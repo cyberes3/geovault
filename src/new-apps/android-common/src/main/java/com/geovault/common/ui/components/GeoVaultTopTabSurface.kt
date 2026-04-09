@@ -49,6 +49,7 @@ fun <T> GeoVaultTopTabSurface(
     selectedTab: T,
     onTabSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
+    animateTabChanges: Boolean = true,
     behavior: GeoVaultTopTabBehavior<T> = GeoVaultTopTabBehavior(),
     titleForTab: (@Composable (T) -> Unit)? = null,
     headerForTab: (@Composable ColumnScope.(T) -> Unit)? = null,
@@ -64,16 +65,20 @@ fun <T> GeoVaultTopTabSurface(
     )
     LaunchedEffect(selectedIndex, tabs) {
         if (pagerState.currentPage != selectedIndex && selectedIndex in tabs.indices) {
-            pagerState.animateScrollToPage(selectedIndex)
+            if (animateTabChanges) {
+                pagerState.animateScrollToPage(selectedIndex)
+            } else {
+                pagerState.scrollToPage(selectedIndex)
+            }
         }
     }
-    LaunchedEffect(pagerState.settledPage, tabs) {
-        val nextTab = tabs.getOrNull(pagerState.settledPage)?.value ?: return@LaunchedEffect
+    LaunchedEffect(pagerState.currentPage, tabs) {
+        val nextTab = tabs.getOrNull(pagerState.currentPage)?.value ?: return@LaunchedEffect
         if (nextTab != selectedTab) {
             onTabSelected(nextTab)
         }
     }
-    val activeTab = tabs.getOrNull(pagerState.settledPage)?.value ?: selectedTab
+    val activeTab = tabs.getOrNull(pagerState.currentPage)?.value ?: selectedTab
     val isBlocking = behavior.isTabBlocking(activeTab)
     val isRefreshing = behavior.isTabRefreshing(activeTab)
     val canRefresh = behavior.canRefreshTab(activeTab)

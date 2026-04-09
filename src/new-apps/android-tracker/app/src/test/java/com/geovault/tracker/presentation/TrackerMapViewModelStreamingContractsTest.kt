@@ -182,4 +182,46 @@ class TrackerMapViewModelStreamingContractsTest {
         assertEquals(true, allVisible)
         assertEquals(true, groupVisible)
     }
+
+    @Test
+    fun resolveAllowedFallbackTrackerIds_singleSession_prefersDisplayedTrackerWhenVisible() {
+        val allowed = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
+            TrackerAccuracyFallbackPolicyInput(
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                runtimeRunning = false,
+                selectedTrackerId = "tracker-1",
+                displayedTrackerId = "tracker-2",
+                visibleTrackerIds = setOf("tracker-1", "tracker-2")
+            )
+        )
+        assertEquals(setOf("tracker-2"), allowed)
+    }
+
+    @Test
+    fun resolveAllowedFallbackTrackerIds_allQueue_allVisibleTrackersAllowed() {
+        val allowed = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
+            TrackerAccuracyFallbackPolicyInput(
+                mode = TrackerMapDisplayMode.ALL_QUEUE,
+                runtimeRunning = false,
+                selectedTrackerId = "tracker-2",
+                displayedTrackerId = "",
+                visibleTrackerIds = setOf("tracker-1", "tracker-2", "tracker-3")
+            )
+        )
+        assertEquals(setOf("tracker-1", "tracker-2", "tracker-3"), allowed)
+    }
+
+    @Test
+    fun resolveAllowedFallbackTrackerIds_groupMode_allVisibleTrackersAllowed() {
+        val allowed = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
+            TrackerAccuracyFallbackPolicyInput(
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                runtimeRunning = true,
+                selectedTrackerId = "tracker-2",
+                displayedTrackerId = "",
+                visibleTrackerIds = setOf("tracker-1")
+            )
+        )
+        assertEquals(setOf("tracker-1"), allowed)
+    }
 }

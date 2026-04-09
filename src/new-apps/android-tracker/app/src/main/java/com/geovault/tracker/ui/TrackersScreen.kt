@@ -248,6 +248,7 @@ fun TrackersScreen(
     var pendingNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var localNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var groupActionsDialog by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
+    var groupEditReturnOverlay by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
     val activeTrackerEditLoadingDialog = state.dialog as? TrackersGroupsDialog.EditTrackerLoading
     val activeTrackerEditDialog = state.dialog as? TrackersGroupsDialog.EditTracker
     val activeGroupEditDialog = state.dialog as? TrackersGroupsDialog.EditGroup
@@ -281,6 +282,14 @@ fun TrackersScreen(
     val dismissEditDialog: () -> Unit = {
         editFlowHasUnsaved = false
         vm.dismissDialog()
+    }
+    val dismissGroupEditDialog: () -> Unit = {
+        editFlowHasUnsaved = false
+        vm.dismissDialog()
+        groupEditReturnOverlay?.let { overlay ->
+            groupActionsDialog = overlay
+            groupEditReturnOverlay = null
+        }
     }
 
     TrackerTabPlaceholderScreen(
@@ -383,7 +392,10 @@ fun TrackersScreen(
                     },
                     onAcceptGroup = vm::acceptGroupShare,
                     onEditTracker = vm::openEditTrackerDialog,
-                    onEditGroup = vm::openEditGroupDialog,
+                    onEditGroup = { group ->
+                        groupEditReturnOverlay = null
+                        vm.openEditGroupDialog(group)
+                    },
                     navigationRequest = pendingNavigationRequest ?: localNavigationRequest,
                     onNavigationRequestHandled = {
                         pendingNavigationRequest = null
@@ -425,6 +437,7 @@ fun TrackersScreen(
                         )
                     },
                     onEditGroup = { group ->
+                        groupEditReturnOverlay = dialog.copy(group = group)
                         groupActionsDialog = null
                         vm.openEditGroupDialog(group)
                     },
@@ -557,7 +570,7 @@ fun TrackersScreen(
                         isPickerRefreshing = state.isPickerRefreshing,
                         addingTrackerIds = state.addingTrackerIds,
                         isSaving = state.isLoading,
-                        onDismiss = dismissEditDialog,
+                        onDismiss = dismissGroupEditDialog,
                         onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
                         onRefreshTrackers = vm::refreshTrackersForPicker,
                         onNameDraftChanged = vm::updateEditGroupDraft,

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Divider
@@ -181,8 +180,9 @@ private fun PickerTabContent(
         tabs = tabs,
         selectedTab = selectedPhase,
         onTabSelected = onPhaseSelected,
+        animateTabChanges = true,
         behavior = GeoVaultTopTabBehavior(
-            swipeMode = GeoVaultTopTabSwipeMode.ALWAYS,
+            swipeMode = GeoVaultTopTabSwipeMode.WHILE_NOT_BLOCKING,
             isTabRefreshing = { false },
             isTabBlocking = { tab -> tab == PickerPhase.ADD && isLoading },
             canRefreshTab = { tab -> tab == PickerPhase.ADD && !isLoading },
@@ -231,38 +231,57 @@ private fun PickerTabContent(
                     }
                 }
                 PickerPhase.ADD -> {
-                    if (filteredItems.isEmpty()) {
-                        Box(
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        GeoVaultInput(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
+                            placeholder = stringResource(R.string.groups_tracker_picker_filter_hint),
+                            singleLine = true,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.groups_tracker_picker_empty),
-                                style = MaterialTheme.typography.body2,
-                                color = GeoVaultColorTokens.TextSecondary,
-                            )
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = 12.dp,
-                                end = 12.dp,
-                                top = 4.dp,
-                                bottom = 12.dp,
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            items(filteredItems, key = { it.trackerId }) { item ->
-                                val isAdding = item.trackerId in addingTrackerIds
-                                AddableTrackerCard(
-                                    item = item,
-                                    isAdding = isAdding,
-                                    borderColor = borderColor,
-                                    onAdd = { onAddTracker(item.trackerId) },
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+
+                        Divider(
+                            color = borderColor,
+                            thickness = 1.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        if (filteredItems.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.groups_tracker_picker_empty),
+                                    style = MaterialTheme.typography.body2,
+                                    color = GeoVaultColorTokens.TextSecondary,
                                 )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    top = 4.dp,
+                                    bottom = 12.dp,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                items(filteredItems, key = { it.trackerId }) { item ->
+                                    val isAdding = item.trackerId in addingTrackerIds
+                                    AddableTrackerCard(
+                                        item = item,
+                                        isAdding = isAdding,
+                                        borderColor = borderColor,
+                                        onAdd = { onAddTracker(item.trackerId) },
+                                    )
+                                }
                             }
                         }
                     }
@@ -271,57 +290,16 @@ private fun PickerTabContent(
         },
         titleForTab = { tab ->
             GeoVaultCompactDismissTitleBar(
-                title = if (tab == PickerPhase.LIST) {
-                    stringResource(R.string.groups_tracker_list_title)
-                } else {
-                    stringResource(R.string.groups_tracker_add_title)
-                },
-                onClose = {
-                    if (tab == PickerPhase.ADD) onPhaseSelected(PickerPhase.LIST)
-                    else onDismiss()
-                },
-                modifier = Modifier.statusBarsPadding(),
+                title = stringResource(R.string.groups_tracker_title),
+                onClose = onDismiss,
             )
         },
-        headerForTab = { tab ->
-            if (tab == PickerPhase.LIST) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .drawBehind {
-                            drawLine(
-                                color = borderColor,
-                                start = Offset(0f, size.height),
-                                end = Offset(size.width, size.height),
-                                strokeWidth = 1.dp.toPx(),
-                            )
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    GeoVaultPrimaryButton(
-                        text = stringResource(R.string.groups_tracker_add_title),
-                        onClick = { onPhaseSelected(PickerPhase.ADD) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            } else {
-                GeoVaultInput(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
-                    placeholder = stringResource(R.string.groups_tracker_picker_filter_hint),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-
-                Divider(
-                    color = borderColor,
-                    thickness = 1.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        headerForTab = {
+            Divider(
+                color = borderColor,
+                thickness = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            )
         },
         bottomForTab = { tab ->
             Box(

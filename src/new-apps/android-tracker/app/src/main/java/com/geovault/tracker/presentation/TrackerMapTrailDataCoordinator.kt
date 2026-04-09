@@ -12,7 +12,7 @@ object TrackerMapTrailDataCoordinator {
         resolveSessionStartMs: (List<Map<String, Any?>>?) -> Long?,
         onSessionStartResolved: (String, Long?) -> Unit,
         onSessionAnchorResolved: (String) -> Unit,
-        mapCoordinatesToTrail: (List<List<Double>>) -> List<QueuedLocation>,
+        mapCoordinatesToTrail: (List<List<Double>>, List<Map<String, Any?>>?) -> List<QueuedLocation>,
     ): List<QueuedLocation> {
         val geometryResult = loadTrackerGeometry(trackerId)
         val geometryCoords = when (geometryResult) {
@@ -28,7 +28,7 @@ object TrackerMapTrailDataCoordinator {
         return if (geometryCoords.isEmpty()) {
             loadQueueTrailWithOverlay()
         } else {
-            mapCoordinatesToTrail(geometryCoords)
+            mapCoordinatesToTrail(geometryCoords, pointParams)
         }
     }
 
@@ -37,7 +37,7 @@ object TrackerMapTrailDataCoordinator {
         loadTrackersGeometry: suspend (List<String>) -> RepositoryResult<List<Tracker>>,
         resolveSessionStartMs: (List<Map<String, Any?>>?) -> Long?,
         onSessionStartResolved: (String, Long?) -> Unit,
-        mapCoordinatesToTrail: (List<List<Double>>) -> List<QueuedLocation>,
+        mapCoordinatesToTrail: (List<List<Double>>, List<Map<String, Any?>>?) -> List<QueuedLocation>,
     ): Map<String, List<QueuedLocation>> {
         val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (normalizedIds.isEmpty()) return emptyMap()
@@ -48,7 +48,10 @@ object TrackerMapTrailDataCoordinator {
                         tracker.id,
                         resolveSessionStartMs(tracker.point_params)
                     )
-                    tracker.id to mapCoordinatesToTrail(tracker.geometry?.coordinates.orEmpty())
+                    tracker.id to mapCoordinatesToTrail(
+                        tracker.geometry?.coordinates.orEmpty(),
+                        tracker.point_params
+                    )
                 }
             }
             is RepositoryResult.Failure -> emptyMap()

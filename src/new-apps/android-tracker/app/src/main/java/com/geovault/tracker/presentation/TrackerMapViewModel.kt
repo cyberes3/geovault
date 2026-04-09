@@ -876,11 +876,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val trackerDisplayNames = trackerManagementStateStore.trackers.value.associate { it.id to it.name }
         val trackerRenderOrder = trackerManagementStateStore.trackers.value.map { it.id }
         val effectiveDisplayedId = effectiveDisplayedTrackerId(s)
-        val allowAccuracyFallback = s.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-            s.runtime.isRunning &&
-            effectiveDisplayedId.isNotBlank() &&
-            effectiveDisplayedId == s.runtime.selectedTrackerId.trim()
-        val streamedAccuracy = s.trail.lastOrNull()?.accuracy
+        val streamedAccuracyByTrackerId = buildStreamedAccuracyByTrackerId(s, effectiveDisplayedId)
+        val fallbackAccuracyByTrackerId = buildFallbackAccuracyByTrackerId(s)
+        val visibleTrackerIds = resolveVisibleAccuracyTrackerIds(s, effectiveDisplayedId)
+        val allowAccuracyFallbackByTrackerId = TrackerAccuracyFallbackPolicy.resolveAllowedFallbackTrackerIds(
+            TrackerAccuracyFallbackPolicyInput(
+                mode = s.mode,
+                runtimeRunning = s.runtime.isRunning,
+                selectedTrackerId = s.runtime.selectedTrackerId,
+                displayedTrackerId = effectiveDisplayedId,
+                visibleTrackerIds = visibleTrackerIds,
+            )
+        )
         return TrackerMapStateTransforms.buildRenderState(
             mode = s.mode,
             trail = s.trail,
@@ -897,9 +904,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 selectedMapTrackerId = s.selectedMapTracker?.trackerId
             ),
             trackerRenderOrder = trackerRenderOrder,
-            streamedAccuracyMeters = streamedAccuracy,
-            fallbackAccuracyMeters = s.runtime.lastAccuracyMeters,
-            allowAccuracyFallback = allowAccuracyFallback,
+            streamedAccuracyMeters = null,
+            fallbackAccuracyMeters = null,
+            allowAccuracyFallback = false,
+            streamedAccuracyByTrackerId = streamedAccuracyByTrackerId,
+            fallbackAccuracyByTrackerId = fallbackAccuracyByTrackerId,
+            allowAccuracyFallbackByTrackerId = allowAccuracyFallbackByTrackerId,
             defaultIconColorHex = defaultTrackerColorHex(appContext),
         )
     }
@@ -924,6 +934,85 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val lat = runtime.lastTrackedLatitude ?: return null
         val lon = runtime.lastTrackedLongitude ?: return null
         return LatLngBounds.from(lat, lon, lat, lon)
+    }
+
+    private fun buildStreamedAccuracyByTrackerId(
+        state: TrackerMapUiState,
+        effectiveDisplayedId: String
+    ): Map<String, Float> {
+        val accuracyByTracker = mutableMapOf<String, Float>()
+        val displayedId = effectiveDisplayedId.trim()
+        state.trail.lastOrNull()?.accuracy?.toFinitePositiveOrNull()?.let { accuracy ->
+            if (displayedId.isNotEmpty()) {
+                accuracyByTracker[displayedId] = accuracy
+            }
+        }
+        state.allQueueTrailsByTracker.forEach { (trackerId, queueTrail) ->
+            queueTrail.lastOrNull()?.accuracy?.toFinitePositiveOrNull()?.let { accuracy ->
+                val normalizedId = trackerId.trim()
+                if (normalizedId.isNotEmpty()) {
+                    accuracyByTracker[normalizedId] = accuracy
+                }
+            }
+        }
+        state.remoteLastPoints.forEach { (trackerId, remotePoint) ->
+            remotePoint.accuracyMeters?.toFinitePositiveOrNull()?.let { accuracy ->
+                val normalizedId = trackerId.trim()
+                if (normalizedId.isNotEmpty()) {
+                    accuracyByTracker[normalizedId] = accuracy
+                }
+            }
+        }
+        return accuracyByTracker
+    }
+
+    private fun buildFallbackAccuracyByTrackerId(state: TrackerMapUiState): Map<String, Float> {
+        val fallbackByTrackerId = mutableMapOf<String, Float>()
+        trackerManagementStateStore.trackers.value.forEach { tracker ->
+            val trackerId = tracker.id.trim()
+            if (trackerId.isEmpty()) return@forEach
+            extractTrackerLatestAccuracyMeters(tracker)?.toFinitePositiveOrNull()?.let { accuracy ->
+                fallbackByTrackerId[trackerId] = accuracy
+            }
+        }
+        val selectedTrackerId = state.runtime.selectedTrackerId.trim()
+        state.runtime.lastAccuracyMeters.toFinitePositiveOrNull()?.let { runtimeAccuracy ->
+            if (selectedTrackerId.isNotEmpty()) {
+                fallbackByTrackerId[selectedTrackerId] = runtimeAccuracy
+            }
+        }
+        return fallbackByTrackerId
+    }
+
+    private fun resolveVisibleAccuracyTrackerIds(
+        state: TrackerMapUiState,
+        effectiveDisplayedId: String
+    ): Set<String> {
+        return buildSet {
+            val displayedId = effectiveDisplayedId.trim()
+            if (displayedId.isNotEmpty()) add(displayedId)
+            state.allQueueTrailsByTracker.keys
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .forEach(::add)
+            state.remoteLastPoints.keys
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .forEach(::add)
+        }
+    }
+
+    private fun Float?.toFinitePositiveOrNull(): Float? {
+        return this?.takeIf { it.isFinite() && it > 0f }
+    }
+
+    private fun extractTrackerLatestAccuracyMeters(tracker: Tracker): Float? {
+        val accuracyRaw = tracker.point_params?.lastOrNull()?.get("acc") ?: return null
+        return when (accuracyRaw) {
+            is Number -> accuracyRaw.toFloat()
+            is String -> accuracyRaw.toFloatOrNull()
+            else -> null
+        }
     }
 
     private fun refreshStreamTargets() {
@@ -1100,7 +1189,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 }
             },
             onSessionAnchorResolved = { id -> clearSessionAnchorResync(id) },
-            mapCoordinatesToTrail = { merged -> mapCoordinatesToTrail(merged) }
+            mapCoordinatesToTrail = { merged, pointParams -> mapCoordinatesToTrail(merged, pointParams) }
         )
     }
 
@@ -1122,7 +1211,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     remoteSessionStartByTrack[id] = latestSessionStart
                 }
             },
-            mapCoordinatesToTrail = { merged -> mapCoordinatesToTrail(merged) }
+            mapCoordinatesToTrail = { merged, pointParams -> mapCoordinatesToTrail(merged, pointParams) }
         )
     }
 
@@ -1166,8 +1255,22 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    private fun mapCoordinatesToTrail(coordinates: List<List<Double>>): List<QueuedLocation> {
+    private fun mapCoordinatesToTrail(
+        coordinates: List<List<Double>>,
+        pointParams: List<Map<String, Any?>>? = null
+    ): List<QueuedLocation> {
         if (coordinates.isEmpty()) return emptyList()
+        val latestAccuracyMeters = pointParams
+            ?.lastOrNull()
+            ?.get("acc")
+            ?.let { raw ->
+                when (raw) {
+                    is Number -> raw.toFloat()
+                    is String -> raw.toFloatOrNull()
+                    else -> null
+                }
+            }
+            ?.takeIf { it.isFinite() && it > 0f }
         val now = System.currentTimeMillis()
         val start = now - coordinates.size
         return coordinates.mapIndexedNotNull { index, point ->
@@ -1181,7 +1284,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 altitude = null,
                 speed = null,
                 bearing = null,
-                accuracy = null,
+                accuracy = if (index == coordinates.lastIndex) latestAccuracyMeters else null,
                 sat = null,
                 prov = "server_geometry",
                 dist = null

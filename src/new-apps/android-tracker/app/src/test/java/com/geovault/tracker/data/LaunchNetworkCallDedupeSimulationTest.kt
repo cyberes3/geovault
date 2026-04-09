@@ -188,7 +188,7 @@ class LaunchNetworkCallDedupeSimulationTest {
             resolveSessionStartMs = { null },
             onSessionStartResolved = { _, _ -> Unit },
             onSessionAnchorResolved = { _ -> Unit },
-            mapCoordinatesToTrail = { emptyList() },
+            mapCoordinatesToTrail = { _, _ -> emptyList() },
         )
     }
 

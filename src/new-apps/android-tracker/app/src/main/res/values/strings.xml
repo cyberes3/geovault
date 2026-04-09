@@ -303,6 +303,7 @@
     <string name="groups_edit_visibility_help_shared">Only specific users you choose can access this group.</string>
     <string name="groups_edit_visibility_help_public">All authenticated users can discover this group.</string>
     <string name="groups_edit_world_share_help">When on, anyone with the link can view this group on a read-only map without logging in.</string>
+    <string name="groups_tracker_title">Group Trackers</string>
     <string name="groups_tracker_list_title">Trackers</string>
     <string name="groups_tracker_list_empty">No trackers in this group.</string>
     <string name="groups_tracker_add_title">Add Trackers</string>

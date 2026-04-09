@@ -249,8 +249,63 @@ class TrackerMapStateTransformsTest {
         )
 
         assertEquals(1, render.polygons.size)
-        assertEquals("last-fix-accuracy", render.polygons.first().id)
-        assertEquals("#403366CC", render.polygons.first().fillColorHex)
+        assertEquals("accuracy-last-fix", render.polygons.first().id)
+        assertEquals("rgba(51,102,204,0.2509804)", render.polygons.first().fillColorHex)
+    }
+
+    @Test
+    fun allQueue_emitsAccuracyPolygonsForAllVisibleTrackers() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(),
+            allQueueTrailsByTracker = mapOf(
+                "t1" to listOf(
+                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = 9f),
+                    QueuedLocation(time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = 10f),
+                ),
+                "t2" to listOf(
+                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = 18f),
+                    QueuedLocation(time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = 20f),
+                ),
+            ),
+            trackerColorById = mapOf(
+                "t1" to "#AA0000",
+                "t2" to "#00AA00",
+            ),
+            streamedAccuracyByTrackerId = mapOf(
+                "t1" to 10f,
+                "t2" to 20f,
+            )
+        )
+
+        assertEquals(2, render.polygons.size)
+        assertTrue(render.polygons.any { it.id == "accuracy-t1" })
+        assertTrue(render.polygons.any { it.id == "accuracy-t2" })
+    }
+
+    @Test
+    fun allQueue_fallbackAllowedForSpecificTracker_onlyRendersThatTrackerPolygon() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(selectedTrackerId = "t2"),
+            allQueueTrailsByTracker = mapOf(
+                "t1" to listOf(
+                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = null),
+                ),
+                "t2" to listOf(
+                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = null),
+                ),
+            ),
+            fallbackAccuracyByTrackerId = mapOf("t2" to 14f),
+            allowAccuracyFallbackByTrackerId = setOf("t2")
+        )
+
+        assertEquals(1, render.polygons.size)
+        assertEquals("accuracy-t2", render.polygons.first().id)
     }
 
 }

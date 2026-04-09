@@ -38,7 +38,7 @@ class TrackerMapTrailDataCoordinatorTest {
             resolveSessionStartMs = { null },
             onSessionStartResolved = { _, _ -> Unit },
             onSessionAnchorResolved = { anchorCleared = true },
-            mapCoordinatesToTrail = { emptyList() }
+            mapCoordinatesToTrail = { _, _ -> emptyList() }
         )
 
         assertEquals(fallback, result)
@@ -66,7 +66,7 @@ class TrackerMapTrailDataCoordinatorTest {
             },
             resolveSessionStartMs = { null },
             onSessionStartResolved = { _, _ -> Unit },
-            mapCoordinatesToTrail = { coordinates ->
+            mapCoordinatesToTrail = { coordinates, _ ->
                 coordinates.mapIndexed { index, point ->
                     QueuedLocation(
                         id = -(index + 1L),

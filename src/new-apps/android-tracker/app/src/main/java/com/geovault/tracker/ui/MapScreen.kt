@@ -414,7 +414,7 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(viewportContextSeed) {
         didInitialBounds = false
     }
-    LaunchedEffect(phase, state.trail, state.runtime) {
+    LaunchedEffect(phase, state.mode, state.currentGroupId, state.trail, state.allQueueTrailsByTracker, state.runtime) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (didInitialBounds) return@LaunchedEffect
         val bounds = viewModel.trailBoundsOrNull()

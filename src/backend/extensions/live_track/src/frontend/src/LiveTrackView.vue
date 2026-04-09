@@ -535,6 +535,11 @@ import TrackerListContent from './TrackerListContent.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
 import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
 import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
+import {
+  buildAccuracyCircleLayerSpec,
+  DEFAULT_ACCURACY_CIRCLE_LAYER_ID,
+  resolveSelectedTrackAccuracyMeters
+} from './mapAccuracyCircle.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
 import { setupMapFollowListeners } from './mapFollowLock.js';
 import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
@@ -565,7 +570,7 @@ const LINES_LAYER_ID = 'live-track-lines';
 const LINES_WHITE_OUTLINE_LAYER_ID = 'live-track-lines-white-outline';
 const LINES_BLACK_OUTLINE_LAYER_ID = 'live-track-lines-black-outline';
 const POINTS_LAYER_ID = 'live-track-points';
-const ACCURACY_CIRCLE_LAYER_ID = 'live-track-accuracy-circle';
+const ACCURACY_CIRCLE_LAYER_ID = DEFAULT_ACCURACY_CIRCLE_LAYER_ID;
 const BASE_SOURCE_ID = 'base-raster';
 const BASE_LAYER_ID = 'base-raster-layer';
 const MIN_ZOOM = 0;
@@ -1136,10 +1141,7 @@ export default {
         if (!pos) continue;
         const color = track.color || '#6C93DE';
         const selected = selectedId.value === track.id;
-        const acc =
-          track.latestPointParams?.acc ?? track.point_params?.[track.point_params?.length - 1]?.acc;
-        const accuracy =
-          selected && typeof acc === 'number' && Number.isFinite(acc) && acc > 0 ? acc : 0;
+        const accuracy = resolveSelectedTrackAccuracyMeters(track, selected);
         const props = {
           trackId: track.id,
           color,
@@ -1211,29 +1213,10 @@ export default {
       },
       layout: { 'line-join': 'round', 'line-cap': 'round' }
     };
-    // Meters-to-pixels factor: 256*2^zoom / (40075016.686 * cos(lat * pi / 180)). Zoom must be input to interpolate/step per MapLibre spec.
-    const METERS_TO_PIXELS_ZOOM_0_EQ = 256 / 40075016.686;
-    const METERS_TO_PIXELS_ZOOM_24_EQ = (256 * Math.pow(2, 24)) / 40075016.686;
-    const accuracyCircleLayerSpec = {
-      id: ACCURACY_CIRCLE_LAYER_ID,
-      type: 'circle',
-      source: POINTS_SOURCE_ID,
-      filter: ['all', ['>', ['get', 'accuracy'], 0]],
-      paint: {
-        'circle-color': ['rgba', 51, 136, 255, 0.25],
-        'circle-stroke-color': '#6C93DE',
-        'circle-stroke-width': 1,
-        'circle-radius': [
-          'interpolate',
-          ['exponential', 2],
-          ['zoom'],
-          0,
-          ['max', 6, ['*', ['get', 'accuracy'], ['/', METERS_TO_PIXELS_ZOOM_0_EQ, ['max', 0.001, ['cos', ['*', ['get', 'latitude'], Math.PI / 180]]]]]],
-          24,
-          ['max', 6, ['*', ['get', 'accuracy'], ['/', METERS_TO_PIXELS_ZOOM_24_EQ, ['max', 0.001, ['cos', ['*', ['get', 'latitude'], Math.PI / 180]]]]]]
-        ]
-      }
-    };
+    const accuracyCircleLayerSpec = buildAccuracyCircleLayerSpec({
+      layerId: ACCURACY_CIRCLE_LAYER_ID,
+      sourceId: POINTS_SOURCE_ID
+    });
 
     const pointsLayerSpec = {
       id: POINTS_LAYER_ID,

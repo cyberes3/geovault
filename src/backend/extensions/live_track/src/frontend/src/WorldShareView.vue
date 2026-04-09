@@ -181,6 +181,7 @@ import MapLayerSidebar from './MapLayerSidebar.vue';
 import MapTrackList from './MapTrackList.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
 import { buildLineFeatures, buildPointFeature, fitMapToTracks, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
+import { buildAccuracyCircleLayerSpec } from './mapAccuracyCircle.js';
 import { setupMapFollowListeners } from './mapFollowLock.js';
 import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { ensureArrowImage } from './trackArrowMap.js';
@@ -195,6 +196,7 @@ const LINES_LAYER_ID = 'world-share-lines-layer';
 const LINES_WHITE_OUTLINE_LAYER_ID = 'world-share-lines-layer-white-outline';
 const LINES_BLACK_OUTLINE_LAYER_ID = 'world-share-lines-layer-black-outline';
 const POINTS_LAYER_ID = 'world-share-points-layer';
+const ACCURACY_CIRCLE_LAYER_ID = 'world-share-accuracy-circle';
 const BASE_SOURCE_ID = 'world-share-base';
 const BASE_LAYER_ID = 'world-share-base-layer';
 const MIN_ZOOM = 0;
@@ -437,12 +439,21 @@ export default {
         }
         const pointFeatures = tracks
           .map((t) =>
-            buildPointFeature(t, selectedId.value != null && String(t.id) === String(selectedId.value))
+            buildPointFeature(
+              t,
+              selectedId.value != null && String(t.id) === String(selectedId.value),
+              { includeAccuracy: true }
+            )
           )
           .filter(Boolean);
         pointSource.setData({ type: 'FeatureCollection', features: pointFeatures });
       }
     }
+
+    const accuracyCircleLayerSpec = buildAccuracyCircleLayerSpec({
+      layerId: ACCURACY_CIRCLE_LAYER_ID,
+      sourceId: POINTS_SOURCE_ID
+    });
 
     async function addWorldShareTrackLayers() {
       if (!map || !map.getStyle()) return;
@@ -519,6 +530,9 @@ export default {
             }
           });
         }
+      }
+      if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
+        map.addLayer(accuracyCircleLayerSpec, LINES_WHITE_OUTLINE_LAYER_ID);
       }
       updateMapData();
     }
@@ -800,7 +814,12 @@ export default {
       const baseSpec = getRasterSourceSpec(layerValue, tileSource);
       const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
       const lineFeatures = tracksForInit.flatMap((t) => buildLineFeatures(t, false));
-      const pointFeatures = tracksForInit.map((t) => buildPointFeature(t, false)).filter(Boolean);
+      const pointFeatures = tracksForInit
+        .map((t) => {
+          const isSelected = selectedId.value != null && String(t.id) === String(selectedId.value);
+          return buildPointFeature(t, isSelected, { includeAccuracy: true });
+        })
+        .filter(Boolean);
       const lineGeoJSON = { type: 'FeatureCollection', features: lineFeatures };
       const pointGeoJSON = { type: 'FeatureCollection', features: pointFeatures };
 

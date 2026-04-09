@@ -4,6 +4,7 @@
  */
 
 import { getArrowImageId } from './trackArrowMap.js';
+import { resolveSelectedTrackAccuracyMeters } from './mapAccuracyCircle.js';
 
 /** Do not draw track across jumps larger than this (meters). 5 miles. Same as Android tracker. */
 export const MAX_JUMP_METERS = 5 * 1609.344;
@@ -79,7 +80,7 @@ export function buildLineFeatures(track, selected = false) {
   return features;
 }
 
-export function buildPointFeature(track, selected = false) {
+export function buildPointFeature(track, selected = false, options = {}) {
   const coordsSorted = getCoordsSortedByTime(track);
   const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
   const pos = last && last.length >= 2 ? [last[0], last[1]] : null;
@@ -88,9 +89,18 @@ export function buildPointFeature(track, selected = false) {
   const iconImage = getArrowImageId(color, selected);
   const rotation = getTrackDirectionAngle(track);
   const trackId = track.id != null ? track.id : undefined;
+  const includeAccuracy = options.includeAccuracy === true;
+  const accuracy = includeAccuracy ? resolveSelectedTrackAccuracyMeters(track, selected) : 0;
   return {
     type: 'Feature',
-    properties: { color, iconImage, rotation, selected: !!selected, trackId },
+    properties: {
+      color,
+      iconImage,
+      rotation,
+      selected: !!selected,
+      trackId,
+      ...(includeAccuracy ? { accuracy, latitude: pos[1] } : {})
+    },
     geometry: { type: 'Point', coordinates: pos }
   };
 }

@@ -148,6 +148,29 @@ class TrackerMapStateTransformsRemoteMarkersTest {
         assertEquals("remote-a", marker.title)
     }
 
+    @Test
+    fun buildRenderState_allQueue_remoteMarkersEmitMatchingAccuracyPolygons() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf(
+                "r1" to remotePoint("r1", 5.0, 6.0),
+                "r2" to remotePoint("r2", 7.0, 8.0),
+            ),
+            activeStreamedTrackerIds = setOf("r1", "r2"),
+            streamedAccuracyByTrackerId = mapOf(
+                "r1" to 4f,
+                "r2" to 7f,
+            ),
+        )
+
+        assertTrue(render.points.any { it.id == "remote-r1" })
+        assertTrue(render.points.any { it.id == "remote-r2" })
+        assertTrue(render.polygons.any { it.id == "accuracy-r1" })
+        assertTrue(render.polygons.any { it.id == "accuracy-r2" })
+    }
+
     private fun remotePoint(trackId: String, lat: Double, lon: Double): TrackPointEvent {
         return TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,

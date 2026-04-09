@@ -1,13 +1,8 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.common.maps.core.geoVaultSplitTrackByDistance
-import com.geovault.common.maps.location.AccuracyGeometryBuilder
-import com.geovault.common.maps.location.AccuracyRadiusInput
-import com.geovault.common.maps.location.AccuracyRadiusPolicy
-import com.geovault.common.maps.location.LatLon
 import com.geovault.common.maps.render.MapRenderLine
 import com.geovault.common.maps.render.MapRenderPoint
-import com.geovault.common.maps.render.MapRenderPolygon
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.TrackPointEvent
@@ -31,6 +26,7 @@ object TrackerMapStateTransforms {
     const val TRAIL_OUTLINE_COLOR_HEX: String = "#000000"
     const val DEFAULT_MULTI_TRACK_LINE_COLOR_HEX: String = "#607D8B"
     const val MAX_TRACK_JUMP_METERS: Float = 5f * 1609.344f
+    private val accuracyCircleResolver = TrackerAccuracyCircleResolver()
 
     fun buildRenderState(
         mode: TrackerMapDisplayMode,
@@ -48,6 +44,9 @@ object TrackerMapStateTransforms {
         streamedAccuracyMeters: Float? = null,
         fallbackAccuracyMeters: Float? = null,
         allowAccuracyFallback: Boolean = false,
+        streamedAccuracyByTrackerId: Map<String, Float> = emptyMap(),
+        fallbackAccuracyByTrackerId: Map<String, Float> = emptyMap(),
+        allowAccuracyFallbackByTrackerId: Set<String> = emptySet(),
         defaultIconColorHex: String = TrackerMapIconIds.DEFAULT_COLOR_HEX,
     ): MapRenderState {
         val singleIconId = TrackerMapMarkerStylePolicy.singleTrackerIconId(
@@ -142,17 +141,29 @@ object TrackerMapStateTransforms {
                 }
         }
 
-        val polygons = if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            buildSingleSessionAccuracyPolygons(
-                marker = markers.firstOrNull { it.id == "last-fix" },
-                streamedAccuracyMeters = streamedAccuracyMeters,
-                fallbackAccuracyMeters = fallbackAccuracyMeters,
-                allowAccuracyFallback = allowAccuracyFallback,
-                centerColorHex = singleLineColorHex,
-            )
-        } else {
-            emptyList()
-        }
+        val normalizedStreamedAccuracyByTracker = streamedAccuracyByTrackerId.mapKeys { it.key.trim() }
+        val normalizedFallbackAccuracyByTracker = fallbackAccuracyByTrackerId.mapKeys { it.key.trim() }
+        val normalizedAllowFallbackTrackerIds = allowAccuracyFallbackByTrackerId
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        val defaultSingleTrackerId = displayedTrackerId.trim().ifEmpty { runtime.selectedTrackerId.trim() }
+        val polygons = buildAccuracyPolygons(
+            markers = markers,
+            markerColorById = buildMarkerColorById(
+                mode = mode,
+                markers = markers,
+                trackerColorById = trackerColorById,
+                singleLineColorHex = singleLineColorHex,
+            ),
+            streamedAccuracyMeters = streamedAccuracyMeters,
+            fallbackAccuracyMeters = fallbackAccuracyMeters,
+            allowAccuracyFallback = allowAccuracyFallback,
+            streamedAccuracyByTrackerId = normalizedStreamedAccuracyByTracker,
+            fallbackAccuracyByTrackerId = normalizedFallbackAccuracyByTracker,
+            allowAccuracyFallbackByTrackerId = normalizedAllowFallbackTrackerIds,
+            defaultSingleTrackerId = defaultSingleTrackerId,
+        )
 
         return MapRenderState(
             points = markers,
@@ -272,46 +283,68 @@ object TrackerMapStateTransforms {
             point.longitude in -180.0..180.0
     }
 
-    private fun buildSingleSessionAccuracyPolygons(
-        marker: MapRenderPoint?,
+    private fun buildAccuracyPolygons(
+        markers: List<MapRenderPoint>,
+        markerColorById: Map<String, String>,
         streamedAccuracyMeters: Float?,
         fallbackAccuracyMeters: Float?,
         allowAccuracyFallback: Boolean,
-        centerColorHex: String,
-    ): List<MapRenderPolygon> {
-        val center = marker ?: return emptyList()
-        val radiusMeters = AccuracyRadiusPolicy.resolveAccuracyRadiusMeters(
-            AccuracyRadiusInput(
-                streamedAccuracyMeters = streamedAccuracyMeters,
-                fallbackAccuracyMeters = fallbackAccuracyMeters,
-                allowFallback = allowAccuracyFallback,
+        streamedAccuracyByTrackerId: Map<String, Float>,
+        fallbackAccuracyByTrackerId: Map<String, Float>,
+        allowAccuracyFallbackByTrackerId: Set<String>,
+        defaultSingleTrackerId: String,
+    ): List<com.geovault.common.maps.render.MapRenderPolygon> {
+        val accuracyInputs = markers.map { marker ->
+            val trackerId = trackerIdForMarker(marker.id, defaultSingleTrackerId)
+            val streamed = streamedAccuracyByTrackerId[trackerId] ?: streamedAccuracyMeters
+            val fallback = fallbackAccuracyByTrackerId[trackerId] ?: fallbackAccuracyMeters
+            val allowFallback = trackerId in allowAccuracyFallbackByTrackerId || allowAccuracyFallback
+            TrackerAccuracyCircleInput(
+                polygonId = polygonIdForMarker(marker.id, trackerId),
+                trackerId = trackerId,
+                centerLatitude = marker.latitude,
+                centerLongitude = marker.longitude,
+                streamedAccuracyMeters = streamed,
+                fallbackAccuracyMeters = fallback,
+                allowFallback = allowFallback,
+                colorHex = markerColorById[marker.id] ?: TrackerMapIconIds.DEFAULT_COLOR_HEX,
             )
-        )
-        if (radiusMeters <= 0.0) return emptyList()
-        val ring = AccuracyGeometryBuilder.buildAccuracyRing(
-            center = LatLon(center.latitude, center.longitude),
-            radiusMeters = radiusMeters,
-        )
-        if (ring.isEmpty()) return emptyList()
-        val fillColorHex = withAlpha(centerColorHex, 0x40)
-        return listOf(
-            MapRenderPolygon(
-                id = "last-fix-accuracy",
-                rings = listOf(ring.map { it.lat to it.lon }),
-                fillColorHex = fillColorHex,
-                outlineColorHex = fillColorHex,
-            )
-        )
+        }
+        return accuracyCircleResolver.buildPolygons(accuracyInputs)
     }
 
-    private fun withAlpha(colorHex: String, alpha: Int): String {
-        val normalized = colorHex.removePrefix("#")
-        val safeHex = if (normalized.length == 6) normalized else TrackerMapIconIds.DEFAULT_COLOR_HEX.removePrefix("#")
-        val r = safeHex.substring(0, 2).toInt(16)
-        val g = safeHex.substring(2, 4).toInt(16)
-        val b = safeHex.substring(4, 6).toInt(16)
-        val a = alpha.coerceIn(0, 255) / 255f
-        // Use explicit rgba() to avoid 8-digit hex parsing differences in map style engines.
-        return "rgba($r,$g,$b,$a)"
+    private fun buildMarkerColorById(
+        mode: TrackerMapDisplayMode,
+        markers: List<MapRenderPoint>,
+        trackerColorById: Map<String, String>,
+        singleLineColorHex: String,
+    ): Map<String, String> {
+        return markers.associate { marker ->
+            val color = when (mode) {
+                TrackerMapDisplayMode.SINGLE_SESSION -> singleLineColorHex
+                TrackerMapDisplayMode.ALL_QUEUE,
+                TrackerMapDisplayMode.GROUP_PLACEHOLDER -> {
+                    val trackerId = marker.id.removePrefix("remote-").trim()
+                    normalizeColor(trackerColorById[trackerId]) ?: DEFAULT_MULTI_TRACK_LINE_COLOR_HEX
+                }
+            }
+            marker.id to color
+        }
+    }
+
+    private fun trackerIdForMarker(markerId: String, defaultSingleTrackerId: String): String {
+        return if (markerId == "last-fix") {
+            defaultSingleTrackerId
+        } else {
+            markerId.removePrefix("remote-").trim()
+        }
+    }
+
+    private fun polygonIdForMarker(markerId: String, trackerId: String): String {
+        return if (markerId == "last-fix") {
+            "accuracy-last-fix"
+        } else {
+            "accuracy-${trackerId.ifEmpty { markerId }}"
+        }
     }
 }
