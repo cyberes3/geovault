@@ -53,5 +53,6 @@ urlpatterns = [
     path("groups/<str:group_id>/tracks/<str:track_id>/", views.group_remove_track),
     path("groups/<str:group_id>/accept-share/", views.group_accept_share),
     path("groups/<str:group_id>/leave/", views.group_leave),
+    path("hidden-items/clear/", views.hidden_items_clear),
     path("map-visibility/", views.map_visibility_get_patch),
 ]

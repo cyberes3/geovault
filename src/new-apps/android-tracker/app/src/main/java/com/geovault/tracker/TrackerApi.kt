@@ -74,6 +74,9 @@ interface TrackerApi {
     @PATCH("/api/extensions/live-track/map-visibility/")
     fun patchMapVisibility(@Body request: MapVisibilityRequest): Call<MapVisibilityResponse>
 
+    @POST("/api/extensions/live-track/hidden-items/clear/")
+    fun clearHiddenItems(@Body request: HiddenItemsClearRequest): Call<ResponseBody>
+
     @GET("/api/extensions/live-track/groups/")
     fun getGroups(): Call<List<Group>>
 

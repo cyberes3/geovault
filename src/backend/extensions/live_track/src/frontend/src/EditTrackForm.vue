@@ -78,7 +78,7 @@
         />
         <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:hidden', !hidden)">Hidden</label>
       </div>
-      <p class="text-xs text-gray-500">When on, this tracker is hidden from the map and your tracker list. You can show it again in Settings.</p>
+      <p class="text-xs text-gray-500">When on, this tracker is hidden from the map and tracker lists. You can show it again in Settings.</p>
     </div>
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">API Password</label>

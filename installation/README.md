@@ -157,13 +157,6 @@ systemctl status geovault-celery-beat
 systemctl status geovault
 ```
 
-## Overpass Server
-
-You can use a third party [Overpass API server](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse
-geocoding butyou should really host your own to avoid resource limits. See
-the [Overpass API](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Overpass%20API) directory
-for installation instructions.
-
 ## Areas Server
 
 A standalone server is nessesary to compute and query an "areas" database as part of the reverse geocoding process when

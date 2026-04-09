@@ -306,7 +306,12 @@ object TrackerMapStateTransforms {
 
     private fun withAlpha(colorHex: String, alpha: Int): String {
         val normalized = colorHex.removePrefix("#")
-        if (normalized.length != 6) return "#40${TrackerMapIconIds.DEFAULT_COLOR_HEX.removePrefix("#")}"
-        return "#${alpha.coerceIn(0, 255).toString(16).padStart(2, '0')}${normalized}".uppercase()
+        val safeHex = if (normalized.length == 6) normalized else TrackerMapIconIds.DEFAULT_COLOR_HEX.removePrefix("#")
+        val r = safeHex.substring(0, 2).toInt(16)
+        val g = safeHex.substring(2, 4).toInt(16)
+        val b = safeHex.substring(4, 6).toInt(16)
+        val a = alpha.coerceIn(0, 255) / 255f
+        // Use explicit rgba() to avoid 8-digit hex parsing differences in map style engines.
+        return "rgba($r,$g,$b,$a)"
     }
 }

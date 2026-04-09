@@ -42,6 +42,7 @@ interface TrackerManagementRepository {
     suspend fun loadUsers(): RepositoryResult<UsersResponse>
     suspend fun loadMapVisibility(forceRefresh: Boolean = false): RepositoryResult<MapVisibilityResponse>
     suspend fun patchMapVisibility(request: MapVisibilityRequest): RepositoryResult<MapVisibilityResponse>
+    suspend fun clearHiddenItems(targetTypes: List<String>? = null): RepositoryResult<Unit>
 }
 
 interface GroupManagementRepository {

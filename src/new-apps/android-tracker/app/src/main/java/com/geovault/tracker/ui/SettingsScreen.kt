@@ -916,6 +916,10 @@ private fun HiddenTrackerRow(
     isLoading: Boolean,
 ) {
     val rowShape = RoundedCornerShape(12.dp)
+    val iconRes = when (item.type) {
+        HiddenTrackerItemType.TRACKER -> R.drawable.ic_chevron_track
+        HiddenTrackerItemType.GROUP -> R.drawable.ic_groups
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -936,7 +940,7 @@ private fun HiddenTrackerRow(
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_chevron_track),
+            painter = painterResource(iconRes),
             contentDescription = null,
             tint = GeoVaultColorTokens.PrimaryBlue,
             modifier = Modifier

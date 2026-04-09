@@ -204,6 +204,17 @@ class MapVisibilityPrefsRequest(BaseModel):
     )
 
 
+class HiddenItemsClearRequest(BaseModel):
+    """Request body for POST hidden-items/clear/. Optional target scope; defaults to both."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_types: Optional[list[Literal["trackers", "groups"]]] = Field(
+        default=None,
+        description="Optional scope. Omit to clear both trackers and groups hidden flags.",
+    )
+
+
 class TrackerBulkGeometryRequest(BaseModel):
     """Request body for POST trackers/geometry/."""
 

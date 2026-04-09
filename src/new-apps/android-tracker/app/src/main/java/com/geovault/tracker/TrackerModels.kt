@@ -133,6 +133,12 @@ data class MapVisibilityRequest(
     val hidden_group_ids: List<String>? = null
 )
 
+@Serializable
+data class HiddenItemsClearRequest(
+    @SerialName("target_types")
+    val target_types: List<String>? = null
+)
+
 /** Group payload from GET/POST/PATCH groups. */
 @Serializable
 @Parcelize

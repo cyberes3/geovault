@@ -341,6 +341,8 @@
             v-else-if="showSettingsSidebar"
             :hidden-trackers="hiddenTrackersForSettings"
             :hidden-groups="hiddenGroupsForSettings"
+            :is-unhide-all-trackers-loading="isUnhideAllTrackersLoading"
+            :is-unhide-all-groups-loading="isUnhideAllGroupsLoading"
             @unhide-tracker="onUnhideTracker"
             @unhide-all-trackers="onUnhideAllTrackers"
             @unhide-group="onUnhideGroup"
@@ -538,7 +540,11 @@ import { setupMapFollowListeners } from './mapFollowLock.js';
 import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
-import { buildGroupUnhidePayload, buildTrackerUnhidePayload } from './settingsPayloadBuilders.js';
+import {
+  buildGroupUnhidePayload,
+  buildHiddenItemsClearPayload,
+  buildTrackerUnhidePayload,
+} from './settingsPayloadBuilders.js';
 import {
   computeVisibleSharedGroups,
   computeVisibleSharedTrackers,
@@ -796,6 +802,8 @@ export default {
     const locationMarker = ref(null);
     const showLayerSidebar = ref(false);
     const showSettingsSidebar = ref(false);
+    const isUnhideAllTrackersLoading = ref(false);
+    const isUnhideAllGroupsLoading = ref(false);
 
     const isMapSidebarOpen = computed(
       () =>
@@ -1823,8 +1831,25 @@ export default {
     }
 
     async function onUnhideAllTrackers() {
-      for (const t of hiddenTrackersForSettings.value) {
-        await onUnhideTracker(t.id);
+      if (!api || isUnhideAllTrackersLoading.value) return;
+      isUnhideAllTrackersLoading.value = true;
+      try {
+        const payload = buildHiddenItemsClearPayload(['trackers']);
+        await api.post('/hidden-items/clear/', payload);
+        await Promise.all([
+          fetchTrackers({ skipGlobalLoading: true }),
+          fetchGroups(),
+        ]);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.success('All hidden trackers shown');
+        }
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to show all trackers');
+        }
+      } finally {
+        isUnhideAllTrackersLoading.value = false;
       }
     }
 
@@ -1853,8 +1878,25 @@ export default {
     }
 
     async function onUnhideAllGroups() {
-      for (const g of hiddenGroupsForSettings.value) {
-        await onUnhideGroup(g.id);
+      if (!api || isUnhideAllGroupsLoading.value) return;
+      isUnhideAllGroupsLoading.value = true;
+      try {
+        const payload = buildHiddenItemsClearPayload(['groups']);
+        await api.post('/hidden-items/clear/', payload);
+        await Promise.all([
+          fetchTrackers({ skipGlobalLoading: true }),
+          fetchGroups(),
+        ]);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.success('All hidden groups shown');
+        }
+      } catch (e) {
+        const err = api.handleError?.(e);
+        if (window.gv_core?.GeoVault?.toast) {
+          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to show all groups');
+        }
+      } finally {
+        isUnhideAllGroupsLoading.value = false;
       }
     }
 
@@ -2709,6 +2751,8 @@ export default {
       showSettingsSidebar,
       hiddenTrackersForSettings,
       hiddenGroupsForSettings,
+      isUnhideAllTrackersLoading,
+      isUnhideAllGroupsLoading,
       onUnhideTracker,
       onUnhideAllTrackers,
       onUnhideGroup,

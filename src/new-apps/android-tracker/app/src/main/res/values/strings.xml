@@ -200,7 +200,8 @@
     <string name="trackers_kml_exported">KML exported</string>
     <string name="trackers_kml_write_failed">Could not save KML file.</string>
     <string name="trackers_field_set_as_selected_tracker">Use as selected tracker for tracking</string>
-    <string name="trackers_field_hidden_on_map">Hide tracker from map</string>
+    <string name="trackers_field_hidden_on_map">Hide tracker</string>
+    <string name="groups_field_hidden">Hide group</string>
     <string name="trackers_field_recent_data_window">Recent data window</string>
     <string name="trackers_field_recent_data_window_hint">all</string>
     <string name="trackers_field_recent_data_window_help">Allowed values: %1$s</string>
@@ -217,7 +218,7 @@
     <string name="trackers_edit_invalid_recent_data">Invalid recent data selection.</string>
     <string name="trackers_edit_default_track_title">Selected tracker</string>
     <string name="trackers_edit_default_track_help">Use this as the tracker to use for live tracking.</string>
-    <string name="trackers_edit_hidden_help">When on, this tracker is hidden from your map and your tracker list. You can show it again in Settings.</string>
+    <string name="trackers_edit_hidden_help">When on, this tracker is hidden from your map and tracker lists. You can show it again in Settings.</string>
     <string name="trackers_edit_sharing_section">Sharing</string>
     <string name="trackers_edit_visibility_help_private">Only you can access this tracker.</string>
     <string name="trackers_edit_visibility_help_shared">Only specific users you choose can access this tracker.</string>
@@ -429,6 +430,7 @@
     <string name="hidden_unhide_all_confirm_message">This will unhide all hidden trackers and groups.</string>
     <string name="failed_to_load_tracker">Could not load tracker.</string>
     <string name="failed_to_save_group">Could not save group.</string>
+    <string name="failed_to_clear_hidden_items">Could not show all hidden items.</string>
     <string name="unit_m">m</string>
     <string name="unit_ft">ft</string>
     <string name="manual_send_point_sent">Manual point sent</string>

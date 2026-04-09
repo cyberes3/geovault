@@ -28,10 +28,11 @@
       <button
         v-if="hiddenTrackers.length > 1"
         type="button"
-        class="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
+        class="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="isUnhideAllTrackersLoading || isUnhideAllGroupsLoading"
         @click="$emit('unhide-all-trackers')"
       >
-        Show all trackers
+        {{ isUnhideAllTrackersLoading ? 'Showing trackers...' : 'Show all trackers' }}
       </button>
     </div>
     <div class="flex-shrink-0 mb-4 border-t border-gray-200 pt-4">
@@ -62,10 +63,11 @@
       <button
         v-if="hiddenGroups.length > 1"
         type="button"
-        class="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
+        class="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="isUnhideAllTrackersLoading || isUnhideAllGroupsLoading"
         @click="$emit('unhide-all-groups')"
       >
-        Show all groups
+        {{ isUnhideAllGroupsLoading ? 'Showing groups...' : 'Show all groups' }}
       </button>
     </div>
   </div>
@@ -82,6 +84,8 @@ export default {
     hiddenTrackers: { type: Array, default: () => [] },
     /** Each item: { id, name, is_owner } — owned groups with Hidden on. */
     hiddenGroups: { type: Array, default: () => [] },
+    isUnhideAllTrackersLoading: { type: Boolean, default: false },
+    isUnhideAllGroupsLoading: { type: Boolean, default: false },
   },
   emits: ['unhide-tracker', 'unhide-all-trackers', 'unhide-group', 'unhide-all-groups'],
 };

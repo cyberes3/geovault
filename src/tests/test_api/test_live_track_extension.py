@@ -495,6 +495,66 @@ class TestLiveTrackAPI(TestCase):
             )
         self.assertEqual(response.status_code, 400)
 
+    def test_post_settings_shared_with_emails_null_shared_clears(self):
+        """POST settings with visibility=shared and shared_with_emails=null clears existing recipients."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Shared Null Clear"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            seed = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(seed.status_code, 200)
+        self.assertTrue(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": None,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists())
+
+    def test_post_settings_world_share_enabled_null_disables(self):
+        """POST settings with world_share_enabled=null disables world share for shared/public visibility."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "World Share Null Disable"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        with _patch_live_track_enabled():
+            enable = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"visibility": "public", "world_share_enabled": True}),
+                content_type="application/json",
+            )
+        self.assertEqual(enable.status_code, 200)
+        self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
+        with _patch_live_track_enabled():
+            disable = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"world_share_enabled": None}),
+                content_type="application/json",
+            )
+        self.assertEqual(disable.status_code, 200)
+        self.assertFalse(LiveTrackWorldShare.objects.filter(track=track).exists())
+
     def test_available_to_add_includes_shared_with_me_track(self):
         """GET trackers/available-to-add/ returns track in shared_with_me when shared with user."""
         with _patch_live_track_enabled():
@@ -3815,6 +3875,218 @@ class TestLiveTrackGroups(TestCase):
             response = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
         self.assertEqual(response.status_code, 404)
 
+    def test_hidden_items_clear_defaults_to_trackers_and_groups(self):
+        """POST hidden-items/clear without scope clears hidden state for both owned trackers and groups."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Hidden Track"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Hidden Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 204)
+
+        track = LiveTrack.objects.get(id=track_id)
+        group = LiveTrackGroup.objects.get(id=group_id)
+        self.assertNotIn("hidden", track.settings or {})
+        self.assertFalse(group.hidden)
+
+    def test_hidden_items_clear_scope_trackers_only(self):
+        """POST hidden-items/clear with trackers scope clears tracker hidden and leaves group hidden unchanged."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Hidden Track Scope"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Hidden Group Scope"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({"target_types": ["trackers"]}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 204)
+
+        track = LiveTrack.objects.get(id=track_id)
+        group = LiveTrackGroup.objects.get(id=group_id)
+        self.assertNotIn("hidden", track.settings or {})
+        self.assertTrue(group.hidden)
+
+    def test_hidden_items_clear_scope_groups_only(self):
+        """POST hidden-items/clear with groups scope clears group hidden and leaves tracker hidden unchanged."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Hidden Track Scope Groups"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Hidden Group Scope Groups"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({"target_types": ["groups"]}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 204)
+
+        track = LiveTrack.objects.get(id=track_id)
+        group = LiveTrackGroup.objects.get(id=group_id)
+        self.assertEqual((track.settings or {}).get("hidden"), True)
+        self.assertFalse(group.hidden)
+
+    def test_hidden_items_clear_does_not_mutate_non_owned_items(self):
+        """POST hidden-items/clear only mutates current owner's hidden items."""
+        with _patch_live_track_enabled():
+            own_track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Owner Hidden Track"}),
+                content_type="application/json",
+            )
+        own_track_id = own_track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{own_track_id}/settings/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+            own_group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Owner Hidden Group"}),
+                content_type="application/json",
+            )
+        own_group_id = own_group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{own_group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            other_track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Other Hidden Track"}),
+                content_type="application/json",
+            )
+        other_track_id = other_track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{other_track_id}/settings/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+            other_group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Other Hidden Group"}),
+                content_type="application/json",
+            )
+        other_group_id = other_group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{other_group_id}/",
+                data=json.dumps({"hidden": True}),
+                content_type="application/json",
+            )
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 204)
+
+        self.assertNotIn("hidden", LiveTrack.objects.get(id=own_track_id).settings or {})
+        self.assertFalse(LiveTrackGroup.objects.get(id=own_group_id).hidden)
+        self.assertEqual((LiveTrack.objects.get(id=other_track_id).settings or {}).get("hidden"), True)
+        self.assertTrue(LiveTrackGroup.objects.get(id=other_group_id).hidden)
+
+    def test_hidden_items_clear_is_idempotent_when_already_clear(self):
+        """POST hidden-items/clear returns 204 when no hidden items are present."""
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 204)
+
+    def test_hidden_items_clear_invalid_scope_returns_400(self):
+        """POST hidden-items/clear rejects unknown target scope values."""
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({"target_types": ["invalid"]}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
     def test_group_add_remove_track(self):
         """POST groups/<id>/tracks/ and DELETE groups/<id>/tracks/<track_id>/."""
         with _patch_live_track_enabled():
@@ -3952,6 +4224,27 @@ class TestLiveTrackGroups(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["hidden"])
+
+    def test_group_patch_shared_with_emails_null_private_does_not_400(self):
+        """PATCH groups/<id>/ accepts shared_with_emails=null when visibility is private."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Null Shared Emails"}),
+                content_type="application/json",
+            )
+        group_id = create_resp.json()["id"]
+
+        with _patch_live_track_enabled():
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "private",
+                    "shared_with_emails": None,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
 
     def test_group_leave_self_unshare(self):
         """Non-owner shared with group can leave via DELETE groups/<id>/leave/ (removes their LiveTrackGroupShare)."""

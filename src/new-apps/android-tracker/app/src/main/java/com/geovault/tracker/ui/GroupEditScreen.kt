@@ -445,7 +445,7 @@ private fun GroupEditOwnerContent(
                 GeoVaultToggleHelpCard(
                     checked = dialog.hiddenDraft,
                     onCheckedChange = onHiddenChanged,
-                    title = stringResource(R.string.trackers_field_hidden_on_map),
+                    title = stringResource(R.string.groups_field_hidden),
                     helpText = stringResource(R.string.groups_edit_hidden_help),
                     enabled = !isSaving,
                 )

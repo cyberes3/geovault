@@ -51,6 +51,9 @@ class SettingsViewModel(
     private val groupManagementRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository(),
 ) : AndroidViewModel(application) {
+    private companion object {
+        val SHOW_ALL_CLEAR_TARGETS = listOf("trackers", "groups")
+    }
 
     constructor(application: Application) : this(
         application,
@@ -292,37 +295,19 @@ class SettingsViewModel(
     fun unhideAllTrackerItems() {
         viewModelScope.launch {
             _state.update { it.copy(isHiddenTrackerItemsLoading = true) }
-            val items = _state.value.hiddenTrackerItems
-            items.forEach { item ->
-                when (item.type) {
-                    HiddenTrackerItemType.TRACKER -> {
-                        val tracker = when (val loadResult = trackerManagementRepository.loadTracker(item.id)) {
-                            is RepositoryResult.Success -> loadResult.data
-                            is RepositoryResult.Failure -> null
-                        }
-                        if (tracker == null) return@forEach
-                        trackerManagementRepository.updateTrackerSettings(
-                            trackerId = item.id,
-                            request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
-                                tracker = tracker,
-                                hidden = false,
-                            )
-                        )
-                    }
-                    HiddenTrackerItemType.GROUP -> {
-                        val group = when (val loadResult = groupManagementRepository.loadGroup(item.id)) {
-                            is RepositoryResult.Success -> loadResult.data
-                            is RepositoryResult.Failure -> null
-                        }
-                        if (group == null) return@forEach
-                        groupManagementRepository.patchGroup(
-                            groupId = item.id,
-                            request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
+            when (val result = trackerManagementRepository.clearHiddenItems(SHOW_ALL_CLEAR_TARGETS)) {
+                is RepositoryResult.Success -> {
+                    refreshHiddenTrackerItems()
+                }
+                is RepositoryResult.Failure -> {
+                    _state.update {
+                        it.copy(
+                            isHiddenTrackerItemsLoading = false,
+                            infoMessage = appContext.getString(R.string.failed_to_clear_hidden_items),
                         )
                     }
                 }
             }
-            refreshHiddenTrackerItems()
         }
     }
 

@@ -82,7 +82,7 @@ export function buildTrackerPreservingSettingsPayload(tracker, overrides = {}) {
 export function buildTrackerSharingPayload(tracker, visibility, sharedWithEmails) {
   return buildTrackerPreservingSettingsPayload(tracker, {
     visibility,
-    shared_with_emails: visibility === 'shared' ? normalizeEmailList(sharedWithEmails) : null,
+    shared_with_emails: visibility === 'shared' ? normalizeEmailList(sharedWithEmails) : undefined,
     world_share_enabled: visibility === 'private' ? false : undefined,
   });
 }
@@ -126,5 +126,15 @@ export function buildGroupUnhidePayload(group) {
   return buildGroupPreservingPatchPayload(group, {
     hidden: false,
   });
+}
+
+export function buildHiddenItemsClearPayload(targetTypes) {
+  const normalized = [...(targetTypes || [])]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+  if (!normalized.length) {
+    return {};
+  }
+  return { target_types: normalized };
 }
 

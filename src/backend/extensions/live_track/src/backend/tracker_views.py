@@ -22,6 +22,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from django.contrib.auth import get_user_model
 from django.db.models import Count, F, Q
+from django.utils import timezone
 
 from .helpers import (
     DEFAULT_TRACK_COLOR,
@@ -58,6 +59,7 @@ from .validation import (
     AvailableToAddGroupResponse,
     AvailableToAddItemResponse,
     AvailableToAddResponse,
+    HiddenItemsClearRequest,
     MapVisibilityPrefsRequest,
     RegenerateTrackerTokensResponse,
     TrackerListItemResponse,
@@ -70,6 +72,50 @@ from .validation import (
 
 
 User = get_user_model()
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@csrf_exempt
+def hidden_items_clear(request):
+    """
+    POST hidden-items/clear/ — clear hidden tracker/group flags for the requesting owner.
+    Contract:
+    - omitted target_types => clear both trackers and groups
+    - scoped clear supports trackers-only or groups-only
+    - idempotent and owner-only; unrelated fields are not modified
+    """
+    data, err = get_json_body(request)
+    if err is not None:
+        return err
+    try:
+        body = HiddenItemsClearRequest.model_validate(data or {})
+    except PydanticValidationError as e:
+        errs = e.errors()
+        msg = errs[0].get("msg", "Invalid body") if errs else "Invalid body"
+        return error_response(msg, 400)
+
+    target_types = set(body.target_types or ["trackers", "groups"])
+
+    if "trackers" in target_types:
+        tracks = LiveTrack.objects.filter(user=request.user).only("id", "settings", "updated_at")
+        now = timezone.now()
+        for track in tracks:
+            settings = scrub_legacy_hidden_from_track_settings({**(track.settings or {})})
+            if "hidden" not in settings:
+                continue
+            settings.pop("hidden", None)
+            track.settings = scrub_legacy_hidden_from_track_settings(settings)
+            track.updated_at = now
+            track.save(update_fields=["settings", "updated_at"])
+
+    if "groups" in target_types:
+        LiveTrackGroup.objects.filter(user=request.user, hidden=True).update(
+            hidden=False,
+            updated_at=timezone.now(),
+        )
+
+    return HttpResponse(status=204)
 
 
 def _json_size_bytes(payload: dict) -> int:
@@ -413,8 +459,9 @@ def tracker_post_settings(request, tracker_id):
     # - explicit null: clear/reset setting key
     # Settings JSON keys: color, recent_data_window, hidden, allow_group_reshare.
     # (visibility/share fields are model fields handled below)
+    provided_fields = body.model_dump(exclude_unset=True)
     settings_keys = {"color", "recent_data_window", "hidden", "allow_group_reshare"}
-    settings_dump = {k: v for k, v in body.model_dump(exclude_unset=True).items() if k in settings_keys}
+    settings_dump = {k: v for k, v in provided_fields.items() if k in settings_keys}
     if settings_dump:
         new_settings = scrub_legacy_hidden_from_track_settings({**(track.settings or {})})
         for k, v in settings_dump.items():
@@ -442,10 +489,20 @@ def tracker_post_settings(request, tracker_id):
     if body.share_params_with_world is not None:
         track.share_params_with_world = body.share_params_with_world
         update_fields.append("share_params_with_world")
-    if body.shared_with_emails is not None:
+    if "shared_with_emails" in provided_fields:
+        raw_shared_with_emails = body.shared_with_emails
         if track.visibility != VISIBILITY_SHARED:
-            return error_response("shared_with_emails only applies when visibility is shared", 400)
-        emails = [e.strip().lower() for e in body.shared_with_emails if (e or "").strip()]
+            # Accept null/[] as a safe clear/no-op for non-shared visibility.
+            if raw_shared_with_emails is None or raw_shared_with_emails == []:
+                LiveTrackShare.objects.filter(track=track).delete()
+                LiveTrackGroupMember.objects.filter(track=track).exclude(group__user=track.user).delete()
+                LiveTrackSubscription.objects.filter(track=track).exclude(user=track.user).delete()
+                raw_shared_with_emails = []
+            else:
+                return error_response("shared_with_emails only applies when visibility is shared", 400)
+        if raw_shared_with_emails is None:
+            raw_shared_with_emails = []
+        emails = [e.strip().lower() for e in raw_shared_with_emails if (e or "").strip()]
         q = Q()
         for e in emails:
             q |= Q(email__iexact=e)
@@ -479,7 +536,7 @@ def tracker_post_settings(request, tracker_id):
     # World share is allowed for shared/public tracks, but never for private tracks.
     if track.visibility == VISIBILITY_PRIVATE:
         LiveTrackWorldShare.objects.filter(track=track).delete()
-    elif body.world_share_enabled is not None:
+    elif "world_share_enabled" in provided_fields:
         if body.world_share_enabled:
             share, _ = LiveTrackWorldShare.objects.get_or_create(
                 track=track,

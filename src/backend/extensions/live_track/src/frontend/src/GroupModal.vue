@@ -281,7 +281,7 @@ export default {
           hidden: groupHidden.value,
           visibility: visibility.value,
           world_share_enabled: worldShareEnabled.value,
-          shared_with_emails: visibility.value === 'shared' ? [...sharedWithEmails.value] : null,
+          shared_with_emails: visibility.value === 'shared' ? [...sharedWithEmails.value] : undefined,
         });
         const patchRes = await props.api.patch(`/groups/${props.group.id}/`, payload);
         const patchData = patchRes?.data;

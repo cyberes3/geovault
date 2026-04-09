@@ -200,9 +200,17 @@ def group_get_patch_delete(request, group_id):
                 LiveTrackGroupShare.objects.filter(group=group).delete()
                 LiveTrackGroupSubscription.objects.filter(group=group).delete()
         if "shared_with_emails" in data:
-            if getattr(group, "visibility", "private") != VISIBILITY_SHARED:
-                return error_response("shared_with_emails only applies when visibility is shared", 400)
             raw = data.get("shared_with_emails")
+            if getattr(group, "visibility", "private") != VISIBILITY_SHARED:
+                # Allow null/empty when not shared as a safe clear/no-op to avoid brittle clients.
+                if raw is None or raw == []:
+                    LiveTrackGroupShare.objects.filter(group=group).delete()
+                    LiveTrackGroupSubscription.objects.filter(group=group).delete()
+                    raw = None
+                else:
+                    return error_response("shared_with_emails only applies when visibility is shared", 400)
+            if raw is None:
+                raw = []
             if not isinstance(raw, list):
                 return error_response("shared_with_emails must be a list", 400)
             if any(not isinstance(e, str) for e in raw):

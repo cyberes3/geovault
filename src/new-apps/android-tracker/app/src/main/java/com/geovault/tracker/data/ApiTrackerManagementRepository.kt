@@ -11,6 +11,7 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.GroupAddTrackRequest
 import com.geovault.tracker.GroupCreateRequest
 import com.geovault.tracker.GroupPatchRequest
+import com.geovault.tracker.HiddenItemsClearRequest
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
@@ -377,6 +378,12 @@ class ApiTrackerManagementRepository(
         return result
     }
 
+    override suspend fun clearHiddenItems(targetTypes: List<String>?): RepositoryResult<Unit> {
+        return executeNoBodyCall { api ->
+            api.clearHiddenItems(HiddenItemsClearRequest(target_types = targetTypes)).execute()
+        }
+    }
+
     override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> {
         if (!forceRefresh) {
             val cachedGroups = cacheMutex.withLock { groupsCache }
@@ -575,7 +582,7 @@ class ApiTrackerManagementRepository(
             if (synchronizedExistingApi != null && cachedApiBaseUrl == baseUrl) {
                 synchronizedExistingApi
             } else {
-                RetrofitClient.getClient(appContext, baseUrl).create(TrackerApi::class.java).also { createdApi ->
+                RetrofitClient.getClientOmitNulls(appContext, baseUrl).create(TrackerApi::class.java).also { createdApi ->
                     cachedApiBaseUrl = baseUrl
                     cachedApi = createdApi
                 }

@@ -14,6 +14,8 @@ object RetrofitClient {
     private val networkGson = GsonBuilder()
         .serializeNulls()
         .create()
+    private val networkGsonOmitNulls = GsonBuilder()
+        .create()
     private fun authTokenInterceptor(appContext: Context): Interceptor = Interceptor { chain ->
         val token = GeovaultAuthManager.getAccessToken(appContext)
         val request = if (!token.isNullOrBlank()) {
@@ -71,9 +73,9 @@ object RetrofitClient {
             .build()
     }
 
-    fun getClient(context: Context, baseUrl: String): Retrofit {
+    private fun buildHttpClient(context: Context): OkHttpClient {
         val appContext = context.applicationContext
-        val client = OkHttpClient.Builder()
+        return OkHttpClient.Builder()
             .addInterceptor(authTokenInterceptor(appContext))
             .addInterceptor(authFailureInterceptor(appContext))
             .authenticator(tokenAuthenticator(appContext))
@@ -81,10 +83,23 @@ object RetrofitClient {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
+    }
+
+    fun getClient(context: Context, baseUrl: String): Retrofit {
+        val client = buildHttpClient(context)
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create(networkGson))
+            .build()
+    }
+
+    fun getClientOmitNulls(context: Context, baseUrl: String): Retrofit {
+        val client = buildHttpClient(context)
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(networkGsonOmitNulls))
             .build()
     }
 }
