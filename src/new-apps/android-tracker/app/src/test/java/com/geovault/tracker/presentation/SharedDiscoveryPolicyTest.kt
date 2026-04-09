@@ -49,7 +49,7 @@ class SharedDiscoveryPolicyTest {
     }
 
     @Test
-    fun derive_filtersPublicGroupTrackIdsAlreadyOnMap() {
+    fun derive_keepsPublicGroupTrackIdsForGroupSubscription() {
         val buckets = SharedDiscoveryPolicy.derive(
             availableToAdd = AvailableToAddResponse(
                 public_groups = listOf(
@@ -63,11 +63,11 @@ class SharedDiscoveryPolicyTest {
         )
 
         assertEquals(listOf("g1"), buckets.publicGroups.map { it.id })
-        assertEquals(listOf("t2"), buckets.publicGroups.first().track_ids)
+        assertEquals(listOf("t1", "t2"), buckets.publicGroups.first().track_ids)
     }
 
     @Test
-    fun derive_filtersIncomingGroupsAlreadyLocalButKeepsPublicDuplicates() {
+    fun derive_keepsIncomingGroupsEvenWhenAlreadyLocalAndKeepsPublicDuplicates() {
         val buckets = SharedDiscoveryPolicy.derive(
             availableToAdd = AvailableToAddResponse(
                 shared_with_me_groups = listOf(
@@ -85,7 +85,7 @@ class SharedDiscoveryPolicyTest {
             )
         )
 
-        assertEquals(listOf("g2"), buckets.incomingGroups.map { it.id })
+        assertEquals(listOf("g2", "g1"), buckets.incomingGroups.map { it.id })
         assertEquals(listOf("g2", "g3"), buckets.publicGroups.map { it.id })
     }
 

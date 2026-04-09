@@ -416,36 +416,36 @@ fun TrackersScreen(
             }
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
-                GroupActionsScreen(
-                    group = dialog.group,
-                    allTrackers = state.trackers,
-                    highlightedTrackerId = dialog.highlightedTrackerId,
-                    onDismiss = { groupActionsDialog = null },
-                    onViewTrackerOnMap = { trackerId ->
-                        groupActionsDialog = null
-                        onOpenTrackerOnMap(trackerId, null)
-                    },
-                    onViewTrackerParams = { tracker ->
-                        onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
-                    },
-                    onViewTrackerInList = { trackerId ->
-                        groupActionsDialog = null
-                        localNavigationRequest = TrackersHostNavigationRequest(
-                            subTab = TrackersGroupsSubTab.TRACKERS,
-                            trackerId = trackerId,
-                            focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
-                        )
-                    },
-                    onEditGroup = { group ->
-                        groupEditReturnOverlay = dialog.copy(group = group)
-                        groupActionsDialog = null
-                        vm.openEditGroupDialog(group)
-                    },
-                    onViewGroupOnMap = { groupId ->
-                        groupActionsDialog = null
-                        onOpenGroupOnMap(groupId)
-                    },
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    GroupActionsScreen(
+                        group = dialog.group,
+                        allTrackers = state.trackers,
+                        highlightedTrackerId = dialog.highlightedTrackerId,
+                        onDismiss = { groupActionsDialog = null },
+                        onViewTrackerOnMap = { trackerId ->
+                            onOpenTrackerOnMap(trackerId, null)
+                        },
+                        onViewTrackerParams = { tracker ->
+                            onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
+                        },
+                        onViewTrackerInList = { trackerId ->
+                            groupActionsDialog = null
+                            localNavigationRequest = TrackersHostNavigationRequest(
+                                subTab = TrackersGroupsSubTab.TRACKERS,
+                                trackerId = trackerId,
+                                focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+                            )
+                        },
+                        onEditGroup = { group ->
+                            groupEditReturnOverlay = dialog.copy(group = group)
+                            groupActionsDialog = null
+                            vm.openEditGroupDialog(group)
+                        },
+                        onViewGroupOnMap = { groupId ->
+                            onOpenGroupOnMap(groupId)
+                        },
+                    )
+                }
             } else if (activeTrackerEditDialog != null) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     renderTrackersBody()
@@ -1110,113 +1110,23 @@ private fun TrackerRowCard(
     onAction: (TrackerRowAction) -> Unit,
     enabled: Boolean,
 ) {
-    val context = LocalContext.current
-    val chevronTint = remember(model.chevronColorHex) {
-        TrackerChevronStylePolicy.tintForTrackerColorHex(model.chevronColorHex, context)
-    }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        shape = RoundedCornerShape(12.dp),
-        elevation = 0.dp,
-        backgroundColor = if (model.isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
-        border = BorderStroke(2.dp, GeoVaultColorTokens.PrimaryBlue),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TrackerChevronIcon(
-                    tint = chevronTint,
-                    modifier = Modifier.size(TrackerChevronStylePolicy.TrackerRowChevronSize),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = model.name,
-                    modifier = Modifier.weight(1f),
-                    color = GeoVaultColorTokens.TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (model.isSelected) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = model.formattedLastUpdate
-                        ?: stringResource(R.string.waiting_for_data),
-                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
-                    fontSize = 12.sp,
-                )
-                if (model.formattedCoordinates != null) {
-                    Text(
-                        text = " \u2022 ",
-                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.5f),
-                        fontSize = 12.sp,
-                    )
-                    Text(
-                        text = model.formattedCoordinates,
-                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            if (model.ownerEmail != null) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = model.ownerEmail,
-                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            } else {
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                GeoVaultPrimaryButton(
-                    text = "Map",
-                    onClick = { onAction(TrackerRowAction.OpenOnMap(model.id, model.name)) },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    enabled = enabled && model.hasPosition,
-                )
-                GeoVaultSecondaryButton(
-                    text = "Params",
-                    onClick = { onAction(TrackerRowAction.ViewParams(model.id)) },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    enabled = enabled,
-                )
-                GeoVaultSecondaryButton(
-                    text = "Edit",
-                    onClick = { onAction(TrackerRowAction.Edit(model.id)) },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    enabled = enabled && model.canEdit,
-                )
-            }
-        }
-    }
+    com.geovault.tracker.ui.components.TrackerItemCard(
+        model = com.geovault.tracker.ui.components.TrackerItemCardModel(
+            title = model.name,
+            chevronColorHex = model.chevronColorHex,
+            lastUpdateText = model.formattedLastUpdate ?: stringResource(R.string.waiting_for_data),
+            coordinatesText = model.formattedCoordinates,
+            ownerEmail = model.ownerEmail,
+            isHighlighted = model.isHighlighted,
+            isSelected = model.isSelected,
+            canOpenMap = model.hasPosition,
+            canEdit = model.canEdit,
+        ),
+        onOpenMap = { onAction(TrackerRowAction.OpenOnMap(model.id, model.name)) },
+        onViewParams = { onAction(TrackerRowAction.ViewParams(model.id)) },
+        onEdit = { onAction(TrackerRowAction.Edit(model.id)) },
+        enabled = enabled,
+    )
 }
 
 @Composable
@@ -1225,101 +1135,22 @@ private fun GroupRowCard(
     onAction: (GroupRowAction) -> Unit,
     enabled: Boolean,
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-    val trackCountText = stringResource(R.string.trackers_meta_tracks_count, model.trackerCount)
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        shape = RoundedCornerShape(8.dp),
-        elevation = 0.dp,
-        backgroundColor = if (model.isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
-        border = BorderStroke(
-            2.dp,
-            if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.PrimaryBlue
+    com.geovault.tracker.ui.components.GroupItemCard(
+        model = com.geovault.tracker.ui.components.GroupItemCardModel(
+            title = model.name,
+            ownerEmail = model.ownerEmail,
+            trackerCount = model.trackerCount,
+            isPending = model.isPending,
+            isHighlighted = model.isHighlighted,
+            canOpenMap = !model.isPending,
+            canEdit = model.canEdit,
+            canOpenActions = true,
         ),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_groups),
-                contentDescription = null,
-                modifier = Modifier.size(22.dp),
-                colorFilter = ColorFilter.tint(GeoVaultColorTokens.PrimaryBlue),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(enabled = enabled) { onAction(GroupRowAction.OpenActions(model.id)) }
-            ) {
-                Text(
-                    text = model.name,
-                    color = GeoVaultColorTokens.TextPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                model.ownerEmail?.let {
-                    Text(
-                        text = it,
-                        color = GeoVaultColorTokens.TextSecondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Text(
-                    text = if (model.isPending) {
-                        "${stringResource(R.string.trackers_badge_invite_pending)} \u00B7 $trackCountText"
-                    } else {
-                        trackCountText
-                    },
-                    color = if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.TextSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = { menuExpanded = true },
-                    enabled = enabled,
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.MoreVert,
-                        contentDescription = null,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
-                    )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    if (!model.isPending) {
-                        DropdownMenuItem(onClick = {
-                            menuExpanded = false
-                            onAction(GroupRowAction.OpenOnMap(model.id))
-                        }) {
-                            Text(stringResource(R.string.trackers_action_view_group_on_map))
-                        }
-                    }
-                    DropdownMenuItem(onClick = {
-                        menuExpanded = false
-                        onAction(GroupRowAction.Edit(model.id))
-                    }) {
-                        Text(stringResource(R.string.trackers_action_edit))
-                    }
-                }
-            }
-        }
-    }
+        onOpenActions = { onAction(GroupRowAction.OpenActions(model.id)) },
+        onOpenMap = { onAction(GroupRowAction.OpenOnMap(model.id)) },
+        onEdit = { onAction(GroupRowAction.Edit(model.id)) },
+        enabled = enabled,
+    )
 }
 
 private fun isVisibleOwnerTracker(tracker: Tracker): Boolean {

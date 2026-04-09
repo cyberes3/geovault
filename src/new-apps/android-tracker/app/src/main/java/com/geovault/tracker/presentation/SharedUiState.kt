@@ -45,6 +45,7 @@ data class SharedUiState(
     val optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
     val optimisticTrackerRemovals: Set<String> = emptySet(),
     val optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
+    val selectedTrackerId: String = "",
 ) {
     private val discoveryBuckets: SharedDiscoveryBuckets
         get() = SharedDiscoveryPolicy.derive(
@@ -97,6 +98,9 @@ data class SharedUiState(
             optimisticDiscoverOnMapRemovals = optimisticDiscoverOnMapRemovals,
         )
 
+    val sharedListRows: List<SharedListRowModel>
+        get() = filteredSections.sharedItems.toSharedListRows(selectedTrackerId = selectedTrackerId)
+
     val pendingAddActionKeys: Set<String>
         get() = pendingOps.filterValues { it == SharedMutationPhase.PENDING_ADD }.keys
 
@@ -114,9 +118,6 @@ data class SharedUiState(
     fun isPublicTrackerAdded(trackerId: String): Boolean =
         effectiveSubscribedTrackerIds.contains(trackerId)
 
-    fun isPublicGroupAdded(trackIds: List<String>): Boolean {
-        val normalizedIds = trackIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        if (normalizedIds.isEmpty()) return false
-        return normalizedIds.all { effectiveSubscribedTrackerIds.contains(it) }
-    }
+    fun isPublicGroupAdded(groupId: String): Boolean =
+        groups.any { it.id == groupId }
 }

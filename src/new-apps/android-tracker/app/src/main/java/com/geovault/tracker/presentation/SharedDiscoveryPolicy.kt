@@ -29,13 +29,6 @@ object SharedDiscoveryPolicy {
             publicTrackers = emptyList(),
             publicGroups = emptyList()
         )
-        val knownTrackerIds = trackers.map { normalizeSharedId(it.id) }
-            .filter { it.isNotEmpty() }
-            .toSet()
-        val knownGroupIds = groups.map { normalizeSharedId(it.id) }
-            .filter { it.isNotEmpty() }
-            .toSet()
-
         val onMyMapTrackers = computeVisibleSharedTrackers(trackers, groups)
             .sortedWith(compareBy({ it.subscribed_at ?: Long.MAX_VALUE }, { it.name.lowercase() }))
             .map {
@@ -62,7 +55,7 @@ object SharedDiscoveryPolicy {
 
         val incomingGroups = available.shared_with_me_groups
             .distinctBy { normalizeSharedId(it.id) }
-            .filter { normalizeSharedId(it.id).isNotEmpty() && normalizeSharedId(it.id) !in knownGroupIds }
+            .filter { normalizeSharedId(it.id).isNotEmpty() }
             // Pending shared groups should not expose per-track membership pre-acceptance.
             .map { it.copy(track_ids = emptyList()) }
             .sortedBy { it.name.lowercase() }
@@ -85,7 +78,7 @@ object SharedDiscoveryPolicy {
                 group.copy(
                     track_ids = group.track_ids
                         .map { normalizeSharedId(it) }
-                        .filter { it.isNotEmpty() && it !in knownTrackerIds }
+                        .filter { it.isNotEmpty() }
                         .distinct()
                 )
             }

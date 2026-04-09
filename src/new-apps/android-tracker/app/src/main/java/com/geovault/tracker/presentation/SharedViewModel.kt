@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.AppError
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerBootstrapOrchestrator
@@ -45,17 +46,32 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     init {
         viewModelScope.launch {
             stateStore.trackers.collectLatest { trackers ->
-                _uiState.update { it.copy(trackers = trackers) }
+                _uiState.update {
+                    it.copy(
+                        trackers = trackers,
+                        selectedTrackerId = selectedTrackerId(),
+                    )
+                }
             }
         }
         viewModelScope.launch {
             stateStore.groups.collectLatest { groups ->
-                _uiState.update { it.copy(groups = groups) }
+                _uiState.update {
+                    it.copy(
+                        groups = groups,
+                        selectedTrackerId = selectedTrackerId(),
+                    )
+                }
             }
         }
         viewModelScope.launch {
             stateStore.mapVisibility.collectLatest { mapVisibility ->
-                _uiState.update { it.copy(mapVisibility = mapVisibility) }
+                _uiState.update {
+                    it.copy(
+                        mapVisibility = mapVisibility,
+                        selectedTrackerId = selectedTrackerId(),
+                    )
+                }
             }
         }
     }
@@ -186,10 +202,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private fun mutationKeyIncomingTrackerAdd(trackerId: String): String = "incoming-tracker-$trackerId"
     private fun mutationKeyPublicTrackerAdd(trackerId: String): String = "public-tracker-$trackerId"
     private fun mutationKeyPublicTrackerRemove(trackerId: String): String = "public-remove-tracker-$trackerId"
-    private fun mutationKeyPublicGroupAdd(trackIds: List<String>): String =
-        "public-group-${trackIds.sorted().joinToString(separator = ",")}"
-    private fun mutationKeyPublicGroupRemove(trackIds: List<String>): String =
-        "public-remove-group-${trackIds.sorted().joinToString(separator = ",")}"
+    private fun mutationKeyPublicGroupAdd(groupId: String): String =
+        "public-group-$groupId"
+    private fun mutationKeyPublicGroupRemove(groupId: String): String =
+        "public-remove-group-$groupId"
     private fun mutationKeyDiscoverOnMapTrackerRemove(trackerId: String): String = "discover-remove-tracker-$trackerId"
     private fun mutationKeyDiscoverOnMapGroupRemove(groupId: String): String = "discover-remove-group-$groupId"
     private fun mutationKeyEditTrackerUnsubscribe(trackerId: String): String = "edit-tracker-unsubscribe-$trackerId"
@@ -353,7 +369,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 )
             ) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
+                // No forced refresh: repository mutation updates the state store immediately,
+                // and Shared UI collects that stream for in-place list updates.
+                is RepositoryResult.Success -> Unit
                 is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
             clearPendingMutation(key)
@@ -372,7 +390,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 )
             ) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
+                // No forced refresh: repository mutation updates the state store immediately,
+                // and Shared UI collects that stream for in-place list updates.
+                is RepositoryResult.Success -> Unit
                 is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
             clearPendingMutation(key)
@@ -391,59 +411,30 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun requestPublicGroupAdd(trackIds: List<String>) {
-        val normalizedIds = SharedBulkMutationCoordinator.normalizeIds(trackIds)
-        if (normalizedIds.isEmpty()) return
-        val key = mutationKeyPublicGroupAdd(normalizedIds)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_ADD) { state ->
-                val optimisticAdds = normalizedIds.associateWith { id -> optimisticTrackerForId(state, id) }
-                state.copy(
-                    optimisticTrackerAdds = state.optimisticTrackerAdds + optimisticAdds,
-                    optimisticTrackerRemovals = state.optimisticTrackerRemovals - normalizedIds.toSet(),
-                )
-            }
-        ) return
+    fun requestPublicGroupAdd(groupId: String) {
+        val normalizedGroupId = groupId.trim()
+        if (normalizedGroupId.isEmpty()) return
+        val key = mutationKeyPublicGroupAdd(normalizedGroupId)
+        if (!startPendingMutation(key, SharedMutationPhase.PENDING_ADD)) return
         viewModelScope.launch {
-            var firstFailure: AppError? = null
-            val outcome = SharedBulkMutationCoordinator.run(normalizedIds) { id ->
-                when (val r = trackerRepository.subscribeTracker(id)) {
-                    is RepositoryResult.Success -> true
-                    is RepositoryResult.Failure -> {
-                        if (firstFailure == null) firstFailure = r.error
-                        false
-                    }
-                }
+            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupAccept(normalizedGroupId))) {
+                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
+                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
-            refreshStateFromServerSerialized(resolveBulkSubscribeMessage(outcome, firstFailure))
-            _uiState.update { it.copy(optimisticTrackerAdds = it.optimisticTrackerAdds - normalizedIds.toSet()) }
             clearPendingMutation(key)
         }
     }
 
-    fun requestPublicGroupRemove(trackIds: List<String>) {
-        val normalizedIds = SharedBulkMutationCoordinator.normalizeIds(trackIds)
-        if (normalizedIds.isEmpty()) return
-        val key = mutationKeyPublicGroupRemove(normalizedIds)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE) { state ->
-                state.copy(
-                    optimisticTrackerAdds = state.optimisticTrackerAdds - normalizedIds.toSet(),
-                    optimisticTrackerRemovals = state.optimisticTrackerRemovals + normalizedIds.toSet(),
-                )
-            }
-        ) return
+    fun requestPublicGroupRemove(groupId: String) {
+        val normalizedGroupId = groupId.trim()
+        if (normalizedGroupId.isEmpty()) return
+        val key = mutationKeyPublicGroupRemove(normalizedGroupId)
+        if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
-            var firstFailure: AppError? = null
-            val outcome = SharedBulkMutationCoordinator.run(normalizedIds) { id ->
-                when (val r = trackerRepository.unsubscribeTracker(id)) {
-                    is RepositoryResult.Success -> true
-                    is RepositoryResult.Failure -> {
-                        if (firstFailure == null) firstFailure = r.error
-                        false
-                    }
-                }
+            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(normalizedGroupId))) {
+                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
+                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
-            refreshStateFromServerSerialized(resolveBulkUnsubscribeMessage(outcome, firstFailure))
-            _uiState.update { it.copy(optimisticTrackerRemovals = it.optimisticTrackerRemovals - normalizedIds.toSet()) }
             clearPendingMutation(key)
         }
     }
@@ -521,128 +512,15 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun leaveTracker(tracker: Tracker) {
-        leaveTracker(tracker, onSuccess = {}, onFailure = {}, onSettled = {})
-    }
-
-    fun leaveTracker(
-        tracker: Tracker,
-        onSuccess: () -> Unit = {},
-        onFailure: () -> Unit = {},
-        onSettled: () -> Unit = {},
-    ) {
         val command = SharedOwnershipTransitionPolicy.forTrackerLeave(tracker) ?: return
         runTrackerTransition(
             command = command,
-            onSuccess = onSuccess,
-            onFailure = onFailure,
-            onSettled = onSettled,
-        )
-    }
-
-    fun unsubscribeTracker(trackerId: String) {
-        runTrackerTransition(
-            SharedTrackerTransitionCommand(
-                trackerId = trackerId,
-                action = SharedTrackerTransitionAction.Unsubscribe
-            )
-        )
-    }
-
-    fun leaveTrackerShare(trackerId: String) {
-        runTrackerTransition(
-            SharedTrackerTransitionCommand(
-                trackerId = trackerId,
-                action = SharedTrackerTransitionAction.LeaveShare
-            )
-        )
-    }
-
-    fun leaveGroup(groupId: String) {
-        runGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))
-    }
-
-    fun acceptGroupShare(groupId: String, onSettled: () -> Unit = {}) {
-        runGroupTransition(
-            command = SharedOwnershipTransitionPolicy.forGroupAccept(groupId),
-            onSettled = onSettled,
-        )
-    }
-
-    /** Incoming shared tracker: add to my trackers (subscribe). */
-    fun subscribeIncomingTracker(
-        trackerId: String,
-        onSuccess: () -> Unit = {},
-        onFailure: () -> Unit = {},
-        onSettled: () -> Unit = {},
-    ) {
-        runTrackerTransition(
-            command = SharedOwnershipTransitionPolicy.forIncomingTrackerSubscribe(trackerId),
-            onSuccess = onSuccess,
-            onFailure = onFailure,
-            onSettled = onSettled,
         )
     }
 
     /** Reject incoming direct share without subscribing. */
     fun leaveIncomingShare(trackerId: String) {
         runTrackerTransition(SharedOwnershipTransitionPolicy.forIncomingTrackerReject(trackerId))
-    }
-
-    fun subscribePublicTracker(trackerId: String) {
-        subscribePublicTracker(trackerId, onSuccess = {}, onSettled = {})
-    }
-
-    fun subscribePublicTracker(
-        trackerId: String,
-        onSuccess: () -> Unit = {},
-        onFailure: () -> Unit = {},
-        onSettled: () -> Unit = {},
-    ) {
-        runTrackerTransition(
-            command = SharedOwnershipTransitionPolicy.forPublicTrackerSubscribe(trackerId),
-            onSuccess = onSuccess,
-            onFailure = onFailure,
-            onSettled = onSettled,
-        )
-    }
-
-    /**
-     * Subscribe to every addable track in a public group.
-     * Mutations are applied per-track; state is always refreshed afterwards to match server truth.
-     */
-    fun subscribePublicGroup(trackIds: List<String>) {
-        subscribePublicGroup(trackIds, onSuccess = {}, onSettled = {})
-    }
-
-    fun subscribePublicGroup(
-        trackIds: List<String>,
-        onSuccess: () -> Unit = {},
-        onSettled: () -> Unit = {},
-    ) {
-        val normalizedIds = SharedBulkMutationCoordinator.normalizeIds(trackIds)
-        if (normalizedIds.isEmpty()) {
-            emitSnackbar(getApplication<Application>().getString(R.string.shared_error_public_group_no_tracks))
-            onSettled()
-            return
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            var firstFailure: AppError? = null
-            val outcome = SharedBulkMutationCoordinator.run(normalizedIds) { id ->
-                when (val r = trackerRepository.subscribeTracker(id)) {
-                    is RepositoryResult.Success -> true
-                    is RepositoryResult.Failure -> {
-                        if (firstFailure == null) firstFailure = r.error
-                        false
-                    }
-                }
-            }
-            refreshStateFromServer(feedbackMessage = resolveBulkSubscribeMessage(outcome, firstFailure))
-            if (outcome.failedCount == 0 && outcome.succeededCount > 0) {
-                onSuccess()
-            }
-            onSettled()
-        }
     }
 
     /**
@@ -703,21 +581,6 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun unsubscribeTracker(
-        trackerId: String,
-        onSuccess: () -> Unit = {},
-        onSettled: () -> Unit = {},
-    ) {
-        runTrackerTransition(
-            command = SharedTrackerTransitionCommand(
-                trackerId = trackerId,
-                action = SharedTrackerTransitionAction.Unsubscribe,
-            ),
-            onSuccess = onSuccess,
-            onSettled = onSettled,
-        )
-    }
-
     private fun runTrackerTransition(
         command: SharedTrackerTransitionCommand,
         onSuccess: () -> Unit = {},
@@ -735,23 +598,6 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                     _uiState.update { it.copy(isLoading = false) }
                     emitSnackbar(appErrorMessage(result.error))
                     onFailure()
-                }
-            }
-            onSettled()
-        }
-    }
-
-    private fun runGroupTransition(
-        command: SharedGroupTransitionCommand,
-        onSettled: () -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            when (val result = executeGroupTransition(command)) {
-                is RepositoryResult.Success -> refreshStateFromServer(feedbackMessage = null)
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false) }
-                    emitSnackbar(appErrorMessage(result.error))
                 }
             }
             onSettled()
@@ -807,29 +653,13 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             availableToAdd = snapshot.availableToAddResult.successDataOr(base.availableToAdd),
             mapVisibility = snapshot.mapVisibilityResult.successDataOr(base.mapVisibility),
             hasCompletedInitialLoad = true,
+            selectedTrackerId = selectedTrackerId(),
         )
         return next
     }
 
-    private fun resolveBulkSubscribeMessage(
-        outcome: SharedBulkMutationOutcome,
-        firstFailure: AppError?
-    ): String {
-        return when (SharedViewModelContracts.resolveBulkFeedbackKind(outcome)) {
-            SharedBulkFeedbackKind.SUCCESS ->
-                getApplication<Application>().getString(
-                    R.string.shared_bulk_subscribe_success,
-                    outcome.succeededCount
-                )
-            SharedBulkFeedbackKind.PARTIAL_FAILURE ->
-                getApplication<Application>().getString(
-                    R.string.shared_bulk_subscribe_partial_failure,
-                    outcome.succeededCount,
-                    outcome.failedCount
-                )
-            SharedBulkFeedbackKind.FULL_FAILURE -> appErrorMessage(firstFailure ?: AppError.Unknown)
-        }
-    }
+    private fun selectedTrackerId(): String =
+        SelectedTrackerPrefs.selectedTrackerId(getApplication())
 
     private fun resolveBulkUnsubscribeMessage(
         outcome: SharedBulkMutationOutcome,

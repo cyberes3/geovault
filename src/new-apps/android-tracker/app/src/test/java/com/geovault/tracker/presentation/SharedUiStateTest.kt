@@ -6,6 +6,7 @@ import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.Group
 import com.geovault.tracker.Tracker
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharedUiStateTest {
@@ -63,6 +64,9 @@ class SharedUiStateTest {
             trackers = listOf(
                 Tracker(id = "t-base", name = "Base", color = null, is_owner = false, visibility = "shared"),
             ),
+            groups = listOf(
+                Group(id = "g-added", name = "Added Group", is_owner = false, visibility = "shared", is_accepted = true),
+            ),
             optimisticTrackerAdds = mapOf(
                 "t-add" to Tracker(id = "t-add", name = "Add", color = null, is_owner = false, visibility = "shared"),
             ),
@@ -71,7 +75,30 @@ class SharedUiStateTest {
 
         assertEquals(true, state.isPublicTrackerAdded("t-add"))
         assertEquals(false, state.isPublicTrackerAdded("t-base"))
-        assertEquals(true, state.isPublicGroupAdded(listOf("t-add")))
-        assertEquals(false, state.isPublicGroupAdded(listOf("t-base")))
+        assertEquals(true, state.isPublicGroupAdded("g-added"))
+        assertEquals(false, state.isPublicGroupAdded("g-missing"))
+    }
+
+    @Test
+    fun sharedListRows_usesSelectedTrackerFromState() {
+        val state = SharedUiState(
+            trackers = listOf(
+                Tracker(
+                    id = "t1",
+                    name = "Alpha tracker",
+                    color = null,
+                    is_owner = false,
+                    visibility = "shared",
+                    last_point = listOf(10.0, 20.0, 1234.0),
+                )
+            ),
+            groups = emptyList(),
+            selectedTrackerId = "t1",
+        )
+
+        val trackerRow = state.sharedListRows.first() as SharedListRowModel.TrackerRow
+
+        assertTrue(trackerRow.isSelected)
+        assertTrue(trackerRow.canOpenMap)
     }
 }

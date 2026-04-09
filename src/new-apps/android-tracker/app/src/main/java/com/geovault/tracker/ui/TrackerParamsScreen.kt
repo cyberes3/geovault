@@ -2,6 +2,7 @@ package com.geovault.tracker.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
@@ -102,6 +104,9 @@ private fun TrackerParamsScrollContent(
     state: TrackerParamsScreenUiState,
     onRetry: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -123,11 +128,13 @@ private fun TrackerParamsScrollContent(
         ParamsInfoCard(
             headerLabel = stringResource(R.string.last_update_label),
             value = state.lastUpdateText,
+            clipboardHelper = clipboardHelper,
         )
 
         ParamsInfoCard(
             headerLabel = stringResource(R.string.position_label),
             value = state.positionText,
+            clipboardHelper = clipboardHelper,
         )
 
         val err = state.errorMessage
@@ -163,7 +170,10 @@ private fun TrackerParamsScrollContent(
                                     .weight(1f)
                                     .padding(4.dp),
                             ) {
-                                ParamGridItemCard(row = row)
+                                ParamGridItemCard(
+                                    row = row,
+                                    clipboardHelper = clipboardHelper,
+                                )
                             }
                         }
                         if (chunk.size == 1) {
@@ -229,11 +239,13 @@ private fun TrackerParamsStrokeCard(
 private fun ParamsInfoCard(
     headerLabel: String,
     value: String,
+    clipboardHelper: ClipboardCopyHelper,
 ) {
     TrackerParamsStrokeCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
+            .padding(bottom = 8.dp)
+            .clickable { clipboardHelper.copyText(value, label = headerLabel) },
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -264,8 +276,15 @@ private fun ParamsMessageCard(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ParamGridItemCard(row: TrackerParamGridRow) {
-    TrackerParamsStrokeCard(modifier = Modifier.fillMaxWidth()) {
+private fun ParamGridItemCard(
+    row: TrackerParamGridRow,
+    clipboardHelper: ClipboardCopyHelper,
+) {
+    TrackerParamsStrokeCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { clipboardHelper.copyText(row.value, label = row.label) },
+    ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = row.label,

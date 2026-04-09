@@ -167,6 +167,7 @@
     <string name="trackers_action_view_on_map">View on map</string>
     <string name="trackers_action_view_group_on_map">View group on map</string>
     <string name="trackers_action_view_group_members">View members</string>
+    <string name="trackers_action_params">Params</string>
     <string name="trackers_action_edit">Edit</string>
     <string name="trackers_action_unsubscribe">Unsubscribe</string>
     <string name="trackers_action_leave_share">Leave share</string>
