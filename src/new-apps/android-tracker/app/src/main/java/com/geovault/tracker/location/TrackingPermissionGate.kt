@@ -11,7 +11,11 @@ import androidx.core.content.ContextCompat
 object TrackingPermissionGate {
     fun hasLocationPermission(context: Context): Boolean {
         return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED ||
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasAnyLocationPermission(context: Context): Boolean {
+        return hasLocationPermission(context) ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
     }

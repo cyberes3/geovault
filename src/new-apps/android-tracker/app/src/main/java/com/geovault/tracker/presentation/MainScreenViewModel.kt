@@ -199,7 +199,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 serverUrl = server,
             )
         }
-        if (wasAuthenticated && !loggedIn) {
+        if (wasAuthenticated != loggedIn) {
             resetPostAuthStartupState()
         }
     }

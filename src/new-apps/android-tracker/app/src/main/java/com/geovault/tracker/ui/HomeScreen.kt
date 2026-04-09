@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.UnitUtils
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
+import com.geovault.common.ui.components.GeoVaultInfoDialog
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -109,10 +111,17 @@ fun HomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    var showPreciseLocationRequiredDialog by rememberSaveable { mutableStateOf(false) }
+
     val foregroundLocationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         homeViewModel.refreshPermissionSnapshot()
+        if (TrackingPermissionGate.hasAnyLocationPermission(context) &&
+            !TrackingPermissionGate.hasLocationPermission(context)
+        ) {
+            showPreciseLocationRequiredDialog = true
+        }
     }
     val backgroundLocationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -157,12 +166,16 @@ fun HomeScreen(
                         hasBatteryExemption = perms.hasBatteryOptimizationExemption,
                         hasExactAlarm = perms.hasExactAlarmPermission,
                         onGrantForeground = {
-                            foregroundLocationLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                ),
-                            )
+                            if (TrackingPermissionGate.hasAnyLocationPermission(context)) {
+                                showPreciseLocationRequiredDialog = true
+                            } else {
+                                foregroundLocationLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    ),
+                                )
+                            }
                         },
                         onGrantBackground = {
                             backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -208,6 +221,18 @@ fun HomeScreen(
             confirmText = stringResource(R.string.stop_tracking),
             cancelText = stringResource(R.string.trackers_dialog_cancel),
         )
+    }
+    if (showPreciseLocationRequiredDialog) {
+        GeoVaultInfoDialog(
+            title = "Precise Location Required",
+            onDismissRequest = {
+                showPreciseLocationRequiredDialog = false
+                openLocationPermissionSettings(context)
+            },
+            closeButtonText = "Open Settings",
+        ) {
+            Text("This app requires precise location to function correctly.\n\nIn the app settings that will open next, go to Permissions \u2192 Location. The \"Use precise location\" switch is below the main location access options.")
+        }
     }
 }
 
@@ -562,6 +587,14 @@ private fun rememberHomeTicker(isEnabled: Boolean): androidx.compose.runtime.Sta
         }
     }
     return now
+}
+
+private fun openLocationPermissionSettings(context: android.content.Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.parse("package:${context.packageName}")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
 }
 
 private fun openBatteryOptimizationSettings(context: android.content.Context) {
