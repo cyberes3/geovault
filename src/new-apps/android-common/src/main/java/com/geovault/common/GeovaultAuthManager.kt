@@ -127,7 +127,7 @@ object GeovaultAuthManager {
         val hasAccess = !s.getAccessToken().isNullOrBlank()
         val hasRefresh = !s.getRefreshToken().isNullOrBlank()
         val loggedIn = hasAccess || hasRefresh
-        Log.i(TAG, "isLoggedIn hasAccess=$hasAccess hasRefresh=$hasRefresh loggedIn=$loggedIn")
+        Log.d(TAG, "isLoggedIn hasAccess=$hasAccess hasRefresh=$hasRefresh loggedIn=$loggedIn")
         return loggedIn
     }
 

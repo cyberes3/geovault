@@ -250,9 +250,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun refreshServerAccessibilityOnResume() {
         if (!_state.value.isAuthenticated) return
-        if (startupRefreshJob?.isActive == true) return
         if (serverAccessibilityRefreshJob?.isActive == true) return
         serverAccessibilityRefreshJob = viewModelScope.launch {
+            startupRefreshJob?.join()
             val outcome = trackerBootstrapOrchestrator.refreshForResume()
             _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
         }

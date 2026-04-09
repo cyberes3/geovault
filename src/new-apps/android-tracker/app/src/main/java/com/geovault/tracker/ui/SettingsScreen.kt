@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.geovault.common.ui.components.rememberConnectingButtonState
 import com.geovault.tracker.presentation.SettingsMeasurementPolicy
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.common.ui.components.GeoVaultInfoDialog
@@ -678,14 +679,26 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(bottom = 24.dp),
             )
+            val connectState = rememberConnectingButtonState(
+                isConnecting = state.isConnecting,
+                onConnect = onConnect,
+            )
             GeoVaultPrimaryButton(
-                text = stringResource(R.string.connect_account),
-                onClick = onConnect,
-                enabled = !state.isConnecting,
+                text = if (connectState.isEffectivelyConnecting) "Connecting..." else stringResource(R.string.connect_account),
+                onClick = { connectState.onClick() },
+                enabled = !connectState.isEffectivelyConnecting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
             )
+            if (!state.infoMessage.isNullOrBlank() && !connectState.isEffectivelyConnecting) {
+                Text(
+                    text = state.infoMessage,
+                    color = GeoVaultColorTokens.TextSecondary,
+                    style = MaterialTheme.typography.body2,
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+            }
         } else {
             val loggedInEmail = state.loggedInText
                 .removePrefix("Logged in as")

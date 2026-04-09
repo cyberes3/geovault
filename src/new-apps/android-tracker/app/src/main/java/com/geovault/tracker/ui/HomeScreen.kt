@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.text.format.DateUtils
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -223,6 +224,7 @@ private fun PermissionsContainer(
     onGrantBattery: () -> Unit,
     onGrantExactAlarm: () -> Unit,
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -253,10 +255,16 @@ private fun PermissionsContainer(
             )
             Spacer(modifier = Modifier.height(12.dp))
         }
-        if (hasForegroundLocation && !hasBackgroundLocation) {
+        if (!hasBackgroundLocation) {
             GeoVaultPrimaryButton(
                 text = stringResource(R.string.grant_background_location),
-                onClick = onGrantBackground,
+                onClick = {
+                    if (hasForegroundLocation) {
+                        onGrantBackground()
+                    } else {
+                        Toast.makeText(context, "Grant location permission first", Toast.LENGTH_SHORT).show()
+                    }
+                },
                 tooltip = stringResource(R.string.tooltip_grant_background_location),
                 modifier = Modifier.fillMaxWidth(),
             )
