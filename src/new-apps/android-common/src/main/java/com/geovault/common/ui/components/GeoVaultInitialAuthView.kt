@@ -60,7 +60,6 @@ fun GeoVaultInitialAuthView(
 
     LaunchedEffect(isConnecting) {
         if (isConnecting) {
-            awaitingExternalStart = false
             localConnecting = true
         } else if (!awaitingExternalStart) {
             localConnecting = false

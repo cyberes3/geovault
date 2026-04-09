@@ -1,7 +1,11 @@
 package com.geovault.common.auth
 
+import android.net.Uri
+import android.util.Log
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+
+private const val TAG = "InitialAuthController"
 
 class CommonInitialAuthController(
     private val serverConfigService: ServerConfigService,
@@ -38,10 +42,13 @@ class CommonInitialAuthController(
     }
 
     suspend fun prepareOAuthConnection(rawServerUrl: String): OAuthPreparationResult {
+        Log.i(TAG, "prepareOAuthConnection: rawServerUrl=$rawServerUrl")
         val normalized = serverConfigService.normalizeServerUrl(rawServerUrl)
         if (normalized.isBlank()) {
+            Log.w(TAG, "prepareOAuthConnection: normalized URL is blank")
             return OAuthPreparationResult.InvalidServerUrl(message = invalidServerUrlMessage)
         }
+        Log.d(TAG, "prepareOAuthConnection: normalized=$normalized, resolving to canonical…")
         val resolvedResult = suspendCancellableCoroutine<Result<String>> { continuation ->
             serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
                 if (continuation.isActive) {
@@ -51,20 +58,25 @@ class CommonInitialAuthController(
         }
         return resolvedResult.fold(
             onSuccess = { resolved ->
+                Log.i(TAG, "prepareOAuthConnection: resolved server=$resolved")
                 serverConfigService.setServerUrl(resolved, commit = true)
                 val (verifier, challenge) = oauthPreparationService.generatePkcePair()
                 val state = oauthPreparationService.generateOAuthStateNonce(length = 16)
+                Log.d(TAG, "prepareOAuthConnection: generated PKCE state=$state, saving…")
                 oauthPreparationService.savePkceState(verifier, state)
                 val oauthUrl = oauthPreparationService.buildAuthorizeUrl(resolved, challenge, state)
+                Log.i(TAG, "prepareOAuthConnection: ready, authorize URL host=${Uri.parse(oauthUrl).host}")
                 OAuthPreparationResult.Ready(oauthUrl = oauthUrl)
             },
-            onFailure = {
+            onFailure = { e ->
+                Log.w(TAG, "prepareOAuthConnection: server unreachable — ${e.javaClass.simpleName}: ${e.message}")
                 OAuthPreparationResult.UnreachableServer(message = unreachableServerMessage)
             }
         )
     }
 
     fun revokeCurrentSessionTokens() {
+        Log.i(TAG, "revokeCurrentSessionTokens")
         authSessionService.revokeCurrentSession()
     }
 }

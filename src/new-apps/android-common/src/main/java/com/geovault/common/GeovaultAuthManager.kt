@@ -214,11 +214,14 @@ object GeovaultAuthManager {
     }
 
     fun savePkceState(context: Context, verifier: String, state: String) {
+        Log.i(TAG, "savePkceState: state=$state verifierLen=${verifier.length}")
         store(context).savePkceState(verifier, state)
     }
 
     fun getAndClearPkceState(context: Context): Pair<String, String>? {
-        return store(context).getAndClearPkceState()
+        val result = store(context).getAndClearPkceState()
+        Log.i(TAG, "getAndClearPkceState: ${if (result != null) "found state=${result.second}" else "returned NULL"}")
+        return result
     }
 
     fun buildAuthorizeUrl(serverUrl: String, codeChallenge: String, state: String): String {
@@ -242,6 +245,8 @@ object GeovaultAuthManager {
         onError: (String) -> Unit
     ) {
         val uri = requireInitialized()
+        val tokenUrl = "${serverUrl.trimEnd('/')}$TOKEN_ENDPOINT_PATH"
+        Log.i(TAG, "exchangeCodeForTokens: tokenUrl=$tokenUrl clientId=$clientId redirectUri=$uri codeLen=${code.length}")
         val body = FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", code)
@@ -250,7 +255,7 @@ object GeovaultAuthManager {
             .add("code_verifier", codeVerifier)
             .build()
         val request = Request.Builder()
-            .url("${serverUrl.trimEnd('/')}$TOKEN_ENDPOINT_PATH")
+            .url(tokenUrl)
             .post(body)
             .addHeader("Content-Type", "application/x-www-form-urlencoded")
             .build()
@@ -259,25 +264,34 @@ object GeovaultAuthManager {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
-        client.newCall(request).execute().use { response ->
-            val payload = response.body.string()
-            if (!response.isSuccessful) {
-                val parsed = decodeAuthTokenPayload(payload)
-                val message = parsed?.errorDescription
-                    ?.takeIf { it.isNotBlank() }
-                    ?: payload.ifBlank { "HTTP ${response.code}" }
-                onError(message)
-                return
+        try {
+            client.newCall(request).execute().use { response ->
+                val payload = response.body.string()
+                Log.d(TAG, "exchangeCodeForTokens: HTTP ${response.code} payloadLen=${payload.length}")
+                if (!response.isSuccessful) {
+                    val parsed = decodeAuthTokenPayload(payload)
+                    val message = parsed?.errorDescription
+                        ?.takeIf { it.isNotBlank() }
+                        ?: payload.ifBlank { "HTTP ${response.code}" }
+                    Log.e(TAG, "exchangeCodeForTokens: failed HTTP ${response.code} — $message")
+                    onError(message)
+                    return
+                }
+                val tokenPayload = decodeAuthTokenPayload(payload)
+                val accessToken = tokenPayload?.accessToken?.trim().orEmpty()
+                val refreshToken = tokenPayload?.refreshToken?.trim().orEmpty().takeIf { it.isNotBlank() }
+                val expiresIn = tokenPayload?.expiresInSeconds ?: 43200L
+                if (accessToken.isBlank()) {
+                    Log.e(TAG, "exchangeCodeForTokens: no access_token in response body")
+                    onError("No access_token in response")
+                    return
+                }
+                Log.i(TAG, "exchangeCodeForTokens: success expiresIn=${expiresIn}s refreshPresent=${refreshToken != null}")
+                onSuccess(accessToken, refreshToken, expiresIn)
             }
-            val tokenPayload = decodeAuthTokenPayload(payload)
-            val accessToken = tokenPayload?.accessToken?.trim().orEmpty()
-            val refreshToken = tokenPayload?.refreshToken?.trim().orEmpty().takeIf { it.isNotBlank() }
-            val expiresIn = tokenPayload?.expiresInSeconds ?: 43200L
-            if (accessToken.isBlank()) {
-                onError("No access_token in response")
-                return
-            }
-            onSuccess(accessToken, refreshToken, expiresIn)
+        } catch (e: Exception) {
+            Log.e(TAG, "exchangeCodeForTokens: exception — ${e.javaClass.simpleName}: ${e.message}", e)
+            onError(e.message ?: "Token exchange failed")
         }
     }
 
@@ -401,12 +415,14 @@ object GeovaultAuthManager {
     }
 
     fun launchOAuthInBrowser(context: Context, authorizeUrl: String) {
+        Log.i(TAG, "launchOAuthInBrowser: host=${Uri.parse(authorizeUrl).host}")
         val uri = Uri.parse(authorizeUrl)
         try {
             val customTabsIntent = CustomTabsIntent.Builder().build()
             customTabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             customTabsIntent.launchUrl(context, uri)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "launchOAuthInBrowser: CustomTabs failed, falling back to ACTION_VIEW — ${e.message}")
             context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }

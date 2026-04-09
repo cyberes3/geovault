@@ -81,19 +81,36 @@ class GeoVaultAuthStore private constructor(context: Context) {
     // ── PKCE state (encrypted) ─────────────────────────────────────────
 
     fun savePkceState(verifier: String, state: String) {
+        val encVerifier = SecureValueCipher.encrypt(verifier)
+        val encState = SecureValueCipher.encrypt(state)
+        Log.d(TAG, "savePkceState: state=$state encrypted verifier=${encVerifier.length} chars, state=${encState.length} chars")
         store.putBatchBlocking(mapOf(
-            KEY_PKCE_VERIFIER to SecureValueCipher.encrypt(verifier),
-            KEY_PKCE_STATE to SecureValueCipher.encrypt(state)
+            KEY_PKCE_VERIFIER to encVerifier,
+            KEY_PKCE_STATE to encState
         ))
+        Log.i(TAG, "savePkceState: written to store")
     }
 
     fun getAndClearPkceState(): Pair<String, String>? {
-        val verifier = getSecureValue(KEY_PKCE_VERIFIER) ?: return null
-        val state = getSecureValue(KEY_PKCE_STATE) ?: return null
+        val rawVerifier = store.getBlocking(KEY_PKCE_VERIFIER)
+        val rawState = store.getBlocking(KEY_PKCE_STATE)
+        Log.d(TAG, "getAndClearPkceState: raw verifier=${if (rawVerifier.isBlank()) "BLANK" else "${rawVerifier.length} chars"}" +
+            " raw state=${if (rawState.isBlank()) "BLANK" else "${rawState.length} chars"}")
+
+        val verifier = getSecureValue(KEY_PKCE_VERIFIER)
+        val state = getSecureValue(KEY_PKCE_STATE)
+        Log.d(TAG, "getAndClearPkceState: decrypted verifier=${if (verifier == null) "NULL" else "present"}" +
+            " state=${state ?: "NULL"}")
+
+        if (verifier == null || state == null) {
+            Log.w(TAG, "getAndClearPkceState: returning null — verifier=${verifier != null} state=${state != null}")
+            return null
+        }
         store.putBatchBlocking(mapOf(
             KEY_PKCE_VERIFIER to null,
             KEY_PKCE_STATE to null
         ))
+        Log.i(TAG, "getAndClearPkceState: cleared stored PKCE, returning state=$state")
         return verifier to state
     }
 

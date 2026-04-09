@@ -702,13 +702,6 @@ fun SettingsScreen(
                 disconnectButtonText = stringResource(R.string.disconnect),
             )
         }
-        if (!state.infoMessage.isNullOrBlank()) {
-            Text(
-                text = state.infoMessage,
-                color = GeoVaultColorTokens.TextSecondary,
-                style = MaterialTheme.typography.body2,
-            )
-        }
             TrackerParamsOverlayLayer()
         }
             if (showHiddenTrackersOverlay) {
