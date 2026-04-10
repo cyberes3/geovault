@@ -148,6 +148,11 @@
     <string name="map_status_streaming_off">Streaming off</string>
     <string name="map_status_streaming_live">Streaming live</string>
     <string name="map_status_streaming_count">Streaming %1$d</string>
+    <string name="map_streaming_connecting">Connecting…</string>
+    <string name="map_streaming_reconnecting">Reconnecting…</string>
+    <string name="map_streaming_live">Live</string>
+    <string name="map_streaming_live_count">Live (%1$d)</string>
+    <string name="map_streaming_failed">Stream failed</string>
     <string name="map_status_map_ready">Map ready</string>
     <string name="map_status_map_loading">Loading tracker geometry...</string>
     <string name="map_status_accuracy_ok">GPS accuracy ok</string>
@@ -437,6 +442,8 @@
     <string name="unit_ft">ft</string>
     <string name="manual_send_point_sent">Manual point sent</string>
     <string name="manual_send_point_requires_active_tracking">Start tracking to send a manual point</string>
+    <string name="live_active_fit_enable">Enable live active tracker fit</string>
+    <string name="live_active_fit_disable">Disable live active tracker fit</string>
 
     <plurals name="trackers_edit_shared_with_user_count">
         <item quantity="one">Sharing with %d user</item>

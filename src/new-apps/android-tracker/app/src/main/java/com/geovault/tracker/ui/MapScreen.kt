@@ -1,6 +1,9 @@
 package com.geovault.tracker.ui
 
+import android.app.Activity
 import android.graphics.PointF
+import android.view.WindowManager
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -16,8 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -25,7 +26,6 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
@@ -81,13 +81,14 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.location.TrackingPermissionGate
-import com.geovault.tracker.services.TrackingUiStatus
+import com.geovault.tracker.presentation.LiveActiveFitInput
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
-import com.geovault.tracker.presentation.TrackerMapGroupModeOption
+import com.geovault.tracker.presentation.TrackerMapLiveActiveFitPolicy
 import com.geovault.tracker.presentation.TrackerMapRenderContract
 import com.geovault.tracker.presentation.TrackerMapSelectionCard
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipMapper
@@ -99,6 +100,8 @@ import com.geovault.tracker.presentation.TrackerMapViewModel
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import java.util.Locale
+
+private const val RENDER_COALESCE_MS = 120L
 
 @Composable
 fun MapScreen(
@@ -204,6 +207,23 @@ private fun TrackerMapAuthenticatedContent(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val activity = context as? Activity
+    val application = context.applicationContext as android.app.Application
+    val settingsRepo = remember(application) {
+        TrackerAppServices.from(application).trackerSettingsRepository()
+    }
+    val keepScreenOnSetting by settingsRepo.observeSettings()
+        .collectAsState(initial = settingsRepo.getSettings())
+    val shouldKeepScreenOn = isActive && keepScreenOnSetting.keepScreenOnWhileViewingMap
+    DisposableEffect(activity, shouldKeepScreenOn) {
+        if (activity != null && shouldKeepScreenOn) {
+            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     val density = LocalDensity.current
     val boundsFitPaddingPx = remember(density, mapPaddingPolicy) {
         mapPaddingPolicy.computeBoundsFitPaddingPx(density)
@@ -261,6 +281,8 @@ private fun TrackerMapAuthenticatedContent(
     val fabDescZoomOut = stringResource(R.string.map_fab_zoom_out)
     val fabDescLockSelection = stringResource(R.string.map_action_lock_selection)
     val fabDescUnlockSelection = stringResource(R.string.map_action_unlock_selection)
+    val fabDescLiveActiveFitEnable = stringResource(R.string.live_active_fit_enable)
+    val fabDescLiveActiveFitDisable = stringResource(R.string.live_active_fit_disable)
 
     val phase by map.phase.collectAsState()
     LaunchedEffect(phase) {
@@ -360,18 +382,17 @@ private fun TrackerMapAuthenticatedContent(
                     TrackerMapRenderContract.pointsLabelLayerId()
                 )
             }.getOrElse { emptyList() }
-            val trackId = features.asSequence()
-                .mapNotNull { feature ->
-                    val id = feature.getStringProperty("id") ?: return@mapNotNull null
-                    when {
-                        id == "last-fix" -> {
-                            state.displayedTrackerId.ifBlank { state.runtime.selectedTrackerId }
-                        }
-                        id.startsWith("remote-") -> id.removePrefix("remote-")
-                        else -> null
-                    }?.trim()?.takeIf { it.isNotEmpty() }
-                }
-                .firstOrNull()
+            val nearest = selectNearestFeature(maplibreMap, screenPoint, features)
+            val trackId = nearest?.let { feature ->
+                val id = feature.getStringProperty("id") ?: return@let null
+                when {
+                    id == "last-fix" -> {
+                        state.displayedTrackerId.ifBlank { state.runtime.selectedTrackerId }
+                    }
+                    id.startsWith("remote-") -> id.removePrefix("remote-")
+                    else -> null
+                }?.trim()?.takeIf { it.isNotEmpty() }
+            }
             if (trackId != null) {
                 viewModel.onTrackerMarkerTapped(trackId)
                 true
@@ -394,6 +415,7 @@ private fun TrackerMapAuthenticatedContent(
         state.selectedMapTracker,
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
+        delay(RENDER_COALESCE_MS)
         val renderState = viewModel.buildMapRenderState()
         val resolvedState = markerIconPlugin.resolveRenderStateWithFallback(renderState)
         renderPlugin.setRenderState(resolvedState)
@@ -525,6 +547,37 @@ private fun TrackerMapAuthenticatedContent(
                         }
                     },
                 )
+                val isSelectedDefaultTracker = singleTrackerMapView &&
+                    effectiveDisplayedTrackerId == state.runtime.selectedTrackerId.trim()
+                val liveActiveFitVisibility = TrackerMapLiveActiveFitPolicy.resolveVisibility(
+                    LiveActiveFitInput(
+                        mode = state.mode,
+                        runtimeRunning = state.runtime.isRunning,
+                        followLockArmed = followLockArmedThisSession,
+                        liveActiveFitEnabled = state.liveActiveFitEnabled,
+                        hasTrailPoints = state.trail.isNotEmpty(),
+                        isSelectedDefaultTracker = isSelectedDefaultTracker,
+                    )
+                )
+                if (liveActiveFitVisibility.showButton) {
+                    action(
+                        id = "live_active_fit",
+                        order = 32,
+                        icon = GeoVaultMapFabIcon.Drawable(
+                            if (state.liveActiveFitEnabled) R.drawable.ic_live_active_fit_on
+                            else R.drawable.ic_live_active_fit_off
+                        ),
+                        contentDescription = if (state.liveActiveFitEnabled) {
+                            fabDescLiveActiveFitDisable
+                        } else {
+                            fabDescLiveActiveFitEnable
+                        },
+                        enabled = liveActiveFitVisibility.buttonEnabled,
+                        onTap = {
+                            viewModel.setLiveActiveFit(!state.liveActiveFitEnabled)
+                        },
+                    )
+                }
                 action(
                     id = "zoom_in",
                     order = 40,
@@ -584,6 +637,12 @@ private fun TrackerMapAuthenticatedContent(
                     )
                 }
             }
+            MapStreamingIndicator(
+                model = state.streamingStatus,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 16.dp, end = 16.dp),
+            )
             val selectionModel = state.toSelectionPanelUiModel()
             if (selectionModel != null) {
                 Column(
@@ -629,116 +688,6 @@ private fun TrackerMapAuthenticatedContent(
     }
 }
 
-@Composable
-private fun MapStatusStrip(
-    state: TrackerMapUiState,
-    mapReady: Boolean,
-) {
-    val trackingStatusText = when (state.runtime.uiStatus) {
-        TrackingUiStatus.NOT_TRACKING -> stringResource(R.string.tracking_status_not_tracking)
-        TrackingUiStatus.WAITING_FOR_GPS -> stringResource(R.string.tracking_status_waiting_for_gps)
-        TrackingUiStatus.LOCKING -> stringResource(R.string.tracking_status_locking)
-        TrackingUiStatus.TRACKING_ACTIVE -> stringResource(R.string.tracking_status_active)
-    }
-    val streamingCount = state.activeStreamedTrackerIds.size
-    val streamingText = if (streamingCount <= 0) {
-        stringResource(R.string.map_status_streaming_off)
-    } else {
-        stringResource(R.string.map_status_streaming_count, streamingCount)
-    }
-    val mapStatusText = if (mapReady) {
-        stringResource(R.string.map_status_map_ready)
-    } else {
-        stringResource(R.string.map_status_map_loading)
-    }
-    val accuracyWarning = shouldShowGpsAccuracyWarning(state)
-    val accuracyText = if (accuracyWarning) {
-        stringResource(R.string.map_status_accuracy_low)
-    } else {
-        stringResource(R.string.map_status_accuracy_ok)
-    }
-    Text(
-        text = "$trackingStatusText  ·  $streamingText  ·  $mapStatusText  ·  $accuracyText",
-        color = GeoVaultColorTokens.TextSecondary,
-        style = MaterialTheme.typography.caption,
-    )
-}
-
-private fun shouldShowGpsAccuracyWarning(state: TrackerMapUiState): Boolean {
-    if (!state.runtime.isRunning) return false
-    val accuracyMeters = state.runtime.lastAccuracyMeters
-    val thresholdMeters = state.runtime.effectiveAccuracyThresholdMeters
-    return accuracyMeters == null || accuracyMeters > thresholdMeters
-}
-
-@Composable
-private fun ModeTextButton(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    TextButton(onClick = onClick, modifier = modifier) {
-        Text(
-            text = label,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) GeoVaultColorTokens.PrimaryBlue else GeoVaultColorTokens.TextPrimary,
-        )
-    }
-}
-
-@Composable
-private fun MapBottomModeSection(
-    state: TrackerMapUiState,
-    mapReady: Boolean,
-    onSetMode: (TrackerMapDisplayMode) -> Unit,
-    onSelectGroup: (String) -> Unit,
-) {
-    Text(
-        text = stringResource(R.string.map_mode_section_title),
-        color = GeoVaultColorTokens.TextPrimary,
-        style = MaterialTheme.typography.subtitle2,
-        fontWeight = FontWeight.Bold,
-    )
-    Spacer(modifier = Modifier.height(6.dp))
-    MapStatusStrip(
-        state = state,
-        mapReady = mapReady,
-    )
-    Spacer(modifier = Modifier.height(8.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        ModeTextButton(
-            label = stringResource(R.string.map_mode_session),
-            selected = state.mode == TrackerMapDisplayMode.SINGLE_SESSION,
-            onClick = { onSetMode(TrackerMapDisplayMode.SINGLE_SESSION) },
-            modifier = Modifier.weight(1f),
-        )
-        ModeTextButton(
-            label = stringResource(R.string.map_mode_all),
-            selected = state.mode == TrackerMapDisplayMode.ALL_QUEUE,
-            onClick = { onSetMode(TrackerMapDisplayMode.ALL_QUEUE) },
-            modifier = Modifier.weight(1f),
-        )
-        ModeTextButton(
-            label = stringResource(R.string.map_mode_group),
-            selected = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-            onClick = { onSetMode(TrackerMapDisplayMode.GROUP_PLACEHOLDER) },
-            modifier = Modifier.weight(1f),
-        )
-    }
-    if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-        Spacer(modifier = Modifier.height(8.dp))
-        GroupModeSelector(
-            options = state.groupModeOptions,
-            selectedGroupId = state.currentGroupId,
-            onSelectGroup = onSelectGroup
-        )
-    }
-}
-
 private data class MapSelectionPanelUiModel(
     val trackerId: String,
     val trackerName: String,
@@ -777,59 +726,6 @@ private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(): TrackerParamsRo
         accuracyMeters = accuracyMeters,
         isOwned = isOwned,
     ).toTrackerParamsRouteArgs()
-}
-
-@Composable
-private fun GroupModeSelector(
-    options: List<TrackerMapGroupModeOption>,
-    selectedGroupId: String,
-    onSelectGroup: (String) -> Unit,
-) {
-    if (options.isEmpty()) {
-        Text(
-            text = stringResource(R.string.map_group_empty_body),
-            color = GeoVaultColorTokens.TextSecondary,
-            style = MaterialTheme.typography.caption,
-        )
-        return
-    }
-    Text(
-        text = stringResource(R.string.map_group_picker_title),
-        color = GeoVaultColorTokens.TextSecondary,
-        style = MaterialTheme.typography.caption,
-    )
-    Spacer(modifier = Modifier.height(4.dp))
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(horizontal = 2.dp),
-    ) {
-        items(
-            items = options,
-            key = { it.groupId }
-        ) { option ->
-            TextButton(
-                onClick = { onSelectGroup(option.groupId) },
-            ) {
-                Text(
-                    text = stringResource(
-                        R.string.map_group_picker_option,
-                        option.groupName,
-                        option.trackerIds.size
-                    ),
-                    fontWeight = if (selectedGroupId == option.groupId) {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    },
-                    color = if (selectedGroupId == option.groupId) {
-                        GeoVaultColorTokens.PrimaryBlue
-                    } else {
-                        GeoVaultColorTokens.TextPrimary
-                    },
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -1026,5 +922,24 @@ private fun formatLegacyLastUpdatedText(lastUpdatedMs: Long?): String {
         }
     }
     return stringResource(R.string.map_updated_ago, value, unit)
+}
+
+private fun selectNearestFeature(
+    map: MapLibreMap,
+    tapPoint: PointF,
+    features: List<org.maplibre.geojson.Feature>,
+): org.maplibre.geojson.Feature? {
+    if (features.isEmpty()) return null
+    if (features.size == 1) return features[0]
+    return features.minByOrNull { feature ->
+        val geom = feature.geometry()
+        if (geom !is org.maplibre.geojson.Point) return@minByOrNull Float.MAX_VALUE
+        val screen = map.projection.toScreenLocation(
+            org.maplibre.android.geometry.LatLng(geom.latitude(), geom.longitude())
+        )
+        val dx = screen.x - tapPoint.x
+        val dy = screen.y - tapPoint.y
+        kotlin.math.sqrt(dx * dx + dy * dy)
+    } ?: features[0]
 }
 

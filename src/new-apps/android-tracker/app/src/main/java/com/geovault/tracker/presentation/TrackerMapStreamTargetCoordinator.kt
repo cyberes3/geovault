@@ -24,7 +24,15 @@ object TrackerMapStreamTargetCoordinator {
                 displayedTrackerId = input.displayedTrackerId,
                 rosterTrackerIds = emptySet()
             )
-            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> input.groupSelection.trackerIds
+            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> {
+                val groupIds = input.groupSelection.trackerIds
+                val normalizedSelected = input.selectedTrackerId.trim()
+                if (input.runtimeRunning && normalizedSelected.isNotEmpty()) {
+                    groupIds - normalizedSelected
+                } else {
+                    groupIds
+                }
+            }
             TrackerMapDisplayMode.ALL_QUEUE -> TrackerMapViewModel.resolveStreamTargetIds(
                 mode = input.mode,
                 runtimeRunning = input.runtimeRunning,

@@ -43,6 +43,46 @@ class TrackerMapStreamTargetCoordinatorTest {
     }
 
     @Test
+    fun resolve_groupModeRunning_excludesSelectedTracker() {
+        val result = TrackerMapStreamTargetCoordinator.resolve(
+            TrackerMapStreamTargetInput(
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                runtimeRunning = true,
+                selectedTrackerId = "a",
+                displayedTrackerId = "",
+                rosterTrackerIds = setOf("x"),
+                groupSelection = TrackerMapGroupModeSelection(
+                    groupId = "g1",
+                    trackerIds = setOf("a", "b", "c")
+                )
+            )
+        )
+
+        assertEquals(setOf("b", "c"), result.streamTargetIds)
+        assertEquals("g1", result.resolvedGroupId)
+    }
+
+    @Test
+    fun resolve_groupModeNotRunning_includesAllGroupTrackers() {
+        val result = TrackerMapStreamTargetCoordinator.resolve(
+            TrackerMapStreamTargetInput(
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                runtimeRunning = false,
+                selectedTrackerId = "a",
+                displayedTrackerId = "",
+                rosterTrackerIds = setOf("x"),
+                groupSelection = TrackerMapGroupModeSelection(
+                    groupId = "g1",
+                    trackerIds = setOf("a", "b", "c")
+                )
+            )
+        )
+
+        assertEquals(setOf("a", "b", "c"), result.streamTargetIds)
+        assertEquals("g1", result.resolvedGroupId)
+    }
+
+    @Test
     fun resolve_singleSession_targetsDisplayedWhenDifferentFromSelected() {
         val result = TrackerMapStreamTargetCoordinator.resolve(
             TrackerMapStreamTargetInput(
