@@ -268,12 +268,16 @@ object TrackerMapStateTransforms {
     private fun trackDirectionDegrees(points: List<LatLng>): Float {
         val validPoints = points.filter(::isValidPoint)
         if (validPoints.size < 2) return 0f
-        val prev = validPoints[validPoints.size - 2]
         val last = validPoints.last()
-        val dLon = last.longitude - prev.longitude
-        val dLat = last.latitude - prev.latitude
-        if (dLon == 0.0 && dLat == 0.0) return 0f
-        return (Math.atan2(dLon, dLat) * 180.0 / Math.PI).toFloat()
+        for (i in validPoints.size - 2 downTo 0) {
+            val prev = validPoints[i]
+            val dLon = last.longitude - prev.longitude
+            val dLat = last.latitude - prev.latitude
+            if (dLon != 0.0 || dLat != 0.0) {
+                return (Math.atan2(dLon, dLat) * 180.0 / Math.PI).toFloat()
+            }
+        }
+        return 0f
     }
 
     private fun isValidPoint(point: LatLng): Boolean {

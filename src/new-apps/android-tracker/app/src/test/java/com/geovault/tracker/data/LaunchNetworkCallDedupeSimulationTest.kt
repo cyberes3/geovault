@@ -178,6 +178,7 @@ class LaunchNetworkCallDedupeSimulationTest {
     ) {
         TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
             trackerId = trackerId,
+            existingTrailMinTimeMs = null,
             loadTrackerGeometry = { id ->
                 deduper.loadOnce("geometry:$id") {
                     recorder.record("GET /api/extensions/live-track/trackers/$id/geometry/")
@@ -185,10 +186,7 @@ class LaunchNetworkCallDedupeSimulationTest {
                 }
             },
             loadQueueTrailWithOverlay = { emptyList<QueuedLocation>() },
-            resolveSessionStartMs = { null },
-            onSessionStartResolved = { _, _ -> Unit },
-            onSessionAnchorResolved = { _ -> Unit },
-            mapCoordinatesToTrail = { _, _ -> emptyList() },
+            mapCoordinatesToTrail = { _, _, _ -> emptyList() },
         )
     }
 

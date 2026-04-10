@@ -69,6 +69,18 @@ data class TrackerMapSelectionCard(
     val isOwned: Boolean,
 )
 
+private fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = copy(
+    followLockEnabled = false,
+    liveActiveFitEnabled = false,
+    selectionLockTrackerId = "",
+)
+
+private fun TrackerMapUiState.withClearedMapSelectionCard(): TrackerMapUiState = copy(
+    isBottomCardVisible = false,
+    selectedMapTracker = null,
+    selectionLockTrackerId = "",
+)
+
 class TrackerMapViewModel(application: Application) : AndroidViewModel(application) {
     internal enum class HistoryClearRefreshAction {
         REFRESH_GROUP_OR_ALL,
@@ -80,7 +92,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     companion object {
         const val TAG = "TrackerMapViewModel"
         const val TRAIL_POINT_LIMIT = 4000
-        private const val SESSION_ANCHOR_RESYNC_MS = 15_000L
 
         @JvmStatic
         internal fun resolveStreamTargetIds(
@@ -112,16 +123,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     }
                 }
             }
-        }
-
-        @JvmStatic
-        internal fun resolveAllowSessionReset(
-            pendingReopenTrackerId: String?,
-            eventTrackId: String
-        ): Boolean {
-            val pending = pendingReopenTrackerId?.trim().orEmpty()
-            if (pending.isEmpty()) return true
-            return pending != eventTrackId.trim()
         }
 
         @JvmStatic
@@ -201,10 +202,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var runtimeTrailReloadJob: Job? = null
     private var runtimeTrailReloadPending: Boolean = false
     private var lastTrailLoadSeed: String? = null
-    private val remoteSessionStartByTrack = mutableMapOf<String, Long>()
     private var pendingReopenSingleTrackerLoadId: String? = null
-    private var sessionAnchorResyncTrackerId: String? = null
-    private var sessionAnchorResyncUntilElapsedMs: Long = 0L
+    private var pendingFitAfterReload: Boolean = false
     private val recentDataWindowByTracker = mutableMapOf<String, String?>()
     private var lastObservedTrackingRunning: Boolean? = null
     private var lastObservedStreamingRunning: Boolean = false
@@ -285,7 +284,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         streamTargetIds = current.streamTargetIds,
                     ),
                 )
-                if (wasRunning && !snapshot.isRunning) {
+                if (wasRunning && !snapshot.isRunning &&
+                    snapshot.lifecycleState == TrackingLifecycleState.STOPPED
+                ) {
                     restoreSelectedTrackerAfterStreamingStop()
                 }
             }
@@ -331,7 +332,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             }
                             HistoryClearRefreshAction.REFRESH_DISPLAYED_SINGLE,
                             HistoryClearRefreshAction.REFRESH_SELECTED_SINGLE -> {
-                                primeSessionAnchorResync(event.trackerId)
                                 reloadTrailFromDatabase(force = true)
                             }
                             HistoryClearRefreshAction.NO_OP -> Unit
@@ -349,7 +349,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             !state.runtime.isRunning &&
                             displayedId == trackerId
                         ) {
-                            primeSessionAnchorResync(trackerId)
                             reloadTrailFromDatabase(force = true)
                         }
                     }
@@ -520,7 +519,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val state = _uiState.value
         val selection = buildSelectionCard(state, normalizedTrackerId)
         if (selection == null) {
-            _uiState.value = closeBottomCardState(state)
+            _uiState.value = state.withClearedMapSelectionCard()
             return
         }
         _uiState.value = stateWithSelectionCard(state, selection)
@@ -535,7 +534,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         ) {
             return false
         }
-        _uiState.value = closeBottomCardState(state)
+        _uiState.value = state.withClearedMapSelectionCard()
         return true
     }
 
@@ -570,11 +569,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val selectedId = trackerId.trim()
         if (selectedId.isEmpty()) return
         val state = _uiState.value
-        _uiState.value = state.copy(
-            selectionLockTrackerId = if (state.selectionLockTrackerId == selectedId) "" else selectedId,
-            // Local follow-lock is for device tracking; keep selection lock mutually exclusive.
-            followLockEnabled = false,
-        )
+        val nextSelectionLock = if (state.selectionLockTrackerId == selectedId) "" else selectedId
+        _uiState.value = state.withAllMapLocksDisabled().copy(selectionLockTrackerId = nextSelectionLock)
     }
 
     fun selectionLockPointOrNull(): Pair<Double, Double>? {
@@ -650,14 +646,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    private fun closeBottomCardState(state: TrackerMapUiState): TrackerMapUiState {
-        return state.copy(
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
-        )
-    }
-
     private fun stateWithSelectionCard(
         state: TrackerMapUiState,
         selection: TrackerMapSelectionCard
@@ -672,14 +660,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    private fun stateWithClearedSelection(state: TrackerMapUiState): TrackerMapUiState {
-        return state.copy(
-            isBottomCardVisible = false,
-            selectedMapTracker = null,
-            selectionLockTrackerId = "",
-        )
-    }
-
     private fun stateWithClearedRenderedTrails(state: TrackerMapUiState): TrackerMapUiState {
         return state.copy(
             trail = emptyList(),
@@ -688,9 +668,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun stateWithResetMapContext(state: TrackerMapUiState): TrackerMapUiState {
-        return stateWithClearedSelection(
-            stateWithClearedRenderedTrails(state).copy(liveActiveFitEnabled = false)
-        )
+        return stateWithClearedRenderedTrails(state)
+            .withAllMapLocksDisabled()
+            .withClearedMapSelectionCard()
     }
 
     private fun applyMapContextTransition(
@@ -699,6 +679,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     ) {
         _uiState.value = stateWithResetMapContext(nextState)
         pendingReopenSingleTrackerLoadId = pendingReopenTrackerId
+        pendingFitAfterReload = true
         lastTrailLoadSeed = null
         requestRuntimeTrailReload()
         refreshStreamTargets()
@@ -827,7 +808,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     remoteLastPoints = emptyMap(),
                     streamTargetIds = emptySet()
                 )
-                _uiState.value = stateWithClearedSelection(_uiState.value)
+                _uiState.value = _uiState.value.withClearedMapSelectionCard()
                 MapStreamingServiceHelper.stopStreaming(appContext)
             }
             is TrackerMapResumeDecision.LoadSingleTrackerRuntime,
@@ -848,7 +829,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         displayedTrackerId = trackerId,
                         displayedTrackerName = trackerName,
                     )
-                    _uiState.value = stateWithClearedSelection(_uiState.value)
+                    _uiState.value = _uiState.value.withClearedMapSelectionCard()
                 }
                 reloadTrailFromDatabase(force = true)
                 if (pendingReopenSingleTrackerLoadId == trackerId) {
@@ -866,36 +847,29 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setFollowLock(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(
-            followLockEnabled = enabled,
-            selectionLockTrackerId = if (enabled) "" else _uiState.value.selectionLockTrackerId,
-            liveActiveFitEnabled = if (enabled) false else _uiState.value.liveActiveFitEnabled,
-        )
-    }
-
-    fun clearFollowLockAfterUserGesture() {
         val state = _uiState.value
-        if (state.followLockEnabled || state.liveActiveFitEnabled) {
-            _uiState.value = state.copy(
-                followLockEnabled = false,
-                liveActiveFitEnabled = false,
-            )
+        _uiState.value = if (enabled) {
+            state.withAllMapLocksDisabled().copy(followLockEnabled = true)
+        } else {
+            state.copy(followLockEnabled = false)
         }
     }
 
-    fun clearSelectionLockAfterUserGesture() {
+    fun disableAllMapLocks() {
         val state = _uiState.value
-        if (state.selectionLockTrackerId.isEmpty()) return
-        _uiState.value = state.copy(selectionLockTrackerId = "")
+        if (!state.followLockEnabled && !state.liveActiveFitEnabled && state.selectionLockTrackerId.isEmpty()) {
+            return
+        }
+        _uiState.value = state.withAllMapLocksDisabled()
     }
 
     fun setLiveActiveFit(enabled: Boolean) {
         val state = _uiState.value
-        _uiState.value = state.copy(
-            liveActiveFitEnabled = enabled,
-            followLockEnabled = if (enabled) false else state.followLockEnabled,
-            selectionLockTrackerId = if (enabled) "" else state.selectionLockTrackerId,
-        )
+        _uiState.value = if (enabled) {
+            state.withAllMapLocksDisabled().copy(liveActiveFitEnabled = true)
+        } else {
+            state.copy(liveActiveFitEnabled = false)
+        }
         if (enabled) {
             requestFitTrail()
         }
@@ -1106,6 +1080,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun reloadTrailFromDatabase(force: Boolean = false) {
         val state = _uiState.value
         val activeTrackerId = effectiveDisplayedTrackerId(state)
+        val guardInput = TrailReloadGuardInput(
+            force = force,
+            mode = state.mode,
+            trailSize = state.trail.size,
+            runtimeRunning = state.runtime.isRunning,
+            activeStreamedTrackerIds = state.activeStreamedTrackerIds,
+            displayedTrackerId = activeTrackerId,
+        )
+        if (!TrackerMapTrailReloadGuardPolicy.shouldProceed(guardInput)) return
         val groupSelection = resolveGroupModeSelection(state)
         val rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id }.toSet()
         val seed = TrackerMapReloadSeedPolicy.trailSeed(
@@ -1142,12 +1125,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 groupSelection = groupSelection
             )
         )
+        val existingTrailMinTimeMs = workingState.trail.minOfOrNull { it.time }
+        val existingMultiMinTimes = workingState.allQueueTrailsByTracker
+            .mapValues { (_, pts) -> pts.minOfOrNull { it.time } }
+            .filterValues { it != null }
+            .mapValues { it.value!! }
         val (trail, allQueueTrailsByTracker) = when (plan.source) {
             TrackerMapTrailSource.SINGLE_SERVER -> {
-                loadSingleTrackerTrailFromServer(plan.singleTrackerId) to emptyMap()
+                loadSingleTrackerTrailFromServer(plan.singleTrackerId, existingTrailMinTimeMs) to emptyMap()
             }
             TrackerMapTrailSource.MULTI_SERVER -> {
-                val multiTrails = loadTrailsForTrackerIds(plan.trackerIds).toMutableMap()
+                val multiTrails = loadTrailsForTrackerIds(plan.trackerIds, existingMultiMinTimes).toMutableMap()
                 plan.overlayTrackerId?.let { overlayTrackerId ->
                     multiTrails[overlayTrackerId] = loadQueueTrailWithOverlay()
                 }
@@ -1162,9 +1150,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             lastTrailLoadSeed = null
             return
         }
-        _uiState.value = _uiState.value.copy(
-            trail = trail,
-            allQueueTrailsByTracker = allQueueTrailsByTracker,
+        val currentState = _uiState.value
+        val mergedTrail = mergeStreamingOverlayIntoReloadedTrail(
+            reloadedTrail = trail,
+            currentTrail = currentState.trail,
+        )
+        val mergedMultiTrails = mergeStreamingOverlayIntoReloadedMultiTrails(
+            reloadedTrails = allQueueTrailsByTracker,
+            currentTrails = currentState.allQueueTrailsByTracker,
+        )
+        _uiState.value = currentState.copy(
+            trail = mergedTrail,
+            allQueueTrailsByTracker = mergedMultiTrails,
             currentGroupId = if (workingState.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                 plan.resolvedGroupId
             } else {
@@ -1176,6 +1173,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 emptyList()
             },
         )
+        if (pendingFitAfterReload && (mergedTrail.isNotEmpty() || mergedMultiTrails.isNotEmpty())) {
+            pendingFitAfterReload = false
+            requestFitTrail()
+        }
     }
 
     private fun requestRuntimeTrailReload() {
@@ -1188,6 +1189,34 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 runtimeTrailReloadPending = false
                 reloadTrailFromDatabase()
             } while (runtimeTrailReloadPending)
+        }
+    }
+
+    private fun mergeStreamingOverlayIntoReloadedTrail(
+        reloadedTrail: List<QueuedLocation>,
+        currentTrail: List<QueuedLocation>,
+    ): List<QueuedLocation> {
+        if (currentTrail.isEmpty()) return reloadedTrail
+        if (reloadedTrail.isEmpty()) return currentTrail
+        val latestReloadedTime = reloadedTrail.maxOfOrNull { it.time } ?: 0L
+        val survivingOverlay = currentTrail.filter { it.time > latestReloadedTime }
+        if (survivingOverlay.isEmpty()) return reloadedTrail
+        return (reloadedTrail + survivingOverlay)
+            .sortedBy { it.time }
+            .takeLast(TRAIL_POINT_LIMIT)
+    }
+
+    private fun mergeStreamingOverlayIntoReloadedMultiTrails(
+        reloadedTrails: Map<String, List<QueuedLocation>>,
+        currentTrails: Map<String, List<QueuedLocation>>,
+    ): Map<String, List<QueuedLocation>> {
+        if (currentTrails.isEmpty()) return reloadedTrails
+        if (reloadedTrails.isEmpty()) return currentTrails
+        return reloadedTrails.keys.associateWith { trackerId ->
+            mergeStreamingOverlayIntoReloadedTrail(
+                reloadedTrail = reloadedTrails.getValue(trackerId),
+                currentTrail = currentTrails[trackerId].orEmpty(),
+            )
         }
     }
 
@@ -1216,31 +1245,32 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return mergeOverlayPoints(databaseTrail, currentOverlay).takeLast(TRAIL_POINT_LIMIT)
     }
 
-    private suspend fun loadSingleTrackerTrailFromServer(trackerId: String): List<QueuedLocation> {
+    private suspend fun loadSingleTrackerTrailFromServer(
+        trackerId: String,
+        existingTrailMinTimeMs: Long?,
+    ): List<QueuedLocation> {
         return TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
             trackerId = trackerId,
+            existingTrailMinTimeMs = existingTrailMinTimeMs,
             loadTrackerGeometry = { id ->
                 sessionRequestDeduper.loadOnce("single:geometry:$id") {
                     geometryLoadingTracker.track { trackerManagementRepository.loadTrackerGeometry(id) }
                 }
             },
             loadQueueTrailWithOverlay = { loadQueueTrailWithOverlay() },
-            resolveSessionStartMs = { pointParams ->
-                TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(pointParams)
-            },
-            onSessionStartResolved = { id, latestSessionStart ->
-                if (latestSessionStart != null) {
-                    remoteSessionStartByTrack[id] = latestSessionStart
-                }
-            },
-            onSessionAnchorResolved = { id -> clearSessionAnchorResync(id) },
-            mapCoordinatesToTrail = { merged, pointParams -> mapCoordinatesToTrail(merged, pointParams) }
+            mapCoordinatesToTrail = { merged, pointParams, minTime ->
+                mapCoordinatesToTrail(merged, pointParams, minTime)
+            }
         )
     }
 
-    private suspend fun loadTrailsForTrackerIds(trackerIds: Collection<String>): Map<String, List<QueuedLocation>> {
+    private suspend fun loadTrailsForTrackerIds(
+        trackerIds: Collection<String>,
+        existingTrailMinTimeMsByTracker: Map<String, Long>,
+    ): Map<String, List<QueuedLocation>> {
         return TrackerMapTrailDataCoordinator.loadTrailsForTrackerIds(
             trackerIds = trackerIds,
+            existingTrailMinTimeMsByTracker = existingTrailMinTimeMsByTracker,
             loadTrackersGeometry = { ids ->
                 val normalizedIds = ids.map { it.trim() }.filter { it.isNotEmpty() }.sorted()
                 val key = "multi:geometry:${normalizedIds.joinToString(",")}"
@@ -1248,15 +1278,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     geometryLoadingTracker.track { trackerManagementRepository.loadTrackersGeometry(ids) }
                 }
             },
-            resolveSessionStartMs = { pointParams ->
-                TrackerMapSessionWindowPolicy.resolveLatestSessionStartMs(pointParams)
-            },
-            onSessionStartResolved = { id, latestSessionStart ->
-                if (latestSessionStart != null) {
-                    remoteSessionStartByTrack[id] = latestSessionStart
-                }
-            },
-            mapCoordinatesToTrail = { merged, pointParams -> mapCoordinatesToTrail(merged, pointParams) }
+            mapCoordinatesToTrail = { merged, pointParams, minTime ->
+                mapCoordinatesToTrail(merged, pointParams, minTime)
+            }
         )
     }
 
@@ -1302,7 +1326,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun mapCoordinatesToTrail(
         coordinates: List<List<Double>>,
-        pointParams: List<Map<String, Any?>>? = null
+        pointParams: List<Map<String, Any?>>? = null,
+        existingTrailMinTimeMs: Long? = null,
     ): List<QueuedLocation> {
         if (coordinates.isEmpty()) return emptyList()
         val latestAccuracyMeters = pointParams
@@ -1316,14 +1341,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
             ?.takeIf { it.isFinite() && it > 0f }
-        val now = System.currentTimeMillis()
-        val start = now - coordinates.size
+        val timestamps = resolveGeometryTimestamps(coordinates, existingTrailMinTimeMs)
         return coordinates.mapIndexedNotNull { index, point ->
             val lon = point.getOrNull(0) ?: return@mapIndexedNotNull null
             val lat = point.getOrNull(1) ?: return@mapIndexedNotNull null
             QueuedLocation(
                 id = -(index + 1L),
-                time = start + index,
+                time = timestamps[index],
                 latitude = lat,
                 longitude = lon,
                 altitude = null,
@@ -1335,6 +1359,24 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 dist = null
             )
         }.takeLast(TRAIL_POINT_LIMIT)
+    }
+
+    private fun resolveGeometryTimestamps(
+        coordinates: List<List<Double>>,
+        existingTrailMinTimeMs: Long? = null,
+    ): List<Long> {
+        val parsed = coordinates.map { coord ->
+            val raw = coord.getOrNull(2)?.toLong() ?: return@map null
+            TrackerMapSessionWindowPolicy.normalizeTimestampToMs(raw)
+        }
+        val hasRealTimestamps = parsed.any { it != null }
+        if (hasRealTimestamps) {
+            val fallbackBase = parsed.filterNotNull().maxOrNull() ?: 0L
+            return parsed.mapIndexed { index, ts -> ts ?: (fallbackBase + index + 1) }
+        }
+        val anchor = existingTrailMinTimeMs ?: System.currentTimeMillis()
+        val fallbackStart = anchor - coordinates.size - 1L
+        return coordinates.indices.map { idx -> (fallbackStart + idx).coerceAtLeast(0L) }
     }
 
     private fun preloadedSingleTrackerTrailFromCacheOrNull(
@@ -1354,27 +1396,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {
         val state = _uiState.value
-        val tracker = if (point.source == TrackPointSource.REMOTE_STREAM) {
-            trackerManagementStateStore.trackers.value.firstOrNull { it.id == point.trackId }
-        } else {
-            null
-        }
         val reduction = TrackerMapPointEventReducer.reduce(
             TrackerMapPointReductionInput(
                 state = state,
                 point = point,
-                recentDataWindow = tracker?.settingString("recent_data_window"),
-                currentSessionStartMs = remoteSessionStartByTrack[point.trackId],
-                pendingReopenTrackerId = pendingReopenSingleTrackerLoadId,
-                sessionAnchorTrackerId = sessionAnchorResyncTrackerId,
-                sessionAnchorUntilElapsedMs = sessionAnchorResyncUntilElapsedMs,
-                nowElapsedMs = SystemClock.elapsedRealtime(),
                 trailPointLimit = TRAIL_POINT_LIMIT
             )
         )
-        sessionAnchorResyncTrackerId = reduction.nextSessionAnchorTrackerId
-        sessionAnchorResyncUntilElapsedMs = reduction.nextSessionAnchorUntilElapsedMs
-        reduction.nextSessionStartMs?.let { remoteSessionStartByTrack[point.trackId] = it }
         if (reduction.shouldUpdateUiState) {
             _uiState.value = reduction.nextState
             if (reduction.nextState.liveActiveFitEnabled &&
@@ -1451,21 +1479,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             is Boolean -> raw
             is String -> raw.toBooleanStrictOrNull()
             else -> null
-        }
-    }
-
-    private fun primeSessionAnchorResync(trackerId: String) {
-        val normalizedId = trackerId.trim()
-        if (normalizedId.isEmpty()) return
-        remoteSessionStartByTrack.remove(normalizedId)
-        sessionAnchorResyncTrackerId = normalizedId
-        sessionAnchorResyncUntilElapsedMs = SystemClock.elapsedRealtime() + SESSION_ANCHOR_RESYNC_MS
-    }
-
-    private fun clearSessionAnchorResync(trackerId: String) {
-        if (sessionAnchorResyncTrackerId == trackerId.trim()) {
-            sessionAnchorResyncTrackerId = null
-            sessionAnchorResyncUntilElapsedMs = 0L
         }
     }
 

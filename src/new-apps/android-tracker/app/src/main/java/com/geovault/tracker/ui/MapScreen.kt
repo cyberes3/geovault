@@ -252,6 +252,12 @@ private fun TrackerMapAuthenticatedContent(
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val userLocationPolicy = remember { TrackerMapUserLocationPolicy() }
     var followLockArmedThisSession by rememberSaveable { mutableStateOf(false) }
+    val disarmFollowSessionAndClearMapLocks = remember(viewModel) {
+        {
+            followLockArmedThisSession = false
+            viewModel.disableAllMapLocks()
+        }
+    }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
@@ -360,8 +366,7 @@ private fun TrackerMapAuthenticatedContent(
 
     DisposableEffect(map) {
         val listener = geoVaultCreateGestureMoveStartedListener {
-            viewModel.clearFollowLockAfterUserGesture()
-            viewModel.clearSelectionLockAfterUserGesture()
+            viewModel.disableAllMapLocks()
         }
         map.addOnCameraMoveStartedListener(listener)
         onDispose {
@@ -503,6 +508,7 @@ private fun TrackerMapAuthenticatedContent(
                     icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
                     contentDescription = fabDescFitTrail,
                     onTap = {
+                        disarmFollowSessionAndClearMapLocks()
                         if (phase == GeoVaultMapPhase.Ready) {
                             geoVaultResetCameraBearingAndTilt(map)
                             viewModel.requestFitTrail()
@@ -516,8 +522,7 @@ private fun TrackerMapAuthenticatedContent(
                         icon = gpsFabAction.icon,
                         contentDescription = gpsFabAction.contentDescription,
                         onTap = {
-                            followLockArmedThisSession = false
-                            viewModel.setFollowLock(false)
+                            disarmFollowSessionAndClearMapLocks()
                             gpsFabAction.onTap?.invoke()
                         },
                     )

@@ -17,7 +17,13 @@ object TrackerChevronStylePolicy {
     val DefaultAddRowTint: Color = GeoVaultColorTokens.PrimaryBlue
 
     fun tintForTrackerColorHex(colorHex: String?, context: Context): Color {
-        return Color(parseHexToColorInt(colorHex, context))
+        val normalized = colorHex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
+        if (normalized == null) return GeoVaultColorTokens.PrimaryBlue
+        return try {
+            Color(parseHexToColorInt(colorHex, context))
+        } catch (_: Exception) {
+            GeoVaultColorTokens.PrimaryBlue
+        }
     }
 }
 

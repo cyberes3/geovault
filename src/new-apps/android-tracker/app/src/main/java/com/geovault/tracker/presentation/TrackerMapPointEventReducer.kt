@@ -7,12 +7,6 @@ import com.geovault.tracker.policy.TrackPointSource
 data class TrackerMapPointReductionInput(
     val state: TrackerMapUiState,
     val point: TrackPointEvent,
-    val recentDataWindow: String?,
-    val currentSessionStartMs: Long?,
-    val pendingReopenTrackerId: String?,
-    val sessionAnchorTrackerId: String?,
-    val sessionAnchorUntilElapsedMs: Long,
-    val nowElapsedMs: Long,
     val trailPointLimit: Int,
 )
 
@@ -20,9 +14,6 @@ data class TrackerMapPointReductionResult(
     val acceptedBySourcePolicy: Boolean,
     val shouldUpdateUiState: Boolean,
     val nextState: TrackerMapUiState,
-    val nextSessionStartMs: Long?,
-    val nextSessionAnchorTrackerId: String?,
-    val nextSessionAnchorUntilElapsedMs: Long,
 )
 
 object TrackerMapPointEventReducer {
@@ -45,9 +36,6 @@ object TrackerMapPointEventReducer {
                 acceptedBySourcePolicy = false,
                 shouldUpdateUiState = false,
                 nextState = state,
-                nextSessionStartMs = input.currentSessionStartMs,
-                nextSessionAnchorTrackerId = input.sessionAnchorTrackerId,
-                nextSessionAnchorUntilElapsedMs = input.sessionAnchorUntilElapsedMs,
             )
         }
 
@@ -63,51 +51,8 @@ object TrackerMapPointEventReducer {
     ): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
-        val pendingAnchor = isSessionAnchorResyncPending(
-            trackerId = point.trackId,
-            sessionAnchorTrackerId = input.sessionAnchorTrackerId,
-            sessionAnchorUntilElapsedMs = input.sessionAnchorUntilElapsedMs,
-            nowElapsedMs = input.nowElapsedMs
-        )
-        val decision = if (state.mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            if (pendingAnchor.isPending) {
-                TrackerMapSessionWindowDecision(
-                    shouldResetTrackGeometry = false,
-                    shouldIgnorePoint = false,
-                    nextSessionStartMs = input.currentSessionStartMs
-                )
-            } else {
-                TrackerMapSessionWindowPolicy.decide(
-                    recentDataWindow = input.recentDataWindow,
-                    currentSessionStartMs = input.currentSessionStartMs,
-                    incomingPropsJson = point.propsJson,
-                    allowResetOnNewSession = TrackerMapViewModel.resolveAllowSessionReset(
-                        pendingReopenTrackerId = input.pendingReopenTrackerId,
-                        eventTrackId = point.trackId
-                    )
-                )
-            }
-        } else {
-            TrackerMapSessionWindowDecision(
-                shouldResetTrackGeometry = false,
-                shouldIgnorePoint = false,
-                nextSessionStartMs = input.currentSessionStartMs
-            )
-        }
-
-        if (decision.shouldIgnorePoint) {
-            return TrackerMapPointReductionResult(
-                acceptedBySourcePolicy = true,
-                shouldUpdateUiState = false,
-                nextState = state,
-                nextSessionStartMs = decision.nextSessionStartMs,
-                nextSessionAnchorTrackerId = pendingAnchor.nextTrackerId,
-                nextSessionAnchorUntilElapsedMs = pendingAnchor.nextUntilElapsedMs,
-            )
-        }
 
         val nextRemoteLastPoints = state.remoteLastPoints.toMutableMap().apply {
-            if (decision.shouldResetTrackGeometry) remove(point.trackId)
             this[point.trackId] = point
         }
         val nextTrail = if (
@@ -116,8 +61,7 @@ object TrackerMapPointEventReducer {
             displayedTrackerId.isNotBlank() &&
             displayedTrackerId == point.trackId
         ) {
-            val baseTrail = if (decision.shouldResetTrackGeometry) emptyList() else state.trail
-            appendRemotePoint(baseTrail, point, input.trailPointLimit)
+            appendRemotePoint(state.trail, point, input.trailPointLimit)
         } else {
             state.trail
         }
@@ -126,11 +70,7 @@ object TrackerMapPointEventReducer {
             state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
         ) {
             val updated = state.allQueueTrailsByTracker.toMutableMap()
-            val base = if (decision.shouldResetTrackGeometry) {
-                emptyList()
-            } else {
-                updated[point.trackId].orEmpty()
-            }
+            val base = updated[point.trackId].orEmpty()
             updated[point.trackId] = appendRemotePoint(base, point, input.trailPointLimit)
             updated
         } else {
@@ -145,9 +85,6 @@ object TrackerMapPointEventReducer {
                 trail = nextTrail,
                 allQueueTrailsByTracker = nextAllQueueTrails
             ),
-            nextSessionStartMs = decision.nextSessionStartMs,
-            nextSessionAnchorTrackerId = pendingAnchor.nextTrackerId,
-            nextSessionAnchorUntilElapsedMs = pendingAnchor.nextUntilElapsedMs,
         )
     }
 
@@ -178,9 +115,6 @@ object TrackerMapPointEventReducer {
                 acceptedBySourcePolicy = true,
                 shouldUpdateUiState = false,
                 nextState = state,
-                nextSessionStartMs = input.currentSessionStartMs,
-                nextSessionAnchorTrackerId = input.sessionAnchorTrackerId,
-                nextSessionAnchorUntilElapsedMs = input.sessionAnchorUntilElapsedMs,
             )
         }
         val nextTrail = (trail + localOverlayPoint).takeLast(input.trailPointLimit)
@@ -188,36 +122,6 @@ object TrackerMapPointEventReducer {
             acceptedBySourcePolicy = true,
             shouldUpdateUiState = true,
             nextState = state.copy(trail = nextTrail),
-            nextSessionStartMs = input.currentSessionStartMs,
-            nextSessionAnchorTrackerId = input.sessionAnchorTrackerId,
-            nextSessionAnchorUntilElapsedMs = input.sessionAnchorUntilElapsedMs,
-        )
-    }
-
-    private data class SessionAnchorPendingResult(
-        val isPending: Boolean,
-        val nextTrackerId: String?,
-        val nextUntilElapsedMs: Long,
-    )
-
-    private fun isSessionAnchorResyncPending(
-        trackerId: String,
-        sessionAnchorTrackerId: String?,
-        sessionAnchorUntilElapsedMs: Long,
-        nowElapsedMs: Long
-    ): SessionAnchorPendingResult {
-        if (nowElapsedMs >= sessionAnchorUntilElapsedMs) {
-            return SessionAnchorPendingResult(
-                isPending = false,
-                nextTrackerId = null,
-                nextUntilElapsedMs = 0L
-            )
-        }
-        val isPending = sessionAnchorTrackerId == trackerId.trim()
-        return SessionAnchorPendingResult(
-            isPending = isPending,
-            nextTrackerId = sessionAnchorTrackerId,
-            nextUntilElapsedMs = sessionAnchorUntilElapsedMs
         )
     }
 

@@ -66,33 +66,6 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun resolveAllowSessionReset_noPendingReopen_allowsReset() {
-        val allowed = TrackerMapViewModel.resolveAllowSessionReset(
-            pendingReopenTrackerId = null,
-            eventTrackId = "tracker-1"
-        )
-        assertEquals(true, allowed)
-    }
-
-    @Test
-    fun resolveAllowSessionReset_samePendingTracker_blocksReset() {
-        val allowed = TrackerMapViewModel.resolveAllowSessionReset(
-            pendingReopenTrackerId = "tracker-1",
-            eventTrackId = "tracker-1"
-        )
-        assertEquals(false, allowed)
-    }
-
-    @Test
-    fun resolveAllowSessionReset_differentPendingTracker_allowsReset() {
-        val allowed = TrackerMapViewModel.resolveAllowSessionReset(
-            pendingReopenTrackerId = "tracker-1",
-            eventTrackId = "tracker-2"
-        )
-        assertEquals(true, allowed)
-    }
-
-    @Test
     fun resolveHistoryClearRefreshAction_singleMode_otherTracker_noOp() {
         val action = TrackerMapViewModel.resolveHistoryClearRefreshAction(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,

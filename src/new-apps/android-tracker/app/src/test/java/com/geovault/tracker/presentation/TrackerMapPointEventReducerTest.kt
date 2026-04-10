@@ -31,12 +31,6 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = 1000L,
                     accuracyMeters = 4f,
                 ),
-                recentDataWindow = null,
-                currentSessionStartMs = null,
-                pendingReopenTrackerId = null,
-                sessionAnchorTrackerId = null,
-                sessionAnchorUntilElapsedMs = 0L,
-                nowElapsedMs = 0L,
                 trailPointLimit = 4000,
             )
         )
@@ -80,12 +74,6 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = 1000L,
                     accuracyMeters = 4f,
                 ),
-                recentDataWindow = null,
-                currentSessionStartMs = null,
-                pendingReopenTrackerId = null,
-                sessionAnchorTrackerId = null,
-                sessionAnchorUntilElapsedMs = 0L,
-                nowElapsedMs = 0L,
                 trailPointLimit = 4000,
             )
         )
@@ -95,7 +83,20 @@ class TrackerMapPointEventReducerTest {
     }
 
     @Test
-    fun remotePointSessionWindowNewer_resetsTrailAndAdvancesSessionAnchor() {
+    fun remoteStream_appendsToExistingTrail() {
+        val existing = QueuedLocation(
+            id = 0L,
+            time = 900L,
+            latitude = 0.0,
+            longitude = 0.0,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = "server_geometry",
+            dist = null
+        )
         val state = TrackerMapUiState(
             runtime = TrackingRuntimeSnapshot(
                 isRunning = false,
@@ -103,21 +104,7 @@ class TrackerMapPointEventReducerTest {
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "tracker-1",
-            trail = listOf(
-                QueuedLocation(
-                    id = 0L,
-                    time = 900L,
-                    latitude = 0.0,
-                    longitude = 0.0,
-                    altitude = null,
-                    speed = null,
-                    bearing = null,
-                    accuracy = null,
-                    sat = null,
-                    prov = "remote_stream",
-                    dist = null
-                )
-            ),
+            trail = listOf(existing),
         )
         val result = TrackerMapPointEventReducer.reduce(
             TrackerMapPointReductionInput(
@@ -128,30 +115,70 @@ class TrackerMapPointEventReducerTest {
                     lon = 10.0,
                     lat = 20.0,
                     timestampMs = 1000L,
-                    propsJson = "{\"starttimestamp\":2000}"
                 ),
-                recentDataWindow = "session",
-                currentSessionStartMs = 1000L,
-                pendingReopenTrackerId = null,
-                sessionAnchorTrackerId = null,
-                sessionAnchorUntilElapsedMs = 0L,
-                nowElapsedMs = 0L,
                 trailPointLimit = 4000,
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
         assertTrue(result.shouldUpdateUiState)
-        assertEquals(2_000_000L, result.nextSessionStartMs)
-        assertEquals(1, result.nextState.trail.size)
+        assertEquals(2, result.nextState.trail.size)
+        assertEquals("server_geometry", result.nextState.trail[0].prov)
+        assertEquals("remote_stream", result.nextState.trail[1].prov)
         assertTrue(result.nextState.remoteLastPoints.containsKey("tracker-1"))
     }
 
     @Test
-    fun remotePointStaleSession_ignoredWithoutUiMutation() {
+    fun remoteStream_rejectsDuplicatePoint() {
+        val tsMs = 1_710_000_000_000L
+        val existing = QueuedLocation(
+            id = 0L,
+            time = tsMs,
+            latitude = 20.0,
+            longitude = 10.0,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = "remote_stream",
+            dist = null
+        )
         val state = TrackerMapUiState(
-            runtime = TrackingRuntimeSnapshot(isRunning = false, selectedTrackerId = "tracker-1"),
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = false,
+                selectedTrackerId = "tracker-1",
+            ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = "tracker-1",
+            trail = listOf(existing),
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.REMOTE_STREAM,
+                    trackId = "tracker-1",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = tsMs,
+                ),
+                trailPointLimit = 4000,
+            )
+        )
+        assertTrue(result.acceptedBySourcePolicy)
+        assertTrue(result.shouldUpdateUiState)
+        assertEquals(1, result.nextState.trail.size)
+    }
+
+    @Test
+    fun remoteStream_multiMode_appendsToTrackerMap() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = false,
+                selectedTrackerId = "",
+            ),
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            activeStreamedTrackerIds = setOf("tracker-1"),
         )
         val result = TrackerMapPointEventReducer.reduce(
             TrackerMapPointReductionInput(
@@ -162,19 +189,12 @@ class TrackerMapPointEventReducerTest {
                     lon = 10.0,
                     lat = 20.0,
                     timestampMs = 1000L,
-                    propsJson = "{\"starttimestamp\":1000}"
                 ),
-                recentDataWindow = "session",
-                currentSessionStartMs = 2_000_000L,
-                pendingReopenTrackerId = null,
-                sessionAnchorTrackerId = null,
-                sessionAnchorUntilElapsedMs = 0L,
-                nowElapsedMs = 0L,
                 trailPointLimit = 4000,
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
-        assertFalse(result.shouldUpdateUiState)
-        assertEquals(2_000_000L, result.nextSessionStartMs)
+        assertTrue(result.shouldUpdateUiState)
+        assertEquals(1, result.nextState.allQueueTrailsByTracker["tracker-1"]?.size)
     }
 }

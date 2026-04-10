@@ -5,14 +5,12 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.db.QueuedLocation
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrackerMapTrailDataCoordinatorTest {
 
     @Test
     fun loadSingleTrackerTrail_usesQueueFallbackWhenGeometryIsEmpty() = runBlocking {
-        var anchorCleared = false
         val fallback = listOf(
             QueuedLocation(
                 id = 1L,
@@ -31,24 +29,22 @@ class TrackerMapTrailDataCoordinatorTest {
 
         val result = TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
             trackerId = "t1",
+            existingTrailMinTimeMs = null,
             loadTrackerGeometry = {
                 RepositoryResult.Success(Tracker(id = "t1", name = "T1", color = null))
             },
             loadQueueTrailWithOverlay = { fallback },
-            resolveSessionStartMs = { null },
-            onSessionStartResolved = { _, _ -> Unit },
-            onSessionAnchorResolved = { anchorCleared = true },
-            mapCoordinatesToTrail = { _, _ -> emptyList() }
+            mapCoordinatesToTrail = { _, _, _ -> emptyList() }
         )
 
         assertEquals(fallback, result)
-        assertTrue(anchorCleared)
     }
 
     @Test
     fun loadTrailsForTrackerIds_returnsMappedTrailsOnSuccess() = runBlocking {
         val result = TrackerMapTrailDataCoordinator.loadTrailsForTrackerIds(
             trackerIds = listOf("t1"),
+            existingTrailMinTimeMsByTracker = emptyMap(),
             loadTrackersGeometry = {
                 RepositoryResult.Success(
                     listOf(
@@ -64,9 +60,7 @@ class TrackerMapTrailDataCoordinatorTest {
                     )
                 )
             },
-            resolveSessionStartMs = { null },
-            onSessionStartResolved = { _, _ -> Unit },
-            mapCoordinatesToTrail = { coordinates, _ ->
+            mapCoordinatesToTrail = { coordinates, _, _ ->
                 coordinates.mapIndexed { index, point ->
                     QueuedLocation(
                         id = -(index + 1L),
