@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -60,6 +61,8 @@ class MainScreenViewModel(
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
+
+    private var validateJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -111,7 +114,7 @@ class MainScreenViewModel(
         _state.update {
             it.copy(
                 isConnecting = true,
-                importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = "Connecting to server…")
+                importantSnackbar = null,
             )
         }
         viewModelScope.launch {
@@ -173,23 +176,28 @@ class MainScreenViewModel(
     }
 
     fun validate() {
-        viewModelScope.launch {
-            _state.update {
-                it.copy(
-                    validationTitle = "Validating API Key…",
-                    validationMessage = "Connecting to server…",
-                    isValidationLoading = true,
-                    validationOutcome = ValidationOutcome.Loading
-                )
-            }
-            val result = validationRepository.validateConnection()
-            _state.update {
-                it.copy(
-                    validationTitle = result.title,
-                    validationMessage = result.message,
-                    isValidationLoading = false,
-                    validationOutcome = result.outcome
-                )
+        if (validateJob?.isActive == true) return
+        validateJob = viewModelScope.launch {
+            try {
+                _state.update {
+                    it.copy(
+                        validationTitle = "Validating API Key…",
+                        validationMessage = "Connecting to server…",
+                        isValidationLoading = true,
+                        validationOutcome = ValidationOutcome.Loading
+                    )
+                }
+                val result = validationRepository.validateConnection()
+                _state.update {
+                    it.copy(
+                        validationTitle = result.title,
+                        validationMessage = result.message,
+                        isValidationLoading = false,
+                        validationOutcome = result.outcome
+                    )
+                }
+            } finally {
+                validateJob = null
             }
         }
     }

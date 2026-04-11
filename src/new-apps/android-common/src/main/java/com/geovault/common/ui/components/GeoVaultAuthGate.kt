@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
+/** Wraps content when signed in; otherwise shows [GeoVaultInitialAuthView] (see that composable for connect UX). */
 @Composable
 fun GeoVaultAuthGate(
     isAuthenticated: Boolean,

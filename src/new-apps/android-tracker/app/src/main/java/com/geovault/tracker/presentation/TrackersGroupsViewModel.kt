@@ -15,7 +15,7 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.data.GroupManagementRepository
-import com.geovault.tracker.data.TrackerBootstrapOrchestrator
+import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.common.NaturalSort
@@ -39,8 +39,6 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
-    private val bootstrapOrchestrator: TrackerBootstrapOrchestrator =
-        TrackerAppServices.from(application).trackerBootstrapOrchestrator()
     private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
 
     private val _uiState = MutableStateFlow(
@@ -77,29 +75,39 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 _uiState.update { it.copy(mapVisibility = mapVisibility) }
             }
         }
-        preloadTrackersSurface()
     }
 
-    fun preloadTrackersSurface() {
-        val state = _uiState.value
-        if (state.isLoading || state.hasCompletedInitialLoad) return
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = true,
-                    isPullRefreshing = false,
-                    userMessage = null,
-                )
-            }
-            val outcome = bootstrapOrchestrator.refreshForLaunch()
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    isPullRefreshing = false,
-                    hasCompletedInitialLoad = true,
-                    userMessage = if (outcome.isServerAccessible) null else appErrorMessage(AppError.Network),
-                )
-            }
+    /** Clears shell bootstrap UI gates after sign-out (see MainScreen auth LaunchedEffect). */
+    fun resetSurfacePreloadAfterSignOut() {
+        _uiState.update {
+            it.copy(
+                hasCompletedInitialLoad = false,
+                isLoading = false,
+                isPullRefreshing = false,
+            )
+        }
+    }
+
+    /** Shell shows loading before [runAuthenticatedLaunchBootstrap] in MainScreenViewModel. */
+    fun beginShellBootstrapUi() {
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                isPullRefreshing = false,
+                userMessage = null,
+            )
+        }
+    }
+
+    /** Shell applies bootstrap outcome after shared session bootstrap completes. */
+    fun completeShellBootstrapUi(outcome: TrackerBootstrapOutcome) {
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                isPullRefreshing = false,
+                hasCompletedInitialLoad = true,
+                userMessage = if (outcome.isServerAccessible) null else appErrorMessage(AppError.Network),
+            )
         }
     }
 

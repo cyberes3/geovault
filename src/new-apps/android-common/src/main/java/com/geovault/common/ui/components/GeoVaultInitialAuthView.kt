@@ -29,6 +29,13 @@ data class GeoVaultAuthExtraAction(
     val style: GeoVaultAuthExtraActionStyle = GeoVaultAuthExtraActionStyle.SECONDARY
 )
 
+/**
+ * Signed-out server URL entry and connect action.
+ *
+ * While [isConnecting] is true, the primary button shows [connectingButtonText] and is non-interactive. Callers should
+ * not also show a separate “connecting to server” snackbar or toast for the same flow; reserve overlays for errors or
+ * unrelated notices.
+ */
 @Composable
 fun GeoVaultInitialAuthView(
     serverUrl: String,

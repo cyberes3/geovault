@@ -84,10 +84,7 @@ class MainScreenViewModel(
         _state.update {
             it.copy(
                 isConnecting = true,
-                snackbar = GeoVaultSnackbarModel(
-                    id = "connect_start_${System.currentTimeMillis()}",
-                    message = "Connecting to server..."
-                )
+                snackbar = null,
             )
         }
         viewModelScope.launch {
@@ -292,6 +289,9 @@ class MainScreenViewModel(
             )
         }
         publishFromCache()
+        if (wasAuthenticated && !loggedIn) {
+            initialRefreshTriggered = false
+        }
         val authenticatedAfterLaunch = !initialRefreshTriggered && loggedIn
         val becameAuthenticated = !wasAuthenticated && loggedIn
         if (authenticatedAfterLaunch || becameAuthenticated) {

@@ -84,7 +84,7 @@ class SettingsViewModel(
     }
 
     fun connect() {
-        _state.value = _state.value.copy(isConnecting = true, infoMessage = "Connecting to server…")
+        _state.value = _state.value.copy(isConnecting = true, infoMessage = null)
         viewModelScope.launch {
             when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
                 is CommonInitialAuthController.OAuthPreparationResult.Ready -> {

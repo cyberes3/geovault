@@ -533,6 +533,7 @@ import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
 import LiveTrackSettingsSidebarContent from './LiveTrackSettingsSidebarContent.vue';
 import TrackerListContent from './TrackerListContent.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
+import { shouldReloadGeometryForSettingsChange } from './settingsChangePolicy.js';
 import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
 import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
 import {
@@ -2174,7 +2175,8 @@ export default {
       if (hasHiddenUpdate) {
         updateMapFeatures();
       }
-      if (refresh_map === true) {
+      const selectedSidebarTrackId = trackSidebarTrack.value?.id ?? null;
+      if (shouldReloadGeometryForSettingsChange(refresh_map, trackId, selectedSidebarTrackId)) {
         fetchAndMergeTracker(trackId);
       }
     }

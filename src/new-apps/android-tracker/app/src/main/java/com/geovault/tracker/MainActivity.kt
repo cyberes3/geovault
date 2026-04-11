@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 MainScreen(
+                    mainScreenViewModel = viewModel,
                     state = state,
                     mapRecoveryRequestToken = state.mapRecoveryRequestToken,
                     onMapRecoveryRequestConsumed = viewModel::consumeMapRecoveryRequest,

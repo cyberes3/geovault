@@ -149,6 +149,30 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         @JvmStatic
+        internal fun shouldReloadForRecentDataWindowChange(
+            oldWindow: String?,
+            newWindow: String?,
+            mode: TrackerMapDisplayMode,
+            selectedTrackerId: String,
+            displayedTrackerId: String,
+            runtimeRunning: Boolean,
+            activeStreamedTrackerIds: Set<String>,
+            changedTrackerId: String,
+        ): Boolean {
+            if (oldWindow == null || oldWindow == newWindow) return false
+            if (mode != TrackerMapDisplayMode.SINGLE_SESSION) return false
+            val selected = selectedTrackerId.trim()
+            val displayed = displayedTrackerId.trim()
+            val changed = changedTrackerId.trim()
+            if (changed.isEmpty()) return false
+            // Filter-driven reloads should only target the selected tracker.
+            if (selected.isEmpty() || changed != selected) return false
+            if (displayed.isNotEmpty() && changed != displayed) return false
+            if (runtimeRunning) return false
+            return changed !in activeStreamedTrackerIds
+        }
+
+        @JvmStatic
         internal fun resolveBottomCardVisibilityForMarkerTap(
             hasSelectionCard: Boolean
         ): Boolean {
@@ -342,12 +366,16 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         val newWindow = event.tracker.settingString("recent_data_window")
                         val oldWindow = recentDataWindowByTracker.put(trackerId, newWindow)
                         val state = _uiState.value
-                        val displayedId = effectiveDisplayedTrackerId(state)
-                        if (oldWindow != null &&
-                            oldWindow != newWindow &&
-                            state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-                            !state.runtime.isRunning &&
-                            displayedId == trackerId
+                        if (shouldReloadForRecentDataWindowChange(
+                                oldWindow = oldWindow,
+                                newWindow = newWindow,
+                                mode = state.mode,
+                                selectedTrackerId = state.runtime.selectedTrackerId,
+                                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                                runtimeRunning = state.runtime.isRunning,
+                                activeStreamedTrackerIds = state.activeStreamedTrackerIds,
+                                changedTrackerId = trackerId,
+                            )
                         ) {
                             reloadTrailFromDatabase(force = true)
                         }

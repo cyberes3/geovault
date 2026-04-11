@@ -24,11 +24,17 @@ import com.geovault.tracker.R
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
-import com.geovault.tracker.data.TrackerBootstrapOrchestrator
+import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
+import com.geovault.tracker.data.TrackerSessionBootstrap
 import com.geovault.tracker.TrackingService
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,8 +66,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerSettingsRepository()
     private val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
-    private val trackerBootstrapOrchestrator: TrackerBootstrapOrchestrator =
-        TrackerAppServices.from(application).trackerBootstrapOrchestrator()
+    private val sessionBootstrap: TrackerSessionBootstrap =
+        TrackerAppServices.from(application).trackerSessionBootstrap()
+
+    private val launchBootstrapMutex = Mutex()
+    private var activeLaunchBootstrap: Deferred<TrackerBootstrapOutcome>? = null
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
@@ -140,7 +149,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun connectAuth() {
-        _state.update { it.copy(isConnecting = true, infoMessage = "Connecting to server...") }
+        _state.update { it.copy(isConnecting = true, infoMessage = null) }
         viewModelScope.launch {
             when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
                 is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
@@ -242,10 +251,40 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (startupRefreshHandled || startupRefreshJob?.isActive == true) return
         startupRefreshJob = viewModelScope.launch {
             startupRefreshHandled = true
-            refreshUserStatus()
-            val outcome = trackerBootstrapOrchestrator.refreshForLaunch()
-            _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
+            runAuthenticatedLaunchBootstrap()
         }
+    }
+
+    /**
+     * Runs user status refresh plus launch-scale bootstrap once; concurrent callers await the same work.
+     * Safe to call from [com.geovault.tracker.ui.MainScreen] and from internal startup paths.
+     */
+    suspend fun runAuthenticatedLaunchBootstrap(): TrackerBootstrapOutcome = coroutineScope {
+        lateinit var self: Deferred<TrackerBootstrapOutcome>
+        val deferred = launchBootstrapMutex.withLock {
+            val existing = activeLaunchBootstrap
+            if (existing != null && existing.isActive) {
+                return@withLock existing
+            }
+            val created = async {
+                try {
+                    refreshUserStatus()
+                    val outcome = sessionBootstrap.runLaunchBootstrap()
+                    _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
+                    outcome
+                } finally {
+                    launchBootstrapMutex.withLock {
+                        if (activeLaunchBootstrap === self) {
+                            activeLaunchBootstrap = null
+                        }
+                    }
+                }
+            }
+            self = created
+            activeLaunchBootstrap = created
+            created
+        }
+        deferred.await()
     }
 
     private fun refreshServerAccessibilityOnResume() {
@@ -253,7 +292,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (serverAccessibilityRefreshJob?.isActive == true) return
         serverAccessibilityRefreshJob = viewModelScope.launch {
             startupRefreshJob?.join()
-            val outcome = trackerBootstrapOrchestrator.refreshForResume()
+            val outcome = sessionBootstrap.runResumeBootstrap()
             _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
         }
     }
@@ -330,7 +369,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun resetPostAuthStartupState() {
-        trackerBootstrapOrchestrator.resetLaunchState()
+        sessionBootstrap.resetForSignedOutSession()
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
         hasStartedVersionCheck = false

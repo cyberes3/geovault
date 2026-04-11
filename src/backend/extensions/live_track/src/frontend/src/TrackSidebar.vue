@@ -207,6 +207,7 @@ import EditTrackForm from './EditTrackForm.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 import HaukInstructionsModal from './HaukInstructionsModal.vue';
 import { buildTrackerSettingsPayloadFromSnapshot } from './settingsPayloadBuilders.js';
+import { didRecentDataWindowChange } from './settingsChangePolicy.js';
 
 export default {
   name: 'TrackSidebar',
@@ -399,7 +400,7 @@ export default {
       if (!lastSavedSnapshot.value) return;
       const current = makeSnapshotFromState();
       const previous = lastSavedSnapshot.value;
-      const recentWindowChanged = String(current.recentDataWindow || '') !== String(previous.recentDataWindow || '');
+      const recentWindowChanged = didRecentDataWindowChange(previous, current);
       if (snapshotsEqual(current, lastSavedSnapshot.value)) return;
       if (autosaveInFlight) {
         autosaveQueued = true;

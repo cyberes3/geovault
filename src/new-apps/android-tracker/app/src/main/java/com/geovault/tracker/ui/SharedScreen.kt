@@ -52,7 +52,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
@@ -94,6 +93,7 @@ import java.util.Locale
 
 @Composable
 fun SharedScreen(
+    vm: SharedViewModel,
     isAuthenticated: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
@@ -106,7 +106,6 @@ fun SharedScreen(
     onOpenGroupOnMap: (groupId: String) -> Unit = {},
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
 ) {
-    val vm: SharedViewModel = viewModel()
     val state by vm.uiState.collectAsState()
     var pendingConfirmAction by remember { mutableStateOf<SharedConfirmAction?>(null) }
     var pendingNavigationRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
@@ -115,11 +114,6 @@ fun SharedScreen(
     var editSharedTracker by remember { mutableStateOf<Tracker?>(null) }
     var editSharedGroup by remember { mutableStateOf<Group?>(null) }
 
-    LaunchedEffect(isAuthenticated) {
-        if (isAuthenticated) {
-            vm.preloadSharedSurface()
-        }
-    }
     LaunchedEffect(navigationRequest) {
         val request = navigationRequest ?: return@LaunchedEffect
         vm.openFromNavigationSubTab(request.subTab)

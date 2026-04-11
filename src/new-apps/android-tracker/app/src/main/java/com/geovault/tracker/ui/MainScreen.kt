@@ -31,6 +31,7 @@ import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.update.CustomTabReleasePageLauncher
 import com.geovault.common.update.UpdateAvailablePromptComposer
 import com.geovault.tracker.presentation.HiddenTrackerItem
+import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.MainScreenState
 import com.geovault.tracker.presentation.SettingsState
 import com.geovault.tracker.presentation.SharedSubTab
@@ -45,6 +46,7 @@ import com.geovault.tracker.TrackerApplication
 
 @Composable
 fun MainScreen(
+    mainScreenViewModel: MainScreenViewModel,
     state: MainScreenState,
     mapRecoveryRequestToken: Long = 0L,
     onMapRecoveryRequestConsumed: (Long) -> Unit = {},
@@ -91,9 +93,14 @@ fun MainScreen(
     var trackerParamsArgs by remember { mutableStateOf<TrackerParamsRouteArgs?>(null) }
     LaunchedEffect(state.isAuthenticated) {
         if (state.isAuthenticated) {
-            // Preload tab data that should be instant on first open.
-            trackersGroupsViewModel.preloadTrackersSurface()
-            sharedViewModel.preloadSharedSurface()
+            trackersGroupsViewModel.beginShellBootstrapUi()
+            sharedViewModel.beginShellBootstrapUi()
+            val outcome = mainScreenViewModel.runAuthenticatedLaunchBootstrap()
+            trackersGroupsViewModel.completeShellBootstrapUi(outcome)
+            sharedViewModel.completeShellBootstrapUi(outcome)
+        } else {
+            trackersGroupsViewModel.resetSurfacePreloadAfterSignOut()
+            sharedViewModel.resetSurfacePreloadAfterSignOut()
         }
     }
     val openTrackerOnMap = remember {
@@ -340,6 +347,7 @@ fun MainScreen(
 
                     TrackerTab.SHARED.name -> {
                     SharedScreen(
+                        vm = sharedViewModel,
                         isAuthenticated = state.isAuthenticated,
                         serverUrl = state.serverUrl,
                         onAuthServerUrlChanged = onAuthServerUrlChanged,

@@ -9,8 +9,9 @@ import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
-import com.geovault.tracker.data.TrackerBootstrapOrchestrator
+import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
+import com.geovault.tracker.data.TrackerSessionBootstrap
 import com.geovault.tracker.di.TrackerAppServices
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -30,8 +31,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
-    private val bootstrapOrchestrator: TrackerBootstrapOrchestrator =
-        TrackerAppServices.from(application).trackerBootstrapOrchestrator()
+    private val sessionBootstrap: TrackerSessionBootstrap =
+        TrackerAppServices.from(application).trackerSessionBootstrap()
     private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
 
     private val _uiState = MutableStateFlow(SharedUiState())
@@ -81,7 +82,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun showDiscoverOverlay() {
-        preloadSharedSurface()
+        ensureSharedBootstrapIfNotLoadedYet()
         _uiState.update { current ->
             current.copy(
                 viewMode = SharedViewMode.DISCOVER_OVERLAY,
@@ -93,7 +94,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun showPublicOverlay() {
-        preloadSharedSurface()
+        ensureSharedBootstrapIfNotLoadedYet()
         _uiState.update { current ->
             current.copy(
                 viewMode = SharedViewMode.PUBLIC_OVERLAY,
@@ -453,21 +454,50 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun preloadSharedSurface() {
+    /** Clears shell bootstrap UI gates after sign-out (see MainScreen auth LaunchedEffect). */
+    fun resetSurfacePreloadAfterSignOut() {
+        _uiState.update {
+            it.copy(
+                hasCompletedInitialLoad = false,
+                isLoading = false,
+            )
+        }
+    }
+
+    /** Runs launch bootstrap when discover/public overlays need store data but shell has not loaded yet. */
+    private fun ensureSharedBootstrapIfNotLoadedYet() {
         val current = _uiState.value
         if (current.isLoading || current.hasCompletedInitialLoad) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val bootstrap = bootstrapOrchestrator.refreshForLaunch()
+            val outcome = sessionBootstrap.runLaunchBootstrap()
             _uiState.update { state ->
                 state.copy(
                     isLoading = false,
                     hasCompletedInitialLoad = true,
                 )
             }
-            if (!bootstrap.isServerAccessible) {
+            if (!outcome.isServerAccessible) {
                 emitSnackbar(appErrorMessage(AppError.Network))
             }
+        }
+    }
+
+    /** Shell shows loading before [MainScreenViewModel.runAuthenticatedLaunchBootstrap]. */
+    fun beginShellBootstrapUi() {
+        _uiState.update { it.copy(isLoading = true) }
+    }
+
+    /** Shell applies outcome after shared session bootstrap completes. */
+    fun completeShellBootstrapUi(outcome: TrackerBootstrapOutcome) {
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                hasCompletedInitialLoad = true,
+            )
+        }
+        if (!outcome.isServerAccessible) {
+            emitSnackbar(appErrorMessage(AppError.Network))
         }
     }
 

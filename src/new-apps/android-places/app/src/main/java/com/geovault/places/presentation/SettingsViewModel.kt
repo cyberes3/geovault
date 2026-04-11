@@ -40,7 +40,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun connect() {
-        _state.update { it.copy(isConnecting = true, infoMessage = "Connecting to server...") }
+        _state.update { it.copy(isConnecting = true, infoMessage = null) }
         viewModelScope.launch {
             when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
                 is CommonInitialAuthController.OAuthPreparationResult.Ready -> {

@@ -354,7 +354,8 @@ fun GeoVaultToggle(
  * Shared outlined text field styled for GeoVault.
  *
  * Outside-tap keyboard dismissal is applied at the shared [com.geovault.common.ui.theme.GeoVaultTheme]
- * root, so screens using common theme wrappers get full-screen dismissal behavior automatically.
+ * root using an initial pointer pass, so taps on any control (not only blank areas) clear focus
+ * and hide the IME when appropriate.
  */
 @Composable
 fun GeoVaultInput(

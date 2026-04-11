@@ -99,6 +99,51 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
+    fun shouldReloadForRecentDataWindowChange_selectedSingleNotStreaming_returnsTrue() {
+        val shouldReload = TrackerMapViewModel.shouldReloadForRecentDataWindowChange(
+            oldWindow = "1h",
+            newWindow = "session",
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "tracker-1",
+            displayedTrackerId = "tracker-1",
+            runtimeRunning = false,
+            activeStreamedTrackerIds = emptySet(),
+            changedTrackerId = "tracker-1"
+        )
+        assertEquals(true, shouldReload)
+    }
+
+    @Test
+    fun shouldReloadForRecentDataWindowChange_nonSelectedTracker_returnsFalse() {
+        val shouldReload = TrackerMapViewModel.shouldReloadForRecentDataWindowChange(
+            oldWindow = "1h",
+            newWindow = "session",
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "tracker-1",
+            displayedTrackerId = "tracker-2",
+            runtimeRunning = false,
+            activeStreamedTrackerIds = emptySet(),
+            changedTrackerId = "tracker-2"
+        )
+        assertEquals(false, shouldReload)
+    }
+
+    @Test
+    fun shouldReloadForRecentDataWindowChange_selectedButStreaming_returnsFalse() {
+        val shouldReload = TrackerMapViewModel.shouldReloadForRecentDataWindowChange(
+            oldWindow = "1h",
+            newWindow = "session",
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "tracker-1",
+            displayedTrackerId = "tracker-1",
+            runtimeRunning = true,
+            activeStreamedTrackerIds = setOf("tracker-1"),
+            changedTrackerId = "tracker-1"
+        )
+        assertEquals(false, shouldReload)
+    }
+
+    @Test
     fun resolveBottomCardVisibilityForMarkerTap_withSelection_showsCard() {
         val visible = TrackerMapViewModel.resolveBottomCardVisibilityForMarkerTap(
             hasSelectionCard = true
