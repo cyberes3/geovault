@@ -30,7 +30,7 @@ sealed interface OAuthCallbackValidationResult {
 
 object OAuthCallbackValidator {
     fun validate(input: OAuthCallbackValidationInput): OAuthCallbackValidationResult {
-        Log.d(TAG, "validate: code=${if (input.code.isNullOrBlank()) "MISSING" else "present(${input.code!!.length} chars)"}" +
+        Log.d(TAG, "validate: code=${if (input.code.isNullOrBlank()) "MISSING" else "present(${input.code.length} chars)"}" +
             " state=${if (input.state.isNullOrBlank()) "MISSING" else "present(${input.state})"}" +
             " oauthError=${input.oauthError}" +
             " pkceState=${if (input.pkceState == null) "NULL" else "present(savedState=${input.pkceState.second})"}" +
