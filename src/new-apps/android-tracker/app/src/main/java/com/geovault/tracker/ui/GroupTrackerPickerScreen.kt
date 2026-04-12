@@ -26,7 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -208,6 +208,7 @@ private fun PickerTabContent(
                 GeoVaultCompactDismissTitleBar(
                     title = stringResource(R.string.groups_tracker_title),
                     onClose = onDismiss,
+                    closeTooltip = stringResource(R.string.tooltip_group_trackers_list_close),
                 )
                 GeoVaultTabBar(
                     tabs = tabs,
@@ -243,6 +244,11 @@ private fun PickerTabContent(
                     onClick = {
                         if (activePhase == PickerPhase.ADD) scrollToPhase(PickerPhase.LIST, true)
                         else onDone()
+                    },
+                    tooltip = if (activePhase == PickerPhase.ADD) {
+                        stringResource(R.string.tooltip_group_trackers_list_add)
+                    } else {
+                        null
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -424,7 +430,10 @@ private fun MemberTrackerCard(
                     )
                 }
             }
-            IconButton(onClick = onRemove) {
+            GeoVaultIconButton(
+                onClick = onRemove,
+                tooltip = stringResource(R.string.tooltip_group_tracker_remove),
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = stringResource(R.string.trackers_dialog_cancel),
@@ -450,5 +459,6 @@ private fun AddableTrackerCard(
         borderColor = borderColor,
         onAdd = onAdd,
         onRemove = {},
+        addIconTooltip = stringResource(R.string.tooltip_add_group_row_add),
     )
 }

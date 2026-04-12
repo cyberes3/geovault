@@ -49,6 +49,7 @@ fun GeoVaultInitialAuthView(
     connectingButtonText: String = "Connecting...",
     isConnecting: Boolean = false,
     connectEnabled: Boolean = true,
+    connectButtonTooltip: String? = null,
     inputEnabled: Boolean = true,
     extraActions: List<GeoVaultAuthExtraAction> = emptyList(),
     captureOutsideTapAcrossParent: Boolean = true
@@ -92,6 +93,7 @@ fun GeoVaultInitialAuthView(
                 text = if (connectState.isEffectivelyConnecting) connectingButtonText else connectButtonText,
                 onClick = { connectState.onClick() },
                 enabled = connectEnabled && !connectState.isEffectivelyConnecting,
+                tooltip = connectButtonTooltip,
                 modifier = Modifier.fillMaxWidth()
             )
             extraActions.forEach { action ->

@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
@@ -76,6 +75,8 @@ import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
 import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.ui.components.GeoVaultAuthGate
+import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
+import com.geovault.common.ui.components.GeoVaultIconButton
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
@@ -128,6 +129,7 @@ fun MapScreen(
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,
                         isAuthenticated = isAuthenticated,
+                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                     )
                 },
             )
@@ -145,6 +147,7 @@ fun MapScreen(
                 onServerUrlChanged = onAuthServerUrlChanged,
                 onConnect = onAuthConnect,
                 isConnecting = isConnecting,
+                connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 TrackerMapAuthenticatedContent(
@@ -290,6 +293,12 @@ private fun TrackerMapAuthenticatedContent(
     val fabDescUnlockSelection = stringResource(R.string.map_action_unlock_selection)
     val fabDescLiveActiveFitEnable = stringResource(R.string.live_active_fit_enable)
     val fabDescLiveActiveFitDisable = stringResource(R.string.live_active_fit_disable)
+    val tooltipMapLayers = stringResource(R.string.tooltip_map_layers)
+    val tooltipMapZoomLatest = stringResource(R.string.tooltip_map_zoom_latest)
+    val tooltipMapZoomIn = stringResource(R.string.tooltip_map_zoom_in)
+    val tooltipMapZoomOut = stringResource(R.string.tooltip_map_zoom_out)
+    val tooltipMapLiveActiveFit = stringResource(R.string.tooltip_map_live_active_fit)
+    val tooltipMapSelectionZoomLock = stringResource(R.string.tooltip_map_selection_zoom_lock)
 
     val phase by map.phase.collectAsState()
     LaunchedEffect(phase) {
@@ -502,12 +511,14 @@ private fun TrackerMapAuthenticatedContent(
                     icon = layerFabAction.icon,
                     contentDescription = fabDescSource,
                     onTap = layerFabAction.onTap,
+                    tooltip = tooltipMapLayers,
                 )
                 action(
                     id = "home_extent",
                     order = 20,
                     icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
                     contentDescription = fabDescFitTrail,
+                    tooltip = tooltipMapZoomLatest,
                     onTap = {
                         disarmFollowSessionAndClearMapLocks()
                         if (phase == GeoVaultMapPhase.Ready) {
@@ -543,6 +554,7 @@ private fun TrackerMapAuthenticatedContent(
                     } else {
                         fabDescFollow
                     },
+                    tooltip = tooltipMapSelectionZoomLock,
                     onTap = {
                         if (singleTrackerMapView) {
                             viewModel.toggleDisplayedTrackerLock()
@@ -579,6 +591,7 @@ private fun TrackerMapAuthenticatedContent(
                             fabDescLiveActiveFitEnable
                         },
                         enabled = liveActiveFitVisibility.buttonEnabled,
+                        tooltip = tooltipMapLiveActiveFit,
                         onTap = {
                             viewModel.setLiveActiveFit(!state.liveActiveFitEnabled)
                         },
@@ -589,6 +602,7 @@ private fun TrackerMapAuthenticatedContent(
                     order = 40,
                     icon = zoomInFabAction.icon,
                     contentDescription = fabDescZoomIn,
+                    tooltip = tooltipMapZoomIn,
                     onTap = {
                         if (phase == GeoVaultMapPhase.Ready) {
                             zoomInFabAction.onTap?.invoke()
@@ -600,6 +614,7 @@ private fun TrackerMapAuthenticatedContent(
                     order = 50,
                     icon = zoomOutFabAction.icon,
                     contentDescription = fabDescZoomOut,
+                    tooltip = tooltipMapZoomOut,
                     onTap = {
                         if (phase == GeoVaultMapPhase.Ready) {
                             zoomOutFabAction.onTap?.invoke()
@@ -771,9 +786,10 @@ private fun MapTrackerSelectionPanel(
                     color = GeoVaultColorTokens.TextPrimary,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(
+                GeoVaultIconButton(
                     onClick = onToggleLock,
                     modifier = Modifier.size(28.dp),
+                    tooltip = stringResource(R.string.tooltip_map_selection_zoom_lock),
                 ) {
                     Icon(
                         imageVector = if (model.isLocked) Icons.Default.Lock else Icons.Outlined.LockOpen,
@@ -787,15 +803,15 @@ private fun MapTrackerSelectionPanel(
                     )
                 }
                 Spacer(modifier = Modifier.size(8.dp))
-                Box(
+                GeoVaultClickableWithTooltip(
+                    onClick = onClear,
                     modifier = Modifier
                         .size(28.dp)
                         .background(
                             color = GeoVaultColorTokens.BorderLight,
                             shape = CircleShape,
-                        )
-                        .clickable(onClick = onClear),
-                    contentAlignment = Alignment.Center,
+                        ),
+                    tooltip = stringResource(R.string.tooltip_map_selection_close),
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -827,6 +843,7 @@ private fun MapTrackerSelectionPanel(
                     iconButtons.add {
                         MapInfoActionIconButton(
                             onClick = onFocus,
+                            tooltip = stringResource(R.string.tooltip_map_selection_focus),
                             icon = {
                                 Icon(
                                     imageVector = Icons.Default.Home,
@@ -841,6 +858,7 @@ private fun MapTrackerSelectionPanel(
                 iconButtons.add {
                     MapInfoActionIconButton(
                         onClick = onViewParams,
+                        tooltip = stringResource(R.string.tooltip_map_selection_view_params),
                         icon = {
                             androidx.compose.foundation.Image(
                                 painter = painterResource(id = R.drawable.ic_params),
@@ -854,6 +872,7 @@ private fun MapTrackerSelectionPanel(
                 iconButtons.add {
                     MapInfoActionIconButton(
                         onClick = onViewInList,
+                        tooltip = stringResource(R.string.tooltip_map_selection_view_in_list),
                         icon = {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.List,
@@ -881,6 +900,7 @@ private fun MapTrackerSelectionPanel(
 @Composable
 private fun MapInfoActionIconButton(
     onClick: () -> Unit,
+    tooltip: String,
     icon: @Composable () -> Unit,
 ) {
     GeoVaultSecondaryButton(
@@ -890,6 +910,7 @@ private fun MapInfoActionIconButton(
         fitToContent = true,
         centeredContent = icon,
         contentPadding = PaddingValues(0.dp),
+        tooltip = tooltip,
     )
 }
 

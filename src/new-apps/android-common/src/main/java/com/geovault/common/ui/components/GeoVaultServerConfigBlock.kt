@@ -25,7 +25,8 @@ fun GeoVaultServerConfigBlock(
     onDisconnectConfirmed: () -> Unit,
     modifier: Modifier = Modifier,
     title: String = "GeoVault Server",
-    disconnectButtonText: String = "Disconnect"
+    disconnectButtonText: String = "Disconnect",
+    disconnectButtonTooltip: String? = null,
 ) {
     var showDisconnectConfirm by remember { mutableStateOf(false) }
 
@@ -60,6 +61,7 @@ fun GeoVaultServerConfigBlock(
         GeoVaultSecondaryButton(
             text = disconnectButtonText,
             onClick = { showDisconnectConfirm = true },
+            tooltip = disconnectButtonTooltip,
             modifier = Modifier.fillMaxWidth()
         )
     }

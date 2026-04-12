@@ -57,6 +57,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.UnitUtils
+import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInfoDialog
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -143,6 +144,8 @@ fun HomeScreen(
         onAuthConnect = onAuthConnect,
         isConnecting = isConnecting,
         onOpenSettings = onOpenSettings,
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
@@ -437,6 +440,7 @@ private fun TrackingContainer(
                     visible = showInlineButtons,
                     enabled = showInlineButtons && canOpenParams,
                     onClick = onParams,
+                    tooltip = stringResource(R.string.tooltip_tracking_params),
                 )
                 SmallIconActionButton(
                     iconRes = R.drawable.ic_send_point,
@@ -444,6 +448,7 @@ private fun TrackingContainer(
                     visible = showInlineButtons,
                     enabled = showInlineButtons,
                     onClick = onManualPoint,
+                    tooltip = stringResource(R.string.tooltip_manual_send_point),
                 )
             }
         }
@@ -494,6 +499,7 @@ private fun SmallIconActionButton(
     visible: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    tooltip: String,
 ) {
     Surface(
         modifier = Modifier
@@ -504,11 +510,11 @@ private fun SmallIconActionButton(
         border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
         elevation = 0.dp,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(enabled = enabled, onClick = onClick),
-            contentAlignment = Alignment.Center
+        GeoVaultClickableWithTooltip(
+            onClick = onClick,
+            modifier = Modifier.fillMaxSize(),
+            enabled = enabled,
+            tooltip = tooltip,
         ) {
             Icon(
                 painter = painterResource(iconRes),

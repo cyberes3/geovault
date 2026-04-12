@@ -1,6 +1,8 @@
 package com.geovault.common.maps.ui
 
+import android.graphics.Rect
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
@@ -8,13 +10,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.components.GeoVaultInstallLongPressTooltip
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 sealed class GeoVaultMapFabIcon {
@@ -36,6 +44,7 @@ data class GeoVaultMapFabAction(
     val backgroundColor: Color? = null,
     val contentColor: Color = Color.White,
     val onTap: (() -> Unit)? = null,
+    val tooltip: String? = null,
 )
 
 class GeoVaultMapFabBuilder {
@@ -51,6 +60,7 @@ class GeoVaultMapFabBuilder {
         backgroundColor: Color? = null,
         contentColor: Color = Color.White,
         onTap: (() -> Unit)? = null,
+        tooltip: String? = null,
     ): GeoVaultMapFabBuilder {
         actions.add(
             GeoVaultMapFabAction(
@@ -63,6 +73,7 @@ class GeoVaultMapFabBuilder {
                 backgroundColor = backgroundColor,
                 contentColor = contentColor,
                 onTap = onTap,
+                tooltip = tooltip,
             ),
         )
         return this
@@ -94,13 +105,27 @@ fun GeoVaultMapFabColumn(
             } else {
                 GeoVaultColorTokens.PrimaryBlue
             }
+            val interactionSource = remember(action.id) { MutableInteractionSource() }
+            var anchorBounds by remember { mutableStateOf<Rect?>(null) }
+            val tooltipText = action.tooltip?.takeIf { it.isNotBlank() }
+            if (tooltipText != null) {
+                GeoVaultInstallLongPressTooltip(
+                    tooltipText = tooltipText,
+                    enabled = action.enabled,
+                    interactionSource = interactionSource,
+                    anchorBounds = anchorBounds,
+                )
+            }
             FloatingActionButton(
                 onClick = {
                     if (!action.enabled) return@FloatingActionButton
                     action.onTap?.invoke()
                     onActionTap?.invoke(action)
                 },
-                modifier = Modifier.size(fabSize),
+                modifier = Modifier
+                    .size(fabSize)
+                    .trackGeoVaultTooltipBounds { anchorBounds = it },
+                interactionSource = interactionSource,
                 shape = CircleShape,
                 backgroundColor = if (action.enabled) backgroundColor else backgroundColor.copy(alpha = 0.55f),
                 contentColor = if (action.enabled) action.contentColor else action.contentColor.copy(alpha = 0.75f),

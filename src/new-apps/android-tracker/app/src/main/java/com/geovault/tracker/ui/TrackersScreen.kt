@@ -29,9 +29,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -69,8 +67,7 @@ import com.geovault.common.ui.components.GeoVaultCheckmark
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
-import com.geovault.common.ui.components.GeoVaultPrimaryButton
-import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
@@ -301,6 +298,8 @@ fun TrackersScreen(
         onAuthConnect = onAuthConnect,
         isConnecting = isConnecting,
         onOpenSettings = onOpenSettingsWithEditGuard,
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
@@ -308,7 +307,7 @@ fun TrackersScreen(
         settingsMenuEnabled = !isTrackerOrGroupEditOpen,
         authenticatedFloatingAction = {
             if (activeTrackerEditDialog == null && activeTrackerEditLoadingDialog == null && groupActionsDialog == null && activeGroupEditDialog == null && groupMembershipDialog == null) {
-                FloatingActionButton(
+                GeoVaultFloatingActionButtonWithTooltip(
                     onClick = {
                         if (state.subTab == TrackersGroupsSubTab.TRACKERS) {
                             vm.openCreateTrackerDialog()
@@ -318,6 +317,7 @@ fun TrackersScreen(
                     },
                     backgroundColor = GeoVaultColorTokens.PrimaryBlue,
                     contentColor = MaterialTheme.colors.onPrimary,
+                    tooltip = stringResource(R.string.tooltip_trackers_pager_fab),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),

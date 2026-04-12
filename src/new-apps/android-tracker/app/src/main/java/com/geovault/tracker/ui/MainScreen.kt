@@ -239,24 +239,28 @@ fun MainScreen(
             id = TrackerTab.HOME.name,
             label = stringResource(R.string.nav_home),
             icon = Icons.Default.Home,
+            tooltip = stringResource(R.string.tooltip_nav_home),
         ),
         GeoVaultBottomNavDestination(
             id = TrackerTab.MAP.name,
             label = stringResource(R.string.nav_map),
             icon = Icons.Default.Map,
             enabled = state.isServerAccessible,
+            tooltip = stringResource(R.string.tooltip_nav_map),
         ),
         GeoVaultBottomNavDestination(
             id = TrackerTab.TRACKERS.name,
             label = stringResource(R.string.nav_trackers),
             icon = Icons.AutoMirrored.Filled.List,
             enabled = state.isServerAccessible,
+            tooltip = stringResource(R.string.tooltip_nav_trackers),
         ),
         GeoVaultBottomNavDestination(
             id = TrackerTab.SHARED.name,
             label = stringResource(R.string.nav_shared),
             icon = Icons.Default.People,
             enabled = state.isServerAccessible,
+            tooltip = stringResource(R.string.tooltip_nav_shared),
         ),
     )
 

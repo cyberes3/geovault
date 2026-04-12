@@ -24,7 +24,7 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.ExposedDropdownMenuBox
 import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Scaffold
@@ -406,6 +406,7 @@ fun SettingsScreen(
                 onRefreshHiddenTrackerItems()
                 showHiddenTrackersOverlay = true
             },
+            tooltip = stringResource(R.string.tooltip_settings_hidden_trackers),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 6.dp, bottom = 16.dp),
@@ -413,6 +414,7 @@ fun SettingsScreen(
         GeoVaultSecondaryButton(
             text = stringResource(R.string.show_all_trackers_in_settings),
             onClick = onOpenAllTrackersOnMap,
+            tooltip = stringResource(R.string.tooltip_settings_view_all_map),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
@@ -524,7 +526,10 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.subtitle2,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = { showLoggingHelpDialog = true }) {
+            GeoVaultIconButton(
+                onClick = { showLoggingHelpDialog = true },
+                tooltip = stringResource(R.string.tooltip_settings_logging_help),
+            ) {
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = stringResource(R.string.logging_help_button),
@@ -687,6 +692,7 @@ fun SettingsScreen(
                 text = if (connectState.isEffectivelyConnecting) "Connecting..." else stringResource(R.string.connect_account),
                 onClick = { connectState.onClick() },
                 enabled = !connectState.isEffectivelyConnecting,
+                tooltip = stringResource(R.string.tooltip_settings_connect),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
@@ -713,6 +719,7 @@ fun SettingsScreen(
                     .padding(bottom = 16.dp),
                 title = stringResource(R.string.server_settings_title),
                 disconnectButtonText = stringResource(R.string.disconnect),
+                disconnectButtonTooltip = stringResource(R.string.tooltip_settings_disconnect),
             )
         }
             TrackerParamsOverlayLayer()
@@ -819,9 +826,10 @@ private fun HiddenTrackersSubView(
                 color = GeoVaultColorTokens.TextPrimary,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(
+            GeoVaultIconButton(
                 onClick = onDismiss,
                 modifier = Modifier.size(48.dp),
+                tooltip = stringResource(R.string.tooltip_hidden_trackers_close),
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -844,6 +852,7 @@ private fun HiddenTrackersSubView(
                 text = stringResource(R.string.show_all),
                 onClick = { showUnhideAllConfirm = true },
                 enabled = !isLoading && items.isNotEmpty(),
+                tooltip = stringResource(R.string.tooltip_hidden_show_all),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -962,10 +971,11 @@ private fun HiddenTrackerRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        IconButton(
+        GeoVaultIconButton(
             onClick = { onUnhideItem(item) },
             enabled = !isLoading,
             modifier = Modifier.size(40.dp),
+            tooltip = stringResource(R.string.tooltip_hidden_show_one),
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_eye),

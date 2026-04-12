@@ -1,8 +1,10 @@
 package com.geovault.common.ui.components
 
+import android.graphics.Rect
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -47,6 +50,7 @@ data class GeoVaultBottomNavDestination(
     val icon: ImageVector,
     val enabled: Boolean = true,
     val contentDescription: String = label,
+    val tooltip: String? = null,
 )
 
 @Stable
@@ -214,10 +218,26 @@ fun GeoVaultBottomNavRow(
                 isSelected -> GeoVaultColorTokens.MainYellow
                 else -> Color.White
             }
+            val interactionSource = remember(destination.id) { MutableInteractionSource() }
+            var anchorBounds by remember { mutableStateOf<Rect?>(null) }
+            val tooltipText = destination.tooltip?.takeIf { it.isNotBlank() }
+            if (tooltipText != null) {
+                GeoVaultInstallLongPressTooltip(
+                    tooltipText = tooltipText,
+                    enabled = destination.enabled,
+                    interactionSource = interactionSource,
+                    anchorBounds = anchorBounds,
+                )
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = destination.enabled) {
+                    .trackGeoVaultTooltipBounds { anchorBounds = it }
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        enabled = destination.enabled,
+                    ) {
                         onDestinationSelected(destination)
                     }
                     .padding(horizontal = 6.dp, vertical = 2.dp),

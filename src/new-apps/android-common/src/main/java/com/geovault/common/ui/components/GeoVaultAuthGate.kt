@@ -14,6 +14,7 @@ fun GeoVaultAuthGate(
     onConnect: () -> Unit,
     modifier: Modifier = Modifier,
     isConnecting: Boolean = false,
+    connectButtonTooltip: String? = null,
     extraActions: List<GeoVaultAuthExtraAction> = emptyList(),
     authenticatedContent: @Composable () -> Unit
 ) {
@@ -27,6 +28,7 @@ fun GeoVaultAuthGate(
                 onServerUrlChanged = onServerUrlChanged,
                 onConnect = onConnect,
                 isConnecting = isConnecting,
+                connectButtonTooltip = connectButtonTooltip,
                 extraActions = extraActions,
                 modifier = Modifier.fillMaxSize()
             )

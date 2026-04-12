@@ -1,7 +1,9 @@
 package com.geovault.tracker.ui.components
 
+import android.graphics.Rect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +19,6 @@ import androidx.compose.material.Card
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -37,8 +38,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.ui.components.GeoVaultIconButton
+import com.geovault.common.ui.components.GeoVaultInstallLongPressTooltip
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.ui.TrackerChevronIcon
@@ -153,18 +157,21 @@ fun TrackerItemCard(
                     onClick = onOpenMap,
                     modifier = Modifier.weight(1f).height(48.dp),
                     enabled = enabled && model.canOpenMap,
+                    tooltip = stringResource(R.string.tooltip_card_view_on_map),
                 )
                 GeoVaultSecondaryButton(
                     text = stringResource(R.string.trackers_action_params),
                     onClick = onViewParams,
                     modifier = Modifier.weight(1f).height(48.dp),
                     enabled = enabled,
+                    tooltip = stringResource(R.string.tooltip_card_view_params),
                 )
                 GeoVaultSecondaryButton(
                     text = stringResource(R.string.trackers_action_edit),
                     onClick = onEdit,
                     modifier = Modifier.weight(1f).height(48.dp),
                     enabled = enabled && model.canEdit,
+                    tooltip = stringResource(R.string.tooltip_card_edit),
                 )
             }
         }
@@ -192,6 +199,15 @@ fun GroupItemCard(
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val groupTitleInteractionSource = remember { MutableInteractionSource() }
+    var groupTitleBounds by remember { mutableStateOf<Rect?>(null) }
+    val groupCardMenuTooltip = stringResource(R.string.tooltip_group_card_menu)
+    GeoVaultInstallLongPressTooltip(
+        tooltipText = groupCardMenuTooltip,
+        enabled = enabled && model.canOpenActions,
+        interactionSource = groupTitleInteractionSource,
+        anchorBounds = groupTitleBounds,
+    )
     val trackCountText = stringResource(R.string.trackers_meta_tracks_count, model.trackerCount)
     Card(
         modifier = modifier
@@ -221,7 +237,13 @@ fun GroupItemCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = enabled && model.canOpenActions, onClick = onOpenActions),
+                    .trackGeoVaultTooltipBounds { groupTitleBounds = it }
+                    .clickable(
+                        interactionSource = groupTitleInteractionSource,
+                        indication = null,
+                        enabled = enabled && model.canOpenActions,
+                        onClick = onOpenActions,
+                    ),
             ) {
                 Text(
                     text = model.title,
@@ -256,10 +278,11 @@ fun GroupItemCard(
             }
             if (model.canOpenMap || model.canEdit) {
                 Box {
-                    IconButton(
+                    GeoVaultIconButton(
                         onClick = { menuExpanded = true },
                         enabled = enabled,
                         modifier = Modifier.size(40.dp),
+                        tooltip = groupCardMenuTooltip,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.MoreVert,

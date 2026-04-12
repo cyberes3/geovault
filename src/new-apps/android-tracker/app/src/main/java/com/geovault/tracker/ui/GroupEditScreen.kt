@@ -254,6 +254,7 @@ private fun GroupEditOwnerContent(
                 title = stringResource(R.string.trackers_dialog_edit_group_details_title),
                 onClose = dismissWithGuard,
                 closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+                closeTooltip = stringResource(R.string.tooltip_group_detail_close),
             )
         },
         bottomBar = {
@@ -275,6 +276,7 @@ private fun GroupEditOwnerContent(
                     text = stringResource(R.string.trackers_dialog_save),
                     onClick = onSave,
                     enabled = !isSaving,
+                    tooltip = stringResource(R.string.tooltip_group_detail_save),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -304,6 +306,7 @@ private fun GroupEditOwnerContent(
                     text = stringResource(R.string.groups_edit_members_row, dialog.memberTrackIds.size),
                     onClick = onOpenMembershipPicker,
                     enabled = !isSaving,
+                    tooltip = stringResource(R.string.tooltip_group_detail_tracks_row),
                     modifier = Modifier.fillMaxWidth(),
                     trailingContent = {
                         Icon(
@@ -385,6 +388,7 @@ private fun GroupEditOwnerContent(
                                             showPickUsersDialog = true
                                         },
                                         enabled = !isSaving,
+                                        tooltip = stringResource(R.string.tooltip_sharing_pick_users),
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                     Text(
@@ -430,6 +434,7 @@ private fun GroupEditOwnerContent(
                                                 copyGroupWorldShareLink(context, dialog.worldShareUrlDraft)
                                             },
                                             enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
+                                            tooltip = stringResource(R.string.tooltip_group_detail_copy_world_link),
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
@@ -457,6 +462,7 @@ private fun GroupEditOwnerContent(
                     onClick = { showDeleteConfirm = true },
                     enabled = !isSaving,
                     accentColor = destructiveAccent,
+                    tooltip = stringResource(R.string.tooltip_group_detail_delete),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -535,6 +541,7 @@ private fun GroupEditNonOwnerContent(
                 title = stringResource(R.string.groups_edit_shared_title),
                 onClose = onDismiss,
                 closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+                closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
             )
         },
     ) { innerPadding ->
@@ -564,6 +571,7 @@ private fun GroupEditNonOwnerContent(
                 text = stringResource(R.string.groups_edit_leave),
                 onClick = { showLeaveConfirm = true },
                 accentColor = destructiveAccent,
+                tooltip = stringResource(R.string.tooltip_edit_shared_group_leave),
                 modifier = Modifier.fillMaxWidth(),
             )
         }

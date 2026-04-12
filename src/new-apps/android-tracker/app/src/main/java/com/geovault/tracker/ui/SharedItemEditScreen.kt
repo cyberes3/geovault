@@ -54,6 +54,7 @@ fun SharedTrackerEditScreen(
                 title = stringResource(R.string.shared_tracker_edit_title),
                 onClose = onDismiss,
                 closeContentDescription = stringResource(R.string.close),
+                closeTooltip = stringResource(R.string.tooltip_edit_shared_tracker_close),
                 modifier = Modifier.statusBarsPadding(),
             )
         },
@@ -83,6 +84,7 @@ fun SharedTrackerEditScreen(
                     label = stringResource(R.string.trackers_action_unsubscribe),
                     isPending = isUnsubscribePending,
                     onClick = onUnsubscribe,
+                    tooltip = stringResource(R.string.tooltip_edit_shared_unsubscribe),
                 )
             }
             if (canLeaveShare) {
@@ -90,6 +92,7 @@ fun SharedTrackerEditScreen(
                     label = stringResource(R.string.trackers_action_leave_share),
                     isPending = isLeaveSharePending,
                     onClick = onLeaveShare,
+                    tooltip = stringResource(R.string.tooltip_edit_shared_remove_from_share),
                 )
             }
         }
@@ -118,6 +121,7 @@ fun SharedGroupEditScreen(
                 title = stringResource(R.string.groups_edit_shared_title),
                 onClose = onDismiss,
                 closeContentDescription = stringResource(R.string.close),
+                closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
                 modifier = Modifier.statusBarsPadding(),
             )
         },
@@ -146,6 +150,7 @@ fun SharedGroupEditScreen(
                 label = stringResource(R.string.trackers_action_leave_group),
                 isPending = isLeavePending,
                 onClick = onLeaveGroup,
+                tooltip = stringResource(R.string.tooltip_edit_shared_group_leave),
             )
         }
     }
@@ -156,12 +161,14 @@ private fun SharedDestructiveActionRow(
     label: String,
     isPending: Boolean,
     onClick: () -> Unit,
+    tooltip: String,
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         GeoVaultSecondaryButton(
             text = label,
             onClick = onClick,
             enabled = !isPending,
+            tooltip = tooltip,
             modifier = Modifier.fillMaxWidth(),
         )
         if (isPending) {

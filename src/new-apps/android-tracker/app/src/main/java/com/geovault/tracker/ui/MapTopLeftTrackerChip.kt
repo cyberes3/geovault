@@ -1,6 +1,8 @@
 package com.geovault.tracker.ui
 
+import android.graphics.Rect
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,6 +19,10 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -28,6 +34,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
+import com.geovault.common.ui.components.GeoVaultInstallLongPressTooltip
+import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipText
@@ -41,13 +50,28 @@ fun MapTopLeftTrackerChip(
     modifier: Modifier = Modifier,
 ) {
     val cardDescription = stringResource(model.cardContentDescriptionResId)
+    val cardTooltip = stringResource(R.string.tooltip_map_tracker_label_card)
+    val resetTooltip = stringResource(R.string.tooltip_map_reset_tracker)
     val chipShape: Shape = RoundedCornerShape(22.dp)
+    val cardInteractionSource = remember { MutableInteractionSource() }
+    var cardBounds by remember { mutableStateOf<Rect?>(null) }
+    GeoVaultInstallLongPressTooltip(
+        tooltipText = cardTooltip,
+        enabled = true,
+        interactionSource = cardInteractionSource,
+        anchorBounds = cardBounds,
+    )
     Card(
         modifier = modifier
+            .trackGeoVaultTooltipBounds { cardBounds = it }
             .semantics(mergeDescendants = true) {
                 contentDescription = cardDescription
             }
-            .clickable(onClick = onCardClick),
+            .clickable(
+                interactionSource = cardInteractionSource,
+                indication = null,
+                onClick = onCardClick,
+            ),
         shape = chipShape,
         elevation = 0.dp,
         backgroundColor = GeoVaultColorTokens.PrimaryBlue,
@@ -94,19 +118,18 @@ fun MapTopLeftTrackerChip(
                     }
                 }
                 if (model.showReset) {
-                    Box(
+                    GeoVaultClickableWithTooltip(
+                        onClick = onResetClick,
                         modifier = Modifier
                             .size(28.dp)
-                            .clickable(onClick = onResetClick)
                             .padding(4.dp),
+                        tooltip = resetTooltip,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = stringResource(model.resetContentDescriptionResId),
                             tint = MaterialTheme.colors.onPrimary,
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(20.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }

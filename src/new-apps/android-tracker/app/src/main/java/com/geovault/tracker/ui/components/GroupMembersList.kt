@@ -17,7 +17,6 @@ import androidx.compose.material.Card
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -35,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.components.GeoVaultIconButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -139,7 +139,10 @@ private fun GroupMemberCard(
                     .padding(start = 8.dp),
             )
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                GeoVaultIconButton(
+                    onClick = { menuExpanded = true },
+                    tooltip = stringResource(R.string.tooltip_group_tracker_menu),
+                ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,

@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -51,6 +51,8 @@ fun TrackerAddRowCard(
     onAdd: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
+    addIconTooltip: String? = null,
+    removeIconTooltip: String? = null,
 ) {
     Card(
         modifier = modifier
@@ -115,7 +117,7 @@ fun TrackerAddRowCard(
                     }
                 }
                 TrackerAddRowActionState.ADDED_DELETE -> {
-                    IconButton(onClick = onRemove, enabled = enabled) {
+                    GeoVaultIconButton(onClick = onRemove, enabled = enabled, tooltip = removeIconTooltip) {
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = null,
@@ -125,7 +127,7 @@ fun TrackerAddRowCard(
                     }
                 }
                 TrackerAddRowActionState.IDLE -> {
-                    IconButton(onClick = onAdd, enabled = enabled) {
+                    GeoVaultIconButton(onClick = onAdd, enabled = enabled, tooltip = addIconTooltip) {
                         Icon(
                             imageVector = Icons.Filled.Add,
                             contentDescription = null,

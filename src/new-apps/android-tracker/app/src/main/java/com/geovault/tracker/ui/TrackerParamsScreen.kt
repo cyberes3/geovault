@@ -79,6 +79,7 @@ fun TrackerParamsScreen(
             title = stringResource(R.string.latest_params_title),
             onClose = onDismiss,
             closeContentDescription = stringResource(R.string.close),
+            closeTooltip = stringResource(R.string.tooltip_params_close),
         )
         GeoVaultPullRefreshLoadingContainer(
             refreshing = state.isRefreshing,

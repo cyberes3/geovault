@@ -33,6 +33,8 @@ internal fun TrackerTabPlaceholderScreen(
     onAuthConnect: () -> Unit,
     isConnecting: Boolean,
     onOpenSettings: () -> Unit,
+    settingsOverflowTooltip: String? = null,
+    connectButtonTooltip: String? = null,
     authenticatedMainContent: (@Composable ColumnScope.() -> Unit)? = null,
     authenticatedFooter: (@Composable () -> Unit)? = null,
     authenticatedFloatingAction: (@Composable BoxScope.() -> Unit)? = null,
@@ -56,6 +58,7 @@ internal fun TrackerTabPlaceholderScreen(
                             onOpenSettings = onOpenSettings,
                             isAuthenticated = isAuthenticated,
                             enabled = settingsMenuEnabled,
+                            overflowTooltip = settingsOverflowTooltip,
                         )
                     },
                 )
@@ -74,6 +77,7 @@ internal fun TrackerTabPlaceholderScreen(
                 onServerUrlChanged = onAuthServerUrlChanged,
                 onConnect = onAuthConnect,
                 isConnecting = isConnecting,
+                connectButtonTooltip = connectButtonTooltip,
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Column(

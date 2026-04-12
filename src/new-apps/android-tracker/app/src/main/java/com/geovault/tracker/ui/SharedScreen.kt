@@ -20,9 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.Card
-import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -53,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
+import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -161,6 +160,8 @@ fun SharedScreen(
         onAuthConnect = onAuthConnect,
         isConnecting = isConnecting,
         onOpenSettings = onOpenSettings,
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
@@ -491,10 +492,11 @@ private fun ColumnScope.SharedAuthenticatedBody(
             }
         }
         if (state.viewMode == SharedViewMode.SHARED_LIST) {
-            FloatingActionButton(
+            GeoVaultFloatingActionButtonWithTooltip(
                 onClick = onShowPublicOverlay,
                 backgroundColor = MaterialTheme.colors.primary,
                 contentColor = MaterialTheme.colors.onPrimary,
+                tooltip = stringResource(R.string.tooltip_shared_fab_public),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = 88.dp),
@@ -504,10 +506,11 @@ private fun ColumnScope.SharedAuthenticatedBody(
                     contentDescription = stringResource(R.string.shared_action_open_public),
                 )
             }
-            FloatingActionButton(
+            GeoVaultFloatingActionButtonWithTooltip(
                 onClick = onShowDiscoverOverlay,
                 backgroundColor = MaterialTheme.colors.primary,
                 contentColor = MaterialTheme.colors.onPrimary,
+                tooltip = stringResource(R.string.tooltip_shared_fab_add),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
@@ -716,6 +719,7 @@ private fun DiscoverOverlaySurface(
                     title = stringResource(R.string.shared_discover_overlay_title),
                     onClose = onClose,
                     closeContentDescription = stringResource(R.string.close),
+                    closeTooltip = stringResource(R.string.tooltip_discover_close),
                 )
                 Divider()
             }
@@ -831,6 +835,7 @@ private fun PublicOverlaySurface(
                 title = stringResource(R.string.shared_public_overlay_title),
                 onClose = onClose,
                 closeContentDescription = stringResource(R.string.close),
+                closeTooltip = stringResource(R.string.tooltip_public_close),
             )
             Divider()
         }
@@ -913,6 +918,7 @@ private fun DiscoverOnMapTrackerCard(
         enabled = enabled,
         onAdd = {},
         onRemove = onRemove,
+        removeIconTooltip = stringResource(R.string.tooltip_discover_row_remove),
     )
 }
 
@@ -933,6 +939,7 @@ private fun DiscoverOnMapGroupCard(
         enabled = enabled,
         onAdd = {},
         onRemove = onRemove,
+        removeIconTooltip = stringResource(R.string.tooltip_discover_row_remove),
     )
 }
 
@@ -1068,6 +1075,7 @@ private fun DiscoverIncomingTrackerCard(
         enabled = enabled,
         onAdd = onAdd,
         onRemove = onRejectShare,
+        addIconTooltip = stringResource(R.string.tooltip_discover_row_add),
     )
 }
 
@@ -1090,6 +1098,7 @@ private fun DiscoverIncomingGroupCard(
         enabled = enabled,
         onAdd = onAccept,
         onRemove = onLeave,
+        addIconTooltip = stringResource(R.string.tooltip_discover_row_add),
     )
 }
 
@@ -1119,6 +1128,8 @@ private fun PublicAddTrackerCard(
         enabled = enabled,
         onAdd = onAdd,
         onRemove = onRemove,
+        addIconTooltip = stringResource(R.string.tooltip_public_row_add),
+        removeIconTooltip = stringResource(R.string.tooltip_public_row_remove),
     )
 }
 
@@ -1148,6 +1159,8 @@ private fun PublicAddGroupCard(
         enabled = enabled,
         onAdd = onAddGroup,
         onRemove = onRemoveGroup,
+        addIconTooltip = stringResource(R.string.tooltip_public_row_add),
+        removeIconTooltip = stringResource(R.string.tooltip_public_row_remove),
     )
 }
 

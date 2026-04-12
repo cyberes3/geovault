@@ -33,7 +33,8 @@ import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
+import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
+import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -221,6 +222,7 @@ fun TrackerEditScreen(
                 title = stringResource(R.string.trackers_dialog_edit_tracker_details_title),
                 onClose = dismissWithGuard,
                 closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+                closeTooltip = stringResource(R.string.tooltip_edit_tracker_close),
             )
         },
         bottomBar = {
@@ -243,6 +245,7 @@ fun TrackerEditScreen(
                     text = stringResource(R.string.trackers_dialog_save),
                     onClick = onSave,
                     enabled = !isSaving,
+                    tooltip = stringResource(R.string.tooltip_edit_tracker_save),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -283,13 +286,14 @@ fun TrackerEditScreen(
                             onColorPicked = onColorDraftChanged,
                         )
                     }
-                    Box(
+                    GeoVaultClickableWithTooltip(
+                        onClick = openColorPicker,
+                        enabled = !isSaving,
+                        tooltip = stringResource(R.string.tooltip_edit_tracker_pick_color),
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .clickable(enabled = !isSaving) { openColorPicker() }
                             .background(colorPreview.backgroundColor),
-                        contentAlignment = Alignment.Center,
                     ) {
                         if (colorPreview.showInvalidBadge) {
                             Text(
@@ -300,9 +304,10 @@ fun TrackerEditScreen(
                             )
                         }
                     }
-                    IconButton(
+                    GeoVaultIconButton(
                         onClick = openColorPicker,
                         enabled = !isSaving,
+                        tooltip = stringResource(R.string.tooltip_edit_tracker_pick_color),
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_eye_dropper),
@@ -419,6 +424,7 @@ fun TrackerEditScreen(
                                                 showPickUsersDialog = true
                                             },
                                             enabled = !isSaving,
+                                            tooltip = stringResource(R.string.tooltip_sharing_pick_users),
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                         Text(
@@ -489,6 +495,7 @@ fun TrackerEditScreen(
                                                         copyWorldShareLink(context, dialog.worldShareUrlDraft)
                                                     },
                                                     enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
+                                                    tooltip = stringResource(R.string.tooltip_edit_tracker_copy_world_link),
                                                     modifier = Modifier.weight(1f),
                                                     centeredContent = {
                                                         Icon(
@@ -509,6 +516,7 @@ fun TrackerEditScreen(
                                                         shareWorldShareLink(context, dialog.worldShareUrlDraft)
                                                     },
                                                     enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
+                                                    tooltip = stringResource(R.string.tooltip_edit_tracker_share_world_link),
                                                     modifier = Modifier.weight(1f),
                                                     centeredContent = {
                                                         Text(
@@ -540,6 +548,7 @@ fun TrackerEditScreen(
                         text = stringResource(R.string.trackers_action_export_kml),
                         onClick = onExportKml,
                         enabled = !isSaving && !isKmlExportLoading,
+                        tooltip = stringResource(R.string.tooltip_edit_tracker_export_kml),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -547,6 +556,7 @@ fun TrackerEditScreen(
                     text = stringResource(R.string.trackers_action_clear_history),
                     onClick = onClearHistory,
                     enabled = !isSaving,
+                    tooltip = stringResource(R.string.tooltip_edit_tracker_clear_history),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 GeoVaultSecondaryButton(
@@ -554,6 +564,7 @@ fun TrackerEditScreen(
                     onClick = onDeleteTracker,
                     enabled = !isSaving,
                     accentColor = destructiveAccent,
+                    tooltip = stringResource(R.string.tooltip_edit_tracker_delete),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

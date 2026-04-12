@@ -102,6 +102,7 @@ fun RowScope.GeoVaultTopBarSettingsMenuAction(
     isAuthenticated: Boolean? = null,
     iconTint: Color = Color.White,
     iconContentDescription: String = "More options",
+    overflowTooltip: String? = null,
     enabled: Boolean = true
 ) {
     val context = LocalContext.current
@@ -123,6 +124,7 @@ fun RowScope.GeoVaultTopBarSettingsMenuAction(
         enabled = enabled,
         iconTint = iconTint,
         iconContentDescription = iconContentDescription,
+        overflowTooltip = overflowTooltip,
         modifier = modifier
     ) {
         entries.forEach { entry ->
@@ -153,19 +155,32 @@ private fun RowScope.GeoVaultTopBarOverflowMenu(
     enabled: Boolean,
     iconTint: Color,
     iconContentDescription: String,
+    overflowTooltip: String? = null,
     modifier: Modifier = Modifier,
     menuContent: @Composable ColumnScope.() -> Unit
 ) {
     Box(modifier = modifier) {
-        IconButton(
-            onClick = { onExpandedChange(true) },
-            enabled = enabled
-        ) {
+        val icon: @Composable () -> Unit = {
             Icon(
                 imageVector = Icons.Filled.MoreVert,
                 contentDescription = iconContentDescription,
                 tint = iconTint.copy(alpha = if (enabled) 1f else 0.45f)
             )
+        }
+        if (!overflowTooltip.isNullOrBlank()) {
+            GeoVaultIconButton(
+                onClick = { onExpandedChange(true) },
+                enabled = enabled,
+                tooltip = overflowTooltip,
+                content = icon,
+            )
+        } else {
+            IconButton(
+                onClick = { onExpandedChange(true) },
+                enabled = enabled
+            ) {
+                icon()
+            }
         }
         DropdownMenu(
             expanded = expanded && enabled,
@@ -254,6 +269,7 @@ fun GeoVaultCompactDismissTitleBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     closeContentDescription: String = "Close",
+    closeTooltip: String? = null,
 ) {
     val backgroundColor = if (MaterialTheme.colors.isLight) {
         GeoVaultColorTokens.Gray300.copy(alpha = 0.58f)
@@ -286,18 +302,33 @@ fun GeoVaultCompactDismissTitleBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = closeContentDescription,
-                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
-                modifier = Modifier.size(30.dp),
-            )
+        if (closeTooltip.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = closeContentDescription,
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                    modifier = Modifier.size(30.dp),
+                )
+            }
+        } else {
+            GeoVaultClickableWithTooltip(
+                onClick = onClose,
+                modifier = Modifier.size(48.dp),
+                tooltip = closeTooltip,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = closeContentDescription,
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                    modifier = Modifier.size(30.dp),
+                )
+            }
         }
     }
 }

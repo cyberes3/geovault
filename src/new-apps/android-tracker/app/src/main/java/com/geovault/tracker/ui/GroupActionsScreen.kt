@@ -83,6 +83,7 @@ fun GroupActionsScreen(
                 title = group.name,
                 onClose = onDismiss,
                 closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+                closeTooltip = stringResource(R.string.tooltip_group_actions_close),
             )
         },
         bottomBar = {
@@ -106,11 +107,13 @@ fun GroupActionsScreen(
                     GeoVaultSecondaryButton(
                         text = stringResource(R.string.trackers_dialog_edit_group_details_title),
                         onClick = { onEditGroup(group) },
+                        tooltip = stringResource(R.string.tooltip_group_action_edit),
                     )
                 }
                 GeoVaultPrimaryButton(
                     text = stringResource(R.string.trackers_action_view_group_on_map),
                     onClick = { onViewGroupOnMap(group.id) },
+                    tooltip = stringResource(R.string.tooltip_group_action_view_map),
                     modifier = Modifier.weight(1f),
                 )
             }
