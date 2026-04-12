@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <dimen name="card_stroke_width">2dp</dimen>
-    <dimen name="thin_card_stroke_width">1dp</dimen>
-    <dimen name="dialog_input_padding_horizontal">24dp</dimen>
-    <dimen name="dialog_input_padding_vertical">16dp</dimen>
-</resources>

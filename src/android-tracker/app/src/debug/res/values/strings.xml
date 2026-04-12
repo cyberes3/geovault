@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Override app name for debug builds -->
-    <string name="app_name">Tracker DEBUG</string>
-</resources>

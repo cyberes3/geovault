@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Card stroke: blue border in both light and dark theme -->
-    <dimen name="card_stroke_width">2dp</dimen>
-</resources>
