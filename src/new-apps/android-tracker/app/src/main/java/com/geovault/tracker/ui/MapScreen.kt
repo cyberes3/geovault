@@ -88,6 +88,7 @@ import com.geovault.tracker.R
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.presentation.LiveActiveFitInput
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
+import com.geovault.tracker.presentation.TrackerMapGpsAccuracyIndicatorPolicy
 import com.geovault.tracker.presentation.TrackerMapLiveActiveFitPolicy
 import com.geovault.tracker.presentation.TrackerMapRenderContract
 import com.geovault.tracker.presentation.TrackerMapSelectionCard
@@ -642,12 +643,21 @@ private fun TrackerMapAuthenticatedContent(
                     )
                 }
             }
-            MapStreamingIndicator(
-                model = state.streamingStatus,
+            val gpsAccuracyIndicatorModel = TrackerMapGpsAccuracyIndicatorPolicy.resolve(state.runtime)
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(bottom = 16.dp, end = 16.dp),
-            )
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (gpsAccuracyIndicatorModel.isVisible) {
+                    MapGpsAccuracyIndicator()
+                }
+                MapStreamingIndicator(
+                    model = state.streamingStatus,
+                )
+            }
             val selectionModel = state.toSelectionPanelUiModel()
             if (selectionModel != null) {
                 Column(
