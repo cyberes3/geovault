@@ -20,6 +20,8 @@ _logger = get_tagged_logger()
 
 # Default: git.evulid.cc. Overridable via APP_RELEASES_API_URL (undocumented).
 DEFAULT_RELEASES_API_URL = "https://git.evulid.cc/api/v1/repos/cyberes/geovault-app-release/releases"
+# HTML dashboard served by the app-version-checker worker (see other/app-version-checker/wrangler.toml ROUTE_PREFIX).
+DEFAULT_RELEASES_PAGE_URL = "https://git.evulid.cc/api/v1/geovault-app-releases"
 RELEASES_REQUEST_TIMEOUT = 10
 # 30 minutes server and browser cache
 CACHE_MAX_AGE_SECONDS = 30 * 60
@@ -31,9 +33,15 @@ def _get_releases_api_url() -> str:
 
 
 def _get_releases_page_url(api_url: str) -> str:
+    """Public HTML for “all releases”; default is the worker dashboard, not Gitea's native /releases page."""
+    explicit = (os.environ.get("APP_RELEASES_PAGE_URL") or "").strip()
+    if explicit:
+        return explicit
+    if (api_url or "").strip() == DEFAULT_RELEASES_API_URL:
+        return DEFAULT_RELEASES_PAGE_URL
     if "/api/v1/repos/" in api_url:
         return api_url.replace("/api/v1/repos/", "/", 1)
-    return "https://git.evulid.cc/cyberes/geovault-app-release/releases"
+    return DEFAULT_RELEASES_PAGE_URL
 
 
 class AppReleasesResponse(BaseModel):
@@ -42,7 +50,7 @@ class AppReleasesResponse(BaseModel):
     uploader_url: str | None = Field(default=None, description="Direct download URL for latest Uploader APK")
     places_url: str | None = Field(default=None, description="Direct download URL for latest Places APK")
     tracker_url: str | None = Field(default=None, description="Direct download URL for latest Tracker APK")
-    releases_page_url: str = Field(description="URL to the releases page (fallback)")
+    releases_page_url: str = Field(description="URL to the public releases HTML (worker dashboard or override)")
 
 
 def _find_uploader_asset(assets: list) -> str | None:
@@ -174,6 +182,6 @@ def app_download_redirect(request, name: str):
 
     data = _get_app_releases_data()
     url = data.get("uploader_url" if name == "uploader" else "places_url" if name == "places" else "tracker_url")
-    fallback = data.get("releases_page_url") or "https://git.evulid.cc/cyberes/geovault-app-release/releases"
+    fallback = data.get("releases_page_url") or DEFAULT_RELEASES_PAGE_URL
     redirect_url = (url or "").strip() or fallback
     return HttpResponseRedirect(redirect_url)

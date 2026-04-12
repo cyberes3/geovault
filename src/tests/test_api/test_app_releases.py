@@ -11,13 +11,16 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
 
-from api.views.app_releases import APP_RELEASES_CACHE_KEY_PREFIX, DEFAULT_RELEASES_API_URL
+from api.views.app_releases import (
+    APP_RELEASES_CACHE_KEY_PREFIX,
+    DEFAULT_RELEASES_API_URL,
+    DEFAULT_RELEASES_PAGE_URL,
+)
 
 User = get_user_model()
 
-# Hardcoded expected URLs (match view default)
-TEST_RELEASES_API_URL = "https://git.evulid.cc/api/v1/repos/cyberes/geovault-app-release/releases"
-TEST_RELEASES_PAGE_URL = "https://git.evulid.cc/cyberes/geovault-app-release/releases"
+# Hardcoded expected page URL (worker dashboard; match view default)
+TEST_RELEASES_PAGE_URL = DEFAULT_RELEASES_PAGE_URL
 
 RELEASES_URL = "/api/apps/releases/"
 

@@ -275,7 +275,7 @@ export default {
       return !!this.$store.state.deferredPrompt;
     },
     releasesPageUrl() {
-      return this.appReleases?.releases_page_url ?? "https://git.evulid.cc/cyberes/geovault-app-release/releases";
+      return this.appReleases?.releases_page_url;
     },
   },
   components: {
