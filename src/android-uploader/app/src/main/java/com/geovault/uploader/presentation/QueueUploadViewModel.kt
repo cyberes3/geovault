@@ -30,8 +30,13 @@ data class QueueUploadState(
 
 class QueueUploadViewModel(
     application: Application,
-    services: UploaderAppServices = UploaderAppServices.from(application)
+    services: UploaderAppServices,
 ) : AndroidViewModel(application) {
+
+    constructor(application: Application) : this(
+        application,
+        UploaderAppServices.from(application)
+    )
     private val metadata = services.fileMetadataRepository()
     private val prefs = services.uploaderPreferences()
     private val uploader = services.uploadRepository()

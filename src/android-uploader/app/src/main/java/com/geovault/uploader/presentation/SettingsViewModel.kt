@@ -24,8 +24,13 @@ data class SettingsState(
 
 class SettingsViewModel(
     application: Application,
-    services: UploaderAppServices = UploaderAppServices.from(application)
+    services: UploaderAppServices,
 ) : AndroidViewModel(application) {
+
+    constructor(application: Application) : this(
+        application,
+        UploaderAppServices.from(application)
+    )
     private val appContext = application.applicationContext
     private val prefs = services.uploaderPreferences()
     private val authController: CommonInitialAuthController = services.initialAuthController()

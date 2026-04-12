@@ -50,8 +50,13 @@ data class MainScreenState(
 
 class MainScreenViewModel(
     application: Application,
-    services: UploaderAppServices = UploaderAppServices.from(application)
+    services: UploaderAppServices,
 ) : AndroidViewModel(application) {
+
+    constructor(application: Application) : this(
+        application,
+        UploaderAppServices.from(application)
+    )
     private val appContext = application.applicationContext
     private val preferences = services.uploaderPreferences()
     private val fileMetadataRepository = services.fileMetadataRepository()

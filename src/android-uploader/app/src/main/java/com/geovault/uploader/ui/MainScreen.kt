@@ -74,9 +74,12 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .navigationBarsPadding()
-                .padding(GeoVaultLayoutTokens.ScreenPadding)
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(GeoVaultLayoutTokens.ScreenPadding)
+            ) {
                 if (state.isValidationMode) {
                     GeoVaultStatusPane(
                         model = MainScreenStatusMapper.toValidationStatusModel(state),

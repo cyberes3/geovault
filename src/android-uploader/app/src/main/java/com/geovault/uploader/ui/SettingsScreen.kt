@@ -19,6 +19,7 @@ import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import com.geovault.uploader.presentation.SettingsState
 
 @Composable
@@ -46,7 +47,9 @@ fun SettingsScreen(
                 .padding(padding)
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .then(
+                    if (state.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
+                )
         ) {
             if (!state.isLoggedIn) {
                 GeoVaultInitialAuthView(

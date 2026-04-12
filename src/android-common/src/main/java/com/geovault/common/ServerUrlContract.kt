@@ -1,6 +1,7 @@
 package com.geovault.common
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 
 object ServerUrlContract {
@@ -12,9 +13,11 @@ object ServerUrlContract {
 
     fun getServerUrlsFromOtherApps(context: Context): Set<String> {
         val ourPackage = context.packageName
-        val packages = context.packageManager.getInstalledPackages(0)
-            .map { it.packageName }
+        val packageManager = context.packageManager
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val packages = packageManager.queryIntentActivities(launcherIntent, 0)
             .asSequence()
+            .mapNotNull { it.activityInfo?.packageName }
             .filter { it.startsWith(PACKAGE_PREFIX) }
             .filter { !it.endsWith(DEBUG_SUFFIX) }
             .filter { it != ourPackage }
