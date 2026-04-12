@@ -18,7 +18,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -28,8 +27,7 @@ import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
-import com.geovault.common.update.CustomTabReleasePageLauncher
-import com.geovault.common.update.UpdateAvailablePromptComposer
+import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
 import com.geovault.tracker.presentation.HiddenTrackerItem
 import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.MainScreenState
@@ -77,8 +75,6 @@ fun MainScreen(
     onSettingsUnhideTrackerItem: (HiddenTrackerItem) -> Unit,
     onSettingsUnhideAllTrackerItems: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
     val trackerMainMap = rememberGeoVaultMainMap(TrackerApplication.TRACKER_MAIN_MAP_KEY)
     val mapViewModel: TrackerMapViewModel = viewModel()
     val trackersGroupsViewModel: TrackersGroupsViewModel = viewModel()
@@ -423,19 +419,12 @@ fun MainScreen(
                 onAction = { },
             )
         }
-        val updatePrompt = state.updatePrompt
-        if (updatePrompt != null) {
-            GeoVaultSnackbarHost(
-                model = updatePrompt,
-                onDismiss = onClearUpdatePrompt,
-                onAction = { actionId ->
-                    if (actionId == UpdateAvailablePromptComposer.ACTION_OPEN_RELEASE) {
-                        state.updateReleaseUrl?.let { releaseLauncher.openReleasePage(it) }
-                    }
-                },
-                stackBottomInset = if (globalInfoModel != null) 72.dp else 0.dp,
-            )
-        }
+        GeoVaultUpdateAvailableSnackbarHost(
+            model = state.updatePrompt,
+            releaseUrl = state.updateReleaseUrl,
+            onDismiss = onClearUpdatePrompt,
+            stackBottomInset = if (globalInfoModel != null) 72.dp else 0.dp,
+        )
     }
 }
 

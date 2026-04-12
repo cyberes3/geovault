@@ -8,9 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
-import com.geovault.common.update.AppVersionChecker
-import com.geovault.common.update.VersionCheckRequest
-import com.geovault.common.update.VersionCheckSnackbarPresenter
+import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultVersionCheckSession
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.SelectedTrackerManager
@@ -29,7 +28,6 @@ import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerSessionBootstrap
 import com.geovault.tracker.TrackingService
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -68,6 +66,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerManagementRepository()
     private val sessionBootstrap: TrackerSessionBootstrap =
         TrackerAppServices.from(application).trackerSessionBootstrap()
+    private val versionCheckSession = GeoVaultVersionCheckSession(
+        application = application,
+        rateLimitKey = GeoVaultAndroidReleaseIdentity.Tracker.RATE_LIMIT_KEY,
+        releaseWorkerAppName = GeoVaultAndroidReleaseIdentity.Tracker.WORKER_APP_NAME,
+        localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+    )
 
     private val launchBootstrapMutex = Mutex()
     private var activeLaunchBootstrap: Deferred<TrackerBootstrapOutcome>? = null
@@ -79,7 +83,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var startupRefreshHandled = false
     private var startupRefreshJob: Job? = null
     private var serverAccessibilityRefreshJob: Job? = null
-    private var hasStartedVersionCheck = false
     private var preparingStartJob: Job? = null
 
     fun initialize() {
@@ -351,23 +354,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun launchVersionCheckIfNeeded() {
-        if (hasStartedVersionCheck) return
-        hasStartedVersionCheck = true
-        viewModelScope.launch {
-            val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                AppVersionChecker().checkForUpdateIfDue(
-                    context = app,
-                    rateLimitKey = "tracker",
-                    request = VersionCheckRequest(
-                        appName = EXPECTED_APP_NAME,
-                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA
-                    )
-                )
-            }
-            val (prompt, releaseUrl) = VersionCheckSnackbarPresenter.snackbarAndReleaseUrl(result)
-            if (prompt != null && releaseUrl != null) {
-                _state.update { it.copy(updatePrompt = prompt, updateReleaseUrl = releaseUrl) }
-            }
+        versionCheckSession.launchIfNeeded(viewModelScope) { prompt, releaseUrl ->
+            _state.update { it.copy(updatePrompt = prompt, updateReleaseUrl = releaseUrl) }
         }
     }
 
@@ -375,7 +363,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         sessionBootstrap.resetForSignedOutSession()
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
-        hasStartedVersionCheck = false
+        versionCheckSession.reset()
         startupTrackingAutomationJob?.cancel()
         startupTrackingAutomationJob = null
         startupRefreshJob?.cancel()
@@ -416,9 +404,5 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         trackerManagementRepository.loadTrackers(forceRefresh = true)
         _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
         return false
-    }
-
-    private companion object {
-        private const val EXPECTED_APP_NAME = "GeoVault Live Tracker"
     }
 }

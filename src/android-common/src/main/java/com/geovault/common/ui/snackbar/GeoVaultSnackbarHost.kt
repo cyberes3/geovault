@@ -52,7 +52,7 @@ fun GeoVaultSnackbarHost(
     model: GeoVaultSnackbarModel?,
     onDismiss: () -> Unit,
     onAction: (actionId: String) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = GeoVaultSnackbarOverlayDefaults.hostModifier,
     style: GeoVaultSnackbarStyle = GeoVaultSnackbarDefaults.style(),
     stackBottomInset: Dp = 0.dp
 ) {

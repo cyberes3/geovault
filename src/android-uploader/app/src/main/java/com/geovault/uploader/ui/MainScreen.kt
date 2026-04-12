@@ -1,10 +1,10 @@
 package com.geovault.uploader.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,8 +31,7 @@ import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
-import com.geovault.common.update.CustomTabReleasePageLauncher
-import com.geovault.common.update.UpdateAvailablePromptComposer
+import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
 import com.geovault.uploader.presentation.MainScreenState
 
 @Composable
@@ -51,9 +49,6 @@ fun MainScreen(
     onDismissInvalidFiles: () -> Unit,
     onDismissUpdatePrompt: () -> Unit
 ) {
-    val context = LocalContext.current
-    val releaseLauncher = remember(context) { CustomTabReleasePageLauncher(context) }
-
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
@@ -78,50 +73,41 @@ fun MainScreen(
                 .padding(padding)
                 .navigationBarsPadding()
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(GeoVaultLayoutTokens.ScreenPadding)
-            ) {
-                if (state.isValidationMode) {
-                    GeoVaultStatusPane(
-                        model = MainScreenStatusMapper.toValidationStatusModel(state),
-                        onPrimaryActionClick = onChooseFileClick,
-                        onSecondaryActionClick = onOpenSettings
-                    )
-                } else {
-                    UploadContent(
-                        filename = state.editedFilename,
-                        suffixPreview = state.suffixPreview,
-                        isUploading = state.isUploading,
-                        statusMessage = state.statusMessage,
-                        onFilenameChanged = onFilenameChanged,
-                        onUploadClick = onUploadClick,
-                        onCloseClick = onCloseClick
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(GeoVaultLayoutTokens.ScreenPadding)
+                ) {
+                    if (state.isValidationMode) {
+                        GeoVaultStatusPane(
+                            model = MainScreenStatusMapper.toValidationStatusModel(state),
+                            onPrimaryActionClick = onChooseFileClick,
+                            onSecondaryActionClick = onOpenSettings
+                        )
+                    } else {
+                        UploadContent(
+                            filename = state.editedFilename,
+                            suffixPreview = state.suffixPreview,
+                            isUploading = state.isUploading,
+                            statusMessage = state.statusMessage,
+                            onFilenameChanged = onFilenameChanged,
+                            onUploadClick = onUploadClick,
+                            onCloseClick = onCloseClick
+                        )
+                    }
                 }
-
                 GeoVaultSnackbarHost(
                     model = state.importantSnackbar,
                     onDismiss = onDismissImportant,
                     onAction = { },
-                    modifier = Modifier.align(Alignment.BottomCenter)
                 )
-                val updateModel = state.updateSnackbar
-                if (updateModel != null) {
-                    val stackInset = if (state.importantSnackbar != null) 72.dp else 0.dp
-                    GeoVaultSnackbarHost(
-                        model = updateModel,
-                        onDismiss = onDismissUpdatePrompt,
-                        onAction = { actionId ->
-                            if (actionId == UpdateAvailablePromptComposer.ACTION_OPEN_RELEASE) {
-                                state.updateReleaseUrl?.let { releaseLauncher.openReleasePage(it) }
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                        stackBottomInset = stackInset
-                    )
-                }
+                GeoVaultUpdateAvailableSnackbarHost(
+                    model = state.updatePrompt,
+                    releaseUrl = state.updateReleaseUrl,
+                    onDismiss = onDismissUpdatePrompt,
+                    stackBottomInset = if (state.importantSnackbar != null) 72.dp else 0.dp,
+                )
                 invalidFilesDialogNames?.let { names ->
                     UnsupportedFilesDialog(
                         fileNames = names,

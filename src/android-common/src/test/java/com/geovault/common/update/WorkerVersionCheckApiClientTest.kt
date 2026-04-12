@@ -6,6 +6,8 @@ import org.junit.Test
 
 class WorkerVersionCheckApiClientTest {
 
+    private val uploaderAppName = GeoVaultAndroidReleaseIdentity.Uploader.WORKER_APP_NAME
+
     @Test
     fun `checkForUpdate maps successful payload`() {
         val client = FakeClient(
@@ -15,7 +17,7 @@ class WorkerVersionCheckApiClientTest {
                 body = """
                     {
                       "isLatest": false,
-                      "appName": "GeoVault Uploader",
+                      "appName": "$uploaderAppName",
                       "versionLabel": "v3",
                       "releasePageUrl": "https://example.test/release",
                       "releaseTag": "v3",
@@ -27,15 +29,15 @@ class WorkerVersionCheckApiClientTest {
         )
 
         val result = client.checkForUpdate(
-            VersionCheckRequest(appName = "GeoVault Uploader", localFullCommitSha = "f".repeat(40))
+            VersionCheckRequest(appName = uploaderAppName, localFullCommitSha = "f".repeat(40))
         )
 
         assertTrue(result is WorkerCheckApiResult.Success)
         val payload = (result as WorkerCheckApiResult.Success).payload
-        assertEquals("GeoVault Uploader", payload.appName)
+        assertEquals(uploaderAppName, payload.appName)
         assertEquals("abc", payload.releaseCommitSha)
         assertEquals("def", payload.localCommitSha)
-        assertTrue(client.lastBody?.contains("\"appName\":\"GeoVault Uploader\"") == true)
+        assertTrue(client.lastBody?.contains("\"appName\":\"$uploaderAppName\"") == true)
     }
 
     @Test
@@ -49,7 +51,7 @@ class WorkerVersionCheckApiClientTest {
         )
 
         val result = client.checkForUpdate(
-            VersionCheckRequest(appName = "GeoVault Uploader", localFullCommitSha = "f".repeat(40))
+            VersionCheckRequest(appName = uploaderAppName, localFullCommitSha = "f".repeat(40))
         )
 
         assertTrue(result is WorkerCheckApiResult.NoMatch)
@@ -67,7 +69,7 @@ class WorkerVersionCheckApiClientTest {
         )
 
         val result = client.checkForUpdate(
-            VersionCheckRequest(appName = "GeoVault Uploader", localFullCommitSha = "f".repeat(40))
+            VersionCheckRequest(appName = uploaderAppName, localFullCommitSha = "f".repeat(40))
         )
 
         assertTrue(result is WorkerCheckApiResult.Failed)

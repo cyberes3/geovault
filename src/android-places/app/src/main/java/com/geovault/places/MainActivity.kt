@@ -229,6 +229,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel.cancelRefresh()
                                     },
                                     onDismissSnackbar = viewModel::clearSnackbar,
+                                    onClearUpdatePrompt = viewModel::clearUpdatePrompt,
                                 )
                             }
                             PlacesTab.MAP.name -> {

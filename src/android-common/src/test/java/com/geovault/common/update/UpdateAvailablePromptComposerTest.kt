@@ -6,10 +6,12 @@ import org.junit.Test
 
 class UpdateAvailablePromptComposerTest {
 
+    private val uploaderAppName = GeoVaultAndroidReleaseIdentity.Uploader.WORKER_APP_NAME
+
     @Test
     fun `snackbarModelOrNull returns model for UpdateAvailable`() {
         val result = VersionCheckResult.UpdateAvailable(
-            appName = "GeoVault Uploader",
+            appName = uploaderAppName,
             versionLabel = "v2",
             releaseUrl = "https://example.com/r",
             releaseTag = "t",
@@ -19,7 +21,7 @@ class UpdateAvailablePromptComposerTest {
         val model = UpdateAvailablePromptComposer.snackbarModelOrNull(result)!!
         assertEquals("update-available", model.id)
         assertEquals(
-            "A newer GeoVault Uploader version is available (v2).",
+            "A newer $uploaderAppName version is available (v2).",
             model.message
         )
         val action = model.action!!

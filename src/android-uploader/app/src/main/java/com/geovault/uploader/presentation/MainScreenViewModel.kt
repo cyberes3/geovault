@@ -7,9 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
-import com.geovault.common.update.AppVersionChecker
-import com.geovault.common.update.VersionCheckRequest
-import com.geovault.common.update.VersionCheckSnackbarPresenter
+import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultVersionCheckSession
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
 import com.geovault.uploader.data.ValidationOutcome
@@ -22,10 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class MainScreenState(
     val isAuthenticated: Boolean = false,
@@ -44,7 +41,7 @@ data class MainScreenState(
     val isUploading: Boolean = false,
     val statusMessage: String = "",
     val importantSnackbar: GeoVaultSnackbarModel? = null,
-    val updateSnackbar: GeoVaultSnackbarModel? = null,
+    val updatePrompt: GeoVaultSnackbarModel? = null,
     val updateReleaseUrl: String? = null
 )
 
@@ -63,6 +60,12 @@ class MainScreenViewModel(
     private val validationRepository = services.validationRepository()
     private val uploadRepository = services.uploadRepository()
     private val authController: CommonInitialAuthController = services.initialAuthController()
+    private val versionCheckSession = GeoVaultVersionCheckSession(
+        application = application,
+        rateLimitKey = GeoVaultAndroidReleaseIdentity.Uploader.RATE_LIMIT_KEY,
+        releaseWorkerAppName = GeoVaultAndroidReleaseIdentity.Uploader.WORKER_APP_NAME,
+        localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+    )
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
@@ -93,7 +96,7 @@ class MainScreenViewModel(
             validate()
         }
         if (_state.value.isAuthenticated) {
-            checkForUpdate()
+            launchVersionCheckIfNeeded()
         }
     }
 
@@ -109,7 +112,7 @@ class MainScreenViewModel(
             if (_state.value.isValidationMode) {
                 validate()
             }
-            checkForUpdate()
+            launchVersionCheckIfNeeded()
         }
     }
 
@@ -186,7 +189,7 @@ class MainScreenViewModel(
     }
 
     fun clearUpdatePrompt() {
-        _state.update { it.copy(updateSnackbar = null, updateReleaseUrl = null) }
+        _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
     }
 
     fun validate() {
@@ -276,31 +279,25 @@ class MainScreenViewModel(
         return "Will be saved as: $finalName"
     }
 
-    private fun checkForUpdate() {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                AppVersionChecker().checkForUpdateIfDue(
-                    context = appContext,
-                    rateLimitKey = "uploader",
-                    request = VersionCheckRequest(
-                        appName = "GeoVault Uploader",
-                        localFullCommitSha = BuildConfig.GIT_COMMIT_SHA
-                    )
-                )
-            }
-            val (model, url) = VersionCheckSnackbarPresenter.snackbarAndReleaseUrl(result)
-            if (model != null && url != null) {
-                _state.update { it.copy(updateSnackbar = model, updateReleaseUrl = url) }
-            }
+    private fun launchVersionCheckIfNeeded() {
+        versionCheckSession.launchIfNeeded(viewModelScope) { model, url ->
+            _state.update { it.copy(updatePrompt = model, updateReleaseUrl = url) }
         }
     }
 
     private fun refreshAuthState() {
+        val wasAuthenticated = _state.value.isAuthenticated
         val resolvedServer = authController.getConfiguredServerUrlOrPeerDefault()
+        val nowAuthenticated = authController.isLoggedIn()
+        if (wasAuthenticated && !nowAuthenticated) {
+            versionCheckSession.reset()
+        }
         _state.update {
             it.copy(
-                isAuthenticated = authController.isLoggedIn(),
-                serverUrl = resolvedServer
+                isAuthenticated = nowAuthenticated,
+                serverUrl = resolvedServer,
+                updatePrompt = if (nowAuthenticated) it.updatePrompt else null,
+                updateReleaseUrl = if (nowAuthenticated) it.updateReleaseUrl else null,
             )
         }
     }

@@ -8,6 +8,9 @@ import com.geovault.common.sync.GeoVaultQueuedSyncMessageFormatter
 import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
 import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
+import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultVersionCheckSession
+import com.geovault.places.BuildConfig
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.domain.SnapshotFetchResult
 import com.geovault.places.domain.SyncEvent
@@ -44,6 +47,8 @@ data class MainScreenState(
     val syncOverlayTitle: String = "Syncing...",
     val syncOverlaySubtext: String = "Tap to cancel",
     val snackbar: GeoVaultSnackbarModel? = null,
+    val updatePrompt: GeoVaultSnackbarModel? = null,
+    val updateReleaseUrl: String? = null,
 )
 
 class MainScreenViewModel(
@@ -54,6 +59,12 @@ class MainScreenViewModel(
     private val repository = services.placesRepository()
     private val offlineSyncCoordinator = services.offlineSyncCoordinator()
     private val authController = services.initialAuthController()
+    private val versionCheckSession = GeoVaultVersionCheckSession(
+        application = application,
+        rateLimitKey = GeoVaultAndroidReleaseIdentity.Places.RATE_LIMIT_KEY,
+        releaseWorkerAppName = GeoVaultAndroidReleaseIdentity.Places.WORKER_APP_NAME,
+        localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+    )
     private var refreshJob: Job? = null
     private var refreshCancelMessage: String? = null
     private var refreshPhase: RefreshPhase = RefreshPhase.IDLE
@@ -267,6 +278,10 @@ class MainScreenViewModel(
         _state.update { it.copy(snackbar = null) }
     }
 
+    fun clearUpdatePrompt() {
+        _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
+    }
+
     fun showExternalError(message: String) {
         showSnackbar(message, "external_error")
     }
@@ -292,12 +307,23 @@ class MainScreenViewModel(
         publishFromCache()
         if (wasAuthenticated && !loggedIn) {
             initialRefreshTriggered = false
+            versionCheckSession.reset()
+            _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
         }
         val authenticatedAfterLaunch = !initialRefreshTriggered && loggedIn
         val becameAuthenticated = !wasAuthenticated && loggedIn
         if (authenticatedAfterLaunch || becameAuthenticated) {
             initialRefreshTriggered = true
             refreshNow()
+        }
+        if (loggedIn) {
+            launchVersionCheckIfNeeded()
+        }
+    }
+
+    private fun launchVersionCheckIfNeeded() {
+        versionCheckSession.launchIfNeeded(viewModelScope) { prompt, releaseUrl ->
+            _state.update { it.copy(updatePrompt = prompt, updateReleaseUrl = releaseUrl) }
         }
     }
 

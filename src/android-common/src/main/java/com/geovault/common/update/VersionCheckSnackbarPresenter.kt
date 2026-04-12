@@ -24,7 +24,7 @@ object VersionCheckSnackbarPresenter {
                     UpdateCheckLog.TAG,
                     "snackbar: showing update prompt for ${result.appName} ${result.versionLabel}"
                 )
-                val model = UpdateAvailablePromptComposer.modelForUpdateAvailable(result)
+                val model = UpdateAvailablePromptComposer.snackbarModelOrNull(result) ?: return Pair(null, null)
                 return Pair(model, result.releaseUrl)
             }
 

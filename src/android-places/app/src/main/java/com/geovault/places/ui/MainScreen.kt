@@ -57,6 +57,7 @@ import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.R
@@ -99,6 +100,7 @@ fun MainScreen(
     onCopyCoordinates: (String) -> Unit,
     onCancelRefresh: () -> Unit,
     onDismissSnackbar: () -> Unit,
+    onClearUpdatePrompt: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val showSearchDivider by remember(listState) {
@@ -107,82 +109,90 @@ fun MainScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            GeoVaultTopTitleBar(
-                title = stringResource(R.string.app_title_bar),
-                subtitle = state.lastSyncLabel,
-                actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(
-                        onOpenSettings = onOpenSettings,
-                        isAuthenticated = state.isAuthenticated
-                    )
-                }
-            )
-        }
-    ) { scaffoldPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(scaffoldPadding)
-                .background(GeoVaultColorTokens.Background)
-        ) {
-            GeoVaultAuthGate(
-                isAuthenticated = state.isAuthenticated,
-                serverUrl = state.serverUrl,
-                onServerUrlChanged = onAuthServerUrlChanged,
-                onConnect = onAuthConnect,
-                isConnecting = state.isConnecting,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    SearchBlock(
-                        query = state.searchQuery,
-                        onSearchChanged = onSearchChanged
-                    )
-                    if (showSearchDivider) {
-                        Divider(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = GeoVaultColorTokens.BorderLight,
-                            thickness = 1.dp
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                GeoVaultTopTitleBar(
+                    title = stringResource(R.string.app_title_bar),
+                    subtitle = state.lastSyncLabel,
+                    actionsContent = {
+                        GeoVaultTopBarSettingsMenuAction(
+                            onOpenSettings = onOpenSettings,
+                            isAuthenticated = state.isAuthenticated
                         )
                     }
-                    PlacesBody(
-                        state = state,
-                        listState = listState,
-                        onRefresh = onRefresh,
-                        onNavigatePlace = onNavigatePlace,
-                        onEditSavedPlace = onEditSavedPlace,
-                        onEditOfflinePlace = onEditOfflinePlace,
-                        onViewDescription = onViewDescription,
-                        onOpenMapToPlace = onOpenMapToPlace,
-                        onCopyCoordinates = onCopyCoordinates,
-                    )
-                }
-            }
-
-            if (state.isAuthenticated) {
-                FabStack(
-                    modifier = Modifier.align(Alignment.BottomEnd),
-                    onAddPlace = onAddPlace,
-                    enabled = !state.isRefreshing
                 )
             }
+        ) { scaffoldPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(scaffoldPadding)
+                    .background(GeoVaultColorTokens.Background)
+            ) {
+                GeoVaultAuthGate(
+                    isAuthenticated = state.isAuthenticated,
+                    serverUrl = state.serverUrl,
+                    onServerUrlChanged = onAuthServerUrlChanged,
+                    onConnect = onAuthConnect,
+                    isConnecting = state.isConnecting,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        SearchBlock(
+                            query = state.searchQuery,
+                            onSearchChanged = onSearchChanged
+                        )
+                        if (showSearchDivider) {
+                            Divider(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = GeoVaultColorTokens.BorderLight,
+                                thickness = 1.dp
+                            )
+                        }
+                        PlacesBody(
+                            state = state,
+                            listState = listState,
+                            onRefresh = onRefresh,
+                            onNavigatePlace = onNavigatePlace,
+                            onEditSavedPlace = onEditSavedPlace,
+                            onEditOfflinePlace = onEditOfflinePlace,
+                            onViewDescription = onViewDescription,
+                            onOpenMapToPlace = onOpenMapToPlace,
+                            onCopyCoordinates = onCopyCoordinates,
+                        )
+                    }
+                }
 
-            GeoVaultLoadingOverlay(
-                isVisible = state.showSyncOverlay,
-                title = state.syncOverlayTitle,
-                subtext = state.syncOverlaySubtext,
-                onTap = onCancelRefresh
-            )
+                if (state.isAuthenticated) {
+                    FabStack(
+                        modifier = Modifier.align(Alignment.BottomEnd),
+                        onAddPlace = onAddPlace,
+                        enabled = !state.isRefreshing
+                    )
+                }
+
+                GeoVaultLoadingOverlay(
+                    isVisible = state.showSyncOverlay,
+                    title = state.syncOverlayTitle,
+                    subtext = state.syncOverlaySubtext,
+                    onTap = onCancelRefresh
+                )
+            }
         }
-    }
 
-    GeoVaultSnackbarHost(
-        model = state.snackbar,
-        onDismiss = onDismissSnackbar,
-        onAction = { _ -> onDismissSnackbar() },
-    )
+        GeoVaultSnackbarHost(
+            model = state.snackbar,
+            onDismiss = onDismissSnackbar,
+            onAction = { _ -> onDismissSnackbar() },
+        )
+        GeoVaultUpdateAvailableSnackbarHost(
+            model = state.updatePrompt,
+            releaseUrl = state.updateReleaseUrl,
+            onDismiss = onClearUpdatePrompt,
+            stackBottomInset = if (state.snackbar != null) 72.dp else 0.dp,
+        )
+    }
 }
 
 @Composable
