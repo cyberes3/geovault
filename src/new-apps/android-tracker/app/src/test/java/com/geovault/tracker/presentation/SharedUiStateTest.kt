@@ -59,7 +59,7 @@ class SharedUiStateTest {
     }
 
     @Test
-    fun publicAddedHelpers_useEffectiveSubscribedIdsWithOptimisticDelta() {
+    fun addedHelpers_useSessionRetainedSets() {
         val state = SharedUiState(
             trackers = listOf(
                 Tracker(id = "t-base", name = "Base", color = null, is_owner = false, visibility = "shared"),
@@ -71,12 +71,59 @@ class SharedUiStateTest {
                 "t-add" to Tracker(id = "t-add", name = "Add", color = null, is_owner = false, visibility = "shared"),
             ),
             optimisticTrackerRemovals = setOf("t-base"),
+            retainedIncomingTrackers = mapOf(
+                "t-incoming-added" to AvailableToAddItem(id = "t-incoming-added", name = "Incoming Added")
+            ),
+            retainedIncomingGroups = mapOf(
+                "g-incoming-added" to AvailableToAddGroup(id = "g-incoming-added", name = "Incoming Group Added")
+            ),
+            retainedPublicTrackers = mapOf(
+                "t-public-added" to AvailableToAddItem(id = "t-public-added", name = "Public Added")
+            ),
+            retainedPublicGroups = mapOf(
+                "g-public-added" to AvailableToAddGroup(id = "g-public-added", name = "Public Group Added")
+            ),
         )
 
-        assertEquals(true, state.isPublicTrackerAdded("t-add"))
-        assertEquals(false, state.isPublicTrackerAdded("t-base"))
-        assertEquals(true, state.isPublicGroupAdded("g-added"))
-        assertEquals(false, state.isPublicGroupAdded("g-missing"))
+        assertEquals(true, state.isPublicTrackerAdded("t-public-added"))
+        assertEquals(false, state.isPublicTrackerAdded("t-add"))
+        assertEquals(true, state.isPublicGroupAdded("g-public-added"))
+        assertEquals(false, state.isPublicGroupAdded("g-added"))
+        assertEquals(true, state.isIncomingTrackerAdded("t-incoming-added"))
+        assertEquals(false, state.isIncomingTrackerAdded("t-add"))
+        assertEquals(true, state.isIncomingGroupAdded("g-incoming-added"))
+        assertEquals(false, state.isIncomingGroupAdded("g-missing"))
+    }
+
+    @Test
+    fun filteredSections_includeRetainedRowsWhenSourceListChanges() {
+        val state = SharedUiState(
+            trackers = listOf(
+                Tracker(id = "t-public-added", name = "Public Added", color = null, is_owner = false, visibility = "shared")
+            ),
+            groups = listOf(
+                Group(id = "g-public-added", name = "Public Added Group", is_owner = false, visibility = "shared", is_accepted = true),
+                Group(id = "g-incoming-added", name = "Incoming Added Group", is_owner = false, visibility = "shared", is_accepted = true),
+            ),
+            availableToAdd = AvailableToAddResponse(),
+            retainedIncomingTrackers = mapOf(
+                "t-incoming-added" to AvailableToAddItem(id = "t-incoming-added", name = "Incoming Added")
+            ),
+            retainedIncomingGroups = mapOf(
+                "g-incoming-added" to AvailableToAddGroup(id = "g-incoming-added", name = "Incoming Added Group")
+            ),
+            retainedPublicTrackers = mapOf(
+                "t-public-added" to AvailableToAddItem(id = "t-public-added", name = "Public Added")
+            ),
+            retainedPublicGroups = mapOf(
+                "g-public-added" to AvailableToAddGroup(id = "g-public-added", name = "Public Added Group")
+            ),
+        )
+
+        assertEquals(listOf("t-incoming-added"), state.filteredSections.incomingTrackers.map { it.id })
+        assertEquals(listOf("g-incoming-added"), state.filteredSections.incomingGroups.map { it.id })
+        assertEquals(listOf("t-public-added"), state.filteredSections.publicTrackers.map { it.id })
+        assertEquals(listOf("g-public-added"), state.filteredSections.publicGroups.map { it.id })
     }
 
     @Test

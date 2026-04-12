@@ -51,14 +51,24 @@ object SharedDiscoveryPolicy {
         val incomingTrackers = available.shared_with_me
             .distinctBy { normalizeSharedId(it.id) }
             .filter { normalizeSharedId(it.id).isNotEmpty() }
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(
+                compareBy(
+                    { it.name.lowercase() },
+                    { normalizeSharedId(it.id) }
+                )
+            )
 
         val incomingGroups = available.shared_with_me_groups
             .distinctBy { normalizeSharedId(it.id) }
             .filter { normalizeSharedId(it.id).isNotEmpty() }
             // Pending shared groups should not expose per-track membership pre-acceptance.
             .map { it.copy(track_ids = emptyList()) }
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(
+                compareBy(
+                    { it.name.lowercase() },
+                    { normalizeSharedId(it.id) }
+                )
+            )
 
         val publicTrackers = available.public
             .distinctBy { normalizeSharedId(it.id) }
@@ -66,7 +76,12 @@ object SharedDiscoveryPolicy {
                 val normalized = normalizeSharedId(id.id)
                 normalized.isNotEmpty()
             }
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(
+                compareBy(
+                    { it.name.lowercase() },
+                    { normalizeSharedId(it.id) }
+                )
+            )
 
         val publicGroups = available.public_groups
             .distinctBy { normalizeSharedId(it.id) }
@@ -82,7 +97,12 @@ object SharedDiscoveryPolicy {
                         .distinct()
                 )
             }
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(
+                compareBy(
+                    { it.name.lowercase() },
+                    { normalizeSharedId(it.id) }
+                )
+            )
 
         return SharedDiscoveryBuckets(
             onMyMapTrackers = onMyMapTrackers,

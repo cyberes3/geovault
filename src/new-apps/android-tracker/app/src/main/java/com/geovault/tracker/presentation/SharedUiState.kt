@@ -45,6 +45,10 @@ data class SharedUiState(
     val optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
     val optimisticTrackerRemovals: Set<String> = emptySet(),
     val optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
+    val retainedIncomingTrackers: Map<String, AvailableToAddItem> = emptyMap(),
+    val retainedIncomingGroups: Map<String, AvailableToAddGroup> = emptyMap(),
+    val retainedPublicTrackers: Map<String, AvailableToAddItem> = emptyMap(),
+    val retainedPublicGroups: Map<String, AvailableToAddGroup> = emptyMap(),
     val selectedTrackerId: String = "",
 ) {
     private val discoveryBuckets: SharedDiscoveryBuckets
@@ -96,6 +100,10 @@ data class SharedUiState(
             optimisticTrackerAdds = optimisticTrackerAdds,
             optimisticTrackerRemovals = optimisticTrackerRemovals,
             optimisticDiscoverOnMapRemovals = optimisticDiscoverOnMapRemovals,
+            retainedIncomingTrackers = retainedIncomingTrackers.values.toList(),
+            retainedIncomingGroups = retainedIncomingGroups.values.toList(),
+            retainedPublicTrackers = retainedPublicTrackers.values.toList(),
+            retainedPublicGroups = retainedPublicGroups.values.toList(),
         )
 
     val sharedListRows: List<SharedListRowModel>
@@ -115,9 +123,15 @@ data class SharedUiState(
             .plus(optimisticTrackerAdds.keys)
             .minus(optimisticTrackerRemovals)
 
+    fun isIncomingTrackerAdded(trackerId: String): Boolean =
+        retainedIncomingTrackers.containsKey(trackerId)
+
+    fun isIncomingGroupAdded(groupId: String): Boolean =
+        retainedIncomingGroups.containsKey(groupId)
+
     fun isPublicTrackerAdded(trackerId: String): Boolean =
-        effectiveSubscribedTrackerIds.contains(trackerId)
+        retainedPublicTrackers.containsKey(trackerId)
 
     fun isPublicGroupAdded(groupId: String): Boolean =
-        groups.any { it.id == groupId }
+        retainedPublicGroups.containsKey(groupId)
 }

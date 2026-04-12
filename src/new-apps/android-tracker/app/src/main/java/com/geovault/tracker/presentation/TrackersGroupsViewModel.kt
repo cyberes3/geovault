@@ -39,6 +39,10 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
+    private val addRemoveCoordinator = TrackerAddRemoveCoordinator(
+        trackerRepository = trackerRepository,
+        groupRepository = groupRepository,
+    )
     private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
 
     private val _uiState = MutableStateFlow(
@@ -1004,7 +1008,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             var shouldRunMutation = false
             _uiState.update { state ->
-                val (started, updatedIds) = TrackersGroupAddMutationPolicy.tryBegin(
+                val (started, updatedIds) = addRemoveCoordinator.tryBeginGroupPickerAdd(
                     addingTrackerIds = state.addingTrackerIds,
                     trackerId = trackerId,
                 )
@@ -1018,14 +1022,14 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             if (!shouldRunMutation) return@launch
 
             try {
-                when (val result = groupRepository.addGroupTrack(groupId, trackerId)) {
+                when (val result = addRemoveCoordinator.addTrackerToGroup(groupId, trackerId)) {
                     is RepositoryResult.Success -> onSuccess()
                     is RepositoryResult.Failure -> _toastEvents.emit(appErrorMessage(result.error))
                 }
             } finally {
                 _uiState.update { state ->
                     state.copy(
-                        addingTrackerIds = TrackersGroupAddMutationPolicy.settle(
+                        addingTrackerIds = addRemoveCoordinator.settleGroupPickerAdd(
                             addingTrackerIds = state.addingTrackerIds,
                             trackerId = trackerId,
                         )

@@ -31,6 +31,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         TrackerAppServices.from(application).trackerManagementRepository()
     private val groupRepository: GroupManagementRepository =
         TrackerAppServices.from(application).groupManagementRepository()
+    private val addRemoveCoordinator = TrackerAddRemoveCoordinator(
+        trackerRepository = trackerRepository,
+        groupRepository = groupRepository,
+    )
     private val sessionBootstrap: TrackerSessionBootstrap =
         TrackerAppServices.from(application).trackerSessionBootstrap()
     private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
@@ -88,6 +92,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 viewMode = SharedViewMode.DISCOVER_OVERLAY,
                 discoverMode = DiscoverOverlayMode.ON_MY_MAP,
                 isLoading = current.isLoading || current.availableToAdd == null,
+                retainedIncomingTrackers = emptyMap(),
+                retainedIncomingGroups = emptyMap(),
             )
         }
         ensureDiscoveryDataLoaded()
@@ -99,6 +105,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 viewMode = SharedViewMode.PUBLIC_OVERLAY,
                 isLoading = current.isLoading || current.availableToAdd == null,
+                retainedPublicTrackers = emptyMap(),
+                retainedPublicGroups = emptyMap(),
             )
         }
         ensureDiscoveryDataLoaded()
@@ -178,6 +186,18 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    private fun incomingTrackerForId(state: SharedUiState, trackerId: String) =
+        state.availableToAdd?.shared_with_me.orEmpty().firstOrNull { it.id == trackerId }
+
+    private fun incomingGroupForId(state: SharedUiState, groupId: String) =
+        state.availableToAdd?.shared_with_me_groups.orEmpty().firstOrNull { it.id == groupId }
+
+    private fun publicTrackerForId(state: SharedUiState, trackerId: String) =
+        state.availableToAdd?.public.orEmpty().firstOrNull { it.id == trackerId }
+
+    private fun publicGroupForId(state: SharedUiState, groupId: String) =
+        state.availableToAdd?.public_groups.orEmpty().firstOrNull { it.id == groupId }
+
     private suspend fun refreshStateFromServerSerialized(feedbackMessage: String?) {
         if (!feedbackMessage.isNullOrBlank()) {
             refreshPendingFeedbackMessage = feedbackMessage
@@ -199,16 +219,6 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun mutationKeyIncomingGroup(groupId: String): String = "incoming-group-$groupId"
-    private fun mutationKeyIncomingTrackerAdd(trackerId: String): String = "incoming-tracker-$trackerId"
-    private fun mutationKeyPublicTrackerAdd(trackerId: String): String = "public-tracker-$trackerId"
-    private fun mutationKeyPublicTrackerRemove(trackerId: String): String = "public-remove-tracker-$trackerId"
-    private fun mutationKeyPublicGroupAdd(groupId: String): String =
-        "public-group-$groupId"
-    private fun mutationKeyPublicGroupRemove(groupId: String): String =
-        "public-remove-group-$groupId"
-    private fun mutationKeyDiscoverOnMapTrackerRemove(trackerId: String): String = "discover-remove-tracker-$trackerId"
-    private fun mutationKeyDiscoverOnMapGroupRemove(groupId: String): String = "discover-remove-group-$groupId"
     private fun mutationKeyEditTrackerUnsubscribe(trackerId: String): String = "edit-tracker-unsubscribe-$trackerId"
     private fun mutationKeyEditTrackerLeaveShare(trackerId: String): String = "edit-tracker-leave-share-$trackerId"
     private fun mutationKeyEditGroupLeave(groupId: String): String = "edit-group-leave-$groupId"
@@ -217,145 +227,66 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     fun editTrackerLeaveSharePendingKey(trackerId: String): String = mutationKeyEditTrackerLeaveShare(trackerId)
     fun editGroupLeavePendingKey(groupId: String): String = mutationKeyEditGroupLeave(groupId)
 
-    fun requestIncomingGroupAccept(groupId: String) {
-        val key = mutationKeyIncomingGroup(groupId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_ADD)) return
+    private fun performSharedMutation(operation: SharedAddRemoveOperation) {
+        var startResult: SharedMutationStartResult? = null
+        _uiState.update { state ->
+            val result = addRemoveCoordinator.beginSharedMutation(
+                state = state,
+                operation = operation,
+                optimisticTrackerResolver = { trackerId -> optimisticTrackerForId(state, trackerId) },
+                incomingTrackerResolver = { trackerId -> incomingTrackerForId(state, trackerId) },
+                incomingGroupResolver = { groupId -> incomingGroupForId(state, groupId) },
+                publicTrackerResolver = { trackerId -> publicTrackerForId(state, trackerId) },
+                publicGroupResolver = { groupId -> publicGroupForId(state, groupId) },
+            )
+            if (result.started) startResult = result
+            result.state
+        }
+        val started = startResult ?: return
         viewModelScope.launch {
-            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupAccept(groupId))) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
+            when (
+                val result = addRemoveCoordinator.executeSharedMutation(
+                    operation = operation,
+                    trackerResolver = { trackerId ->
+                        _uiState.value.trackers.firstOrNull { it.id == trackerId }
+                    },
+                )
+            ) {
+                is RepositoryResult.Success -> {
+                    refreshStateFromServerSerialized(feedbackMessage = null)
+                    _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
+                }
                 is RepositoryResult.Failure -> {
+                    _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
                     emitSnackbar(appErrorMessage(result.error))
                 }
             }
-            clearPendingMutation(key)
+            _uiState.update { state -> addRemoveCoordinator.clearPendingMutation(state, started.key) }
         }
+    }
+
+    fun requestIncomingGroupAccept(groupId: String) {
+        performSharedMutation(SharedAddRemoveOperation.IncomingGroupAccept(groupId))
     }
 
     fun requestIncomingTrackerAdd(trackerId: String) {
-        val key = mutationKeyIncomingTrackerAdd(trackerId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_ADD) { state ->
-                state.copy(
-                    optimisticTrackerAdds = state.optimisticTrackerAdds + (trackerId to optimisticTrackerForId(state, trackerId)),
-                    optimisticTrackerRemovals = state.optimisticTrackerRemovals - trackerId,
-                    optimisticDiscoverOnMapRemovals = state.optimisticDiscoverOnMapRemovals - trackerId,
-                )
-            }
-        ) return
-        viewModelScope.launch {
-            when (val result = executeTrackerTransition(SharedOwnershipTransitionPolicy.forIncomingTrackerSubscribe(trackerId))) {
-                is RepositoryResult.Success -> {
-                    refreshStateFromServerSerialized(feedbackMessage = null)
-                    _uiState.update { it.copy(optimisticTrackerAdds = it.optimisticTrackerAdds - trackerId) }
-                }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(optimisticTrackerAdds = it.optimisticTrackerAdds - trackerId) }
-                    emitSnackbar(appErrorMessage(result.error))
-                }
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.IncomingTrackerAdd(trackerId))
     }
 
     fun requestPublicTrackerAdd(trackerId: String) {
-        val key = mutationKeyPublicTrackerAdd(trackerId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_ADD) { state ->
-                state.copy(
-                    optimisticTrackerAdds = state.optimisticTrackerAdds + (trackerId to optimisticTrackerForId(state, trackerId)),
-                    optimisticTrackerRemovals = state.optimisticTrackerRemovals - trackerId,
-                )
-            }
-        ) return
-        viewModelScope.launch {
-            when (val result = executeTrackerTransition(SharedOwnershipTransitionPolicy.forPublicTrackerSubscribe(trackerId))) {
-                is RepositoryResult.Success -> {
-                    refreshStateFromServerSerialized(feedbackMessage = null)
-                    _uiState.update { it.copy(optimisticTrackerAdds = it.optimisticTrackerAdds - trackerId) }
-                }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(optimisticTrackerAdds = it.optimisticTrackerAdds - trackerId) }
-                    emitSnackbar(appErrorMessage(result.error))
-                }
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.PublicTrackerAdd(trackerId))
     }
 
     fun requestPublicTrackerRemove(trackerId: String) {
-        val key = mutationKeyPublicTrackerRemove(trackerId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE) { state ->
-                state.copy(
-                    optimisticTrackerAdds = state.optimisticTrackerAdds - trackerId,
-                    optimisticTrackerRemovals = state.optimisticTrackerRemovals + trackerId,
-                )
-            }
-        ) return
-        viewModelScope.launch {
-            when (val result = executeTrackerTransition(
-                SharedTrackerTransitionCommand(
-                    trackerId = trackerId,
-                    action = SharedTrackerTransitionAction.Unsubscribe,
-                )
-            )) {
-                is RepositoryResult.Success -> {
-                    refreshStateFromServerSerialized(feedbackMessage = null)
-                    _uiState.update { it.copy(optimisticTrackerRemovals = it.optimisticTrackerRemovals - trackerId) }
-                }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(optimisticTrackerRemovals = it.optimisticTrackerRemovals - trackerId) }
-                    emitSnackbar(appErrorMessage(result.error))
-                }
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.PublicTrackerRemove(trackerId))
     }
 
     fun requestDiscoverOnMapTrackerRemove(trackerId: String) {
-        val tracker = _uiState.value.trackers.firstOrNull { it.id == trackerId } ?: return
-        val key = mutationKeyDiscoverOnMapTrackerRemove(trackerId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE) { state ->
-                state.copy(
-                    optimisticTrackerAdds = state.optimisticTrackerAdds - trackerId,
-                    optimisticTrackerRemovals = state.optimisticTrackerRemovals + trackerId,
-                    optimisticDiscoverOnMapRemovals = state.optimisticDiscoverOnMapRemovals + trackerId,
-                )
-            }
-        ) return
-        viewModelScope.launch {
-            val command = SharedOwnershipTransitionPolicy.forTrackerLeave(tracker) ?: return@launch
-            when (val result = executeTrackerTransition(command)) {
-                is RepositoryResult.Success -> {
-                    refreshStateFromServerSerialized(feedbackMessage = null)
-                    _uiState.update {
-                        it.copy(
-                            optimisticTrackerRemovals = it.optimisticTrackerRemovals - trackerId,
-                            optimisticDiscoverOnMapRemovals = it.optimisticDiscoverOnMapRemovals - trackerId,
-                        )
-                    }
-                }
-                is RepositoryResult.Failure -> {
-                    _uiState.update {
-                        it.copy(
-                            optimisticTrackerRemovals = it.optimisticTrackerRemovals - trackerId,
-                            optimisticDiscoverOnMapRemovals = it.optimisticDiscoverOnMapRemovals - trackerId,
-                        )
-                    }
-                    emitSnackbar(appErrorMessage(result.error))
-                }
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(trackerId))
     }
 
     fun requestDiscoverOnMapGroupRemove(groupId: String) {
-        val key = mutationKeyDiscoverOnMapGroupRemove(groupId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
-        viewModelScope.launch {
-            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
-                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.DiscoverOnMapGroupRemove(groupId))
     }
 
     fun requestEditSharedTrackerUnsubscribe(trackerId: String) {
@@ -415,29 +346,13 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     fun requestPublicGroupAdd(groupId: String) {
         val normalizedGroupId = groupId.trim()
         if (normalizedGroupId.isEmpty()) return
-        val key = mutationKeyPublicGroupAdd(normalizedGroupId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_ADD)) return
-        viewModelScope.launch {
-            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupAccept(normalizedGroupId))) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
-                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.PublicGroupAdd(normalizedGroupId))
     }
 
     fun requestPublicGroupRemove(groupId: String) {
         val normalizedGroupId = groupId.trim()
         if (normalizedGroupId.isEmpty()) return
-        val key = mutationKeyPublicGroupRemove(normalizedGroupId)
-        if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
-        viewModelScope.launch {
-            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(normalizedGroupId))) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
-                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
-            }
-            clearPendingMutation(key)
-        }
+        performSharedMutation(SharedAddRemoveOperation.PublicGroupRemove(normalizedGroupId))
     }
 
     fun refreshAll() {

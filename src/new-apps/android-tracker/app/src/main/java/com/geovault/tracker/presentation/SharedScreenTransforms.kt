@@ -111,6 +111,10 @@ fun deriveSharedFilteredSections(
     optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
     optimisticTrackerRemovals: Set<String> = emptySet(),
     optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
+    retainedIncomingTrackers: List<AvailableToAddItem> = emptyList(),
+    retainedIncomingGroups: List<AvailableToAddGroup> = emptyList(),
+    retainedPublicTrackers: List<AvailableToAddItem> = emptyList(),
+    retainedPublicGroups: List<AvailableToAddGroup> = emptyList(),
 ): SharedFilteredSections {
     val sharedItemsWithOptimistic = applyOptimisticSharedItems(
         sharedItems = sharedItems,
@@ -118,22 +122,26 @@ fun deriveSharedFilteredSections(
         optimisticTrackerRemovals = optimisticTrackerRemovals,
     )
     val filteredSharedItems = sharedItemsWithOptimistic
+    val mergedIncomingTrackers = mergeRetainedTrackerItems(incomingTrackers, retainedIncomingTrackers)
+    val mergedIncomingGroups = mergeRetainedGroupItems(incomingGroups, retainedIncomingGroups)
+    val mergedPublicTrackers = mergeRetainedTrackerItems(publicTrackers, retainedPublicTrackers)
+    val mergedPublicGroups = mergeRetainedGroupItems(publicGroups, retainedPublicGroups)
     val filteredOnMyMapTrackers = discoverOnMyMapTrackers.filter { item ->
         matchesSharedSearch(discoverOnMapQuery, item.name, item.owner_email)
     }
     val filteredOnMyMapGroups = discoverOnMyMapGroups.filter { group ->
         matchesSharedSearch(discoverOnMapQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
-    val filteredIncomingTrackers = incomingTrackers.filter { item ->
+    val filteredIncomingTrackers = mergedIncomingTrackers.filter { item ->
         matchesSharedSearch(discoverIncomingQuery, item.name, item.owner_email)
     }
-    val filteredIncomingGroups = incomingGroups.filter { group ->
+    val filteredIncomingGroups = mergedIncomingGroups.filter { group ->
         matchesSharedSearch(discoverIncomingQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
-    val filteredPublicTrackers = publicTrackers.filter { item ->
+    val filteredPublicTrackers = mergedPublicTrackers.filter { item ->
         matchesSharedSearch(publicQuery, item.name, item.owner_email)
     }
-    val filteredPublicGroups = publicGroups.filter { group ->
+    val filteredPublicGroups = mergedPublicGroups.filter { group ->
         matchesSharedSearch(publicQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
     return SharedFilteredSections(
@@ -166,6 +174,44 @@ private fun applyOptimisticSharedItems(
     return (base + optimisticAddItems).sortedWith(
         NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) }
     )
+}
+
+private fun mergeRetainedTrackerItems(
+    base: List<AvailableToAddItem>,
+    retained: List<AvailableToAddItem>,
+): List<AvailableToAddItem> {
+    val byId = LinkedHashMap<String, AvailableToAddItem>()
+    base.forEach { item -> byId[normalizeSharedId(item.id)] = item }
+    retained.forEach { item ->
+        val id = normalizeSharedId(item.id)
+        if (!byId.containsKey(id)) byId[id] = item
+    }
+    return byId.values
+        .sortedWith(
+            compareBy(
+                { it.name.lowercase(Locale.getDefault()) },
+                { normalizeSharedId(it.id) }
+            )
+        )
+}
+
+private fun mergeRetainedGroupItems(
+    base: List<AvailableToAddGroup>,
+    retained: List<AvailableToAddGroup>,
+): List<AvailableToAddGroup> {
+    val byId = LinkedHashMap<String, AvailableToAddGroup>()
+    base.forEach { group -> byId[normalizeSharedId(group.id)] = group }
+    retained.forEach { group ->
+        val id = normalizeSharedId(group.id)
+        if (!byId.containsKey(id)) byId[id] = group
+    }
+    return byId.values
+        .sortedWith(
+            compareBy(
+                { it.name.lowercase(Locale.getDefault()) },
+                { normalizeSharedId(it.id) }
+            )
+        )
 }
 
 

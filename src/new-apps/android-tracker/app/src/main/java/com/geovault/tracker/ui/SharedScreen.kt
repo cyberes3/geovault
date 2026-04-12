@@ -76,10 +76,12 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.presentation.OwnershipActionPolicy
 import com.geovault.tracker.presentation.DiscoverOverlayMode
 import com.geovault.tracker.presentation.SharedEditActionPolicy
+import com.geovault.tracker.presentation.SharedAddRemoveOperation
 import com.geovault.tracker.presentation.SharedListRowModel
 import com.geovault.tracker.presentation.SharedViewMode
 import com.geovault.tracker.presentation.SharedUiState
 import com.geovault.tracker.presentation.SharedViewModel
+import com.geovault.tracker.presentation.TrackerAddRemoveKeyPolicy
 import com.geovault.tracker.presentation.TrackerLeaveKind
 import com.geovault.tracker.ui.components.GroupItemCard
 import com.geovault.tracker.ui.components.GroupItemCardModel
@@ -757,7 +759,11 @@ private fun DiscoverOverlaySurface(
                     item { EmptyLine(stringResource(R.string.shared_empty_discover_on_my_map)) }
                 }
                 items(filteredOnMyMapTrackers, key = { "m-t-${it.id}" }) { item ->
-                    val isPendingRemove = pendingRemoveActionKeys.contains("discover-remove-tracker-${item.id}")
+                    val isPendingRemove = pendingRemoveActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
+                        )
+                    )
                     DiscoverOnMapTrackerCard(
                         item = item,
                         onRemove = { onRemoveOnMapTracker(item.id) },
@@ -766,7 +772,11 @@ private fun DiscoverOverlaySurface(
                     )
                 }
                 items(filteredOnMyMapGroups, key = { "m-g-${it.id}" }) { group ->
-                    val isPendingRemove = pendingRemoveActionKeys.contains("discover-remove-group-${group.id}")
+                    val isPendingRemove = pendingRemoveActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
+                        )
+                    )
                     DiscoverOnMapGroupCard(
                         group = group,
                         onRemove = { onRemoveOnMapGroup(group.id) },
@@ -779,26 +789,50 @@ private fun DiscoverOverlaySurface(
                     item { EmptyLine(stringResource(R.string.shared_empty_discover_incoming)) }
                 }
                 items(filteredIncomingTrackers, key = { "d-t-${it.id}" }) { item ->
-                    val isPending = pendingAddActionKeys.contains("incoming-tracker-${item.id}")
+                    val isAdded = state.isIncomingTrackerAdded(item.id)
+                    val isPending = pendingAddActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.IncomingTrackerAdd(item.id)
+                        )
+                    )
+                    val isPendingRemove = pendingRemoveActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
+                        )
+                    )
                     DiscoverIncomingTrackerCard(
                         item = item,
                         onAdd = { onAddIncomingTracker(item.id) },
-                        onRejectShare = {},
-                        showRejectAction = false,
+                        onRemove = { onRemoveOnMapTracker(item.id) },
+                        isAdded = isAdded,
                         isPendingAdd = isPending,
+                        isPendingRemove = isPendingRemove,
                         isHighlighted = false,
-                        enabled = !overlayLoading && !isPending,
+                        enabled = !overlayLoading && !isPending && !isPendingRemove,
                     )
                 }
                 items(filteredIncomingGroups, key = { "d-g-${it.id}" }) { group ->
-                    val isPending = pendingAddActionKeys.contains("incoming-group-${group.id}")
+                    val isAdded = state.isIncomingGroupAdded(group.id)
+                    val isPending = pendingAddActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.IncomingGroupAccept(group.id)
+                        )
+                    )
+                    val isPendingRemove = pendingRemoveActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
+                        )
+                    )
                     DiscoverIncomingGroupCard(
                         group = group,
                         onAccept = { onAcceptIncomingGroup(group.id) },
                         onLeave = { onLeaveIncomingGroup(group.id, group.name) },
+                        onRemove = { onRemoveOnMapGroup(group.id) },
+                        isAdded = isAdded,
                         isPendingAccept = isPending,
+                        isPendingRemove = isPendingRemove,
                         isHighlighted = false,
-                        enabled = !overlayLoading && !isPending,
+                        enabled = !overlayLoading && !isPending && !isPendingRemove,
                     )
                 }
             }
@@ -869,8 +903,16 @@ private fun PublicOverlaySurface(
                     item { EmptyLine(stringResource(R.string.shared_empty_public_trackers)) }
                 }
                 items(filteredPublicTrackers, key = { "p-t-${it.id}" }) { item ->
-                    val isPendingAdd = pendingAddActionKeys.contains("public-tracker-${item.id}")
-                    val isPendingRemove = pendingRemoveActionKeys.contains("public-remove-tracker-${item.id}")
+                    val isPendingAdd = pendingAddActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.PublicTrackerAdd(item.id)
+                        )
+                    )
+                    val isPendingRemove = pendingRemoveActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.PublicTrackerRemove(item.id)
+                        )
+                    )
                     PublicAddTrackerCard(
                         item = item,
                         isAdded = state.isPublicTrackerAdded(item.id),
@@ -883,8 +925,16 @@ private fun PublicOverlaySurface(
                     )
                 }
                 items(filteredPublicGroups, key = { "p-g-${it.id}" }) { group ->
-                    val isPendingAdd = pendingAddActionKeys.contains("public-group-${group.id}")
-                    val isPendingRemove = pendingRemoveActionKeys.contains("public-remove-group-${group.id}")
+                    val isPendingAdd = pendingAddActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.PublicGroupAdd(group.id)
+                        )
+                    )
+                    val isPendingRemove = pendingRemoveActionKeys.contains(
+                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                            SharedAddRemoveOperation.PublicGroupRemove(group.id)
+                        )
+                    )
                     PublicAddGroupCard(
                         group = group,
                         isAdded = state.isPublicGroupAdded(group.id),
@@ -1059,9 +1109,10 @@ private fun formatSharedListDate(timestampMs: Long): String = SHARED_LIST_DATE_F
 private fun DiscoverIncomingTrackerCard(
     item: AvailableToAddItem,
     onAdd: () -> Unit,
-    onRejectShare: () -> Unit,
-    showRejectAction: Boolean = true,
+    onRemove: () -> Unit,
+    isAdded: Boolean,
     isPendingAdd: Boolean,
+    isPendingRemove: Boolean,
     isHighlighted: Boolean,
     enabled: Boolean,
 ) {
@@ -1070,12 +1121,18 @@ private fun DiscoverIncomingTrackerCard(
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
         iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
-        state = if (isPendingAdd) TrackerAddRowActionState.ADDING else TrackerAddRowActionState.IDLE,
+        state = when {
+            isPendingAdd -> TrackerAddRowActionState.ADDING
+            isPendingRemove -> TrackerAddRowActionState.REMOVING
+            isAdded -> TrackerAddRowActionState.ADDED_DELETE
+            else -> TrackerAddRowActionState.IDLE
+        },
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
-        onAdd = onAdd,
-        onRemove = onRejectShare,
+        onAdd = if (isAdded) { { } } else onAdd,
+        onRemove = onRemove,
         addIconTooltip = stringResource(R.string.tooltip_discover_row_add),
+        removeIconTooltip = stringResource(R.string.tooltip_discover_row_remove),
     )
 }
 
@@ -1084,7 +1141,10 @@ private fun DiscoverIncomingGroupCard(
     group: AvailableToAddGroup,
     onAccept: () -> Unit,
     onLeave: () -> Unit,
+    onRemove: () -> Unit,
+    isAdded: Boolean,
     isPendingAccept: Boolean,
+    isPendingRemove: Boolean,
     isHighlighted: Boolean,
     enabled: Boolean,
 ) {
@@ -1093,12 +1153,22 @@ private fun DiscoverIncomingGroupCard(
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
         iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-        state = if (isPendingAccept) TrackerAddRowActionState.ADDING else TrackerAddRowActionState.IDLE,
+        state = when {
+            isPendingAccept -> TrackerAddRowActionState.ADDING
+            isPendingRemove -> TrackerAddRowActionState.REMOVING
+            isAdded -> TrackerAddRowActionState.ADDED_DELETE
+            else -> TrackerAddRowActionState.IDLE
+        },
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
-        onAdd = onAccept,
-        onRemove = onLeave,
+        onAdd = if (isAdded) { { } } else onAccept,
+        onRemove = if (isAdded) onRemove else onLeave,
         addIconTooltip = stringResource(R.string.tooltip_discover_row_add),
+        removeIconTooltip = if (isAdded) {
+            stringResource(R.string.tooltip_discover_row_remove)
+        } else {
+            null
+        },
     )
 }
 

@@ -275,4 +275,82 @@ class SharedScreenTransformsTest {
         assertEquals(listOf("t1"), filtered.discoverOnMyMapTrackers.map { it.id })
         assertEquals(emptyList<String>(), filtered.incomingTrackers.map { it.id })
     }
+
+    @Test
+    fun deriveSharedFilteredSections_mergesRetainedIncomingAndPublicRows() {
+        val filtered = deriveSharedFilteredSections(
+            sharedItems = emptyList(),
+            discoverOnMyMapTrackers = emptyList(),
+            discoverOnMyMapGroups = emptyList(),
+            incomingTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "in-a", name = "Incoming A")
+            ),
+            incomingGroups = emptyList(),
+            publicTrackers = emptyList(),
+            publicGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "pg-a", name = "Public Group A")
+            ),
+            discoverOnMapQuery = "",
+            discoverIncomingQuery = "",
+            publicQuery = "",
+            retainedIncomingTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "in-b", name = "Incoming B")
+            ),
+            retainedIncomingGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "ig-b", name = "Incoming Group B")
+            ),
+            retainedPublicTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "pt-b", name = "Public Tracker B")
+            ),
+            retainedPublicGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "pg-b", name = "Public Group B")
+            ),
+        )
+
+        assertEquals(listOf("in-a", "in-b"), filtered.incomingTrackers.map { it.id })
+        assertEquals(listOf("ig-b"), filtered.incomingGroups.map { it.id })
+        assertEquals(listOf("pt-b"), filtered.publicTrackers.map { it.id })
+        assertEquals(listOf("pg-a", "pg-b"), filtered.publicGroups.map { it.id })
+    }
+
+    @Test
+    fun deriveSharedFilteredSections_retainedRowsDoNotDuplicateExistingRows() {
+        val filtered = deriveSharedFilteredSections(
+            sharedItems = emptyList(),
+            discoverOnMyMapTrackers = emptyList(),
+            discoverOnMyMapGroups = emptyList(),
+            incomingTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "in-a", name = "Incoming A")
+            ),
+            incomingGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "ig-a", name = "Incoming Group A")
+            ),
+            publicTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "pt-a", name = "Public Tracker A")
+            ),
+            publicGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "pg-a", name = "Public Group A")
+            ),
+            discoverOnMapQuery = "",
+            discoverIncomingQuery = "",
+            publicQuery = "",
+            retainedIncomingTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "in-a", name = "Incoming A (retained)")
+            ),
+            retainedIncomingGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "ig-a", name = "Incoming Group A (retained)")
+            ),
+            retainedPublicTrackers = listOf(
+                com.geovault.tracker.AvailableToAddItem(id = "pt-a", name = "Public Tracker A (retained)")
+            ),
+            retainedPublicGroups = listOf(
+                com.geovault.tracker.AvailableToAddGroup(id = "pg-a", name = "Public Group A (retained)")
+            ),
+        )
+
+        assertEquals(listOf("in-a"), filtered.incomingTrackers.map { it.id })
+        assertEquals(listOf("ig-a"), filtered.incomingGroups.map { it.id })
+        assertEquals(listOf("pt-a"), filtered.publicTrackers.map { it.id })
+        assertEquals(listOf("pg-a"), filtered.publicGroups.map { it.id })
+    }
 }
