@@ -1,12 +1,14 @@
 package com.geovault.tracker.db
 
 import android.location.Location
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "queued_locations")
 data class QueuedLocation(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "tracker_id") val trackerId: String? = null,
     val time: Long,
     val latitude: Double,
     val longitude: Double,
@@ -33,9 +35,14 @@ data class QueuedLocation(
     companion object {
         private const val EXTRAS_KEY_SATELLITES = "satellites"
 
-        fun fromLocation(loc: Location, totalDistanceMeters: Float? = null): QueuedLocation {
+        fun fromLocation(
+            loc: Location,
+            totalDistanceMeters: Float? = null,
+            trackerId: String? = null,
+        ): QueuedLocation {
             val sat = loc.extras?.getInt(EXTRAS_KEY_SATELLITES, 0)?.takeIf { it > 0 } ?: 0
             return QueuedLocation(
+                trackerId = trackerId,
                 time = loc.time,
                 latitude = loc.latitude,
                 longitude = loc.longitude,

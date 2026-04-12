@@ -1,5 +1,6 @@
 package com.geovault.tracker
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -49,7 +50,15 @@ class SettingsActivity : ComponentActivity() {
                     onRefreshHiddenTrackerItems = viewModel::refreshHiddenTrackerItems,
                     onUnhideTrackerItem = viewModel::unhideTrackerItem,
                     onUnhideAllTrackerItems = viewModel::unhideAllTrackerItems,
-                    onOpenAllTrackersOnMap = {},
+                    onOpenAllTrackersOnMap = {
+                        startActivity(
+                            Intent(this@SettingsActivity, MainActivity::class.java).apply {
+                                flags =
+                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                putExtra(MainActivity.EXTRA_OPEN_ALL_TRACKERS_ON_MAP, true)
+                            },
+                        )
+                    },
                 )
             }
         }

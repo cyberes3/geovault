@@ -6,7 +6,6 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
-import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.RepositoryResult
@@ -204,6 +203,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private val appContext = application.applicationContext
+    private val streamingReconciler = LiveTrackStreamingReconciler(appContext)
     private val dao = AppDatabase.getDatabase(application).locationDao()
     private val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
@@ -217,7 +217,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private val pointEventChannel = Channel<TrackPointEvent>(Channel.UNLIMITED)
     val fitTrailEvents = fitTrailSignal.receiveAsFlow()
     private var lastStreamTargetsSeed: String? = null
-    private var lastStreamingServiceSeed: String? = null
     private var lastBackgroundAtElapsedMs: Long = 0L
     private var mapReady: Boolean = false
     private var pendingResumeEvaluation: Boolean = false
@@ -280,9 +279,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 lastObservedTrackingRunning = snap.isRunning
                 requestRuntimeTrailReload()
                 refreshStreamTargets()
-                if (runtimeResyncDecision.restartDisplayedStreaming && mapSurfaceVisible) {
-                    lastStreamingServiceSeed = null
-                    applyStreamingServicePolicy(_uiState.value)
+                if (runtimeResyncDecision.restartDisplayedStreaming) {
+                    streamingReconciler.invalidateDedupe()
+                    reconcileStreaming(_uiState.value)
                 }
             }
         }
@@ -396,8 +395,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             uiState.collectLatest { state ->
-                if (!mapSurfaceVisible) return@collectLatest
-                applyStreamingServicePolicy(state)
+                reconcileStreaming(state)
             }
         }
         refreshStreamTargets()
@@ -500,8 +498,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun restoreSelectedTrackerMapContext() {
         val state = _uiState.value
         val selectedId = state.runtime.selectedTrackerId.trim()
-        MapStreamingServiceHelper.stopStreaming(appContext)
-        lastStreamingServiceSeed = null
+        streamingReconciler.stopForegroundStreaming()
         val nextState = state.copy(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = selectedId,
@@ -734,8 +731,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
         evaluateResumeAfterBackground(allowZeroGap = true)
         viewModelScope.launch {
-            lastStreamingServiceSeed = null
-            applyStreamingServicePolicy(_uiState.value)
+            streamingReconciler.invalidateDedupe()
+            reconcileStreaming(_uiState.value)
         }
     }
 
@@ -743,7 +740,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         mapSurfaceVisible = false
         mapReady = false
         lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
-        lastStreamingServiceSeed = null
+        streamingReconciler.invalidateDedupe()
         viewModelScope.launch {
             sessionRequestDeduper.clear()
         }
@@ -802,10 +799,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             applyReopenDecision(outcome.decision)
             refreshStreamTargets()
-            if (mapSurfaceVisible) {
-                lastStreamingServiceSeed = null
-                applyStreamingServicePolicy(_uiState.value)
-            }
+            streamingReconciler.invalidateDedupe()
+            reconcileStreaming(_uiState.value)
             lastBackgroundAtElapsedMs = 0L
             pendingResumeEvaluation = false
         }
@@ -819,14 +814,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 pendingReopenSingleTrackerLoadId = null
                 val ids = decision.trackerIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
                 _uiState.value = _uiState.value.copy(streamTargetIds = ids)
-                if (ids.isNotEmpty()) {
-                    MapStreamingServiceHelper.startStreaming(
-                        context = appContext,
-                        trackerIds = ids
-                    )
-                } else {
-                    MapStreamingServiceHelper.stopStreaming(appContext)
-                }
+                streamingReconciler.invalidateDedupe()
+                reconcileStreaming(_uiState.value)
             }
             TrackerMapResumeDecision.ClearSingleTrackerState -> {
                 pendingReopenSingleTrackerLoadId = null
@@ -837,7 +826,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     streamTargetIds = emptySet()
                 )
                 _uiState.value = _uiState.value.withClearedMapSelectionCard()
-                MapStreamingServiceHelper.stopStreaming(appContext)
+                streamingReconciler.stopForegroundStreaming()
             }
             is TrackerMapResumeDecision.LoadSingleTrackerRuntime,
             is TrackerMapResumeDecision.LoadSingleTrackerBootstrap -> {
@@ -863,13 +852,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 if (pendingReopenSingleTrackerLoadId == trackerId) {
                     pendingReopenSingleTrackerLoadId = null
                 }
-                lastStreamingServiceSeed = null
-                applyStreamingServicePolicy(_uiState.value)
+                streamingReconciler.invalidateDedupe()
+                reconcileStreaming(_uiState.value)
             }
             TrackerMapResumeDecision.RestartDisplayedTrackerStreaming -> {
                 pendingReopenSingleTrackerLoadId = null
-                lastStreamingServiceSeed = null
-                applyStreamingServicePolicy(_uiState.value)
+                streamingReconciler.invalidateDedupe()
+                reconcileStreaming(_uiState.value)
             }
         }
     }
@@ -1441,36 +1430,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun applyStreamingServicePolicy(state: TrackerMapUiState) {
-        val streamIdsSignature = state.streamTargetIds.toList().sorted().joinToString(separator = ",")
-        val effectiveDisplayedId = effectiveDisplayedTrackerId(state)
-        val effectiveDisplayedName = effectiveDisplayedTrackerName(state)
-        val seed =
-            "${state.mode}|${state.runtime.isRunning}|$streamIdsSignature|$effectiveDisplayedId|${state.runtime.selectedTrackerId}|$effectiveDisplayedName"
-        if (seed == lastStreamingServiceSeed) return
-        lastStreamingServiceSeed = seed
-        val command = TrackerMapStreamingCoordinator.resolve(
-            TrackerMapStreamingDecisionInput(
-                mode = state.mode,
-                streamTargetIds = state.streamTargetIds,
-                displayedTrackerId = effectiveDisplayedId,
-                displayedTrackerName = effectiveDisplayedName,
-                selectedTrackerId = state.runtime.selectedTrackerId
-            )
+    private fun reconcileStreaming(state: TrackerMapUiState) {
+        streamingReconciler.reconcile(
+            state,
+            effectiveDisplayedTrackerId(state),
+            effectiveDisplayedTrackerName(state),
         )
-        when (command) {
-            is TrackerMapStreamingCommand.Start -> {
-                MapStreamingServiceHelper.startStreaming(
-                    context = appContext,
-                    trackerIds = command.trackerIds,
-                    trackerName = command.trackerName
-                )
-            }
-            TrackerMapStreamingCommand.Stop -> {
-                MapStreamingServiceHelper.stopStreaming(appContext)
-            }
-            TrackerMapStreamingCommand.NoOp -> Unit
-        }
     }
 
     private fun effectiveDisplayedTrackerId(state: TrackerMapUiState): String {

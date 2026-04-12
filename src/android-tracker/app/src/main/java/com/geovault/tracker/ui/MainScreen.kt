@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
 import com.geovault.tracker.presentation.HiddenTrackerItem
 import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.MainScreenState
+import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.SettingsState
 import com.geovault.tracker.presentation.SharedSubTab
 import com.geovault.tracker.presentation.SharedViewModel
@@ -77,6 +79,7 @@ fun MainScreen(
 ) {
     val trackerMainMap = rememberGeoVaultMainMap(TrackerApplication.TRACKER_MAIN_MAP_KEY)
     val mapViewModel: TrackerMapViewModel = viewModel()
+    val pendingOpenAllTrackersOnMap by mainScreenViewModel.pendingOpenAllTrackersOnMap.collectAsState()
     val trackersGroupsViewModel: TrackersGroupsViewModel = viewModel()
     val sharedViewModel: SharedViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
@@ -148,6 +151,22 @@ fun MainScreen(
             }
             selectedTab = TrackerTab.MAP.name
         }
+    }
+    val navigateToAllTrackersOnMap: () -> Unit = {
+        if (!isHandlingTabBack &&
+            selectedTab.isNotBlank() &&
+            selectedTab != TrackerTab.MAP.name
+        ) {
+            tabBackStack = (tabBackStack + selectedTab).takeLast(16)
+        }
+        pendingMapReturnContext = null
+        mapViewModel.setMode(TrackerMapDisplayMode.ALL_QUEUE)
+        selectedTab = TrackerTab.MAP.name
+    }
+    LaunchedEffect(pendingOpenAllTrackersOnMap) {
+        if (!pendingOpenAllTrackersOnMap) return@LaunchedEffect
+        mainScreenViewModel.consumePendingOpenAllTrackersOnMap()
+        navigateToAllTrackersOnMap()
     }
     GeoVaultRegisterBackHandler(
         enabled = true,
@@ -387,17 +406,7 @@ fun MainScreen(
                         onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
                         onUnhideTrackerItem = onSettingsUnhideTrackerItem,
                         onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
-                        onOpenAllTrackersOnMap = {
-                            if (!isHandlingTabBack &&
-                                selectedTab.isNotBlank() &&
-                                selectedTab != TrackerTab.MAP.name
-                            ) {
-                                tabBackStack = (tabBackStack + selectedTab).takeLast(16)
-                            }
-                            pendingMapReturnContext = null
-                            mapViewModel.setMode(com.geovault.tracker.presentation.TrackerMapDisplayMode.ALL_QUEUE)
-                            selectedTab = TrackerTab.MAP.name
-                        },
+                        onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
                     )
                     }
                 }

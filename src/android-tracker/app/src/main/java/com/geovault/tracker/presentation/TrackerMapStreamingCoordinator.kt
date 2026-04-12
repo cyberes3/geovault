@@ -6,6 +6,8 @@ data class TrackerMapStreamingDecisionInput(
     val displayedTrackerId: String,
     val displayedTrackerName: String,
     val selectedTrackerId: String,
+    /** When true and [selectedTrackerId] is non-blank, multi-context streaming excludes the selected id (local GPS). */
+    val trackingRunning: Boolean = false,
 )
 
 sealed class TrackerMapStreamingCommand {
@@ -39,10 +41,14 @@ object TrackerMapStreamingCoordinator {
     }
 
     private fun resolveMultiContext(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
-        val ids = input.streamTargetIds
+        val normalizedSelected = input.selectedTrackerId.trim()
+        var ids = input.streamTargetIds
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .toSet()
+            .toMutableSet()
+        if (input.trackingRunning && normalizedSelected.isNotEmpty()) {
+            ids.remove(normalizedSelected)
+        }
         if (ids.isEmpty()) return TrackerMapStreamingCommand.Stop
         val trackerName = if (ids.size == 1) {
             input.displayedTrackerName.trim().ifBlank { null }

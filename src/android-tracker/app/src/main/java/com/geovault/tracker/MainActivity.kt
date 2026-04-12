@@ -26,6 +26,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OAUTH_ERROR = "oauth_error"
+        const val EXTRA_OPEN_ALL_TRACKERS_ON_MAP =
+            "com.geovault.tracker.EXTRA_OPEN_ALL_TRACKERS_ON_MAP"
         const val ACTION_DUMP_RECOVERY_TELEMETRY = "com.geovault.tracker.ACTION_DUMP_RECOVERY_TELEMETRY"
     }
 
@@ -53,6 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntentAction(intent)
+        consumeOpenAllTrackersMapIntentIfPresent(intent)
         GeoVaultSystemBars.applyAppChrome(activity = this)
         syncRuntimeSelectedTracker()
         viewModel.initialize()
@@ -120,6 +123,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntentAction(intent)
+        consumeOpenAllTrackersMapIntentIfPresent(intent)
         intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
             viewModel.showExternalError(error)
             intent.removeExtra(EXTRA_OAUTH_ERROR)
@@ -164,6 +168,12 @@ class MainActivity : ComponentActivity() {
             )
             viewModel.showExternalError(getString(R.string.location_permission_revoked))
         }
+    }
+
+    private fun consumeOpenAllTrackersMapIntentIfPresent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_ALL_TRACKERS_ON_MAP, false) != true) return
+        intent.removeExtra(EXTRA_OPEN_ALL_TRACKERS_ON_MAP)
+        viewModel.requestOpenAllTrackersOnMapFromIntent()
     }
 
     private fun handleIntentAction(intent: Intent?) {

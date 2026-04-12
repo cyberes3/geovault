@@ -50,6 +50,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = true,
             propsJson = """{"manual_send":true}""",
             totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
             nowMs = System.currentTimeMillis(),
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = false
@@ -57,6 +58,7 @@ class LocationIngestCoordinatorTest {
 
         assertTrue(result.accepted)
         assertEquals(1, dao.getCount())
+        assertEquals("tracker-1", dao.getAll().single().trackerId)
         assertEquals(1, result.queuedPointsVisible)
         assertEquals("""{"manual_send":true}""", result.lastTrackedPropsJson)
     }
@@ -91,6 +93,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = true,
             propsJson = """{"manual_send":true}""",
             totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
             nowMs = nowMs,
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = false
@@ -105,6 +108,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = false,
             propsJson = null,
             totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
             nowMs = nowMs,
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = false
@@ -137,6 +141,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = false,
             propsJson = null,
             totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
             nowMs = System.currentTimeMillis(),
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = false
@@ -170,6 +175,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = false,
             propsJson = null,
             totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
             nowMs = nowMs,
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = false
@@ -202,6 +208,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = false,
             propsJson = null,
             totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
             nowMs = nowMs,
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = true
@@ -241,6 +248,7 @@ class LocationIngestCoordinatorTest {
             bypassFilters = true,
             propsJson = null,
             totalDistanceMeters = startingDistance,
+            queuedTrackerId = "tracker-1",
             nowMs = nowMs,
             nowElapsedRealtimeNanos = 0L,
             isMockLocation = false

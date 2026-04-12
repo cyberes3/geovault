@@ -743,6 +743,7 @@ class TrackingService : Service() {
             bypassFilters = bypassFilters,
             propsJson = pointPropsJson,
             totalDistanceMeters = runtimeSnapshot.sessionTotalDistanceMeters,
+            queuedTrackerId = selectedTrackerId,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             isMockLocation = LocationCompat.isMock(location)

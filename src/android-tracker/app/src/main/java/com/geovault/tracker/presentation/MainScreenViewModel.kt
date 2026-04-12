@@ -78,6 +78,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
+
+    private val _pendingOpenAllTrackersOnMap = MutableStateFlow(false)
+    val pendingOpenAllTrackersOnMap: StateFlow<Boolean> = _pendingOpenAllTrackersOnMap.asStateFlow()
+
+    fun requestOpenAllTrackersOnMapFromIntent() {
+        _pendingOpenAllTrackersOnMap.value = true
+    }
+
+    fun consumePendingOpenAllTrackersOnMap() {
+        _pendingOpenAllTrackersOnMap.value = false
+    }
     private var startupTrackingAutomationHandled = false
     private var startupTrackingAutomationJob: Job? = null
     private var startupRefreshHandled = false
@@ -88,6 +99,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun initialize() {
         refreshAuthState()
         launchPostAuthStartupFlowsIfNeeded()
+        if (!_state.value.isAuthenticated) {
+            launchVersionCheckIfNeeded()
+        }
     }
 
     fun requestStartTracking() {
@@ -146,6 +160,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             _state.update { it.copy(isConnecting = false, oauthUrl = null) }
         }
         launchPostAuthStartupFlowsIfNeeded()
+        if (!_state.value.isAuthenticated) {
+            launchVersionCheckIfNeeded()
+        }
         refreshServerAccessibilityOnResume()
     }
 
@@ -274,9 +291,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             val created = async {
                 try {
-                    refreshUserStatus()
+                    val userStatusReachable = refreshUserStatusEndpointReachable()
                     val outcome = sessionBootstrap.runLaunchBootstrap()
-                    _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
+                    _state.update { it.copy(isServerAccessible = userStatusReachable) }
                     outcome
                 } finally {
                     launchBootstrapMutex.withLock {
@@ -298,18 +315,22 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (serverAccessibilityRefreshJob?.isActive == true) return
         serverAccessibilityRefreshJob = viewModelScope.launch {
             startupRefreshJob?.join()
-            val outcome = sessionBootstrap.runResumeBootstrap()
-            _state.update { it.copy(isServerAccessible = outcome.isServerAccessible) }
+            val userStatusReachable = refreshUserStatusEndpointReachable()
+            sessionBootstrap.runResumeBootstrap()
+            _state.update { it.copy(isServerAccessible = userStatusReachable) }
         }
     }
 
-    private suspend fun refreshUserStatus() {
-        suspendCancellableCoroutine<Unit> { continuation ->
-            GeovaultAuthManager.fetchUserStatus(app) {
-                continuation.resume(Unit)
+    /**
+     * Mirrors SPA health against `/api/user/status/` via [GeovaultAuthManager.fetchUserStatusWithResult].
+     * HTTP 401 still counts as reachable (host answered); [refreshAuthState] may flip signed-in state afterward.
+     */
+    private suspend fun refreshUserStatusEndpointReachable(): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            GeovaultAuthManager.fetchUserStatusWithResult(app) { result ->
+                continuation.resume(result.isUserStatusEndpointReachable)
             }
         }
-    }
 
     private suspend fun tryStartTrackingOnLaunch() {
         if (!ensureStartupTrackingPreflight()) return

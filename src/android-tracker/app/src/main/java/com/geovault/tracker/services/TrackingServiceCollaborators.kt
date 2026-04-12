@@ -113,6 +113,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         bypassFilters: Boolean,
         propsJson: String?,
         totalDistanceMeters: Float,
+        queuedTrackerId: String,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
         isMockLocation: Boolean = LocationCompat.isMock(location)
@@ -178,7 +179,11 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             previousAcceptedLocation = previousAcceptedLocation,
             acceptedLocation = location
         )
-        val queued = QueuedLocation.fromLocation(location, totalDistanceMeters = nextSessionDistanceMeters)
+        val queued = QueuedLocation.fromLocation(
+            location,
+            totalDistanceMeters = nextSessionDistanceMeters,
+            trackerId = queuedTrackerId.takeIf { it.isNotBlank() },
+        )
         val insertedId = locationDao.insert(queued)
         if (bypassFilters) {
             val canonical = trackPointEventForPolicy(

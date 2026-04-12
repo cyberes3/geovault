@@ -18,6 +18,20 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+/**
+ * Outcome of calling `/api/user/status/` (or the early bail-outs before a network request).
+ */
+data class FetchUserStatusResult(
+    val email: String?,
+    /**
+     * True when the GeoVault API host responded in a way that distinguishes "server up" from
+     * total outage: HTTP 200 with a non-empty body that decodes as JSON, or HTTP 401 (host
+     * answered and rejected the session). Network failures, timeouts, empty bodies, and JSON
+     * decode failures are false.
+     */
+    val isUserStatusEndpointReachable: Boolean,
+)
+
 object GeovaultAuthManager {
     private const val TAG = "GeovaultAuthManager"
 
@@ -356,14 +370,20 @@ object GeovaultAuthManager {
     }
 
     fun fetchUserStatus(context: Context, callback: ((String?) -> Unit)? = null) {
+        fetchUserStatusWithResult(context) { result ->
+            callback?.invoke(result.email)
+        }
+    }
+
+    fun fetchUserStatusWithResult(context: Context, callback: (FetchUserStatusResult) -> Unit) {
         if (!isLoggedIn(context)) {
             setCachedUserEmail(context, null)
-            callback?.invoke(null)
+            callback(FetchUserStatusResult(email = null, isUserStatusEndpointReachable = false))
             return
         }
         val serverUrl = getServerUrl(context)
         if (serverUrl.isBlank()) {
-            callback?.invoke(null)
+            callback(FetchUserStatusResult(email = null, isUserStatusEndpointReachable = false))
             return
         }
 
@@ -374,7 +394,7 @@ object GeovaultAuthManager {
         val request = Request.Builder().url("${serverUrl.trimEnd('/')}/api/user/status/").build()
         client.newCall(request).enqueue(object : okhttp3.Callback {
             override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                callback?.invoke(null)
+                callback(FetchUserStatusResult(email = null, isUserStatusEndpointReachable = false))
             }
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
@@ -387,18 +407,37 @@ object GeovaultAuthManager {
                 response.close()
                 if (statusCode == 200 && body.isNotEmpty()) {
                     val statusPayload = decodeUserStatusPayload(body)
-                    val email = statusPayload?.email?.trim().orEmpty()
-                    if (email.isNotEmpty()) {
-                        setCachedUserEmail(context, email)
-                        callback?.invoke(email)
+                    if (statusPayload != null) {
+                        val email = statusPayload.email?.trim().orEmpty()
+                        if (email.isNotEmpty()) {
+                            setCachedUserEmail(context, email)
+                            callback(
+                                FetchUserStatusResult(
+                                    email = email,
+                                    isUserStatusEndpointReachable = true,
+                                ),
+                            )
+                        } else {
+                            callback(
+                                FetchUserStatusResult(
+                                    email = null,
+                                    isUserStatusEndpointReachable = true,
+                                ),
+                            )
+                        }
                     } else {
-                        callback?.invoke(null)
+                        callback(FetchUserStatusResult(email = null, isUserStatusEndpointReachable = false))
                     }
                 } else if (statusCode == 401) {
                     clearTokens(context)
-                    callback?.invoke(null)
+                    callback(
+                        FetchUserStatusResult(
+                            email = null,
+                            isUserStatusEndpointReachable = true,
+                        ),
+                    )
                 } else {
-                    callback?.invoke(null)
+                    callback(FetchUserStatusResult(email = null, isUserStatusEndpointReachable = false))
                 }
             }
         })

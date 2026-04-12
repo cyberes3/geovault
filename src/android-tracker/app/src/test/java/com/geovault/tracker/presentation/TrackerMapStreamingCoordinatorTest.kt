@@ -62,7 +62,8 @@ class TrackerMapStreamingCoordinatorTest {
                 streamTargetIds = emptySet(),
                 displayedTrackerId = "t1",
                 displayedTrackerName = "Name",
-                selectedTrackerId = "t1"
+                selectedTrackerId = "t1",
+                trackingRunning = false,
             )
         )
 
@@ -77,7 +78,8 @@ class TrackerMapStreamingCoordinatorTest {
                 streamTargetIds = setOf("a", "b"),
                 displayedTrackerId = "a",
                 displayedTrackerName = "A",
-                selectedTrackerId = "z"
+                selectedTrackerId = "z",
+                trackingRunning = false,
             )
         )
 
@@ -85,5 +87,39 @@ class TrackerMapStreamingCoordinatorTest {
         val start = command as TrackerMapStreamingCommand.Start
         assertEquals(setOf("a", "b"), start.trackerIds)
         assertEquals(null, start.trackerName)
+    }
+
+    @Test
+    fun resolve_multiContext_trackingRunning_stripsSelectedFromTargets() {
+        val command = TrackerMapStreamingCoordinator.resolve(
+            TrackerMapStreamingDecisionInput(
+                mode = TrackerMapDisplayMode.ALL_QUEUE,
+                streamTargetIds = setOf("self", "other"),
+                displayedTrackerId = "other",
+                displayedTrackerName = "O",
+                selectedTrackerId = "self",
+                trackingRunning = true,
+            )
+        )
+
+        assertTrue(command is TrackerMapStreamingCommand.Start)
+        val start = command as TrackerMapStreamingCommand.Start
+        assertEquals(setOf("other"), start.trackerIds)
+    }
+
+    @Test
+    fun resolve_multiContext_trackingRunning_allSelected_returnsStop() {
+        val command = TrackerMapStreamingCoordinator.resolve(
+            TrackerMapStreamingDecisionInput(
+                mode = TrackerMapDisplayMode.ALL_QUEUE,
+                streamTargetIds = setOf("only"),
+                displayedTrackerId = "only",
+                displayedTrackerName = "Only",
+                selectedTrackerId = "only",
+                trackingRunning = true,
+            )
+        )
+
+        assertEquals(TrackerMapStreamingCommand.Stop, command)
     }
 }
