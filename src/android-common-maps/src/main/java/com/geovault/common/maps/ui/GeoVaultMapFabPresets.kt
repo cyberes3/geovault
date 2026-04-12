@@ -27,6 +27,12 @@ import com.geovault.common.maps.location.LocationUpdates
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 
+data class GeoVaultGpsRecenterController(
+    val onRecenter: () -> Unit,
+    val fabIcon: GeoVaultMapFabIcon,
+    val isLocking: Boolean,
+)
+
 fun geoVaultLayerToggleFabAction(
     map: GeoVaultBaseMap,
     id: String = "layers",
@@ -83,14 +89,13 @@ fun geoVaultZoomOutFabAction(
 }
 
 @Composable
-fun rememberGeoVaultGpsRecenterFabAction(
+fun rememberGeoVaultGpsRecenterController(
     map: GeoVaultBaseMap,
     userLocation: GeoVaultUserLocationCapability,
-    id: String = "gps_recenter",
-    order: Int = 30,
-    contentDescription: String = "Recenter on my location",
     onLocationResolved: ((LatLng) -> Unit)? = null,
-): GeoVaultMapFabAction {
+    /** When false, only resolves coordinates and does not show the MapLibre user location puck, accuracy ring, or camera move (for hosts that handle the marker and camera themselves). */
+    showUserLocationPuck: Boolean = true,
+): GeoVaultGpsRecenterController {
     val context = LocalContext.current
     var locationEnabled by remember { mutableStateOf(false) }
     var locationLocking by remember { mutableStateOf(false) }
@@ -110,9 +115,11 @@ fun rememberGeoVaultGpsRecenterFabAction(
         activeRecenterRequestId += 1
         val requestId = activeRecenterRequestId
         map.ensureInteractiveGestures()
-        userLocation.setEnabled(true)
-        userLocation.setCameraTracking(false)
-        userLocation.setAccuracyCircleVisible(true)
+        if (showUserLocationPuck) {
+            userLocation.setEnabled(true)
+            userLocation.setCameraTracking(false)
+            userLocation.setAccuracyCircleVisible(true)
+        }
         // Post to next UI tick so loading state is visible before fast callbacks.
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             if (requestId != activeRecenterRequestId) return@post
@@ -121,39 +128,50 @@ fun rememberGeoVaultGpsRecenterFabAction(
                 if (showSpinner) {
                     locationLocking = false
                 }
-                if (latLng == null) return@getCurrentLocation
+                if (latLng == null) {
+                    if (!showUserLocationPuck) {
+                        userLocation.setEnabled(false)
+                        userLocation.setAccuracyCircleVisible(false)
+                    }
+                    return@getCurrentLocation
+                }
                 if (map.phase.value != GeoVaultMapPhase.Ready) return@getCurrentLocation
                 locationEnabled = true
                 onLocationResolved?.invoke(latLng)
-                val syntheticLocation = android.location.Location("geovault-gps-fab").apply {
-                    latitude = latLng.latitude
-                    longitude = latLng.longitude
-                    accuracy = 10f
-                    time = System.currentTimeMillis()
-                }
-                userLocation.renderLocation(syntheticLocation)
-                val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
-                val currentZoom = mapLibreMap.cameraPosition.zoom.coerceAtLeast(1.0)
-                map.animateCameraWithPadding(
-                    CameraUpdateFactory.newLatLngZoom(latLng, currentZoom),
-                    callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
-                        override fun onCancel() {
-                            map.ensureInteractiveGestures()
-                        }
+                if (showUserLocationPuck) {
+                    val syntheticLocation = android.location.Location("geovault-gps-fab").apply {
+                        latitude = latLng.latitude
+                        longitude = latLng.longitude
+                        accuracy = 10f
+                        time = System.currentTimeMillis()
+                    }
+                    userLocation.renderLocation(syntheticLocation)
+                    val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
+                    val currentZoom = mapLibreMap.cameraPosition.zoom.coerceAtLeast(1.0)
+                    map.animateCameraWithPadding(
+                        CameraUpdateFactory.newLatLngZoom(latLng, currentZoom),
+                        callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
+                            override fun onCancel() {
+                                map.ensureInteractiveGestures()
+                            }
 
-                        override fun onFinish() {
-                            map.ensureInteractiveGestures()
-                        }
-                    },
-                )
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                    {
-                        if (requestId == activeRecenterRequestId) {
-                            map.ensureInteractiveGestures()
-                        }
-                    },
-                    350L,
-                )
+                            override fun onFinish() {
+                                map.ensureInteractiveGestures()
+                            }
+                        },
+                    )
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                        {
+                            if (requestId == activeRecenterRequestId) {
+                                map.ensureInteractiveGestures()
+                            }
+                        },
+                        350L,
+                    )
+                } else {
+                    userLocation.setEnabled(false)
+                    userLocation.setAccuracyCircleVisible(false)
+                }
             }
         }
     }
@@ -170,31 +188,56 @@ fun rememberGeoVaultGpsRecenterFabAction(
         }
     }
 
-    val icon = when {
+    val fabIcon = when {
         locationLocking -> GeoVaultMapFabIcon.Spinner(spinnerColor = Color.White)
         locationEnabled -> GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
         else -> GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
     }
 
+    val onRecenter: () -> Unit = {
+        if (!locationLocking) {
+            if (context.hasLocationPermission()) {
+                recenterOnUser(showSpinner = !locationEnabled)
+            } else {
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                )
+            }
+        }
+    }
+
+    return GeoVaultGpsRecenterController(
+        onRecenter = onRecenter,
+        fabIcon = fabIcon,
+        isLocking = locationLocking,
+    )
+}
+
+@Composable
+fun rememberGeoVaultGpsRecenterFabAction(
+    map: GeoVaultBaseMap,
+    userLocation: GeoVaultUserLocationCapability,
+    id: String = "gps_recenter",
+    order: Int = 30,
+    contentDescription: String = "Recenter on my location",
+    onLocationResolved: ((LatLng) -> Unit)? = null,
+    showUserLocationPuck: Boolean = true,
+): GeoVaultMapFabAction {
+    val controller = rememberGeoVaultGpsRecenterController(
+        map = map,
+        userLocation = userLocation,
+        onLocationResolved = onLocationResolved,
+        showUserLocationPuck = showUserLocationPuck,
+    )
     return GeoVaultMapFabAction(
         id = id,
         order = order,
-        icon = icon,
+        icon = controller.fabIcon,
         contentDescription = contentDescription,
-        onTap = {
-            if (!locationLocking) {
-                if (context.hasLocationPermission()) {
-                    recenterOnUser(showSpinner = !locationEnabled)
-                } else {
-                    permissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                        ),
-                    )
-                }
-            }
-        },
+        onTap = controller.onRecenter,
     )
 }
 

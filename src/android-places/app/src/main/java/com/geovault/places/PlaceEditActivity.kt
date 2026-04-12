@@ -20,17 +20,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -65,7 +69,7 @@ import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
-import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
+import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterController
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -73,6 +77,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
+import com.geovault.common.ui.components.TopBarIconAction
 import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -210,13 +215,13 @@ private fun PlaceEditScreen(
         )
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
-    val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
+    val gpsRecenterController = rememberGeoVaultGpsRecenterController(
         map = map,
         userLocation = locationPlugin,
-        order = 2,
         onLocationResolved = { latLng ->
-            state.setFromGpsLocation(latLng.latitude, latLng.longitude)
+            state.setFromDeviceLocation(latLng.latitude, latLng.longitude)
         },
+        showUserLocationPuck = false,
     )
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map, order = 1) }
     var geocodeJob by remember { mutableStateOf<Job?>(null) }
@@ -313,13 +318,28 @@ private fun PlaceEditScreen(
             GeoVaultTopTitleBar(
                 title = state.title,
                 backgroundColor = GeoVaultColorTokens.PrimaryBlue,
-                rightActions = listOf(
-                    GeoVaultTopTitleBarDefaults.closeAction(
-                        onClick = {
-                            if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
-                        },
-                    ),
-                ),
+                rightActions = if (initial != null) {
+                    listOf(
+                        TopBarIconAction(
+                            icon = Icons.Filled.Delete,
+                            contentDescription = state.deleteActionLabel(),
+                            onClick = { state.showDeleteDialog = true },
+                        ),
+                        GeoVaultTopTitleBarDefaults.closeAction(
+                            onClick = {
+                                if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                            },
+                        ),
+                    )
+                } else {
+                    listOf(
+                        GeoVaultTopTitleBarDefaults.closeAction(
+                            onClick = {
+                                if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                            },
+                        ),
+                    )
+                },
             )
         },
     ) { padding ->
@@ -365,16 +385,6 @@ private fun PlaceEditScreen(
                                 onTap = {
                                     dismissInputFocus()
                                     layerFabAction.onTap?.invoke()
-                                },
-                            )
-                            action(
-                                id = gpsFabAction.id,
-                                order = gpsFabAction.order,
-                                icon = gpsFabAction.icon,
-                                contentDescription = gpsFabAction.contentDescription,
-                                onTap = {
-                                    dismissInputFocus()
-                                    gpsFabAction.onTap?.invoke()
                                 },
                             )
                         },
@@ -438,10 +448,14 @@ private fun PlaceEditScreen(
                         .heightIn(max = formMaxHeight),
                     shape = androidx.compose.ui.graphics.RectangleShape,
                     color = GeoVaultColorTokens.Surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
                     elevation = 0.dp,
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        Divider(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = GeoVaultColorTokens.BorderLight,
+                            thickness = 1.dp,
+                        )
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -505,6 +519,43 @@ private fun PlaceEditScreen(
                                 )
                             }
 
+                            GeoVaultSecondaryButton(
+                                text = "Use my location",
+                                onClick = {
+                                    dismissInputFocus()
+                                    gpsRecenterController.onRecenter()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !gpsRecenterController.isLocking,
+                                tooltip = "Use my location",
+                                centeredContent = {
+                                    val locationButtonTint = LocalContentColor.current
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        if (gpsRecenterController.isLocking) {
+                                            GeoVaultLoadingSpinner(
+                                                spinnerSize = 18.dp,
+                                                color = locationButtonTint,
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Filled.MyLocation,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = locationButtonTint,
+                                            )
+                                        }
+                                        Text(
+                                            text = "Use my location",
+                                            color = locationButtonTint,
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                },
+                            )
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -524,15 +575,6 @@ private fun PlaceEditScreen(
                                         if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
                                     },
                                     modifier = Modifier.weight(1f),
-                                )
-                            }
-
-                            if (initial != null) {
-                                GeoVaultSecondaryButton(
-                                    text = state.deleteActionLabel(),
-                                    onClick = { state.showDeleteDialog = true },
-                                    accentColor = GeoVaultColorTokens.Error,
-                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         }

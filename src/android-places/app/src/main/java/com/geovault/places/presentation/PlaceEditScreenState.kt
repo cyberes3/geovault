@@ -72,14 +72,14 @@ class PlaceEditScreenState(
         pendingCameraMotion = CameraMotionRequest.None
     }
 
-    fun setFromGpsLocation(latitude: Double, longitude: Double) {
+    /** Sets coordinates from a device location fix: show the edit marker and pan/zoom the map to it. */
+    fun setFromDeviceLocation(latitude: Double, longitude: Double) {
         selectedLat = latitude
         selectedLon = longitude
         selectedAddress = null
         coordinatesInput = String.format("%.6f, %.6f", latitude, longitude)
         coordinatesError = null
-        // Avoid drawing the edit-point marker on top of the location puck.
-        showSelectedPointMarker = false
+        showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.FocusSelection
     }
 
