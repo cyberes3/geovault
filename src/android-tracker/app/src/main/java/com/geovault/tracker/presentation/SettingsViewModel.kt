@@ -87,6 +87,9 @@ class SettingsViewModel(
     fun onHostResumed() {
         enforceMotionSensorSupport()
         refreshAuthState()
+        if (!_state.value.isLoggedIn) {
+            _state.update { it.copy(isConnecting = false, oauthUrl = null) }
+        }
         refreshHiddenTrackerItems()
     }
 

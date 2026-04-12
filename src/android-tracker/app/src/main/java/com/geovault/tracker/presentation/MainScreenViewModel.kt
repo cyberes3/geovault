@@ -139,6 +139,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun onHostResumed() {
         refreshAuthState()
+        if (!_state.value.isAuthenticated) {
+            _state.update { it.copy(isConnecting = false, oauthUrl = null) }
+        }
         launchPostAuthStartupFlowsIfNeeded()
         refreshServerAccessibilityOnResume()
     }

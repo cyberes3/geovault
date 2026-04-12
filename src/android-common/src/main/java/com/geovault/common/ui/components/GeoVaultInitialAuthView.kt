@@ -32,7 +32,8 @@ data class GeoVaultAuthExtraAction(
 /**
  * Signed-out server URL entry and connect action.
  *
- * While [isConnecting] is true, the primary button shows [connectingButtonText] and is non-interactive. Callers should
+ * While [isConnecting] is true, the primary button shows [connectingButtonText] with disabled styling but remains
+ * tappable so users can restart OAuth flow if needed. Callers should
  * not also show a separate “connecting to server” snackbar or toast for the same flow; reserve overlays for errors or
  * unrelated notices.
  */
@@ -92,7 +93,8 @@ fun GeoVaultInitialAuthView(
             GeoVaultPrimaryButton(
                 text = if (connectState.isEffectivelyConnecting) connectingButtonText else connectButtonText,
                 onClick = { connectState.onClick() },
-                enabled = connectEnabled && !connectState.isEffectivelyConnecting,
+                enabled = connectEnabled,
+                visuallyDisabled = connectState.isEffectivelyConnecting,
                 tooltip = connectButtonTooltip,
                 modifier = Modifier.fillMaxWidth()
             )

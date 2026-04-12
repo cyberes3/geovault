@@ -32,6 +32,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun onHostResumed() {
         refreshAuthState()
+        if (!_state.value.isLoggedIn) {
+            _state.update { it.copy(isConnecting = false, oauthUrl = null) }
+        }
     }
 
     fun onServerUrlChanged(url: String) {

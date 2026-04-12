@@ -27,7 +27,9 @@ fun rememberConnectingButtonState(
     LaunchedEffect(isConnecting) {
         if (isConnecting) {
             localConnecting = true
-        } else if (!awaitingExternalStart) {
+            awaitingExternalStart = false
+        } else {
+            awaitingExternalStart = false
             localConnecting = false
         }
     }

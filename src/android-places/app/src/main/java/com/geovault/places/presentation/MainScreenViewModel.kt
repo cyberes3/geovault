@@ -94,6 +94,7 @@ class MainScreenViewModel(
                         it.copy(
                             serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
                             oauthUrl = result.oauthUrl,
+                            isConnecting = false,
                             snackbar = null,
                         )
                     }
@@ -282,7 +283,7 @@ class MainScreenViewModel(
             it.copy(
                 serverUrl = serverUrl,
                 isAuthenticated = loggedIn,
-                isConnecting = if (loggedIn) false else it.isConnecting,
+                isConnecting = false,
                 oauthUrl = if (loggedIn) null else it.oauthUrl,
                 lastSyncMillis = cache.getLastSyncTime(),
                 lastSyncLabel = formatLastSyncLabel(cache.getLastSyncTime()),

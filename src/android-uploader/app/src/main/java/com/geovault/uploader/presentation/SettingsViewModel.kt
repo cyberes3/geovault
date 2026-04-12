@@ -54,6 +54,9 @@ class SettingsViewModel(
 
     fun onHostResumed() {
         refreshAuthState()
+        if (!_state.value.isLoggedIn) {
+            _state.value = _state.value.copy(isConnecting = false, oauthUrl = null)
+        }
     }
 
     private fun refreshAuthState() {
@@ -93,7 +96,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
                 is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                    _state.value = _state.value.copy(oauthUrl = result.oauthUrl, infoMessage = null)
+                    _state.value = _state.value.copy(
+                        oauthUrl = result.oauthUrl,
+                        isConnecting = false,
+                        infoMessage = null
+                    )
                 }
 
                 is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {

@@ -101,6 +101,9 @@ class MainScreenViewModel(
         val wasAuthenticated = _state.value.isAuthenticated
         refreshAuthState()
         val isAuthenticated = _state.value.isAuthenticated
+        if (!isAuthenticated) {
+            _state.update { it.copy(isConnecting = false) }
+        }
         if (!wasAuthenticated && isAuthenticated) {
             _state.update { it.copy(isConnecting = false, oauthUrl = null, importantSnackbar = null) }
             if (_state.value.isValidationMode) {
@@ -125,7 +128,13 @@ class MainScreenViewModel(
         viewModelScope.launch {
             when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
                 is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                    _state.update { it.copy(oauthUrl = result.oauthUrl, importantSnackbar = null) }
+                    _state.update {
+                        it.copy(
+                            oauthUrl = result.oauthUrl,
+                            isConnecting = false,
+                            importantSnackbar = null
+                        )
+                    }
                 }
 
                 is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {

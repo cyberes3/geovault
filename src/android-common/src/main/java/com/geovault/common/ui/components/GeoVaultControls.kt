@@ -178,17 +178,28 @@ fun GeoVaultPrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    visuallyDisabled: Boolean = false,
     tooltip: String? = null,
     fitToContent: Boolean = false,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
+    val resolvedBackgroundColor = if (visuallyDisabled) {
+        GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f)
+    } else {
+        GeoVaultColorTokens.PrimaryBlue
+    }
+    val resolvedContentColor = if (visuallyDisabled) {
+        Color.White.copy(alpha = 0.75f)
+    } else {
+        Color.White
+    }
     GeoVaultBaseButton(
         text = text,
         onClick = onClick,
         style = GeoVaultButtonStyle(
             colors = ButtonDefaults.buttonColors(
-                backgroundColor = GeoVaultColorTokens.PrimaryBlue,
-                contentColor = Color.White,
+                backgroundColor = resolvedBackgroundColor,
+                contentColor = resolvedContentColor,
                 disabledBackgroundColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f),
                 disabledContentColor = Color.White.copy(alpha = 0.75f)
             ),

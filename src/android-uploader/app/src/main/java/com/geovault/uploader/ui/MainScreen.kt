@@ -59,7 +59,10 @@ fun MainScreen(
             GeoVaultTopTitleBar(
                 title = "GeoVault Uploader",
                 actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(onOpenSettings = onOpenSettings)
+                    GeoVaultTopBarSettingsMenuAction(
+                        onOpenSettings = onOpenSettings,
+                        isAuthenticated = true
+                    )
                 }
             )
         }
