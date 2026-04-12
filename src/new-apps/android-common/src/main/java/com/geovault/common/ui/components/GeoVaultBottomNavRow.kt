@@ -221,12 +221,18 @@ fun GeoVaultBottomNavRow(
             val interactionSource = remember(destination.id) { MutableInteractionSource() }
             var anchorBounds by remember { mutableStateOf<Rect?>(null) }
             val tooltipText = destination.tooltip?.takeIf { it.isNotBlank() }
+            val suppressNextClickAfterTooltip = if (tooltipText != null) {
+                remember(destination.id) { mutableStateOf(false) }
+            } else {
+                null
+            }
             if (tooltipText != null) {
                 GeoVaultInstallLongPressTooltip(
                     tooltipText = tooltipText,
                     enabled = destination.enabled,
                     interactionSource = interactionSource,
                     anchorBounds = anchorBounds,
+                    suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
                 )
             }
             Column(
@@ -238,7 +244,11 @@ fun GeoVaultBottomNavRow(
                         indication = null,
                         enabled = destination.enabled,
                     ) {
-                        onDestinationSelected(destination)
+                        if (suppressNextClickAfterTooltip?.value == true) {
+                            suppressNextClickAfterTooltip.value = false
+                        } else {
+                            onDestinationSelected(destination)
+                        }
                     }
                     .padding(horizontal = 6.dp, vertical = 2.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

@@ -138,15 +138,23 @@ private fun GeoVaultBaseButtonWithTooltip(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     var anchorBounds by remember { mutableStateOf<Rect?>(null) }
+    val suppressNextClickAfterTooltip = remember { mutableStateOf(false) }
     GeoVaultInstallLongPressTooltip(
         tooltipText = tooltipText,
         enabled = enabled,
         interactionSource = interactionSource,
         anchorBounds = anchorBounds,
+        suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
     )
     val buttonModifier = modifier.trackGeoVaultTooltipBounds { anchorBounds = it }
     Button(
-        onClick = onClick,
+        onClick = {
+            if (suppressNextClickAfterTooltip.value) {
+                suppressNextClickAfterTooltip.value = false
+            } else {
+                onClick()
+            }
+        },
         enabled = enabled,
         modifier = buttonModifier,
         interactionSource = interactionSource,

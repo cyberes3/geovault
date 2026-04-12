@@ -55,11 +55,13 @@ fun MapTopLeftTrackerChip(
     val chipShape: Shape = RoundedCornerShape(22.dp)
     val cardInteractionSource = remember { MutableInteractionSource() }
     var cardBounds by remember { mutableStateOf<Rect?>(null) }
+    val suppressCardClickAfterTooltip = remember { mutableStateOf(false) }
     GeoVaultInstallLongPressTooltip(
         tooltipText = cardTooltip,
         enabled = true,
         interactionSource = cardInteractionSource,
         anchorBounds = cardBounds,
+        suppressNextClickAfterTooltip = suppressCardClickAfterTooltip,
     )
     Card(
         modifier = modifier
@@ -70,7 +72,13 @@ fun MapTopLeftTrackerChip(
             .clickable(
                 interactionSource = cardInteractionSource,
                 indication = null,
-                onClick = onCardClick,
+                onClick = {
+                    if (suppressCardClickAfterTooltip.value) {
+                        suppressCardClickAfterTooltip.value = false
+                    } else {
+                        onCardClick()
+                    }
+                },
             ),
         shape = chipShape,
         elevation = 0.dp,

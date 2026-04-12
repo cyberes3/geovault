@@ -12,6 +12,7 @@ import androidx.compose.material.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,10 @@ fun Modifier.trackGeoVaultTooltipBounds(onBounds: (Rect?) -> Unit): Modifier =
  *
  * Call from the same composable that owns [interactionSource] and apply [Modifier.trackGeoVaultTooltipBounds]
  * on the interactive control so bounds stay in sync.
+ *
+ * When [suppressNextClickAfterTooltip] is non-null, a successful tooltip long-press sets it to `true` so the
+ * caller can ignore the following [androidx.compose.foundation.clickable] / button `onClick` from the same
+ * gesture (otherwise release would act like a tap).
  */
 @Composable
 fun GeoVaultInstallLongPressTooltip(
@@ -53,6 +58,7 @@ fun GeoVaultInstallLongPressTooltip(
     enabled: Boolean,
     interactionSource: MutableInteractionSource,
     anchorBounds: Rect?,
+    suppressNextClickAfterTooltip: MutableState<Boolean>? = null,
 ) {
     val isPressed by interactionSource.collectIsPressedAsState()
     val rootView = LocalView.current
@@ -99,6 +105,7 @@ fun GeoVaultInstallLongPressTooltip(
 
     LaunchedEffect(isPressed, tooltipText, enabled, anchorBounds, anchorProxyView) {
         if (!enabled || !isPressed) return@LaunchedEffect
+        suppressNextClickAfterTooltip?.value = false
         delay(android.view.ViewConfiguration.getLongPressTimeout().toLong())
         if (isPressed) {
             updateAnchorProxyLayout()
@@ -106,6 +113,7 @@ fun GeoVaultInstallLongPressTooltip(
             val touchX = anchorProxyView.width * 0.5f
             val touchY = anchorProxyView.height * 0.5f
             anchorProxyView.performLongClick(touchX, touchY)
+            suppressNextClickAfterTooltip?.value = true
         }
     }
 
@@ -125,16 +133,28 @@ fun GeoVaultIconButton(
     val interactionSource = remember { MutableInteractionSource() }
     var anchorBounds by remember { mutableStateOf<Rect?>(null) }
     val tooltipText = tooltip?.takeIf { it.isNotBlank() }
+    val suppressNextClickAfterTooltip = if (tooltipText != null) {
+        remember { mutableStateOf(false) }
+    } else {
+        null
+    }
     if (tooltipText != null) {
         GeoVaultInstallLongPressTooltip(
             tooltipText = tooltipText,
             enabled = enabled,
             interactionSource = interactionSource,
             anchorBounds = anchorBounds,
+            suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
         )
     }
     IconButton(
-        onClick = onClick,
+        onClick = {
+            if (suppressNextClickAfterTooltip?.value == true) {
+                suppressNextClickAfterTooltip.value = false
+            } else {
+                onClick()
+            }
+        },
         modifier = modifier.trackGeoVaultTooltipBounds { anchorBounds = it },
         enabled = enabled,
         interactionSource = interactionSource,
@@ -157,12 +177,18 @@ fun GeoVaultClickableWithTooltip(
     val interactionSource = remember { MutableInteractionSource() }
     var anchorBounds by remember { mutableStateOf<Rect?>(null) }
     val tooltipText = tooltip?.takeIf { it.isNotBlank() }
+    val suppressNextClickAfterTooltip = if (tooltipText != null) {
+        remember { mutableStateOf(false) }
+    } else {
+        null
+    }
     if (tooltipText != null) {
         GeoVaultInstallLongPressTooltip(
             tooltipText = tooltipText,
             enabled = enabled,
             interactionSource = interactionSource,
             anchorBounds = anchorBounds,
+            suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
         )
     }
     Box(
@@ -172,7 +198,13 @@ fun GeoVaultClickableWithTooltip(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
-                onClick = onClick,
+                onClick = {
+                    if (suppressNextClickAfterTooltip?.value == true) {
+                        suppressNextClickAfterTooltip.value = false
+                    } else {
+                        onClick()
+                    }
+                },
             ),
         contentAlignment = contentAlignment,
     ) {
@@ -192,16 +224,28 @@ fun GeoVaultFloatingActionButtonWithTooltip(
     val interactionSource = remember { MutableInteractionSource() }
     var anchorBounds by remember { mutableStateOf<Rect?>(null) }
     val tooltipText = tooltip?.takeIf { it.isNotBlank() }
+    val suppressNextClickAfterTooltip = if (tooltipText != null) {
+        remember { mutableStateOf(false) }
+    } else {
+        null
+    }
     if (tooltipText != null) {
         GeoVaultInstallLongPressTooltip(
             tooltipText = tooltipText,
             enabled = true,
             interactionSource = interactionSource,
             anchorBounds = anchorBounds,
+            suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
         )
     }
     FloatingActionButton(
-        onClick = onClick,
+        onClick = {
+            if (suppressNextClickAfterTooltip?.value == true) {
+                suppressNextClickAfterTooltip.value = false
+            } else {
+                onClick()
+            }
+        },
         modifier = modifier.trackGeoVaultTooltipBounds { anchorBounds = it },
         interactionSource = interactionSource,
         shape = CircleShape,

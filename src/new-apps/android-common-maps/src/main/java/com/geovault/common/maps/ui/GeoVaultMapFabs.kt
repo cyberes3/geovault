@@ -108,17 +108,27 @@ fun GeoVaultMapFabColumn(
             val interactionSource = remember(action.id) { MutableInteractionSource() }
             var anchorBounds by remember { mutableStateOf<Rect?>(null) }
             val tooltipText = action.tooltip?.takeIf { it.isNotBlank() }
+            val suppressNextClickAfterTooltip = if (tooltipText != null) {
+                remember(action.id) { mutableStateOf(false) }
+            } else {
+                null
+            }
             if (tooltipText != null) {
                 GeoVaultInstallLongPressTooltip(
                     tooltipText = tooltipText,
                     enabled = action.enabled,
                     interactionSource = interactionSource,
                     anchorBounds = anchorBounds,
+                    suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
                 )
             }
             FloatingActionButton(
                 onClick = {
                     if (!action.enabled) return@FloatingActionButton
+                    if (suppressNextClickAfterTooltip?.value == true) {
+                        suppressNextClickAfterTooltip.value = false
+                        return@FloatingActionButton
+                    }
                     action.onTap?.invoke()
                     onActionTap?.invoke(action)
                 },

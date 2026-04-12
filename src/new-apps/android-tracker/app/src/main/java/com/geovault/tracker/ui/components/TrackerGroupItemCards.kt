@@ -202,11 +202,13 @@ fun GroupItemCard(
     val groupTitleInteractionSource = remember { MutableInteractionSource() }
     var groupTitleBounds by remember { mutableStateOf<Rect?>(null) }
     val groupCardMenuTooltip = stringResource(R.string.tooltip_group_card_menu)
+    val suppressTitleClickAfterTooltip = remember { mutableStateOf(false) }
     GeoVaultInstallLongPressTooltip(
         tooltipText = groupCardMenuTooltip,
         enabled = enabled && model.canOpenActions,
         interactionSource = groupTitleInteractionSource,
         anchorBounds = groupTitleBounds,
+        suppressNextClickAfterTooltip = suppressTitleClickAfterTooltip,
     )
     val trackCountText = stringResource(R.string.trackers_meta_tracks_count, model.trackerCount)
     Card(
@@ -242,7 +244,13 @@ fun GroupItemCard(
                         interactionSource = groupTitleInteractionSource,
                         indication = null,
                         enabled = enabled && model.canOpenActions,
-                        onClick = onOpenActions,
+                        onClick = {
+                            if (suppressTitleClickAfterTooltip.value) {
+                                suppressTitleClickAfterTooltip.value = false
+                            } else {
+                                onOpenActions()
+                            }
+                        },
                     ),
             ) {
                 Text(
