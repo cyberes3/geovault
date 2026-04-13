@@ -845,10 +845,10 @@ private fun MapTrackerSelectionPanel(
                             onClick = onFocus,
                             tooltip = stringResource(R.string.tooltip_map_selection_focus),
                             icon = {
-                                Icon(
-                                    imageVector = Icons.Default.Home,
+                                androidx.compose.foundation.Image(
+                                    painter = painterResource(id = R.drawable.ic_focus_point_round),
                                     contentDescription = stringResource(R.string.map_action_focus_tracker),
-                                    tint = GeoVaultColorTokens.PrimaryBlue,
+                                    colorFilter = ColorFilter.tint(GeoVaultColorTokens.PrimaryBlue),
                                     modifier = Modifier.size(22.dp),
                                 )
                             },

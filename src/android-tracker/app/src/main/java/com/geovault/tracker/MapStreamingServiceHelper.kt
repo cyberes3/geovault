@@ -2,14 +2,20 @@ package com.geovault.tracker
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
 
 internal object MapStreamingServiceHelper {
+    /**
+     * Prefer a normal service start; if Android rejects background start, escalate to
+     * startForegroundService so streaming can still bootstrap.
+     */
     fun startStreaming(context: Context, trackerIds: Set<String>, trackerName: String? = null): Set<String>? {
         val cleanedIds = trackerIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
         if (cleanedIds.isEmpty()) return null
-        val intent = Intent(context, LiveTrackStreamingService::class.java).apply {
+        val app = context.applicationContext
+        val intent = Intent(app, LiveTrackStreamingService::class.java).apply {
             action = LiveTrackStreamingService.ACTION_START
             putStringArrayListExtra(LiveTrackStreamingService.EXTRA_TRACKER_IDS, ArrayList(cleanedIds))
             if (cleanedIds.size == 1) {
@@ -17,13 +23,24 @@ internal object MapStreamingServiceHelper {
             }
             putExtra(LiveTrackStreamingService.EXTRA_TRACKER_NAME, trackerName)
         }
-        ContextCompat.startForegroundService(context, intent)
+        try {
+            app.startService(intent)
+        } catch (e: IllegalStateException) {
+            Log.w("MapStreamingServiceHelper", "startService rejected; escalating to FGS start", e)
+            runCatching { ContextCompat.startForegroundService(app, intent) }
+                .exceptionOrNull()
+                ?.let { inner ->
+                    Log.e("MapStreamingServiceHelper", "FGS start also failed", inner)
+                    return null
+                }
+        }
         return cleanedIds
     }
 
     fun stopStreaming(context: Context) {
-        context.startService(
-            Intent(context, LiveTrackStreamingService::class.java).apply {
+        val app = context.applicationContext
+        app.startService(
+            Intent(app, LiveTrackStreamingService::class.java).apply {
                 action = LiveTrackStreamingService.ACTION_STOP
             }
         )

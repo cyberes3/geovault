@@ -49,12 +49,6 @@
         </activity>
 
         <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Tracker"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
             android:name=".OAuthCallbackActivity"
             android:exported="true"
             android:theme="@style/Theme.Tracker"

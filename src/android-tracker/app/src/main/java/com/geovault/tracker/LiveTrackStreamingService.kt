@@ -56,9 +56,6 @@ class LiveTrackStreamingService : Service() {
         private const val CHANNEL_ID = "live_track_streaming"
         private const val WS_READ_TIMEOUT_SEC = 90L
         private const val WS_PING_INTERVAL_SEC = 30L
-        private const val PREFS_NAME = "streaming_runtime"
-        private const val PREFS_TRACKER_IDS = "tracker_ids_csv"
-        private const val PREFS_TRACKER_NAME = "tracker_name"
 
         @Volatile
         @JvmStatic
@@ -78,31 +75,19 @@ class LiveTrackStreamingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
-            val restored = restoreLastStreamingSession()
-            if (restored == null) {
-                applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            val restoredIntent = Intent(this, LiveTrackStreamingService::class.java).apply {
-                action = ACTION_START
-                putStringArrayListExtra(EXTRA_TRACKER_IDS, ArrayList(restored.first))
-                putExtra(EXTRA_TRACKER_NAME, restored.second)
-            }
-            return onStartCommand(restoredIntent, flags, startId)
+            Log.w(TAG, "Null intent received; stopping streaming service")
+            stopSelf()
+            return START_NOT_STICKY
         }
         when (intent.action) {
             ACTION_START -> {
                 val trackerIds = extractTrackerIds(intent)
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
                 ensureStreamingChannel()
-                startForeground(
-                    NOTIFICATION_ID,
+                startForegroundForStreaming(
                     createNotification(trackerName, trackerIds.size),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 )
                 if (trackerIds.isEmpty()) {
-                    persistStreamingSession(emptySet(), null)
                     applyLifecycleEvent(
                         event = StreamingLifecycleEvent.PermanentFailure,
                         activeTrackerIds = emptySet(),
@@ -128,7 +113,6 @@ class LiveTrackStreamingService : Service() {
                 disconnectWebSocket()
                 currentTrackerIds = trackerIds
                 currentTrackerName = trackerName
-                persistStreamingSession(currentTrackerIds, currentTrackerName)
                 val sessionId = connectionSessionId.incrementAndGet()
                 connectJob?.cancel()
                 connectJob = serviceScope.launch { connect(sessionId) }
@@ -137,7 +121,6 @@ class LiveTrackStreamingService : Service() {
             ACTION_STOP -> {
                 disconnectWebSocket()
                 connectionSessionId.incrementAndGet()
-                persistStreamingSession(emptySet(), null)
                 applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -147,15 +130,17 @@ class LiveTrackStreamingService : Service() {
             ACTION_RESHOW_FOREGROUND -> {
                 if (isRunning && currentTrackerIds.isNotEmpty()) {
                     ensureStreamingChannel()
-                    startForeground(
-                        NOTIFICATION_ID,
+                    startForegroundForStreaming(
                         createNotification(currentTrackerName, currentTrackerIds.size),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                     )
                 }
             }
 
-            else -> stopSelf()
+            else -> {
+                Log.w(TAG, "Unexpected onStartCommand action=${intent.action}; stopping service")
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
         return START_STICKY
     }
@@ -163,7 +148,6 @@ class LiveTrackStreamingService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         disconnectWebSocket()
         connectionSessionId.incrementAndGet()
-        persistStreamingSession(emptySet(), null)
         applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -332,24 +316,6 @@ class LiveTrackStreamingService : Service() {
         return intent.getStringExtra(EXTRA_TRACKER_ID)?.trim()?.takeIf { it.isNotEmpty() }?.let { setOf(it) } ?: emptySet()
     }
 
-    private fun persistStreamingSession(trackerIds: Set<String>, trackerName: String?) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-            .putString(PREFS_TRACKER_IDS, trackerIds.joinToString(","))
-            .putString(PREFS_TRACKER_NAME, trackerName)
-            .apply()
-    }
-
-    private fun restoreLastStreamingSession(): Pair<Set<String>, String?>? {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val ids = prefs.getString(PREFS_TRACKER_IDS, "").orEmpty()
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
-        if (ids.isEmpty()) return null
-        return ids to prefs.getString(PREFS_TRACKER_NAME, null)
-    }
-
     private fun emitStreamingError(message: String) {
         sendBroadcast(
             Intent(ACTION_STREAMING_ERROR).apply {
@@ -363,6 +329,43 @@ class LiveTrackStreamingService : Service() {
         if (lifecycle.lifecycleState != TrackingLifecycleState.FAILED || lifecycle.failureReason != message) {
             emitStreamingError(message)
         }
+    }
+
+    /**
+     * After `startForegroundService`, the system requires `startForeground` within a short
+     * deadline. Use a minimal notification if the primary notification cannot be posted.
+     */
+    private fun startForegroundForStreaming(notification: Notification) {
+        try {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed; using minimal FGS notification", e)
+            runCatching {
+                startForeground(
+                    NOTIFICATION_ID,
+                    createMinimalStreamingNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                )
+            }.exceptionOrNull()?.let { inner ->
+                Log.e(TAG, "Minimal startForeground also failed", inner)
+                throw inner
+            }
+        }
+    }
+
+    private fun createMinimalStreamingNotification(): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.live_track_streaming_title))
+            .setContentText(getString(R.string.live_track_streaming_text_anon))
+            .setSmallIcon(android.R.drawable.ic_popup_sync)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .build()
     }
 
     private fun ensureStreamingChannel() {
