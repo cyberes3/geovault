@@ -1,6 +1,7 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -319,6 +320,7 @@ fun GeoVaultInput(
     enabled: Boolean = true,
     readOnly: Boolean = false,
     singleLine: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
@@ -341,6 +343,7 @@ fun GeoVaultInput(
         enabled = enabled,
         readOnly = readOnly,
         singleLine = singleLine,
+        keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         trailingIcon = trailingIcon,
         colors = TextFieldDefaults.outlinedTextFieldColors(
