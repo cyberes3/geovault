@@ -3,6 +3,7 @@ package com.geovault.common.maps.core
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
@@ -70,17 +71,37 @@ internal object MapStyleCache {
                 }
                 val request = Request.Builder().url(styleUrl).get().build()
                 val response = client.newCall(request).execute()
-                var json = response.body.string()
-                if (!response.isSuccessful || json.isNullOrBlank()) {
+                val json = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    Log.w(
+                        TAG,
+                        "Map style fetch failed (OSM fallback may be used): code=${response.code} " +
+                            "message=${response.message} isOurServer=$isOurServer url=$styleUrl " +
+                            "bodyPreview=${json.take(BODY_PREVIEW_MAX)}",
+                    )
                     deliver(null)
                     return@execute
                 }
-                if (isOurServer && !serverBaseForRewrite.isNullOrBlank()) {
-                    json = json.replace("\"/api/tiles/", "\"$serverBaseForRewrite/api/tiles/")
+                if (json.isBlank()) {
+                    Log.w(
+                        TAG,
+                        "Map style fetch returned empty body (OSM fallback may be used): url=$styleUrl isOurServer=$isOurServer",
+                    )
+                    deliver(null)
+                    return@execute
                 }
-                cache[styleUrl] = json
-                deliver(json)
-            } catch (_: Exception) {
+                var rewritten = json
+                if (isOurServer && !serverBaseForRewrite.isNullOrBlank()) {
+                    rewritten = rewritten.replace("\"/api/tiles/", "\"$serverBaseForRewrite/api/tiles/")
+                }
+                cache[styleUrl] = rewritten
+                deliver(rewritten)
+            } catch (e: Exception) {
+                Log.e(
+                    TAG,
+                    "Map style fetch threw (OSM fallback may be used): isOurServer=$isOurServer url=$styleUrl",
+                    e,
+                )
                 deliver(null)
             }
         }
@@ -104,4 +125,7 @@ internal object MapStyleCache {
             }
         }
     }
+
+    private const val TAG = "MapStyleCache"
+    private const val BODY_PREVIEW_MAX = 400
 }

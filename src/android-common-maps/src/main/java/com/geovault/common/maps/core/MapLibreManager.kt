@@ -175,6 +175,10 @@ class MapLibreManager(
                 }
             } else {
                 pendingSourceKey = null
+                Log.w(
+                    TAG,
+                    "Vector map style JSON missing or invalid; loading OSM raster fallback. styleUrl=$styleUrl (see MapStyleCache for HTTP details)",
+                )
                 onStyleLoadFailed?.invoke("Map style unavailable for $styleUrl")
                 Toast.makeText(context, "Map style unavailable, falling back to basic map.", Toast.LENGTH_SHORT).show()
                 loadOsmFallback(map, restoreCamera)
