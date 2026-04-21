@@ -68,15 +68,20 @@ case "$SUBCOMMAND" in
     echo "Replication initialised. Run ./update.sh update periodically (e.g. via cron)." >&2
     ;;
   update)
+    # osm2pgsql-replication invokes post-processing as: SCRIPT sequence timestamp (no shell, no URL in argv).
     POST_SCRIPT=""
     if [[ -f "$SCRIPT_DIR/post-analyze.sh" ]]; then
-      POST_SCRIPT="bash -c '\"$SCRIPT_DIR/post-analyze.sh\" \"$DB\" \"\$@\"'"
+      POST_SCRIPT="$SCRIPT_DIR/post-analyze.sh"
     fi
     EXTRA_OSM2PGSQL=()
     [[ -n "$CACHE_MB" ]] && EXTRA_OSM2PGSQL+=(-C "$CACHE_MB")
     [[ -n "$PROCESSES" ]] && EXTRA_OSM2PGSQL+=(--number-processes "$PROCESSES")
     if [[ -n "$POST_SCRIPT" ]]; then
-      run_replication update --post-processing "$POST_SCRIPT" -- "${EXTRA_OSM2PGSQL[@]}" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
+      # Subshell so AREAS_SERVER_REPLICATION_DATABASE_URL is not left exported in this script.
+      (
+        export AREAS_SERVER_REPLICATION_DATABASE_URL="$DB"
+        run_replication update --post-processing "$POST_SCRIPT" -- "${EXTRA_OSM2PGSQL[@]}" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
+      )
     else
       run_replication update -- "${EXTRA_OSM2PGSQL[@]}" -O flex -S "$FLEX_CONFIG" --schema "$SCHEMA" -x
     fi
