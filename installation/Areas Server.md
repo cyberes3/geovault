@@ -184,7 +184,7 @@ To run the update:
 ./scripts/update.sh "postgresql://..." update
 ```
 
-It will output something like this:
+Each run applies replication diffs until the database sequence matches the planet daily server (so a large backlog is cleared in one go, which can take hours; once current, the next run finishes quickly). It will output something like this:
 
 ```
 2026-02-22 10:02:14 [INFO]: Initialised updates for service 'https://planet.openstreetmap.org/replication/day'.

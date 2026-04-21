@@ -1,9 +1,11 @@
 [Unit]
-Description=GeoVault Areas Server incremental update
+Description=GeoVault Areas Server OSM replication update
 After=network.target postgresql.service
 
 [Service]
 Type=oneshot
+# First run after a long outage can take many hours; routine runs are short once caught up.
+TimeoutStartSec=0
 User=geovault
 SyslogIdentifier=areas-server-update
 WorkingDirectory=/srv/geovault/geovault/src/areas-server

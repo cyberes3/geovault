@@ -1,5 +1,5 @@
 [Unit]
-Description=Run GeoVault areas server incremental update daily
+Description=Run GeoVault areas server OSM replication update daily
 Requires=areas-server-update.service
 
 [Timer]
