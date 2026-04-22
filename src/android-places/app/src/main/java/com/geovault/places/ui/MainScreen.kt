@@ -118,7 +118,6 @@ fun MainScreen(
                     actionsContent = {
                         GeoVaultTopBarSettingsMenuAction(
                             onOpenSettings = onOpenSettings,
-                            isAuthenticated = state.isAuthenticated
                         )
                     }
                 )

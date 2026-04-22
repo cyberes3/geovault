@@ -12,6 +12,8 @@ We like titles like `Example Title` in this case instead of `Example title`.
 
 External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.
 
+I really don't care about Mermaid diagrams. You don't need to create them in plans.
+
 ### Backend and Frontend Instructions
 
 The backend venv is at src/backend/venv

@@ -322,6 +322,7 @@ fun GeoVaultInput(
     singleLine: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    leadingIcon: (@Composable (() -> Unit))? = null,
     trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
     val fieldBackground =
@@ -345,6 +346,7 @@ fun GeoVaultInput(
         singleLine = singleLine,
         keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
+        leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
         colors = TextFieldDefaults.outlinedTextFieldColors(
             backgroundColor = fieldBackground,

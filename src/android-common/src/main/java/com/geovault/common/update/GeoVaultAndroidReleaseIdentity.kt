@@ -22,4 +22,9 @@ object GeoVaultAndroidReleaseIdentity {
         const val WORKER_APP_NAME: String = "GeoVault Live Tracker"
         const val RATE_LIMIT_KEY: String = "tracker"
     }
+
+    object SurveyDataViewer {
+        const val WORKER_APP_NAME: String = "GeoVault Survey Data Viewer"
+        const val RATE_LIMIT_KEY: String = "survey"
+    }
 }

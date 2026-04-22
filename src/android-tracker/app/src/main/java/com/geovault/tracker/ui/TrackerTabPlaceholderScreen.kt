@@ -56,7 +56,6 @@ internal fun TrackerTabPlaceholderScreen(
                     actionsContent = {
                         GeoVaultTopBarSettingsMenuAction(
                             onOpenSettings = onOpenSettings,
-                            isAuthenticated = isAuthenticated,
                             enabled = settingsMenuEnabled,
                             overflowTooltip = settingsOverflowTooltip,
                         )

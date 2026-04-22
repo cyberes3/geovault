@@ -50,6 +50,7 @@ import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -186,7 +187,7 @@ fun PlacesMapScreen(
                 actionsContent = {
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,
-                        isAuthenticated = true,
+                        visibility = GeoVaultTopBarMenuVisibility.Always,
                     )
                 },
             )

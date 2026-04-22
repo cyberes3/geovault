@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthExtras
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
@@ -25,7 +26,7 @@ import com.geovault.tracker.ui.MainScreen
 class MainActivity : ComponentActivity() {
 
     companion object {
-        const val EXTRA_OAUTH_ERROR = "oauth_error"
+        const val EXTRA_OAUTH_ERROR = GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY
         const val EXTRA_OPEN_ALL_TRACKERS_ON_MAP =
             "com.geovault.tracker.EXTRA_OPEN_ALL_TRACKERS_ON_MAP"
         const val ACTION_DUMP_RECOVERY_TELEMETRY = "com.geovault.tracker.ACTION_DUMP_RECOVERY_TELEMETRY"

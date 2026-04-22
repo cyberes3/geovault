@@ -13,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthExtras
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.uploader.data.FileMetadataRepository
@@ -90,7 +91,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        const val EXTRA_OAUTH_ERROR = "oauth_error"
+        const val EXTRA_OAUTH_ERROR = GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY
     }
 
     private fun routeIncomingIntentToUploadTarget(intent: Intent?): Boolean {

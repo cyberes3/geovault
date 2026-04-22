@@ -93,22 +93,46 @@ object GeoVaultTopTitleBarDefaults {
     }
 }
 
+/**
+ * Controls when [GeoVaultTopBarSettingsMenuAction] renders its overflow menu.
+ *
+ * The composable previously accepted an `isAuthenticated: Boolean?` parameter that overloaded two
+ * responsibilities: declaring the visibility policy and overriding the auth source-of-truth. This
+ * enum makes the visibility contract explicit so call sites no longer have to lie about auth state
+ * to keep settings reachable on pre-auth screens.
+ */
+enum class GeoVaultTopBarMenuVisibility {
+    /**
+     * Menu is shown only when [GeovaultAuthManager] reports the user as signed in. This is the
+     * default and matches the post-login top-bar convention used by most surfaces.
+     */
+    AuthenticatedOnly,
+
+    /**
+     * Menu is always shown, regardless of authentication state. Use for surfaces that must expose
+     * settings before sign-in — for example, changing the server URL or diagnostics while the user
+     * is unauthenticated.
+     */
+    Always,
+}
+
 @Composable
 fun RowScope.GeoVaultTopBarSettingsMenuAction(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     extraEntries: List<TopBarMenuEntry> = emptyList(),
     settingsLabel: String = "Settings",
-    isAuthenticated: Boolean? = null,
+    visibility: GeoVaultTopBarMenuVisibility = GeoVaultTopBarMenuVisibility.AuthenticatedOnly,
     iconTint: Color = Color.White,
     iconContentDescription: String = "More options",
     overflowTooltip: String? = null,
-    enabled: Boolean = true
+    enabled: Boolean = true,
 ) {
-    val context = LocalContext.current
-    val resolvedIsAuthenticated = isAuthenticated ?: GeovaultAuthManager.isLoggedIn(context)
-    if (!resolvedIsAuthenticated) {
-        return
+    if (visibility == GeoVaultTopBarMenuVisibility.AuthenticatedOnly) {
+        val context = LocalContext.current
+        if (!GeovaultAuthManager.isLoggedIn(context)) {
+            return
+        }
     }
     var expanded by remember { mutableStateOf(false) }
     val entries = remember(onOpenSettings, extraEntries, settingsLabel) {

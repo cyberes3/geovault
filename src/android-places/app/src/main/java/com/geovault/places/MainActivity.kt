@@ -1,6 +1,5 @@
 package com.geovault.places
 
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -15,8 +14,10 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
-import androidx.core.content.IntentCompat
 import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.auth.GeoVaultAuthExtras
+import com.geovault.common.intent.GeoVaultExternalIntents
+import com.geovault.common.intent.getSerializableExtraCompat
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,7 +46,7 @@ import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
     companion object {
-        const val EXTRA_OAUTH_ERROR = "oauth_error"
+        const val EXTRA_OAUTH_ERROR = GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY
         const val EXTRA_SHOW_EXPORT_SAVED_MESSAGE = "show_export_saved_message"
     }
 
@@ -55,10 +56,10 @@ class MainActivity : ComponentActivity() {
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val data = it.data
-        val offlineFeature = data?.serializableExtraCompat<Feature>("offline_feature")
-        val updatedFeature = data?.serializableExtraCompat<Feature>("updated_feature")
-        val deletedFeature = data?.serializableExtraCompat<Feature>("deleted_feature")
-        val revertOffline = data?.serializableExtraCompat<OfflineFeature>("revert_offline_feature")
+        val offlineFeature = data?.getSerializableExtraCompat<Feature>("offline_feature")
+        val updatedFeature = data?.getSerializableExtraCompat<Feature>("updated_feature")
+        val deletedFeature = data?.getSerializableExtraCompat<Feature>("deleted_feature")
+        val revertOffline = data?.getSerializableExtraCompat<OfflineFeature>("revert_offline_feature")
         when {
             deletedFeature != null -> {
                 viewModel.applyDeletedFeature(deletedFeature)
@@ -67,7 +68,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.revertOfflineChanges(revertOffline)
             }
             offlineFeature != null -> {
-                val original = data.serializableExtraCompat<Feature>("original_feature")
+                val original = data.getSerializableExtraCompat<Feature>("original_feature")
                 val offlineEditIndex = data.getIntExtra("offline_edit_index", -1)
                 viewModel.saveOffline(offlineFeature, original, offlineEditIndex)
             }
@@ -286,17 +287,8 @@ class MainActivity : ComponentActivity() {
         viewModel.onOauthUrlConsumed()
     }
 
-    private inline fun <reified T : java.io.Serializable> Intent.serializableExtraCompat(key: String): T? {
-        return IntentCompat.getSerializableExtra(this, key, T::class.java)
-    }
-
-    private fun launchMapIntent(uri: Uri): Boolean {
-        return try {
-            startActivity(Intent(Intent.ACTION_VIEW, uri))
-            true
-        } catch (_: ActivityNotFoundException) {
+    private fun launchMapIntent(uri: Uri): Boolean =
+        GeoVaultExternalIntents.launchMap(activity = this, uri = uri) {
             viewModel.showExternalError(PlacesOfflineBehaviorPolicy.MAP_APP_UNAVAILABLE_MESSAGE)
-            false
         }
-    }
 }

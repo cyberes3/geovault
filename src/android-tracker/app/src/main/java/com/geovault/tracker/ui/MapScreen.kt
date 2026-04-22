@@ -128,7 +128,6 @@ fun MapScreen(
                 actionsContent = {
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,
-                        isAuthenticated = isAuthenticated,
                         overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                     )
                 },
