@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,7 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -75,17 +73,13 @@ fun GroupActionsScreen(
     val actionBarBorderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
     val memberCardBorderColor = GeoVaultColorTokens.PrimaryBlue
 
-    Scaffold(
+    GeoVaultSubViewScaffold(
         modifier = Modifier.fillMaxSize(),
         backgroundColor = MaterialTheme.colors.surface,
-        topBar = {
-            GeoVaultCompactDismissTitleBar(
-                title = group.name,
-                onClose = onDismiss,
-                closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-                closeTooltip = stringResource(R.string.tooltip_group_actions_close),
-            )
-        },
+        title = group.name,
+        onClose = onDismiss,
+        closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+        closeTooltip = stringResource(R.string.tooltip_group_actions_close),
         bottomBar = {
             Row(
                 modifier = Modifier
@@ -98,7 +92,6 @@ fun GroupActionsScreen(
                             strokeWidth = 1.dp.toPx(),
                         )
                     }
-                    .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,

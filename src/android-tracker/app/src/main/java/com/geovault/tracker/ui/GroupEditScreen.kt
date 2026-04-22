@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,7 +27,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -55,7 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.geovault.common.NaturalSort
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormSection
 import com.geovault.common.ui.components.GeoVaultInput
@@ -248,15 +246,11 @@ private fun GroupEditOwnerContent(
         }
     val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
 
-    Scaffold(
-        topBar = {
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.trackers_dialog_edit_group_details_title),
-                onClose = dismissWithGuard,
-                closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-                closeTooltip = stringResource(R.string.tooltip_group_detail_close),
-            )
-        },
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.trackers_dialog_edit_group_details_title),
+        onClose = dismissWithGuard,
+        closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+        closeTooltip = stringResource(R.string.tooltip_group_detail_close),
         bottomBar = {
             Box(
                 modifier = Modifier
@@ -269,7 +263,6 @@ private fun GroupEditOwnerContent(
                             strokeWidth = 1.dp.toPx(),
                         )
                     }
-                    .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 GeoVaultPrimaryButton(
@@ -535,15 +528,11 @@ private fun GroupEditNonOwnerContent(
         },
     )
 
-    Scaffold(
-        topBar = {
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.groups_edit_shared_title),
-                onClose = onDismiss,
-                closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-                closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
-            )
-        },
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.groups_edit_shared_title),
+        onClose = onDismiss,
+        closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+        closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
     ) { innerPadding ->
         Column(
             modifier = Modifier

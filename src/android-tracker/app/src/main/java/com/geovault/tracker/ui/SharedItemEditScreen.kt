@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,10 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
@@ -47,17 +45,12 @@ fun SharedTrackerEditScreen(
             true
         },
     )
-    Scaffold(
+    GeoVaultSubViewScaffold(
         backgroundColor = MaterialTheme.colors.surface,
-        topBar = {
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.shared_tracker_edit_title),
-                onClose = onDismiss,
-                closeContentDescription = stringResource(R.string.close),
-                closeTooltip = stringResource(R.string.tooltip_edit_shared_tracker_close),
-                modifier = Modifier.statusBarsPadding(),
-            )
-        },
+        title = stringResource(R.string.shared_tracker_edit_title),
+        onClose = onDismiss,
+        closeContentDescription = stringResource(R.string.close),
+        closeTooltip = stringResource(R.string.tooltip_edit_shared_tracker_close),
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -114,17 +107,12 @@ fun SharedGroupEditScreen(
             true
         },
     )
-    Scaffold(
+    GeoVaultSubViewScaffold(
         backgroundColor = MaterialTheme.colors.surface,
-        topBar = {
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.groups_edit_shared_title),
-                onClose = onDismiss,
-                closeContentDescription = stringResource(R.string.close),
-                closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
-                modifier = Modifier.statusBarsPadding(),
-            )
-        },
+        title = stringResource(R.string.groups_edit_shared_title),
+        onClose = onDismiss,
+        closeContentDescription = stringResource(R.string.close),
+        closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
     ) { innerPadding ->
         Column(
             modifier = Modifier

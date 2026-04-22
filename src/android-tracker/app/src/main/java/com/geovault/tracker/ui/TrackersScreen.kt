@@ -263,7 +263,6 @@ fun TrackersScreen(
         }
     }
 
-    val suppressTabTopBar = isAuthenticated && (groupMembershipDialog != null)
     val isTrackerOrGroupEditOpen =
         activeTrackerEditLoadingDialog != null ||
             activeTrackerEditDialog != null ||
@@ -303,7 +302,6 @@ fun TrackersScreen(
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
-        suppressTabTopBar = suppressTabTopBar,
         settingsMenuEnabled = !isTrackerOrGroupEditOpen,
         authenticatedFloatingAction = {
             if (activeTrackerEditDialog == null && activeTrackerEditLoadingDialog == null && groupActionsDialog == null && activeGroupEditDialog == null && groupMembershipDialog == null) {

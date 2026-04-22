@@ -34,9 +34,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.ClipboardCopyHelper
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
@@ -70,25 +70,19 @@ fun TrackerParamsScreen(
         },
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colors.background),
-    ) {
-        GeoVaultCompactDismissTitleBar(
-            title = stringResource(R.string.latest_params_title),
-            onClose = onDismiss,
-            closeContentDescription = stringResource(R.string.close),
-            closeTooltip = stringResource(R.string.tooltip_params_close),
-        )
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.latest_params_title),
+        onClose = onDismiss,
+        closeContentDescription = stringResource(R.string.close),
+        closeTooltip = stringResource(R.string.tooltip_params_close),
+    ) { innerPadding ->
         GeoVaultPullRefreshLoadingContainer(
             refreshing = state.isRefreshing,
             showBlockingLoader = state.showBlockingLoader,
             onRefresh = { viewModel.loadTrackerData(refresh = true) },
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .fillMaxHeight(),
+                .fillMaxSize()
+                .padding(innerPadding),
             loadingText = stringResource(R.string.loading_params),
             pullRefreshEnabled = true,
         ) {

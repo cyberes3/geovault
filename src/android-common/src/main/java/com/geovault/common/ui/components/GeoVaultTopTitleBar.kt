@@ -287,8 +287,13 @@ fun GeoVaultTopTitleBar(
     }
 }
 
+/**
+ * Composition primitive for the compact sub-view title bar. Internal — call sites render
+ * this only via [GeoVaultSubViewScaffold] or [GeoVaultTopTabSurface]'s dismiss params so the
+ * chrome has exactly one source of truth.
+ */
 @Composable
-fun GeoVaultCompactDismissTitleBar(
+internal fun GeoVaultCompactDismissTitleBar(
     title: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
@@ -58,6 +56,7 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
@@ -147,12 +146,6 @@ fun SharedScreen(
         }
     }
 
-    val suppressTabTopBar = isAuthenticated &&
-        (
-            editSharedGroup != null ||
-                editSharedTracker != null ||
-                state.viewMode != SharedViewMode.SHARED_LIST
-            )
     TrackerTabPlaceholderScreen(
         title = stringResource(R.string.shared_screen_title),
         placeholderText = stringResource(R.string.shared_placeholder_signed_out),
@@ -167,7 +160,6 @@ fun SharedScreen(
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
-        suppressTabTopBar = suppressTabTopBar,
         authenticatedMainContent = {
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
@@ -711,21 +703,10 @@ private fun DiscoverOverlaySurface(
             loadingTextForTab = { loadingTrackersText },
             onRefreshTab = { onRefresh() },
         ),
-        titleForTab = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
-            ) {
-                GeoVaultCompactDismissTitleBar(
-                    title = stringResource(R.string.shared_discover_overlay_title),
-                    onClose = onClose,
-                    closeContentDescription = stringResource(R.string.close),
-                    closeTooltip = stringResource(R.string.tooltip_discover_close),
-                )
-                Divider()
-            }
-        },
+        dismissTitle = stringResource(R.string.shared_discover_overlay_title),
+        onDismiss = onClose,
+        dismissContentDescription = stringResource(R.string.close),
+        dismissTooltip = stringResource(R.string.tooltip_discover_close),
         headerForTab = { tab ->
             val activeQuery = if (tab == DiscoverOverlayMode.ON_MY_MAP) {
                 state.discoverOnMapQuery
@@ -859,31 +840,26 @@ private fun PublicOverlaySurface(
     val isRequiredDataMissing = state.availableToAdd == null || !state.hasCompletedInitialLoad
     val hasInlineMutation = pendingAddActionKeys.isNotEmpty() || pendingRemoveActionKeys.isNotEmpty()
     val overlayLoading = (state.isLoading || isRequiredDataMissing) && !hasInlineMutation
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding(),
-        ) {
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.shared_public_overlay_title),
-                onClose = onClose,
-                closeContentDescription = stringResource(R.string.close),
-                closeTooltip = stringResource(R.string.tooltip_public_close),
-            )
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.shared_public_overlay_title),
+        onClose = onClose,
+        closeContentDescription = stringResource(R.string.close),
+        closeTooltip = stringResource(R.string.tooltip_public_close),
+        headerExtras = {
             Divider()
-        }
-        GeoVaultInput(
-            value = state.publicQuery,
-            onValueChange = onQueryChanged,
-            label = stringResource(R.string.shared_search_label),
-            placeholder = stringResource(R.string.shared_search_hint),
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            enabled = !overlayLoading,
-        )
+            GeoVaultInput(
+                value = state.publicQuery,
+                onValueChange = onQueryChanged,
+                label = stringResource(R.string.shared_search_label),
+                placeholder = stringResource(R.string.shared_search_hint),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                enabled = !overlayLoading,
+            )
+        },
+    ) { innerPadding ->
         GeoVaultPullRefreshLoadingContainer(
             refreshing = overlayLoading,
             showBlockingLoader = overlayLoading,
@@ -891,7 +867,8 @@ private fun PublicOverlaySurface(
             canRefresh = !overlayLoading,
             loadingText = stringResource(R.string.loading_trackers),
             modifier = Modifier
-                .fillMaxSize(),
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.background
+import androidx.compose.material.Divider
 import androidx.compose.material.Scaffold
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -21,11 +22,16 @@ import androidx.compose.ui.Modifier
  * Canonical rendered surface for top-tab screens.
  *
  * Owns shared structure and behavior:
- * - optional title region
+ * - optional dismiss chrome (compact title + close) for tabbed sub-views
  * - standardized top tab bar
  * - optional header region (for search/filters/actions)
  * - pull-to-refresh + blocking loading body
  * - optional bottom region
+ *
+ * Tabbed sub-views that need a dismiss affordance pass [dismissTitle] and [onDismiss] to
+ * render the shared compact dismiss bar above the tab row; this composes the same
+ * [GeoVaultCompactDismissTitleBar] used by [GeoVaultSubViewScaffold], keeping one source of
+ * truth for sub-view chrome.
  */
 enum class GeoVaultTopTabSwipeMode {
     ALWAYS,
@@ -51,7 +57,10 @@ fun <T> GeoVaultTopTabSurface(
     modifier: Modifier = Modifier,
     animateTabChanges: Boolean = true,
     behavior: GeoVaultTopTabBehavior<T> = GeoVaultTopTabBehavior(),
-    titleForTab: (@Composable (T) -> Unit)? = null,
+    dismissTitle: String? = null,
+    onDismiss: (() -> Unit)? = null,
+    dismissContentDescription: String = "Close",
+    dismissTooltip: String? = null,
     headerForTab: (@Composable ColumnScope.(T) -> Unit)? = null,
     bottomForTab: (@Composable (T) -> Unit)? = null,
     contentForTab: @Composable BoxScope.(T) -> Unit,
@@ -94,7 +103,15 @@ fun <T> GeoVaultTopTabSurface(
         modifier = modifier.fillMaxSize(),
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                titleForTab?.invoke(activeTab)
+                if (dismissTitle != null && onDismiss != null) {
+                    GeoVaultCompactDismissTitleBar(
+                        title = dismissTitle,
+                        onClose = onDismiss,
+                        closeContentDescription = dismissContentDescription,
+                        closeTooltip = dismissTooltip,
+                    )
+                    Divider()
+                }
                 GeoVaultTabBar(
                     tabs = tabs,
                     selectedTab = selectedTab,

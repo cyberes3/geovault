@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -31,7 +30,6 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -47,7 +45,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
@@ -63,6 +60,7 @@ import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -342,7 +340,6 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
                 .geoVaultKeyboardAwareVerticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
@@ -806,64 +803,35 @@ private fun HiddenTrackersSubView(
         },
     )
     val scrollState = rememberScrollState()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colors.background)
-            .navigationBarsPadding(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.hidden_trackers),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = GeoVaultColorTokens.TextPrimary,
-                modifier = Modifier.weight(1f),
-            )
-            GeoVaultIconButton(
-                onClick = onDismiss,
-                modifier = Modifier.size(48.dp),
-                tooltip = stringResource(R.string.tooltip_hidden_trackers_close),
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.hidden_trackers),
+        onClose = onDismiss,
+        closeTooltip = stringResource(R.string.tooltip_hidden_trackers_close),
+        headerExtras = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = GeoVaultColorTokens.TextPrimary,
+                GeoVaultSecondaryButton(
+                    text = stringResource(R.string.show_all),
+                    onClick = { showUnhideAllConfirm = true },
+                    enabled = !isLoading && items.isNotEmpty(),
+                    tooltip = stringResource(R.string.tooltip_hidden_show_all),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
-        Divider(
-            color = GeoVaultColorTokens.BorderLight,
-            thickness = 1.dp,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            GeoVaultSecondaryButton(
-                text = stringResource(R.string.show_all),
-                onClick = { showUnhideAllConfirm = true },
-                enabled = !isLoading && items.isNotEmpty(),
-                tooltip = stringResource(R.string.tooltip_hidden_show_all),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+        },
+    ) { innerPadding ->
         GeoVaultPullRefreshLoadingContainer(
             refreshing = isLoading,
             showBlockingLoader = isLoading,
             onRefresh = onRefresh,
             loadingText = stringResource(R.string.loading_trackers),
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
             Column(
                 modifier = Modifier

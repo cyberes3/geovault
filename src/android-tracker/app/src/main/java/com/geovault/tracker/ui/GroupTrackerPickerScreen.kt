@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,12 +48,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.NaturalSort
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -202,22 +201,18 @@ private fun PickerTabContent(
     }
     val loadingTrackersText = stringResource(R.string.loading_trackers)
 
-    androidx.compose.material.Scaffold(
-        topBar = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                GeoVaultCompactDismissTitleBar(
-                    title = stringResource(R.string.groups_tracker_title),
-                    onClose = onDismiss,
-                    closeTooltip = stringResource(R.string.tooltip_group_trackers_list_close),
-                )
-                GeoVaultTabBar(
-                    tabs = tabs,
-                    selectedTab = activePhase,
-                    onTabSelected = { scrollToPhase(it, true) },
-                    indicatorPage = pagerState.currentPage,
-                    indicatorOffsetFraction = pagerState.currentPageOffsetFraction,
-                )
-            }
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.groups_tracker_title),
+        onClose = onDismiss,
+        closeTooltip = stringResource(R.string.tooltip_group_trackers_list_close),
+        headerExtras = {
+            GeoVaultTabBar(
+                tabs = tabs,
+                selectedTab = activePhase,
+                onTabSelected = { scrollToPhase(it, true) },
+                indicatorPage = pagerState.currentPage,
+                indicatorOffsetFraction = pagerState.currentPageOffsetFraction,
+            )
             Divider(
                 color = borderColor,
                 thickness = 1.dp,
@@ -236,7 +231,6 @@ private fun PickerTabContent(
                             strokeWidth = 1.dp.toPx(),
                         )
                     }
-                    .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 GeoVaultPrimaryButton(

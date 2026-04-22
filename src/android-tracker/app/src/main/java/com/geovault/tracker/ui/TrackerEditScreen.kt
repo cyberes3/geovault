@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Icon
 import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultIconButton
@@ -70,8 +68,8 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
-import com.geovault.common.ui.components.GeoVaultCompactDismissTitleBar
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.NaturalSort
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -216,15 +214,11 @@ fun TrackerEditScreen(
             MaterialTheme.colors.onSurface.copy(alpha = 0.10f)
         }
 
-    Scaffold(
-        topBar = {
-            GeoVaultCompactDismissTitleBar(
-                title = stringResource(R.string.trackers_dialog_edit_tracker_details_title),
-                onClose = dismissWithGuard,
-                closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-                closeTooltip = stringResource(R.string.tooltip_edit_tracker_close),
-            )
-        },
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.trackers_dialog_edit_tracker_details_title),
+        onClose = dismissWithGuard,
+        closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+        closeTooltip = stringResource(R.string.tooltip_edit_tracker_close),
         bottomBar = {
             val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
             Box(
@@ -238,7 +232,6 @@ fun TrackerEditScreen(
                             strokeWidth = 1.dp.toPx(),
                         )
                     }
-                    .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 GeoVaultPrimaryButton(
