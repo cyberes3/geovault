@@ -207,7 +207,7 @@ Create an environment file with the database URL under `/etc/secrets` (so the pa
 ```shell
 sudo mkdir -p /etc/secrets
 sudo chmod 600 /etc/secrets
-echo 'AREAS_SERVER_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/areas_server.env
+echo 'AREAS_SERVER_DATABASE=postgresql://is_in_areas:your_password_here@localhost/is_in_areas' | sudo tee /etc/secrets/areas-server.env
 ```
 
 Copy the service and timer files:
