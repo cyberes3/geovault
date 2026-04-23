@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -15,13 +16,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonColors
 import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.ExposedDropdownMenuBox
-import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
@@ -35,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import android.graphics.Rect
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
@@ -213,6 +212,57 @@ fun GeoVaultPrimaryButton(
     )
 }
 
+/**
+ * Square primary-filled icon button — the Compose equivalent of the old app's
+ * `@style/gv_common_ButtonIconBase` with `iconTint=@color/surface`. Width is fixed at
+ * [minSize] (the button wraps an [Icon] so it would otherwise grow to match
+ * [GeoVaultBaseButton]'s full-width centered content slot); height starts at [minSize] but
+ * is left as a minimum so callers can stretch it vertically inside an intrinsic-min row to
+ * match the height of a sibling input/selector.
+ *
+ * Prefer this over the slim ripple-only [com.geovault.common.ui.components.GeoVaultIconButton]
+ * when the icon should visually match a primary button sitting beside it (e.g. "+" next to a
+ * selector field, as in the Import Data File screen's coordinate-system row).
+ */
+@Composable
+fun GeoVaultFilledIconButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tooltip: String? = null,
+    minSize: Dp = 48.dp,
+    backgroundColor: Color = GeoVaultColorTokens.PrimaryBlue,
+    contentColor: Color = Color.White,
+) {
+    GeoVaultBaseButton(
+        text = "",
+        onClick = onClick,
+        style = GeoVaultButtonStyle(
+            colors = ButtonDefaults.buttonColors(
+                backgroundColor = backgroundColor,
+                contentColor = contentColor,
+                disabledBackgroundColor = backgroundColor.copy(alpha = 0.5f),
+                disabledContentColor = contentColor.copy(alpha = 0.75f),
+            ),
+        ),
+        modifier = modifier
+            .width(minSize)
+            .defaultMinSize(minHeight = minSize),
+        enabled = enabled,
+        tooltip = tooltip,
+        contentPadding = PaddingValues(0.dp),
+        centeredContent = {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = contentColor,
+            )
+        },
+    )
+}
+
 @Composable
 fun GeoVaultSecondaryButton(
     text: String,
@@ -358,62 +408,12 @@ fun GeoVaultInput(
     )
 }
 
+/**
+ * Option model shared by [GeoVaultSelectField] and [GeoVaultSingleSelectDialog] (single-select)
+ * and [GeoVaultMultiSelectDialog] (multi-select). [value] is the domain-level payload;
+ * [label] is the display string shown to the user.
+ */
 data class GeoVaultSelectOption<T>(
     val value: T,
     val label: String,
 )
-
-/**
- * Shared select/dropdown control styled with [GeoVaultInput].
- *
- * Keeps selection logic in one component and avoids ad-hoc overlay/dropdown patterns per screen.
- */
-@OptIn(ExperimentalMaterialApi::class)
-@Composable
-fun <T> GeoVaultDropdownSelect(
-    selectedValue: T,
-    options: List<GeoVaultSelectOption<T>>,
-    onValueSelected: (T) -> Unit,
-    label: String,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = options.firstOrNull { it.value == selectedValue }?.label
-        ?: options.firstOrNull()?.label.orEmpty()
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { requested ->
-            if (enabled) {
-                expanded = requested
-            }
-        },
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        GeoVaultInput(
-            value = selectedLabel,
-            onValueChange = {},
-            label = label,
-            readOnly = true,
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    onClick = {
-                        expanded = false
-                        onValueSelected(option.value)
-                    },
-                ) {
-                    Text(option.label)
-                }
-            }
-        }
-    }
-}

@@ -60,7 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
-import com.geovault.common.ui.components.GeoVaultDropdownSelect
+import com.geovault.common.ui.components.GeoVaultSelectField
 import com.geovault.common.ui.components.GeoVaultFormSection
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -332,8 +332,9 @@ fun TrackerEditScreen(
                     helpText = stringResource(R.string.trackers_edit_hidden_help),
                     enabled = !isSaving && !dialog.setAsSelectedTracker,
                 )
-                GeoVaultDropdownSelect(
+                GeoVaultSelectField(
                     label = stringResource(R.string.trackers_edit_recent_data_filter_title),
+                    dialogTitle = stringResource(R.string.trackers_edit_recent_data_filter_title),
                     selectedValue = dialog.recentDataWindowDraft,
                     options = recentOptions,
                     onValueSelected = onRecentDataWindowChanged,
