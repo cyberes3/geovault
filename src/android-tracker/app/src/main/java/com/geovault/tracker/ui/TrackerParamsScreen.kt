@@ -1,46 +1,39 @@
 package com.geovault.tracker.ui
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.ui.components.GeoVaultOutlinedInfoCard
+import com.geovault.common.ui.components.GeoVaultOutlinedInfoCardOptions
+import com.geovault.common.ui.components.GeoVaultOutlinedStrokeCard
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
-import com.geovault.tracker.params.TrackerParamGridRow
 import com.geovault.tracker.params.TrackerParamsBodyKind
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.presentation.TrackerParamsScreenUiState
@@ -98,9 +91,6 @@ private fun TrackerParamsScrollContent(
     state: TrackerParamsScreenUiState,
     onRetry: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -119,16 +109,18 @@ private fun TrackerParamsScrollContent(
             fontWeight = FontWeight.Bold,
         )
 
-        ParamsInfoCard(
-            headerLabel = stringResource(R.string.last_update_label),
+        GeoVaultOutlinedInfoCard(
+            label = stringResource(R.string.last_update_label),
             value = state.lastUpdateText,
-            clipboardHelper = clipboardHelper,
+            modifier = Modifier.padding(bottom = 8.dp),
+            options = COPY_ON_TAP,
         )
 
-        ParamsInfoCard(
-            headerLabel = stringResource(R.string.position_label),
+        GeoVaultOutlinedInfoCard(
+            label = stringResource(R.string.position_label),
             value = state.positionText,
-            clipboardHelper = clipboardHelper,
+            modifier = Modifier.padding(bottom = 8.dp),
+            options = COPY_ON_TAP,
         )
 
         val err = state.errorMessage
@@ -164,9 +156,10 @@ private fun TrackerParamsScrollContent(
                                     .weight(1f)
                                     .padding(4.dp),
                             ) {
-                                ParamGridItemCard(
-                                    row = row,
-                                    clipboardHelper = clipboardHelper,
+                                GeoVaultOutlinedInfoCard(
+                                    label = row.label,
+                                    value = row.value,
+                                    options = GRID_CELL_OPTIONS,
                                 )
                             }
                         }
@@ -215,52 +208,8 @@ private fun TrackerParamsScrollContent(
 }
 
 @Composable
-private fun TrackerParamsStrokeCard(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        elevation = 0.dp,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
-        backgroundColor = MaterialTheme.colors.surface,
-        content = content,
-    )
-}
-
-@Composable
-private fun ParamsInfoCard(
-    headerLabel: String,
-    value: String,
-    clipboardHelper: ClipboardCopyHelper,
-) {
-    TrackerParamsStrokeCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .clickable { clipboardHelper.copyText(value, label = headerLabel) },
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = headerLabel,
-                color = MaterialTheme.colors.onSurface,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = value,
-                modifier = Modifier.padding(top = 4.dp),
-                color = MaterialTheme.colors.onSurface,
-                fontSize = 14.sp,
-            )
-        }
-    }
-}
-
-@Composable
 private fun ParamsMessageCard(content: @Composable () -> Unit) {
-    TrackerParamsStrokeCard(
+    GeoVaultOutlinedStrokeCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp),
@@ -269,33 +218,14 @@ private fun ParamsMessageCard(content: @Composable () -> Unit) {
     }
 }
 
-@Composable
-private fun ParamGridItemCard(
-    row: TrackerParamGridRow,
-    clipboardHelper: ClipboardCopyHelper,
-) {
-    TrackerParamsStrokeCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { clipboardHelper.copyText(row.value, label = row.label) },
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = row.label,
-                color = MaterialTheme.colors.onSurface,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = row.value,
-                modifier = Modifier.padding(top = 4.dp),
-                color = MaterialTheme.colors.onSurface,
-                fontSize = 14.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
+private val COPY_ON_TAP = GeoVaultOutlinedInfoCardOptions(copyOnTap = true)
+
+/**
+ * Compact options for the two-column extended-params grid: copy-on-tap plus tight
+ * line caps so the cells don't grow unboundedly when a label or value is long.
+ */
+private val GRID_CELL_OPTIONS = GeoVaultOutlinedInfoCardOptions(
+    copyOnTap = true,
+    labelMaxLines = 1,
+    valueMaxLines = 3,
+)
