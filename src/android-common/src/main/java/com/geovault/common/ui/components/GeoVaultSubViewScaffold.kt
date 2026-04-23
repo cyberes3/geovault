@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.Color
  * @param modifier Applied to the outer [Scaffold]; use this for [statusBarsPadding] when
  *   presenting the scaffold as a root overlay.
  * @param closeContentDescription Accessibility description for the close icon.
- * @param closeTooltip Optional long-press tooltip for the close icon.
  * @param headerExtras Optional extra chrome placed directly under the compact bar (e.g. a
  *   tab bar or divider). Runs in a [ColumnScope] inside the top bar.
  * @param bottomBar Optional bottom chrome (save/done buttons, action rows, etc.).
@@ -50,7 +49,6 @@ fun GeoVaultSubViewScaffold(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     closeContentDescription: String = "Close",
-    closeTooltip: String? = null,
     headerExtras: (@Composable ColumnScope.() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     backgroundColor: Color = MaterialTheme.colors.background,
@@ -65,7 +63,6 @@ fun GeoVaultSubViewScaffold(
                     title = title,
                     onClose = onClose,
                     closeContentDescription = closeContentDescription,
-                    closeTooltip = closeTooltip,
                 )
                 headerExtras?.invoke(this)
             }

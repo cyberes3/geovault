@@ -706,7 +706,6 @@ private fun DiscoverOverlaySurface(
         dismissTitle = stringResource(R.string.shared_discover_overlay_title),
         onDismiss = onClose,
         dismissContentDescription = stringResource(R.string.close),
-        dismissTooltip = stringResource(R.string.tooltip_discover_close),
         headerForTab = { tab ->
             val activeQuery = if (tab == DiscoverOverlayMode.ON_MY_MAP) {
                 state.discoverOnMapQuery
@@ -844,7 +843,6 @@ private fun PublicOverlaySurface(
         title = stringResource(R.string.shared_public_overlay_title),
         onClose = onClose,
         closeContentDescription = stringResource(R.string.close),
-        closeTooltip = stringResource(R.string.tooltip_public_close),
         headerExtras = {
             Divider()
             GeoVaultInput(

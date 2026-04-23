@@ -79,7 +79,6 @@ fun GroupActionsScreen(
         title = group.name,
         onClose = onDismiss,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-        closeTooltip = stringResource(R.string.tooltip_group_actions_close),
         bottomBar = {
             Row(
                 modifier = Modifier

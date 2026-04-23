@@ -141,7 +141,6 @@
     <string name="tooltip_new_tracker_pick_color">Choose a color for this tracker on the map.</string>
     <string name="tooltip_new_tracker_cancel">Close without saving; you may be asked to confirm if you edited fields.</string>
     <string name="tooltip_new_tracker_create">Save the new tracker and add it to your account.</string>
-    <string name="tooltip_edit_tracker_close">Close the editor; you may be asked to save or discard changes.</string>
     <string name="tooltip_edit_tracker_pick_color">Change the tracker color shown on the map.</string>
     <string name="tooltip_sharing_pick_users">Choose accounts to share this tracker or group with.</string>
     <string name="tooltip_edit_tracker_copy_world_link">Copy a link for world-share, when that feature is enabled.</string>
@@ -150,9 +149,6 @@
     <string name="tooltip_edit_tracker_clear_history">Delete stored history for this tracker on the server.</string>
     <string name="tooltip_edit_tracker_delete">Permanently delete this tracker and its data.</string>
     <string name="tooltip_edit_tracker_save">Save changes to this tracker.</string>
-    <string name="tooltip_params_close">Close the parameters view.</string>
-    <string name="tooltip_discover_close">Close this screen and go back.</string>
-    <string name="tooltip_public_close">Close this screen and go back.</string>
     <string name="tooltip_discover_row_add">Add this tracker or group to your map, or accept an incoming share.</string>
     <string name="tooltip_public_row_add">Subscribe to this public tracker on your map.</string>
     <string name="tooltip_discover_row_remove">Remove from your map, leave a group, or decline, depending on the row.</string>
@@ -160,25 +156,19 @@
     <string name="tooltip_add_group_trackers_close">Close without changing the group.</string>
     <string name="tooltip_add_group_row_add">Include this tracker in the group you are editing.</string>
     <string name="tooltip_add_group_row_check">Remove this tracker from the draft selection.</string>
-    <string name="tooltip_group_detail_close">Close group editing.</string>
     <string name="tooltip_group_detail_tracks_row">Open the list of trackers in this group.</string>
     <string name="tooltip_group_detail_copy_world_link">Copy the world-share link when enabled.</string>
     <string name="tooltip_group_detail_delete">Delete this group and remove it for members.</string>
     <string name="tooltip_group_detail_save">Save group name, sharing, and related settings.</string>
-    <string name="tooltip_group_actions_close">Close group actions.</string>
     <string name="tooltip_group_action_edit">Change group name, sharing, and membership.</string>
     <string name="tooltip_group_action_view_map">Open this group on the map.</string>
     <string name="tooltip_group_tracker_menu">More actions for this member tracker.</string>
     <string name="tooltip_group_tracker_remove">Remove this tracker from the group.</string>
-    <string name="tooltip_group_trackers_list_close">Close the group’s track list.</string>
     <string name="tooltip_group_trackers_list_add">Choose trackers to add to this group.</string>
-    <string name="tooltip_hidden_trackers_close">Close hidden trackers.</string>
     <string name="tooltip_hidden_show_one">Show this tracker or group on the map again.</string>
     <string name="tooltip_hidden_show_all">Restore visibility for everything listed here.</string>
-    <string name="tooltip_edit_shared_tracker_close">Close this screen.</string>
     <string name="tooltip_edit_shared_unsubscribe">Stop following this shared tracker.</string>
     <string name="tooltip_edit_shared_remove_from_share">Remove someone\'s access when you manage sharing.</string>
-    <string name="tooltip_edit_shared_group_close">Close this screen.</string>
     <string name="tooltip_edit_shared_group_leave">Leave this shared group on your account.</string>
     <string name="tooltip_recipient_remove">Remove this person from the share list for this draft or tracker.</string>
 

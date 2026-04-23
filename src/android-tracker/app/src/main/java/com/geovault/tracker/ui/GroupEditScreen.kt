@@ -250,7 +250,6 @@ private fun GroupEditOwnerContent(
         title = stringResource(R.string.trackers_dialog_edit_group_details_title),
         onClose = dismissWithGuard,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-        closeTooltip = stringResource(R.string.tooltip_group_detail_close),
         bottomBar = {
             Box(
                 modifier = Modifier
@@ -532,7 +531,6 @@ private fun GroupEditNonOwnerContent(
         title = stringResource(R.string.groups_edit_shared_title),
         onClose = onDismiss,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-        closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
     ) { innerPadding ->
         Column(
             modifier = Modifier

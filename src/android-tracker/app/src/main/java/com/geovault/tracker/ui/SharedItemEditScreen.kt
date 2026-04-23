@@ -50,7 +50,6 @@ fun SharedTrackerEditScreen(
         title = stringResource(R.string.shared_tracker_edit_title),
         onClose = onDismiss,
         closeContentDescription = stringResource(R.string.close),
-        closeTooltip = stringResource(R.string.tooltip_edit_shared_tracker_close),
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -112,7 +111,6 @@ fun SharedGroupEditScreen(
         title = stringResource(R.string.groups_edit_shared_title),
         onClose = onDismiss,
         closeContentDescription = stringResource(R.string.close),
-        closeTooltip = stringResource(R.string.tooltip_edit_shared_group_close),
     ) { innerPadding ->
         Column(
             modifier = Modifier

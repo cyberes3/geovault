@@ -162,9 +162,6 @@ fun GeoVaultIconButton(
     )
 }
 
-/**
- * Icon-sized hit target using [Modifier.clickable] (for surfaces that are not [IconButton]).
- */
 @Composable
 fun GeoVaultClickableWithTooltip(
     onClick: () -> Unit,

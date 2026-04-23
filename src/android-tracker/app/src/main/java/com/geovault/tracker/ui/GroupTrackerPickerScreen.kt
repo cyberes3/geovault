@@ -204,7 +204,6 @@ private fun PickerTabContent(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.groups_tracker_title),
         onClose = onDismiss,
-        closeTooltip = stringResource(R.string.tooltip_group_trackers_list_close),
         headerExtras = {
             GeoVaultTabBar(
                 tabs = tabs,

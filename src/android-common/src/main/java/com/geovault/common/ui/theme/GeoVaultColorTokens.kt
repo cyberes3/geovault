@@ -11,6 +11,8 @@ object GeoVaultColorTokens {
     @ColorInt const val TEXT_PRIMARY_INT: Int = 0xFF061D4A.toInt()
     @ColorInt const val TEXT_SECONDARY_INT: Int = 0xFF4B5563.toInt()
     @ColorInt const val BORDER_LIGHT_INT: Int = 0xFFC4D2ED.toInt()
+    /** Frontend `--color-blue-100` tint used for subtle blue backgrounds (chip pills, icon tiles, etc.). */
+    @ColorInt const val BLUE_LIGHT_INT: Int = 0xFFE4EAF5.toInt()
     @ColorInt const val GRAY_200_INT: Int = 0xFFE5E7EB.toInt()
     @ColorInt const val GRAY_300_INT: Int = 0xFFD1D5DB.toInt()
     @ColorInt const val GRAY_400_INT: Int = 0xFF9CA3AF.toInt()
@@ -26,6 +28,8 @@ object GeoVaultColorTokens {
     @ColorInt const val DARK_ON_SURFACE_INT: Int = 0xFFE5E7EB.toInt()
     @ColorInt const val DARK_ON_BACKGROUND_INT: Int = 0xFFE5E7EB.toInt()
     @ColorInt const val DARK_BORDER_LIGHT_INT: Int = 0xFF404040.toInt()
+    /** Dark-mode counterpart for [BLUE_LIGHT_INT] — a neutral dark tint for the same slots. */
+    @ColorInt const val DARK_BLUE_LIGHT_INT: Int = 0xFF1F2937.toInt()
     @ColorInt const val DARK_TOGGLE_TITLE_INT: Int = 0xFFE5E7EB.toInt()
     @ColorInt const val DARK_TOGGLE_HELP_TEXT_INT: Int = 0xFFA0A0A0.toInt()
     @ColorInt const val DARK_TOGGLE_UNCHECKED_THUMB_INT: Int = 0xFFBFC8D6.toInt()
@@ -49,6 +53,7 @@ object GeoVaultColorTokens {
     val TextPrimary: Color = Color(TEXT_PRIMARY_INT)
     val TextSecondary: Color = Color(TEXT_SECONDARY_INT)
     val BorderLight: Color = Color(BORDER_LIGHT_INT)
+    val BlueLight: Color = Color(BLUE_LIGHT_INT)
     val Gray200: Color = Color(GRAY_200_INT)
     val Gray300: Color = Color(GRAY_300_INT)
     val Gray400: Color = Color(GRAY_400_INT)
@@ -64,6 +69,7 @@ object GeoVaultColorTokens {
     val DarkOnSurface: Color = Color(DARK_ON_SURFACE_INT)
     val DarkOnBackground: Color = Color(DARK_ON_BACKGROUND_INT)
     val DarkBorderLight: Color = Color(DARK_BORDER_LIGHT_INT)
+    val DarkBlueLight: Color = Color(DARK_BLUE_LIGHT_INT)
     val DarkToggleTitle: Color = Color(DARK_TOGGLE_TITLE_INT)
     val DarkToggleHelpText: Color = Color(DARK_TOGGLE_HELP_TEXT_INT)
     val DarkToggleUncheckedThumb: Color = Color(DARK_TOGGLE_UNCHECKED_THUMB_INT)

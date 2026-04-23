@@ -2,6 +2,8 @@ package com.geovault.common.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -298,7 +300,6 @@ internal fun GeoVaultCompactDismissTitleBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     closeContentDescription: String = "Close",
-    closeTooltip: String? = null,
 ) {
     val backgroundColor = if (MaterialTheme.colors.isLight) {
         GeoVaultColorTokens.Gray300.copy(alpha = 0.58f)
@@ -331,33 +332,22 @@ internal fun GeoVaultCompactDismissTitleBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (closeTooltip.isNullOrBlank()) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clickable(onClick = onClose),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = closeContentDescription,
-                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-        } else {
-            GeoVaultClickableWithTooltip(
-                onClick = onClose,
-                modifier = Modifier.size(48.dp),
-                tooltip = closeTooltip,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = closeContentDescription,
-                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
-                    modifier = Modifier.size(30.dp),
-                )
-            }
+        Box(
+            // Clipping to CircleShape before `.clickable` bounds the Material ripple to a
+            // circle inside the 48dp hit target — the layout box stays square so the icon
+            // still sits on a 48dp minimum tap target, only the highlight is round.
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = closeContentDescription,
+                tint = MaterialTheme.colors.onSurface.copy(alpha = 0.8f),
+                modifier = Modifier.size(30.dp),
+            )
         }
     }
 }

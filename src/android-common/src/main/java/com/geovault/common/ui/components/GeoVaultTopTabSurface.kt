@@ -60,7 +60,6 @@ fun <T> GeoVaultTopTabSurface(
     dismissTitle: String? = null,
     onDismiss: (() -> Unit)? = null,
     dismissContentDescription: String = "Close",
-    dismissTooltip: String? = null,
     headerForTab: (@Composable ColumnScope.(T) -> Unit)? = null,
     bottomForTab: (@Composable (T) -> Unit)? = null,
     contentForTab: @Composable BoxScope.(T) -> Unit,
@@ -108,7 +107,6 @@ fun <T> GeoVaultTopTabSurface(
                         title = dismissTitle,
                         onClose = onDismiss,
                         closeContentDescription = dismissContentDescription,
-                        closeTooltip = dismissTooltip,
                     )
                     Divider()
                 }

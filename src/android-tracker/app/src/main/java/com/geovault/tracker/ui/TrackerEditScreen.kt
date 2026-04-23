@@ -218,7 +218,6 @@ fun TrackerEditScreen(
         title = stringResource(R.string.trackers_dialog_edit_tracker_details_title),
         onClose = dismissWithGuard,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-        closeTooltip = stringResource(R.string.tooltip_edit_tracker_close),
         bottomBar = {
             val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
             Box(

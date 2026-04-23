@@ -806,7 +806,6 @@ private fun HiddenTrackersSubView(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.hidden_trackers),
         onClose = onDismiss,
-        closeTooltip = stringResource(R.string.tooltip_hidden_trackers_close),
         headerExtras = {
             Row(
                 modifier = Modifier
