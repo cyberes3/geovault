@@ -1,0 +1,166 @@
+package com.geovault.common.maps.ui.scaffold
+
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Icon
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.components.GeoVaultIconButton
+
+/**
+ * Typed receiver scope for [GeoVaultMapScaffold]'s `drawerHeader` slot.
+ *
+ * Giving the header a scope (rather than a plain `() -> Unit`) lets the scaffold expose the
+ * canonical helpers ([TitleChip], [PlainTitle], [SettingsAction]) without forcing a specific
+ * layout on consumers — feature code remains free to arrange them inside any row/column
+ * composition it needs.
+ *
+ * Implemented by the scaffold itself; feature code never needs to construct this directly.
+ */
+@Stable
+interface GeoVaultMapDrawerHeaderScope : RowScope {
+
+    /**
+     * Pill-shaped title chip with a leading icon, mirroring the old survey app's file
+     * header — "📄 filename" indicator that lives next to the drag handle.
+     */
+    @Composable
+    fun TitleChip(
+        @DrawableRes iconRes: Int,
+        text: String,
+        modifier: Modifier = Modifier,
+    )
+
+    /**
+     * Plain title label used for the All-Data / non-chip header variant.
+     * Uses the same typographic treatment as the old survey app's "All Points" header.
+     */
+    @Composable
+    fun PlainTitle(
+        text: String,
+        modifier: Modifier = Modifier,
+    )
+
+    /**
+     * Trailing settings/gear action. Renders as the canonical [GeoVaultIconButton] with
+     * long-press tooltip support so every app's map-settings affordance looks identical.
+     */
+    @Composable
+    fun SettingsAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier = Modifier,
+        icon: ImageVector = Icons.Filled.Settings,
+        tooltip: String? = null,
+    )
+}
+
+/**
+ * Default implementation used by [GeoVaultMapScaffold]. Extracted as a class that wraps the
+ * live [RowScope] provided by the scaffold's header row so consumers of the scope can use
+ * [RowScope.weight] on their title/action modifiers — that's the only way to push the
+ * trailing settings button to the end of the row without forcing a specific layout on the
+ * scaffold itself.
+ */
+internal class DefaultGeoVaultMapDrawerHeaderScope(
+    rowScope: RowScope,
+) : GeoVaultMapDrawerHeaderScope, RowScope by rowScope {
+
+    @Composable
+    override fun TitleChip(
+        iconRes: Int,
+        text: String,
+        modifier: Modifier,
+    ) {
+        Row(
+            modifier = modifier
+                .background(
+                    color = GeoVaultMapScaffoldDefaults.TitleChipBackgroundColor,
+                    shape = RoundedCornerShape(14.dp),
+                )
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = GeoVaultMapScaffoldDefaults.TitleChipContentColor,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = text,
+                color = GeoVaultMapScaffoldDefaults.TitleChipContentColor,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+
+    @Composable
+    override fun PlainTitle(
+        text: String,
+        modifier: Modifier,
+    ) {
+        Text(
+            text = text,
+            modifier = modifier,
+            color = GeoVaultMapScaffoldDefaults.HeaderTitleColor,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+
+    @Composable
+    override fun SettingsAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier,
+        icon: ImageVector,
+        tooltip: String?,
+    ) {
+        GeoVaultIconButton(
+            onClick = onClick,
+            modifier = modifier.size(36.dp),
+            tooltip = tooltip,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = GeoVaultMapScaffoldDefaults.HeaderTitleColor,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Convenience helper for a "flex-grow" spacer between leading title and trailing action.
+ * Inlined into the scaffold's header Row. Declared in this file to keep all header primitives
+ * co-located.
+ */
+@Suppress("unused")
+@Composable
+internal fun GeoVaultMapDrawerHeaderSpacer(modifier: Modifier = Modifier) {
+    Spacer(modifier = modifier.width(8.dp))
+}
