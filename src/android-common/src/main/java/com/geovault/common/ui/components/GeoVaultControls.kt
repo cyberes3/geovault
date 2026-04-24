@@ -366,14 +366,23 @@ fun GeoVaultToggle(
     onCheckedChange: (Boolean) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    /**
+     * Optional override for the label text colour. Defaults to [Color.Unspecified] which
+     * means "inherit whatever the surrounding MaterialTheme content colour is" — preserving
+     * the long-standing toggle appearance everywhere this control is already used. Callers
+     * that want an accent label (e.g. primary-blue on the map display-settings dialog) pass
+     * an explicit colour here rather than wrapping the toggle in `CompositionLocalProvider`
+     * or replacing it with a hand-rolled Row.
+     */
+    labelColor: Color = Color.Unspecified,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label)
+        Text(text = label, color = labelColor)
         GeoVaultSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,

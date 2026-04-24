@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        Shared GeoVault splash-screen theme. Parent of every app's per-launcher theme so
+        the GeoVault family shows a consistent branded splash (primary-blue background
+        with the app's own launcher icon centred).
+
+        How to use:
+          1. Depend on `:android-common` (every GeoVault app already does).
+          2. Declare a per-app theme that extends this one and sets `postSplashScreenTheme`
+             to whatever theme the launcher activity should use once the splash exits:
+
+                <style name="Theme.<App>.Splash" parent="Theme.GeoVault.Splash">
+                    <item name="postSplashScreenTheme">@style/Theme.<App></item>
+                </style>
+
+          3. Point the launcher activity's `android:theme` at that per-app style.
+          4. Call `GeoVaultSplashScreen.install(this) { !coldStart.isReady.value }` before
+             `super.onCreate(…)` in the activity.
+
+        Notes:
+          - `windowSplashScreenAnimatedIcon` is deliberately left defaulted; the system picks
+            the app's launcher icon automatically, so each app shows its own brand mark on
+            the shared blue field without any config.
+          - Keep overrides in this theme minimal — anything app-specific belongs in the
+            subclass so the shared branding stays consistent.
+    -->
+    <style name="Theme.GeoVault.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/gv_common_main_blue</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/gv_common_main_blue</item>
+    </style>
+</resources>
