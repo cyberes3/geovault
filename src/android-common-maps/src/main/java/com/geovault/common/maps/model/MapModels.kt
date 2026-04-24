@@ -28,6 +28,9 @@ data class TileSourceResponse(
 )
 
 const val SOURCE_OSM = "osm"
+// CartoCDN-hosted dark OSM raster, usable in guest mode without a GeoVault server. Distinct
+// from [SOURCE_MAPTILER_STREETS_DARK], which is a server-backed MapTiler vector style.
+const val SOURCE_OSM_DARK = "osm-dark"
 const val SOURCE_MAPTILER_STREETS_DARK = "maptiler-openstreetmap-dark"
 const val SOURCE_MAPTILER_STREETS = "maptiler-streets"
 const val SOURCE_MAPTILER_HYBRID = "maptiler-hybrid-v4"

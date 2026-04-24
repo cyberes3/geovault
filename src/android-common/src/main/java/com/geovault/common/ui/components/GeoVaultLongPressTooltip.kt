@@ -42,7 +42,7 @@ fun Modifier.trackGeoVaultTooltipBounds(onBounds: (Rect?) -> Unit): Modifier =
     }
 
 /**
- * Long-press tooltip matching legacy [android.view.View.setTooltipText]: uses a proxy [android.view.View]
+ * Long-press tooltip backed by [android.view.View.setTooltipText]: uses a proxy [android.view.View]
  * and [ViewCompat.setTooltipText] so the platform shows the standard tooltip bubble.
  *
  * Call from the same composable that owns [interactionSource] and apply [Modifier.trackGeoVaultTooltipBounds]

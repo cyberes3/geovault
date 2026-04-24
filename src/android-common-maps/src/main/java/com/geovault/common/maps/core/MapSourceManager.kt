@@ -9,6 +9,7 @@ import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.SOURCE_OSM
+import com.geovault.common.maps.model.SOURCE_OSM_DARK
 import com.geovault.common.maps.model.TileClientConfig
 import com.geovault.common.maps.model.TileSource
 import com.geovault.common.settings.GeoVaultPrefsStore
@@ -21,9 +22,35 @@ class MapSourceManager(private val context: Context) {
         schemaVersion = SCHEMA_VERSION,
         registeredKeys = ALL_KEYS
     )
+
+    init {
+        migrateSelectedSourceFromSharedPrefsIfNeeded()
+    }
+
     private var availableSources: List<TileSource> = listOf(
         defaultOsmSource(),
     )
+
+    /**
+     * One-shot import of the user's previously selected map source from the older
+     * `geovault_prefs` SharedPreferences bucket into the DataStore-backed
+     * [GeoVaultPrefsStore]. Runs on every [MapSourceManager] construction but is idempotent:
+     *  - If the new store already has a value, we leave it alone (user already touched the
+     *    new setting, so we never clobber a newer choice with a stale value).
+     *  - If the older bucket has no `selected_map_source`, we also do nothing (fresh install
+     *    or already-wiped prefs).
+     *  - Otherwise we copy the value across and delete it from the old bucket so
+     *    subsequent launches are a true no-op.
+     */
+    private fun migrateSelectedSourceFromSharedPrefsIfNeeded() {
+        val existing = store.getBlocking(KEY_SELECTED_SOURCE)
+        if (existing.isNotBlank()) return
+        val oldPrefs = context.getSharedPreferences(OLD_PREFS_NAME, Context.MODE_PRIVATE)
+        val oldValue = oldPrefs.getString(OLD_KEY_SELECTED_SOURCE, null)
+        if (oldValue.isNullOrBlank()) return
+        store.putBlocking(KEY_SELECTED_SOURCE, MapSourcePolicy.normalizeSelection(oldValue))
+        oldPrefs.edit().remove(OLD_KEY_SELECTED_SOURCE).apply()
+    }
 
     fun setSources(sources: List<TileSource>) {
         val allowedIds = setOf(
@@ -55,7 +82,10 @@ class MapSourceManager(private val context: Context) {
     }
 
     fun setOsmOnly() {
-        availableSources = listOf(defaultOsmSource())
+        // Guest mode exposes both the light OSM raster and a CartoCDN-hosted dark OSM raster
+        // so night-mode users still get a legible basemap even without a GeoVault server to
+        // serve the MapTiler vector dark style.
+        availableSources = listOf(defaultOsmSource(), defaultOsmDarkSource())
     }
 
     fun getSources(): List<TileSource> = availableSources
@@ -94,6 +124,7 @@ class MapSourceManager(private val context: Context) {
             isAuthenticated = isAuthenticated(),
             hasMapTilerHybrid = availableSources.any { it.id == SOURCE_MAPTILER_HYBRID },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
+            hasOsmDarkFallback = availableSources.any { it.id == SOURCE_OSM_DARK },
         )
         return if (availableSources.any { it.id == resolved }) {
             resolved
@@ -107,6 +138,7 @@ class MapSourceManager(private val context: Context) {
             isAuthenticated = isAuthenticated(),
             hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
+            hasOsmDarkFallback = availableSources.any { it.id == SOURCE_OSM_DARK },
         )
     }
 
@@ -144,6 +176,13 @@ class MapSourceManager(private val context: Context) {
         client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
     )
 
+    private fun defaultOsmDarkSource(): TileSource = TileSource(
+        id = SOURCE_OSM_DARK,
+        name = "OpenStreetMap Dark",
+        type = "xyz",
+        client_config = TileClientConfig(url = "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"),
+    )
+
     private fun defaultGoogleHybridFallbackSource(): TileSource = TileSource(
         id = SOURCE_GOOGLE_HYBRID_FALLBACK,
         name = "Google Hybrid Fallback",
@@ -158,6 +197,11 @@ class MapSourceManager(private val context: Context) {
     companion object {
         private const val PREFS_NAME = "geovault_map_source"
         private const val SCHEMA_VERSION = 1
+
+        // Older SharedPreferences bucket + key used before this module moved to DataStore.
+        // Retained only as migration sources — do NOT read these paths for runtime state.
+        private const val OLD_PREFS_NAME = "geovault_prefs"
+        private const val OLD_KEY_SELECTED_SOURCE = "selected_map_source"
 
         private val KEY_SELECTED_SOURCE = PrefKey.StringKey("selected_map_source")
 

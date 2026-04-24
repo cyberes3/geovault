@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Translucent variant of the directional-compass puck background. Used when the puck is sitting
+  on top of a point/feature symbol so the underlying render stays visible through the disc.
+  Identical geometry to [gv_common_ic_user_location_puck_circle] — only the fill+stroke are
+  premultiplied with 0xD9 alpha (~85%).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:fillColor="#D9FFFFFF"
+        android:strokeColor="#D9000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 16,1 A 15,15 0 0,1 31,16 A 15,15 0 0,1 16,31 A 15,15 0 0,1 1,16 A 15,15 0 0,1 16,1 Z" />
+</vector>

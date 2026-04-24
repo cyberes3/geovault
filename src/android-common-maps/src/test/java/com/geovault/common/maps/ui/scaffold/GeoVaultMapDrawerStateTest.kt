@@ -126,7 +126,7 @@ class GeoVaultMapDrawerStateTest {
     }
 
     @Test
-    fun visibleHeightPx_collapsed_equalsPeek() = runBlocking {
+    fun visibleHeightPx_collapsed_equalsPeek() = runTest {
         val state = createGeoVaultMapDrawerStateForTest(
             peekHeightPx = 200,
             halfExpandedFraction = 0.5f,
@@ -139,7 +139,7 @@ class GeoVaultMapDrawerStateTest {
     }
 
     @Test
-    fun visibleHeightPx_halfExpanded_equalsFractionOfContainer() = runBlocking {
+    fun visibleHeightPx_halfExpanded_equalsFractionOfContainer() = runTest {
         val state = createGeoVaultMapDrawerStateForTest(
             peekHeightPx = 200,
             halfExpandedFraction = 0.55f,
@@ -153,7 +153,7 @@ class GeoVaultMapDrawerStateTest {
     }
 
     @Test
-    fun visibleHeightPx_expanded_equalsContainerHeight() = runBlocking {
+    fun visibleHeightPx_expanded_equalsContainerHeight() = runTest {
         val state = createGeoVaultMapDrawerStateForTest(
             peekHeightPx = 200,
             halfExpandedFraction = 0.5f,
@@ -166,7 +166,7 @@ class GeoVaultMapDrawerStateTest {
     }
 
     @Test
-    fun visibleHeightPx_tracksContainerResize() = runBlocking {
+    fun visibleHeightPx_tracksContainerResize() = runTest {
         val state = createGeoVaultMapDrawerStateForTest(
             peekHeightPx = 120,
             halfExpandedFraction = 0.5f,
@@ -199,7 +199,7 @@ class GeoVaultMapDrawerStateTest {
     }
 
     @Test
-    fun snapTo_updatesBothCurrentAndTargetAnchor() = runBlocking {
+    fun snapTo_updatesBothCurrentAndTargetAnchor() = runTest {
         val state = createGeoVaultMapDrawerStateForTest(
             peekHeightPx = 100,
             halfExpandedFraction = 0.5f,
@@ -213,7 +213,7 @@ class GeoVaultMapDrawerStateTest {
     }
 
     @Test
-    fun animateTo_eventuallySettlesAtTarget() = runBlocking {
+    fun animateTo_eventuallySettlesAtTarget() = runTest {
         val state = createGeoVaultMapDrawerStateForTest(
             peekHeightPx = 100,
             halfExpandedFraction = 0.5f,

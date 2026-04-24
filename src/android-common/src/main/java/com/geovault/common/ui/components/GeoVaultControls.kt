@@ -325,6 +325,41 @@ fun GeoVaultCheckmark(
     }
 }
 
+/**
+ * Canonical GeoVault switch primitive. Use this anywhere you previously wrote `Switch(...)`
+ * with per-call `SwitchDefaults.colors(...)` — keeps the thumb / track palette consistent
+ * across SettingsScreen, filter screens, the map display dialog, and the import wizard, and
+ * keeps dark-mode behaviour in one place instead of drifting per call-site.
+ *
+ * Tokens come from [GeoVaultColorTokens] and auto-swap on [isSystemInDarkTheme]. The palette
+ * intentionally matches `GeoVaultToggleHelpCard` because it is the only one that was
+ * dark-mode-aware; the earlier `GeoVaultToggle` palette (white-thumb-off, translucent-blue
+ * track) was light-mode only and did not survive night mode.
+ */
+@Composable
+fun GeoVaultSwitch(
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val offThumb = if (isDark) GeoVaultColorTokens.DarkToggleUncheckedThumb else GeoVaultColorTokens.ToggleUncheckedThumb
+    val offTrack = if (isDark) GeoVaultColorTokens.DarkToggleUncheckedTrack else GeoVaultColorTokens.ToggleUncheckedTrack
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        enabled = enabled,
+        modifier = modifier,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = GeoVaultColorTokens.PrimaryBlue,
+            uncheckedThumbColor = offThumb,
+            uncheckedTrackColor = offTrack,
+            uncheckedTrackAlpha = 1f,
+        ),
+    )
+}
+
 @Composable
 fun GeoVaultToggle(
     checked: Boolean,
@@ -339,16 +374,10 @@ fun GeoVaultToggle(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = label)
-        Switch(
+        GeoVaultSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = GeoVaultColorTokens.PrimaryBlue,
-                checkedTrackColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.45f),
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.25f)
-            )
         )
     }
 }

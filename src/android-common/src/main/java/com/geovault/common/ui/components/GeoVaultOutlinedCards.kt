@@ -71,7 +71,7 @@ data class GeoVaultOutlinedInfoCardOptions(
 )
 
 /**
- * The shared "bold label, value beneath" detail-row card. Structure matches the legacy
+ * The shared "bold label, value beneath" detail-row card. Structure matches the
  * `item_param_card.xml` / `fragment_point_detail.xml` / `fragment_coord_system_detail.xml`
  * cards arm-for-arm: 12.dp inner padding, 12.sp bold [label], 14.sp [value] with 4.dp top
  * padding, tinted with the theme's `onSurface` color.

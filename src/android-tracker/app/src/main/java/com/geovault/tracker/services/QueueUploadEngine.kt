@@ -45,7 +45,7 @@ internal class QueueInFlightClaimSet {
 
     /**
      * Claims up to [limit] consecutive oldest rows that share the same effective tracker id
-     * ([QueuedLocation.trackerId] when set, else [fallbackTrackerId] for legacy rows).
+     * ([QueuedLocation.trackerId] when set, else [fallbackTrackerId] for older rows).
      */
     suspend fun claimHomogeneousConsecutive(
         candidates: List<QueuedLocation>,

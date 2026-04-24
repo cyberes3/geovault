@@ -7,9 +7,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GpsNotFixed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -26,6 +28,8 @@ import com.geovault.common.maps.location.GeoVaultUserLocationCapability
 import com.geovault.common.maps.location.LocationUpdates
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.maps.MapLibreMap
 
 data class GeoVaultGpsRecenterController(
     val onRecenter: () -> Unit,
@@ -244,4 +248,254 @@ fun rememberGeoVaultGpsRecenterFabAction(
 private fun Context.hasLocationPermission(): Boolean {
     return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+/**
+ * Controller state for a toggle-able GPS-follow FAB. The caller wires [onTap] onto a FAB
+ * action and observes [isFollowing] to update the icon. Manual pan/zoom cancels the lock —
+ * [installCameraGestureWatcher] hooks that up automatically against the host map.
+ */
+data class GeoVaultGpsFollowController(
+    val onTap: () -> Unit,
+    val fabIcon: GeoVaultMapFabIcon,
+    val isFollowing: Boolean,
+)
+
+/**
+ * Continuous GPS-follow toggle.
+ *  - Tap once -> enable TRACKING camera mode; puck follows every fix.
+ *  - Manual pan/zoom -> silently release the lock (camera mode NONE) without altering state.
+ *  - Tap again -> explicitly release the lock.
+ *
+ * Continuous GPS updates are assumed to be driven elsewhere (see
+ * [com.geovault.common.maps.location.MapLocationRendererPlugin.startRenderingGpsLocation]).
+ *
+ * [onPermissionDenied] fires when the user rejects the permission prompt, so the host shell
+ * can surface a snackbar.
+ */
+@Composable
+fun rememberGeoVaultGpsFollowController(
+    map: GeoVaultBaseMap,
+    userLocation: GeoVaultUserLocationCapability,
+    onPermissionDenied: (() -> Unit)? = null,
+): GeoVaultGpsFollowController {
+    val context = LocalContext.current
+    // `rememberSaveable` so the "follow my location" lock survives config changes / process
+    // death. The restored flag is reapplied via the [DisposableEffect] below that calls
+    // `setCameraMode(TRACKING)` whenever `isFollowing` is true.
+    var isFollowing by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            engageGpsFollow(map, userLocation)
+            isFollowing = true
+        } else {
+            onPermissionDenied?.invoke()
+        }
+    }
+
+    // Cancel the lock when the user starts dragging/zooming. Only the `REASON_API_GESTURE`
+    // code corresponds to a touch event; programmatic animations (including ours when we
+    // engage the lock) don't drop tracking.
+    val listener = remember(map) {
+        MapLibreMap.OnCameraMoveStartedListener { reason ->
+            if (!isFollowing) return@OnCameraMoveStartedListener
+            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                isFollowing = false
+                userLocation.setCameraMode(CameraMode.NONE)
+            }
+        }
+    }
+    DisposableEffect(map, listener) {
+        map.addOnCameraMoveStartedListener(listener)
+        onDispose { map.removeOnCameraMoveStartedListener(listener) }
+    }
+
+    // Reapply tracking mode after map rebuilds (style change resets camera mode).
+    DisposableEffect(map, isFollowing) {
+        if (isFollowing) {
+            userLocation.setCameraMode(CameraMode.TRACKING)
+        }
+        onDispose { }
+    }
+
+    val fabIcon = if (isFollowing) {
+        GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
+    } else {
+        GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
+    }
+
+    val onTap = {
+        if (isFollowing) {
+            isFollowing = false
+            userLocation.setCameraMode(CameraMode.NONE)
+        } else if (context.hasLocationPermission()) {
+            engageGpsFollow(map, userLocation)
+            isFollowing = true
+        } else {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+        }
+    }
+
+    return GeoVaultGpsFollowController(
+        onTap = onTap,
+        fabIcon = fabIcon,
+        isFollowing = isFollowing,
+    )
+}
+
+private fun engageGpsFollow(map: GeoVaultBaseMap, userLocation: GeoVaultUserLocationCapability) {
+    map.ensureInteractiveGestures()
+    userLocation.setEnabled(true)
+    userLocation.setCameraMode(CameraMode.TRACKING)
+}
+
+@Composable
+fun rememberGeoVaultGpsFollowFabAction(
+    map: GeoVaultBaseMap,
+    userLocation: GeoVaultUserLocationCapability,
+    id: String = "gps_follow",
+    order: Int = 30,
+    contentDescription: String = "Follow my location",
+    onPermissionDenied: (() -> Unit)? = null,
+): GeoVaultMapFabAction {
+    val controller = rememberGeoVaultGpsFollowController(
+        map = map,
+        userLocation = userLocation,
+        onPermissionDenied = onPermissionDenied,
+    )
+    return GeoVaultMapFabAction(
+        id = id,
+        order = order,
+        icon = controller.fabIcon,
+        contentDescription = contentDescription,
+        onTap = controller.onTap,
+    )
+}
+
+/**
+ * Controller state for a toggle-able camera orientation (compass) lock. Pairs with
+ * [rememberGeoVaultOrientationLockController] / [rememberGeoVaultOrientationLockFabAction].
+ */
+data class GeoVaultOrientationLockController(
+    val onTap: () -> Unit,
+    val fabIcon: GeoVaultMapFabIcon,
+    val isLocked: Boolean,
+)
+
+/**
+ * Toggle that rotates the camera to match device heading using MapLibre
+ * `CameraMode.TRACKING_COMPASS`. Manual pan/zoom releases the lock. The caller is expected
+ * to feed bearings into the puck (via `HeadingSensor`) separately so the directional arrow
+ * rotates as well.
+ */
+@Composable
+fun rememberGeoVaultOrientationLockController(
+    map: GeoVaultBaseMap,
+    userLocation: GeoVaultUserLocationCapability,
+    onPermissionDenied: (() -> Unit)? = null,
+): GeoVaultOrientationLockController {
+    val context = LocalContext.current
+    // Persist across config changes / process death so the compass lock survives a rotation.
+    // The DisposableEffect below reapplies `TRACKING_COMPASS` on restore, so visual state
+    // follows the saved flag without extra glue.
+    var isLocked by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            engageOrientationLock(map, userLocation)
+            isLocked = true
+        } else {
+            onPermissionDenied?.invoke()
+        }
+    }
+
+    val listener = remember(map) {
+        MapLibreMap.OnCameraMoveStartedListener { reason ->
+            if (!isLocked) return@OnCameraMoveStartedListener
+            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                isLocked = false
+                userLocation.setCameraMode(CameraMode.NONE)
+            }
+        }
+    }
+    DisposableEffect(map, listener) {
+        map.addOnCameraMoveStartedListener(listener)
+        onDispose { map.removeOnCameraMoveStartedListener(listener) }
+    }
+    DisposableEffect(map, isLocked) {
+        if (isLocked) userLocation.setCameraMode(CameraMode.TRACKING_COMPASS)
+        onDispose { }
+    }
+
+    val fabIcon = if (isLocked) {
+        GeoVaultMapFabIcon.Vector(Icons.Filled.Explore)
+    } else {
+        GeoVaultMapFabIcon.Vector(Icons.Outlined.Explore)
+    }
+
+    val onTap = {
+        if (isLocked) {
+            isLocked = false
+            userLocation.setCameraMode(CameraMode.NONE)
+        } else if (context.hasLocationPermission()) {
+            engageOrientationLock(map, userLocation)
+            isLocked = true
+        } else {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+        }
+    }
+
+    return GeoVaultOrientationLockController(
+        onTap = onTap,
+        fabIcon = fabIcon,
+        isLocked = isLocked,
+    )
+}
+
+private fun engageOrientationLock(map: GeoVaultBaseMap, userLocation: GeoVaultUserLocationCapability) {
+    map.ensureInteractiveGestures()
+    userLocation.setEnabled(true)
+    userLocation.setCameraMode(CameraMode.TRACKING_COMPASS)
+}
+
+@Composable
+fun rememberGeoVaultOrientationLockFabAction(
+    map: GeoVaultBaseMap,
+    userLocation: GeoVaultUserLocationCapability,
+    id: String = "orientation_lock",
+    order: Int = 35,
+    contentDescription: String = "Follow my heading",
+    onPermissionDenied: (() -> Unit)? = null,
+): GeoVaultMapFabAction {
+    val controller = rememberGeoVaultOrientationLockController(
+        map = map,
+        userLocation = userLocation,
+        onPermissionDenied = onPermissionDenied,
+    )
+    return GeoVaultMapFabAction(
+        id = id,
+        order = order,
+        icon = controller.fabIcon,
+        contentDescription = contentDescription,
+        onTap = controller.onTap,
+    )
 }

@@ -128,6 +128,13 @@ private fun BoxScope.DrawerLayer(
         topStart = GeoVaultMapScaffoldDefaults.DrawerCornerRadius,
         topEnd = GeoVaultMapScaffoldDefaults.DrawerCornerRadius,
     )
+    // Drag behaviour split into two layers:
+    //  - The Surface is NOT directly draggable — instead it receives the drawer-aware
+    //    [nestedScrollModifier], so scrolling a LazyColumn in [drawerBody] coordinates with
+    //    anchor snapping without the user's finger having to leave the list.
+    //  - The handle + header row is where touch-drags actually move the anchor (see
+    //    [DragHandle] / [DrawerHeaderRow]). This matches the user expectation that dragging
+    //    in the body = scroll, dragging on the top chrome = resize.
     Surface(
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -139,16 +146,16 @@ private fun BoxScope.DrawerLayer(
                     .coerceAtLeast(0)
                 IntOffset(x = 0, y = y)
             }
-            .anchoredDraggable(
-                state = drawerState.anchoredDraggableState,
-                orientation = Orientation.Vertical,
-            )
             .then(nestedScrollModifier)
             .clip(shape),
         color = GeoVaultMapScaffoldDefaults.DrawerContainerColor,
         shape = shape,
         elevation = GeoVaultMapScaffoldDefaults.DrawerElevation,
     ) {
+        val headerDragModifier = Modifier.anchoredDraggable(
+            state = drawerState.anchoredDraggableState,
+            orientation = Orientation.Vertical,
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -158,17 +165,17 @@ private fun BoxScope.DrawerLayer(
                     shape = shape,
                 ),
         ) {
-            DragHandle()
-            DrawerHeaderRow(drawerHeader)
+            DragHandle(modifier = headerDragModifier)
+            DrawerHeaderRow(modifier = headerDragModifier, drawerHeader = drawerHeader)
             drawerBody()
         }
     }
 }
 
 @Composable
-private fun DragHandle() {
+private fun DragHandle(modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(
                 top = GeoVaultMapScaffoldDefaults.DragHandleTopPadding,
@@ -192,10 +199,11 @@ private fun DragHandle() {
 
 @Composable
 private fun DrawerHeaderRow(
+    modifier: Modifier = Modifier,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = GeoVaultMapScaffoldDefaults.HeaderMinHeight)
             .padding(

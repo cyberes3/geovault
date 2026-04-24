@@ -40,11 +40,19 @@ interface GeoVaultMapDrawerHeaderScope : RowScope {
 
     /**
      * Pill-shaped title chip with a leading icon, mirroring the old survey app's file
-     * header — "📄 filename" indicator that lives next to the drag handle.
+     * header — "[file-icon] filename" indicator that lives next to the drag handle.
      */
     @Composable
     fun TitleChip(
         @DrawableRes iconRes: Int,
+        text: String,
+        modifier: Modifier = Modifier,
+    )
+
+    /** Vector-icon overload for [TitleChip]. Accepts Material icons without needing a drawable. */
+    @Composable
+    fun TitleChip(
+        icon: ImageVector,
         text: String,
         modifier: Modifier = Modifier,
     )
@@ -90,6 +98,38 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
         text: String,
         modifier: Modifier,
     ) {
+        TitleChipRow(text = text, modifier = modifier) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = GeoVaultMapScaffoldDefaults.TitleChipContentColor,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+
+    @Composable
+    override fun TitleChip(
+        icon: ImageVector,
+        text: String,
+        modifier: Modifier,
+    ) {
+        TitleChipRow(text = text, modifier = modifier) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = GeoVaultMapScaffoldDefaults.TitleChipContentColor,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+
+    @Composable
+    private fun TitleChipRow(
+        text: String,
+        modifier: Modifier,
+        icon: @Composable () -> Unit,
+    ) {
         Row(
             modifier = modifier
                 .background(
@@ -100,12 +140,7 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(
-                painter = painterResource(id = iconRes),
-                contentDescription = null,
-                tint = GeoVaultMapScaffoldDefaults.TitleChipContentColor,
-                modifier = Modifier.size(16.dp),
-            )
+            icon()
             Text(
                 text = text,
                 color = GeoVaultMapScaffoldDefaults.TitleChipContentColor,

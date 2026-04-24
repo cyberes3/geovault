@@ -15,13 +15,25 @@ import org.maplibre.android.maps.Style
 object LocationComponentHelper {
     private const val DEFAULT_LOCATION_ICON_SCALE = 0.45f
 
+    /**
+     * Styling contract for MapLibre's location component.
+     *
+     * The [backgroundDrawable] is the static disc rendered underneath the puck and the
+     * [backgroundDrawableTranslucent] is an optional alpha-attenuated variant of the same
+     * disc. Hosts toggle between the two at runtime (via
+     * [MapLocationRendererPlugin.setPuckBackgroundTranslucent]) to keep an underlying
+     * feature / point visible when the puck happens to overlap it. When the translucent
+     * drawable is `null` the toggle is a no-op.
+     */
     data class Config(
         val accuracyColor: Int,
         val accuracyAlpha: Float = 0.25f,
         @param:DrawableRes val backgroundDrawable: Int? = null,
+        @param:DrawableRes val backgroundDrawableTranslucent: Int? = null,
         @param:DrawableRes val foregroundDrawable: Int? = null,
         val iconScale: Float = DEFAULT_LOCATION_ICON_SCALE,
         val renderMode: Int = RenderMode.NORMAL,
+        val useTranslucentBackground: Boolean = false,
     )
 
     @SuppressLint("MissingPermission")
@@ -54,6 +66,15 @@ object LocationComponentHelper {
         map.locationComponent.cameraMode = if (enabled) CameraMode.TRACKING else CameraMode.NONE
     }
 
+    /**
+     * Switch the MapLibre camera-tracking mode directly. Used by the GPS-follow and
+     * orientation-lock FABs to toggle between NONE, TRACKING, and TRACKING_COMPASS without
+     * re-activating the location component.
+     */
+    fun setCameraMode(map: MapLibreMap, cameraMode: Int) {
+        map.locationComponent.cameraMode = cameraMode
+    }
+
     @SuppressLint("MissingPermission")
     fun forceLocation(map: MapLibreMap, location: Location) {
         map.locationComponent.forceLocationUpdate(location)
@@ -70,7 +91,12 @@ object LocationComponentHelper {
             .maxZoomIconScale(config.iconScale)
             .accuracyColor(config.accuracyColor)
             .accuracyAlpha(config.accuracyAlpha)
-        config.backgroundDrawable?.let {
+        val effectiveBackground = when {
+            config.useTranslucentBackground && config.backgroundDrawableTranslucent != null ->
+                config.backgroundDrawableTranslucent
+            else -> config.backgroundDrawable
+        }
+        effectiveBackground?.let {
             optionsBuilder
                 .backgroundDrawable(it)
                 .backgroundDrawableStale(it)

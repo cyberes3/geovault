@@ -829,7 +829,7 @@ private fun MapTrackerSelectionPanel(
                     clipboardHelper.copyText(latLon, label = "Coordinates")
                 },
             )
-            val lastUpdatedText = formatLegacyLastUpdatedText(lastUpdatedMs = model.lastUpdatedMs)
+            val lastUpdatedText = formatLastUpdatedText(lastUpdatedMs = model.lastUpdatedMs)
             Text(
                 text = lastUpdatedText,
                 style = MaterialTheme.typography.caption,
@@ -914,7 +914,7 @@ private fun MapInfoActionIconButton(
 }
 
 @Composable
-private fun formatLegacyLastUpdatedText(lastUpdatedMs: Long?): String {
+private fun formatLastUpdatedText(lastUpdatedMs: Long?): String {
     if (lastUpdatedMs == null) return stringResource(R.string.waiting_for_data)
     val diffMs = System.currentTimeMillis() - lastUpdatedMs
     val diffSec = (diffMs / 1000).coerceAtLeast(0)

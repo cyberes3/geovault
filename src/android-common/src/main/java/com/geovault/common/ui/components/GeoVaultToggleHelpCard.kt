@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material.Card
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,8 +32,6 @@ fun GeoVaultToggleHelpCard(
     val borderColor = if (isDark) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
     val titleColor = if (isDark) GeoVaultColorTokens.DarkToggleTitle else GeoVaultColorTokens.ToggleTitle
     val helpColor = if (isDark) GeoVaultColorTokens.DarkToggleHelpText else GeoVaultColorTokens.ToggleHelpText
-    val offThumbColor = if (isDark) GeoVaultColorTokens.DarkToggleUncheckedThumb else GeoVaultColorTokens.ToggleUncheckedThumb
-    val offTrackColor = if (isDark) GeoVaultColorTokens.DarkToggleUncheckedTrack else GeoVaultColorTokens.ToggleUncheckedTrack
     Card(
         modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f),
         backgroundColor = GeoVaultColorTokens.Surface,
@@ -61,16 +57,10 @@ fun GeoVaultToggleHelpCard(
                         .weight(1f)
                         .padding(end = 12.dp)
                 )
-                Switch(
+                GeoVaultSwitch(
                     checked = checked,
                     onCheckedChange = onCheckedChange,
                     enabled = enabled,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = GeoVaultColorTokens.PrimaryBlue,
-                        uncheckedThumbColor = offThumbColor,
-                        uncheckedTrackColor = offTrackColor,
-                        uncheckedTrackAlpha = 1f
-                    )
                 )
             }
             if (helpText.isNotBlank()) {

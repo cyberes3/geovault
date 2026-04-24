@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Background circle for the directional-compass user-location puck. Rendered static (MapLibre
+  does not rotate background drawables in compass mode) underneath the chevron foreground so
+  the chevron appears to sit inside a white disc with a thin black border.
+
+  32dp viewport, 15-radius circle centered at (16, 16), 1dp black stroke.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 16,1 A 15,15 0 0,1 31,16 A 15,15 0 0,1 16,31 A 15,15 0 0,1 1,16 A 15,15 0 0,1 16,1 Z" />
+</vector>

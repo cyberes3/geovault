@@ -114,6 +114,17 @@ object GeoVaultMainMapControllerStore {
         }
     }
 
+    /**
+     * Invokes [block] with every currently-registered main map (regardless of refcount). Used
+     * by host [android.app.Activity]s to forward system callbacks like `onLowMemory` to each
+     * retained `MapView` without exposing the internal store map. Safe to call from the main
+     * thread while composition is running — the snapshot is taken under the store lock.
+     */
+    fun forEachActiveMap(block: (GeoVaultMainMap) -> Unit) {
+        val snapshot = synchronized(lock) { controllers.values.map { it.ref.map } }
+        snapshot.forEach(block)
+    }
+
     fun preload(context: Context, key: String) {
         val ref = synchronized(lock) {
             val entry = controllers.getOrPut(key) {

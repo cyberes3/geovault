@@ -2,7 +2,7 @@ package com.geovault.tracker.policy
 
 /**
  * Decides whether a [TrackPointEvent] should update the tracker params UI for [trackerId].
- * Mirrors legacy [com.geovault.tracker.pipeline.TrackPointSourceResolver.shouldAcceptForParams].
+ * Mirrors [com.geovault.tracker.pipeline.TrackPointSourceResolver.shouldAcceptForParams].
  */
 object TrackerParamsPointAcceptancePolicy {
 

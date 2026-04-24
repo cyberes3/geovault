@@ -353,8 +353,11 @@ class MapLibreManager(
         const val RASTER_LAYER_ID = "geovault-raster-layer"
         const val ANNOTATIONS_LAYER_ID = "org.maplibre.annotations.points"
         const val MIN_ZOOM_LEVEL = 1
-        const val MAX_ZOOM_LEVEL = 18
-        const val MAX_ZOOM_LEVEL_VECTOR = 18
+        // Raster tiles top out around 18-19; MapLibre keeps rendering the finest available
+        // tiles past that but allows pinch-zooming in further, which lets survey/tracker
+        // users read dense point clusters without the map "hitting a wall".
+        const val MAX_ZOOM_LEVEL = 25
+        const val MAX_ZOOM_LEVEL_VECTOR = 25
         const val BOUNDS_FIT_MAX_ZOOM = 15.0
         const val DEFAULT_POINT_ZOOM = 12.0
         val DEFAULT_WORLD_CENTER = LatLng(0.0, 0.0)

@@ -13,7 +13,7 @@ import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
 import com.geovault.common.R as CommonR
 
-/** Legacy tracker default color from `gv_common_color_blue_400`. */
+/** Default tracker color, matching `gv_common_color_blue_400`. */
 const val DEFAULT_TRACKER_COLOR_HEX: String = "#6C93DE"
 
 /** Fallback tracker color hex used across tracker UI and map rendering. */

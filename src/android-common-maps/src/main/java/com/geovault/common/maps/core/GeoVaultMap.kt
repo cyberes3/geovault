@@ -25,6 +25,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.maplibre.android.maps.MapView
 
+/** 0xFFF3F6FA — matches the `gv_common_map_underlay` color resource. */
+private const val MAP_UNDERLAY_COLOR = 0xFFF3F6FA.toInt()
+
 data class GeoVaultMapPaddingDp(
     val left: Dp = Dp.Unspecified,
     val top: Dp = Dp.Unspecified,
@@ -112,6 +115,12 @@ private fun GeoVaultMapHost(
             modifier = Modifier.fillMaxSize(),
             factory = {
                 val acquiredMapView = currentMap.acquireMapView(mapStateBundle)
+                //  - OVER_SCROLL_NEVER avoids glow/stretch artifacts some vendors draw on a
+                //    GL surface during fling.
+                //  - Painting an underlay background colour hides the empty black surface
+                //    between attach and first-tile render, which is jarring on white UIs.
+                acquiredMapView.overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                acquiredMapView.setBackgroundColor(MAP_UNDERLAY_COLOR)
                 mapView = acquiredMapView
                 currentMap.attachMapView(acquiredMapView)
                 acquiredMapView
@@ -175,6 +184,14 @@ private fun GeoVaultMapHost(
                 currentMap.detachMapView()
                 activeMapView?.onDestroy()
                 currentMap.onDestroy()
+            } else {
+                // Main-mode retained MapView: keep it alive across tab changes but pause/stop
+                // while it's not mounted so rendering, GPS/heading sensor subscriptions, and
+                // MapLibre tile requests stop instead of draining battery in the background.
+                // The next `attachMapView` + re-added lifecycle observer synchronously
+                // redispatches onStart/onResume based on the Activity's current state.
+                activeMapView?.onPause()
+                activeMapView?.onStop()
             }
         }
     }
