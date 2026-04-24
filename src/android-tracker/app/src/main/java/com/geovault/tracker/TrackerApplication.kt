@@ -7,6 +7,7 @@ import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
+import com.geovault.tracker.BuildConfig
 
 class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListener {
 
@@ -14,7 +15,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
         super.onCreate()
         GeovaultAuthManager.init(
             context = this,
-            redirectUri = TRACKER_REDIRECT_URI,
+            redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
             clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_TRACKER,
         )
         GeovaultAuthManager.setAuthFailureListener(this)
@@ -57,7 +58,6 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
     }
 
     companion object {
-        const val TRACKER_REDIRECT_URI = "com.geovault.tracker://oauth/callback"
         const val TRACKER_MAIN_MAP_KEY = "tracker-main-map"
         private const val HOOK_STOP_SERVICES = "tracker_stop_services"
         private const val HOOK_CLEAR_LOCAL = "tracker_clear_local"

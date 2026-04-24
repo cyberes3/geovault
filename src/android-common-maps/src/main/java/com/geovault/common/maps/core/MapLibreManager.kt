@@ -74,8 +74,14 @@ class MapLibreManager(
 
         fun restoreCamera() {
             map.setCameraPosition(savedCamera)
-            // Style reload can yield a snapshot without our viewport padding; re-apply defaults.
-            applyViewportPadding(defaultPadding)
+            // Style reload can yield a snapshot without our viewport padding, so re-apply
+            // whatever padding was active on the saved camera. Using `defaultPadding`
+            // unconditionally would clobber non-zero padding a prior bounds-fit baked into
+            // the camera (e.g., the Survey map's initial `snapFitAll` fits with a
+            // drawer+FAB inset while the host's `defaultPadding` is `[0, 0, 0, 0]`), which
+            // is what made the map appear to shift the first time a layer was changed.
+            val paddingToRestore = savedCamera.padding?.takeIf { it.size == 4 } ?: defaultPadding
+            applyViewportPadding(paddingToRestore)
         }
 
         try {

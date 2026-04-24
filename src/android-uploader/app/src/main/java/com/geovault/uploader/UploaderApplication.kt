@@ -3,6 +3,7 @@ package com.geovault.uploader
 import android.app.Application
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.data.UploaderPreferences
 
 class UploaderApplication : Application(), GeovaultAuthManager.AuthFailureListener {
@@ -10,7 +11,7 @@ class UploaderApplication : Application(), GeovaultAuthManager.AuthFailureListen
         super.onCreate()
         GeovaultAuthManager.init(
             context = this,
-            redirectUri = "com.geovault.uploader://oauth/callback",
+            redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
             clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_UPLOADER
         )
         UploaderPreferences.getInstance(this).preloadOnLaunch()

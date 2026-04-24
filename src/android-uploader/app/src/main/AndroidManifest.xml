@@ -50,7 +50,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="com.geovault.uploader"
+                    android:scheme="${applicationId}"
                     android:host="oauth"
                     android:pathPrefix="/callback" />
             </intent-filter>

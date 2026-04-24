@@ -52,5 +52,5 @@ Additional code style instructions are in `src/android-tracker/CODE_STYLE.md`. T
 
 DO NOT FALL BACK TO DESTRUCTIVE DB MIGRATIONS!!!!!!!!!!!!! YOU MUST MIGRATE THEM CORRECTLY!!!!!!!!
 
-We have a few external apps symlinked into the `src/` directory that may not show up correctly in your tools. Use `ls` to find them. List:
+We have a few external apps symlinked into the `src/` directory that may not show up correctly in your tools or in git. Use `ls` to find them. List:
 - `android-survey-data-viewer`

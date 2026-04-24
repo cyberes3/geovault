@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
+import com.geovault.places.BuildConfig
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.places.model.Feature
@@ -17,7 +18,6 @@ import java.util.Locale
 
 class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener {
     companion object {
-        private const val PLACES_REDIRECT_URI = "com.geovault.places://oauth/callback"
         private const val HOOK_EMERGENCY_EXPORT = "places_emergency_export"
         private const val HOOK_CLEAR_LOCAL = "places_clear_local"
     }
@@ -26,7 +26,7 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
         super.onCreate()
         GeovaultAuthManager.init(
             context = this,
-            redirectUri = PLACES_REDIRECT_URI,
+            redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
             clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_PLACES,
         )
         GeovaultAuthManager.setAuthFailureListener(this)
