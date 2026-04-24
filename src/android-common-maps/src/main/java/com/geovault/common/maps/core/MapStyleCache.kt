@@ -71,7 +71,7 @@ internal object MapStyleCache {
                 }
                 val request = Request.Builder().url(styleUrl).get().build()
                 val response = client.newCall(request).execute()
-                val json = response.body?.string().orEmpty()
+                val json = response.body.string()
                 if (!response.isSuccessful) {
                     Log.w(
                         TAG,

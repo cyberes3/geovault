@@ -20,13 +20,11 @@ import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -67,16 +65,6 @@ fun GeoVaultMapScaffold(
     bottomEnd: (@Composable BoxScope.() -> Unit)? = null,
     mapContent: @Composable BoxScope.() -> Unit,
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val nestedScrollConnection = remember(drawerState) {
-        drawerNestedScrollConnection(
-            state = drawerState.anchoredDraggableState,
-            onFling = { velocity ->
-                coroutineScope.settleDrawerOnFling(drawerState.anchoredDraggableState, velocity)
-            },
-        )
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -95,7 +83,6 @@ fun GeoVaultMapScaffold(
 
         DrawerLayer(
             drawerState = drawerState,
-            nestedScrollModifier = Modifier.nestedScroll(nestedScrollConnection),
             drawerHeader = drawerHeader,
             drawerBody = drawerBody,
         )
@@ -120,7 +107,6 @@ fun GeoVaultMapScaffold(
 @Composable
 private fun BoxScope.DrawerLayer(
     drawerState: GeoVaultMapDrawerState,
-    nestedScrollModifier: Modifier,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
 ) {
@@ -128,13 +114,26 @@ private fun BoxScope.DrawerLayer(
         topStart = GeoVaultMapScaffoldDefaults.DrawerCornerRadius,
         topEnd = GeoVaultMapScaffoldDefaults.DrawerCornerRadius,
     )
-    // Drag behaviour split into two layers:
-    //  - The Surface is NOT directly draggable — instead it receives the drawer-aware
-    //    [nestedScrollModifier], so scrolling a LazyColumn in [drawerBody] coordinates with
-    //    anchor snapping without the user's finger having to leave the list.
-    //  - The handle + header row is where touch-drags actually move the anchor (see
-    //    [DragHandle] / [DrawerHeaderRow]). This matches the user expectation that dragging
-    //    in the body = scroll, dragging on the top chrome = resize.
+    // Drag is intentionally header-only: only the drag handle + title row carry the
+    // [anchoredDraggable] modifier (see [DragHandle] / [DrawerHeaderRow]). Scrolling the
+    // body (e.g. a LazyColumn) does not move the drawer — this mirrors the old survey app's
+    // `DragFromHeaderBottomSheetBehavior`, which ignored nested scroll from the list so the
+    // list could scroll freely while the drawer stayed parked at its current anchor.
+    //
+    // The Surface height is pinned to the full scaffold container (not the visible slice) so
+    // the card is always as tall as the screen, identical to how the old app declared the
+    // `MaterialCardView` with `match_parent` height and let `BottomSheetBehavior` position it
+    // via translation. With this sizing:
+    //   * the container background paints the entire drawer strip regardless of how little
+    //     content the body holds (fixes the "short list leaves a hole" case), and
+    //   * the inner [Column] has a bounded height so a [drawerBody] that uses
+    //     `Modifier.weight(1f)` (e.g. a LazyColumn) gets a real height constraint and scrolls
+    //     internally instead of overflowing below the drawer.
+    // The bottom half of the Surface that sits below the scaffold edge is simply off-screen
+    // — clipped by the enclosing Box / bottom-nav row — so overshoot costs us nothing.
+    val containerHeightPx by drawerState.containerHeightPxState
+    val density = LocalDensity.current
+    val drawerHeightDp = with(density) { containerHeightPx.toDp() }
     Surface(
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -146,7 +145,7 @@ private fun BoxScope.DrawerLayer(
                     .coerceAtLeast(0)
                 IntOffset(x = 0, y = y)
             }
-            .then(nestedScrollModifier)
+            .height(drawerHeightDp)
             .clip(shape),
         color = GeoVaultMapScaffoldDefaults.DrawerContainerColor,
         shape = shape,
@@ -157,7 +156,7 @@ private fun BoxScope.DrawerLayer(
             orientation = Orientation.Vertical,
         )
         val headerDividerColor = GeoVaultMapScaffoldDefaults.HeaderDividerColor
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxSize()) {
             DragHandle(modifier = headerDragModifier)
             DrawerHeaderRow(modifier = headerDragModifier, drawerHeader = drawerHeader)
             Box(

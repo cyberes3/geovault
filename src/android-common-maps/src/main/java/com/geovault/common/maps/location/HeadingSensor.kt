@@ -5,8 +5,9 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
+import android.view.Display
 import android.view.Surface
-import android.view.WindowManager
 import kotlin.math.abs
 
 /**
@@ -95,8 +96,12 @@ class HeadingSensor(context: Context) {
     }
 
     private fun screenRotationAxes(): Pair<Int, Int> {
-        val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-        val rotation = windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        // `WindowManager.getDefaultDisplay()` was deprecated in API 30. `Context.getDisplay()`
+        // is the documented replacement but requires a UI context — we only have the app
+        // context here — so we route through `DisplayManager` to fetch the default display.
+        val displayManager = appContext.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        val rotation = displayManager?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation
+            ?: Surface.ROTATION_0
         return when (rotation) {
             Surface.ROTATION_90 -> SensorManager.AXIS_Y to SensorManager.AXIS_MINUS_X
             Surface.ROTATION_180 -> SensorManager.AXIS_MINUS_X to SensorManager.AXIS_MINUS_Y

@@ -7,7 +7,10 @@ import androidx.compose.foundation.gestures.snapTo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import kotlin.math.roundToInt
@@ -55,7 +58,18 @@ class GeoVaultMapDrawerState internal constructor(
     val anchoredDraggableState: AnchoredDraggableState<GeoVaultMapDrawerAnchor> =
         AnchoredDraggableState(initialValue = initialAnchor)
 
-    private var containerHeightPxBacking: Int = 0
+    /**
+     * Last container height observed via [updateAnchors], as observable state. The scaffold
+     * reads this via [containerHeightPxState] so the drawer Surface re-sizes the instant the
+     * first onSizeChanged pass delivers a real container height.
+     */
+    private val containerHeightPxBackingState = mutableStateOf(0)
+    private var containerHeightPxBacking: Int
+        get() = containerHeightPxBackingState.value
+        set(value) { containerHeightPxBackingState.value = value }
+
+    /** Observable view of [containerHeightPx] — reads participate in recomposition. */
+    val containerHeightPxState: State<Int> = containerHeightPxBackingState
 
     /** Last container height observed via [updateAnchors]. Safe to read at any time. */
     val containerHeightPx: Int get() = containerHeightPxBacking
