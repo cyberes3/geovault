@@ -1,7 +1,6 @@
 package com.geovault.common.maps.ui.scaffold
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.layout.Box
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -156,17 +156,16 @@ private fun BoxScope.DrawerLayer(
             state = drawerState.anchoredDraggableState,
             orientation = Orientation.Vertical,
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    width = GeoVaultMapScaffoldDefaults.DrawerTopBorderWidth,
-                    color = GeoVaultMapScaffoldDefaults.DrawerBorderColor,
-                    shape = shape,
-                ),
-        ) {
+        val headerDividerColor = GeoVaultMapScaffoldDefaults.HeaderDividerColor
+        Column(modifier = Modifier.fillMaxWidth()) {
             DragHandle(modifier = headerDragModifier)
             DrawerHeaderRow(modifier = headerDragModifier, drawerHeader = drawerHeader)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(GeoVaultMapScaffoldDefaults.HeaderDividerThickness)
+                    .background(headerDividerColor),
+            )
             drawerBody()
         }
     }

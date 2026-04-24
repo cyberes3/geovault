@@ -1,5 +1,8 @@
 package com.geovault.common.maps.ui.scaffold
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -10,6 +13,9 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
  *
  * Kept as an `object` (not a data class) so the compiler inlines the values and no extra
  * object allocation happens per-frame — the scaffold reads these once per composition.
+ *
+ * Color tokens are exposed as `@Composable` helpers so the drawer can pick the correct
+ * light / dark value without callers threading a theme through the slot API.
  */
 object GeoVaultMapScaffoldDefaults {
     /** Visible drawer height when collapsed. Mirrors the old survey app's ~65dp peek. */
@@ -21,16 +27,19 @@ object GeoVaultMapScaffoldDefaults {
     /** Rounded top radius matching the old survey-app drawer shape. */
     val DrawerCornerRadius: Dp = 28.dp
 
-    /** 1 dp hairline on the top edge to separate drawer from map. */
-    val DrawerTopBorderWidth: Dp = 1.dp
+    /**
+     * Drop-shadow depth behind the drawer. Matches the old survey-app `MaterialCardView`
+     * which rendered with `cardElevation="0dp"` — no shadow fringes against the map.
+     */
+    val DrawerElevation: Dp = 0.dp
 
-    /** Shadow elevation behind the drawer; matches Material3 bottom sheet. */
-    val DrawerElevation: Dp = 8.dp
-
-    /** Drag handle dimensions. Sized for a comfortable thumb target. */
-    val DragHandleWidth: Dp = 36.dp
+    /**
+     * Drag handle dimensions. Sized to match the old survey app's 48dp × 4dp pill so the
+     * thumb target is unchanged for existing muscle memory.
+     */
+    val DragHandleWidth: Dp = 48.dp
     val DragHandleHeight: Dp = 4.dp
-    val DragHandleTopPadding: Dp = 8.dp
+    val DragHandleTopPadding: Dp = 12.dp
     val DragHandleBottomPadding: Dp = 4.dp
 
     /** Height allocated to the drawer header (title + actions row). Tuned for the peek value. */
@@ -39,10 +48,50 @@ object GeoVaultMapScaffoldDefaults {
     /** Horizontal padding applied inside the header row. */
     val HeaderHorizontalPadding: Dp = 12.dp
 
-    /** Default colors derived from [GeoVaultColorTokens]. */
-    val DrawerContainerColor: Color get() = GeoVaultColorTokens.Surface
-    val DrawerBorderColor: Color get() = GeoVaultColorTokens.BorderLight
-    val DragHandleColor: Color get() = GeoVaultColorTokens.Gray300
+    /** Thickness of the hairline drawn under the drawer header, separating it from the body. */
+    val HeaderDividerThickness: Dp = 1.dp
+
+    /**
+     * Drawer container color. Matches the old survey-app `bottom_sheet_background`
+     * (`blue_extra_light` = #F3F6FA) in light mode; uses [GeoVaultColorTokens.DarkSurface]
+     * in dark mode for consistency with the rest of the GeoVault palette (not pure black).
+     */
+    val DrawerContainerColor: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isSystemInDarkTheme()) {
+            GeoVaultColorTokens.DarkSurface
+        } else {
+            GeoVaultColorTokens.Background
+        }
+
+    /**
+     * Drag handle color. Light/dark pair mirrors the old app's `border_light` token
+     * (#C4D2ED / #404040) so the handle carries the same muted-blue tone on the pill.
+     */
+    val DragHandleColor: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isSystemInDarkTheme()) {
+            GeoVaultColorTokens.DarkBorderLight
+        } else {
+            GeoVaultColorTokens.BorderLight
+        }
+
+    /**
+     * Thin divider drawn under the drawer header row — the same hairline the old app's
+     * `fragment_map.xml` rendered between the title and the points list.
+     */
+    val HeaderDividerColor: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isSystemInDarkTheme()) {
+            GeoVaultColorTokens.DarkBorderLight
+        } else {
+            GeoVaultColorTokens.Gray200
+        }
+
+    /** Title text color for drawer headers. */
     val HeaderTitleColor: Color get() = GeoVaultColorTokens.TextPrimary
     val TitleChipBackgroundColor: Color get() = GeoVaultColorTokens.BlueLight
     val TitleChipContentColor: Color get() = GeoVaultColorTokens.PrimaryBlue

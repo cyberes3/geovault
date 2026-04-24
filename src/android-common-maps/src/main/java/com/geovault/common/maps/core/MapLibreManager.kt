@@ -7,7 +7,6 @@ import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -44,7 +43,12 @@ class MapLibreManager(
         map.uiSettings.isTiltGesturesEnabled = true
         map.uiSettings.isDoubleTapGesturesEnabled = true
         map.uiSettings.isRotateGesturesEnabled = false
-        map.setLatLngBoundsForCameraTarget(LatLngBounds.world())
+        // Unbounded camera target: MapLibre Native is initialised with `ConstrainMode::HeightOnly`
+        // and an empty `LatLngBounds`, which clamps latitude to the Mercator band (≈ ±85°) while
+        // letting longitude wrap infinitely via world copies. Passing any bounded `LatLngBounds`
+        // here (including `LatLngBounds.world()`) disables horizontal wrap, so we explicitly
+        // restore the native default with `null`.
+        map.setLatLngBoundsForCameraTarget(null)
         applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
         applyViewportPadding(defaultPadding)
     }

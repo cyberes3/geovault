@@ -56,6 +56,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
+import com.geovault.common.maps.core.GeoVaultMapPaddingDp
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
@@ -485,12 +486,20 @@ private fun TrackerMapAuthenticatedContent(
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
+            // Keep persistent viewport padding at zero. MapLibre Native's
+            // `TransformState::constrain` clamps the camera centre to the Web-Mercator
+            // ±85° band using the full viewport height but does NOT compensate for
+            // `edgeInsets`, so any non-zero top or bottom viewport padding lets the user
+            // pan the camera past the world edge and exposes the MapView underlay.
+            // Top/left reserves for the chip and FAB column are still applied to
+            // bounds-fit camera updates via `boundsFitPaddingPx`, which is one-shot and
+            // therefore doesn't leave a persistent camera offset.
             GeoVaultMainMapView(
                 modifier = Modifier.fillMaxSize(),
                 map = map,
                 showDefaultSourceToggle = false,
-                includeDefaultFabColumnPadding = mapPaddingPolicy.includeDefaultFabColumnPadding,
-                mapPaddingDp = mapPaddingPolicy.mapPaddingDp,
+                includeDefaultFabColumnPadding = false,
+                mapPaddingDp = GeoVaultMapPaddingDp(),
             )
 
             val effectiveDisplayedTrackerId = state.displayedTrackerId
