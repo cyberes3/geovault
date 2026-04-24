@@ -342,7 +342,21 @@ class GeoVaultMainMap(
         }
     }
 
+    /**
+     * Eagerly create + attach the retained [MapView] so style/tile loading starts before any
+     * Compose surface mounts it.
+     *
+     * The warmup is posted to the main thread from a background task, so on a normal cold
+     * start it commonly races with the first Compose mount of [GeoVaultMainMapView]. If
+     * Compose has already mounted the retained `MapView` into its host `ViewGroup`,
+     * [acquireMapView] would yank it out of that parent — leaving the `TextureView`
+     * detached from the window with no `SurfaceTexture`, so the map renders blank until
+     * something forces a route remount (e.g. opening a file map). Detect that case via
+     * [getMapViewOrNull] (set by `attachMapView`) and skip — Compose has already done the
+     * equivalent work for us.
+     */
     fun preload() {
+        if (getMapViewOrNull() != null) return
         val view = acquireMapView(Bundle())
         attachMapView(view)
         view.onStart()
