@@ -38,7 +38,7 @@ class TrackerMapTrailReloadCoordinatorTest {
         assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
         assertEquals(setOf("active", "t2"), plan.trackerIds)
         assertEquals("active", plan.overlayTrackerId)
-        assertEquals("active", plan.fallbackTrackerId)
+        assertEquals("active", plan.activeTrackerId)
     }
 
     @Test

@@ -18,20 +18,38 @@ interface LocationDao {
 
     /**
      * Returns the newest [limit] rows in chronological order (oldest of that window first).
+     * This query intentionally spans all trackers because the local trail renderer shows whatever
+     * the device most recently captured regardless of attribution.
      */
     @Query(
         "SELECT * FROM (SELECT * FROM queued_locations ORDER BY time DESC LIMIT :limit) ORDER BY time ASC",
     )
     fun getRecentChronological(limit: Int): List<QueuedLocation>
 
-    @Query("SELECT * FROM queued_locations ORDER BY time ASC LIMIT :limit")
-    fun getOldest(limit: Int): List<QueuedLocation>
+    @Query(
+        "SELECT * FROM queued_locations WHERE tracker_id = :trackerId ORDER BY id ASC LIMIT :limit",
+    )
+    fun getOldestForTracker(trackerId: String, limit: Int): List<QueuedLocation>
 
-    @Query("SELECT * FROM queued_locations WHERE id <= :sessionBoundaryId ORDER BY id ASC LIMIT :limit")
-    fun getOldestBacklogById(sessionBoundaryId: Long, limit: Int): List<QueuedLocation>
+    @Query(
+        "SELECT * FROM queued_locations WHERE tracker_id = :trackerId AND id <= :sessionBoundaryId " +
+            "ORDER BY id ASC LIMIT :limit",
+    )
+    fun getOldestBacklogForTracker(
+        trackerId: String,
+        sessionBoundaryId: Long,
+        limit: Int,
+    ): List<QueuedLocation>
 
-    @Query("SELECT * FROM queued_locations WHERE id > :sessionBoundaryId ORDER BY id ASC LIMIT :limit")
-    fun getOldestCurrentSessionById(sessionBoundaryId: Long, limit: Int): List<QueuedLocation>
+    @Query(
+        "SELECT * FROM queued_locations WHERE tracker_id = :trackerId AND id > :sessionBoundaryId " +
+            "ORDER BY id ASC LIMIT :limit",
+    )
+    fun getOldestCurrentSessionForTracker(
+        trackerId: String,
+        sessionBoundaryId: Long,
+        limit: Int,
+    ): List<QueuedLocation>
 
     @Delete
     fun delete(locations: List<QueuedLocation>)

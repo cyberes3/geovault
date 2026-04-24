@@ -19,7 +19,7 @@ data class TrackerMapTrailReloadPlan(
     val singleTrackerId: String = "",
     val trackerIds: Set<String> = emptySet(),
     val overlayTrackerId: String? = null,
-    val fallbackTrackerId: String = "",
+    val activeTrackerId: String = "",
     val resolvedGroupId: String = "",
 )
 
@@ -41,7 +41,7 @@ object TrackerMapTrailReloadCoordinator {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.SINGLE_SERVER,
                 singleTrackerId = active,
-                fallbackTrackerId = active
+                activeTrackerId = active
             )
         }
         if (input.mode == TrackerMapDisplayMode.ALL_QUEUE) {
@@ -49,7 +49,7 @@ object TrackerMapTrailReloadCoordinator {
                 source = TrackerMapTrailSource.MULTI_SERVER,
                 trackerIds = rosterIds,
                 overlayTrackerId = active.takeIf { input.runtimeRunning && it.isNotEmpty() },
-                fallbackTrackerId = active
+                activeTrackerId = active
             )
         }
         if (input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
@@ -59,13 +59,13 @@ object TrackerMapTrailReloadCoordinator {
                 overlayTrackerId = active.takeIf {
                     input.runtimeRunning && it.isNotEmpty() && it in groupIds
                 },
-                fallbackTrackerId = active,
+                activeTrackerId = active,
                 resolvedGroupId = input.groupSelection.groupId.orEmpty()
             )
         }
         return TrackerMapTrailReloadPlan(
             source = TrackerMapTrailSource.SINGLE_QUEUE,
-            fallbackTrackerId = active
+            activeTrackerId = active
         )
     }
 }

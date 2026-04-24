@@ -10,7 +10,7 @@ object TrackerMapTrailDataCoordinator {
         existingTrailMinTimeMs: Long?,
         loadTrackerGeometry: suspend (String) -> RepositoryResult<Tracker>,
         loadQueueTrailWithOverlay: suspend () -> List<QueuedLocation>,
-        mapCoordinatesToTrail: (List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
+        mapCoordinatesToTrail: (String, List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
     ): List<QueuedLocation> {
         val geometryResult = loadTrackerGeometry(trackerId)
         val geometryCoords = when (geometryResult) {
@@ -24,7 +24,7 @@ object TrackerMapTrailDataCoordinator {
         return if (geometryCoords.isEmpty()) {
             loadQueueTrailWithOverlay()
         } else {
-            mapCoordinatesToTrail(geometryCoords, pointParams, existingTrailMinTimeMs)
+            mapCoordinatesToTrail(trackerId, geometryCoords, pointParams, existingTrailMinTimeMs)
         }
     }
 
@@ -32,7 +32,7 @@ object TrackerMapTrailDataCoordinator {
         trackerIds: Collection<String>,
         existingTrailMinTimeMsByTracker: Map<String, Long>,
         loadTrackersGeometry: suspend (List<String>) -> RepositoryResult<List<Tracker>>,
-        mapCoordinatesToTrail: (List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
+        mapCoordinatesToTrail: (String, List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
     ): Map<String, List<QueuedLocation>> {
         val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (normalizedIds.isEmpty()) return emptyMap()
@@ -40,6 +40,7 @@ object TrackerMapTrailDataCoordinator {
             is RepositoryResult.Success -> {
                 result.data.associate { tracker ->
                     tracker.id to mapCoordinatesToTrail(
+                        tracker.id,
                         tracker.geometry?.coordinates.orEmpty(),
                         tracker.point_params,
                         existingTrailMinTimeMsByTracker[tracker.id]

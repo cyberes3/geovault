@@ -41,7 +41,7 @@ object TrackerMapPointEventReducer {
 
         return when (point.source) {
             TrackPointSource.REMOTE_STREAM -> reduceRemote(input, displayedTrackerId)
-            TrackPointSource.LOCAL_GPS -> reduceLocal(input)
+            TrackPointSource.LOCAL_GPS -> reduceLocal(input, displayedTrackerId)
         }
     }
 
@@ -88,11 +88,23 @@ object TrackerMapPointEventReducer {
         )
     }
 
-    private fun reduceLocal(input: TrackerMapPointReductionInput): TrackerMapPointReductionResult {
+    private fun reduceLocal(
+        input: TrackerMapPointReductionInput,
+        displayedTrackerId: String,
+    ): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
+        val overlayTrackerId = displayedTrackerId.ifBlank { state.runtime.selectedTrackerId.trim() }
+        if (overlayTrackerId.isBlank()) {
+            return TrackerMapPointReductionResult(
+                acceptedBySourcePolicy = true,
+                shouldUpdateUiState = false,
+                nextState = state,
+            )
+        }
         val localOverlayPoint = QueuedLocation(
             id = 0L,
+            trackerId = overlayTrackerId,
             time = point.timestampMs,
             latitude = point.lat,
             longitude = point.lon,
@@ -138,8 +150,11 @@ object TrackerMapPointEventReducer {
                 last.longitude == point.lon
             if (duplicate || normalizedTime < last.time) return currentTrail
         }
+        val trackerId = point.trackId.trim()
+        if (trackerId.isEmpty()) return currentTrail
         val queued = QueuedLocation(
             id = 0L,
+            trackerId = trackerId,
             time = normalizedTime,
             latitude = point.lat,
             longitude = point.lon,

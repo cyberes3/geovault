@@ -16,6 +16,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = listOf(
                 QueuedLocation(
+                    trackerId = "active",
                     time = 10L,
                     latitude = 1.0,
                     longitude = 1.0,
@@ -65,6 +66,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
                     QueuedLocation(
+                        trackerId = "t1",
                         time = 1L,
                         latitude = 10.0,
                         longitude = 20.0,
@@ -74,6 +76,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
                         accuracy = null
                     ),
                     QueuedLocation(
+                        trackerId = "t1",
                         time = 2L,
                         latitude = 10.001,
                         longitude = 20.002,
@@ -100,12 +103,12 @@ class TrackerMapStateTransformsRemoteMarkersTest {
             runtime = TrackingRuntimeSnapshot(),
             allQueueTrailsByTracker = mapOf(
                 "b" to listOf(
-                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = null)
+                    QueuedLocation(trackerId = "b", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "b", time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = null)
                 ),
                 "a" to listOf(
-                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = null)
+                    QueuedLocation(trackerId = "a", time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "a", time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = null)
                 ),
             ),
             trackerRenderOrder = listOf("b", "a"),
@@ -122,8 +125,8 @@ class TrackerMapStateTransformsRemoteMarkersTest {
             runtime = TrackingRuntimeSnapshot(),
             allQueueTrailsByTracker = mapOf(
                 "tracker-1" to listOf(
-                    QueuedLocation(time = 1L, latitude = 10.0, longitude = 20.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 10.1, longitude = 20.1, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "tracker-1", time = 1L, latitude = 10.0, longitude = 20.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "tracker-1", time = 2L, latitude = 10.1, longitude = 20.1, altitude = null, speed = null, bearing = null, accuracy = null),
                 )
             ),
             trackerDisplayNameById = mapOf("tracker-1" to "Delta"),

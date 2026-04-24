@@ -14,6 +14,7 @@ class TrackerMapStateTransformsTest {
     fun groupPlaceholderMode_rendersRemoteMarkersAndGroupLines() {
         val trail = listOf(
             QueuedLocation(
+                trackerId = "g1",
                 time = 1L,
                 latitude = 1.0,
                 longitude = 2.0,
@@ -39,8 +40,8 @@ class TrackerMapStateTransformsTest {
             activeStreamedTrackerIds = setOf("g1"),
             allQueueTrailsByTracker = mapOf(
                 "g1" to listOf(
-                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 1.001, longitude = 2.001, altitude = null, speed = null, bearing = null, accuracy = null)
+                    QueuedLocation(trackerId = "g1", time = 1L, latitude = 1.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "g1", time = 2L, latitude = 1.001, longitude = 2.001, altitude = null, speed = null, bearing = null, accuracy = null)
                 )
             ),
         )
@@ -53,6 +54,7 @@ class TrackerMapStateTransformsTest {
     fun twoPointTrail_hasLineAndLastMarkerWithBearing() {
         val trail = listOf(
             QueuedLocation(
+                trackerId = "t1",
                 time = 1L,
                 latitude = 10.0,
                 longitude = 20.0,
@@ -62,6 +64,7 @@ class TrackerMapStateTransformsTest {
                 accuracy = null,
             ),
             QueuedLocation(
+                trackerId = "t1",
                 time = 2L,
                 latitude = 10.001,
                 longitude = 20.001,
@@ -106,9 +109,9 @@ class TrackerMapStateTransformsTest {
     @Test
     fun effectiveTrail_singleSession_filtersBacklogBySessionBoundary() {
         val trail = listOf(
-            QueuedLocation(id = 1L, time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-            QueuedLocation(id = 2L, time = 2L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
-            QueuedLocation(id = 3L, time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 1L, trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 2L, trackerId = "t1", time = 2L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
         )
         val filtered = TrackerMapStateTransforms.effectiveTrail(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -121,8 +124,8 @@ class TrackerMapStateTransformsTest {
     @Test
     fun effectiveTrail_allQueue_keepsBacklogAndCurrentSession() {
         val trail = listOf(
-            QueuedLocation(id = 1L, time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-            QueuedLocation(id = 3L, time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 1L, trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
         )
         val filtered = TrackerMapStateTransforms.effectiveTrail(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
@@ -136,6 +139,7 @@ class TrackerMapStateTransformsTest {
     fun trailBounds_singlePoint_degenerateBounds() {
         val trail = listOf(
             QueuedLocation(
+                trackerId = "t1",
                 time = 1L,
                 latitude = 5.0,
                 longitude = 6.0,
@@ -164,12 +168,12 @@ class TrackerMapStateTransformsTest {
             runtime = TrackingRuntimeSnapshot(),
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
-                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 1.001, longitude = 1.001, altitude = null, speed = null, bearing = null, accuracy = null)
+                    QueuedLocation(trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "t1", time = 2L, latitude = 1.001, longitude = 1.001, altitude = null, speed = null, bearing = null, accuracy = null)
                 ),
                 "t2" to listOf(
-                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 2.001, longitude = 2.001, altitude = null, speed = null, bearing = null, accuracy = null)
+                    QueuedLocation(trackerId = "t2", time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "t2", time = 2L, latitude = 2.001, longitude = 2.001, altitude = null, speed = null, bearing = null, accuracy = null)
                 )
             ),
             trackerColorById = mapOf("t1" to "FF0000", "t2" to "#00FF00")
@@ -185,6 +189,7 @@ class TrackerMapStateTransformsTest {
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
+                    trackerId = "displayed",
                     time = 1L,
                     latitude = 1.0,
                     longitude = 2.0,
@@ -194,6 +199,7 @@ class TrackerMapStateTransformsTest {
                     accuracy = null,
                 ),
                 QueuedLocation(
+                    trackerId = "displayed",
                     time = 2L,
                     latitude = 1.001,
                     longitude = 2.002,
@@ -222,6 +228,7 @@ class TrackerMapStateTransformsTest {
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = listOf(
                 QueuedLocation(
+                    trackerId = "t1",
                     time = 1L,
                     latitude = 1.0,
                     longitude = 2.0,
@@ -231,6 +238,7 @@ class TrackerMapStateTransformsTest {
                     accuracy = 12f,
                 ),
                 QueuedLocation(
+                    trackerId = "t1",
                     time = 2L,
                     latitude = 1.001,
                     longitude = 2.001,
@@ -261,12 +269,12 @@ class TrackerMapStateTransformsTest {
             runtime = TrackingRuntimeSnapshot(),
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
-                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = 9f),
-                    QueuedLocation(time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = 10f),
+                    QueuedLocation(trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = 9f),
+                    QueuedLocation(trackerId = "t1", time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = 10f),
                 ),
                 "t2" to listOf(
-                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = 18f),
-                    QueuedLocation(time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = 20f),
+                    QueuedLocation(trackerId = "t2", time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = 18f),
+                    QueuedLocation(trackerId = "t2", time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = 20f),
                 ),
             ),
             trackerColorById = mapOf(
@@ -292,12 +300,12 @@ class TrackerMapStateTransformsTest {
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = "t2"),
             allQueueTrailsByTracker = mapOf(
                 "t1" to listOf(
-                    QueuedLocation(time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "t1", time = 2L, latitude = 1.1, longitude = 1.1, altitude = null, speed = null, bearing = null, accuracy = null),
                 ),
                 "t2" to listOf(
-                    QueuedLocation(time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
-                    QueuedLocation(time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "t2", time = 1L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
+                    QueuedLocation(trackerId = "t2", time = 2L, latitude = 2.1, longitude = 2.1, altitude = null, speed = null, bearing = null, accuracy = null),
                 ),
             ),
             fallbackAccuracyByTrackerId = mapOf("t2" to 14f),

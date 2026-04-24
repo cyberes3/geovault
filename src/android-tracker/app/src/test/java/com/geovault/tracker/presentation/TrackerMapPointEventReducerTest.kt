@@ -44,6 +44,7 @@ class TrackerMapPointEventReducerTest {
     fun localGpsDuplicateTail_doesNotMutateUiState() {
         val existing = QueuedLocation(
             id = 0L,
+            trackerId = "tracker-1",
             time = 1000L,
             latitude = 20.0,
             longitude = 10.0,
@@ -86,6 +87,7 @@ class TrackerMapPointEventReducerTest {
     fun remoteStream_appendsToExistingTrail() {
         val existing = QueuedLocation(
             id = 0L,
+            trackerId = "tracker-1",
             time = 900L,
             latitude = 0.0,
             longitude = 0.0,
@@ -132,6 +134,7 @@ class TrackerMapPointEventReducerTest {
         val tsMs = 1_710_000_000_000L
         val existing = QueuedLocation(
             id = 0L,
+            trackerId = "tracker-1",
             time = tsMs,
             latitude = 20.0,
             longitude = 10.0,

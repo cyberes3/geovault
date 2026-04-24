@@ -39,36 +39,26 @@ data class QueueUploadConfig(
     val deviceIdentifier: String
 )
 
+/**
+ * Domain-agnostic in-flight reservation set. Tracks which row ids are currently being uploaded so
+ * a second concurrent push cannot claim the same rows. Knows nothing about trackers.
+ */
 internal class QueueInFlightClaimSet {
     private val mutex = Mutex()
     private val claimedIds = mutableSetOf<Long>()
 
     /**
-     * Claims up to [limit] consecutive oldest rows that share the same effective tracker id
-     * ([QueuedLocation.trackerId] when set, else [fallbackTrackerId] for older rows).
+     * Claims up to [limit] rows from [candidates] in their provided order, skipping rows that are
+     * already claimed by another in-flight push.
      */
-    suspend fun claimHomogeneousConsecutive(
-        candidates: List<QueuedLocation>,
-        limit: Int,
-        fallbackTrackerId: String,
-    ): List<QueuedLocation> {
+    suspend fun claim(candidates: List<QueuedLocation>, limit: Int): List<QueuedLocation> {
         if (limit <= 0 || candidates.isEmpty()) return emptyList()
-        fun effectiveTrackerId(row: QueuedLocation): String =
-            row.trackerId?.takeIf { it.isNotBlank() } ?: fallbackTrackerId
         return mutex.withLock {
             val batch = ArrayList<QueuedLocation>(limit)
             for (item in candidates) {
                 if (item.id in claimedIds) continue
-                val effective = effectiveTrackerId(item)
-                if (effective.isBlank()) continue
-                if (batch.isEmpty()) {
-                    claimedIds.add(item.id)
-                    batch.add(item)
-                } else {
-                    if (effective != effectiveTrackerId(batch.first())) break
-                    claimedIds.add(item.id)
-                    batch.add(item)
-                }
+                claimedIds.add(item.id)
+                batch.add(item)
                 if (batch.size >= limit) break
             }
             batch
@@ -150,6 +140,8 @@ class QueueUploadEngine(
             if (trackerId.isBlank() || serverUrl.isBlank()) {
                 return@withContext SyncFailureClass.PERMANENT
             }
+            val trackerUuid = runCatching { UUID.fromString(trackerId) }.getOrNull()
+                ?: return@withContext SyncFailureClass.PERMANENT
             val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
             val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
             var batchesSent = 0
@@ -157,15 +149,12 @@ class QueueUploadEngine(
             while (batchesSent < config.maxBatchesPerPush && shouldContinuePush) {
                 val batch = claimNextBatch(
                     scope = scope,
+                    trackerId = trackerId,
                     sessionBoundaryId = config.sessionBoundaryId,
                     limit = config.batchSize,
-                    fallbackTrackerId = trackerId,
                 )
                 if (batch.isEmpty()) break
                 locallyClaimedIds.addAll(batch.map { it.id })
-                val batchTrackerKey = batch.first().trackerId?.takeIf { it.isNotBlank() } ?: trackerId
-                val trackerUuid = runCatching { UUID.fromString(batchTrackerKey) }.getOrNull()
-                    ?: return@withContext SyncFailureClass.PERMANENT
                 val payload = if (config.useExtendedParams) {
                     BinaryPayloadBuilder.buildPayload(
                         locations = batch,
@@ -228,17 +217,21 @@ class QueueUploadEngine(
 
     suspend fun claimNextBatch(
         scope: QueueUploadScope,
+        trackerId: String,
         sessionBoundaryId: Long,
         limit: Int,
-        fallbackTrackerId: String,
     ): List<QueuedLocation> {
+        val probe = limit * 3
         val candidates = when (scope) {
-            QueueUploadScope.BACKLOG_ONLY -> locationDao.getOldestBacklogById(sessionBoundaryId, limit * 3)
-            QueueUploadScope.LIVE_ONLY -> locationDao.getOldestCurrentSessionById(sessionBoundaryId, limit * 3)
-            QueueUploadScope.ALL -> locationDao.getOldest(limit * 3)
+            QueueUploadScope.BACKLOG_ONLY ->
+                locationDao.getOldestBacklogForTracker(trackerId, sessionBoundaryId, probe)
+            QueueUploadScope.LIVE_ONLY ->
+                locationDao.getOldestCurrentSessionForTracker(trackerId, sessionBoundaryId, probe)
+            QueueUploadScope.ALL ->
+                locationDao.getOldestForTracker(trackerId, probe)
         }
         if (candidates.isEmpty()) return emptyList()
-        return inFlightClaims.claimHomogeneousConsecutive(candidates, limit, fallbackTrackerId)
+        return inFlightClaims.claim(candidates, limit)
     }
 
     private suspend fun releaseClaimedBatch(batch: List<QueuedLocation>) {

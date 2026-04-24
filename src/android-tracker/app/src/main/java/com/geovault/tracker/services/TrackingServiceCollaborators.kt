@@ -118,6 +118,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         nowElapsedRealtimeNanos: Long,
         isMockLocation: Boolean = LocationCompat.isMock(location)
     ): LocationIngestResult {
+        require(queuedTrackerId.isNotBlank()) { "queuedTrackerId must not be blank" }
         val accuracy = if (location.hasAccuracy()) location.accuracy else null
         var resolvedQuality: TrackPointQuality? = null
         if (!bypassFilters) {
@@ -180,9 +181,9 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             acceptedLocation = location
         )
         val queued = QueuedLocation.fromLocation(
-            location,
+            loc = location,
+            trackerId = queuedTrackerId,
             totalDistanceMeters = nextSessionDistanceMeters,
-            trackerId = queuedTrackerId.takeIf { it.isNotBlank() },
         )
         val insertedId = locationDao.insert(queued)
         if (bypassFilters) {

@@ -184,6 +184,7 @@ class TrackerMapLiveActiveFitPolicyTest {
     private fun makeQueuedLocation(timeMs: Long): QueuedLocation {
         return QueuedLocation(
             id = 0L,
+            trackerId = "test-tracker",
             time = timeMs,
             latitude = 40.0,
             longitude = -74.0,

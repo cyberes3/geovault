@@ -4,8 +4,9 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.geovault.tracker.SelectedTrackerPrefs
 
-@Database(entities = [QueuedLocation::class], version = 3, exportSchema = true)
+@Database(entities = [QueuedLocation::class], version = 4, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun locationDao(): LocationDao
 
@@ -15,14 +16,19 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "tracker_database"
-                ).addMigrations(*DatabaseMigrations.ALL).build()
-                INSTANCE = instance
-                instance
+                INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
             }
+        }
+
+        private fun buildDatabase(context: Context): AppDatabase {
+            val appContext = context.applicationContext
+            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(appContext)
+                .takeIf { it.isNotBlank() }
+            return Room.databaseBuilder(
+                appContext,
+                AppDatabase::class.java,
+                "tracker_database"
+            ).addMigrations(*DatabaseMigrations.all(selectedTrackerId)).build()
         }
     }
 }

@@ -1156,7 +1156,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 plan.overlayTrackerId?.let { overlayTrackerId ->
                     multiTrails[overlayTrackerId] = loadQueueTrailWithOverlay()
                 }
-                val fallbackTrail = multiTrails[plan.fallbackTrackerId].orEmpty()
+                val fallbackTrail = multiTrails[plan.activeTrackerId].orEmpty()
                 fallbackTrail to multiTrails.toMap()
             }
             TrackerMapTrailSource.SINGLE_QUEUE -> {
@@ -1275,8 +1275,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 }
             },
             loadQueueTrailWithOverlay = { loadQueueTrailWithOverlay() },
-            mapCoordinatesToTrail = { merged, pointParams, minTime ->
-                mapCoordinatesToTrail(merged, pointParams, minTime)
+            mapCoordinatesToTrail = { id, merged, pointParams, minTime ->
+                mapCoordinatesToTrail(id, merged, pointParams, minTime)
             }
         )
     }
@@ -1295,8 +1295,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     geometryLoadingTracker.track { trackerManagementRepository.loadTrackersGeometry(ids) }
                 }
             },
-            mapCoordinatesToTrail = { merged, pointParams, minTime ->
-                mapCoordinatesToTrail(merged, pointParams, minTime)
+            mapCoordinatesToTrail = { id, merged, pointParams, minTime ->
+                mapCoordinatesToTrail(id, merged, pointParams, minTime)
             }
         )
     }
@@ -1342,11 +1342,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun mapCoordinatesToTrail(
+        trackerId: String,
         coordinates: List<List<Double>>,
         pointParams: List<Map<String, Any?>>? = null,
         existingTrailMinTimeMs: Long? = null,
     ): List<QueuedLocation> {
         if (coordinates.isEmpty()) return emptyList()
+        val normalizedTrackerId = trackerId.trim()
+        if (normalizedTrackerId.isEmpty()) return emptyList()
         val latestAccuracyMeters = pointParams
             ?.lastOrNull()
             ?.get("acc")
@@ -1364,6 +1367,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             val lat = point.getOrNull(1) ?: return@mapIndexedNotNull null
             QueuedLocation(
                 id = -(index + 1L),
+                trackerId = normalizedTrackerId,
                 time = timestamps[index],
                 latitude = lat,
                 longitude = lon,
@@ -1408,7 +1412,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             ?: return null
         val cachedGeometry = cachedTracker.geometry?.coordinates.orEmpty()
         if (cachedGeometry.isEmpty()) return null
-        return mapCoordinatesToTrail(cachedGeometry).takeIf { it.isNotEmpty() }
+        return mapCoordinatesToTrail(trackerId, cachedGeometry).takeIf { it.isNotEmpty() }
     }
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {

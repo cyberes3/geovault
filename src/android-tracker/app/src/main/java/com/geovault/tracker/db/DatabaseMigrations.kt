@@ -1,9 +1,12 @@
 package com.geovault.tracker.db
 
+import android.util.Log
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object DatabaseMigrations {
+    private const val TAG = "DatabaseMigrations"
+
     /**
      * Version 2 introduces schema export and a formal migration path.
      * Schema stays unchanged; the migration is intentionally no-op.
@@ -18,5 +21,90 @@ object DatabaseMigrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    /**
+     * Version 4 promotes `tracker_id` to `NOT NULL`. Legacy rows inserted before the
+     * column existed (or while the producer still allowed blank ids) are backfilled
+     * with [selectedTrackerId] when provided; rows that cannot be attributed to any
+     * tracker are dropped since there is no server they could be uploaded to.
+     */
+    fun migration3To4(selectedTrackerId: String?): Migration = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val fallback = selectedTrackerId?.trim()?.takeIf { it.isNotEmpty() }
+            val beforeCount = singleLongQuery(db, "SELECT COUNT(*) FROM queued_locations")
+            val attributableBefore = if (fallback != null) {
+                beforeCount
+            } else {
+                singleLongQuery(
+                    db,
+                    "SELECT COUNT(*) FROM queued_locations WHERE tracker_id IS NOT NULL AND TRIM(tracker_id) <> ''"
+                )
+            }
+            db.execSQL(
+                """
+                CREATE TABLE queued_locations_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    tracker_id TEXT NOT NULL,
+                    time INTEGER NOT NULL,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    altitude REAL,
+                    speed REAL,
+                    bearing REAL,
+                    accuracy REAL,
+                    sat INTEGER,
+                    prov TEXT,
+                    dist REAL
+                )
+                """.trimIndent()
+            )
+            if (fallback != null) {
+                db.execSQL(
+                    """
+                    INSERT INTO queued_locations_new (id, tracker_id, time, latitude, longitude,
+                        altitude, speed, bearing, accuracy, sat, prov, dist)
+                    SELECT id, COALESCE(NULLIF(TRIM(tracker_id), ''), ?), time, latitude, longitude,
+                        altitude, speed, bearing, accuracy, sat, prov, dist
+                    FROM queued_locations
+                    """.trimIndent(),
+                    arrayOf<Any>(fallback)
+                )
+            } else {
+                db.execSQL(
+                    """
+                    INSERT INTO queued_locations_new (id, tracker_id, time, latitude, longitude,
+                        altitude, speed, bearing, accuracy, sat, prov, dist)
+                    SELECT id, TRIM(tracker_id), time, latitude, longitude,
+                        altitude, speed, bearing, accuracy, sat, prov, dist
+                    FROM queued_locations
+                    WHERE tracker_id IS NOT NULL AND TRIM(tracker_id) <> ''
+                    """.trimIndent()
+                )
+            }
+            db.execSQL("DROP TABLE queued_locations")
+            db.execSQL("ALTER TABLE queued_locations_new RENAME TO queued_locations")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_queued_locations_tracker_id ON queued_locations(tracker_id)"
+            )
+            val dropped = beforeCount - attributableBefore
+            if (dropped > 0) {
+                Log.i(
+                    TAG,
+                    "MIGRATION_3_4 dropped $dropped unattributable queued_locations row(s); " +
+                        "selectedTrackerId=${if (fallback != null) "present" else "absent"}"
+                )
+            }
+        }
+    }
+
+    fun all(selectedTrackerId: String?): Array<Migration> = arrayOf(
+        MIGRATION_1_2,
+        MIGRATION_2_3,
+        migration3To4(selectedTrackerId)
+    )
+
+    private fun singleLongQuery(db: SupportSQLiteDatabase, sql: String): Long {
+        db.query(sql).use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+        }
+    }
 }

@@ -186,7 +186,7 @@ class LaunchNetworkCallDedupeSimulationTest {
                 }
             },
             loadQueueTrailWithOverlay = { emptyList<QueuedLocation>() },
-            mapCoordinatesToTrail = { _, _, _ -> emptyList() },
+            mapCoordinatesToTrail = { _, _, _, _ -> emptyList() },
         )
     }
 

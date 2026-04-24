@@ -281,14 +281,28 @@ private class FakeLocationDao : LocationDao {
         return rows.sortedByDescending { it.time }.take(limit).reversed()
     }
 
-    override fun getOldest(limit: Int): List<QueuedLocation> = rows.sortedBy { it.time }.take(limit)
-
-    override fun getOldestBacklogById(sessionBoundaryId: Long, limit: Int): List<QueuedLocation> {
-        return rows.filter { it.id <= sessionBoundaryId }.sortedBy { it.id }.take(limit)
+    override fun getOldestForTracker(trackerId: String, limit: Int): List<QueuedLocation> {
+        return rows.filter { it.trackerId == trackerId }.sortedBy { it.id }.take(limit)
     }
 
-    override fun getOldestCurrentSessionById(sessionBoundaryId: Long, limit: Int): List<QueuedLocation> {
-        return rows.filter { it.id > sessionBoundaryId }.sortedBy { it.id }.take(limit)
+    override fun getOldestBacklogForTracker(
+        trackerId: String,
+        sessionBoundaryId: Long,
+        limit: Int,
+    ): List<QueuedLocation> {
+        return rows.filter { it.trackerId == trackerId && it.id <= sessionBoundaryId }
+            .sortedBy { it.id }
+            .take(limit)
+    }
+
+    override fun getOldestCurrentSessionForTracker(
+        trackerId: String,
+        sessionBoundaryId: Long,
+        limit: Int,
+    ): List<QueuedLocation> {
+        return rows.filter { it.trackerId == trackerId && it.id > sessionBoundaryId }
+            .sortedBy { it.id }
+            .take(limit)
     }
 
     override fun delete(locations: List<QueuedLocation>) {

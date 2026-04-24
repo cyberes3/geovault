@@ -14,6 +14,7 @@ class TrackerMapTrailDataCoordinatorTest {
         val fallback = listOf(
             QueuedLocation(
                 id = 1L,
+                trackerId = "t1",
                 time = 1L,
                 latitude = 1.0,
                 longitude = 2.0,
@@ -34,7 +35,7 @@ class TrackerMapTrailDataCoordinatorTest {
                 RepositoryResult.Success(Tracker(id = "t1", name = "T1", color = null))
             },
             loadQueueTrailWithOverlay = { fallback },
-            mapCoordinatesToTrail = { _, _, _ -> emptyList() }
+            mapCoordinatesToTrail = { _, _, _, _ -> emptyList() }
         )
 
         assertEquals(fallback, result)
@@ -60,10 +61,11 @@ class TrackerMapTrailDataCoordinatorTest {
                     )
                 )
             },
-            mapCoordinatesToTrail = { coordinates, _, _ ->
+            mapCoordinatesToTrail = { trackerId, coordinates, _, _ ->
                 coordinates.mapIndexed { index, point ->
                     QueuedLocation(
                         id = -(index + 1L),
+                        trackerId = trackerId,
                         time = index.toLong(),
                         latitude = point[1],
                         longitude = point[0],
