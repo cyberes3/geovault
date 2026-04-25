@@ -16,10 +16,7 @@ def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Op
         bulk_ops: Dictionary from the request's bulk_operations field
 
     Returns:
-        (is_valid, error_message). error_message is None when is_valid is True.
-
-    Note: This function maintains backward compatibility with the old signature.
-    It uses Pydantic validation internally but returns the legacy tuple format.
+        ``(is_valid, error_message)``. ``error_message`` is None when ``is_valid`` is True.
     """
     if not isinstance(bulk_ops, dict):
         return False, "bulk_operations must be a JSON object"

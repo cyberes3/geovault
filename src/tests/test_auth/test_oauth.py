@@ -706,25 +706,6 @@ class TestEnsureOAuth2AppCommand(TestCase):
         self.assertEqual(Application.objects.filter(client_id="geovault-android-tracker").count(), 1)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-survey").count(), 1)
 
-    def test_deletes_legacy_app(self):
-        """Command deletes the legacy geovault-android application if present."""
-        from django.core.management import call_command
-        from io import StringIO
-
-        _create_oauth_application(
-            self.user,
-            client_id="geovault-android",
-            redirect_uri="com.geovault.places://oauth/callback",
-        )
-        self.assertEqual(Application.objects.filter(client_id="geovault-android").count(), 1)
-        out = StringIO()
-        call_command("ensure_oauth2_app", stdout=out)
-        self.assertFalse(Application.objects.filter(client_id="geovault-android").exists())
-        self.assertEqual(Application.objects.filter(client_id="geovault-android-places").count(), 1)
-        self.assertEqual(Application.objects.filter(client_id="geovault-android-uploader").count(), 1)
-        self.assertEqual(Application.objects.filter(client_id="geovault-android-tracker").count(), 1)
-        self.assertIn("Deleted legacy", out.getvalue())
-
     def test_updates_redirect_uris_if_changed(self):
         """If app exists but redirect_uris differ, command updates them."""
         from django.core.management import call_command

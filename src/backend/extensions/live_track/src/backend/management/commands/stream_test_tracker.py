@@ -221,7 +221,7 @@ class Command(BaseCommand):
                     geom = track_locked.geometry or {"type": "LineString", "coordinates": []}
                     coords = list(geom.get("coordinates") or [])
                     point_params = list(track_locked.point_params or [])
-                    # Keep params aligned with coordinates if legacy data is mismatched.
+                    # Keep point_params length aligned with coordinates.
                     if len(point_params) < len(coords):
                         point_params.extend({} for _ in range(len(coords) - len(point_params)))
                     elif len(point_params) > len(coords):

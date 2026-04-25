@@ -2,6 +2,8 @@
 trigger: always_on
 ---
 
+THE FIRST STEP IN ANY TASK IS TO READ THIS FILE!!!!
+
 **The following are extremely relevant and important instructions. It would behoove you to follow them.**
 
 ### General Instructions

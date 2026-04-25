@@ -32,7 +32,7 @@ import kotlin.math.sqrt
  * MapLibre plugin: dashed line from user to target, purple triple-ring target icon (same draw
  * style as the default map point, via [MapMarkerUtils] + [CommonMapMarkerStyles]),
  * and an optional name/distance label on the **user** coordinate (under the location puck;
- * same placement as the legacy Android survey `MapFragment` navigation text). Hosts drive it
+ * aligned with android-common-maps navigation UX). Hosts drive it
  * with [start], [stop], and [updateUserLocation].
  *
  * @param lineLayerRenderBelowId When set (e.g. the host's `\*-points-icon-layer` id) and the
@@ -47,7 +47,7 @@ import kotlin.math.sqrt
  * [LocationComponentConstants.FOREGROUND_LAYER] when that layer exists at style-load time, so
  * that the LocationComponent's accuracy ring (rendered inside that same indicator layer when
  * `useSpecializedLocationLayer = true`) draws **beneath** the navigation text — matching the
- * legacy survey `MapFragment` z-order. Hosts must therefore register the user-location plugin
+ * android-common-maps layer stack. Hosts must therefore register the user-location plugin
  * **before** this plugin so the foreground layer is present when [onStyleLoaded] runs.
  */
 class GeoVaultNavigationToPointPlugin(
@@ -190,8 +190,7 @@ class GeoVaultNavigationToPointPlugin(
      * preferring [LocationComponentConstants.FOREGROUND_LAYER] (so MapLibre's accuracy ring,
      * drawn inside that same indicator layer when `useSpecializedLocationLayer = true`, sits
      * beneath the text), then the nav target icon, then the host's point-symbol stack anchor,
-     * then unanchored at the top of the layer stack. Mirrors the legacy survey `MapFragment`
-     * z-order (`addLayerAbove(navTargetNameLayer, FOREGROUND_LAYER)`).
+     * then unanchored at the top of the layer stack (`addLayerAbove(navTargetNameLayer, FOREGROUND_LAYER)`).
      */
     private fun addLabelLayer(style: Style) {
         val textLayer = SymbolLayer(LABEL_LAYER_ID, LABEL_SOURCE_ID)
@@ -295,10 +294,7 @@ class GeoVaultNavigationToPointPlugin(
             return FeatureCollection.fromFeatures(features)
         }
 
-        /**
-         * Point at **user** lat/lon so text+offset sit under the location puck (legacy survey
-         * `NAV_TARGET_NAME` point-at-user-lat-lon in the old survey `MapFragment`).
-         */
+        /** Point at **user** lat/lon so text+offset sit under the location puck. */
         fun buildLabelFeatureCollection(
             userLatitude: Double?,
             userLongitude: Double?,
@@ -376,10 +372,7 @@ class GeoVaultNavigationToPointPlugin(
 
         private const val LABEL_TEXT_SIZE_SP = 13f
         private const val LABEL_HALO_WIDTH_PX = 1.5f
-        /**
-         * Ems below the [Property.TEXT_ANCHOR_TOP] anchor; legacy survey `MapFragment` used
-         * 1.25f so the block sits just under the user location puck.
-         */
+        /** Ems below the [Property.TEXT_ANCHOR_TOP] anchor (sits just under the location puck). */
         private const val LABEL_OFFSET_EM = 1.25f
     }
 }

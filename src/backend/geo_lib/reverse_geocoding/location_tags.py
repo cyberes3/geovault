@@ -49,7 +49,7 @@ class ReverseGeocodingLogMessage:
 def tags_from_areas_data(response: Union[AreasQueryResponse, dict]) -> List[str]:
     """
     Build tag list from areas server response (pure function, no I/O).
-    response: AreasQueryResponse or legacy dict with admin_hierarchy, protected_areas, etc.
+    response: AreasQueryResponse, or a dict with the same fields (validated into the model).
     """
     if isinstance(response, dict):
         response = AreasQueryResponse.model_validate(response)

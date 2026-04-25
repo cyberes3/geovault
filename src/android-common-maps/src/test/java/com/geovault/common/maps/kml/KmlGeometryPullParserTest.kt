@@ -82,7 +82,7 @@ class KmlGeometryPullParserTest {
     }
 
     @Test
-    fun polygon_legacy_direct_coordinates_under_polygon() {
+    fun polygon_direct_coordinates_child_under_polygon() {
         val kml = """
             <kml xmlns="http://www.opengis.net/kml/2.2">
               <Polygon>

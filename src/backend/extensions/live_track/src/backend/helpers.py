@@ -15,23 +15,9 @@ DEFAULT_TRACK_COLOR = "#6C93DE"
 
 
 def normalize_track_settings_for_api(settings: Optional[dict[str, Any]]) -> dict:
-    """API responses use ``hidden``; migrate legacy ``hidden_in_list`` from stored JSON."""
+    """Return settings JSON for API and persistence (drops obsolete keys such as ``hidden_in_list``)."""
     s = dict(settings or {})
-    if "hidden_in_list" in s:
-        legacy = s.pop("hidden_in_list")
-        if "hidden" not in s:
-            s["hidden"] = legacy
-    return s
-
-
-def scrub_legacy_hidden_from_track_settings(settings: Optional[dict[str, Any]]) -> dict:
-    """Persist only ``hidden`` in LiveTrack.settings JSON."""
-    s = dict(settings or {})
-    if "hidden_in_list" in s:
-        if "hidden" not in s:
-            s["hidden"] = s.pop("hidden_in_list")
-        else:
-            del s["hidden_in_list"]
+    s.pop("hidden_in_list", None)
     return s
 
 
@@ -150,7 +136,6 @@ def _filter_coords_by_latest_session_start(coords, point_params):
         if latest_start_ms is None or start_ms > latest_start_ms:
             latest_start_ms = start_ms
 
-    # Backward-compatible fallback for imports/older data without starttimestamp.
     if latest_start_ms is None:
         return coords, point_params
 
@@ -198,7 +183,6 @@ def _filter_coords_by_last_and_current_session(coords, point_params):
 
     unique_starts_desc = sorted(set(session_starts_ms), reverse=True)
     if not unique_starts_desc:
-        # Backward-compatible fallback for imports/older data without starttimestamp.
         return coords, point_params
 
     latest_start_ms = unique_starts_desc[0]

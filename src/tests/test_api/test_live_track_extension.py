@@ -5177,17 +5177,15 @@ class TestLiveTrackWorldShare(TestCase):
             )
         self.assertEqual(response.status_code, 404)
 
-    def test_public_share_redirects_to_world_share(self):
-        """GET public/share/<id>/ redirects to world/share/<id>/ for backward compatibility."""
+    def test_public_share_urls_removed(self):
+        """Old public/share/ paths are not served (use world/share/ only)."""
         self.client.logout()
         with _patch_live_track_enabled():
             response = self.client.get(
                 f"/api/extensions/live-track/public/share/{self.share_id}/info/",
                 follow=False,
             )
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("world/share", response["Location"])
-        self.assertIn(self.share_id, response["Location"])
+        self.assertEqual(response.status_code, 404)
 
     def test_disable_world_share_removes_link(self):
         """POST settings with world_share_enabled: false removes LiveTrackWorldShare and response has no world_share_id."""

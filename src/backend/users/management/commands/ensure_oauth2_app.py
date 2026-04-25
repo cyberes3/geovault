@@ -11,9 +11,6 @@ from oauth2_provider.models import Application
 
 User = get_user_model()
 
-# Legacy client_id to remove if present (replaced by geovault-android-places / geovault-android-uploader / geovault-android-tracker)
-LEGACY_CLIENT_ID = "geovault-android"
-
 ANDROID_APPS = (
     {
         "client_id": "geovault-android-places",
@@ -91,12 +88,6 @@ class Command(BaseCommand):
                 self.style.ERROR("No user found. Create a user (e.g. run migrations and create a superuser) first.")
             )
             return
-
-        # Remove legacy single Android app if present (invalidates its tokens)
-        legacy = Application.objects.filter(client_id=LEGACY_CLIENT_ID)
-        if legacy.exists():
-            legacy.delete()
-            self.stdout.write(self.style.WARNING(f"Deleted legacy OAuth2 application '{LEGACY_CLIENT_ID}'."))
 
         for spec in ANDROID_APPS:
             changed, msg = _ensure_app(

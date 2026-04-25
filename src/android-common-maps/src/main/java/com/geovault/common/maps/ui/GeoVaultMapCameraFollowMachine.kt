@@ -7,7 +7,7 @@ import org.maplibre.android.location.modes.CameraMode
  *
  * MapLibre exposes one [CameraMode] at a time. Map bearing while "heading follow" is on is
  * driven manually (smoothed + throttled [HeadingSensor] in [rememberGeoVaultMapCameraFollowFabBundle])
- * like the legacy survey app, not [CameraMode.TRACKING_COMPASS], which tends to feel choppy.
+ * like other GeoVault map hosts, not [CameraMode.TRACKING_COMPASS], which tends to feel choppy.
  */
 data class GeoVaultMapCameraFollowState(
     val gpsFollowDesired: Boolean,
@@ -66,8 +66,8 @@ object GeoVaultMapCameraFollowMachine {
         }
 
     /**
-     * User panned or zoomed the map. Matches legacy survey behaviour: drop **position** follow
-     * but keep heading follow so the map can stay compass-locked.
+     * User panned or zoomed the map: drop **position** follow but keep heading follow so the
+     * map can stay compass-locked.
      */
     fun afterUserGesture(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
         current.copy(gpsFollowDesired = false)

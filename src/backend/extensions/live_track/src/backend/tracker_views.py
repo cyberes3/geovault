@@ -28,7 +28,6 @@ from .helpers import (
     DEFAULT_TRACK_COLOR,
     _color_from_settings,
     normalize_track_settings_for_api,
-    scrub_legacy_hidden_from_track_settings,
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
     accepted_group_track_ids_for_user,
@@ -101,11 +100,11 @@ def hidden_items_clear(request):
         tracks = LiveTrack.objects.filter(user=request.user).only("id", "settings", "updated_at")
         now = timezone.now()
         for track in tracks:
-            settings = scrub_legacy_hidden_from_track_settings({**(track.settings or {})})
+            settings = normalize_track_settings_for_api({**(track.settings or {})})
             if "hidden" not in settings:
                 continue
             settings.pop("hidden", None)
-            track.settings = scrub_legacy_hidden_from_track_settings(settings)
+            track.settings = normalize_track_settings_for_api(settings)
             track.updated_at = now
             track.save(update_fields=["settings", "updated_at"])
 
@@ -463,7 +462,7 @@ def tracker_post_settings(request, tracker_id):
     settings_keys = {"color", "recent_data_window", "hidden", "allow_group_reshare"}
     settings_dump = {k: v for k, v in provided_fields.items() if k in settings_keys}
     if settings_dump:
-        new_settings = scrub_legacy_hidden_from_track_settings({**(track.settings or {})})
+        new_settings = normalize_track_settings_for_api({**(track.settings or {})})
         for k, v in settings_dump.items():
             if k == "recent_data_window" and v == "all":
                 new_settings.pop(k, None)
@@ -472,7 +471,7 @@ def tracker_post_settings(request, tracker_id):
                 new_settings.pop(k, None)
             else:
                 new_settings[k] = v
-        track.settings = scrub_legacy_hidden_from_track_settings(new_settings)
+        track.settings = normalize_track_settings_for_api(new_settings)
         update_fields.append("settings")
     if body.visibility is not None:
         track.visibility = body.visibility

@@ -947,7 +947,7 @@ def check_extensions():
 
 def check_live_track_flusher():
     """
-    Legacy compatibility check retained as a no-op after Celery cutover.
+    Live Track flush runs via Celery; this startup check is intentionally a no-op log line.
     """
     _logger.info("✓ Live Track flusher check skipped (Celery-based flush enabled)")
     return True

@@ -33,17 +33,13 @@ export async function getUserInfo() {
             }
             const userStatusData = await response.json()
             
-            // Handle new tag structure (array of objects with tag and count) or legacy (array of strings)
-            // Tags are already separated - backend only returns user tags
+            // Tags: array of { tag, count } from /api/user/status/
             let processedTags = []
             if (userStatusData.tags && Array.isArray(userStatusData.tags)) {
-                if (userStatusData.tags.length > 0 && typeof userStatusData.tags[0] === 'object' && 'tag' in userStatusData.tags[0]) {
-                    // New structure: array of objects with tag and count
-                    processedTags = userStatusData.tags.map(tagObj => ({ tag: tagObj.tag, count: tagObj.count }))
-                } else {
-                    // Legacy structure: array of strings
-                    processedTags = userStatusData.tags.map(tag => ({ tag: tag, count: 0 }))
-                }
+                processedTags = userStatusData.tags.map(tagObj => ({
+                    tag: tagObj.tag,
+                    count: tagObj.count,
+                }))
             }
             
             return new UserStatus(userStatusData.authorized, userStatusData.email, userStatusData.id, userStatusData.featureCount, processedTags, userStatusData.is_superuser || false)

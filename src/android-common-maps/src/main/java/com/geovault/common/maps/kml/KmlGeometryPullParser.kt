@@ -66,7 +66,7 @@ class KmlGeometryPullParser {
 
     /**
      * KML [Polygon]: rings live under [outerBoundaryIs] / [innerBoundaryIs] → [LinearRing] → [coordinates],
-     * or legacy direct [coordinates] under [Polygon].
+     * or a direct [coordinates] child under [Polygon] (some KML writers).
      */
     private fun parsePolygon(parser: XmlPullParser): ParsedKmlGeometry.Polygon? {
         val rings = mutableListOf<List<KmlPosition>>()

@@ -19,7 +19,7 @@ import android.view.Surface
  * Design goals:
  * - One lifecycle owner per caller (start/stop pair). No shared singleton so tests and hosts
  *   that live under different lifecycles can't trip each other.
- * - Heading is smoothed across frames (defaults match the legacy survey map: fast sampling
+ * - Heading is smoothed across frames (defaults tuned for GeoVault maps: fast sampling
  *   with a minimum emit interval so map / puck updates are not tied to raw sensor jitter).
  * - Screen rotation is compensated (landscape/upside-down renders usable bearings).
  * - [start] is a no-op when the device has no rotation-vector sensor, so callers can always
@@ -65,7 +65,7 @@ class HeadingSensor(context: Context) {
      *
      * When [minEmitIntervalMs] is greater than zero, smoothed bearings are still computed on
      * every sensor sample but the callback is invoked at most once per interval — the pattern
-     * used by the legacy survey map to keep camera / puck motion steady (~60 Hz cap).
+     * used to keep camera / puck motion steady (~60 Hz cap).
      *
      * Idempotent: calling [start] while already running replaces the callback without
      * re-registering the sensor listener.
@@ -171,17 +171,17 @@ class HeadingSensor(context: Context) {
         val next = ((last + delta * clampedAlpha) + 360f) % 360f
         // No dead-zone here on purpose: a min-delta filter makes slow physical rotation look
         // stair-stepped (the smoothed delta-per-frame stays under the threshold for several
-        // frames, then jumps once accumulated change crosses it). The legacy survey app's
-        // smoothing has no filter and feels continuous; we match that.
+        // frames, then jumps once accumulated change crosses it). No min-delta filter here so
+        // slow physical rotation stays continuous.
         smoothedBearing = next
         return next
     }
 
     companion object {
-        /** Matches legacy survey `ORIENTATION_SMOOTHING_ALPHA` (rotation-vector → map). */
+        /** Default rotation-vector smoothing alpha (rotation-vector → map). */
         private const val DEFAULT_SMOOTHING_ALPHA = 0.35f
 
-        /** Matches legacy survey `MIN_MAP_ORIENTATION_UPDATE_INTERVAL_MS`. */
+        /** Minimum interval between main-thread bearing callbacks (ms). */
         private const val DEFAULT_MIN_EMIT_INTERVAL_MS = 16L
 
         private val DEFAULT_SENSOR_DELAY: Int = SensorManager.SENSOR_DELAY_FASTEST

@@ -34,7 +34,7 @@ object GeoVaultMapScaffoldDefaults {
      */
     val DrawerBorderWidth: Dp = 1.5.dp
 
-    /** Same as [GeoVaultColorTokens.MainBlue] (legacy survey bottom sheet). */
+    /** Same as [GeoVaultColorTokens.MainBlue] (map scaffold bottom sheet). */
     val DrawerBorderColor: Color
         get() = GeoVaultColorTokens.MainBlue
 

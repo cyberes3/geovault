@@ -280,7 +280,7 @@ private enum class GeoVaultMapCameraFollowPendingGrant {
 
 /**
  * Zoom level the map snaps to the **first** time GPS follow is engaged in a session. Picked
- * to roughly match the legacy survey app's "tap GPS lock" experience (city block scale —
+ * to roughly match the survey data viewer "tap GPS lock" experience (city block scale —
  * close enough to the user to be useful, not so close that everything is texture).
  *
  * Subsequent engagements preserve whatever zoom the user has dialed in.
@@ -291,10 +291,10 @@ private const val INITIAL_FOLLOW_ZOOM: Double = 10.0
  * Coordinated GPS follow and compass / heading follow for one map.
  *
  * - One [MapLibreMap.OnCameraMoveStartedListener]: a user pan/zoom clears **GPS** follow only
- *   and keeps heading follow, matching the legacy survey map.
+ *   and keeps heading follow, matching the survey data viewer map.
  * - One saveable pair of booleans so both FABs agree with the single underlying [CameraMode].
  * - Map bearing is driven manually only when **both** GPS follow and heading follow are on
- *   (legacy survey rule). When only heading is on, the puck rotates via the user-location
+ *   (survey data viewer rule). When only heading is on, the puck rotates via the user-location
  *   plugin's existing heading sensor and the camera stays put — no double-sensor work and
  *   no per-frame map redraw fight with [CameraMode.TRACKING_COMPASS].
  * - Map bearing updates piggyback on the puck's [MapLocationRendererPlugin.addBearingListener]
@@ -395,7 +395,7 @@ fun rememberGeoVaultMapCameraFollowFabBundle(
         onDispose { }
     }
 
-    // Legacy survey parity: only push camera bearing while BOTH GPS follow and heading follow
+    // android-common-maps parity: only push camera bearing while BOTH GPS follow and heading follow
     // are on (heading-alone just rotates the puck, no camera work). Subscribe to the puck's
     // existing heading sensor so we don't run a second SENSOR_DELAY_FASTEST stream — that was
     // the source of the freeze when the rotation FAB was tapped.

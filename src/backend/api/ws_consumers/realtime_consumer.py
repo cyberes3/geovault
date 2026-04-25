@@ -145,9 +145,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             _logger.warning("Binary data received but not supported")
 
     async def live_track_track_updated(self, event):
-        """No-op: live_track updates are sent only to the standalone trackers-live endpoint, not realtime.
-        Ignore if this message is ever delivered to this consumer (e.g. legacy or misconfiguration).
-        """
+        """No-op: live_track updates use the trackers-live consumer, not this realtime channel."""
         pass
 
     # Dynamic event routing - automatically route events to modules

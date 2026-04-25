@@ -5,7 +5,7 @@ Tests cover:
 - Hook registration with extension context
 - Hook execution
 - Hook ID prefixing
-- Integration with legacy import hooks
+- Integration with execute_import_hooks
 """
 import pytest
 from unittest.mock import patch
@@ -25,7 +25,7 @@ from website.extensions.extension_hooks import (
     get_registered_periodic_bg_tasks,
 )
 import website.extensions.extension_hooks as extension_hooks_module
-from geo_lib.processing.hooks import register_import_hook, execute_import_hooks
+from geo_lib.processing.hooks import execute_import_hooks
 from api.models import ImportQueue
 from django.contrib.auth import get_user_model
 
@@ -383,106 +383,69 @@ class TestExtensionHooks:
 
 @pytest.mark.django_db
 class TestExtensionHooksIntegration:
-    """Test integration between extension hooks and legacy import hooks."""
-    
+    """execute_import_hooks runs import hooks from the extension registry."""
+
     def setup_method(self):
-        """Clear hooks before each test."""
         clear_extension_context()
         extension_hooks_module._hook_registry.clear()
         extension_hooks_module._bg_task_registry.clear()
         extension_hooks_module._periodic_bg_task_registry.clear()
-        from geo_lib.processing.hooks import _import_hooks
-        _import_hooks.clear()
-    
+
     def teardown_method(self):
-        """Clear hooks after each test."""
         clear_extension_context()
         extension_hooks_module._hook_registry.clear()
         extension_hooks_module._bg_task_registry.clear()
         extension_hooks_module._periodic_bg_task_registry.clear()
-        from geo_lib.processing.hooks import _import_hooks
-        _import_hooks.clear()
-    
-    def test_legacy_register_import_hook_still_works(self):
-        """Test that legacy register_import_hook still works."""
+
+    def test_execute_import_hooks_runs_extension_import_hooks(self):
         call_log = []
-        
-        def legacy_callback(import_item, user_id, created_features):
-            call_log.append('legacy')
-        
-        # Register via legacy API (no extension context)
-        register_import_hook('legacy_hook', legacy_callback)
-        
-        # Create mock import item
-        user = User.objects.create_user('test@example.com', 'password')
+
+        def cb(import_item, user_id, created_features):
+            call_log.append("a")
+
+        set_extension_context("test_extension")
+        register_hook("import", "ext_hook", cb)
+        clear_extension_context()
+
+        user = User.objects.create_user("test@example.com", "password")
         import_item = ImportQueue.objects.create(
             user=user,
-            original_filename='test.kml',
-            raw_file='<kml>test</kml>',
-            file_hash='test_hash',
-            imported=True
+            original_filename="test.kml",
+            raw_file="<kml>test</kml>",
+            file_hash="test_hash",
+            imported=True,
         )
-        
+
         execute_import_hooks(import_item, user.id, [])
-        
-        assert len(call_log) == 1
-        assert call_log[0] == 'legacy'
-    
-    def test_extension_hooks_executed_with_import_hooks(self):
-        """Test that extension hooks are executed along with legacy hooks."""
-        set_extension_context('test_extension')
-        
+
+        assert call_log == ["a"]
+
+    def test_execute_import_hooks_calls_multiple_import_hooks(self):
         call_log = []
-        
-        def extension_callback(import_item, user_id, created_features):
-            call_log.append('extension')
-        
-        def legacy_callback(import_item, user_id, created_features):
-            call_log.append('legacy')
-        
-        # Register extension hook
-        register_hook('import', 'ext_hook', extension_callback)
-        
-        # Register legacy hook
-        register_import_hook('legacy_hook', legacy_callback)
-        
-        # Create mock import item
-        user = User.objects.create_user('test@example.com', 'password')
+
+        def cb_a(import_item, user_id, created_features):
+            call_log.append("a")
+
+        def cb_b(import_item, user_id, created_features):
+            call_log.append("b")
+
+        set_extension_context("test_extension")
+        register_hook("import", "one", cb_a)
+        register_hook("import", "two", cb_b)
+        clear_extension_context()
+
+        user = User.objects.create_user("test2@example.com", "password")
         import_item = ImportQueue.objects.create(
             user=user,
-            original_filename='test.kml',
-            raw_file='<kml>test</kml>',
-            file_hash='test_hash',
-            imported=True
+            original_filename="test.kml",
+            raw_file="<kml>test</kml>",
+            file_hash="test_hash2",
+            imported=True,
         )
-        
+
         execute_import_hooks(import_item, user.id, [])
-        
-        # Both should be called
-        assert len(call_log) == 2
-        assert 'extension' in call_log
-        assert 'legacy' in call_log
-        
-        clear_extension_context()
-    
-    def test_register_import_hook_in_extension_context_uses_new_system(self):
-        """Test that register_import_hook in extension context uses new system."""
-        set_extension_context('test_extension')
-        
-        call_log = []
-        
-        def callback(import_item, user_id, created_features):
-            call_log.append('called')
-        
-        # Register via legacy API but in extension context
-        register_import_hook('test_hook', callback)
-        
-        # Should be registered in extension hooks system
-        hooks = get_hooks('import')
-        assert len(hooks) == 1
-        assert hooks[0][0] == 'test_extension.test_hook'
-        
-        clear_extension_context()
+
+        assert set(call_log) == {"a", "b"}
 
 
 @pytest.mark.django_db

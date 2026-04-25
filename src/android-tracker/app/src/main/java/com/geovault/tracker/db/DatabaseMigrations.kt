@@ -22,7 +22,7 @@ object DatabaseMigrations {
     }
 
     /**
-     * Version 4 promotes `tracker_id` to `NOT NULL`. Legacy rows inserted before the
+     * Version 4 promotes `tracker_id` to `NOT NULL`. Rows inserted before the
      * column existed (or while the producer still allowed blank ids) are backfilled
      * with [selectedTrackerId] when provided; rows that cannot be attributed to any
      * tracker are dropped since there is no server they could be uploaded to.
