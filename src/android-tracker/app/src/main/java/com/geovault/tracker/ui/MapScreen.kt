@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -97,6 +98,7 @@ import com.geovault.tracker.presentation.TrackerMapSelectionCard
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipMapper
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
 import com.geovault.tracker.presentation.TrackerMapUiState
+import com.geovault.tracker.presentation.TrackerMapMyLocationFabPolicy
 import com.geovault.tracker.presentation.TrackerMapUserLocationInput
 import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
 import com.geovault.tracker.presentation.TrackerMapViewModel
@@ -262,15 +264,33 @@ private fun TrackerMapAuthenticatedContent(
         }
     }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
+    var didInitialBounds by remember { mutableStateOf(false) }
+    val viewportContextSeed = remember(
+        state.mode,
+        state.currentGroupId,
+        state.displayedTrackerId,
+        state.runtime.selectedTrackerId,
+    ) {
+        val effectiveDisplayedTrackerId = state.displayedTrackerId
+            .ifBlank { state.runtime.selectedTrackerId }
+            .trim()
+        "${state.mode}|${state.currentGroupId.trim()}|$effectiveDisplayedTrackerId"
+    }
+    LaunchedEffect(viewportContextSeed) {
+        didInitialBounds = false
+        gpsHomeAnchor = null
+    }
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
     val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
-    val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
-        map = map,
-        userLocation = locationPlugin,
-        order = 30,
-        onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
-    )
+    val gpsFabAction = key(viewportContextSeed) {
+        rememberGeoVaultGpsRecenterFabAction(
+            map = map,
+            userLocation = locationPlugin,
+            order = 30,
+            onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
+        )
+    }
 
     DisposableEffect(map) {
         map.registerPlugin(renderPlugin)
@@ -340,7 +360,7 @@ private fun TrackerMapAuthenticatedContent(
         }
     }
 
-    LaunchedEffect(phase, userLocationDecision) {
+    LaunchedEffect(phase, userLocationDecision, viewportContextSeed) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         locationPlugin.setEnabled(userLocationDecision.shouldEnablePuck)
         locationPlugin.setCameraTracking(userLocationDecision.shouldEnableFollowCamera)
@@ -435,21 +455,6 @@ private fun TrackerMapAuthenticatedContent(
         renderPlugin.setRenderState(resolvedState)
     }
 
-    var didInitialBounds by remember { mutableStateOf(false) }
-    val viewportContextSeed = remember(
-        state.mode,
-        state.currentGroupId,
-        state.displayedTrackerId,
-        state.runtime.selectedTrackerId,
-    ) {
-        val effectiveDisplayedTrackerId = state.displayedTrackerId
-            .ifBlank { state.runtime.selectedTrackerId }
-            .trim()
-        "${state.mode}|${state.currentGroupId.trim()}|$effectiveDisplayedTrackerId"
-    }
-    LaunchedEffect(viewportContextSeed) {
-        didInitialBounds = false
-    }
     LaunchedEffect(phase, state.mode, state.currentGroupId, state.trail, state.allQueueTrailsByTracker, state.runtime) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (didInitialBounds) return@LaunchedEffect
@@ -534,7 +539,13 @@ private fun TrackerMapAuthenticatedContent(
                         }
                     },
                 )
-                if (!singleTrackerMapView) {
+                if (
+                    TrackerMapMyLocationFabPolicy.shouldShowFab(
+                        mode = state.mode,
+                        displayedTrackerId = state.displayedTrackerId,
+                        selectedTrackerId = state.runtime.selectedTrackerId,
+                    )
+                ) {
                     action(
                         id = gpsFabAction.id,
                         order = gpsFabAction.order,
