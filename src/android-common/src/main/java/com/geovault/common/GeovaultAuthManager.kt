@@ -38,6 +38,7 @@ object GeovaultAuthManager {
     const val OAUTH_CLIENT_ID_UPLOADER = "geovault-android-uploader"
     const val OAUTH_CLIENT_ID_PLACES = "geovault-android-places"
     const val OAUTH_CLIENT_ID_TRACKER = "geovault-android-tracker"
+    const val OAUTH_CLIENT_ID_NGS = "geovault-android-ngs"
     private const val OAUTH_SCOPE = "api"
     private const val TOKEN_ENDPOINT_PATH = "/api/oauth/token/"
     private const val AUTHORIZE_PATH = "/api/oauth/authorize/"

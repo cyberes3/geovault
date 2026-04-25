@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,12 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,7 +24,6 @@ import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,16 +36,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.geovault.common.NaturalSort
 import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
@@ -61,6 +51,7 @@ import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSearchableMultiSelectDialog
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -619,150 +610,33 @@ private fun GroupEditShareUserPickerDialog(
     val pinnedEmails = selectedEmails.filter { it !in apiEmailSet }
     val pickerRowEmails = (apiEmailsLower + pinnedEmails).distinct()
         .sortedWith(NaturalSort.naturalOrderBy { it })
-    val q = shareUserPickerSearch.trim()
-    val filteredPickerEmails = if (q.isEmpty()) {
-        pickerRowEmails
-    } else {
-        pickerRowEmails.filter { it.contains(q, ignoreCase = true) }
-    }
 
-    Dialog(onDismissRequest = onDismiss) {
-        val pickerWidth = LocalConfiguration.current.screenWidthDp.dp * 0.8f
-        Card(
-            modifier = Modifier.width(pickerWidth),
-            elevation = 0.dp,
-            backgroundColor = MaterialTheme.colors.surface,
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.trackers_edit_pick_users),
-                    style = MaterialTheme.typography.subtitle1,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = stringResource(R.string.trackers_edit_share_user_picker_hint),
-                    style = MaterialTheme.typography.caption,
-                    color = GeoVaultColorTokens.TextSecondary,
-                )
-                GeoVaultInput(
-                    value = shareUserPickerSearch,
-                    onValueChange = onSearchChanged,
-                    label = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
-                    placeholder = stringResource(R.string.trackers_edit_share_user_picker_filter_hint),
-                    singleLine = true,
-                    enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                when {
-                    isShareRecipientSuggestionsLoading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 120.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            GeoVaultLoadingSpinner(
-                                bottomText = stringResource(R.string.trackers_share_suggestions_loading),
-                            )
-                        }
-                    }
-                    filteredPickerEmails.isEmpty() -> {
-                        Text(
-                            text = stringResource(R.string.trackers_no_other_users_found),
-                            style = MaterialTheme.typography.body2,
-                            color = GeoVaultColorTokens.TextSecondary,
-                        )
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 360.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            items(filteredPickerEmails, key = { it }) { emailLower ->
-                                val displayEmail = shareRecipientUsers
-                                    .firstOrNull {
-                                        it.email.trim().lowercase(Locale.getDefault()) == emailLower
-                                    }
-                                    ?.email
-                                    ?.trim()
-                                    ?: emailLower
-                                GroupEditShareUserPickerRow(
-                                    displayEmail = displayEmail,
-                                    selected = selectedEmails.contains(emailLower),
-                                    enabled = !isSaving,
-                                    onClick = { onToggleSharedEmail(emailLower) },
-                                )
-                            }
-                        }
-                    }
+    GeoVaultSearchableMultiSelectDialog(
+        title = stringResource(R.string.trackers_edit_pick_users),
+        hint = stringResource(R.string.trackers_edit_share_user_picker_hint),
+        items = pickerRowEmails,
+        isSelected = { selectedEmails.contains(it) },
+        onToggleItem = onToggleSharedEmail,
+        onDismiss = onDismiss,
+        labelFor = { emailLower ->
+            shareRecipientUsers
+                .firstOrNull {
+                    it.email.trim().lowercase(Locale.getDefault()) == emailLower
                 }
-                GeoVaultPrimaryButton(
-                    text = stringResource(R.string.trackers_edit_pick_users_done),
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun GroupEditShareUserPickerRow(
-    displayEmail: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val isDark = !MaterialTheme.colors.isLight
-    val rowBackground = when {
-        !selected -> MaterialTheme.colors.surface
-        isDark -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
-        else -> GeoVaultColorTokens.Blue100
-    }
-    val labelColor = if (selected) {
-        GeoVaultColorTokens.MainBlue
-    } else {
-        MaterialTheme.colors.onSurface
-    }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) { onClick() },
-        shape = RoundedCornerShape(8.dp),
-        elevation = 0.dp,
-        backgroundColor = rowBackground,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 44.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = displayEmail,
-                modifier = Modifier.weight(1f),
-                color = labelColor,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = GeoVaultColorTokens.MainBlue,
-                    modifier = Modifier.size(20.dp),
-                )
-            } else {
-                Spacer(modifier = Modifier.size(20.dp))
-            }
-        }
-    }
+                ?.email
+                ?.trim()
+                ?: emailLower
+        },
+        searchQuery = shareUserPickerSearch,
+        onSearchQueryChange = onSearchChanged,
+        searchLabel = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
+        searchPlaceholder = stringResource(R.string.trackers_edit_share_user_picker_filter_hint),
+        emptyLabel = stringResource(R.string.trackers_no_other_users_found),
+        confirmText = stringResource(R.string.trackers_edit_pick_users_done),
+        isLoading = isShareRecipientSuggestionsLoading,
+        loadingText = stringResource(R.string.trackers_share_suggestions_loading),
+        enabled = !isSaving,
+    )
 }
 
 @Composable

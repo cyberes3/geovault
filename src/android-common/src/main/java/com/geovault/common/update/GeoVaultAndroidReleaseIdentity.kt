@@ -27,4 +27,9 @@ object GeoVaultAndroidReleaseIdentity {
         const val WORKER_APP_NAME: String = "GeoVault Survey Data Viewer"
         const val RATE_LIMIT_KEY: String = "survey"
     }
+
+    object NgsNavigator {
+        const val WORKER_APP_NAME: String = "GeoVault NGS Navigator"
+        const val RATE_LIMIT_KEY: String = "ngs_navigator"
+    }
 }

@@ -56,6 +56,11 @@ fun GeoVaultBaseButton(
     tooltip: String? = null,
     fitToContent: Boolean = false,
     minWidthWhenFitToContent: Dp = 1.dp,
+    /**
+     * Renders to the **left** of [text], with the pair centered as a unit in the button
+     * (e.g. icon + label). Mutually exclusive with [trailingContent] and [centeredContent].
+     */
+    leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
     centeredContent: (@Composable () -> Unit)? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
@@ -84,12 +89,26 @@ fun GeoVaultBaseButton(
         }
     } else {
         {
-            if (trailingContent != null) {
-                Text(text = text, modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(8.dp))
-                trailingContent()
-            } else {
-                Text(text = text)
+            when {
+                trailingContent != null -> {
+                    Text(text = text, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    trailingContent()
+                }
+                leadingContent != null -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        leadingContent()
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = text)
+                    }
+                }
+                else -> {
+                    Text(text = text)
+                }
             }
         }
     }
@@ -182,6 +201,12 @@ fun GeoVaultPrimaryButton(
     tooltip: String? = null,
     fitToContent: Boolean = false,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    /**
+     * Optional start icon, rendered to the **left** of the label, together centered in the
+     * button. Uses [text] for [Icon] content description when the latter is null.
+     */
+    leadingIcon: ImageVector? = null,
+    leadingIconContentDescription: String? = null,
 ) {
     val resolvedBackgroundColor = if (visuallyDisabled) {
         GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f)
@@ -192,6 +217,17 @@ fun GeoVaultPrimaryButton(
         Color.White.copy(alpha = 0.75f)
     } else {
         Color.White
+    }
+    val li = leadingIcon
+    val leading: (@Composable () -> Unit)? = if (li != null) {
+        {
+            Icon(
+                imageVector = li,
+                contentDescription = leadingIconContentDescription ?: text,
+            )
+        }
+    } else {
+        null
     }
     GeoVaultBaseButton(
         text = text,
@@ -209,6 +245,7 @@ fun GeoVaultPrimaryButton(
         tooltip = tooltip,
         fitToContent = fitToContent,
         contentPadding = contentPadding,
+        leadingContent = leading,
     )
 }
 

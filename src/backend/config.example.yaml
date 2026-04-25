@@ -252,6 +252,11 @@ extensions:
     # If running in Docker, use the service name (e.g., http://pwabuilder:5858)
     pwa_builder_url: "http://pwabuilder:5858"
 
+  ngs_data:
+    # Serves NGS per-state .sqlite files for the NGS Navigator app (no website UI).
+    # Files are read from {BASE_DIR}/data/ngs_data (see ngs-navigator-android/server for generator).
+    enabled: true
+
   live_track:
     # Location tracking server for devices to publish live location tracks to.
     enabled: true

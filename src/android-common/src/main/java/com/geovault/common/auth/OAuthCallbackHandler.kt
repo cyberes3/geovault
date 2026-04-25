@@ -30,10 +30,12 @@ sealed interface OAuthCallbackValidationResult {
 
 object OAuthCallbackValidator {
     fun validate(input: OAuthCallbackValidationInput): OAuthCallbackValidationResult {
+        val callbackState = input.state?.trim()
+        val savedStateForLog = input.pkceState?.second?.trim()
         Log.d(TAG, "validate: code=${if (input.code.isNullOrBlank()) "MISSING" else "present(${input.code.length} chars)"}" +
-            " state=${if (input.state.isNullOrBlank()) "MISSING" else "present(${input.state})"}" +
+            " state=${if (callbackState.isNullOrBlank()) "MISSING" else "present($callbackState)"}" +
             " oauthError=${input.oauthError}" +
-            " pkceState=${if (input.pkceState == null) "NULL" else "present(savedState=${input.pkceState.second})"}" +
+            " pkceState=${if (input.pkceState == null) "NULL" else "present(savedState=$savedStateForLog)"}" +
             " serverUrl=${input.serverUrl.ifBlank { "BLANK" }}")
 
         if (input.code.isNullOrBlank()) {
@@ -46,8 +48,12 @@ object OAuthCallbackValidator {
             Log.e(TAG, "validate FAILED: pkceState is null — stored PKCE was missing or decryption failed")
             return OAuthCallbackValidationResult.Error(message = "Invalid state")
         }
-        if (pkce.second != input.state) {
-            Log.e(TAG, "validate FAILED: state mismatch — callback state=${input.state} stored state=${pkce.second}")
+        val expectedState = pkce.second.trim()
+        if (expectedState != callbackState) {
+            Log.e(
+                TAG,
+                "validate FAILED: state mismatch — callback state=$callbackState stored state=$expectedState"
+            )
             return OAuthCallbackValidationResult.Error(message = "Invalid state")
         }
         if (input.serverUrl.isBlank()) {
@@ -61,6 +67,34 @@ object OAuthCallbackValidator {
             serverUrl = input.serverUrl,
         )
     }
+}
+
+/**
+ * Read OAuth2 callback parameters from the redirect URI query, and (if any are missing) from
+ * a fragment in `key=value&` form. Some handoff flows put parameters only in the fragment
+ * (and [Uri.getQueryParameter] on the full URI will not read them from there).
+ */
+internal fun parseOAuthRedirectParams(uri: Uri): Triple<String?, String?, String?> {
+    var code = uri.getQueryParameter("code")
+    var state = uri.getQueryParameter("state")
+    var error = uri.getQueryParameter("error")
+    if (code == null || state == null || error == null) {
+        val fromFragment = uri.fragment?.let { parseFragmentKeyValues(it) }
+        if (fromFragment != null) {
+            if (code == null) code = fromFragment["code"]
+            if (state == null) state = fromFragment["state"]
+            if (error == null) error = fromFragment["error"]
+        }
+    }
+    return Triple(code, state, error)
+}
+
+private fun parseFragmentKeyValues(fragment: String): Map<String, String>? {
+    val q = fragment.trim().removePrefix("?").removePrefix("/")
+    if (q.isEmpty() || !q.contains('=')) return null
+    val parsed = Uri.parse("https://oauth-fragment.local/blank?$q")
+    if (parsed.query.isNullOrBlank()) return null
+    return parsed.queryParameterNames.associateWith { n -> parsed.getQueryParameter(n) ?: "" }
 }
 
 class OAuthCallbackHandler(
@@ -80,17 +114,20 @@ class OAuthCallbackHandler(
             return
         }
         Log.d(TAG, "handleIntent: callback URI scheme=${uri.scheme} host=${uri.host} path=${uri.path}" +
-            " queryParams=${uri.queryParameterNames}")
+            " queryParams=${uri.queryParameterNames} fragmentLen=${uri.fragment?.length ?: 0}")
+        val (code, state, oauthError) = parseOAuthRedirectParams(uri)
         val pkceState = GeovaultAuthManager.getAndClearPkceState(context)
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
-        Log.d(TAG, "handleIntent: retrieved pkceState=${if (pkceState == null) "NULL" else "present"}" +
+        Log.d(TAG, "handleIntent: parsed code=${if (code.isNullOrBlank()) "MISSING" else "present"}" +
+            " state=${if (state.isNullOrBlank()) "MISSING" else "present"}" +
+            " retrieved pkceState=${if (pkceState == null) "NULL" else "present"}" +
             " serverUrl=${serverUrl.ifBlank { "BLANK" }}")
 
         val validation = OAuthCallbackValidator.validate(
             OAuthCallbackValidationInput(
-                code = uri.getQueryParameter("code"),
-                state = uri.getQueryParameter("state"),
-                oauthError = uri.getQueryParameter("error"),
+                code = code,
+                state = state,
+                oauthError = oauthError,
                 pkceState = pkceState,
                 serverUrl = serverUrl,
             )

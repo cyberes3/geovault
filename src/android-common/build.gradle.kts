@@ -36,12 +36,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-    // Exposed as `api` so every consumer that depends on :android-common also gets the
-    // Theme.SplashScreen parent style referenced by Theme.GeoVault.Splash + the
-    // androidx.core.splashscreen.SplashScreen type returned by GeoVaultSplashScreen.install.
-    // Pinned here rather than via a version catalog alias so individual app catalogs stay
-    // free of splash-specific bookkeeping.
-    api("androidx.core:core-splashscreen:1.0.1")
+    api("androidx.core:core-splashscreen:1.2.0")
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
