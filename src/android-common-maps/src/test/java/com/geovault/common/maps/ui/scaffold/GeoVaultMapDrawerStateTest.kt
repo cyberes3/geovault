@@ -250,4 +250,27 @@ class GeoVaultMapDrawerStateTest {
         assertEquals(72, state.peekHeightPx)
         assertTrue("fraction should be preserved", state.halfExpandedFraction == 0.42f)
     }
+
+    @Test
+    fun halfExpandedSettledVisibleHeightPx_matchesUpdateAnchorsMath() {
+        val state = createGeoVaultMapDrawerStateForTest(
+            peekHeightPx = 200,
+            halfExpandedFraction = 0.5f,
+        )
+        state.updateAnchorsForTest(containerHeightPx = 1000)
+        // half offset 500, visible = 1000 - 500
+        assertEquals(500, state.halfExpandedSettledVisibleHeightPx())
+    }
+
+    @Test
+    fun mapPanDrawerBottomReservePx_boostsLiveHeightWhenTargetHalf() = runBlocking {
+        val state = createGeoVaultMapDrawerStateForTest(
+            peekHeightPx = 200,
+            halfExpandedFraction = 0.5f,
+        )
+        state.updateAnchorsForTest(containerHeightPx = 1000)
+        state.snapTo(GeoVaultMapDrawerAnchor.HalfExpanded)
+        // Fictive "still at peek" live height while the UI target is half: reserve uses settled half.
+        assertEquals(500, state.mapPanDrawerBottomReservePx(liveVisibleHeightPx = 200))
+    }
 }

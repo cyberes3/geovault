@@ -1,5 +1,8 @@
 package com.geovault.common.maps.ui.scaffold
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.animateTo
@@ -42,6 +45,20 @@ class GeoVaultMapDrawerState internal constructor(
     /** Fraction of the container height occupied by [GeoVaultMapDrawerAnchor.HalfExpanded]. */
     val halfExpandedFraction: Float,
     initialAnchor: GeoVaultMapDrawerAnchor = GeoVaultMapDrawerAnchor.Collapsed,
+    /**
+     * Animation spec used by [animateTo] (sheet snap-to-anchor).
+     *
+     * Defaulted to a fixed-duration tween rather than the foundation library's default
+     * spring so consumers that need to drive *concurrent* animations (e.g. screen-space
+     * map panning to keep a selection visible while the sheet rises) can match this exact
+     * curve frame-for-frame. Spring physics have variable settling time and a non-linear
+     * progression that can't be replicated by an external coroutine driving MapLibre's
+     * `scrollBy` — the result is a visible desync between sheet position and map shift.
+     * A deterministic tween makes lockstep co-animation trivial: read [snapAnimationSpec],
+     * pass it to `androidx.compose.animation.core.animate`, and both motions step on the
+     * same frame clock with identical easing.
+     */
+    val snapAnimationSpec: AnimationSpec<Float> = DefaultSnapAnimationSpec,
 ) {
     init {
         require(peekHeightPx >= 0) { "peekHeightPx must be >= 0, was $peekHeightPx" }
@@ -56,7 +73,20 @@ class GeoVaultMapDrawerState internal constructor(
      * almost never needs to call this directly; prefer [animateTo] / [snapTo].
      */
     val anchoredDraggableState: AnchoredDraggableState<GeoVaultMapDrawerAnchor> =
-        AnchoredDraggableState(initialValue = initialAnchor)
+        AnchoredDraggableState(
+            initialValue = initialAnchor,
+            // Drag past the geometric midpoint snaps to the next anchor (the standard
+            // bottom-sheet idiom that the no-arg `AnchoredDraggableState` constructor uses).
+            positionalThreshold = { totalDistance: Float -> totalDistance * 0.5f },
+            // No velocity-only snap — drags only commit by passing the positional threshold,
+            // matching the previous default. (The decay spec below still handles real flings.)
+            velocityThreshold = { 0f },
+            snapAnimationSpec = snapAnimationSpec,
+            // Fling/decay physics for drag releases. Tap-driven `animateTo` snaps go through
+            // `snapAnimationSpec` (above) — this only kicks in when the user actually flings
+            // the sheet with a velocity that overshoots the nearest anchor.
+            decayAnimationSpec = androidx.compose.animation.core.exponentialDecay(),
+        )
 
     /**
      * Last container height observed via [updateAnchors], as observable state. The scaffold
@@ -118,6 +148,44 @@ class GeoVaultMapDrawerState internal constructor(
     }
 
     /**
+     * Pixel height the drawer would use if the sheet were settled at [GeoVaultMapDrawerAnchor.HalfExpanded]
+     * (same math as [updateAnchors] and [visibleHeightPx]). Exposed for map "keep selection above
+     * the sheet" panning while the sheet is still mid-animation, where [visibleHeightPx] still
+     * tracks the smaller in-flight value.
+     */
+    fun halfExpandedSettledVisibleHeightPx(): Int {
+        val cTotal = containerHeightPx
+        if (cTotal <= 0) return 0
+        val c = cTotal.toFloat()
+        val collapsedOffset = (c - peekHeightPx).coerceAtLeast(0f)
+        val halfOffset = (c * (1f - halfExpandedFraction)).coerceIn(0f, collapsedOffset)
+        return (c - halfOffset)
+            .roundToInt()
+            .coerceIn(peekHeightPx.coerceAtMost(cTotal), cTotal)
+    }
+
+    /**
+     * Bottom "reserve" for screen-space map panning so a lat/lon stays in the part of the
+     * viewport that will be above the sheet's top edge, including the destination for in-flight
+     * animations. ([visibleHeightPx] alone under-estimates when [targetAnchor] is half but the
+     * drag animation has not finished — the map would be nudged for peek, then the real half
+     * would still cover the point.)
+     */
+    fun mapPanDrawerBottomReservePx(liveVisibleHeightPx: Int): Int {
+        return when (targetAnchor) {
+            GeoVaultMapDrawerAnchor.HalfExpanded -> maxOf(
+                liveVisibleHeightPx,
+                halfExpandedSettledVisibleHeightPx(),
+            )
+            GeoVaultMapDrawerAnchor.Expanded -> maxOf(
+                liveVisibleHeightPx,
+                containerHeightPx,
+            )
+            GeoVaultMapDrawerAnchor.Collapsed -> liveVisibleHeightPx
+        }
+    }
+
+    /**
      * Refresh anchor offsets for a new container height. Called by [GeoVaultMapScaffold] in
      * `onSizeChanged`; feature code does not need to call this directly.
      *
@@ -155,6 +223,18 @@ class GeoVaultMapDrawerState internal constructor(
 }
 
 /**
+ * Default animation spec for [GeoVaultMapDrawerState.animateTo]. A 300 ms tween with the
+ * standard Material easing curve. Exposed as a `const val`-style top-level so feature code
+ * driving co-animations alongside the sheet (notably the Survey route's "pan map to keep
+ * selection visible above drawer" effect) can pass the *same* spec into Compose's
+ * `androidx.compose.animation.core.animate` and have both motions step on a single frame
+ * clock with identical easing — eliminating the visible desync that resulted from MapLibre
+ * `scrollBy` (linear/cubic ease) running concurrently with a default spring sheet animation.
+ */
+val DefaultSnapAnimationSpec: AnimationSpec<Float> =
+    tween(durationMillis = 300, easing = FastOutSlowInEasing)
+
+/**
  * Compose entry point that wires a [GeoVaultMapDrawerState] with density-sensitive peek height.
  *
  * Keyed on [peekHeight] and [halfExpandedFraction] so a layout change that resizes the header
@@ -166,6 +246,7 @@ fun rememberGeoVaultMapDrawerState(
     peekHeight: Dp = GeoVaultMapScaffoldDefaults.PeekHeight,
     halfExpandedFraction: Float = GeoVaultMapScaffoldDefaults.HalfExpandedFraction,
     initialAnchor: GeoVaultMapDrawerAnchor = GeoVaultMapDrawerAnchor.Collapsed,
+    snapAnimationSpec: AnimationSpec<Float> = DefaultSnapAnimationSpec,
 ): GeoVaultMapDrawerState {
     val density = LocalDensity.current
     val peekPx = with(density) { peekHeight.toPx().roundToInt() }
@@ -174,6 +255,7 @@ fun rememberGeoVaultMapDrawerState(
             peekHeightPx = peekPx,
             halfExpandedFraction = halfExpandedFraction,
             initialAnchor = initialAnchor,
+            snapAnimationSpec = snapAnimationSpec,
         )
     }
 }

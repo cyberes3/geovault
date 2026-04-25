@@ -150,6 +150,12 @@ class MapLibreManager(
             }
         } catch (e: Exception) {
             pendingSourceKey = null
+            Log.e(
+                TAG,
+                "Map source apply failed before style load; applying empty style. " +
+                    "effectiveId=${sourceManager.getEffectiveSourceId()}",
+                e,
+            )
             onStyleLoadFailed?.invoke(e.message ?: e.javaClass.simpleName)
             map.setStyle(Style.Builder()) { style ->
                 applyZoomPreferences(map, MAX_ZOOM_LEVEL.toDouble())
@@ -185,10 +191,21 @@ class MapLibreManager(
                 }
             } else {
                 pendingSourceKey = null
-                Log.w(
-                    TAG,
-                    "Vector map style JSON missing or invalid; loading OSM raster fallback. styleUrl=$styleUrl (see MapStyleCache for HTTP details)",
-                )
+                if (isOurServer) {
+                    Log.e(
+                        TAG,
+                        "GeoVault server map style not loaded (empty fetch or bad JSON path); " +
+                            "using OSM raster fallback. styleUrl=$styleUrl " +
+                            "configuredServer=${com.geovault.common.GeovaultAuthManager.getServerUrl(context).trimEnd('/')} " +
+                            "(see MapStyleCache for HTTP/exception details)",
+                    )
+                } else {
+                    Log.w(
+                        TAG,
+                        "Vector map style JSON missing; loading OSM raster fallback. styleUrl=$styleUrl " +
+                            "(see MapStyleCache for HTTP details)",
+                    )
+                }
                 onStyleLoadFailed?.invoke("Map style unavailable for $styleUrl")
                 Toast.makeText(context, "Map style unavailable, falling back to basic map.", Toast.LENGTH_SHORT).show()
                 loadOsmFallback(map, restoreCamera)

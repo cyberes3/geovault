@@ -73,20 +73,38 @@ internal object MapStyleCache {
                 val response = client.newCall(request).execute()
                 val json = response.body.string()
                 if (!response.isSuccessful) {
-                    Log.w(
-                        TAG,
-                        "Map style fetch failed (OSM fallback may be used): code=${response.code} " +
-                            "message=${response.message} isOurServer=$isOurServer url=$styleUrl " +
-                            "bodyPreview=${json.take(BODY_PREVIEW_MAX)}",
-                    )
+                    if (isOurServer) {
+                        val configuredServer = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+                        Log.e(
+                            TAG,
+                            "GeoVault server map style HTTP error: code=${response.code} " +
+                                "message=${response.message} styleUrl=$styleUrl configuredServer=$configuredServer " +
+                                "bodyPreview=${json.take(BODY_PREVIEW_MAX)}",
+                        )
+                    } else {
+                        Log.w(
+                            TAG,
+                            "External map style fetch failed (OSM fallback may be used): " +
+                                "code=${response.code} message=${response.message} url=$styleUrl " +
+                                "bodyPreview=${json.take(BODY_PREVIEW_MAX)}",
+                        )
+                    }
                     deliver(null)
                     return@execute
                 }
                 if (json.isBlank()) {
-                    Log.w(
-                        TAG,
-                        "Map style fetch returned empty body (OSM fallback may be used): url=$styleUrl isOurServer=$isOurServer",
-                    )
+                    if (isOurServer) {
+                        Log.e(
+                            TAG,
+                            "GeoVault server map style returned empty body. styleUrl=$styleUrl " +
+                                "configuredServer=${GeovaultAuthManager.getServerUrl(context).trimEnd('/')}",
+                        )
+                    } else {
+                        Log.w(
+                            TAG,
+                            "Map style fetch returned empty body (OSM fallback may be used): url=$styleUrl",
+                        )
+                    }
                     deliver(null)
                     return@execute
                 }
@@ -97,11 +115,20 @@ internal object MapStyleCache {
                 cache[styleUrl] = rewritten
                 deliver(rewritten)
             } catch (e: Exception) {
-                Log.e(
-                    TAG,
-                    "Map style fetch threw (OSM fallback may be used): isOurServer=$isOurServer url=$styleUrl",
-                    e,
-                )
+                if (isOurServer) {
+                    Log.e(
+                        TAG,
+                        "GeoVault server map style request failed: styleUrl=$styleUrl " +
+                            "configuredServer=${GeovaultAuthManager.getServerUrl(context).trimEnd('/')}",
+                        e,
+                    )
+                } else {
+                    Log.e(
+                        TAG,
+                        "Map style fetch threw (OSM fallback may be used): url=$styleUrl isOurServer=false",
+                        e,
+                    )
+                }
                 deliver(null)
             }
         }
