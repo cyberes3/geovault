@@ -8,12 +8,15 @@ failures.txt
 .vscode
 .gradle
 *.apk
+*.class
 .kotlin
 *.swp
 *.txt
 !requirements.txt
+/androidx/
 
 android cleanup.md
+
 
 celerybeat-schedule
 celerybeat-schedule-shm
