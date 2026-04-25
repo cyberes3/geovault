@@ -24,6 +24,12 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
 
+/**
+ * Renders [MapRenderState] as MapLibre GeoJSON sources and layers.
+ *
+ * Labeled point features use a built-in **icon + label** symbol stack (see [GeoJsonRenderConfig])
+ * whenever text labels are enabled—callers should not duplicate collision logic in app code.
+ */
 class GeoJsonRenderPlugin(
     private val sourceIdPrefix: String = "gv-common-render",
     private val config: GeoJsonRenderConfig = GeoJsonRenderConfig(),
@@ -87,7 +93,8 @@ class GeoJsonRenderPlugin(
         ensureSource(style, linesSourceId)
         ensureSource(style, polygonsSourceId)
 
-        var pendingPointSymbolLayer: SymbolLayer? = null
+        var pendingPointIconLayer: SymbolLayer? = null
+        var pendingPointLabelLayer: SymbolLayer? = null
         if (config.showPointCircles && style.getLayer(pointsCircleLayerId) == null) {
             addLayerWithPlacement(
                 style,
@@ -119,15 +126,38 @@ class GeoJsonRenderPlugin(
                 ),
             )
         }
-        if (config.showPointLabelsAndIcons && style.getLayer(pointsSymbolLayerId) == null) {
-            val symbolLayer = SymbolLayer(pointsSymbolLayerId, pointsSourceId).withProperties(
-                    PropertyFactory.textField(
-                        if (config.showPointTextLabels) {
-                            Expression.get("title")
-                        } else {
-                            Expression.literal("")
-                        },
-                    ),
+        if (config.showPointLabelsAndIcons && style.getLayer(pointsIconLayerId) == null) {
+            val iconSizeExpr = Expression.coalesce(
+                Expression.get("iconSize"),
+                Expression.literal(config.defaultIconSize),
+            )
+            val iconRotateExpr = Expression.coalesce(
+                Expression.toNumber(Expression.get("iconRotationDegrees")),
+                Expression.literal(0.0),
+            )
+            val iconLayer = SymbolLayer(pointsIconLayerId, pointsSourceId).withProperties(
+                PropertyFactory.textField(Expression.literal("")),
+                PropertyFactory.iconImage(Expression.get("iconImageId")),
+                PropertyFactory.iconSize(iconSizeExpr),
+                PropertyFactory.iconRotate(iconRotateExpr),
+                PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(true),
+            )
+            if (config.disablePointSymbolFade) {
+                val instant = TransitionOptions(0L, 0L)
+                iconLayer.setIconOpacityTransition(instant)
+            }
+            val labelLayer: SymbolLayer? = if (config.showPointTextLabels) {
+                SymbolLayer(pointsLabelLayerId, pointsSourceId).withProperties(
+                    PropertyFactory.iconImage(Expression.get("iconImageId")),
+                    PropertyFactory.iconOpacity(Expression.literal(0.0)),
+                    PropertyFactory.iconSize(iconSizeExpr),
+                    PropertyFactory.iconRotate(iconRotateExpr),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.textField(Expression.get("title")),
                     PropertyFactory.textSize(
                         Expression.coalesce(
                             Expression.get("labelTextSize"),
@@ -140,31 +170,33 @@ class GeoJsonRenderPlugin(
                             Expression.literal(config.defaultLabelTextColorHex),
                         ),
                     ),
-                    PropertyFactory.textOffset(arrayOf(0f, 1.2f)),
-                    PropertyFactory.iconImage(Expression.get("iconImageId")),
-                    PropertyFactory.iconSize(
-                        Expression.coalesce(
-                            Expression.get("iconSize"),
-                            Expression.literal(config.defaultIconSize),
-                        ),
-                    ),
-                    PropertyFactory.iconRotate(
-                        Expression.coalesce(
-                            Expression.toNumber(Expression.get("iconRotationDegrees")),
-                            Expression.literal(0.0),
-                        ),
-                    ),
-                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-            )
-            if (config.disablePointSymbolFade) {
-                symbolLayer.setIconOpacityTransition(TransitionOptions(0L, 0L))
+                    // Top anchor + downward offset: long / multi-line labels extend below the
+                    // marker instead of growing upward over the icon (center anchor default).
+                    PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
+                    PropertyFactory.textOffset(arrayOf(0f, 0.85f)),
+                    PropertyFactory.textAllowOverlap(false),
+                    PropertyFactory.textIgnorePlacement(false),
+                ).also { layer ->
+                    if (config.disablePointSymbolFade) {
+                        val instant = TransitionOptions(0L, 0L)
+                        layer.setIconOpacityTransition(instant)
+                        layer.setTextOpacityTransition(instant)
+                    }
+                }
+            } else {
+                null
+            }
+            fun attachPointSymbolLayers() {
+                addLayerWithPlacement(style, iconLayer)
+                if (labelLayer != null) {
+                    style.addLayerAbove(labelLayer, pointsIconLayerId)
+                }
             }
             if (config.renderPointSymbolsAboveLines) {
-                pendingPointSymbolLayer = symbolLayer
+                pendingPointIconLayer = iconLayer
+                pendingPointLabelLayer = labelLayer
             } else {
-                addLayerWithPlacement(style, symbolLayer)
+                attachPointSymbolLayers()
             }
         }
         if (style.getLayer(lineOuterLayerId) == null) {
@@ -206,8 +238,11 @@ class GeoJsonRenderPlugin(
                 ),
             )
         }
-        if (pendingPointSymbolLayer != null && style.getLayer(pointsSymbolLayerId) == null) {
-            addLayerWithPlacement(style, pendingPointSymbolLayer)
+        if (pendingPointIconLayer != null && style.getLayer(pointsIconLayerId) == null) {
+            addLayerWithPlacement(style, pendingPointIconLayer)
+            if (pendingPointLabelLayer != null) {
+                style.addLayerAbove(pendingPointLabelLayer, pointsIconLayerId)
+            }
         }
     }
 
@@ -309,7 +344,10 @@ class GeoJsonRenderPlugin(
     private val linesSourceId = "$sourceIdPrefix-lines-source"
     private val polygonsSourceId = "$sourceIdPrefix-polygons-source"
     private val pointsCircleLayerId = "$sourceIdPrefix-points-circle-layer"
-    private val pointsSymbolLayerId = "$sourceIdPrefix-points-label-layer"
+    /** Visible markers; always above linework when [GeoJsonRenderConfig.renderPointSymbolsAboveLines]. */
+    private val pointsIconLayerId = "$sourceIdPrefix-points-icon-layer"
+    /** Text stacked above [pointsIconLayerId]; collision hides overlapping labels, not icons. */
+    private val pointsLabelLayerId = "$sourceIdPrefix-points-label-layer"
     private val lineOuterLayerId = "$sourceIdPrefix-lines-outer-layer"
     private val lineBorderLayerId = "$sourceIdPrefix-lines-border-layer"
     private val lineFillLayerId = "$sourceIdPrefix-lines-fill-layer"

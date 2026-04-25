@@ -242,7 +242,6 @@ private fun TrackerMapAuthenticatedContent(
                 showPointTextLabels = false,
                 renderPointSymbolsAboveLines = true,
                 useSynchronousSourceUpdates = true,
-                disablePointSymbolFade = true,
                 defaultIconSize = 0.75f,
                 showPolygonOutline = false,
                 defaultPolygonFillOpacity = 1f,
@@ -394,7 +393,7 @@ private fun TrackerMapAuthenticatedContent(
             val features = runCatching {
                 maplibreMap.queryRenderedFeatures(
                     screenPoint,
-                    TrackerMapRenderContract.pointsLabelLayerId()
+                    TrackerMapRenderContract.pointsMarkerHitTestLayerId(),
                 )
             }.getOrElse { emptyList() }
             val nearest = selectNearestFeature(maplibreMap, screenPoint, features)
