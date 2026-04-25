@@ -23,7 +23,6 @@ data class MapRenderLine(
     val id: String,
     val coordinates: List<Pair<Double, Double>>,
     val lineColorHex: String,
-    val outlineColorHex: String,
 )
 
 data class MapRenderPolygon(

@@ -60,4 +60,6 @@ dependencies {
     api("org.maplibre.gl:android-sdk:12.3.1")
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

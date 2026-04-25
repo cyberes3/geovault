@@ -235,7 +235,6 @@ class GeoJsonRenderPlugin(
             ).also { feature ->
                 feature.addStringProperty("id", line.id)
                 feature.addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, line.lineColorHex)
-                feature.addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_OUTLINE_COLOR, line.outlineColorHex)
             }
         }
         val polygonFeatures = state.polygons.map { polygon ->
@@ -246,6 +245,12 @@ class GeoJsonRenderPlugin(
                 feature.addStringProperty("id", polygon.id)
                 feature.addStringProperty("fillColor", polygon.fillColorHex)
                 feature.addStringProperty("outlineColor", polygon.outlineColorHex)
+                if (!config.showPolygonOutline) {
+                    feature.addStringProperty(
+                        OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR,
+                        polygon.outlineColorHex,
+                    )
+                }
             }
         }
         updateSource(style, pointsSourceId, pointFeatures)

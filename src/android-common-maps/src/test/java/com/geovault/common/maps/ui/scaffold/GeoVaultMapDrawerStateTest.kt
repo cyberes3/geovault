@@ -3,6 +3,7 @@ package com.geovault.common.maps.ui.scaffold
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

@@ -140,10 +140,10 @@ object GeoVaultColorTokens {
     /** Map view underlay color shown beneath the basemap while tiles load. */
     val MapUnderlay = ListBackground
 
-    /** Outer halo painted underneath KML lines for contrast against imagery basemaps. */
+    /** Light ring between the outer dark edge and stroke fill on outlined map lines. */
     val MapLineworkHalo = Surface
 
-    /** Thin dark border painted between halo and fill on outlined map lines. */
+    /** Outermost wide ring on outlined map lines (drawn under the light halo and fill). */
     val MapLineworkBorder = Black
 
     /** Default fill color for unstyled map points. */
