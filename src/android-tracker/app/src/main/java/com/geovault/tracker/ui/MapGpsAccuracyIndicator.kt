@@ -28,7 +28,7 @@ fun MapGpsAccuracyIndicator(
             modifier = Modifier
                 .size(56.dp)
                 .background(
-                    color = GeoVaultColorTokens.Background.copy(alpha = 0.85f),
+                    color = GeoVaultColorTokens.ListBackground.copy(alpha = 0.85f),
                     shape = CircleShape,
                 )
                 .border(

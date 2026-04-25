@@ -1,13 +1,12 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.DEFAULT_TRACKER_COLOR_HEX
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 object TrackerMapIconIds {
     private const val SELECTED_PREFIX = "track-direction-arrow-"
     private const val SIMPLE_PREFIX = "track-direction-arrow-simple-"
     const val SELECTED_DEFAULT = "track-direction-arrow"
-    // Keep map icon default in sync with shared tracker fallback color policy.
-    const val DEFAULT_COLOR_HEX: String = DEFAULT_TRACKER_COLOR_HEX
+    val DEFAULT_COLOR_HEX: String = GeoVaultColorTokens.Hex.Blue400
 
     data class IconSpec(
         val colorHex: String,

@@ -17,7 +17,7 @@ data class GeoVaultSnackbarStyle(
 object GeoVaultSnackbarDefaults {
     fun style(): GeoVaultSnackbarStyle {
         return GeoVaultSnackbarStyle(
-            background = GeoVaultColorTokens.SnackbarBackground,
+            background = GeoVaultColorTokens.SnackbarSurface,
             messageColor = GeoVaultColorTokens.SnackbarMessage,
             actionColor = GeoVaultColorTokens.MainYellow,
             borderColor = GeoVaultColorTokens.Purple500,

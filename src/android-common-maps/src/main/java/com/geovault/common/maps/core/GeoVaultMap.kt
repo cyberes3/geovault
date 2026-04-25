@@ -15,6 +15,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -23,10 +24,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.maplibre.android.maps.MapView
 
-/** 0xFFF3F6FA — matches the `gv_common_map_underlay` color resource. */
-private const val MAP_UNDERLAY_COLOR = 0xFFF3F6FA.toInt()
+private val MAP_UNDERLAY_COLOR: Int = GeoVaultColorTokens.MapUnderlay.toArgb()
 
 data class GeoVaultMapPaddingDp(
     val left: Dp = Dp.Unspecified,

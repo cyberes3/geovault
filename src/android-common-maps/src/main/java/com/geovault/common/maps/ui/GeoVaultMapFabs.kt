@@ -103,7 +103,7 @@ fun GeoVaultMapFabColumn(
             val backgroundColor = action.backgroundColor ?: if (action.emphasized) {
                 GeoVaultColorTokens.Success
             } else {
-                GeoVaultColorTokens.PrimaryBlue
+                GeoVaultColorTokens.MainBlue
             }
             val interactionSource = remember(action.id) { MutableInteractionSource() }
             var anchorBounds by remember { mutableStateOf<Rect?>(null) }
@@ -137,7 +137,7 @@ fun GeoVaultMapFabColumn(
                     .trackGeoVaultTooltipBounds { anchorBounds = it },
                 interactionSource = interactionSource,
                 shape = CircleShape,
-                backgroundColor = if (action.enabled) backgroundColor else backgroundColor.copy(alpha = 0.55f),
+                backgroundColor = if (action.enabled) backgroundColor else backgroundColor.copy(alpha = GeoVaultColorTokens.FabDisabledTint),
                 contentColor = if (action.enabled) action.contentColor else action.contentColor.copy(alpha = 0.75f),
                 elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(0.dp, 0.dp),
             ) {

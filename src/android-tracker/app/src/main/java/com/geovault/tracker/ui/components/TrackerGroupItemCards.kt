@@ -31,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,9 +68,8 @@ fun TrackerItemCard(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val chevronTint = remember(model.chevronColorHex) {
-        TrackerChevronStylePolicy.tintForTrackerColorHex(model.chevronColorHex, context)
+        TrackerChevronStylePolicy.tintForTrackerColorHex(model.chevronColorHex)
     }
     Card(
         modifier = modifier
@@ -80,7 +78,7 @@ fun TrackerItemCard(
         shape = RoundedCornerShape(12.dp),
         elevation = 0.dp,
         backgroundColor = if (model.isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
-        border = BorderStroke(2.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(2.dp, GeoVaultColorTokens.MainBlue),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(
@@ -106,7 +104,7 @@ fun TrackerItemCard(
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -220,7 +218,7 @@ fun GroupItemCard(
         backgroundColor = if (model.isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
         border = BorderStroke(
             2.dp,
-            if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.PrimaryBlue
+            if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.MainBlue
         ),
     ) {
         Row(
@@ -232,7 +230,7 @@ fun GroupItemCard(
             Icon(
                 painter = painterResource(R.drawable.ic_groups),
                 contentDescription = null,
-                tint = GeoVaultColorTokens.PrimaryBlue,
+                tint = GeoVaultColorTokens.MainBlue,
                 modifier = Modifier.size(22.dp),
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -295,7 +293,7 @@ fun GroupItemCard(
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
                             contentDescription = null,
-                            tint = GeoVaultColorTokens.PrimaryBlue,
+                            tint = GeoVaultColorTokens.MainBlue,
                         )
                     }
                     DropdownMenu(

@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dark-mode overrides for the names in `values/colors.xml` that flip in night mode.
+
+    Brand colors (`gv_common_main_blue`, `gv_common_main_yellow`) intentionally do
+    not appear here — they stay branded across both themes.
+
+    Each name below is locked to `GeoVaultColorTokens.Dark.*` by
+    `GeoVaultColorTokensXmlSyncTest`, which fails CI on any drift.
+-->
 <resources>
     <color name="gv_common_surface">#111827</color>
-    <color name="gv_common_list_background">#051638</color>
+    <color name="gv_common_border_light">#374151</color>
     <color name="gv_common_text_primary">#E5E7EB</color>
     <color name="gv_common_text_secondary">#BFC8D6</color>
-    <color name="gv_common_border_light">#404040</color>
-    <color name="gv_common_error">#F28B8D</color>
-    <color name="gv_common_snackbar_background">#505050</color>
-    <color name="gv_common_snackbar_message">#FFFFFF</color>
-    <color name="gv_common_map_linework_outer_halo">#FFFFFF</color>
-    <color name="gv_common_map_linework_border">#000000</color>
 </resources>

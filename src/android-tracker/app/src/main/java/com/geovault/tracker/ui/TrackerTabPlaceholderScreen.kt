@@ -68,7 +68,7 @@ internal fun TrackerTabPlaceholderScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(GeoVaultColorTokens.Background),
+                .background(GeoVaultColorTokens.ListBackground),
         ) {
             GeoVaultAuthGate(
                 isAuthenticated = isAuthenticated,

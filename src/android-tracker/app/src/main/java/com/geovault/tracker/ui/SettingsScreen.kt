@@ -530,7 +530,7 @@ fun SettingsScreen(
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = stringResource(R.string.logging_help_button),
-                    tint = GeoVaultColorTokens.PrimaryBlue,
+                    tint = GeoVaultColorTokens.MainBlue,
                 )
             }
         }
@@ -771,13 +771,13 @@ private fun SettingsNumericInput(
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         colors = TextFieldDefaults.outlinedTextFieldColors(
             backgroundColor = fieldBackground,
-            focusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
-            unfocusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
-            focusedLabelColor = GeoVaultColorTokens.PrimaryBlue,
-            unfocusedLabelColor = GeoVaultColorTokens.PrimaryBlue,
+            focusedBorderColor = GeoVaultColorTokens.MainBlue,
+            unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
+            focusedLabelColor = GeoVaultColorTokens.MainBlue,
+            unfocusedLabelColor = GeoVaultColorTokens.MainBlue,
             disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-            disabledBorderColor = GeoVaultColorTokens.PrimaryBlue,
-            disabledLabelColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.6f),
+            disabledBorderColor = GeoVaultColorTokens.MainBlue,
+            disabledLabelColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.6f),
             disabledPlaceholderColor = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.6f),
             disabledTrailingIconColor = Color.Unspecified,
             disabledLeadingIconColor = Color.Unspecified,
@@ -914,7 +914,7 @@ private fun HiddenTrackerRow(
             )
             .border(
                 width = 1.dp,
-                color = GeoVaultColorTokens.PrimaryBlue,
+                color = GeoVaultColorTokens.MainBlue,
                 shape = rowShape,
             )
             .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
@@ -924,7 +924,7 @@ private fun HiddenTrackerRow(
         Icon(
             painter = painterResource(iconRes),
             contentDescription = null,
-            tint = GeoVaultColorTokens.PrimaryBlue,
+            tint = GeoVaultColorTokens.MainBlue,
             modifier = Modifier
                 .size(18.dp),
         )
@@ -947,7 +947,7 @@ private fun HiddenTrackerRow(
             Icon(
                 painter = painterResource(R.drawable.ic_eye),
                 contentDescription = stringResource(R.string.show_button),
-                tint = GeoVaultColorTokens.PrimaryBlue,
+                tint = GeoVaultColorTokens.MainBlue,
             )
         }
     }

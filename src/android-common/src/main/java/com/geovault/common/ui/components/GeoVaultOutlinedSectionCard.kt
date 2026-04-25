@@ -43,7 +43,7 @@ fun GeoVaultOutlinedSectionCard(
             .clip(RoundedCornerShape(12.dp))
             .border(
                 width = 1.dp,
-                color = GeoVaultColorTokens.PrimaryBlue,
+                color = GeoVaultColorTokens.MainBlue,
                 shape = RoundedCornerShape(12.dp),
             )
             .padding(16.dp),
@@ -70,7 +70,7 @@ fun GeoVaultOutlinedSectionCard(
                     Icon(
                         imageVector = trailingIcon,
                         contentDescription = trailingContentDescription,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                     )
                 }
             }

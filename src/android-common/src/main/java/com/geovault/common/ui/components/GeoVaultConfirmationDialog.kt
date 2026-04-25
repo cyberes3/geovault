@@ -13,7 +13,7 @@ object GeoVaultDialogDefaults {
     val NegativeButtonColor = GeoVaultColorTokens.Error
 
     @Composable
-    fun cancelButtonColor() = GeoVaultColorTokens.PrimaryBlue
+    fun cancelButtonColor() = GeoVaultColorTokens.MainBlue
 }
 
 @Composable

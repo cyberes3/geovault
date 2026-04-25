@@ -4,11 +4,12 @@ import androidx.annotation.ColorInt
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 object GeoVaultSystemBars {
-    @ColorInt const val PRIMARY_BLUE: Int = GeoVaultColorTokens.PRIMARY_BLUE_INT
-    @ColorInt const val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.BACKGROUND_INT
+    @ColorInt val PRIMARY_BLUE: Int = GeoVaultColorTokens.MainBlue.toArgb()
+    @ColorInt val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.ListBackground.toArgb()
     @ColorInt private var lastNavigationBarColor: Int = DEFAULT_NAV_BG
     private var lastUseDarkNavigationBarIcons: Boolean = true
 

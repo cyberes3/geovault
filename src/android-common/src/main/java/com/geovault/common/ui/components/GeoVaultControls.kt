@@ -184,9 +184,9 @@ fun GeoVaultPrimaryButton(
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
     val resolvedBackgroundColor = if (visuallyDisabled) {
-        GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f)
+        GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f)
     } else {
-        GeoVaultColorTokens.PrimaryBlue
+        GeoVaultColorTokens.MainBlue
     }
     val resolvedContentColor = if (visuallyDisabled) {
         Color.White.copy(alpha = 0.75f)
@@ -200,7 +200,7 @@ fun GeoVaultPrimaryButton(
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = resolvedBackgroundColor,
                 contentColor = resolvedContentColor,
-                disabledBackgroundColor = GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f),
+                disabledBackgroundColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f),
                 disabledContentColor = Color.White.copy(alpha = 0.75f)
             ),
         ),
@@ -233,7 +233,7 @@ fun GeoVaultFilledIconButton(
     enabled: Boolean = true,
     tooltip: String? = null,
     minSize: Dp = 48.dp,
-    backgroundColor: Color = GeoVaultColorTokens.PrimaryBlue,
+    backgroundColor: Color = GeoVaultColorTokens.MainBlue,
     contentColor: Color = Color.White,
 ) {
     GeoVaultBaseButton(
@@ -269,7 +269,7 @@ fun GeoVaultSecondaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    accentColor: Color = GeoVaultColorTokens.PrimaryBlue,
+    accentColor: Color = GeoVaultColorTokens.MainBlue,
     tooltip: String? = null,
     fitToContent: Boolean = false,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -316,8 +316,8 @@ fun GeoVaultCheckmark(
             onCheckedChange = onCheckedChange,
             enabled = enabled,
             colors = CheckboxDefaults.colors(
-                checkedColor = GeoVaultColorTokens.PrimaryBlue,
-                uncheckedColor = GeoVaultColorTokens.PrimaryBlue,
+                checkedColor = GeoVaultColorTokens.MainBlue,
+                uncheckedColor = GeoVaultColorTokens.MainBlue,
                 checkmarkColor = Color.White
             )
         )
@@ -344,15 +344,15 @@ fun GeoVaultSwitch(
     enabled: Boolean = true,
 ) {
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val offThumb = if (isDark) GeoVaultColorTokens.DarkToggleUncheckedThumb else GeoVaultColorTokens.ToggleUncheckedThumb
-    val offTrack = if (isDark) GeoVaultColorTokens.DarkToggleUncheckedTrack else GeoVaultColorTokens.ToggleUncheckedTrack
+    val offThumb = if (isDark) GeoVaultColorTokens.Dark.ToggleThumbOff else GeoVaultColorTokens.ToggleThumbOff
+    val offTrack = if (isDark) GeoVaultColorTokens.Dark.ToggleTrackOff else GeoVaultColorTokens.ToggleTrackOff
     Switch(
         checked = checked,
         onCheckedChange = onCheckedChange,
         enabled = enabled,
         modifier = modifier,
         colors = SwitchDefaults.colors(
-            checkedThumbColor = GeoVaultColorTokens.PrimaryBlue,
+            checkedThumbColor = GeoVaultColorTokens.MainBlue,
             uncheckedThumbColor = offThumb,
             uncheckedTrackColor = offTrack,
             uncheckedTrackAlpha = 1f,
@@ -423,7 +423,7 @@ fun GeoVaultInput(
         value = value,
         onValueChange = onValueChange,
         label = label?.let {
-            { Text(it, color = GeoVaultColorTokens.PrimaryBlue) }
+            { Text(it, color = GeoVaultColorTokens.MainBlue) }
         },
         placeholder = placeholder?.let {
             { Text(it, color = GeoVaultColorTokens.TextSecondary) }
@@ -438,10 +438,10 @@ fun GeoVaultInput(
         trailingIcon = trailingIcon,
         colors = TextFieldDefaults.outlinedTextFieldColors(
             backgroundColor = fieldBackground,
-            focusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
-            unfocusedBorderColor = GeoVaultColorTokens.PrimaryBlue,
-            focusedLabelColor = GeoVaultColorTokens.PrimaryBlue,
-            unfocusedLabelColor = GeoVaultColorTokens.PrimaryBlue
+            focusedBorderColor = GeoVaultColorTokens.MainBlue,
+            unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
+            focusedLabelColor = GeoVaultColorTokens.MainBlue,
+            unfocusedLabelColor = GeoVaultColorTokens.MainBlue
         )
     )
 }

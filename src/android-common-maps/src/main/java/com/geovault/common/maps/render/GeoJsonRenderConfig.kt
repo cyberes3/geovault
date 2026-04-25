@@ -1,5 +1,7 @@
 package com.geovault.common.maps.render
 
+import com.geovault.common.ui.theme.GeoVaultColorTokens
+
 data class GeoJsonRenderConfig(
     val belowLayerId: String? = null,
     /**
@@ -18,10 +20,10 @@ data class GeoJsonRenderConfig(
     val showPolygonFill: Boolean = true,
     val showPolygonOutline: Boolean = true,
     val defaultPointRadius: Float = 6f,
-    val defaultPointFillColorHex: String = "#0077FF",
-    val defaultPointStrokeColorHex: String = "#FFFFFF",
+    val defaultPointFillColorHex: String = GeoVaultColorTokens.Hex.MapPointDefault,
+    val defaultPointStrokeColorHex: String = GeoVaultColorTokens.Hex.Surface,
     val defaultPointStrokeWidth: Float = 1.5f,
-    val defaultLabelTextColorHex: String = "#1D1D1D",
+    val defaultLabelTextColorHex: String = GeoVaultColorTokens.Hex.MapLabelText,
     val defaultLabelTextSize: Float = 12f,
     val defaultIconSize: Float = 1f,
     val defaultPolygonFillOpacity: Float = 0.35f,

@@ -1,5 +1,6 @@
 package com.geovault.common.maps.location
 
+import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.maps.R
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.maplibre.android.location.modes.RenderMode
@@ -32,7 +33,7 @@ object GeoVaultLocationPuckPresets {
         accuracyAlpha: Float = 0.25f,
     ): LocationComponentHelper.Config {
         return LocationComponentHelper.Config(
-            accuracyColor = GeoVaultColorTokens.PRIMARY_BLUE_INT,
+            accuracyColor = GeoVaultColorTokens.MainBlue.toArgb(),
             accuracyAlpha = accuracyAlpha,
             backgroundDrawable = R.drawable.gv_common_ic_user_location_puck_circle,
             backgroundDrawableTranslucent =

@@ -131,7 +131,7 @@ fun TrackerAddRowCard(
                         Icon(
                             imageVector = Icons.Filled.Add,
                             contentDescription = null,
-                            tint = GeoVaultColorTokens.PrimaryBlue,
+                            tint = GeoVaultColorTokens.MainBlue,
                             modifier = Modifier.size(22.dp),
                         )
                     }

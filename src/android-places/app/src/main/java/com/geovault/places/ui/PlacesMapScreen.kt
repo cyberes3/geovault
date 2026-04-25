@@ -199,7 +199,7 @@ fun PlacesMapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .background(GeoVaultColorTokens.Background),
+                .background(GeoVaultColorTokens.ListBackground),
         ) {
             Box(
                 modifier = Modifier
@@ -288,7 +288,7 @@ fun PlacesMapScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = androidx.compose.ui.graphics.RectangleShape,
-                backgroundColor = GeoVaultColorTokens.Background,
+                backgroundColor = GeoVaultColorTokens.ListBackground,
                 elevation = 0.dp,
             ) {
                 Column {

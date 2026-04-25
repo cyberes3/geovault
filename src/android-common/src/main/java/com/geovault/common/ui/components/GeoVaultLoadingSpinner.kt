@@ -29,7 +29,7 @@ fun GeoVaultLoadingSpinner(
     modifier: Modifier = Modifier,
     spinnerSize: Dp = 28.dp,
     strokeWidth: Dp = 2.5.dp,
-    color: Color = GeoVaultColorTokens.PrimaryBlue,
+    color: Color = GeoVaultColorTokens.MainBlue,
     bottomText: String? = null,
 ) {
     if (bottomText != null) {
@@ -63,7 +63,7 @@ private fun GeoVaultLoadingSpinnerArc(
     modifier: Modifier = Modifier,
     spinnerSize: Dp = 28.dp,
     strokeWidth: Dp = 2.5.dp,
-    color: Color = GeoVaultColorTokens.PrimaryBlue,
+    color: Color = GeoVaultColorTokens.MainBlue,
 ) {
     var rotationDegrees by androidx.compose.runtime.remember { mutableFloatStateOf(0f) }
 

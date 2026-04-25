@@ -4,6 +4,7 @@ import com.geovault.common.maps.core.geoVaultSplitTrackByDistance
 import com.geovault.common.maps.render.MapRenderLine
 import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
@@ -22,9 +23,6 @@ enum class TrackerMapDisplayMode {
 
 object TrackerMapStateTransforms {
 
-    const val TRAIL_LINE_COLOR_HEX: String = "#1E88E5"
-    const val TRAIL_OUTLINE_COLOR_HEX: String = "#000000"
-    const val DEFAULT_MULTI_TRACK_LINE_COLOR_HEX: String = "#607D8B"
     const val MAX_TRACK_JUMP_METERS: Float = 5f * 1609.344f
     private val accuracyCircleResolver = TrackerAccuracyCircleResolver()
 
@@ -32,7 +30,7 @@ object TrackerMapStateTransforms {
         mode: TrackerMapDisplayMode,
         trail: List<QueuedLocation>,
         runtime: TrackingRuntimeSnapshot,
-        trailOutlineColorHex: String = TRAIL_OUTLINE_COLOR_HEX,
+        trailOutlineColorHex: String = GeoVaultColorTokens.Hex.MapLineworkBorder,
         remoteLastPoints: Map<String, TrackPointEvent> = emptyMap(),
         activeStreamedTrackerIds: Set<String> = emptySet(),
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
@@ -233,7 +231,7 @@ object TrackerMapStateTransforms {
         return allQueueTrailsByTracker.entries
             .sortedBy { it.key }
             .flatMap { (trackerId, queuedLocations) ->
-                val color = normalizeColor(trackerColorById[trackerId]) ?: DEFAULT_MULTI_TRACK_LINE_COLOR_HEX
+                val color = normalizeColor(trackerColorById[trackerId]) ?: GeoVaultColorTokens.Hex.Gray500
                 buildSegmentedLines(
                     lineIdPrefix = "all-track-$trackerId",
                     points = queuedLocations.map { it.latitude to it.longitude },
@@ -329,7 +327,7 @@ object TrackerMapStateTransforms {
                 TrackerMapDisplayMode.ALL_QUEUE,
                 TrackerMapDisplayMode.GROUP_PLACEHOLDER -> {
                     val trackerId = marker.id.removePrefix("remote-").trim()
-                    normalizeColor(trackerColorById[trackerId]) ?: DEFAULT_MULTI_TRACK_LINE_COLOR_HEX
+                    normalizeColor(trackerColorById[trackerId]) ?: GeoVaultColorTokens.Hex.Gray500
                 }
             }
             marker.id to color

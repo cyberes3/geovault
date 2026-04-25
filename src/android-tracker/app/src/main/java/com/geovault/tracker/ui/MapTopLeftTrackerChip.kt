@@ -82,7 +82,7 @@ fun MapTopLeftTrackerChip(
             ),
         shape = chipShape,
         elevation = 0.dp,
-        backgroundColor = GeoVaultColorTokens.PrimaryBlue,
+        backgroundColor = GeoVaultColorTokens.MainBlue,
     ) {
         BoxWithConstraints(
             modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),

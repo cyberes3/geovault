@@ -89,9 +89,9 @@ private fun SelectTrigger(
     modifier: Modifier = Modifier,
 ) {
     val borderColor = if (enabled) {
-        GeoVaultColorTokens.PrimaryBlue
+        GeoVaultColorTokens.MainBlue
     } else {
-        GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.5f)
+        GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f)
     }
     val valueColor = when {
         !enabled -> GeoVaultColorTokens.TextSecondary

@@ -70,8 +70,8 @@ fun GroupActionsScreen(
         }
     }
 
-    val actionBarBorderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
-    val memberCardBorderColor = GeoVaultColorTokens.PrimaryBlue
+    val actionBarBorderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
+    val memberCardBorderColor = GeoVaultColorTokens.MainBlue
 
     GeoVaultSubViewScaffold(
         modifier = Modifier.fillMaxSize(),

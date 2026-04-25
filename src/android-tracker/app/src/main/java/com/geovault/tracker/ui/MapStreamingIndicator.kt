@@ -67,7 +67,7 @@ fun MapStreamingIndicator(
     Row(
         modifier = modifier
             .background(
-                color = GeoVaultColorTokens.Background.copy(alpha = 0.85f),
+                color = GeoVaultColorTokens.ListBackground.copy(alpha = 0.85f),
                 shape = RoundedCornerShape(16.dp),
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),

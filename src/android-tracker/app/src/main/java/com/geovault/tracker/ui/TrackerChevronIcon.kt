@@ -1,6 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.content.Context
 import androidx.compose.material.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,15 +13,15 @@ import com.geovault.tracker.parseHexToColorInt
 
 object TrackerChevronStylePolicy {
     val TrackerRowChevronSize: Dp = 18.dp
-    val DefaultAddRowTint: Color = GeoVaultColorTokens.PrimaryBlue
+    val DefaultAddRowTint: Color = GeoVaultColorTokens.MainBlue
 
-    fun tintForTrackerColorHex(colorHex: String?, context: Context): Color {
+    fun tintForTrackerColorHex(colorHex: String?): Color {
         val normalized = colorHex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
-        if (normalized == null) return GeoVaultColorTokens.PrimaryBlue
+        if (normalized == null) return GeoVaultColorTokens.MainBlue
         return try {
-            Color(parseHexToColorInt(colorHex, context))
+            Color(parseHexToColorInt(colorHex))
         } catch (_: Exception) {
-            GeoVaultColorTokens.PrimaryBlue
+            GeoVaultColorTokens.MainBlue
         }
     }
 }

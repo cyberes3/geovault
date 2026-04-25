@@ -127,7 +127,7 @@ fun TrackerEditScreen(
 
     val context = LocalContext.current
     val colorPreview = remember(dialog.colorDraft, context) {
-        resolveTrackerColorPreview(dialog.colorDraft, context)
+        resolveTrackerColorPreview(dialog.colorDraft)
     }
     val recentOptions = remember(context) {
         TrackerRecentDataWindowOptions.labels(context).mapIndexed { index, label ->
@@ -206,7 +206,7 @@ fun TrackerEditScreen(
 
     val sharedRecipientCount = TrackerSharingSettingsPolicy.parseSharedEmails(dialog.sharedEmailsDraft).size
     val destructiveAccent =
-        if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkError else GeoVaultColorTokens.Error
+        if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.Error else GeoVaultColorTokens.Error
     val sharingSectionBackground =
         if (MaterialTheme.colors.isLight) {
             GeoVaultColorTokens.Gray300.copy(alpha = 0.58f)
@@ -219,7 +219,7 @@ fun TrackerEditScreen(
         onClose = dismissWithGuard,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
         bottomBar = {
-            val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
+            val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -304,7 +304,7 @@ fun TrackerEditScreen(
                         Icon(
                             painter = painterResource(R.drawable.ic_eye_dropper),
                             contentDescription = stringResource(R.string.trackers_action_pick_tracker_color),
-                            tint = GeoVaultColorTokens.PrimaryBlue,
+                            tint = GeoVaultColorTokens.MainBlue,
                             modifier = Modifier.size(24.dp),
                         )
                     }
@@ -465,7 +465,7 @@ fun TrackerEditScreen(
                                             Card(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 elevation = 0.dp,
-                                                border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+                                                border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
                                                 backgroundColor = Color.Transparent,
                                             ) {
                                                 Box(
@@ -686,7 +686,7 @@ fun TrackerEditScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x66000000))
+                .background(GeoVaultColorTokens.ScrimMedium)
         ) {
             GeoVaultLoadingSpinner(
                 modifier = Modifier
@@ -708,11 +708,11 @@ private fun ShareUserPickerRow(
     val isDark = !MaterialTheme.colors.isLight
     val rowBackground = when {
         !selected -> MaterialTheme.colors.surface
-        isDark -> GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.22f)
-        else -> Color(0xFFE4EAF5)
+        isDark -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
+        else -> GeoVaultColorTokens.Blue100
     }
     val labelColor = if (selected) {
-        GeoVaultColorTokens.PrimaryBlue
+        GeoVaultColorTokens.MainBlue
     } else {
         MaterialTheme.colors.onSurface
     }
@@ -723,7 +723,7 @@ private fun ShareUserPickerRow(
         shape = RoundedCornerShape(8.dp),
         elevation = 0.dp,
         backgroundColor = rowBackground,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
     ) {
         Row(
             modifier = Modifier
@@ -744,7 +744,7 @@ private fun ShareUserPickerRow(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = GeoVaultColorTokens.PrimaryBlue,
+                    tint = GeoVaultColorTokens.MainBlue,
                     modifier = Modifier.size(20.dp),
                 )
             } else {
@@ -800,17 +800,17 @@ private data class TrackerColorPreviewState(
     val showInvalidBadge: Boolean,
 )
 
-private fun resolveTrackerColorPreview(colorDraft: String, context: Context): TrackerColorPreviewState {
+private fun resolveTrackerColorPreview(colorDraft: String): TrackerColorPreviewState {
     val normalized = colorDraft.trim()
     if (normalized.isEmpty()) {
         return TrackerColorPreviewState(
-            backgroundColor = Color(parseHexToColorInt(null, context)),
+            backgroundColor = Color(parseHexToColorInt(null)),
             showInvalidBadge = false,
         )
     }
     return if (isValidTrackerHexInput(normalized)) {
         TrackerColorPreviewState(
-            backgroundColor = Color(parseHexToColorInt(normalized, context)),
+            backgroundColor = Color(parseHexToColorInt(normalized)),
             showInvalidBadge = false,
         )
     } else {

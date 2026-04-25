@@ -315,11 +315,11 @@ private fun PlaceEditScreen(
     }
 
     Scaffold(
-        backgroundColor = GeoVaultColorTokens.Background,
+        backgroundColor = GeoVaultColorTokens.ListBackground,
         topBar = {
             GeoVaultTopTitleBar(
                 title = state.title,
-                backgroundColor = GeoVaultColorTokens.PrimaryBlue,
+                backgroundColor = GeoVaultColorTokens.MainBlue,
                 rightActions = if (initial != null) {
                     listOf(
                         TopBarIconAction(
@@ -349,7 +349,7 @@ private fun PlaceEditScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(GeoVaultColorTokens.Background),
+                .background(GeoVaultColorTokens.ListBackground),
         ) {
             val mapMinHeight = maxHeight * 0.30f
             val formMinHeight = maxHeight * 0.56f

@@ -1,5 +1,7 @@
 package com.geovault.common.maps.render
 
+import com.geovault.common.ui.theme.GeoVaultColorTokens
+
 data class MapRenderPoint(
     val id: String,
     val latitude: Double,
@@ -27,8 +29,8 @@ data class MapRenderLine(
 data class MapRenderPolygon(
     val id: String,
     val rings: List<List<Pair<Double, Double>>>,
-    val fillColorHex: String = "#66000000",
-    val outlineColorHex: String = "#000000",
+    val fillColorHex: String = GeoVaultColorTokens.Hex.ScrimMedium,
+    val outlineColorHex: String = GeoVaultColorTokens.Hex.MapLineworkBorder,
 )
 
 data class MapRenderState(

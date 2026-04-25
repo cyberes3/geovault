@@ -195,14 +195,14 @@ private fun FileQueueRow(
                     Icon(
                         painter = painterResource(id = R.drawable.ic_file),
                         contentDescription = null,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Icon(
                         imageVector = statusIcon,
                         contentDescription = null,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -236,7 +236,7 @@ private fun FileQueueRow(
                             tint = if (MaterialTheme.colors.isLight) {
                                 GeoVaultColorTokens.Error
                             } else {
-                                GeoVaultColorTokens.DarkError
+                                GeoVaultColorTokens.Dark.Error
                             }
                         )
                     }

@@ -313,7 +313,7 @@ fun TrackersScreen(
                             vm.openCreateGroupDialog()
                         }
                     },
-                    backgroundColor = GeoVaultColorTokens.PrimaryBlue,
+                    backgroundColor = GeoVaultColorTokens.MainBlue,
                     contentColor = MaterialTheme.colors.onPrimary,
                     tooltip = stringResource(R.string.tooltip_trackers_pager_fab),
                     modifier = Modifier
@@ -895,7 +895,7 @@ private fun TrackersServerFailureOverlay(modifier: Modifier = Modifier) {
     val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
-            .background(androidx.compose.ui.graphics.Color(0xA0000000))
+            .background(GeoVaultColorTokens.ScrimStrong)
             .clickable(
                 enabled = true,
                 interactionSource = interactionSource,
@@ -909,7 +909,7 @@ private fun TrackersServerFailureOverlay(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp),
             shape = MaterialTheme.shapes.medium,
-            color = androidx.compose.ui.graphics.Color(0xFFFFF3F3),
+            color = GeoVaultColorTokens.ErrorSurfaceLight,
             elevation = 0.dp,
         ) {
             Column(
@@ -948,7 +948,7 @@ private fun TrackersListPage(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.Background),
+            .background(GeoVaultColorTokens.ListBackground),
         state = listState,
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 88.dp),
     ) {
@@ -988,7 +988,7 @@ private fun GroupsListPage(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.Background),
+            .background(GeoVaultColorTokens.ListBackground),
         state = listState,
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 88.dp),
     ) {

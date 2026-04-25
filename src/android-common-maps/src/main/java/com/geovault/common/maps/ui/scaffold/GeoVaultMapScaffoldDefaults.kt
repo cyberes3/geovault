@@ -53,16 +53,16 @@ object GeoVaultMapScaffoldDefaults {
 
     /**
      * Drawer container color. Matches the old survey-app `bottom_sheet_background`
-     * (`blue_extra_light` = #F3F6FA) in light mode; uses [GeoVaultColorTokens.DarkSurface]
+     * (`blue_extra_light` = #F3F6FA) in light mode; uses [GeoVaultColorTokens.Dark.Surface]
      * in dark mode for consistency with the rest of the GeoVault palette (not pure black).
      */
     val DrawerContainerColor: Color
         @Composable
         @ReadOnlyComposable
         get() = if (isSystemInDarkTheme()) {
-            GeoVaultColorTokens.DarkSurface
+            GeoVaultColorTokens.Dark.Surface
         } else {
-            GeoVaultColorTokens.Background
+            GeoVaultColorTokens.ListBackground
         }
 
     /**
@@ -73,7 +73,7 @@ object GeoVaultMapScaffoldDefaults {
         @Composable
         @ReadOnlyComposable
         get() = if (isSystemInDarkTheme()) {
-            GeoVaultColorTokens.DarkBorderLight
+            GeoVaultColorTokens.Dark.BorderLight
         } else {
             GeoVaultColorTokens.BorderLight
         }
@@ -86,13 +86,13 @@ object GeoVaultMapScaffoldDefaults {
         @Composable
         @ReadOnlyComposable
         get() = if (isSystemInDarkTheme()) {
-            GeoVaultColorTokens.DarkBorderLight
+            GeoVaultColorTokens.Dark.BorderLight
         } else {
             GeoVaultColorTokens.Gray200
         }
 
     /** Title text color for drawer headers. */
     val HeaderTitleColor: Color get() = GeoVaultColorTokens.TextPrimary
-    val TitleChipBackgroundColor: Color get() = GeoVaultColorTokens.BlueLight
-    val TitleChipContentColor: Color get() = GeoVaultColorTokens.PrimaryBlue
+    val TitleChipBackgroundColor: Color get() = GeoVaultColorTokens.Blue100
+    val TitleChipContentColor: Color get() = GeoVaultColorTokens.MainBlue
 }

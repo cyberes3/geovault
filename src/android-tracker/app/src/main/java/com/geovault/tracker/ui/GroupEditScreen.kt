@@ -237,14 +237,14 @@ private fun GroupEditOwnerContent(
 
     val sharedRecipientCount = TrackerSharingSettingsPolicy.parseSharedEmails(dialog.sharedEmailsDraft).size
     val destructiveAccent =
-        if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkError else GeoVaultColorTokens.Error
+        if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.Error else GeoVaultColorTokens.Error
     val sharingSectionBackground =
         if (MaterialTheme.colors.isLight) {
             GeoVaultColorTokens.Gray300.copy(alpha = 0.58f)
         } else {
             MaterialTheme.colors.onSurface.copy(alpha = 0.10f)
         }
-    val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
+    val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
 
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.trackers_dialog_edit_group_details_title),
@@ -407,7 +407,7 @@ private fun GroupEditOwnerContent(
                                         Card(
                                             modifier = Modifier.fillMaxWidth(),
                                             elevation = 0.dp,
-                                            border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+                                            border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
                                             backgroundColor = Color.Transparent,
                                         ) {
                                             Box(
@@ -498,7 +498,7 @@ private fun GroupEditOwnerContent(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x66000000))
+                .background(GeoVaultColorTokens.ScrimMedium)
         ) {
             GeoVaultLoadingSpinner(
                 modifier = Modifier
@@ -517,7 +517,7 @@ private fun GroupEditNonOwnerContent(
 ) {
     var showLeaveConfirm by remember { mutableStateOf(false) }
     val destructiveAccent =
-        if (isSystemInDarkTheme()) GeoVaultColorTokens.DarkError else GeoVaultColorTokens.Error
+        if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.Error else GeoVaultColorTokens.Error
 
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.NESTED_FULL_SCREEN_OVERLAY,
@@ -698,11 +698,11 @@ private fun GroupEditShareUserPickerRow(
     val isDark = !MaterialTheme.colors.isLight
     val rowBackground = when {
         !selected -> MaterialTheme.colors.surface
-        isDark -> GeoVaultColorTokens.PrimaryBlue.copy(alpha = 0.22f)
-        else -> Color(0xFFE4EAF5)
+        isDark -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
+        else -> GeoVaultColorTokens.Blue100
     }
     val labelColor = if (selected) {
-        GeoVaultColorTokens.PrimaryBlue
+        GeoVaultColorTokens.MainBlue
     } else {
         MaterialTheme.colors.onSurface
     }
@@ -713,7 +713,7 @@ private fun GroupEditShareUserPickerRow(
         shape = RoundedCornerShape(8.dp),
         elevation = 0.dp,
         backgroundColor = rowBackground,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
     ) {
         Row(
             modifier = Modifier
@@ -734,7 +734,7 @@ private fun GroupEditShareUserPickerRow(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = GeoVaultColorTokens.PrimaryBlue,
+                    tint = GeoVaultColorTokens.MainBlue,
                     modifier = Modifier.size(20.dp),
                 )
             } else {

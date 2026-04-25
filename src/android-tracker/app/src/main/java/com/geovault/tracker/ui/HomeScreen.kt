@@ -388,7 +388,7 @@ private fun TrackingContainer(
                     Icon(
                         painter = painterResource(R.drawable.ic_radar_dish),
                         contentDescription = null,
-                        tint = if (state.isTracking) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.PrimaryBlue,
+                        tint = if (state.isTracking) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.MainBlue,
                         modifier = Modifier.size(radarIconSize),
                     )
                 }
@@ -466,7 +466,7 @@ private fun StatCard(
         modifier = modifier,
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colors.surface,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
         elevation = 0.dp,
     ) {
         Column(
@@ -507,7 +507,7 @@ private fun SmallIconActionButton(
             .alpha(if (visible) 1f else 0f),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colors.surface,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
         elevation = 0.dp,
     ) {
         GeoVaultClickableWithTooltip(
@@ -519,7 +519,7 @@ private fun SmallIconActionButton(
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = contentDescription,
-                tint = GeoVaultColorTokens.PrimaryBlue,
+                tint = GeoVaultColorTokens.MainBlue,
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -531,7 +531,7 @@ private fun ServerFailureOverlay(modifier: Modifier = Modifier) {
     val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
-            .background(androidx.compose.ui.graphics.Color(0xA0000000))
+            .background(GeoVaultColorTokens.ScrimStrong)
             .clickable(
                 enabled = true,
                 interactionSource = interactionSource,
@@ -543,7 +543,7 @@ private fun ServerFailureOverlay(modifier: Modifier = Modifier) {
         Surface(
             modifier = Modifier.width(280.dp),
             shape = MaterialTheme.shapes.medium,
-            color = androidx.compose.ui.graphics.Color(0xFFFFF3F3),
+            color = GeoVaultColorTokens.ErrorSurfaceLight,
             border = BorderStroke(3.dp, GeoVaultColorTokens.Error),
             elevation = 0.dp,
         ) {
@@ -636,9 +636,9 @@ private fun homeStatusLabelRes(status: TrackingUiStatus): Int {
 }
 
 private fun homeStatusColor(status: TrackingUiStatus, isPreparingToTrack: Boolean): androidx.compose.ui.graphics.Color {
-    if (isPreparingToTrack) return GeoVaultColorTokens.PrimaryBlue
+    if (isPreparingToTrack) return GeoVaultColorTokens.MainBlue
     return when (status) {
-        TrackingUiStatus.NOT_TRACKING -> GeoVaultColorTokens.PrimaryBlue
+        TrackingUiStatus.NOT_TRACKING -> GeoVaultColorTokens.MainBlue
         TrackingUiStatus.WAITING_FOR_GPS -> GeoVaultColorTokens.Error
         TrackingUiStatus.LOCKING -> GeoVaultColorTokens.MainYellow
         TrackingUiStatus.TRACKING_ACTIVE -> GeoVaultColorTokens.MainYellow

@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -36,7 +35,7 @@ fun GeoVaultLoadingOverlay(
     val scrimModifier = if (onTap != null) {
         modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
+            .background(GeoVaultColorTokens.ScrimMedium)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null
@@ -44,7 +43,7 @@ fun GeoVaultLoadingOverlay(
     } else {
         modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
+            .background(GeoVaultColorTokens.ScrimMedium)
             .then(
                 if (blockInput) {
                     Modifier.clickable(
@@ -64,7 +63,7 @@ fun GeoVaultLoadingOverlay(
         Card(
             shape = RoundedCornerShape(8.dp),
             elevation = 0.dp,
-            border = BorderStroke(2.dp, GeoVaultColorTokens.PrimaryBlue),
+            border = BorderStroke(2.dp, GeoVaultColorTokens.MainBlue),
             backgroundColor = GeoVaultColorTokens.Surface
         ) {
             Column(

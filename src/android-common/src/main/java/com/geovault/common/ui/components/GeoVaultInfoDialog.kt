@@ -23,7 +23,7 @@ object GeoVaultInfoDialogDefaults {
     @Composable
     fun closeButtonColor() =
         if (MaterialTheme.colors.isLight) {
-            GeoVaultColorTokens.PrimaryBlue
+            GeoVaultColorTokens.MainBlue
         } else {
             GeoVaultColorTokens.Gray300
         }

@@ -48,7 +48,7 @@ fun GeoVaultFormDialog(
                 Text(
                     text = confirmText,
                     color = if (confirmEnabled) {
-                        GeoVaultColorTokens.PrimaryBlue
+                        GeoVaultColorTokens.MainBlue
                     } else {
                         GeoVaultColorTokens.Gray400
                     },
@@ -59,7 +59,7 @@ fun GeoVaultFormDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     text = cancelText,
-                    color = GeoVaultColorTokens.PrimaryBlue,
+                    color = GeoVaultColorTokens.MainBlue,
                 )
             }
         },

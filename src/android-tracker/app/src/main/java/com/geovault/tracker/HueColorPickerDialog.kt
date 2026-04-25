@@ -8,28 +8,18 @@ import android.graphics.Color
 import androidx.appcompat.R as AppCompatR
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ContextThemeWrapper
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.graphics.toArgb
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
-import com.geovault.common.R as CommonR
-
-/** Default tracker color, matching `gv_common_color_blue_400`. */
-const val DEFAULT_TRACKER_COLOR_HEX: String = "#6C93DE"
-
-/** Fallback tracker color hex used across tracker UI and map rendering. */
-fun defaultTrackerColorHex(context: Context): String =
-    colorIntToHex(ContextCompat.getColor(context, CommonR.color.gv_common_color_blue_400))
-
-/** Static fallback for contexts where Android resources are unavailable (e.g. JVM tests). */
-fun defaultTrackerColorHex(): String = DEFAULT_TRACKER_COLOR_HEX
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 /**
  * Parses a hex color string (with or without #) to Android color int.
- * Returns fallback tracker color from resources when [hex] is null or invalid.
+ * Returns the default tracker color (`GeoVaultColorTokens.Blue400`) when [hex] is null or invalid.
  */
-fun parseHexToColorInt(hex: String?, context: Context): Int {
+fun parseHexToColorInt(hex: String?): Int {
     val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
-    if (normalized == null) return Color.parseColor(defaultTrackerColorHex(context))
+    if (normalized == null) return GeoVaultColorTokens.Blue400.toArgb()
     return try {
         val parsedHex = if (
             normalized.length == 9 &&
@@ -43,7 +33,7 @@ fun parseHexToColorInt(hex: String?, context: Context): Int {
         }
         Color.parseColor(parsedHex)
     } catch (_: Exception) {
-        Color.parseColor(defaultTrackerColorHex(context))
+        GeoVaultColorTokens.Blue400.toArgb()
     }
 }
 
@@ -81,7 +71,7 @@ fun showHueColorPickerDialog(
     initialHex: String?,
     onColorPicked: (String) -> Unit,
 ) {
-    val initialColor = parseHexToColorInt(initialHex, context)
+    val initialColor = parseHexToColorInt(initialHex)
     val dialogContext = appCompatDialogContext(context)
     val dialog: AlertDialog = ColorPickerDialogBuilder
         .with(dialogContext)
@@ -99,7 +89,7 @@ fun showHueColorPickerDialog(
             Configuration.UI_MODE_NIGHT_YES
     if (isDarkTheme) {
         dialog.setOnShowListener {
-            val buttonColor = ContextCompat.getColor(context, CommonR.color.gv_common_text_primary)
+            val buttonColor = GeoVaultColorTokens.Dark.TextPrimary.toArgb()
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(buttonColor)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(buttonColor)
         }

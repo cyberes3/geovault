@@ -173,7 +173,6 @@ class GeoJsonRenderPlugin(
                 OutlinedGeoJsonLineLayers.createOuterLayer(
                     layerId = lineOuterLayerId,
                     sourceId = linesSourceId,
-                    context = context?.applicationContext,
                 )
             )
         }
@@ -287,8 +286,8 @@ class GeoJsonRenderPlugin(
 
     private fun buildResolvedMarkerStyles(context: Context): Map<String, MapMarkerStyle> {
         return mapOf(
-            CommonMapIconIds.MARKER_DEFAULT to CommonMapMarkerStyles.default(context),
-            CommonMapIconIds.MARKER_SELECTED to CommonMapMarkerStyles.selected(context),
+            CommonMapIconIds.MARKER_DEFAULT to CommonMapMarkerStyles.default(),
+            CommonMapIconIds.MARKER_SELECTED to CommonMapMarkerStyles.selected(),
         ) + config.markerStyles
     }
 

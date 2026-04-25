@@ -29,9 +29,9 @@ fun GeoVaultToggleHelpCard(
     enabled: Boolean = true
 ) {
     val isDark = isSystemInDarkTheme()
-    val borderColor = if (isDark) GeoVaultColorTokens.DarkBorderLight else GeoVaultColorTokens.BorderLight
-    val titleColor = if (isDark) GeoVaultColorTokens.DarkToggleTitle else GeoVaultColorTokens.ToggleTitle
-    val helpColor = if (isDark) GeoVaultColorTokens.DarkToggleHelpText else GeoVaultColorTokens.ToggleHelpText
+    val borderColor = if (isDark) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
+    val titleColor = if (isDark) GeoVaultColorTokens.Dark.ToggleTitle else GeoVaultColorTokens.ToggleTitle
+    val helpColor = if (isDark) GeoVaultColorTokens.Dark.ToggleHelpText else GeoVaultColorTokens.ToggleHelpText
     Card(
         modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f),
         backgroundColor = GeoVaultColorTokens.Surface,

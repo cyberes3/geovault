@@ -1,10 +1,8 @@
 package com.geovault.common.maps.core
 
-import android.content.Context
 import androidx.annotation.ColorInt
-import androidx.annotation.ColorRes
-import androidx.core.content.ContextCompat
-import com.geovault.common.R as CommonR
+import androidx.compose.ui.graphics.toArgb
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -20,16 +18,12 @@ object OutlinedGeoJsonLineLayers {
     fun createOuterLayer(
         layerId: String,
         sourceId: String,
-        context: Context? = null,
         visibility: String = Property.VISIBLE,
     ): LineLayer {
-        val outerColor = context?.let {
-            ContextCompat.getColor(it, CommonR.color.gv_common_map_linework_outer_halo)
-        } ?: 0xFFFFFFFF.toInt()
         return LineLayer(layerId, sourceId).apply {
             setProperties(
                 PropertyFactory.lineWidth(WIDTH_OUTER_PX),
-                PropertyFactory.lineColor(outerColor),
+                PropertyFactory.lineColor(GeoVaultColorTokens.MapLineworkHalo.toArgb()),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 PropertyFactory.visibility(visibility),
@@ -69,13 +63,8 @@ object OutlinedGeoJsonLineLayers {
         }
     }
 
-    fun borderColorHex(context: Context): String = colorResToHex6(context, CommonR.color.gv_common_map_linework_border)
-
-    fun lineColorHex(context: Context, @ColorRes colorResId: Int): String = colorResToHex6(context, colorResId)
+    /** Default outline color for outlined GeoJSON line layers. */
+    val DEFAULT_OUTLINE_COLOR_HEX: String = GeoVaultColorTokens.Hex.MapLineworkBorder
 
     fun colorIntToHex6(@ColorInt color: Int): String = String.format("#%06X", 0xFFFFFF and color)
-
-    private fun colorResToHex6(context: Context, @ColorRes colorResId: Int): String {
-        return colorIntToHex6(ContextCompat.getColor(context, colorResId))
-    }
 }

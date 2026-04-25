@@ -23,7 +23,7 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 /**
  * The GeoVault "outlined stroke card" primitive: a Material [Card] with rounded 8.dp corners,
- * 0.dp elevation, a 1.dp [GeoVaultColorTokens.PrimaryBlue] stroke border, and the current
+ * 0.dp elevation, a 1.dp [GeoVaultColorTokens.MainBlue] stroke border, and the current
  * theme's surface color as background.
  *
  * This is the shared visual chrome for every detail-screen card across the GeoVault apps
@@ -43,7 +43,7 @@ fun GeoVaultOutlinedStrokeCard(
         modifier = clickableModifier,
         shape = RoundedCornerShape(8.dp),
         elevation = 0.dp,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.PrimaryBlue),
+        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
         backgroundColor = MaterialTheme.colors.surface,
         content = content,
     )

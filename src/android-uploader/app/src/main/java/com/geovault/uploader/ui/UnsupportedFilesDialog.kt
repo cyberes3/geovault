@@ -18,7 +18,7 @@ fun UnsupportedFilesDialog(
     onDismissRequest: () -> Unit
 ) {
     val bodyColor =
-        if (MaterialTheme.colors.isLight) GeoVaultColorTokens.TextPrimary else GeoVaultColorTokens.DarkOnSurface
+        if (MaterialTheme.colors.isLight) GeoVaultColorTokens.TextPrimary else GeoVaultColorTokens.Dark.TextPrimary
     GeoVaultInfoDialog(
         title = "Unsupported files",
         onDismissRequest = onDismissRequest

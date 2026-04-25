@@ -139,7 +139,7 @@ fun MapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(GeoVaultColorTokens.Background),
+                .background(GeoVaultColorTokens.ListBackground),
         ) {
             GeoVaultAuthGate(
                 isAuthenticated = isAuthenticated,
@@ -479,7 +479,7 @@ private fun TrackerMapAuthenticatedContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.Background),
+            .background(GeoVaultColorTokens.ListBackground),
     ) {
         Box(
             modifier = Modifier
@@ -698,7 +698,7 @@ private fun TrackerMapAuthenticatedContent(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = androidx.compose.ui.graphics.RectangleShape,
-                        backgroundColor = GeoVaultColorTokens.Background,
+                        backgroundColor = GeoVaultColorTokens.ListBackground,
                         elevation = 0.dp,
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -779,7 +779,7 @@ private fun MapTrackerSelectionPanel(
     val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = GeoVaultColorTokens.Background,
+        color = GeoVaultColorTokens.ListBackground,
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             Row(
@@ -806,7 +806,7 @@ private fun MapTrackerSelectionPanel(
                         } else {
                             stringResource(R.string.map_action_lock_selection)
                         },
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -824,7 +824,7 @@ private fun MapTrackerSelectionPanel(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = stringResource(R.string.trackers_dialog_cancel),
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -856,7 +856,7 @@ private fun MapTrackerSelectionPanel(
                                 androidx.compose.foundation.Image(
                                     painter = painterResource(id = R.drawable.ic_focus_point_round),
                                     contentDescription = stringResource(R.string.map_action_focus_tracker),
-                                    colorFilter = ColorFilter.tint(GeoVaultColorTokens.PrimaryBlue),
+                                    colorFilter = ColorFilter.tint(GeoVaultColorTokens.MainBlue),
                                     modifier = Modifier.size(22.dp),
                                 )
                             },
@@ -871,7 +871,7 @@ private fun MapTrackerSelectionPanel(
                             androidx.compose.foundation.Image(
                                 painter = painterResource(id = R.drawable.ic_params),
                                 contentDescription = stringResource(R.string.map_action_view_params),
-                                colorFilter = ColorFilter.tint(GeoVaultColorTokens.PrimaryBlue),
+                                colorFilter = ColorFilter.tint(GeoVaultColorTokens.MainBlue),
                                 modifier = Modifier.size(22.dp),
                             )
                         },
@@ -885,7 +885,7 @@ private fun MapTrackerSelectionPanel(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.List,
                                 contentDescription = stringResource(R.string.map_action_view_in_list),
-                                tint = GeoVaultColorTokens.PrimaryBlue,
+                                tint = GeoVaultColorTokens.MainBlue,
                                 modifier = Modifier.size(22.dp),
                             )
                         },

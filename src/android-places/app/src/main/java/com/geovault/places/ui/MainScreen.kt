@@ -127,7 +127,7 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(scaffoldPadding)
-                    .background(GeoVaultColorTokens.Background)
+                    .background(GeoVaultColorTokens.ListBackground)
             ) {
                 GeoVaultAuthGate(
                     isAuthenticated = state.isAuthenticated,
@@ -202,7 +202,7 @@ private fun SearchBlock(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(GeoVaultColorTokens.Background)
+            .background(GeoVaultColorTokens.ListBackground)
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -299,7 +299,7 @@ private fun PlacesBody(
         canRefresh = !state.isRefreshing,
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.Background),
+            .background(GeoVaultColorTokens.ListBackground),
     ) {
         if (state.saved.isEmpty() && state.offlineItems.isEmpty()) {
             EmptyState()
@@ -384,9 +384,9 @@ private fun PlaceRow(
         border = BorderStroke(
             width = 2.dp,
             color = when {
-                isSelected -> GeoVaultColorTokens.PrimaryBlue
+                isSelected -> GeoVaultColorTokens.MainBlue
                 item.isOffline -> GeoVaultColorTokens.MainYellow
-                else -> GeoVaultColorTokens.PrimaryBlue
+                else -> GeoVaultColorTokens.MainBlue
             }
         )
     ) {
@@ -416,7 +416,7 @@ private fun PlaceRow(
                     Icon(
                         imageVector = Icons.Outlined.Map,
                         contentDescription = "Open map",
-                        tint = GeoVaultColorTokens.PrimaryBlue
+                        tint = GeoVaultColorTokens.MainBlue
                     )
                 }
                 Spacer(modifier = Modifier.size(12.dp))
@@ -554,7 +554,7 @@ private fun FabStack(
         FloatingActionButton(
             onClick = { if (enabled) onAddPlace() },
             shape = CircleShape,
-            backgroundColor = GeoVaultColorTokens.PrimaryBlue,
+            backgroundColor = GeoVaultColorTokens.MainBlue,
             contentColor = Color.White,
             elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
                 defaultElevation = 0.dp,

@@ -68,7 +68,7 @@ fun <T> GeoVaultTabBar(
             }
         },
         divider = {
-            Divider(color = GeoVaultColorTokens.PrimaryBlue, thickness = 2.dp)
+            Divider(color = GeoVaultColorTokens.MainBlue, thickness = 2.dp)
         },
     ) {
         tabs.forEach { tab ->

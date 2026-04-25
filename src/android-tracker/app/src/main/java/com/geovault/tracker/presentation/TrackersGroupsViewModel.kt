@@ -13,7 +13,7 @@ import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRecentDataWindowOptions
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
-import com.geovault.tracker.defaultTrackerColorHex
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
@@ -804,7 +804,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
                         tracker = d.tracker,
                         name = name,
-                        color = d.colorDraft.trim().ifBlank { defaultTrackerColorHex() },
+                        color = d.colorDraft.trim().ifBlank { GeoVaultColorTokens.Hex.Blue400 },
                         recentDataWindow = recentResolved,
                         visibility = d.visibilityDraft.apiValue,
                         shareParamsWithRecipients = d.shareParamsWithRecipientsDraft,

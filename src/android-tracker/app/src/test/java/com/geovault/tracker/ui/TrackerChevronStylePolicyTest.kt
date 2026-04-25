@@ -1,7 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.parseHexToColorInt
 import org.junit.Assert.assertEquals
@@ -14,23 +12,20 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], manifest = Config.NONE)
 class TrackerChevronStylePolicyTest {
 
-    private val context: Context
-        get() = ApplicationProvider.getApplicationContext()
-
     @Test
-    fun tintForTrackerColorHex_usesPrimaryBlueFallbackForNullAndInvalidHex() {
-        val nullTint = TrackerChevronStylePolicy.tintForTrackerColorHex(null, context)
-        val invalidTint = TrackerChevronStylePolicy.tintForTrackerColorHex("not-a-color", context)
+    fun tintForTrackerColorHex_usesMainBlueForNull_andTrackerDefaultForInvalidHex() {
+        val nullTint = TrackerChevronStylePolicy.tintForTrackerColorHex(null)
+        val invalidTint = TrackerChevronStylePolicy.tintForTrackerColorHex("not-a-color")
 
-        assertEquals(GeoVaultColorTokens.PrimaryBlue, nullTint)
-        assertEquals(GeoVaultColorTokens.PrimaryBlue, invalidTint)
+        assertEquals(GeoVaultColorTokens.MainBlue, nullTint)
+        assertEquals(GeoVaultColorTokens.Blue400, invalidTint)
     }
 
     @Test
     fun tintForTrackerColorHex_matchesParseHexPolicyForValidHex() {
         val hex = "#AA33CC"
-        val expected = androidx.compose.ui.graphics.Color(parseHexToColorInt(hex, context))
-        val actual = TrackerChevronStylePolicy.tintForTrackerColorHex(hex, context)
+        val expected = androidx.compose.ui.graphics.Color(parseHexToColorInt(hex))
+        val actual = TrackerChevronStylePolicy.tintForTrackerColorHex(hex)
 
         assertEquals(expected, actual)
     }

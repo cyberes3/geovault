@@ -90,7 +90,7 @@ fun <T> GeoVaultMultiSelectDialog(
                                 checked = checked,
                                 onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = GeoVaultColorTokens.PrimaryBlue,
+                                    checkedColor = GeoVaultColorTokens.MainBlue,
                                     uncheckedColor = GeoVaultColorTokens.Gray400,
                                 ),
                             )
@@ -107,12 +107,12 @@ fun <T> GeoVaultMultiSelectDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(selection) }) {
-                Text(text = confirmText, color = GeoVaultColorTokens.PrimaryBlue)
+                Text(text = confirmText, color = GeoVaultColorTokens.MainBlue)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = cancelText, color = GeoVaultColorTokens.PrimaryBlue)
+                Text(text = cancelText, color = GeoVaultColorTokens.MainBlue)
             }
         },
     )

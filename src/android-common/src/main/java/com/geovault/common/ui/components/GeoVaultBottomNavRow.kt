@@ -33,6 +33,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -179,8 +180,8 @@ fun GeoVaultBottomNavScaffold(
     SideEffect {
         if (activity != null && !areTabsHidden) {
             val lighterNavBarBlue = ColorUtils.blendARGB(
-                GeoVaultColorTokens.PRIMARY_BLUE_INT,
-                0xFFFFFFFF.toInt(),
+                GeoVaultColorTokens.MainBlue.toArgb(),
+                GeoVaultColorTokens.Surface.toArgb(),
                 0.12f,
             )
             // Keep the Android system navigation bar blue when a bottom nav row is present.
@@ -204,7 +205,7 @@ fun GeoVaultBottomNavRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(GeoVaultColorTokens.PrimaryBlue)
+            .background(GeoVaultColorTokens.MainBlue)
             // Do not use navigationBarsPadding here: GeoVaultTheme already applies it at the root.
             // A second inset shrinks the tab content area and squishes screens (e.g. map) above the bar.
             .padding(vertical = 3.dp),

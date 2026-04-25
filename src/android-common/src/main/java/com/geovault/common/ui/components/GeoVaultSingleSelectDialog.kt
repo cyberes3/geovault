@@ -138,7 +138,7 @@ fun <T> GeoVaultSingleSelectDialog(
                     TextButton(onClick = onDismiss) {
                         Text(
                             text = cancelText,
-                            color = GeoVaultColorTokens.PrimaryBlue,
+                            color = GeoVaultColorTokens.MainBlue,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
@@ -154,8 +154,8 @@ private fun <T> OptionRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val rowBackground = if (selected) GeoVaultColorTokens.BlueLight else GeoVaultColorTokens.Surface
-    val textColor = if (selected) GeoVaultColorTokens.PrimaryBlue else GeoVaultColorTokens.TextPrimary
+    val rowBackground = if (selected) GeoVaultColorTokens.Blue100 else GeoVaultColorTokens.Surface
+    val textColor = if (selected) GeoVaultColorTokens.MainBlue else GeoVaultColorTokens.TextPrimary
     val rowShape = RoundedCornerShape(8.dp)
     Box(
         modifier = Modifier

@@ -12,36 +12,35 @@ import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.common.ui.navigation.GeoVaultBackHandlerHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 
 private fun lightScheme(): Colors = lightColors(
-    primary = GeoVaultColorTokens.PrimaryBlue,
-    primaryVariant = GeoVaultColorTokens.PrimaryBlueDark,
-    secondary = GeoVaultColorTokens.PrimaryBlue,
+    primary = GeoVaultColorTokens.MainBlue,
+    primaryVariant = GeoVaultColorTokens.Blue600,
+    secondary = GeoVaultColorTokens.MainBlue,
     surface = GeoVaultColorTokens.Surface,
-    background = GeoVaultColorTokens.Background,
-    onPrimary = Color.White,
-    onSecondary = Color.White,
+    background = GeoVaultColorTokens.ListBackground,
+    onPrimary = GeoVaultColorTokens.White,
+    onSecondary = GeoVaultColorTokens.White,
     onSurface = GeoVaultColorTokens.TextPrimary,
     onBackground = GeoVaultColorTokens.TextPrimary,
     error = GeoVaultColorTokens.Error
 )
 
 private fun darkScheme(): Colors = darkColors(
-    primary = GeoVaultColorTokens.PrimaryBlue,
-    primaryVariant = GeoVaultColorTokens.PrimaryBlueDark,
-    secondary = GeoVaultColorTokens.PrimaryBlue,
-    surface = GeoVaultColorTokens.DarkSurface,
-    background = GeoVaultColorTokens.DarkBackground,
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onSurface = GeoVaultColorTokens.DarkOnSurface,
-    onBackground = GeoVaultColorTokens.DarkOnBackground,
-    error = GeoVaultColorTokens.DarkError
+    primary = GeoVaultColorTokens.MainBlue,
+    primaryVariant = GeoVaultColorTokens.Blue600,
+    secondary = GeoVaultColorTokens.MainBlue,
+    surface = GeoVaultColorTokens.Dark.Surface,
+    background = GeoVaultColorTokens.Dark.ListBackground,
+    onPrimary = GeoVaultColorTokens.White,
+    onSecondary = GeoVaultColorTokens.White,
+    onSurface = GeoVaultColorTokens.Dark.TextPrimary,
+    onBackground = GeoVaultColorTokens.Dark.TextPrimary,
+    error = GeoVaultColorTokens.Dark.Error
 )
 
 @Composable

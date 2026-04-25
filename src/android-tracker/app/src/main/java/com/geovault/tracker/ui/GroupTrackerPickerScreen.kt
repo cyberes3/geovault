@@ -174,7 +174,7 @@ private fun PickerTabContent(
     )
 
     val borderColor = if (isSystemInDarkTheme()) {
-        GeoVaultColorTokens.DarkBorderLight
+        GeoVaultColorTokens.Dark.BorderLight
     } else {
         GeoVaultColorTokens.BorderLight
     }
@@ -383,7 +383,7 @@ private fun MemberTrackerCard(
     onRemove: () -> Unit,
 ) {
     val chevronTint = remember(item.tracker?.color) {
-        TrackerChevronStylePolicy.tintForTrackerColorHex(item.tracker?.color, context)
+        TrackerChevronStylePolicy.tintForTrackerColorHex(item.tracker?.color)
     }
 
     Card(

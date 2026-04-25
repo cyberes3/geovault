@@ -45,7 +45,7 @@ fun GeoVaultStatusPane(
             Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = "Connected",
-                tint = GeoVaultColorTokens.PrimaryBlue
+                tint = GeoVaultColorTokens.MainBlue
             )
             Spacer(modifier = Modifier.height(GeoVaultLayoutTokens.StatusIconGap))
         }

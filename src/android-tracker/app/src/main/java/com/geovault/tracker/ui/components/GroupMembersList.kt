@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,10 +91,9 @@ private fun GroupMemberCard(
     onViewParams: (() -> Unit)?,
     onViewInList: (() -> Unit)?,
 ) {
-    val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
     val chevronTint = remember(row.tracker?.color) {
-        TrackerChevronStylePolicy.tintForTrackerColorHex(row.tracker?.color, context)
+        TrackerChevronStylePolicy.tintForTrackerColorHex(row.tracker?.color)
     }
     val cardBackground = if (isHighlighted) {
         MaterialTheme.colors.primary.copy(alpha = 0.14f)
@@ -146,7 +144,7 @@ private fun GroupMemberCard(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = GeoVaultColorTokens.PrimaryBlue,
+                        tint = GeoVaultColorTokens.MainBlue,
                     )
                 }
                 DropdownMenu(

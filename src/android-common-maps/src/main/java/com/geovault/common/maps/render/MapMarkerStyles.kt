@@ -1,9 +1,8 @@
 package com.geovault.common.maps.render
 
-import android.content.Context
 import androidx.annotation.ColorInt
-import androidx.core.content.ContextCompat
-import com.geovault.common.R as CommonUiR
+import androidx.compose.ui.graphics.toArgb
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 data class MapMarkerStyle(
     @param:ColorInt val outerBorderColorInt: Int,
@@ -23,8 +22,10 @@ object CommonMapMarkerStyles {
 
     fun fromCenterColorInt(@ColorInt centerColorInt: Int, borderStyle: MapMarkerBorderStyle): MapMarkerStyle {
         val (outerBorderColorInt, innerBorderColorInt) = when (borderStyle) {
-            MapMarkerBorderStyle.LIGHT -> 0xFF000000.toInt() to 0xFFFFFFFF.toInt()
-            MapMarkerBorderStyle.DARK -> 0xFFFFFFFF.toInt() to 0xFF000000.toInt()
+            MapMarkerBorderStyle.LIGHT ->
+                GeoVaultColorTokens.Black.toArgb() to GeoVaultColorTokens.Surface.toArgb()
+            MapMarkerBorderStyle.DARK ->
+                GeoVaultColorTokens.Surface.toArgb() to GeoVaultColorTokens.Black.toArgb()
         }
         return MapMarkerStyle(
             outerBorderColorInt = outerBorderColorInt,
@@ -33,19 +34,15 @@ object CommonMapMarkerStyles {
         )
     }
 
-    fun default(context: Context): MapMarkerStyle {
-        return fromCenterColorInt(
-            centerColorInt = ContextCompat.getColor(context, CommonUiR.color.gv_common_main_blue),
-            borderStyle = MapMarkerBorderStyle.LIGHT,
-        )
-    }
+    fun default(): MapMarkerStyle = fromCenterColorInt(
+        centerColorInt = GeoVaultColorTokens.MainBlue.toArgb(),
+        borderStyle = MapMarkerBorderStyle.LIGHT,
+    )
 
-    fun selected(context: Context): MapMarkerStyle {
-        return fromCenterColorInt(
-            centerColorInt = ContextCompat.getColor(context, CommonUiR.color.gv_common_main_yellow),
-            borderStyle = MapMarkerBorderStyle.DARK,
-        )
-    }
+    fun selected(): MapMarkerStyle = fromCenterColorInt(
+        centerColorInt = GeoVaultColorTokens.MainYellow.toArgb(),
+        borderStyle = MapMarkerBorderStyle.DARK,
+    )
 
     private fun parseColorHex(value: String): Int {
         val normalized = value.removePrefix("#")

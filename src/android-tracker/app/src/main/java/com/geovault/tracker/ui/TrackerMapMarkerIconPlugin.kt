@@ -5,8 +5,8 @@ import android.util.Log
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.render.MapRenderState
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
-import com.geovault.tracker.defaultTrackerColorHex
 import com.geovault.tracker.parseHexToColorInt
 import com.geovault.tracker.presentation.TrackerMapIconIds
 import org.maplibre.android.maps.MapLibreMap
@@ -30,7 +30,7 @@ class TrackerMapMarkerIconPlugin(
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
-        val defaultColorHex = defaultTrackerColorHex(context)
+        val defaultColorHex = GeoVaultColorTokens.Hex.Blue400
         ensureIcon(style, TrackerMapIconIds.SELECTED_DEFAULT)
         ensureIcon(style, TrackerMapIconIds.selectedForColor(defaultColorHex))
         ensureIcon(style, TrackerMapIconIds.simpleForColor(defaultColorHex))
@@ -62,13 +62,13 @@ class TrackerMapMarkerIconPlugin(
         if (style.getImage(imageId) != null) return true
         val spec = if (imageId == TrackerMapIconIds.SELECTED_DEFAULT) {
             TrackerMapIconIds.IconSpec(
-                colorHex = defaultTrackerColorHex(context),
+                colorHex = GeoVaultColorTokens.Hex.Blue400,
                 chevronOnly = false,
             )
         } else {
             TrackerMapIconIds.parseSpec(imageId) ?: return false
         }
-        val tint = parseHexToColorInt(spec.colorHex, context)
+        val tint = parseHexToColorInt(spec.colorHex)
         val bitmap = if (spec.chevronOnly) {
             MapMarkerUtils.getMarkerBitmapWithTintedForeground(
                 context = context,

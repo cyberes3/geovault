@@ -9,7 +9,7 @@ import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.defaultTrackerColorHex
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.di.TrackerAppServices
@@ -918,7 +918,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = s.mode,
             trail = s.trail,
             runtime = s.runtime,
-            trailOutlineColorHex = OutlinedGeoJsonLineLayers.borderColorHex(appContext),
+            trailOutlineColorHex = OutlinedGeoJsonLineLayers.DEFAULT_OUTLINE_COLOR_HEX,
             remoteLastPoints = s.remoteLastPoints,
             activeStreamedTrackerIds = s.activeStreamedTrackerIds,
             allQueueTrailsByTracker = s.allQueueTrailsByTracker,
@@ -936,7 +936,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             streamedAccuracyByTrackerId = streamedAccuracyByTrackerId,
             fallbackAccuracyByTrackerId = fallbackAccuracyByTrackerId,
             allowAccuracyFallbackByTrackerId = allowAccuracyFallbackByTrackerId,
-            defaultIconColorHex = defaultTrackerColorHex(appContext),
+            defaultIconColorHex = GeoVaultColorTokens.Hex.Blue400,
         )
     }
 

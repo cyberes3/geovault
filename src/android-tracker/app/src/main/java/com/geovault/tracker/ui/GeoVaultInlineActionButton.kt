@@ -21,7 +21,7 @@ internal fun GeoVaultInlineActionButton(
         Text(
             text = text,
             color = if (enabled) {
-                GeoVaultColorTokens.PrimaryBlue
+                GeoVaultColorTokens.MainBlue
             } else {
                 GeoVaultColorTokens.TextSecondary
             }
