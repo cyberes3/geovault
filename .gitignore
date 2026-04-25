@@ -26,6 +26,7 @@ external sources/
 
 # symlinked from other repository source
 src/android-survey-data-viewer
+src/android-ngs-navigator
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

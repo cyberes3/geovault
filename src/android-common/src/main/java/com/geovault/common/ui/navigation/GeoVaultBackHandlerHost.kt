@@ -1,8 +1,5 @@
 package com.geovault.common.ui.navigation
 
-import android.content.Context
-import android.content.ContextWrapper
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -114,12 +111,4 @@ fun GeoVaultRegisterBackHandler(
         enabled = enabled,
         priority = priority,
     )
-}
-
-private tailrec fun Context.findComponentActivity(): ComponentActivity? {
-    return when (this) {
-        is ComponentActivity -> this
-        is ContextWrapper -> baseContext.findComponentActivity()
-        else -> null
-    }
 }

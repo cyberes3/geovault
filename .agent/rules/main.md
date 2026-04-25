@@ -58,3 +58,4 @@ When adding new libraries make sure you are using the latest version.
 
 We have a few external apps symlinked into the `src/` directory that may not show up correctly in your tools or in git. If the user says something about an app you can't find, its probably one of these. Use `ls` to find them and `ls -la` to resolve the symlink. They are an important part of the project so do not ignore them. List:
 - `android-survey-data-viewer`. When the user says "survey app", they mean this.
+- `android-ngs-navigator`. When the user says "ngs app", they mean this
