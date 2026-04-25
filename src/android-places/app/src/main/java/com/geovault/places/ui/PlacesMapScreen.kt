@@ -47,7 +47,7 @@ import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
-import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterFabAction
+import com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterFabAction
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility

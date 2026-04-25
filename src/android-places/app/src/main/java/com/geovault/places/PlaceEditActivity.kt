@@ -71,7 +71,7 @@ import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
-import com.geovault.common.maps.ui.rememberGeoVaultGpsRecenterController
+import com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterController
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
