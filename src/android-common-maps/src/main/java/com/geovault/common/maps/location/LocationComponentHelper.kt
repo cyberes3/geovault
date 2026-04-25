@@ -36,6 +36,11 @@ object LocationComponentHelper {
         val useTranslucentBackground: Boolean = false,
     )
 
+    /**
+     * Activates MapLibre's location component with GeoVault styling and **no** default engine.
+     * Leaves [org.maplibre.android.location.LocationComponent.isLocationComponentEnabled] false
+     * so hosts opt in via [setEnabled] (GPS FAB, follow bundle, tracker policy, etc.).
+     */
     @SuppressLint("MissingPermission")
     fun activate(map: MapLibreMap, style: Style, context: Context, config: Config) {
         val activationOptions = LocationComponentActivationOptions.builder(context, style)
@@ -45,7 +50,7 @@ object LocationComponentHelper {
             .build()
 
         map.locationComponent.activateLocationComponent(activationOptions)
-        map.locationComponent.isLocationComponentEnabled = true
+        map.locationComponent.isLocationComponentEnabled = false
         map.locationComponent.renderMode = config.renderMode
         map.locationComponent.cameraMode = CameraMode.NONE
     }

@@ -267,6 +267,10 @@ data class GeoVaultMapCameraFollowFabBundle(
      * selection zoom, navigation framing) so MapLibre does not fight programmatic animations.
      */
     val clearForProgrammaticCameraMove: () -> Unit,
+    /** True while the GPS follow FAB is engaged (position follow / camera tracking as configured). */
+    val gpsFollowDesired: Boolean,
+    /** True while the heading / compass follow FAB is engaged. */
+    val headingFollowDesired: Boolean,
 )
 
 private enum class GeoVaultMapCameraFollowPendingGrant {
@@ -517,5 +521,7 @@ fun rememberGeoVaultMapCameraFollowFabBundle(
         gpsFollowFab = gpsFab,
         orientationFollowFab = orientationFab,
         clearForProgrammaticCameraMove = clearForProgrammaticCameraMove,
+        gpsFollowDesired = gpsFollowDesired,
+        headingFollowDesired = headingFollowDesired,
     )
 }
