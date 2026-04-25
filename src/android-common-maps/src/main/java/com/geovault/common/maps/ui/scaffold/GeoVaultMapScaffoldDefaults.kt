@@ -1,5 +1,8 @@
 package com.geovault.common.maps.ui.scaffold
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
@@ -18,6 +21,26 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
  * light / dark value without callers threading a theme through the slot API.
  */
 object GeoVaultMapScaffoldDefaults {
+    /**
+     * Programmatic and drag-release snaps between drawer anchors. A snappy critically-damped
+     * spring — fast settle, no overshoot, physical feel.
+     *
+     * Spring (rather than the foundation library's longer default tween) makes anchor changes
+     * feel responsive: a row tap or programmatic [GeoVaultMapDrawerState.animateTo] visibly
+     * commits within ~250 ms but accelerates non-linearly so it reads as motion instead of a
+     * mid-frame jump. `StiffnessMediumLow` is the standard sheet-snap pick used by Compose's
+     * own ModalBottomSheet defaults; `DampingRatioNoBouncy` avoids sheet wobble at the anchor.
+     *
+     * Co-animations driven off the live drawer offset (e.g. the survey route's "pan map to
+     * keep selection above sheet" mirror) keep working because they read
+     * [GeoVaultMapDrawerState.visibleHeightPx] each frame and react to whatever value the
+     * spring is producing — no parallel `animate()` curve needs to be matched.
+     */
+    val DrawerAnchorSnapSpec: AnimationSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+    )
+
     /** Visible drawer height when collapsed. Mirrors the old survey app's ~65dp peek. */
     val PeekHeight: Dp = 65.dp
 

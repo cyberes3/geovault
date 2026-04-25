@@ -1,8 +1,6 @@
 package com.geovault.common.maps.ui.scaffold
 
 import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.animateTo
@@ -46,17 +44,13 @@ class GeoVaultMapDrawerState internal constructor(
     val halfExpandedFraction: Float,
     initialAnchor: GeoVaultMapDrawerAnchor = GeoVaultMapDrawerAnchor.Collapsed,
     /**
-     * Animation spec used by [animateTo] (sheet snap-to-anchor).
+     * Animation spec used by [animateTo] (sheet snap-to-anchor) and the drag-release fling
+     * settle (via [GeoVaultMapScaffold]'s `flingBehavior`). Defaults to
+     * [DefaultSnapAnimationSpec] — a snappy critically-damped spring.
      *
-     * Defaulted to a fixed-duration tween rather than the foundation library's default
-     * spring so consumers that need to drive *concurrent* animations (e.g. screen-space
-     * map panning to keep a selection visible while the sheet rises) can match this exact
-     * curve frame-for-frame. Spring physics have variable settling time and a non-linear
-     * progression that can't be replicated by an external coroutine driving MapLibre's
-     * `scrollBy` — the result is a visible desync between sheet position and map shift.
-     * A deterministic tween makes lockstep co-animation trivial: read [snapAnimationSpec],
-     * pass it to `androidx.compose.animation.core.animate`, and both motions step on the
-     * same frame clock with identical easing.
+     * Consumers driving concurrent map / camera motion alongside the sheet should *follow
+     * the live offset* (e.g. `snapshotFlow { visibleHeightPx.value }` + `scrollBy`) rather
+     * than running a parallel `animate()` curve.
      */
     val snapAnimationSpec: AnimationSpec<Float> = DefaultSnapAnimationSpec,
 ) {
@@ -69,24 +63,17 @@ class GeoVaultMapDrawerState internal constructor(
 
     /**
      * Underlying anchored-draggable state. Public so [GeoVaultMapScaffold] can wire
-     * `Modifier.anchoredDraggable` and the nested-scroll connection to it — feature code
-     * almost never needs to call this directly; prefer [animateTo] / [snapTo].
+     * `Modifier.anchoredDraggable` (with a [snapAnimationSpec]-driven fling behavior) and the
+     * nested-scroll connection to it — feature code almost never needs to call this directly;
+     * prefer [animateTo] / [snapTo].
+     *
+     * Uses the no-arg constructor so the state opts into the modern (post-1.7) flow where
+     * positional threshold + animation spec are configured on `Modifier.anchoredDraggable`'s
+     * `flingBehavior` rather than on the state. Programmatic snaps go through [animateTo],
+     * which forwards [snapAnimationSpec] explicitly to the underlying extension function.
      */
     val anchoredDraggableState: AnchoredDraggableState<GeoVaultMapDrawerAnchor> =
-        AnchoredDraggableState(
-            initialValue = initialAnchor,
-            // Drag past the geometric midpoint snaps to the next anchor (the standard
-            // bottom-sheet idiom that the no-arg `AnchoredDraggableState` constructor uses).
-            positionalThreshold = { totalDistance: Float -> totalDistance * 0.5f },
-            // No velocity-only snap — drags only commit by passing the positional threshold,
-            // matching the previous default. (The decay spec below still handles real flings.)
-            velocityThreshold = { 0f },
-            snapAnimationSpec = snapAnimationSpec,
-            // Fling/decay physics for drag releases. Tap-driven `animateTo` snaps go through
-            // `snapAnimationSpec` (above) — this only kicks in when the user actually flings
-            // the sheet with a velocity that overshoots the nearest anchor.
-            decayAnimationSpec = androidx.compose.animation.core.exponentialDecay(),
-        )
+        AnchoredDraggableState(initialValue = initialAnchor)
 
     /**
      * Last container height observed via [updateAnchors], as observable state. The scaffold
@@ -139,7 +126,12 @@ class GeoVaultMapDrawerState internal constructor(
 
     /** Smoothly animate the drawer to [anchor]. Cancels any in-flight animation. */
     suspend fun animateTo(anchor: GeoVaultMapDrawerAnchor) {
-        anchoredDraggableState.animateTo(anchor)
+        // Forward the configured [snapAnimationSpec] explicitly so the modern post-1.7
+        // anchored-draggable API drives the snap with our spring (default) or whatever the
+        // host overrode. Calling the no-arg overload would silently fall back to the
+        // foundation-library default tween, which is what produced the "no animation" feel
+        // when the state-level spec was previously dropped on construction.
+        anchoredDraggableState.animateTo(anchor, snapAnimationSpec)
     }
 
     /** Snap the drawer to [anchor] without animation. */
@@ -223,16 +215,12 @@ class GeoVaultMapDrawerState internal constructor(
 }
 
 /**
- * Default animation spec for [GeoVaultMapDrawerState.animateTo]. A 300 ms tween with the
- * standard Material easing curve. Exposed as a `const val`-style top-level so feature code
- * driving co-animations alongside the sheet (notably the Survey route's "pan map to keep
- * selection visible above drawer" effect) can pass the *same* spec into Compose's
- * `androidx.compose.animation.core.animate` and have both motions step on a single frame
- * clock with identical easing — eliminating the visible desync that resulted from MapLibre
- * `scrollBy` (linear/cubic ease) running concurrently with a default spring sheet animation.
+ * Default re-export of [GeoVaultMapScaffoldDefaults.DrawerAnchorSnapSpec] for callers that
+ * import [DefaultSnapAnimationSpec] only. A snappy critically-damped spring — fast settle,
+ * no overshoot — so anchor changes (programmatic [GeoVaultMapDrawerState.animateTo] or
+ * drag-release snaps) read as a clear physical motion rather than an instant jump.
  */
-val DefaultSnapAnimationSpec: AnimationSpec<Float> =
-    tween(durationMillis = 300, easing = FastOutSlowInEasing)
+val DefaultSnapAnimationSpec: AnimationSpec<Float> = GeoVaultMapScaffoldDefaults.DrawerAnchorSnapSpec
 
 /**
  * Compose entry point that wires a [GeoVaultMapDrawerState] with density-sensitive peek height.
@@ -250,7 +238,7 @@ fun rememberGeoVaultMapDrawerState(
 ): GeoVaultMapDrawerState {
     val density = LocalDensity.current
     val peekPx = with(density) { peekHeight.toPx().roundToInt() }
-    return remember(peekPx, halfExpandedFraction) {
+    return remember(peekPx, halfExpandedFraction, snapAnimationSpec) {
         GeoVaultMapDrawerState(
             peekHeightPx = peekPx,
             halfExpandedFraction = halfExpandedFraction,

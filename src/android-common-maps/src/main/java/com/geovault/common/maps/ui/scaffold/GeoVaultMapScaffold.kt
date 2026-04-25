@@ -1,6 +1,7 @@
 package com.geovault.common.maps.ui.scaffold
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,12 +31,11 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 
 /**
  * Reusable "map surface + bottom drawer" scaffold shared by every GeoVault app.
@@ -143,16 +142,27 @@ private fun BoxScope.DrawerLayer(
     val containerHeightPx by drawerState.containerHeightPxState
     val density = LocalDensity.current
     val drawerHeightDp = with(density) { containerHeightPx.toDp() }
+    // Drag-release fling behavior. Built via the modern (post-1.7) AnchoredDraggableDefaults
+    // entry point so the user-configured [GeoVaultMapDrawerState.snapAnimationSpec] (snappy
+    // spring by default) drives the settle animation instead of the foundation library's
+    // unconfigured default tween. Programmatic snaps still go through
+    // [GeoVaultMapDrawerState.animateTo] which forwards the same spec explicitly.
+    val flingBehavior = AnchoredDraggableDefaults.flingBehavior(
+        state = drawerState.anchoredDraggableState,
+        animationSpec = drawerState.snapAnimationSpec,
+    )
     Surface(
         modifier = Modifier
             .align(Alignment.TopStart)
             .fillMaxWidth()
-            .offset {
-                val y = runCatching { drawerState.anchoredDraggableState.requireOffset() }
+            // graphicsLayer reads the live offset every frame on the GPU layer thread —
+            // unlike Modifier.offset { ... }, which defers to the placement phase and can
+            // drop intermediate frames during fast spring animations. This is the same
+            // pattern Compose Material's own ModalBottomSheet uses for its sheet translation.
+            .graphicsLayer {
+                translationY = runCatching { drawerState.anchoredDraggableState.requireOffset() }
                     .getOrDefault(0f)
-                    .roundToInt()
-                    .coerceAtLeast(0)
-                IntOffset(x = 0, y = y)
+                    .coerceAtLeast(0f)
             }
             .height(drawerHeightDp)
             .drawerTopAndSidesBorder(
@@ -168,6 +178,7 @@ private fun BoxScope.DrawerLayer(
         val headerDragModifier = Modifier.anchoredDraggable(
             state = drawerState.anchoredDraggableState,
             orientation = Orientation.Vertical,
+            flingBehavior = flingBehavior,
         )
         val headerDividerColor = GeoVaultMapScaffoldDefaults.HeaderDividerColor
         Column(modifier = Modifier.fillMaxSize()) {
