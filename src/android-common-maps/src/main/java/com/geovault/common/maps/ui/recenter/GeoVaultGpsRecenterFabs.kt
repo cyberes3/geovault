@@ -24,12 +24,15 @@ import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 
+/** Map zoom used for the camera animation after a one-shot recenter. */
+private const val GPS_RECENTER_ZOOM: Double = 12.0
+
 /**
  * One-shot "recenter map on my location" FAB preset.
  *
- * For continuous GPS + heading follow (MapLibre [CameraMode]), use
- * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapCameraFollowFabBundle] and
- * [com.geovault.common.maps.ui.GeoVaultMapCameraFollowMachine].
+ * For continuous **position** + **heading** follow (MapLibre [CameraMode]), use
+ * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle] and
+ * [com.geovault.common.maps.ui.GeoVaultMapCameraFollowMachine]. One-shot recenter stays here.
  */
 data class GeoVaultGpsRecenterController(
     val onRecenter: () -> Unit,
@@ -42,6 +45,8 @@ fun rememberGeoVaultGpsRecenterController(
     map: GeoVaultBaseMap,
     userLocation: GeoVaultUserLocationCapability,
     onLocationResolved: ((LatLng) -> Unit)? = null,
+    /** Invoked when the system permission dialog returns denied (same contract as the camera-follow FABs). */
+    onPermissionDenied: (() -> Unit)? = null,
     /** When false, only resolves coordinates and does not show the MapLibre user location puck, accuracy ring, or camera move (for hosts that handle the marker and camera themselves). */
     showUserLocationPuck: Boolean = true,
 ): GeoVaultGpsRecenterController {
@@ -96,9 +101,8 @@ fun rememberGeoVaultGpsRecenterController(
                     }
                     userLocation.renderLocation(syntheticLocation)
                     val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
-                    val currentZoom = mapLibreMap.cameraPosition.zoom.coerceAtLeast(1.0)
                     map.animateCameraWithPadding(
-                        CameraUpdateFactory.newLatLngZoom(latLng, currentZoom),
+                        CameraUpdateFactory.newLatLngZoom(latLng, GPS_RECENTER_ZOOM),
                         callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
                             override fun onCancel() {
                                 map.ensureInteractiveGestures()
@@ -134,6 +138,7 @@ fun rememberGeoVaultGpsRecenterController(
             recenterOnUser(showSpinner = !locationEnabled)
         } else {
             locationLocking = false
+            onPermissionDenied?.invoke()
         }
     }
 
@@ -168,12 +173,14 @@ fun rememberGeoVaultGpsRecenterFabAction(
     order: Int = 30,
     contentDescription: String = "Recenter on my location",
     onLocationResolved: ((LatLng) -> Unit)? = null,
+    onPermissionDenied: (() -> Unit)? = null,
     showUserLocationPuck: Boolean = true,
 ): GeoVaultMapFabAction {
     val controller = rememberGeoVaultGpsRecenterController(
         map = map,
         userLocation = userLocation,
         onLocationResolved = onLocationResolved,
+        onPermissionDenied = onPermissionDenied,
         showUserLocationPuck = showUserLocationPuck,
     )
     return GeoVaultMapFabAction(

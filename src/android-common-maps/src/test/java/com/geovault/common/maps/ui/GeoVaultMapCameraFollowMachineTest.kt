@@ -9,14 +9,13 @@ import org.maplibre.android.location.modes.CameraMode
 class GeoVaultMapCameraFollowMachineTest {
 
     @Test
-    fun toCameraMode_gpsAndHeadingUsesNoneSoManualUpdatesDontFightLocationComponent() {
-        // Both flags on → we drive target + bearing manually at ~60 Hz from the smoothed
-        // heading sensor. Putting MapLibre in TRACKING here makes the LocationComponent run
-        // its own animated re-center on every GPS fix, which competes with our manual frame
-        // updates and produces visible jank. NONE lets us own the camera fully.
+    fun toCameraMode_positionAndHeadingUsesNoneSoManualUpdatesDontFightLocationComponent() {
         assertEquals(
             CameraMode.NONE,
-            GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = true).toCameraMode(),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = true,
+            ).toCameraMode(),
         )
     }
 
@@ -24,15 +23,21 @@ class GeoVaultMapCameraFollowMachineTest {
     fun toCameraMode_headingAloneDoesNotUseMapLibreCompassMode() {
         assertEquals(
             CameraMode.NONE,
-            GeoVaultMapCameraFollowState(gpsFollowDesired = false, headingFollowDesired = true).toCameraMode(),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = false,
+                headingFollowDesired = true,
+            ).toCameraMode(),
         )
     }
 
     @Test
-    fun toCameraMode_gpsOnly() {
+    fun toCameraMode_positionOnly() {
         assertEquals(
             CameraMode.TRACKING,
-            GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = false).toCameraMode(),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = false,
+            ).toCameraMode(),
         )
     }
 
@@ -45,22 +50,31 @@ class GeoVaultMapCameraFollowMachineTest {
     }
 
     @Test
-    fun afterUserGesture_clearsGpsOnly() {
-        val prev = GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = true)
+    fun afterUserGesture_clearsPositionOnly() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = true,
+            headingFollowDesired = true,
+        )
         val next = GeoVaultMapCameraFollowMachine.afterUserGesture(prev)
         assertEquals(GeoVaultMapCameraFollowState(false, true), next)
     }
 
     @Test
-    fun afterUserGesture_whenGpsAlreadyOff_noOp() {
-        val prev = GeoVaultMapCameraFollowState(gpsFollowDesired = false, headingFollowDesired = true)
+    fun afterUserGesture_whenPositionAlreadyOff_noOp() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = false,
+            headingFollowDesired = true,
+        )
         val next = GeoVaultMapCameraFollowMachine.afterUserGesture(prev)
         assertEquals(prev, next)
     }
 
     @Test
     fun afterProgrammaticCamera_clearsAll() {
-        val prev = GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = true)
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = true,
+            headingFollowDesired = true,
+        )
         assertEquals(GeoVaultMapCameraFollowState.NONE, GeoVaultMapCameraFollowMachine.afterProgrammaticCamera(prev))
     }
 
@@ -81,57 +95,60 @@ class GeoVaultMapCameraFollowMachineTest {
     }
 
     @Test
-    fun toggleGpsOnTap() {
+    fun toggleHeadingOnTap_offToOn_engagesPositionFollowToo() {
         assertEquals(
-            GeoVaultMapCameraFollowState(true, false),
-            GeoVaultMapCameraFollowMachine.toggleGpsOnTap(GeoVaultMapCameraFollowState.NONE),
-        )
-        assertEquals(
-            GeoVaultMapCameraFollowState.NONE,
-            GeoVaultMapCameraFollowMachine.toggleGpsOnTap(GeoVaultMapCameraFollowState(true, false)),
-        )
-    }
-
-    @Test
-    fun toggleHeadingOnTap_offToOn_engagesGpsFollowToo() {
-        // Tapping the rotation FAB should enable GPS location and lock the map to the user — the
-        // map should both center and rotate, not just rotate the puck while the camera sits still.
-        assertEquals(
-            GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = true),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = true,
+            ),
             GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(GeoVaultMapCameraFollowState.NONE),
         )
     }
 
     @Test
-    fun toggleHeadingOnTap_offToOn_preservesGpsTrueWhenAlreadyOn() {
+    fun toggleHeadingOnTap_offToOn_preservesPositionTrueWhenAlreadyOn() {
         assertEquals(
-            GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = true),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = true,
+            ),
             GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(
-                GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = false),
+                GeoVaultMapCameraFollowState(
+                    positionFollowDesired = true,
+                    headingFollowDesired = false,
+                ),
             ),
         )
     }
 
     @Test
-    fun toggleHeadingOnTap_onToOff_dropsHeadingButKeepsGps() {
-        // Symmetric with the GPS FAB: the user can drop rotation while staying centered on
-        // themselves without having to re-tap the GPS FAB afterwards.
+    fun toggleHeadingOnTap_onToOff_dropsHeadingButKeepsPosition() {
         assertEquals(
-            GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = false),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = false,
+            ),
             GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(
-                GeoVaultMapCameraFollowState(gpsFollowDesired = true, headingFollowDesired = true),
+                GeoVaultMapCameraFollowState(
+                    positionFollowDesired = true,
+                    headingFollowDesired = true,
+                ),
             ),
         )
     }
 
     @Test
-    fun toggleHeadingOnTap_onToOff_whenGpsWasOffStaysOff() {
-        // Heading-only state can arise after the gesture listener clears GPS while leaving
-        // heading on. Tapping the FAB to disengage rotation should not magically re-enable GPS.
+    fun toggleHeadingOnTap_onToOff_whenPositionWasOffStaysOff() {
         assertEquals(
-            GeoVaultMapCameraFollowState(gpsFollowDesired = false, headingFollowDesired = false),
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = false,
+                headingFollowDesired = false,
+            ),
             GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(
-                GeoVaultMapCameraFollowState(gpsFollowDesired = false, headingFollowDesired = true),
+                GeoVaultMapCameraFollowState(
+                    positionFollowDesired = false,
+                    headingFollowDesired = true,
+                ),
             ),
         )
     }
