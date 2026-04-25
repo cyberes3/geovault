@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Map load underlay (shown until tiles/style load); matches blue_extra_light in day -->
-    <color name="gv_common_map_underlay">#F3F6FA</color>
-</resources>

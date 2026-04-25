@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <permission
-        android:name="com.geovault.common.permission.READ_SERVER_URL"
-        android:protectionLevel="signature" />
-</manifest>

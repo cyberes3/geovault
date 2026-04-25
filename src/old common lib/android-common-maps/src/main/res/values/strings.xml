@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="gv_common_map_toggle_content_description">Toggle map source</string>
-    <string name="gv_common_map_style_unavailable_fallback_osm">Map style unavailable, using OpenStreetMap</string>
-    <string name="gv_common_map_select_place">Select a place</string>
-    <string name="gv_common_map_tap_marker_hint">Tap a marker to view details</string>
-</resources>
