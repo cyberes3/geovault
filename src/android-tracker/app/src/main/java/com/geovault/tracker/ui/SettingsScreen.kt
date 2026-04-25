@@ -26,7 +26,6 @@ import androidx.compose.material.Icon
 import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.Icons
@@ -62,7 +61,6 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
-import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -97,6 +95,7 @@ fun SettingsScreen(
     onUnhideTrackerItem: (HiddenTrackerItem) -> Unit,
     onUnhideAllTrackerItems: () -> Unit,
     onOpenAllTrackersOnMap: () -> Unit = {},
+    onClose: () -> Unit,
 ) {
     var showLoggingHelpDialog by remember { mutableStateOf(false) }
     var showHiddenTrackersOverlay by remember { mutableStateOf(false) }
@@ -327,22 +326,23 @@ fun SettingsScreen(
     }
     val distanceUnit = stringResource(if (state.usesImperialUnits) R.string.unit_ft else R.string.unit_m)
 
-    Scaffold(
-        topBar = {
-            GeoVaultTopTitleBar(title = stringResource(R.string.nav_settings))
-        },
-    ) { contentPadding ->
+    GeoVaultSubViewScaffold(
+        modifier = Modifier.fillMaxSize(),
+        title = stringResource(R.string.nav_settings),
+        onClose = onClose,
+        closeContentDescription = stringResource(R.string.close),
+    ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(contentPadding)
+                .padding(innerPadding),
         ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .geoVaultKeyboardAwareVerticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 20.dp),
-        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .geoVaultKeyboardAwareVerticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+            ) {
         if (state.trackerLoadState == TrackerSettingsLoadState.Loading) {
             Text(
                 text = stringResource(R.string.settings_tracker_loading),
@@ -719,8 +719,8 @@ fun SettingsScreen(
                 disconnectButtonTooltip = stringResource(R.string.tooltip_settings_disconnect),
             )
         }
+            }
             TrackerParamsOverlayLayer()
-        }
             if (showHiddenTrackersOverlay) {
                 HiddenTrackersSubView(
                     items = state.hiddenTrackerItems,
@@ -806,6 +806,7 @@ private fun HiddenTrackersSubView(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.hidden_trackers),
         onClose = onDismiss,
+        onLeaveComposition = onDismiss,
         headerExtras = {
             Row(
                 modifier = Modifier

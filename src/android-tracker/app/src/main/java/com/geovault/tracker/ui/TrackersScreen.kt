@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +69,8 @@ import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
+import com.geovault.common.ui.components.GeoVaultNavTabShell
+import com.geovault.common.ui.components.GeoVaultSubViewTabChrome
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
@@ -214,6 +217,9 @@ fun TrackersScreen(
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
+    DisposableEffect(vm) {
+        onDispose { vm.dismissDialog() }
+    }
     val context = LocalContext.current
     var pendingKmlBytes by remember { mutableStateOf<ByteArray?>(null) }
     val createKmlDocumentLauncher = rememberLauncherForActivityResult(
@@ -288,7 +294,7 @@ fun TrackersScreen(
         }
     }
 
-    TrackerTabPlaceholderScreen(
+    GeoVaultNavTabShell(
         title = stringResource(R.string.trackers_screen_title),
         placeholderText = stringResource(R.string.trackers_placeholder_signed_out),
         isAuthenticated = isAuthenticated,
@@ -333,6 +339,12 @@ fun TrackersScreen(
             }
         },
         authenticatedMainContent = {
+            val trackersTabChrome = GeoVaultSubViewTabChrome.withStandardSettingsMenu(
+                title = stringResource(R.string.trackers_screen_title),
+                onOpenSettings = onOpenSettingsWithEditGuard,
+                settingsMenuEnabled = !isTrackerOrGroupEditOpen,
+                settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+            )
             val renderTrackersBody: @Composable () -> Unit = {
                 TrackersGroupsAuthenticatedBody(
                     state = state,
@@ -416,6 +428,7 @@ fun TrackersScreen(
                 val dialog = groupActionsDialog!!
                 Box(modifier = Modifier.fillMaxSize()) {
                     GroupActionsScreen(
+                        chromeMode = trackersTabChrome,
                         group = dialog.group,
                         allTrackers = state.trackers,
                         highlightedTrackerId = dialog.highlightedTrackerId,
@@ -448,6 +461,7 @@ fun TrackersScreen(
                 Box(modifier = Modifier.fillMaxSize()) {
                     renderTrackersBody()
                     TrackerEditScreen(
+                        chromeMode = trackersTabChrome,
                         dialog = activeTrackerEditDialog,
                         shareRecipientUsers = state.shareRecipientUsers,
                         isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
@@ -508,6 +522,7 @@ fun TrackersScreen(
                     }
                 }
                 GroupTrackerPickerScreen(
+                    chromeMode = trackersTabChrome,
                     groupName = dialogState.group.name,
                     allTrackers = state.trackers,
                     selectedTrackerIds = dialogState.selectedTrackerIds,
@@ -542,6 +557,7 @@ fun TrackersScreen(
                         groupMembershipDialog = null
                     },
                     onDismiss = dismissPickerWithGuard,
+                    onLeaveComposition = { groupMembershipDialog = null },
                     doneButtonLabel = stringResource(R.string.trackers_dialog_save),
                 )
                 if (showPickerDiscardDialog) {
@@ -561,6 +577,7 @@ fun TrackersScreen(
                 Box(modifier = Modifier.fillMaxSize()) {
                     renderTrackersBody()
                     GroupEditScreen(
+                        chromeMode = trackersTabChrome,
                         dialog = activeGroupEditDialog,
                         allTrackers = state.trackers,
                         shareRecipientUsers = state.shareRecipientUsers,
@@ -597,6 +614,7 @@ fun TrackersScreen(
                 renderTrackersBody()
             }
         },
+        tabOverlay = { TrackerParamsOverlayLayer() },
     )
 
     if (showOpenSettingsDiscardConfirm) {

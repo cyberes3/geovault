@@ -60,6 +60,7 @@ import com.geovault.common.UnitUtils
 import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInfoDialog
+import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -135,7 +136,7 @@ fun HomeScreen(
         homeViewModel.refreshPermissionSnapshot()
     }
 
-    TrackerTabPlaceholderScreen(
+    GeoVaultNavTabShell(
         title = stringResource(R.string.home_title),
         placeholderText = stringResource(R.string.home_placeholder),
         isAuthenticated = isAuthenticated,
@@ -211,6 +212,7 @@ fun HomeScreen(
                 }
             }
         },
+        tabOverlay = { TrackerParamsOverlayLayer() },
     )
     if (showStopTrackingConfirm) {
         GeoVaultConfirmationDialog(

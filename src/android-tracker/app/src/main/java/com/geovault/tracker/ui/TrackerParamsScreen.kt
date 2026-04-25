@@ -66,6 +66,7 @@ fun TrackerParamsScreen(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.latest_params_title),
         onClose = onDismiss,
+        onLeaveComposition = onDismiss,
         closeContentDescription = stringResource(R.string.close),
     ) { innerPadding ->
         GeoVaultPullRefreshLoadingContainer(

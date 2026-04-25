@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.tracker.Group
@@ -28,6 +29,7 @@ import com.geovault.tracker.Tracker
 
 @Composable
 fun SharedTrackerEditScreen(
+    chromeMode: GeoVaultSubViewChromeMode,
     tracker: Tracker,
     canUnsubscribe: Boolean,
     canLeaveShare: Boolean,
@@ -49,7 +51,9 @@ fun SharedTrackerEditScreen(
         backgroundColor = MaterialTheme.colors.surface,
         title = stringResource(R.string.shared_tracker_edit_title),
         onClose = onDismiss,
+        onLeaveComposition = onDismiss,
         closeContentDescription = stringResource(R.string.close),
+        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -93,6 +97,7 @@ fun SharedTrackerEditScreen(
 
 @Composable
 fun SharedGroupEditScreen(
+    chromeMode: GeoVaultSubViewChromeMode,
     group: Group,
     isLeavePending: Boolean,
     onDismiss: () -> Unit,
@@ -110,7 +115,9 @@ fun SharedGroupEditScreen(
         backgroundColor = MaterialTheme.colors.surface,
         title = stringResource(R.string.groups_edit_shared_title),
         onClose = onDismiss,
+        onLeaveComposition = onDismiss,
         closeContentDescription = stringResource(R.string.close),
+        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier

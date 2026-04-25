@@ -69,6 +69,7 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.NaturalSort
@@ -99,6 +100,7 @@ private data class TrackerEditInitialSnapshot(
 
 @Composable
 fun TrackerEditScreen(
+    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditTracker,
     shareRecipientUsers: List<UserItem>,
     isShareRecipientSuggestionsLoading: Boolean,
@@ -217,6 +219,7 @@ fun TrackerEditScreen(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.trackers_dialog_edit_tracker_details_title),
         onClose = dismissWithGuard,
+        onLeaveComposition = onDismiss,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
         bottomBar = {
             val borderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
@@ -241,7 +244,8 @@ fun TrackerEditScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
+        },
+        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier

@@ -13,6 +13,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.Scaffold
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,10 @@ import androidx.compose.ui.Modifier
  * render the shared compact dismiss bar above the tab row; this composes the same
  * [GeoVaultCompactDismissTitleBar] used by [GeoVaultSubViewScaffold], keeping one source of
  * truth for sub-view chrome.
+ *
+ * When dismiss chrome is shown, [onDismissLeaveComposition] mirrors the `onLeaveComposition`
+ * behavior on [GeoVaultSubViewScaffold]: pass `null` if this surface is swapped for another
+ * in-tab mode so composition leave must not dismiss.
  */
 enum class GeoVaultTopTabSwipeMode {
     ALWAYS,
@@ -59,12 +64,20 @@ fun <T> GeoVaultTopTabSurface(
     behavior: GeoVaultTopTabBehavior<T> = GeoVaultTopTabBehavior(),
     dismissTitle: String? = null,
     onDismiss: (() -> Unit)? = null,
+    onDismissLeaveComposition: (() -> Unit)? = null,
     dismissContentDescription: String = "Close",
     headerForTab: (@Composable ColumnScope.(T) -> Unit)? = null,
     bottomForTab: (@Composable (T) -> Unit)? = null,
     contentForTab: @Composable BoxScope.(T) -> Unit,
 ) {
     if (tabs.isEmpty()) return
+
+    val dismissLeave = onDismissLeaveComposition
+    if (dismissTitle != null && onDismiss != null && dismissLeave != null) {
+        DisposableEffect(dismissLeave) {
+            onDispose { dismissLeave() }
+        }
+    }
 
     val selectedIndex = tabs.indexOfFirst { it.value == selectedTab }.let { if (it >= 0) it else 0 }
     val pagerState = rememberPagerState(

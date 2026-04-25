@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,10 +54,13 @@ import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
+import com.geovault.common.ui.components.GeoVaultSubViewTabChrome
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
@@ -107,6 +111,9 @@ fun SharedScreen(
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
+    DisposableEffect(vm) {
+        onDispose { vm.showSharedList() }
+    }
     var pendingConfirmAction by remember { mutableStateOf<SharedConfirmAction?>(null) }
     var pendingNavigationRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
     var groupActionsDialog by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
@@ -146,7 +153,7 @@ fun SharedScreen(
         }
     }
 
-    TrackerTabPlaceholderScreen(
+    GeoVaultNavTabShell(
         title = stringResource(R.string.shared_screen_title),
         placeholderText = stringResource(R.string.shared_placeholder_signed_out),
         isAuthenticated = isAuthenticated,
@@ -161,10 +168,16 @@ fun SharedScreen(
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
         authenticatedMainContent = {
+            val sharedTabChrome = GeoVaultSubViewTabChrome.withStandardSettingsMenu(
+                title = stringResource(R.string.shared_screen_title),
+                onOpenSettings = onOpenSettings,
+                settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+            )
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
                 Box(modifier = Modifier.fillMaxSize()) {
                     GroupActionsScreen(
+                        chromeMode = sharedTabChrome,
                         group = dialog.group,
                         allTrackers = state.trackers,
                         highlightedTrackerId = dialog.highlightedTrackerId,
@@ -188,6 +201,7 @@ fun SharedScreen(
                     vm.editGroupLeavePendingKey(group.id)
                 )
                 SharedGroupEditScreen(
+                    chromeMode = sharedTabChrome,
                     group = group,
                     isLeavePending = leavePending,
                     onDismiss = { editSharedGroup = null },
@@ -208,6 +222,7 @@ fun SharedScreen(
                 )
                 val actions = SharedEditActionPolicy.trackerActions(tracker)
                 SharedTrackerEditScreen(
+                    chromeMode = sharedTabChrome,
                     tracker = tracker,
                     canUnsubscribe = actions.canUnsubscribe,
                     canLeaveShare = actions.canLeaveShare,
@@ -220,6 +235,7 @@ fun SharedScreen(
             } else {
             SharedAuthenticatedBody(
                 state = state,
+                integratedTabChrome = sharedTabChrome,
                 onShowSharedList = vm::showSharedList,
                 onShowDiscoverOverlay = vm::showDiscoverOverlay,
                 onShowPublicOverlay = vm::showPublicOverlay,
@@ -283,6 +299,7 @@ fun SharedScreen(
             )
             }
         },
+        tabOverlay = { TrackerParamsOverlayLayer() },
     )
     GeoVaultSnackbarHost(
         model = snackbarModel,
@@ -310,6 +327,7 @@ fun SharedScreen(
 @Composable
 private fun ColumnScope.SharedAuthenticatedBody(
     state: SharedUiState,
+    integratedTabChrome: GeoVaultSubViewChromeMode,
     onShowSharedList: () -> Unit,
     onShowDiscoverOverlay: () -> Unit,
     onShowPublicOverlay: () -> Unit,
@@ -470,6 +488,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
             }
             SharedViewMode.PUBLIC_OVERLAY -> {
                 PublicOverlaySurface(
+                    chromeMode = integratedTabChrome,
                     state = state,
                     filteredPublicTrackers = filteredPublicTrackers,
                     filteredPublicGroups = filteredPublicGroups,
@@ -822,6 +841,7 @@ private fun DiscoverOverlaySurface(
 
 @Composable
 private fun PublicOverlaySurface(
+    chromeMode: GeoVaultSubViewChromeMode,
     state: SharedUiState,
     filteredPublicTrackers: List<AvailableToAddItem>,
     filteredPublicGroups: List<AvailableToAddGroup>,
@@ -842,6 +862,7 @@ private fun PublicOverlaySurface(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.shared_public_overlay_title),
         onClose = onClose,
+        onLeaveComposition = onClose,
         closeContentDescription = stringResource(R.string.close),
         headerExtras = {
             Divider()
@@ -857,6 +878,7 @@ private fun PublicOverlaySurface(
                 enabled = !overlayLoading,
             )
         },
+        chromeMode = chromeMode,
     ) { innerPadding ->
         GeoVaultPullRefreshLoadingContainer(
             refreshing = overlayLoading,

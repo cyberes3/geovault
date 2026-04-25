@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.geovault.common.NaturalSort
+import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -82,6 +83,7 @@ private data class GroupEditInitialSnapshot(
 
 @Composable
 fun GroupEditScreen(
+    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditGroup,
     allTrackers: List<Tracker>,
     shareRecipientUsers: List<UserItem>,
@@ -158,39 +160,49 @@ fun GroupEditScreen(
         },
     )
 
-    if (showMembershipPicker && dialog.group.isOwner()) {
-        GroupTrackerPickerScreen(
-            groupName = dialog.group.name,
-            allTrackers = allTrackers,
-            selectedTrackerIds = dialog.memberTrackIds,
-            isLoading = isPickerRefreshing,
-            addingTrackerIds = addingTrackerIds,
-            onRefreshTrackers = onRefreshTrackers,
-            onSelectionChanged = { onUpdateDraftTrackers(it) },
-            onAddTracker = onAddTracker,
-            onDone = { showMembershipPicker = false },
-            onDismiss = { showMembershipPicker = false },
-        )
-    } else if (dialog.group.isOwner()) {
-        GroupEditOwnerContent(
-            dialog = dialog,
-            allTrackers = allTrackers,
-            shareRecipientUsers = shareRecipientUsers,
-            isShareRecipientSuggestionsLoading = isShareRecipientSuggestionsLoading,
-            isSaving = isSaving,
-            dismissWithGuard = dismissWithGuard,
-            onReloadShareRecipients = onReloadShareRecipients,
-            onNameDraftChanged = onNameDraftChanged,
-            onVisibilityChanged = onVisibilityChanged,
-            onToggleSharedEmail = onToggleSharedEmail,
-            onWorldShareToggled = onWorldShareToggled,
-            onHiddenChanged = onHiddenChanged,
-            onOpenMembershipPicker = { showMembershipPicker = true },
-            onDeleteGroup = onDeleteGroup,
-            onSave = onSave,
-        )
+    if (dialog.group.isOwner()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            GroupEditOwnerContent(
+                chromeMode = chromeMode,
+                dialog = dialog,
+                allTrackers = allTrackers,
+                shareRecipientUsers = shareRecipientUsers,
+                isShareRecipientSuggestionsLoading = isShareRecipientSuggestionsLoading,
+                isSaving = isSaving,
+                dismissWithGuard = dismissWithGuard,
+                onDismiss = onDismiss,
+                onReloadShareRecipients = onReloadShareRecipients,
+                onNameDraftChanged = onNameDraftChanged,
+                onVisibilityChanged = onVisibilityChanged,
+                onToggleSharedEmail = onToggleSharedEmail,
+                onWorldShareToggled = onWorldShareToggled,
+                onHiddenChanged = onHiddenChanged,
+                onOpenMembershipPicker = { showMembershipPicker = true },
+                onDeleteGroup = onDeleteGroup,
+                onSave = onSave,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (showMembershipPicker) {
+                GroupTrackerPickerScreen(
+                    chromeMode = chromeMode,
+                    modifier = Modifier.fillMaxSize(),
+                    groupName = dialog.group.name,
+                    allTrackers = allTrackers,
+                    selectedTrackerIds = dialog.memberTrackIds,
+                    isLoading = isPickerRefreshing,
+                    addingTrackerIds = addingTrackerIds,
+                    onRefreshTrackers = onRefreshTrackers,
+                    onSelectionChanged = { onUpdateDraftTrackers(it) },
+                    onAddTracker = onAddTracker,
+                    onDone = { showMembershipPicker = false },
+                    onDismiss = { showMembershipPicker = false },
+                    onLeaveComposition = onDismiss,
+                )
+            }
+        }
     } else {
         GroupEditNonOwnerContent(
+            chromeMode = chromeMode,
             dialog = dialog,
             onDismiss = onDismiss,
             onLeaveGroup = onLeaveGroup,
@@ -214,12 +226,14 @@ fun GroupEditScreen(
 
 @Composable
 private fun GroupEditOwnerContent(
+    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditGroup,
     allTrackers: List<Tracker>,
     shareRecipientUsers: List<UserItem>,
     isShareRecipientSuggestionsLoading: Boolean,
     isSaving: Boolean,
     dismissWithGuard: () -> Unit,
+    onDismiss: () -> Unit,
     onReloadShareRecipients: () -> Unit,
     onNameDraftChanged: (String) -> Unit,
     onVisibilityChanged: (GroupShareVisibility) -> Unit,
@@ -229,6 +243,7 @@ private fun GroupEditOwnerContent(
     onOpenMembershipPicker: () -> Unit,
     onDeleteGroup: () -> Unit,
     onSave: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var showPickUsersDialog by remember { mutableStateOf(false) }
@@ -249,6 +264,8 @@ private fun GroupEditOwnerContent(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.trackers_dialog_edit_group_details_title),
         onClose = dismissWithGuard,
+        onLeaveComposition = onDismiss,
+        modifier = modifier,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
         bottomBar = {
             Box(
@@ -272,7 +289,8 @@ private fun GroupEditOwnerContent(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
+        },
+        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -511,6 +529,7 @@ private fun GroupEditOwnerContent(
 
 @Composable
 private fun GroupEditNonOwnerContent(
+    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditGroup,
     onDismiss: () -> Unit,
     onLeaveGroup: () -> Unit,
@@ -530,7 +549,9 @@ private fun GroupEditNonOwnerContent(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.groups_edit_shared_title),
         onClose = onDismiss,
+        onLeaveComposition = onDismiss,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
+        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier

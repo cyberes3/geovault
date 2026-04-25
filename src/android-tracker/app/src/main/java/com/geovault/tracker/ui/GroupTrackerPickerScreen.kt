@@ -53,6 +53,7 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
@@ -76,9 +77,11 @@ private data class TrackerRowItem(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GroupTrackerPickerScreen(
+    chromeMode: GeoVaultSubViewChromeMode,
     groupName: String,
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
+    modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     addingTrackerIds: Set<String> = emptySet(),
     onRefreshTrackers: () -> Unit = {},
@@ -86,6 +89,7 @@ fun GroupTrackerPickerScreen(
     onAddTracker: (String) -> Unit = {},
     onDone: () -> Unit,
     onDismiss: () -> Unit,
+    onLeaveComposition: (() -> Unit)? = null,
     doneButtonLabel: String = stringResource(R.string.trackers_edit_pick_users_done),
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
@@ -106,6 +110,8 @@ fun GroupTrackerPickerScreen(
     }
 
     PickerTabContent(
+        chromeMode = chromeMode,
+        modifier = modifier,
         allTrackers = allTrackers,
         selectedTrackerIds = selectedTrackerIds,
         tabs = localizedTabs,
@@ -117,11 +123,14 @@ fun GroupTrackerPickerScreen(
         onRefresh = onRefreshTrackers,
         onDone = onDone,
         onDismiss = onDismiss,
+        onLeaveComposition = onLeaveComposition,
     )
 }
 
 @Composable
 private fun PickerTabContent(
+    chromeMode: GeoVaultSubViewChromeMode,
+    modifier: Modifier = Modifier,
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
     tabs: List<GeoVaultTab<PickerPhase>>,
@@ -132,6 +141,7 @@ private fun PickerTabContent(
     onRefresh: () -> Unit,
     onDone: () -> Unit,
     onDismiss: () -> Unit,
+    onLeaveComposition: (() -> Unit)?,
     doneButtonLabel: String,
 ) {
     val context = LocalContext.current
@@ -204,6 +214,8 @@ private fun PickerTabContent(
     GeoVaultSubViewScaffold(
         title = stringResource(R.string.groups_tracker_title),
         onClose = onDismiss,
+        onLeaveComposition = onLeaveComposition,
+        modifier = modifier,
         headerExtras = {
             GeoVaultTabBar(
                 tabs = tabs,
@@ -247,6 +259,7 @@ private fun PickerTabContent(
                 )
             }
         },
+        chromeMode = chromeMode,
     ) { innerPadding ->
         HorizontalPager(
             state = pagerState,

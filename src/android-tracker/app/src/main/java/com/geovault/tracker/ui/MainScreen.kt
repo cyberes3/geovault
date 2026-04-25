@@ -90,6 +90,19 @@ fun MainScreen(
     var pendingSharedRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
     var pendingMapReturnContext by remember { mutableStateOf<MapReturnContext?>(null) }
     var trackerParamsArgs by remember { mutableStateOf<TrackerParamsRouteArgs?>(null) }
+
+    // One-shot host navigation is only meaningful while that tab is composed; if the user
+    // switches away before the child consumes it, drop the stale handoff (mirrors clearing
+    // shell stacks when leaving a tab in Survey).
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != TrackerTab.TRACKERS.name) {
+            pendingTrackersRequest = null
+        }
+        if (selectedTab != TrackerTab.SHARED.name) {
+            pendingSharedRequest = null
+        }
+    }
+
     LaunchedEffect(state.isAuthenticated) {
         if (state.isAuthenticated) {
             trackersGroupsViewModel.beginShellBootstrapUi()
@@ -407,6 +420,7 @@ fun MainScreen(
                         onUnhideTrackerItem = onSettingsUnhideTrackerItem,
                         onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
                         onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
+                        onClose = { selectedTab = TrackerTab.HOME.name },
                     )
                     }
                 }
