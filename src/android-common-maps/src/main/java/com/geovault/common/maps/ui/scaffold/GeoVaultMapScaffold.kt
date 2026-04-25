@@ -23,8 +23,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -146,6 +155,11 @@ private fun BoxScope.DrawerLayer(
                 IntOffset(x = 0, y = y)
             }
             .height(drawerHeightDp)
+            .drawerTopAndSidesBorder(
+                shape = shape,
+                color = GeoVaultMapScaffoldDefaults.DrawerBorderColor,
+                width = GeoVaultMapScaffoldDefaults.DrawerBorderWidth,
+            )
             .clip(shape),
         color = GeoVaultMapScaffoldDefaults.DrawerContainerColor,
         shape = shape,
@@ -168,6 +182,84 @@ private fun BoxScope.DrawerLayer(
             drawerBody()
         }
     }
+}
+
+/**
+ * Insets the stroked path inward by half the stroke width so the full stroke weight lies
+ * inside the layer. Stroking the true outer edge is half-clipped at the top, so the top arc
+ * looked thinner than the vertical sides.
+ */
+private fun Modifier.drawerTopAndSidesBorder(
+    shape: RoundedCornerShape,
+    color: Color,
+    width: Dp,
+): Modifier = this.drawWithContent {
+    val strokePx = width.toPx()
+    val halfStroke = strokePx * 0.5f
+    drawContent()
+    val outline = shape.createOutline(
+        size = this.size,
+        layoutDirection = layoutDirection,
+        density = this,
+    )
+    clipRect(
+        left = 0f,
+        top = 0f,
+        right = this.size.width,
+        bottom = this.size.height - 2f * strokePx,
+    ) {
+        when (val def = outline) {
+            is Outline.Rectangle -> {
+                val path = Path()
+                path.addRect(def.rect.deflate(halfStroke))
+                drawPath(
+                    path = path,
+                    color = color,
+                    style = Stroke(width = strokePx),
+                )
+            }
+            is Outline.Rounded -> {
+                val insetRr = def.roundRect.insetBy(halfStroke) ?: return@clipRect
+                val path = Path()
+                path.addRoundRect(insetRr)
+                drawPath(
+                    path = path,
+                    color = color,
+                    style = Stroke(width = strokePx),
+                )
+            }
+            is Outline.Generic -> {
+                drawPath(
+                    path = def.path,
+                    color = color,
+                    style = Stroke(width = strokePx),
+                )
+            }
+        }
+    }
+}
+
+private fun RoundRect.insetBy(delta: Float): RoundRect? {
+    if (delta <= 0f) return this
+    val l = left + delta
+    val t = top + delta
+    val r = right - delta
+    val b = bottom - delta
+    if (l >= r || t >= b) return null
+    fun shrink(c: CornerRadius) = CornerRadius(
+        (c.x - delta).coerceAtLeast(0f),
+        (c.y - delta).coerceAtLeast(0f),
+    )
+    return RoundRect(
+        left = l,
+        top = t,
+        right = r,
+        bottom = b,
+        topLeftCornerRadius = shrink(topLeftCornerRadius),
+        topRightCornerRadius = shrink(topRightCornerRadius),
+        bottomRightCornerRadius = shrink(bottomRightCornerRadius),
+        bottomLeftCornerRadius = shrink(bottomLeftCornerRadius),
+    )
 }
 
 @Composable

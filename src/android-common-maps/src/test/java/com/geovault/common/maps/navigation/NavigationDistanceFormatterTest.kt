@@ -5,6 +5,10 @@ import org.junit.Test
 
 class NavigationDistanceFormatterTest {
 
+    private companion object {
+        private const val METERS_TO_FEET = 3.28084
+    }
+
     @Test
     fun `format title with distance joins lines with newline`() {
         val result = NavigationDistanceFormatter.format("Point A", 10.0)
@@ -38,11 +42,20 @@ class NavigationDistanceFormatterTest {
     }
 
     @Test
-    fun `formatDistance matches legacy imperial output`() {
+    fun `formatDistance uses feet under a tenth of a mile`() {
         assertEquals("0 ft", NavigationDistanceFormatter.formatDistance(0.0))
         assertEquals("3 ft", NavigationDistanceFormatter.formatDistance(1.0))
         assertEquals("328 ft", NavigationDistanceFormatter.formatDistance(100.0))
-        assertEquals("5280 ft", NavigationDistanceFormatter.formatDistance(1609.344))
+        // 528 ft = 0.1 mi exactly — still feet (miles only when strictly over 0.1 mi).
+        assertEquals("528 ft", NavigationDistanceFormatter.formatDistance(528.0 / METERS_TO_FEET))
+    }
+
+    @Test
+    fun `formatDistance switches to miles above a tenth of a mile`() {
+        assertEquals("1.00 mi", NavigationDistanceFormatter.formatDistance(1609.344))
+        // Just past 528 ft in meters → first band that formats as miles.
+        val justOverTenthMileMeters = (528.1 / METERS_TO_FEET)
+        assertEquals("0.10 mi", NavigationDistanceFormatter.formatDistance(justOverTenthMileMeters))
     }
 
     @Test

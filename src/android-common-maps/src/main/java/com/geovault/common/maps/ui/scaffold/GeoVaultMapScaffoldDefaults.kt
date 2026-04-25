@@ -28,6 +28,17 @@ object GeoVaultMapScaffoldDefaults {
     val DrawerCornerRadius: Dp = 28.dp
 
     /**
+     * Stroke width for the map drawer outline. Matches the former survey
+     * `pointsBottomSheet` (1.5dp `primary_blue`); the path is clipped so the bottom edge
+     * of the full-height sheet is not outlined.
+     */
+    val DrawerBorderWidth: Dp = 1.5.dp
+
+    /** Same as [GeoVaultColorTokens.MainBlue] (legacy survey bottom sheet). */
+    val DrawerBorderColor: Color
+        get() = GeoVaultColorTokens.MainBlue
+
+    /**
      * Drop-shadow depth behind the drawer. Matches the old survey-app `MaterialCardView`
      * which rendered with `cardElevation="0dp"` — no shadow fringes against the map.
      */
