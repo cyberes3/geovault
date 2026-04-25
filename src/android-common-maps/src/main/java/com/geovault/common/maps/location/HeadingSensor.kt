@@ -6,9 +6,12 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.hardware.display.DisplayManager
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
+import android.os.SystemClock
 import android.view.Display
 import android.view.Surface
-import kotlin.math.abs
 
 /**
  * Reads the device rotation vector and exposes a degrees-from-north bearing.
@@ -16,11 +19,14 @@ import kotlin.math.abs
  * Design goals:
  * - One lifecycle owner per caller (start/stop pair). No shared singleton so tests and hosts
  *   that live under different lifecycles can't trip each other.
- * - Heading is smoothed across frames to avoid the jitter you get when the low-level sensor
- *   flips by a few tenths of a degree on every sample.
+ * - Heading is smoothed across frames (defaults match the legacy survey map: fast sampling
+ *   with a minimum emit interval so map / puck updates are not tied to raw sensor jitter).
  * - Screen rotation is compensated (landscape/upside-down renders usable bearings).
  * - [start] is a no-op when the device has no rotation-vector sensor, so callers can always
  *   call it; [isAvailable] exposes that state for UI affordances.
+ *
+ * Sensor math runs on a dedicated [HandlerThread] so [SensorManager.SENSOR_DELAY_FASTEST] does
+ * not flood the UI thread (which previously caused freezes when combined with map updates).
  */
 class HeadingSensor(context: Context) {
     private val appContext = context.applicationContext
@@ -36,53 +42,94 @@ class HeadingSensor(context: Context) {
     private val orientation = FloatArray(3)
     private var smoothedBearing: Float? = null
     private var listener: SensorEventListener? = null
+    private var lastEmitElapsedMs: Long = 0L
 
     private var onBearing: ((Float) -> Unit)? = null
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var sensorThread: HandlerThread? = null
+    private var sensorHandler: Handler? = null
+    private var pendingEmitBearing: Float = 0f
+    private val flushEmitRunnable = Runnable {
+        onBearing?.invoke(pendingEmitBearing)
+    }
 
     /**
      * Begin receiving bearing updates.
      *
-     * [onBearingDegrees] is invoked on the main-looper-posted sensor callback with a degrees
-     * value normalized to `[0, 360)`. The exponential smoothing factor [smoothingAlpha] lives
+     * [onBearingDegrees] is invoked on the **main** thread with a degrees value normalized to
+     * `[0, 360)`. The exponential smoothing factor [smoothingAlpha] lives
      * in `[0, 1]`: higher values follow the sensor more tightly (1.0 = no smoothing).
+     *
+     * [sensorDelay] is passed to [SensorManager.registerListener] (e.g. [SensorManager.SENSOR_DELAY_FASTEST]).
+     *
+     * When [minEmitIntervalMs] is greater than zero, smoothed bearings are still computed on
+     * every sensor sample but the callback is invoked at most once per interval — the pattern
+     * used by the legacy survey map to keep camera / puck motion steady (~60 Hz cap).
      *
      * Idempotent: calling [start] while already running replaces the callback without
      * re-registering the sensor listener.
      */
     fun start(
         smoothingAlpha: Float = DEFAULT_SMOOTHING_ALPHA,
+        sensorDelay: Int = DEFAULT_SENSOR_DELAY,
+        minEmitIntervalMs: Long = DEFAULT_MIN_EMIT_INTERVAL_MS,
         onBearingDegrees: (Float) -> Unit,
     ) {
         onBearing = onBearingDegrees
         if (listener != null) return
         val sensor = rotationVectorSensor ?: return
         val manager = sensorManager ?: return
+        ensureSensorThread()
+        val handler = sensorHandler ?: return
         val observer = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 if (event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) return
                 val bearing = computeBearing(event.values) ?: return
                 val smoothed = smoothBearing(bearing, smoothingAlpha)
-                onBearing?.invoke(smoothed)
+                if (minEmitIntervalMs > 0L) {
+                    val now = SystemClock.elapsedRealtime()
+                    if (lastEmitElapsedMs != 0L && now - lastEmitElapsedMs < minEmitIntervalMs) {
+                        return
+                    }
+                    lastEmitElapsedMs = now
+                }
+                pendingEmitBearing = smoothed
+                mainHandler.removeCallbacks(flushEmitRunnable)
+                mainHandler.post(flushEmitRunnable)
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
         listener = observer
-        manager.registerListener(observer, sensor, SensorManager.SENSOR_DELAY_UI)
+        lastEmitElapsedMs = 0L
+        manager.registerListener(observer, sensor, sensorDelay, 0, handler)
+    }
+
+    private fun ensureSensorThread() {
+        if (sensorThread != null) return
+        val thread = HandlerThread("gv-heading-sensor").apply { start() }
+        sensorThread = thread
+        sensorHandler = Handler(thread.looper)
     }
 
     /**
      * Stop delivering updates. Safe to call multiple times.
      */
     fun stop() {
+        mainHandler.removeCallbacks(flushEmitRunnable)
         val manager = sensorManager
         val observer = listener
-        if (manager != null && observer != null) {
-            manager.unregisterListener(observer)
-        }
         listener = null
         onBearing = null
         smoothedBearing = null
+        lastEmitElapsedMs = 0L
+        if (manager != null && observer != null) {
+            manager.unregisterListener(observer)
+        }
+        sensorThread?.quitSafely()
+        sensorThread = null
+        sensorHandler = null
     }
 
     private fun computeBearing(rotationValues: FloatArray): Float? {
@@ -122,16 +169,21 @@ class HeadingSensor(context: Context) {
         if (delta > 180f) delta -= 360f
         if (delta < -180f) delta += 360f
         val next = ((last + delta * clampedAlpha) + 360f) % 360f
-        // Avoid thrash-writes when the sensor is essentially noise-bound.
-        if (abs(next - last) < MIN_BEARING_DELTA_DEG) {
-            return last
-        }
+        // No dead-zone here on purpose: a min-delta filter makes slow physical rotation look
+        // stair-stepped (the smoothed delta-per-frame stays under the threshold for several
+        // frames, then jumps once accumulated change crosses it). The legacy survey app's
+        // smoothing has no filter and feels continuous; we match that.
         smoothedBearing = next
         return next
     }
 
     companion object {
-        private const val DEFAULT_SMOOTHING_ALPHA = 0.15f
-        private const val MIN_BEARING_DELTA_DEG = 0.25f
+        /** Matches legacy survey `ORIENTATION_SMOOTHING_ALPHA` (rotation-vector → map). */
+        private const val DEFAULT_SMOOTHING_ALPHA = 0.35f
+
+        /** Matches legacy survey `MIN_MAP_ORIENTATION_UPDATE_INTERVAL_MS`. */
+        private const val DEFAULT_MIN_EMIT_INTERVAL_MS = 16L
+
+        private val DEFAULT_SENSOR_DELAY: Int = SensorManager.SENSOR_DELAY_FASTEST
     }
 }

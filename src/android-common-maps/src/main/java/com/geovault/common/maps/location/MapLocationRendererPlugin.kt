@@ -21,9 +21,10 @@ class MapLocationRendererPlugin(
     private var updatesSession: LocationUpdates.LocationUpdatesSession? = null
     private var accuracyCircleVisible: Boolean = config.accuracyAlpha > 0f
     private var lastLocation: Location? = null
-    private var overrideBearing: Float? = null
     private var puckBackgroundTranslucent: Boolean = false
     private val locationListeners: MutableList<(Location) -> Unit> = mutableListOf()
+    private val bearingListeners: MutableList<(Float) -> Unit> = mutableListOf()
+    private val headingCompassEngine = GeoVaultHeadingCompassEngine()
 
     override fun onMapAttached(map: MapLibreMap) {
         this.map = map
@@ -90,37 +91,38 @@ class MapLocationRendererPlugin(
 
     fun isPuckBackgroundTranslucent(): Boolean = puckBackgroundTranslucent
 
+    /**
+     * The last location passed to [renderLocation], or `null` if no fix has been applied yet.
+     * Hosts (e.g. camera fits) can use this between GPS callbacks.
+     */
+    fun getLastLocation(): Location? = lastLocation
+
     @SuppressLint("MissingPermission")
     override fun renderLocation(location: Location) {
         lastLocation = location
-        val applied = applyBearingOverride(location)
         val mapValue = map ?: return
-        LocationComponentHelper.forceLocation(mapValue, applied)
-        locationListeners.toList().forEach { it(applied) }
+        LocationComponentHelper.forceLocation(mapValue, location)
+        locationListeners.toList().forEach { it(location) }
     }
 
     /**
-     * Force a heading update without a new GPS fix. The last-known [Location] is re-emitted
-     * with this bearing so [RenderMode.COMPASS] pucks rotate as the device turns, even when
-     * the user is stationary and GPS callbacks are paused.
+     * Push a new device heading (degrees clockwise from north). The puck's
+     * [org.maplibre.android.location.modes.RenderMode.COMPASS] bearing is driven through our
+     * installed [GeoVaultHeadingCompassEngine] so MapLibre's internal animator interpolates
+     * over the elapsed time between successive pushes — at our ~60 Hz emit cadence this
+     * yields continuously-smooth rotation that exactly tracks the camera bearing (which is
+     * fed from the same sensor stream via [addBearingListener]).
      *
-     * No-op until at least one call to [renderLocation] has happened (nothing to rotate).
+     * Notifies [addBearingListener] subscribers so other map subsystems (e.g. camera bearing
+     * follow) can share this single sensor stream instead of running their own. Does NOT fire
+     * [addLocationListener] subscribers — bearing-only updates have no new lat/lon and would
+     * otherwise spam any per-fix consumer (nav distance label, telemetry, etc.). And does NOT
+     * call `forceLocationUpdate`, which would re-trigger MapLibre's accuracy-radius animator
+     * with the same value (wasted work) on every sensor frame.
      */
-    @SuppressLint("MissingPermission")
     fun updateBearing(bearingDegrees: Float) {
-        overrideBearing = bearingDegrees
-        val last = lastLocation ?: return
-        val applied = applyBearingOverride(last)
-        val mapValue = map ?: return
-        LocationComponentHelper.forceLocation(mapValue, applied)
-    }
-
-    /**
-     * Clear any bearing override so subsequent renders use the GPS-provided bearing (or
-     * nothing, on providers that don't set one).
-     */
-    fun clearBearingOverride() {
-        overrideBearing = null
+        headingCompassEngine.pushHeading(bearingDegrees)
+        bearingListeners.toList().forEach { it(bearingDegrees) }
     }
 
     /**
@@ -134,6 +136,22 @@ class MapLocationRendererPlugin(
 
     fun removeLocationListener(listener: (Location) -> Unit) {
         locationListeners -= listener
+    }
+
+    /**
+     * Observe every smoothed bearing pushed through [updateBearing]. Lets one
+     * [HeadingSensor] drive both the puck and any camera-bearing follower so devices don't
+     * end up running two parallel sensor streams + per-frame main-thread posts.
+     *
+     * Subscribers run on whichever thread posted the bearing (the [HeadingSensor] in
+     * [rememberGeoVaultMapUserLocationPlugin] dispatches on the main thread).
+     */
+    fun addBearingListener(listener: (Float) -> Unit) {
+        bearingListeners += listener
+    }
+
+    fun removeBearingListener(listener: (Float) -> Unit) {
+        bearingListeners -= listener
     }
 
     /**
@@ -158,19 +176,10 @@ class MapLocationRendererPlugin(
     override fun onPluginDestroyed() {
         stopRenderingGpsLocation()
         locationListeners.clear()
+        bearingListeners.clear()
         lastLocation = null
-        overrideBearing = null
         puckBackgroundTranslucent = false
         map = null
-    }
-
-    private fun applyBearingOverride(source: Location): Location {
-        val override = overrideBearing ?: return source
-        // Preserve caller-provided metadata (time, provider, accuracy) and only substitute bearing.
-        // We do not mutate [source] because callers may retain references.
-        return Location(source).apply {
-            bearing = override
-        }
     }
 
     @SuppressLint("MissingPermission")
@@ -178,9 +187,15 @@ class MapLocationRendererPlugin(
         val locationComponent = map.locationComponent
         if (locationComponent.isLocationComponentActivated) {
             LocationComponentHelper.applyStyle(map, appContext, effectiveConfig())
-            return
+        } else {
+            LocationComponentHelper.activate(map, style, appContext, effectiveConfig())
         }
-        LocationComponentHelper.activate(map, style, appContext, effectiveConfig())
+        // Replace MapLibre's built-in 100 ms / no-animation `LocationComponentCompassEngine`
+        // with our own engine. The puck's COMPASS-mode bearing now comes from the same
+        // smoothed [HeadingSensor] stream the camera uses, via [updateBearing] →
+        // [GeoVaultHeadingCompassEngine.pushHeading]. Idempotent: re-installing the same
+        // engine instance is a no-op on MapLibre's side beyond a listener re-attach.
+        locationComponent.compassEngine = headingCompassEngine
     }
 
     private fun effectiveConfig(): LocationComponentHelper.Config {

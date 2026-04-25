@@ -14,10 +14,30 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.android.geometry.LatLng
+import kotlin.coroutines.resume
 
 object LocationUpdates {
     private const val DEFAULT_MIN_DISTANCE_METERS = 0f
+
+    /**
+     * Coroutine-friendly wrapper around [getCurrentLocation] with a hard timeout. Returns the
+     * resolved [LatLng] (cached fix or fresh single-shot) or `null` if no fix arrives within
+     * [timeoutMs]. Caller must hold location permission.
+     *
+     * Useful inside `LaunchedEffect`s that need a "best-effort current fix" without blocking
+     * the composition forever when the GPS provider is unresponsive.
+     */
+    suspend fun getCurrentLatLngOnce(context: Context, timeoutMs: Long = 4000L): LatLng? =
+        withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine<LatLng?> { cont ->
+                getCurrentLocation(context) { latLng ->
+                    if (cont.isActive) cont.resume(latLng)
+                }
+            }
+        }
 
     @SuppressLint("MissingPermission")
     fun getCurrentLocation(context: Context, callback: (LatLng?) -> Unit) {

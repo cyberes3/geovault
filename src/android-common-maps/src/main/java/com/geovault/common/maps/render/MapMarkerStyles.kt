@@ -44,6 +44,15 @@ object CommonMapMarkerStyles {
         borderStyle = MapMarkerBorderStyle.DARK,
     )
 
+    /**
+     * Same concentric structure as [default] (the standard blue map point), with a purple
+     * center — used for the “navigate to point” target on the map.
+     */
+    fun navigationToPointTarget(): MapMarkerStyle = fromCenterColorInt(
+        centerColorInt = GeoVaultColorTokens.MainPurple.toArgb(),
+        borderStyle = MapMarkerBorderStyle.LIGHT,
+    )
+
     private fun parseColorHex(value: String): Int {
         val normalized = value.removePrefix("#")
         return when (normalized.length) {

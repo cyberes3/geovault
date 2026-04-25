@@ -67,4 +67,12 @@ class CommonMapMarkerStylesTest {
         assertEquals(GeoVaultColorTokens.Surface.toArgb(), style.outerBorderColorInt)
         assertEquals(GeoVaultColorTokens.Black.toArgb(), style.innerBorderColorInt)
     }
+
+    @Test
+    fun navigationToPointTarget_usesMainPurpleWithLightBorder() {
+        val style = CommonMapMarkerStyles.navigationToPointTarget()
+        assertEquals(GeoVaultColorTokens.MainPurple.toArgb(), style.centerColorInt)
+        assertEquals(GeoVaultColorTokens.Black.toArgb(), style.outerBorderColorInt)
+        assertEquals(GeoVaultColorTokens.Surface.toArgb(), style.innerBorderColorInt)
+    }
 }

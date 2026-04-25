@@ -27,9 +27,9 @@ fun createGeoVaultMapUserLocationPlugin(context: Context): MapLocationRendererPl
  * In addition to creating the plugin, this composable attaches a [HeadingSensor] scoped to
  * the calling composition: bearings from the rotation-vector sensor are forwarded into the
  * plugin via [MapLocationRendererPlugin.updateBearing] while the composable is in the tree,
- * and sensor polling stops (plus any bearing override is cleared) on disposal. Devices
- * without a rotation-vector sensor silently skip sensor start — MapLibre's internal compass
- * engine still drives rotation when available.
+ * and sensor polling stops on disposal. Devices without a rotation-vector sensor silently
+ * skip sensor start — the puck simply stops rotating, but its position and accuracy circle
+ * keep updating from GPS fixes.
  */
 @Composable
 fun rememberGeoVaultMapUserLocationPlugin(
@@ -41,10 +41,7 @@ fun rememberGeoVaultMapUserLocationPlugin(
         if (headingSensor.isAvailable) {
             headingSensor.start { bearing -> plugin.updateBearing(bearing) }
         }
-        onDispose {
-            headingSensor.stop()
-            plugin.clearBearingOverride()
-        }
+        onDispose { headingSensor.stop() }
     }
     return plugin
 }
