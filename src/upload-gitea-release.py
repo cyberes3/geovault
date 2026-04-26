@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-import uuid
 from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -90,19 +89,6 @@ def request_json(method: str, url: str, token: str, payload: dict | None = None,
         die(f"HTTP request failed for {url}: {e}")
 
 
-def build_multipart_attachment(file_name: str, file_bytes: bytes) -> tuple[bytes, str]:
-    boundary = f"----GeoVaultUpload{uuid.uuid4().hex}"
-    header = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="attachment"; filename="{file_name}"\r\n'
-        "Content-Type: application/vnd.android.package-archive\r\n\r\n"
-    ).encode("utf-8")
-    trailer = f"\r\n--{boundary}--\r\n".encode("utf-8")
-    body = header + file_bytes + trailer
-    content_type = f"multipart/form-data; boundary={boundary}"
-    return body, content_type
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build and upload Android draft release to Gitea")
     parser.add_argument("app_folder", help="App folder path (e.g. android-tracker)")
@@ -144,7 +130,9 @@ def main() -> None:
 
     tag = f"{app_slug}-{date_short}-{short_hash}"
     title = f"{release_title_name} {date_short} {short_hash}"
-    asset_name = f"{asset_title_name} {date_short} {short_hash}.apk"
+    # No spaces in the asset filename: some Android download / PackageInstaller
+    # paths mishandle spaces when opening from Files or the browser.
+    asset_name = f"{asset_title_name.replace(' ', '-')}-{date_short}-{short_hash}.apk"
 
     print(f"Building release APK for {app_config_key}...")
     build_script = app_dir / "build-android.sh"
@@ -179,13 +167,12 @@ def main() -> None:
         f"{GITEA_BASE_URL}/api/v1/repos/{GITEA_OWNER}/{release_repo}/releases/"
         f"{release_id}/assets?name={quote(asset_name)}"
     )
-    multipart_body, multipart_type = build_multipart_attachment(asset_name, apk_path.read_bytes())
     upload_resp = request_json(
         "POST",
         upload_url,
         token,
-        data=multipart_body,
-        content_type=multipart_type,
+        data=apk_path.read_bytes(),
+        content_type="application/octet-stream",
     )
 
     asset_url = upload_resp.get("browser_download_url", "")
