@@ -219,11 +219,18 @@ fun GeoVaultPrimaryButton(
     fitToContent: Boolean = false,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     /**
-     * Optional start icon, rendered to the **start** of the label (same row, start-aligned).
-     * Uses [text] for [Icon] content description when the latter is null.
+     * Optional start icon shorthand before [text]. Ignored when [leadingContent] is non-null.
+     * Uses [text] for [Icon] content description when [leadingIconContentDescription] is null.
      */
     leadingIcon: ImageVector? = null,
     leadingIconContentDescription: String? = null,
+    /**
+     * Optional custom leading slot (same contract as [GeoVaultBaseButton.leadingContent]).
+     * When set, [leadingIcon] is ignored.
+     */
+    leadingContent: (@Composable () -> Unit)? = null,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null,
+    centeredContent: (@Composable () -> Unit)? = null,
 ) {
     val resolvedBackgroundColor = if (visuallyDisabled) {
         GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f)
@@ -235,17 +242,15 @@ fun GeoVaultPrimaryButton(
     } else {
         Color.White
     }
-    val li = leadingIcon
-    val leading: (@Composable () -> Unit)? = if (li != null) {
+    val leadingFromIcon: (@Composable () -> Unit)? = leadingIcon?.let { li ->
         {
             Icon(
                 imageVector = li,
                 contentDescription = leadingIconContentDescription ?: text,
             )
         }
-    } else {
-        null
     }
+    val resolvedLeading = leadingContent ?: leadingFromIcon
     GeoVaultBaseButton(
         text = text,
         onClick = onClick,
@@ -262,7 +267,9 @@ fun GeoVaultPrimaryButton(
         tooltip = tooltip,
         fitToContent = fitToContent,
         contentPadding = contentPadding,
-        leadingContent = leading,
+        leadingContent = resolvedLeading,
+        trailingContent = trailingContent,
+        centeredContent = centeredContent,
     )
 }
 
@@ -327,9 +334,9 @@ fun GeoVaultSecondaryButton(
     tooltip: String? = null,
     fitToContent: Boolean = false,
     /**
-     * Optional start icon (e.g. [androidx.compose.material.Icon]) before the label; with label
-     * only, both are centered in the button. See [GeoVaultBaseButton] for the leading+trailing
-     * layout when the label is blank (e.g. spinner beside a fixed icon).
+     * Optional start icon (e.g. [androidx.compose.material.Icon]) before the label. Layout rules
+     * are identical to [GeoVaultBaseButton] (leading anchored start, label + trailing centered
+     * in the remainder, blank label + trailing for spinners, etc.).
      */
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
