@@ -57,8 +57,11 @@ fun GeoVaultBaseButton(
     fitToContent: Boolean = false,
     minWidthWhenFitToContent: Dp = 1.dp,
     /**
-     * Renders to the **left** of [text], with the pair centered as a unit in the button
-     * (e.g. icon + label). Mutually exclusive with [trailingContent] and [centeredContent].
+     * Optional **leading** slot (e.g. icon) before [text]. The leading slot is **anchored at the
+     * row's start** so its x-position does not shift when [text] / [trailingContent] change
+     * (e.g. label swapped for a save-in-progress spinner). Label and trailing element render in a
+     * weighted, centered area to the right of the leading slot. Mutually exclusive with
+     * [centeredContent] alone; do not pass [centeredContent] together with leading/trailing.
      */
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -90,21 +93,35 @@ fun GeoVaultBaseButton(
     } else {
         {
             when {
+                leadingContent != null -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        leadingContent()
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (text.isNotBlank()) {
+                                Text(text = text)
+                            }
+                            if (trailingContent != null) {
+                                if (text.isNotBlank()) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                trailingContent()
+                            }
+                        }
+                    }
+                }
                 trailingContent != null -> {
                     Text(text = text, modifier = Modifier.weight(1f))
                     Spacer(modifier = Modifier.width(8.dp))
                     trailingContent()
-                }
-                leadingContent != null -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        leadingContent()
-                        Spacer(Modifier.width(8.dp))
-                        Text(text = text)
-                    }
                 }
                 else -> {
                     Text(text = text)
@@ -202,8 +219,8 @@ fun GeoVaultPrimaryButton(
     fitToContent: Boolean = false,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     /**
-     * Optional start icon, rendered to the **left** of the label, together centered in the
-     * button. Uses [text] for [Icon] content description when the latter is null.
+     * Optional start icon, rendered to the **start** of the label (same row, start-aligned).
+     * Uses [text] for [Icon] content description when the latter is null.
      */
     leadingIcon: ImageVector? = null,
     leadingIconContentDescription: String? = null,
@@ -309,6 +326,12 @@ fun GeoVaultSecondaryButton(
     accentColor: Color = GeoVaultColorTokens.MainBlue,
     tooltip: String? = null,
     fitToContent: Boolean = false,
+    /**
+     * Optional start icon (e.g. [androidx.compose.material.Icon]) before the label; with label
+     * only, both are centered in the button. See [GeoVaultBaseButton] for the leading+trailing
+     * layout when the label is blank (e.g. spinner beside a fixed icon).
+     */
+    leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
     centeredContent: (@Composable () -> Unit)? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
@@ -329,6 +352,7 @@ fun GeoVaultSecondaryButton(
         enabled = enabled,
         tooltip = tooltip,
         fitToContent = fitToContent,
+        leadingContent = leadingContent,
         trailingContent = trailingContent,
         centeredContent = centeredContent,
         contentPadding = contentPadding,

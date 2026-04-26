@@ -53,4 +53,7 @@ dependencies {
     implementation(libs.androidx.datastore)
 
     testImplementation(libs.junit)
+    // Plain JVM unit tests hit android.util.Log from auth code; Robolectric provides a shadowed
+    // Android environment (same pattern as :android-common-maps unit tests).
+    testImplementation("org.robolectric:robolectric:4.16.1")
 }
