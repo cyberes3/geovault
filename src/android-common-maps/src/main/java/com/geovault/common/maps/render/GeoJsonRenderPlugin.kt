@@ -6,6 +6,9 @@ import android.os.Looper
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
@@ -25,6 +28,12 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
 
+private data class PreparedGeoJsonRenderState(
+    val points: FeatureCollection,
+    val lines: FeatureCollection,
+    val polygons: FeatureCollection,
+)
+
 /**
  * Renders [MapRenderState] as MapLibre GeoJSON sources and layers.
  *
@@ -36,33 +45,30 @@ class GeoJsonRenderPlugin(
     private val config: GeoJsonRenderConfig = GeoJsonRenderConfig(),
     private val context: Context? = null,
 ) : GeoVaultMapPlugin, GeoVaultRenderCapability {
+    @Volatile
     private var renderState: MapRenderState = MapRenderState()
     private var map: MapLibreMap? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var marshaledApply: Runnable? = null
+    private val renderGeneration = AtomicLong(0L)
+    private val destroyed = AtomicBoolean(false)
+    private val renderExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "GeoJsonRenderPlugin-$sourceIdPrefix").apply {
+            isDaemon = true
+        }
+    }
 
     override fun setRenderState(newState: MapRenderState) {
         renderState = newState
-        fun applyNow() {
-            marshaledApply = null
-            val style = map?.style ?: return
-            applyState(style, renderState)
-        }
+        val generation = renderGeneration.incrementAndGet()
         if (config.synchronousGeoJsonApplication) {
             check(Looper.myLooper() == Looper.getMainLooper()) {
                 "GeoJsonRenderPlugin: synchronousGeoJsonApplication requires main thread"
             }
-            applyNow()
+            applyPreparedState(prepareState(newState))
             return
         }
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            applyNow()
-        } else {
-            marshaledApply?.let { mainHandler.removeCallbacks(it) }
-            val runnable = Runnable { applyNow() }
-            marshaledApply = runnable
-            mainHandler.post(runnable)
-        }
+        schedulePreparedApply(newState, generation)
     }
 
     override fun onMapAttached(map: MapLibreMap) {
@@ -76,6 +82,9 @@ class GeoJsonRenderPlugin(
     override fun onPluginDestroyed() {
         marshaledApply?.let { mainHandler.removeCallbacks(it) }
         marshaledApply = null
+        destroyed.set(true)
+        renderGeneration.incrementAndGet()
+        renderExecutor.shutdownNow()
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
@@ -86,7 +95,26 @@ class GeoJsonRenderPlugin(
         }
         ensureCommonPlacemarkImages(style)
         ensureLayers(style)
-        applyState(style, renderState)
+        setRenderState(renderState)
+    }
+
+    private fun schedulePreparedApply(state: MapRenderState, generation: Long) {
+        renderExecutor.execute {
+            if (destroyed.get() || generation != renderGeneration.get()) return@execute
+            val prepared = prepareState(state)
+            if (destroyed.get() || generation != renderGeneration.get()) return@execute
+            val runnable = Runnable {
+                marshaledApply = null
+                if (!destroyed.get() && generation == renderGeneration.get()) {
+                    applyPreparedState(prepared)
+                }
+            }
+            mainHandler.post {
+                marshaledApply?.let { mainHandler.removeCallbacks(it) }
+                marshaledApply = runnable
+                mainHandler.post(runnable)
+            }
+        }
     }
 
     private fun ensureLayers(style: Style) {
@@ -313,7 +341,7 @@ class GeoJsonRenderPlugin(
         }
     }
 
-    private fun applyState(style: Style, state: MapRenderState) {
+    private fun prepareState(state: MapRenderState): PreparedGeoJsonRenderState {
         val pointFeatures = state.points.map { point ->
             Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude)).also { feature ->
                 feature.addStringProperty("id", point.id)
@@ -355,14 +383,23 @@ class GeoJsonRenderPlugin(
                 }
             }
         }
-        updateSource(style, pointsSourceId, pointFeatures)
-        updateSource(style, linesSourceId, lineFeatures)
-        updateSource(style, polygonsSourceId, polygonFeatures)
+        return PreparedGeoJsonRenderState(
+            points = FeatureCollection.fromFeatures(pointFeatures),
+            lines = FeatureCollection.fromFeatures(lineFeatures),
+            polygons = FeatureCollection.fromFeatures(polygonFeatures),
+        )
     }
 
-    private fun updateSource(style: Style, id: String, features: List<Feature>) {
+    private fun applyPreparedState(prepared: PreparedGeoJsonRenderState) {
+        val style = map?.style ?: return
+        updateSource(style, pointsSourceId, prepared.points)
+        updateSource(style, linesSourceId, prepared.lines)
+        updateSource(style, polygonsSourceId, prepared.polygons)
+    }
+
+    private fun updateSource(style: Style, id: String, featureCollection: FeatureCollection) {
         val source = style.getSourceAs<GeoJsonSource>(id) ?: return
-        source.setGeoJson(FeatureCollection.fromFeatures(features))
+        source.setGeoJson(featureCollection)
     }
 
     private fun ensureSource(
