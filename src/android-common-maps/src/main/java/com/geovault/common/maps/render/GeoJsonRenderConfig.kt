@@ -81,12 +81,12 @@ data class GeoJsonPointClusteringConfig(
         fun defaultCircleStyles(): List<GeoJsonPointClusterCircleStyle> = listOf(
             GeoJsonPointClusterCircleStyle(
                 minPointCount = 150,
-                circleColorHex = GeoVaultColorTokens.Hex.MainRed,
+                circleColorHex = GeoVaultColorTokens.Hex.MainBlue,
                 circleRadius = 22f,
             ),
             GeoJsonPointClusterCircleStyle(
                 minPointCount = 20,
-                circleColorHex = GeoVaultColorTokens.Hex.MainGreen,
+                circleColorHex = GeoVaultColorTokens.Hex.MainBlue,
                 circleRadius = 20f,
             ),
             GeoJsonPointClusterCircleStyle(

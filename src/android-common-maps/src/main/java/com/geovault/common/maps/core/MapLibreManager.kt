@@ -64,12 +64,41 @@ class MapLibreManager(
         }
     }
 
-    fun applySelectedSource(map: MapLibreMap = requireNotNull(maplibreMap)) {
+    /**
+     * Applies the selected basemap.
+     *
+     * @return `true` when a full style load was started and callers should wait for
+     * [onStyleLoaded]; `false` when the selection was applied in-place (or was already active).
+     */
+    fun applySelectedSource(map: MapLibreMap = requireNotNull(maplibreMap)): Boolean {
         val savedCamera = map.cameraPosition
         val effectiveId = sourceManager.getEffectiveSourceId()
         val requestedSourceKey = buildSourceKey(effectiveId)
-        if (requestedSourceKey == pendingSourceKey || (requestedSourceKey == lastAppliedSourceKey && map.style != null)) {
-            return
+        val currentStyle = map.style
+        when (
+            MapSourceApplyPlanner.plan(
+                requestedSourceKey = requestedSourceKey,
+                pendingSourceKey = pendingSourceKey,
+                lastAppliedSourceKey = lastAppliedSourceKey,
+                hasCurrentStyle = currentStyle != null,
+            )
+        ) {
+            MapSourceApplyPlan.Noop -> return false
+            MapSourceApplyPlan.ReplaceRasterInPlace -> {
+                val rasterUrl = sourceManager.getRasterUrl(effectiveId)
+                if (!rasterUrl.isNullOrBlank() && currentStyle != null) {
+                    pendingSourceKey = requestedSourceKey
+                    // Raster-to-raster changes are pure basemap swaps. Keeping the current
+                    // style avoids GeoJSON plugin reattachment and the 100k-point redraw that
+                    // would otherwise happen through setStyle().
+                    if (replaceRasterSourceInPlace(currentStyle, rasterUrl)) {
+                        lastAppliedSourceKey = requestedSourceKey
+                        pendingSourceKey = null
+                        return false
+                    }
+                }
+            }
+            MapSourceApplyPlan.LoadFullStyle -> Unit
         }
         pendingSourceKey = requestedSourceKey
 
@@ -117,17 +146,8 @@ class MapLibreManager(
                     map.setStyle(Style.Builder()) { style ->
                         applyZoomPreferences(map, mapMaxZoom)
                         try {
-                            val tileSet = TileSet("2.1.0", rasterUrl).apply {
-                                maxZoom = MAX_ZOOM_LEVEL.toFloat()
-                            }
-                            style.addSource(RasterSource(RASTER_SOURCE_ID, tileSet, 256))
-                            val rasterLayer = RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID)
-                            try {
-                                style.addLayerBelow(rasterLayer, ANNOTATIONS_LAYER_ID)
-                            } catch (layerError: Exception) {
-                                Log.w(TAG, "Raster layer insertion fallback to top-layer add", layerError)
-                                style.addLayer(rasterLayer)
-                            }
+                            style.addSource(buildRasterSource(rasterUrl))
+                            addRasterLayer(style, RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID))
                         } catch (rasterError: Exception) {
                             Log.e(TAG, "Failed applying raster source for selected map source", rasterError)
                             onStyleLoadFailed?.invoke(
@@ -139,6 +159,7 @@ class MapLibreManager(
                         onStyleLoaded?.invoke(map, style)
                         restoreCamera()
                     }
+                    return true
                 } else {
                     map.setStyle(Style.Builder()) { style ->
                         applyZoomPreferences(map, mapMaxZoom)
@@ -147,6 +168,7 @@ class MapLibreManager(
                         onStyleLoaded?.invoke(map, style)
                         restoreCamera()
                     }
+                    return true
                 }
             }
         } catch (e: Exception) {
@@ -164,7 +186,48 @@ class MapLibreManager(
                 onStyleLoaded?.invoke(map, style)
                 restoreCamera()
             }
+            return true
         }
+        return true
+    }
+
+    private fun replaceRasterSourceInPlace(style: Style, rasterUrl: String): Boolean {
+        return try {
+            if (style.getLayer(RASTER_LAYER_ID) != null) {
+                style.removeLayer(RASTER_LAYER_ID)
+            }
+            if (style.getSource(RASTER_SOURCE_ID) != null) {
+                style.removeSource(RASTER_SOURCE_ID)
+            }
+            style.addSource(buildRasterSource(rasterUrl))
+            addRasterLayer(style, RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID))
+            true
+        } catch (error: Exception) {
+            pendingSourceKey = null
+            Log.w(TAG, "Failed replacing raster source in-place; falling back to full style load", error)
+            false
+        }
+    }
+
+    private fun buildRasterSource(rasterUrl: String): RasterSource {
+        return RasterSource(
+            RASTER_SOURCE_ID,
+            TileSet("2.1.0", rasterUrl).apply { maxZoom = MAX_ZOOM_LEVEL.toFloat() },
+            256,
+        )
+    }
+
+    private fun addRasterLayer(style: Style, rasterLayer: RasterLayer) {
+        try {
+            style.addLayerBelow(rasterLayer, firstLayerAboveBaseMap(style) ?: ANNOTATIONS_LAYER_ID)
+        } catch (layerError: Exception) {
+            Log.w(TAG, "Raster layer insertion fallback to top-layer add", layerError)
+            style.addLayer(rasterLayer)
+        }
+    }
+
+    private fun firstLayerAboveBaseMap(style: Style): String? {
+        return style.layers.firstOrNull { it.id != RASTER_LAYER_ID }?.id
     }
 
     private fun loadVectorStyle(

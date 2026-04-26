@@ -172,7 +172,9 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(manager.sourceManager.getNextSourceId())
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
-        manager.applySelectedSource(map)
+        if (!manager.applySelectedSource(map)) {
+            _phase.value = GeoVaultMapPhase.Ready
+        }
     }
 
     fun applySourceSelection(optionId: String) {
@@ -181,7 +183,9 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(optionId)
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
-        manager.applySelectedSource(map)
+        if (!manager.applySelectedSource(map)) {
+            _phase.value = GeoVaultMapPhase.Ready
+        }
     }
 
     fun moveCameraWithPadding(
