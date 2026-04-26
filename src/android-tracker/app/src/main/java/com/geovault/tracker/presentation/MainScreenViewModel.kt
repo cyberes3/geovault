@@ -9,7 +9,6 @@ import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
-import com.geovault.common.update.GeoVaultVersionCheckSession
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.SelectedTrackerManager
@@ -66,10 +65,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerManagementRepository()
     private val sessionBootstrap: TrackerSessionBootstrap =
         TrackerAppServices.from(application).trackerSessionBootstrap()
-    private val versionCheckSession = GeoVaultVersionCheckSession(
+    private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Tracker.versionCheckSession(
         application = application,
-        rateLimitKey = GeoVaultAndroidReleaseIdentity.Tracker.RATE_LIMIT_KEY,
-        releaseWorkerAppName = GeoVaultAndroidReleaseIdentity.Tracker.WORKER_APP_NAME,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
     )
 

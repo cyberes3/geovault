@@ -9,7 +9,6 @@ import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
 import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
-import com.geovault.common.update.GeoVaultVersionCheckSession
 import com.geovault.places.BuildConfig
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.domain.SnapshotFetchResult
@@ -59,10 +58,8 @@ class MainScreenViewModel(
     private val repository = services.placesRepository()
     private val offlineSyncCoordinator = services.offlineSyncCoordinator()
     private val authController = services.initialAuthController()
-    private val versionCheckSession = GeoVaultVersionCheckSession(
+    private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Places.versionCheckSession(
         application = application,
-        rateLimitKey = GeoVaultAndroidReleaseIdentity.Places.RATE_LIMIT_KEY,
-        releaseWorkerAppName = GeoVaultAndroidReleaseIdentity.Places.WORKER_APP_NAME,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
     )
     private var refreshJob: Job? = null

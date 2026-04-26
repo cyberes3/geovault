@@ -32,7 +32,7 @@ Returns JSON:
 - `repos` — configured release repos as `owner/repo`.
 - `apps` — array of objects:
     - `appName`, `versionLabel`, `assetName`, `latestApkUrl`, `releasePageUrl`, `releaseTag`
-    - `releasesRepo`, `codeRepo` (derived: `geovault-app-release` → `owner/geovault`; survey repo maps to itself)
+    - `releasesRepo`, `codeRepo` (derived: `geovault-app-release` → `owner/geovault`; standalone app repos map to themselves)
     - `releaseCommitSha` — full 40-char SHA when resolution succeeds
     - `error` — string when resolution or upstream failed for that row
 

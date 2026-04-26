@@ -16,6 +16,7 @@ _logger = get_tagged_logger()
 # Hardcoded Gitea release page URLs for the "More apps" page. Add more as needed.
 ADMIN_APPS_GITEA_RELEASE_URLS = [
     "https://git.evulid.cc/cyberes/survey-data-viewer-android/releases",
+    "https://git.evulid.cc/cyberes/ngs-navigator-android/releases",
 ]
 RELEASES_REQUEST_TIMEOUT = 10
 ADMIN_APPS_CACHE_KEY_PREFIX = "website:admin_apps_gitea"

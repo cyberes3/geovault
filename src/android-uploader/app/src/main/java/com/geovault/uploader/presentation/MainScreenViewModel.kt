@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
-import com.geovault.common.update.GeoVaultVersionCheckSession
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
 import com.geovault.uploader.data.ValidationOutcome
@@ -60,10 +59,8 @@ class MainScreenViewModel(
     private val validationRepository = services.validationRepository()
     private val uploadRepository = services.uploadRepository()
     private val authController: CommonInitialAuthController = services.initialAuthController()
-    private val versionCheckSession = GeoVaultVersionCheckSession(
+    private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Uploader.versionCheckSession(
         application = application,
-        rateLimitKey = GeoVaultAndroidReleaseIdentity.Uploader.RATE_LIMIT_KEY,
-        releaseWorkerAppName = GeoVaultAndroidReleaseIdentity.Uploader.WORKER_APP_NAME,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
     )
 

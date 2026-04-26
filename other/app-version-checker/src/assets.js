@@ -228,8 +228,7 @@ export const INDEX_HTML = `<!DOCTYPE html>
         const r = await fetch(apiUrl('latest'));
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
-        meta.textContent =
-          'Scanned at ' + (data.scannedAt || '?') + ' · Repos: ' + (data.repos || []).join(', ');
+        meta.textContent = 'Scanned at ' + (data.scannedAt || '?');
         const apps = data.apps || [];
         if (!apps.length) {
           root.innerHTML = '<p class="empty-state">No apps discovered.</p>';

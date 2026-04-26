@@ -6,7 +6,7 @@ workers_dev = true
 preview_urls = true
 
 [vars]
-RELEASE_REPO_URLS = '["https://git.evulid.cc/cyberes/geovault-app-release","https://git.evulid.cc/cyberes/survey-data-viewer-android"]'
+RELEASE_REPO_URLS = '["https://git.evulid.cc/cyberes/geovault-app-release","https://git.evulid.cc/cyberes/survey-data-viewer-android","https://git.evulid.cc/cyberes/ngs-navigator-android"]'
 
 # Update this with your info
 [[routes]]
