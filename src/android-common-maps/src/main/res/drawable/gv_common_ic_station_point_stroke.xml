@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- White outer ring (wider stroke), then black inner ring on the same outline. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M832,384c0,176.725 -320,576 -320,576S192,560.725 192,384 335.275,64 512,64s320,143.275 320,320z"
+        android:strokeColor="@android:color/white"
+        android:strokeLineJoin="round"
+        android:strokeWidth="44" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M832,384c0,176.725 -320,576 -320,576S192,560.725 192,384 335.275,64 512,64s320,143.275 320,320z"
+        android:strokeColor="@android:color/black"
+        android:strokeLineJoin="round"
+        android:strokeWidth="24" />
+</vector>

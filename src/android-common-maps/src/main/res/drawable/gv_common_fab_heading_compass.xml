@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- North-up compass for heading FAB; north (+Y) is red, south is white. Intrinsic colors — do not tint in Compose. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- South (bottom of icon, +viewport Y) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M24,24 L36,26 L24,42 L12,26 Z" />
+    <!-- North (top of icon, -viewport Y); drawn after so it wins at the seam -->
+    <path
+        android:fillColor="@color/gv_common_map_heading_north"
+        android:pathData="M24,6 L36,24 L24,22 L12,24 Z" />
+</vector>

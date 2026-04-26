@@ -32,6 +32,7 @@ class GeoVaultColorTokensXmlSyncTest {
         "gv_common_border_light" to { GeoVaultColorTokens.Hex.BorderLight },
         "gv_common_text_primary" to { GeoVaultColorTokens.Hex.TextPrimary },
         "gv_common_text_secondary" to { GeoVaultColorTokens.Hex.TextSecondary },
+        "gv_common_map_heading_north" to { GeoVaultColorTokens.Hex.MapHeadingNorth },
     )
 
     /**

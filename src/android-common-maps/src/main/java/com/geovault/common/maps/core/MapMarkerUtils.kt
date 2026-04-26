@@ -102,10 +102,15 @@ object MapMarkerUtils {
         DrawableCompat.setTint(wrapped, style.backgroundTintColorInt)
         DrawableCompat.setTintMode(wrapped, PorterDuff.Mode.SRC_IN)
 
-        // This is the shared hook for symbol-bearing map icons. Today it returns only the
-        // background marker; future symbol drawing should compose on the bitmap here.
-        return requireNotNull(BitmapUtils.getBitmapFromDrawable(wrapped)) {
+        val base = requireNotNull(BitmapUtils.getBitmapFromDrawable(wrapped)) {
             "Unable to rasterize map symbol icon drawable: ${style.backgroundDrawableResId}"
         }
+        val strokeRes = style.overlayStrokeDrawableResId ?: return base
+        val strokeDrawable = ContextCompat.getDrawable(context, strokeRes) ?: return base
+        val composed = base.copy(base.config ?: Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(composed)
+        strokeDrawable.setBounds(0, 0, composed.width, composed.height)
+        strokeDrawable.draw(canvas)
+        return composed
     }
 }

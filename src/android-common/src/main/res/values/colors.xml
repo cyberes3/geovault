@@ -17,6 +17,7 @@
       - gv_common_border_light: popup notch / card / divider strokes.
       - gv_common_text_primary: overlapping-point row text.
       - gv_common_text_secondary: chevron-down icon tint.
+      - gv_common_map_heading_north: heading/rotation FAB compass north segment.
 -->
 <resources>
     <color name="gv_common_main_blue">#163D8A</color>
@@ -25,4 +26,5 @@
     <color name="gv_common_border_light">#C4D2ED</color>
     <color name="gv_common_text_primary">#061D4A</color>
     <color name="gv_common_text_secondary">#4B5563</color>
+    <color name="gv_common_map_heading_north">#FF3E41</color>
 </resources>

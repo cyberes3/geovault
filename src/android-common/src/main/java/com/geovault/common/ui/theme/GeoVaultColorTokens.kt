@@ -152,6 +152,9 @@ object GeoVaultColorTokens {
     /** Default text color for map labels (KML titles, tracker names, etc.). */
     val MapLabelText = Gray900
 
+    /** North accent on the map heading / rotation FAB (compass tip). */
+    val MapHeadingNorth = Red500
+
     /** Shared FAB-disabled background alpha used by `GeoVaultMapFabs`. */
     const val FabDisabledTint: Float = 0.55f
 
@@ -236,6 +239,7 @@ object GeoVaultColorTokens {
         val MapLineworkBorder = GeoVaultColorTokens.MapLineworkBorder.toHexRgb()
         val MapPointDefault = GeoVaultColorTokens.MapPointDefault.toHexRgb()
         val MapLabelText = GeoVaultColorTokens.MapLabelText.toHexRgb()
+        val MapHeadingNorth = GeoVaultColorTokens.MapHeadingNorth.toHexRgb()
 
         val ScrimMedium = GeoVaultColorTokens.ScrimMedium.toHexArgb()
         val ScrimStrong = GeoVaultColorTokens.ScrimStrong.toHexArgb()

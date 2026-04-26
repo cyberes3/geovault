@@ -3,18 +3,19 @@ package com.geovault.common.maps.ui.camerafollow
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
 import com.geovault.common.maps.location.GeoVaultMapLocationPermission
@@ -24,6 +25,7 @@ import com.geovault.common.maps.location.MapLocationRendererPlugin
 import com.geovault.common.maps.location.geoVaultMapHasFineOrCoarseLocation
 import com.geovault.common.maps.ui.GeoVaultMapCameraFollowMachine
 import com.geovault.common.maps.ui.GeoVaultMapCameraFollowState
+import com.geovault.common.maps.R
 import com.geovault.common.maps.ui.GeoVaultMapFabAction
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import org.maplibre.android.camera.CameraPosition
@@ -64,6 +66,9 @@ private enum class GeoVaultMapHeadingFollowPendingGrant {
  */
 private const val INITIAL_FOLLOW_ZOOM: Double = 10.0
 
+/** If no bearing arrives (e.g. missing rotation sensor), stop showing the heading FAB spinner. */
+private const val HEADING_FAB_BEARING_WAIT_TIMEOUT_MS: Long = 2_500L
+
 /**
  * Coordinates the **heading** follow FAB, MapLibre [CameraMode], and optional first-follow zoom.
  *
@@ -96,6 +101,22 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         }
     }
     var pendingGrant by remember { mutableStateOf<GeoVaultMapHeadingFollowPendingGrant?>(null) }
+    val plugin = userLocation as? MapLocationRendererPlugin
+    var headingFabBearingDeg by remember { mutableFloatStateOf(0f) }
+    /** True after first smoothed bearing while heading follow is on (compass may rotate). */
+    var headingFabBearingReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(headingFollowDesired) {
+        if (!headingFollowDesired) {
+            headingFabBearingReady = false
+            return@LaunchedEffect
+        }
+        headingFabBearingReady = false
+        delay(HEADING_FAB_BEARING_WAIT_TIMEOUT_MS)
+        if (headingFollowDesired) {
+            headingFabBearingReady = true
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -155,7 +176,18 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         onDispose { }
     }
 
-    val plugin = userLocation as? MapLocationRendererPlugin
+    DisposableEffect(plugin, headingFollowDesired) {
+        if (plugin == null || !headingFollowDesired) {
+            return@DisposableEffect onDispose { }
+        }
+        val listener: (Float) -> Unit = {
+            headingFabBearingDeg = it
+            headingFabBearingReady = true
+        }
+        plugin.addBearingListener(listener)
+        onDispose { plugin.removeBearingListener(listener) }
+    }
+
     DisposableEffect(map, plugin, positionFollowDesired, headingFollowDesired, allowFollowCamera) {
         val cameraShouldFollowHeading = positionFollowDesired && headingFollowDesired && allowFollowCamera
         if (!cameraShouldFollowHeading || plugin == null) {
@@ -215,16 +247,20 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         }
     }
 
+    val showHeadingCompass =
+        headingFollowDesired && headingFabBearingReady
     val orientationFab = GeoVaultMapFabAction(
         id = orientationFollowFabId,
         order = orientationFollowFabOrder,
-        icon = if (headingFollowDesired) {
-            GeoVaultMapFabIcon.Vector(Icons.Filled.Explore)
-        } else {
-            GeoVaultMapFabIcon.Vector(Icons.Outlined.Explore)
+        icon = when {
+            !headingFollowDesired -> GeoVaultMapFabIcon.Vector(Icons.Outlined.Explore)
+            showHeadingCompass -> GeoVaultMapFabIcon.Drawable(R.drawable.gv_common_fab_heading_compass)
+            else -> GeoVaultMapFabIcon.Spinner()
         },
         contentDescription = orientationFollowContentDescription,
         onTap = onHeadingTap,
+        iconRotationDegrees = if (showHeadingCompass) -headingFabBearingDeg else 0f,
+        useIntrinsicIconColors = showHeadingCompass,
     )
 
     return GeoVaultMapHeadingFollowFabBundle(

@@ -38,6 +38,7 @@ class MapLibreManager(
         maplibreMap = map
         map.uiSettings.setLogoEnabled(false)
         map.uiSettings.setAttributionEnabled(false)
+        map.uiSettings.setCompassEnabled(false)
         map.uiSettings.isScrollGesturesEnabled = true
         map.uiSettings.isZoomGesturesEnabled = true
         map.uiSettings.isTiltGesturesEnabled = true

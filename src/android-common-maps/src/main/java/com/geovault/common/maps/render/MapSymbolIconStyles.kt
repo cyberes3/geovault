@@ -9,6 +9,11 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 data class MapSymbolIconStyle(
     @param:DrawableRes val backgroundDrawableResId: Int,
     @param:ColorInt val backgroundTintColorInt: Int,
+    /**
+     * When non-null, this drawable is drawn on top of the tinted background at the same bounds
+     * (e.g. a vector stroke) without tinting—use for a fixed-color outline around a tinted fill.
+     */
+    @param:DrawableRes val overlayStrokeDrawableResId: Int? = null,
 )
 
 object CommonMapSymbolIconStyles {

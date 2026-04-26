@@ -129,6 +129,7 @@ sealed class GeoVaultBaseMap(
     protected fun createMapView(): MapView {
         val options = MapLibreMapOptions.createFromAttributes(appContext).apply {
             textureMode(true)
+            compassEnabled(false)
             minZoomPreference(MapLibreManager.MIN_ZOOM_LEVEL.toDouble())
             maxZoomPreference(MapLibreManager.MAX_ZOOM_LEVEL.toDouble())
         }
@@ -211,6 +212,7 @@ sealed class GeoVaultBaseMap(
      */
     fun ensureInteractiveGestures() {
         val map = maplibreMap ?: return
+        map.uiSettings.setCompassEnabled(false)
         map.uiSettings.isScrollGesturesEnabled = true
         map.uiSettings.isZoomGesturesEnabled = true
         map.uiSettings.isTiltGesturesEnabled = true

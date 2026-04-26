@@ -9,12 +9,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
+import androidx.compose.material.LocalContentAlpha
+import androidx.compose.material.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -45,6 +49,10 @@ data class GeoVaultMapFabAction(
     val contentColor: Color = Color.White,
     val onTap: (() -> Unit)? = null,
     val tooltip: String? = null,
+    /** Clockwise rotation applied to vector/drawable icons inside the FAB. */
+    val iconRotationDegrees: Float = 0f,
+    /** When true, the icon keeps its drawable intrinsic colors (no content tint). */
+    val useIntrinsicIconColors: Boolean = false,
 )
 
 class GeoVaultMapFabBuilder {
@@ -61,6 +69,8 @@ class GeoVaultMapFabBuilder {
         contentColor: Color = Color.White,
         onTap: (() -> Unit)? = null,
         tooltip: String? = null,
+        iconRotationDegrees: Float = 0f,
+        useIntrinsicIconColors: Boolean = false,
     ): GeoVaultMapFabBuilder {
         actions.add(
             GeoVaultMapFabAction(
@@ -74,6 +84,8 @@ class GeoVaultMapFabBuilder {
                 contentColor = contentColor,
                 onTap = onTap,
                 tooltip = tooltip,
+                iconRotationDegrees = iconRotationDegrees,
+                useIntrinsicIconColors = useIntrinsicIconColors,
             ),
         )
         return this
@@ -94,6 +106,11 @@ fun GeoVaultMapFabColumn(
     fabSize: Dp = 44.dp,
     iconSize: Dp = 24.dp,
     onActionTap: ((GeoVaultMapFabAction) -> Unit)? = null,
+    /**
+     * When true, taps and long-press tooltips are ignored; FABs keep normal enabled visuals
+     * ([GeoVaultMapFabAction.enabled] and colors unchanged).
+     */
+    tapSuppressed: Boolean = false,
 ) {
     Column(
         modifier = modifier,
@@ -116,7 +133,7 @@ fun GeoVaultMapFabColumn(
             if (tooltipText != null) {
                 GeoVaultInstallLongPressTooltip(
                     tooltipText = tooltipText,
-                    enabled = action.enabled,
+                    enabled = action.enabled && !tapSuppressed,
                     interactionSource = interactionSource,
                     anchorBounds = anchorBounds,
                     suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
@@ -124,6 +141,7 @@ fun GeoVaultMapFabColumn(
             }
             FloatingActionButton(
                 onClick = {
+                    if (tapSuppressed) return@FloatingActionButton
                     if (!action.enabled) return@FloatingActionButton
                     if (suppressNextClickAfterTooltip?.value == true) {
                         suppressNextClickAfterTooltip.value = false
@@ -141,26 +159,38 @@ fun GeoVaultMapFabColumn(
                 contentColor = if (action.enabled) action.contentColor else action.contentColor.copy(alpha = 0.75f),
                 elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(0.dp, 0.dp),
             ) {
+                val iconRotation = action.iconRotationDegrees
+                val iconModifier = Modifier
+                    .size(iconSize)
+                    .rotate(iconRotation)
                 when (val icon = action.icon) {
                     is GeoVaultMapFabIcon.Vector -> {
                         Icon(
                             imageVector = icon.imageVector,
                             contentDescription = action.contentDescription,
-                            modifier = Modifier.size(iconSize),
+                            modifier = iconModifier,
                         )
                     }
                     is GeoVaultMapFabIcon.Drawable -> {
+                        val tint = if (action.useIntrinsicIconColors) {
+                            Color.Unspecified
+                        } else {
+                            LocalContentColor.current.copy(alpha = LocalContentAlpha.current)
+                        }
                         Icon(
                             painter = painterResource(id = icon.drawableResId),
                             contentDescription = action.contentDescription,
-                            modifier = Modifier.size(iconSize),
+                            modifier = iconModifier,
+                            tint = tint,
                         )
                     }
                     is GeoVaultMapFabIcon.Spinner -> {
-                        GeoVaultLoadingSpinner(
-                            spinnerSize = icon.spinnerSize,
-                            color = icon.spinnerColor,
-                        )
+                        Box(modifier = iconModifier) {
+                            GeoVaultLoadingSpinner(
+                                spinnerSize = icon.spinnerSize,
+                                color = icon.spinnerColor,
+                            )
+                        }
                     }
                 }
             }
