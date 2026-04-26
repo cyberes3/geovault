@@ -23,7 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
@@ -167,20 +167,25 @@ private fun BoxScope.DrawerLayer(
             // unlike Modifier.offset { ... }, which defers to the placement phase and can
             // drop intermediate frames during fast spring animations. This is the same
             // pattern Compose Material's own ModalBottomSheet uses for its sheet translation.
+            //
+            // shape + clip on the layer route clipping through the RenderNode outline path
+            // (hardware accelerated, no per-frame path tessellation), which is decisively
+            // cheaper than `Surface(shape = …)` during a fast LazyColumn fling — the latter
+            // applies an extra `Modifier.clip(shape)` to the children inside the surface and
+            // re-tessellates the rounded path in software each frame the body invalidates.
             .graphicsLayer {
                 translationY = runCatching { drawerState.anchoredDraggableState.requireOffset() }
                     .getOrDefault(0f)
                     .coerceAtLeast(0f)
             }
+            .clip(shape)
             .height(drawerHeightDp)
             .drawerTopAndSidesBorder(
                 shape = shape,
                 color = GeoVaultMapScaffoldDefaults.DrawerBorderColor,
                 width = GeoVaultMapScaffoldDefaults.DrawerBorderWidth,
-            )
-            .clip(shape),
+            ),
         color = GeoVaultMapScaffoldDefaults.DrawerContainerColor,
-        shape = shape,
         elevation = GeoVaultMapScaffoldDefaults.DrawerElevation,
     ) {
         val headerDragModifier = if (drawerDragEnabled) {
@@ -215,53 +220,51 @@ private fun BoxScope.DrawerLayer(
  * Insets the stroked path inward by half the stroke width so the full stroke weight lies
  * inside the layer. Stroking the true outer edge is half-clipped at the top, so the top arc
  * looked thinner than the vertical sides.
+ *
+ * Implemented with [drawWithCache] (not [drawWithContent]) so the [Outline], inset
+ * [RoundRect], [Path], and [Stroke] are built once and reused across draws. The drawer's
+ * graphicsLayer is the closest render layer for the LazyColumn body, so during a fast
+ * LazyColumn fling this draw modifier is re-invoked every frame — allocating fresh path
+ * / stroke / outline objects per frame produced visible jank. The cache key (size +
+ * density + style + color) only changes on real layout changes, so the per-frame work
+ * collapses to a single cached `drawPath` call.
  */
 private fun Modifier.drawerTopAndSidesBorder(
     shape: RoundedCornerShape,
     color: Color,
     width: Dp,
-): Modifier = this.drawWithContent {
+): Modifier = this.drawWithCache {
     val strokePx = width.toPx()
     val halfStroke = strokePx * 0.5f
-    drawContent()
+    val stroke = Stroke(width = strokePx)
     val outline = shape.createOutline(
         size = this.size,
         layoutDirection = layoutDirection,
         density = this,
     )
-    clipRect(
-        left = 0f,
-        top = 0f,
-        right = this.size.width,
-        bottom = this.size.height - 2f * strokePx,
-    ) {
-        when (val def = outline) {
-            is Outline.Rectangle -> {
-                val path = Path()
-                path.addRect(def.rect.deflate(halfStroke))
-                drawPath(
-                    path = path,
-                    color = color,
-                    style = Stroke(width = strokePx),
-                )
-            }
-            is Outline.Rounded -> {
-                val insetRr = def.roundRect.insetBy(halfStroke) ?: return@clipRect
-                val path = Path()
-                path.addRoundRect(insetRr)
-                drawPath(
-                    path = path,
-                    color = color,
-                    style = Stroke(width = strokePx),
-                )
-            }
-            is Outline.Generic -> {
-                drawPath(
-                    path = def.path,
-                    color = color,
-                    style = Stroke(width = strokePx),
-                )
-            }
+    val borderPath: Path? = when (outline) {
+        is Outline.Rectangle -> Path().apply { addRect(outline.rect.deflate(halfStroke)) }
+        is Outline.Rounded -> outline.roundRect.insetBy(halfStroke)?.let { rr ->
+            Path().apply { addRoundRect(rr) }
+        }
+        is Outline.Generic -> outline.path
+    }
+    val clipRight = this.size.width
+    val clipBottom = this.size.height - 2f * strokePx
+    onDrawWithContent {
+        drawContent()
+        if (borderPath == null) return@onDrawWithContent
+        clipRect(
+            left = 0f,
+            top = 0f,
+            right = clipRight,
+            bottom = clipBottom,
+        ) {
+            drawPath(
+                path = borderPath,
+                color = color,
+                style = stroke,
+            )
         }
     }
 }
