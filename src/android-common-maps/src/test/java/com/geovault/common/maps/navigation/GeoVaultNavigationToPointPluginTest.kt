@@ -2,7 +2,6 @@ package com.geovault.common.maps.navigation
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.maplibre.geojson.LineString
@@ -26,26 +25,18 @@ class GeoVaultNavigationToPointPluginTest {
     }
 
     @Test
-    fun `target-only produces a single point feature with the target id`() {
+    fun `target-only (no user fix) is empty - map layer shows the station`() {
         val fc = GeoVaultNavigationToPointPlugin.RenderGeometry.buildFeatureCollection(
             targetLatitude = 45.0,
             targetLongitude = -93.0,
             userLatitude = null,
             userLongitude = null,
         )
-        val features = fc.features()
-        assertNotNull(features)
-        assertEquals(1, features!!.size)
-        val targetFeature = features[0]
-        assertEquals(GeoVaultNavigationToPointPlugin.RenderGeometry.TARGET_FEATURE_ID, targetFeature.id())
-        val geometry = targetFeature.geometry() as? Point
-        assertNotNull("Target must be a Point geometry", geometry)
-        assertEquals(-93.0, geometry!!.longitude(), 1e-9)
-        assertEquals(45.0, geometry.latitude(), 1e-9)
+        assertEquals(0, fc.features()?.size ?: 0)
     }
 
     @Test
-    fun `target plus user produces both point and line features`() {
+    fun `target plus user produces a single line feature`() {
         val fc = GeoVaultNavigationToPointPlugin.RenderGeometry.buildFeatureCollection(
             targetLatitude = 45.0,
             targetLongitude = -93.0,
@@ -53,8 +44,9 @@ class GeoVaultNavigationToPointPluginTest {
             userLongitude = -93.1,
         )
         val features = fc.features()!!
-        assertEquals(2, features.size)
-        val lineFeature = features.first { it.id() == GeoVaultNavigationToPointPlugin.RenderGeometry.LINE_FEATURE_ID }
+        assertEquals(1, features.size)
+        val lineFeature = features[0]
+        assertEquals(GeoVaultNavigationToPointPlugin.RenderGeometry.LINE_FEATURE_ID, lineFeature.id())
         val line = lineFeature.geometry() as? LineString
         assertNotNull("Line feature must carry a LineString geometry", line)
         val coords = line!!.coordinates()
@@ -66,16 +58,14 @@ class GeoVaultNavigationToPointPluginTest {
     }
 
     @Test
-    fun `partial user coords (only latitude) are ignored - no line drawn`() {
+    fun `partial user coords (only latitude) are ignored - no line`() {
         val fc = GeoVaultNavigationToPointPlugin.RenderGeometry.buildFeatureCollection(
             targetLatitude = 10.0,
             targetLongitude = 20.0,
             userLatitude = 11.0,
             userLongitude = null,
         )
-        val features = fc.features()!!
-        assertEquals(1, features.size)
-        assertEquals(GeoVaultNavigationToPointPlugin.RenderGeometry.TARGET_FEATURE_ID, features[0].id())
+        assertEquals(0, fc.features()?.size ?: 0)
     }
 
     @Test
@@ -113,7 +103,7 @@ class GeoVaultNavigationToPointPluginTest {
             userLatitude = null,
             userLongitude = 3.0,
         )
-        assertNull(fc.features()!!.find { it.id() == GeoVaultNavigationToPointPlugin.RenderGeometry.LINE_FEATURE_ID })
+        assertEquals(0, fc.features()?.size ?: 0)
     }
 
     @Test

@@ -28,4 +28,10 @@ object CommonMapSymbolIconStyles {
         backgroundTintColorInt = GeoVaultColorTokens.MainYellow.toArgb(),
         overlayStrokeDrawableResId = R.drawable.gv_common_ic_station_point_stroke,
     )
+
+    fun stationNavTarget(): MapSymbolIconStyle = MapSymbolIconStyle(
+        backgroundDrawableResId = R.drawable.gv_common_ic_station_point,
+        backgroundTintColorInt = GeoVaultColorTokens.MainPurple.toArgb(),
+        overlayStrokeDrawableResId = R.drawable.gv_common_ic_station_point_stroke,
+    )
 }

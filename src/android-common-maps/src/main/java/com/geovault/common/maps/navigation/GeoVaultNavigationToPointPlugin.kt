@@ -3,9 +3,6 @@ package com.geovault.common.maps.navigation
 import android.content.Context
 import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.maps.core.GeoVaultMapPlugin
-import com.geovault.common.maps.core.MapMarkerUtils
-import com.geovault.common.maps.render.CommonMapIconIds
-import com.geovault.common.maps.render.CommonMapMarkerStyles
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,19 +26,18 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * MapLibre plugin: dashed line from user to target, purple triple-ring target icon (same draw
- * style as the default map point, via [MapMarkerUtils] + [CommonMapMarkerStyles]),
- * and an optional name/distance label on the **user** coordinate (under the location puck;
- * aligned with android-common-maps navigation UX). Hosts drive it
- * with [start], [stop], and [updateUserLocation].
+ * MapLibre plugin: a dashed line from the user to the target and an optional name/distance
+ * label on the **user** coordinate (under the location puck). The **target** is not rendered as
+ * a second map pin: the map’s own station / point layer (e.g. [GeoJsonRenderPlugin]) already shows
+ * it; a duplicate at the same coordinate is omitted. Hosts drive this with
+ * [start], [stop], and [updateUserLocation].
  *
  * @param lineLayerRenderBelowId When set (e.g. the host's `\*-points-icon-layer` id) and the
  *   layer exists, the nav dash is inserted with [Style.addLayerBelow] so it draws **under**
  *   point symbols but **over** KML/GeoJSON line and polygon layers.
  * @param overlayStackAnchorAboveId When set (e.g. the host's top `\*-points-label-layer` id) and
- *   the layer exists, the nav target icon and the user text label are inserted with
- *   [Style.addLayerAbove] so they draw **on top of** the point symbol stack (so the purple
- *   target is not covered by a blue point icon at the same coordinate).
+ *   the layer exists, the user text label is inserted with
+ *   [Style.addLayerAbove] so it draws **on top of** the point symbol stack.
  *
  * **Layer ordering note:** the user-coordinate label is preferentially anchored above
  * [LocationComponentConstants.FOREGROUND_LAYER] when that layer exists at style-load time, so
@@ -51,13 +47,10 @@ import kotlin.math.sqrt
  * **before** this plugin so the foreground layer is present when [onStyleLoaded] runs.
  */
 class GeoVaultNavigationToPointPlugin(
-    context: Context,
+    @Suppress("unused") context: Context,
     private val lineLayerRenderBelowId: String? = null,
     private val overlayStackAnchorAboveId: String? = null,
 ) : GeoVaultMapPlugin {
-
-    /** [Context.getApplicationContext] for bitmaps and other app-scoped work. */
-    private val context: Context = context.applicationContext
     private var map: MapLibreMap? = null
     private var style: Style? = null
 
@@ -106,8 +99,6 @@ class GeoVaultNavigationToPointPlugin(
         this.style = style
         ensureSources(style)
         ensureLineLayer(style)
-        ensureNavigationImage(style)
-        ensureTargetIconLayer(style)
         ensureLabelLayer(style)
         applyToStyle()
     }
@@ -131,22 +122,15 @@ class GeoVaultNavigationToPointPlugin(
         }
     }
 
-    private fun ensureNavigationImage(style: Style) {
-        if (style.getImage(CommonMapIconIds.NAVIGATION_TO_POINT_TARGET) != null) return
-        val bitmap = MapMarkerUtils.buildMarkerBitmap(
-            context,
-            CommonMapMarkerStyles.navigationToPointTarget(),
-        )
-        style.addImage(CommonMapIconIds.NAVIGATION_TO_POINT_TARGET, bitmap, false)
-    }
-
     private fun ensureLineLayer(style: Style) {
         if (style.getLayer(LINE_LAYER_ID) != null) return
         val lineLayer = LineLayer(LINE_LAYER_ID, SOURCE_ID)
             .withProperties(
                 PropertyFactory.lineColor(GeoVaultColorTokens.MainPurple.toArgb()),
                 PropertyFactory.lineWidth(LINE_WIDTH_PX),
-                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                // Butt caps end stroke exactly at the line vertices. Round caps extend past each
+                // end by ~lineWidth/2 px, so the nav dash looked like it ran past the target pin.
+                PropertyFactory.lineCap(Property.LINE_CAP_BUTT),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                 PropertyFactory.lineDasharray(arrayOf(2f, 2f)),
                 PropertyFactory.lineOpacity(LINE_OPACITY),
@@ -161,25 +145,6 @@ class GeoVaultNavigationToPointPlugin(
         }
     }
 
-    private fun ensureTargetIconLayer(style: Style) {
-        if (style.getLayer(TARGET_ICON_LAYER_ID) != null) return
-        val targetLayer = SymbolLayer(TARGET_ICON_LAYER_ID, SOURCE_ID)
-            .withProperties(
-                PropertyFactory.iconImage(CommonMapIconIds.NAVIGATION_TO_POINT_TARGET),
-                PropertyFactory.iconSize(ICON_SIZE),
-                PropertyFactory.iconAllowOverlap(true),
-                PropertyFactory.iconIgnorePlacement(true),
-            )
-        targetLayer.setFilter(
-            Expression.eq(Expression.geometryType(), Expression.literal("Point")),
-        )
-        if (overlayStackAnchorAboveId != null && style.getLayer(overlayStackAnchorAboveId) != null) {
-            style.addLayerAbove(targetLayer, overlayStackAnchorAboveId)
-        } else {
-            style.addLayer(targetLayer)
-        }
-    }
-
     private fun ensureLabelLayer(style: Style) {
         if (style.getLayer(LABEL_LAYER_ID) != null) return
         addLabelLayer(style)
@@ -189,7 +154,7 @@ class GeoVaultNavigationToPointPlugin(
      * Builds the navigation-text [SymbolLayer] and inserts it at the highest available anchor —
      * preferring [LocationComponentConstants.FOREGROUND_LAYER] (so MapLibre's accuracy ring,
      * drawn inside that same indicator layer when `useSpecializedLocationLayer = true`, sits
-     * beneath the text), then the nav target icon, then the host's point-symbol stack anchor,
+     * beneath the text), then the host's point-symbol stack anchor,
      * then unanchored at the top of the layer stack (`addLayerAbove(navTargetNameLayer, FOREGROUND_LAYER)`).
      */
     private fun addLabelLayer(style: Style) {
@@ -197,7 +162,7 @@ class GeoVaultNavigationToPointPlugin(
             .withProperties(
                 PropertyFactory.textField(Expression.get(TEXT_PROPERTY)),
                 PropertyFactory.textSize(LABEL_TEXT_SIZE_SP),
-                PropertyFactory.textColor(GeoVaultColorTokens.MapLabelText.toArgb()),
+                PropertyFactory.textColor(GeoVaultColorTokens.MainPurple.toArgb()),
                 PropertyFactory.textHaloColor(GeoVaultColorTokens.MapLineworkHalo.toArgb()),
                 PropertyFactory.textHaloWidth(LABEL_HALO_WIDTH_PX),
                 PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
@@ -208,8 +173,6 @@ class GeoVaultNavigationToPointPlugin(
             )
         if (style.getLayer(LocationComponentConstants.FOREGROUND_LAYER) != null) {
             style.addLayerAbove(textLayer, LocationComponentConstants.FOREGROUND_LAYER)
-        } else if (style.getLayer(TARGET_ICON_LAYER_ID) != null) {
-            style.addLayerAbove(textLayer, TARGET_ICON_LAYER_ID)
         } else if (overlayStackAnchorAboveId != null && style.getLayer(overlayStackAnchorAboveId) != null) {
             style.addLayerAbove(textLayer, overlayStackAnchorAboveId)
         } else {
@@ -266,7 +229,6 @@ class GeoVaultNavigationToPointPlugin(
 
     internal object RenderGeometry {
 
-        const val TARGET_FEATURE_ID: String = "gv-nav-target"
         const val LINE_FEATURE_ID: String = "gv-nav-line"
         const val LABEL_FEATURE_ID: String = "gv-nav-label"
 
@@ -276,22 +238,21 @@ class GeoVaultNavigationToPointPlugin(
             userLatitude: Double?,
             userLongitude: Double?,
         ): FeatureCollection {
-            val features = mutableListOf<Feature>()
-            if (targetLatitude != null && targetLongitude != null) {
-                val targetPoint = Point.fromLngLat(targetLongitude, targetLatitude)
-                features.add(Feature.fromGeometry(targetPoint, null, TARGET_FEATURE_ID))
-                if (userLatitude != null && userLongitude != null) {
-                    val userPoint = Point.fromLngLat(userLongitude, userLatitude)
-                    features.add(
-                        Feature.fromGeometry(
-                            LineString.fromLngLats(listOf(userPoint, targetPoint)),
-                            null,
-                            LINE_FEATURE_ID,
-                        ),
-                    )
-                }
+            if (targetLatitude == null || targetLongitude == null) {
+                return FeatureCollection.fromFeatures(emptyList())
             }
-            return FeatureCollection.fromFeatures(features)
+            if (userLatitude == null || userLongitude == null) {
+                // No line until we have a user fix; the map's own point layer shows the target.
+                return FeatureCollection.fromFeatures(emptyList())
+            }
+            val targetPoint = Point.fromLngLat(targetLongitude, targetLatitude)
+            val userPoint = Point.fromLngLat(userLongitude, userLatitude)
+            val line = Feature.fromGeometry(
+                LineString.fromLngLats(listOf(userPoint, targetPoint)),
+                null,
+                LINE_FEATURE_ID,
+            )
+            return FeatureCollection.fromFeatures(listOf(line))
         }
 
         /** Point at **user** lat/lon so text+offset sit under the location puck. */
@@ -361,15 +322,12 @@ class GeoVaultNavigationToPointPlugin(
         const val SOURCE_ID: String = "gv-common-nav-to-point-source"
         const val LABEL_SOURCE_ID: String = "gv-common-nav-to-point-label-source"
         const val LINE_LAYER_ID: String = "gv-common-nav-to-point-line-layer"
-        const val TARGET_ICON_LAYER_ID: String = "gv-common-nav-to-point-target-icon-layer"
         const val LABEL_LAYER_ID: String = "gv-common-nav-to-point-label-layer"
 
         internal const val TEXT_PROPERTY: String = "text"
 
         private const val LINE_WIDTH_PX = 4f
         private const val LINE_OPACITY = 0.85f
-        private const val ICON_SIZE = 1f
-
         private const val LABEL_TEXT_SIZE_SP = 13f
         private const val LABEL_HALO_WIDTH_PX = 1.5f
         /** Ems below the [Property.TEXT_ANCHOR_TOP] anchor (sits just under the location puck). */

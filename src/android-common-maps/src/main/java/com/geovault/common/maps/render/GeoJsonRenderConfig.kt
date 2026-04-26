@@ -32,6 +32,13 @@ data class GeoJsonRenderConfig(
     val showPointTextLabels: Boolean = true,
     val renderPointSymbolsAboveLines: Boolean = false,
     val pointClustering: GeoJsonPointClusteringConfig? = null,
+    /**
+     * When [pointClustering] is enabled, features whose [MapRenderPoint.iconImageId] is in this
+     * set are **not** written to the clustered source. They are drawn from a second, non-clustered
+     * GeoJSON source and stacked on top of the main point layers so e.g. a navigation target pin
+     * is never absorbed into a cluster.
+     */
+    val iconImageIdsExcludedFromClustering: Set<String> = emptySet(),
     val useSynchronousSourceUpdates: Boolean = false,
     /**
      * When true (the default), point symbol icon and text use zero-duration opacity transitions

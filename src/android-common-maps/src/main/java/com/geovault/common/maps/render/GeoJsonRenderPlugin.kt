@@ -42,6 +42,7 @@ import org.maplibre.android.style.sources.GeoJsonOptions
  */
 private data class PreparedGeoJsonRenderState(
     val pointsJson: String,
+    val overlayPointsJson: String,
     val linesJson: String,
     val polygonsJson: String,
 )
@@ -58,6 +59,10 @@ class GeoJsonRenderPlugin(
     private val config: GeoJsonRenderConfig = GeoJsonRenderConfig(),
     private val context: Context? = null,
 ) : GeoVaultMapPlugin, GeoVaultRenderCapability {
+
+    private val useUnclusteredPointOverlay: Boolean =
+        config.pointClustering != null && config.iconImageIdsExcludedFromClustering.isNotEmpty()
+
     @Volatile
     private var renderState: MapRenderState = MapRenderState()
     private var map: MapLibreMap? = null
@@ -122,6 +127,12 @@ class GeoJsonRenderPlugin(
             PropertyFactory.textHaloWidth(haloWidthPx),
             PropertyFactory.textHaloColor(haloColorArgb),
         )
+        if (useUnclusteredPointOverlay) {
+            (style.getLayer(pointsOverlayLabelLayerId) as? SymbolLayer)?.setProperties(
+                PropertyFactory.textHaloWidth(haloWidthPx),
+                PropertyFactory.textHaloColor(haloColorArgb),
+            )
+        }
     }
 
     private fun schedulePreparedApply(state: MapRenderState, generation: Long) {
@@ -145,6 +156,9 @@ class GeoJsonRenderPlugin(
 
     private fun ensureLayers(style: Style) {
         ensureSource(style, pointsSourceId, buildGeoJsonOptions(config.pointClustering))
+        if (useUnclusteredPointOverlay) {
+            ensureSource(style, pointsOverlaySourceId, null)
+        }
         ensureSource(style, linesSourceId)
         ensureSource(style, polygonsSourceId)
 
@@ -283,6 +297,124 @@ class GeoJsonRenderPlugin(
             }
             attachPointSymbolLayers()
         }
+        if (useUnclusteredPointOverlay) {
+            if (config.showPointCircles && style.getLayer(pointsOverlayCircleLayerId) == null) {
+                addPointPresentationLayer(
+                    CircleLayer(pointsOverlayCircleLayerId, pointsOverlaySourceId).withProperties(
+                        PropertyFactory.circleColor(
+                            Expression.coalesce(
+                                Expression.get("pointFillColorHex"),
+                                Expression.literal(config.defaultPointFillColorHex),
+                            ),
+                        ),
+                        PropertyFactory.circleRadius(
+                            Expression.coalesce(
+                                Expression.get("pointRadius"),
+                                Expression.literal(config.defaultPointRadius),
+                            ),
+                        ),
+                        PropertyFactory.circleStrokeColor(
+                            Expression.coalesce(
+                                Expression.get("pointStrokeColorHex"),
+                                Expression.literal(config.defaultPointStrokeColorHex),
+                            ),
+                        ),
+                        PropertyFactory.circleStrokeWidth(
+                            Expression.coalesce(
+                                Expression.get("pointStrokeWidth"),
+                                Expression.literal(config.defaultPointStrokeWidth),
+                            ),
+                        ),
+                    ),
+                )
+            }
+            if (config.showPointLabelsAndIcons && style.getLayer(pointsOverlayIconLayerId) == null) {
+                val iconSizeExpr = Expression.coalesce(
+                    Expression.get("iconSize"),
+                    Expression.literal(config.defaultIconSize),
+                )
+                val iconRotateExpr = Expression.coalesce(
+                    Expression.toNumber(Expression.get("iconRotationDegrees")),
+                    Expression.literal(0.0),
+                )
+                val iconLayer = SymbolLayer(pointsOverlayIconLayerId, pointsOverlaySourceId)
+                    .withProperties(
+                        PropertyFactory.iconImage(Expression.get("iconImageId")),
+                        PropertyFactory.iconSize(iconSizeExpr),
+                        PropertyFactory.iconAnchor(config.defaultIconAnchor),
+                        PropertyFactory.iconRotate(iconRotateExpr),
+                        PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                        PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true),
+                    )
+                if (config.disablePointSymbolFade) {
+                    val instant = TransitionOptions(0L, 0L)
+                    iconLayer.setIconOpacityTransition(instant)
+                }
+                val labelLayer: SymbolLayer? = if (config.showPointTextLabels) {
+                    val labelPointProperties: Array<PropertyValue<*>> = buildList {
+                        add(PropertyFactory.iconImage(Expression.get("iconImageId")))
+                        add(PropertyFactory.iconOpacity(Expression.literal(0.0)))
+                        add(PropertyFactory.iconSize(iconSizeExpr))
+                        add(PropertyFactory.iconAnchor(config.defaultIconAnchor))
+                        add(PropertyFactory.iconRotate(iconRotateExpr))
+                        add(PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT))
+                        add(PropertyFactory.iconAllowOverlap(true))
+                        add(PropertyFactory.iconIgnorePlacement(true))
+                        add(PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT))
+                        add(PropertyFactory.textField(Expression.get("title")))
+                        add(
+                            PropertyFactory.textSize(
+                                Expression.coalesce(
+                                    Expression.get("labelTextSize"),
+                                    Expression.literal(config.defaultLabelTextSize),
+                                ),
+                            ),
+                        )
+                        add(
+                            PropertyFactory.textColor(
+                                Expression.coalesce(
+                                    Expression.get("labelTextColorHex"),
+                                    Expression.literal(config.defaultLabelTextColorHex),
+                                ),
+                            ),
+                        )
+                        if (config.pointLabelHaloWidth > 0f) {
+                            add(PropertyFactory.textHaloWidth(config.pointLabelHaloWidth))
+                            add(
+                                PropertyFactory.textHaloColor(
+                                    config.pointLabelHaloColorArgb
+                                        ?: GeoVaultColorTokens.MapLineworkHalo.toArgb(),
+                                ),
+                            )
+                        }
+                        add(PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP))
+                        add(PropertyFactory.textOffset(arrayOf(0f, config.pointLabelTextOffsetYEm)))
+                        add(PropertyFactory.textAllowOverlap(false))
+                        add(PropertyFactory.textIgnorePlacement(false))
+                    }.toTypedArray()
+                    SymbolLayer(pointsOverlayLabelLayerId, pointsOverlaySourceId).withProperties(
+                        *labelPointProperties,
+                    ).also { layer ->
+                        if (config.disablePointSymbolFade) {
+                            val instant = TransitionOptions(0L, 0L)
+                            layer.setIconOpacityTransition(instant)
+                            layer.setTextOpacityTransition(instant)
+                        }
+                    }
+                } else {
+                    null
+                }
+                fun attachOverlayPointSymbolLayers() {
+                    if (labelLayer != null) {
+                        addPointPresentationLayer(labelLayer)
+                    }
+                    addPointPresentationLayer(iconLayer)
+                }
+                attachOverlayPointSymbolLayers()
+            }
+        }
         if (style.getLayer(lineOuterLayerId) == null) {
             addLayerWithPlacement(
                 style,
@@ -382,8 +514,21 @@ class GeoJsonRenderPlugin(
     }
 
     private fun prepareState(state: MapRenderState): PreparedGeoJsonRenderState {
+        val excluded = config.iconImageIdsExcludedFromClustering
+        val (mainPoints, overlayPoints) = if (useUnclusteredPointOverlay) {
+            val over = state.points.filter { p -> p.iconImageId in excluded }
+            val main = state.points.filter { p -> p.iconImageId !in excluded }
+            main to over
+        } else {
+            state.points to emptyList()
+        }
         return PreparedGeoJsonRenderState(
-            pointsJson = buildPointsFeatureCollectionJson(state.points),
+            pointsJson = buildPointsFeatureCollectionJson(mainPoints),
+            overlayPointsJson = if (useUnclusteredPointOverlay) {
+                buildPointsFeatureCollectionJson(overlayPoints)
+            } else {
+                GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
+            },
             linesJson = buildLinesFeatureCollectionJson(state.lines),
             polygonsJson = buildPolygonsFeatureCollectionJson(
                 polygons = state.polygons,
@@ -395,6 +540,9 @@ class GeoJsonRenderPlugin(
     private fun applyPreparedState(prepared: PreparedGeoJsonRenderState) {
         val style = map?.style ?: return
         updateSource(style, pointsSourceId, prepared.pointsJson)
+        if (useUnclusteredPointOverlay) {
+            updateSource(style, pointsOverlaySourceId, prepared.overlayPointsJson)
+        }
         updateSource(style, linesSourceId, prepared.linesJson)
         updateSource(style, polygonsSourceId, prepared.polygonsJson)
     }
@@ -463,6 +611,7 @@ class GeoJsonRenderPlugin(
         return mapOf(
             CommonMapIconIds.STATION_POINT to CommonMapSymbolIconStyles.station(),
             CommonMapIconIds.STATION_POINT_SELECTED to CommonMapSymbolIconStyles.selectedStation(),
+            CommonMapIconIds.STATION_POINT_NAV_TARGET to CommonMapSymbolIconStyles.stationNavTarget(),
         ) + config.symbolIconStyles
     }
 
@@ -510,10 +659,15 @@ class GeoJsonRenderPlugin(
     private val linesSourceId = "$sourceIdPrefix-lines-source"
     private val polygonsSourceId = "$sourceIdPrefix-polygons-source"
     private val pointsCircleLayerId = "$sourceIdPrefix-points-circle-layer"
+    /** Points that must never participate in clustering (e.g. navigation target), non-clustered source. */
+    private val pointsOverlaySourceId = pointsOverlaySourceId(sourceIdPrefix)
+    private val pointsOverlayCircleLayerId = "$sourceIdPrefix-points-overlay-circle-layer"
     /** Visible markers; painted above [pointsLabelLayerId] and above linework when [GeoJsonRenderConfig.renderPointSymbolsAboveLines]. */
     private val pointsIconLayerId = pointsIconLayerId(sourceIdPrefix)
     /** Text below [pointsIconLayerId]; collision hides overlapping labels, not icons. */
     private val pointsLabelLayerId = pointsLabelLayerId(sourceIdPrefix)
+    private val pointsOverlayIconLayerId = pointsOverlayIconLayerId(sourceIdPrefix)
+    private val pointsOverlayLabelLayerId = pointsOverlayLabelLayerId(sourceIdPrefix)
     private val lineOuterLayerId = "$sourceIdPrefix-lines-outer-layer"
     private val lineBorderLayerId = "$sourceIdPrefix-lines-border-layer"
     private val lineFillLayerId = "$sourceIdPrefix-lines-fill-layer"
@@ -526,9 +680,18 @@ class GeoJsonRenderPlugin(
 
         fun pointsSourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-source"
 
+        /** Non-clustered point source for [GeoJsonRenderConfig.iconImageIdsExcludedFromClustering]. */
+        fun pointsOverlaySourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-overlay-source"
+
         fun pointsIconLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-icon-layer"
 
         fun pointsLabelLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-label-layer"
+
+        fun pointsOverlayIconLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-points-overlay-icon-layer"
+
+        fun pointsOverlayLabelLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-points-overlay-label-layer"
 
         fun pointClusterCircleLayerId(sourceIdPrefix: String, index: Int): String =
             "$sourceIdPrefix-points-cluster-$index-layer"
