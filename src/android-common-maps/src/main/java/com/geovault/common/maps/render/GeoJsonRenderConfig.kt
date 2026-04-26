@@ -1,6 +1,7 @@
 package com.geovault.common.maps.render
 
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import org.maplibre.android.style.layers.Property
 
 /**
  * Configuration for [GeoJsonRenderPlugin].
@@ -25,6 +26,7 @@ data class GeoJsonRenderConfig(
     val showPointLabelsAndIcons: Boolean = true,
     val showPointTextLabels: Boolean = true,
     val renderPointSymbolsAboveLines: Boolean = false,
+    val pointClustering: GeoJsonPointClusteringConfig? = null,
     val useSynchronousSourceUpdates: Boolean = false,
     /**
      * When true (the default), point symbol icon and text use zero-duration opacity transitions
@@ -33,6 +35,7 @@ data class GeoJsonRenderConfig(
      */
     val disablePointSymbolFade: Boolean = true,
     val markerStyles: Map<String, MapMarkerStyle> = emptyMap(),
+    val symbolIconStyles: Map<String, MapSymbolIconStyle> = emptyMap(),
     val showPolygonFill: Boolean = true,
     val showPolygonOutline: Boolean = true,
     val defaultPointRadius: Float = 6f,
@@ -42,6 +45,61 @@ data class GeoJsonRenderConfig(
     val defaultLabelTextColorHex: String = GeoVaultColorTokens.Hex.MapLabelText,
     val defaultLabelTextSize: Float = 12f,
     val defaultIconSize: Float = 1f,
+    val defaultIconAnchor: String = Property.ICON_ANCHOR_CENTER,
     val defaultPolygonFillOpacity: Float = 0.35f,
     val defaultPolygonOutlineWidth: Float = 2f,
 )
+
+data class GeoJsonPointClusteringConfig(
+    val maxZoom: Int = 14,
+    val radius: Int = 50,
+    val minPoints: Int = 2,
+    val circleStyles: List<GeoJsonPointClusterCircleStyle> = defaultCircleStyles(),
+    val countTextColorHex: String = GeoVaultColorTokens.Hex.Surface,
+    val countTextSize: Float = 12f,
+) {
+    init {
+        require(maxZoom >= 0) { "Cluster maxZoom must be non-negative." }
+        require(radius > 0) { "Cluster radius must be positive." }
+        require(minPoints >= 2) { "Cluster minPoints must be at least 2." }
+        require(circleStyles.isNotEmpty()) { "At least one cluster circle style is required." }
+        require(circleStyles.map { it.minPointCount }.distinct().size == circleStyles.size) {
+            "Cluster circle style thresholds must be unique."
+        }
+    }
+
+    val orderedCircleStyles: List<GeoJsonPointClusterCircleStyle> =
+        circleStyles.sortedByDescending { it.minPointCount }
+
+    companion object {
+        fun defaultCircleStyles(): List<GeoJsonPointClusterCircleStyle> = listOf(
+            GeoJsonPointClusterCircleStyle(
+                minPointCount = 150,
+                circleColorHex = GeoVaultColorTokens.Hex.MainRed,
+                circleRadius = 22f,
+            ),
+            GeoJsonPointClusterCircleStyle(
+                minPointCount = 20,
+                circleColorHex = GeoVaultColorTokens.Hex.MainGreen,
+                circleRadius = 20f,
+            ),
+            GeoJsonPointClusterCircleStyle(
+                minPointCount = 0,
+                circleColorHex = GeoVaultColorTokens.Hex.MainBlue,
+                circleRadius = 18f,
+            ),
+        )
+    }
+}
+
+data class GeoJsonPointClusterCircleStyle(
+    val minPointCount: Int,
+    val circleColorHex: String,
+    val circleRadius: Float,
+) {
+    init {
+        require(minPointCount >= 0) { "Cluster circle threshold must be non-negative." }
+        require(circleColorHex.isNotBlank()) { "Cluster circle color must not be blank." }
+        require(circleRadius > 0f) { "Cluster circle radius must be positive." }
+    }
+}

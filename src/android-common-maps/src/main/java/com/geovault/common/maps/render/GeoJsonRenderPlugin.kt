@@ -11,6 +11,7 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -89,15 +90,29 @@ class GeoJsonRenderPlugin(
     }
 
     private fun ensureLayers(style: Style) {
-        ensureSource(style, pointsSourceId)
+        ensureSource(style, pointsSourceId, buildGeoJsonOptions(config.pointClustering))
         ensureSource(style, linesSourceId)
         ensureSource(style, polygonsSourceId)
 
-        var pendingPointIconLayer: SymbolLayer? = null
-        var pendingPointLabelLayer: SymbolLayer? = null
+        val pendingPointPresentationLayers = mutableListOf<Layer>()
+        fun addPointPresentationLayer(layer: Layer) {
+            if (config.renderPointSymbolsAboveLines) {
+                pendingPointPresentationLayers += layer
+            } else {
+                addLayerWithPlacement(style, layer)
+            }
+        }
+        fun addPointPresentationLayers(layers: List<Layer>) {
+            if (config.renderPointSymbolsAboveLines) {
+                pendingPointPresentationLayers += layers
+            } else {
+                addLayerStackWithPlacement(style, layers)
+            }
+        }
+
+        addPointPresentationLayers(createPointClusterLayers(style))
         if (config.showPointCircles && style.getLayer(pointsCircleLayerId) == null) {
-            addLayerWithPlacement(
-                style,
+            addPointPresentationLayer(
                 CircleLayer(pointsCircleLayerId, pointsSourceId).withProperties(
                     PropertyFactory.circleColor(
                         Expression.coalesce(
@@ -123,7 +138,7 @@ class GeoJsonRenderPlugin(
                             Expression.literal(config.defaultPointStrokeWidth),
                         ),
                     ),
-                ),
+                ).withUnclusteredPointFilter(),
             )
         }
         if (config.showPointLabelsAndIcons && style.getLayer(pointsIconLayerId) == null) {
@@ -139,11 +154,12 @@ class GeoJsonRenderPlugin(
                 PropertyFactory.textField(Expression.literal("")),
                 PropertyFactory.iconImage(Expression.get("iconImageId")),
                 PropertyFactory.iconSize(iconSizeExpr),
+                PropertyFactory.iconAnchor(config.defaultIconAnchor),
                 PropertyFactory.iconRotate(iconRotateExpr),
                 PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
                 PropertyFactory.iconAllowOverlap(true),
                 PropertyFactory.iconIgnorePlacement(true),
-            )
+            ).withUnclusteredPointFilter()
             if (config.disablePointSymbolFade) {
                 val instant = TransitionOptions(0L, 0L)
                 iconLayer.setIconOpacityTransition(instant)
@@ -153,6 +169,7 @@ class GeoJsonRenderPlugin(
                     PropertyFactory.iconImage(Expression.get("iconImageId")),
                     PropertyFactory.iconOpacity(Expression.literal(0.0)),
                     PropertyFactory.iconSize(iconSizeExpr),
+                    PropertyFactory.iconAnchor(config.defaultIconAnchor),
                     PropertyFactory.iconRotate(iconRotateExpr),
                     PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
                     PropertyFactory.iconAllowOverlap(true),
@@ -176,7 +193,7 @@ class GeoJsonRenderPlugin(
                     PropertyFactory.textOffset(arrayOf(0f, 0.85f)),
                     PropertyFactory.textAllowOverlap(false),
                     PropertyFactory.textIgnorePlacement(false),
-                ).also { layer ->
+                ).withUnclusteredPointFilter().also { layer ->
                     if (config.disablePointSymbolFade) {
                         val instant = TransitionOptions(0L, 0L)
                         layer.setIconOpacityTransition(instant)
@@ -187,17 +204,16 @@ class GeoJsonRenderPlugin(
                 null
             }
             fun attachPointSymbolLayers() {
-                addLayerWithPlacement(style, iconLayer)
+                addPointPresentationLayer(iconLayer)
                 if (labelLayer != null) {
-                    style.addLayerAbove(labelLayer, pointsIconLayerId)
+                    if (config.renderPointSymbolsAboveLines) {
+                        pendingPointPresentationLayers += labelLayer
+                    } else {
+                        style.addLayerAbove(labelLayer, pointsIconLayerId)
+                    }
                 }
             }
-            if (config.renderPointSymbolsAboveLines) {
-                pendingPointIconLayer = iconLayer
-                pendingPointLabelLayer = labelLayer
-            } else {
-                attachPointSymbolLayers()
-            }
+            attachPointSymbolLayers()
         }
         if (style.getLayer(lineOuterLayerId) == null) {
             addLayerWithPlacement(
@@ -238,11 +254,62 @@ class GeoJsonRenderPlugin(
                 ),
             )
         }
-        if (pendingPointIconLayer != null && style.getLayer(pointsIconLayerId) == null) {
-            addLayerWithPlacement(style, pendingPointIconLayer)
-            if (pendingPointLabelLayer != null) {
-                style.addLayerAbove(pendingPointLabelLayer, pointsIconLayerId)
+        if (pendingPointPresentationLayers.isNotEmpty()) {
+            addLayerStackWithPlacement(style, pendingPointPresentationLayers)
+        }
+    }
+
+    private fun createPointClusterLayers(style: Style): List<Layer> {
+        val clustering = config.pointClustering ?: return emptyList()
+        val circleLayers = clustering.orderedCircleStyles.mapIndexedNotNull { index, circleStyle ->
+            val layerId = pointClusterCircleLayerId(sourceIdPrefix, index)
+            if (style.getLayer(layerId) != null) {
+                null
+            } else {
+                CircleLayer(layerId, pointsSourceId)
+                    .withProperties(
+                        PropertyFactory.circleColor(Expression.literal(circleStyle.circleColorHex)),
+                        PropertyFactory.circleRadius(circleStyle.circleRadius),
+                        PropertyFactory.circleStrokeColor(config.defaultPointStrokeColorHex),
+                        PropertyFactory.circleStrokeWidth(config.defaultPointStrokeWidth),
+                    )
+                    .withFilter(clusterCircleFilter(index, clustering.orderedCircleStyles))
             }
+        }
+        val countLayerId = pointClusterCountLayerId(sourceIdPrefix)
+        val countLayer = if (style.getLayer(countLayerId) == null) {
+            SymbolLayer(countLayerId, pointsSourceId)
+                .withProperties(
+                    PropertyFactory.textField(Expression.get(PROPERTY_POINT_COUNT)),
+                    PropertyFactory.textSize(clustering.countTextSize),
+                    PropertyFactory.textColor(Expression.literal(clustering.countTextColorHex)),
+                    PropertyFactory.textAllowOverlap(true),
+                    PropertyFactory.textIgnorePlacement(true),
+                )
+                .withFilter(Expression.has(PROPERTY_POINT_COUNT))
+        } else {
+            null
+        }
+        return circleLayers + listOfNotNull(countLayer)
+    }
+
+    private fun clusterCircleFilter(
+        index: Int,
+        styles: List<GeoJsonPointClusterCircleStyle>,
+    ): Expression {
+        val pointCount = Expression.toNumber(Expression.get(PROPERTY_POINT_COUNT))
+        val minCountFilter = Expression.gte(pointCount, Expression.literal(styles[index].minPointCount))
+        return if (index == 0) {
+            Expression.all(
+                Expression.has(PROPERTY_POINT_COUNT),
+                minCountFilter,
+            )
+        } else {
+            Expression.all(
+                Expression.has(PROPERTY_POINT_COUNT),
+                minCountFilter,
+                Expression.lt(pointCount, Expression.literal(styles[index - 1].minPointCount)),
+            )
         }
     }
 
@@ -298,17 +365,32 @@ class GeoJsonRenderPlugin(
         source.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
-    private fun ensureSource(style: Style, id: String) {
+    private fun ensureSource(
+        style: Style,
+        id: String,
+        options: GeoJsonOptions? = buildGeoJsonOptions(pointClustering = null),
+    ) {
         if (style.getSource(id) == null) {
-            if (config.useSynchronousSourceUpdates) {
-                style.addSource(
-                    GeoJsonSource(
-                        id,
-                        GeoJsonOptions().apply { this["synchronousUpdate"] = true }
-                    )
-                )
+            val emptyCollection = FeatureCollection.fromFeatures(emptyList())
+            if (options == null) {
+                style.addSource(GeoJsonSource(id, emptyCollection))
             } else {
-                style.addSource(GeoJsonSource(id, FeatureCollection.fromFeatures(emptyList())))
+                style.addSource(GeoJsonSource(id, emptyCollection, options))
+            }
+        }
+    }
+
+    private fun buildGeoJsonOptions(pointClustering: GeoJsonPointClusteringConfig?): GeoJsonOptions? {
+        if (!config.useSynchronousSourceUpdates && pointClustering == null) return null
+        return GeoJsonOptions().apply {
+            if (config.useSynchronousSourceUpdates) {
+                withSynchronousUpdate(true)
+            }
+            if (pointClustering != null) {
+                withCluster(true)
+                withClusterMaxZoom(pointClustering.maxZoom)
+                withClusterRadius(pointClustering.radius)
+                withClusterMinPoints(pointClustering.minPoints)
             }
         }
     }
@@ -322,6 +404,13 @@ class GeoJsonRenderPlugin(
                 style.addImage(imageId, bitmap, false)
             }
         }
+        val resolvedSymbolIcons = buildResolvedSymbolIconStyles()
+        resolvedSymbolIcons.forEach { (imageId, iconStyle) ->
+            if (style.getImage(imageId) == null) {
+                val bitmap = MapMarkerUtils.buildSymbolIconBitmap(appContext, iconStyle)
+                style.addImage(imageId, bitmap, false)
+            }
+        }
     }
 
     private fun buildResolvedMarkerStyles(context: Context): Map<String, MapMarkerStyle> {
@@ -329,6 +418,13 @@ class GeoJsonRenderPlugin(
             CommonMapIconIds.MARKER_DEFAULT to CommonMapMarkerStyles.default(),
             CommonMapIconIds.MARKER_SELECTED to CommonMapMarkerStyles.selected(),
         ) + config.markerStyles
+    }
+
+    private fun buildResolvedSymbolIconStyles(): Map<String, MapSymbolIconStyle> {
+        return mapOf(
+            CommonMapIconIds.STATION_POINT to CommonMapSymbolIconStyles.station(),
+            CommonMapIconIds.STATION_POINT_SELECTED to CommonMapSymbolIconStyles.selectedStation(),
+        ) + config.symbolIconStyles
     }
 
     private fun addLayerWithPlacement(style: Style, layer: org.maplibre.android.style.layers.Layer) {
@@ -340,17 +436,73 @@ class GeoJsonRenderPlugin(
         }
     }
 
-    private val pointsSourceId = "$sourceIdPrefix-points-source"
+    private fun addLayerStackWithPlacement(style: Style, layers: List<Layer>) {
+        var previousLayerId: String? = null
+        layers.forEach { layer ->
+            if (style.getLayer(layer.id) != null) {
+                previousLayerId = layer.id
+                return@forEach
+            }
+            val anchorLayerId = previousLayerId
+            if (anchorLayerId != null && style.getLayer(anchorLayerId) != null) {
+                style.addLayerAbove(layer, anchorLayerId)
+            } else {
+                addLayerWithPlacement(style, layer)
+            }
+            previousLayerId = layer.id
+        }
+    }
+
+    private fun CircleLayer.withUnclusteredPointFilter(): CircleLayer =
+        if (config.pointClustering == null) {
+            this
+        } else {
+            withFilter(Expression.neq(Expression.get(PROPERTY_CLUSTER), true))
+        }
+
+    private fun SymbolLayer.withUnclusteredPointFilter(): SymbolLayer =
+        if (config.pointClustering == null) {
+            this
+        } else {
+            withFilter(Expression.neq(Expression.get(PROPERTY_CLUSTER), true))
+        }
+
+    private val pointsSourceId = pointsSourceId(sourceIdPrefix)
     private val linesSourceId = "$sourceIdPrefix-lines-source"
     private val polygonsSourceId = "$sourceIdPrefix-polygons-source"
     private val pointsCircleLayerId = "$sourceIdPrefix-points-circle-layer"
     /** Visible markers; always above linework when [GeoJsonRenderConfig.renderPointSymbolsAboveLines]. */
-    private val pointsIconLayerId = "$sourceIdPrefix-points-icon-layer"
+    private val pointsIconLayerId = pointsIconLayerId(sourceIdPrefix)
     /** Text stacked above [pointsIconLayerId]; collision hides overlapping labels, not icons. */
-    private val pointsLabelLayerId = "$sourceIdPrefix-points-label-layer"
+    private val pointsLabelLayerId = pointsLabelLayerId(sourceIdPrefix)
     private val lineOuterLayerId = "$sourceIdPrefix-lines-outer-layer"
     private val lineBorderLayerId = "$sourceIdPrefix-lines-border-layer"
     private val lineFillLayerId = "$sourceIdPrefix-lines-fill-layer"
     private val polygonsFillLayerId = "$sourceIdPrefix-polygons-fill-layer"
     private val polygonsOutlineLayerId = "$sourceIdPrefix-polygons-outline-layer"
+
+    companion object {
+        private const val PROPERTY_CLUSTER: String = "cluster"
+        private const val PROPERTY_POINT_COUNT: String = "point_count"
+
+        fun pointsSourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-source"
+
+        fun pointsIconLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-icon-layer"
+
+        fun pointsLabelLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-label-layer"
+
+        fun pointClusterCircleLayerId(sourceIdPrefix: String, index: Int): String =
+            "$sourceIdPrefix-points-cluster-$index-layer"
+
+        fun pointClusterCountLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-points-cluster-count-layer"
+
+        fun pointClusterLayerIds(
+            sourceIdPrefix: String,
+            clustering: GeoJsonPointClusteringConfig,
+        ): List<String> =
+            clustering.orderedCircleStyles.indices.map { index ->
+                pointClusterCircleLayerId(sourceIdPrefix, index)
+            } + pointClusterCountLayerId(sourceIdPrefix)
+    }
 }

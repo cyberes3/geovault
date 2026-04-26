@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import com.geovault.common.maps.R
 import com.geovault.common.maps.render.MapMarkerStyle
+import com.geovault.common.maps.render.MapSymbolIconStyle
 import org.maplibre.android.utils.BitmapUtils
 
 object MapMarkerUtils {
@@ -91,5 +92,20 @@ object MapMarkerUtils {
         paint.color = style.centerColorInt
         canvas.drawCircle(center, center, centerRadius, paint)
         return bitmap
+    }
+
+    fun buildSymbolIconBitmap(context: Context, style: MapSymbolIconStyle): Bitmap {
+        val drawable = requireNotNull(ContextCompat.getDrawable(context, style.backgroundDrawableResId)) {
+            "Missing map symbol icon drawable: ${style.backgroundDrawableResId}"
+        }
+        val wrapped = DrawableCompat.wrap(drawable.mutate())
+        DrawableCompat.setTint(wrapped, style.backgroundTintColorInt)
+        DrawableCompat.setTintMode(wrapped, PorterDuff.Mode.SRC_IN)
+
+        // This is the shared hook for symbol-bearing map icons. Today it returns only the
+        // background marker; future symbol drawing should compose on the bitmap here.
+        return requireNotNull(BitmapUtils.getBitmapFromDrawable(wrapped)) {
+            "Unable to rasterize map symbol icon drawable: ${style.backgroundDrawableResId}"
+        }
     }
 }
