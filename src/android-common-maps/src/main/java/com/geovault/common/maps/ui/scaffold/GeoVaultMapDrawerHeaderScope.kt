@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -25,6 +26,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultIconButton
+
+@Stable
+data class GeoVaultMapDrawerTitleChip(
+    val icon: ImageVector,
+    val text: String,
+)
 
 /**
  * Typed receiver scope for [GeoVaultMapScaffold]'s `drawerHeader` slot.
@@ -73,6 +80,18 @@ interface GeoVaultMapDrawerHeaderScope : RowScope {
     fun PlainTitle(
         text: String,
         modifier: Modifier = Modifier,
+    )
+
+    /** Leading close/X action for modal drawer contexts such as file-scoped map overlays. */
+    @Composable
+    fun CloseAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier = Modifier,
+        icon: ImageVector = Icons.Filled.Close,
+        tooltip: String? = null,
+        /** When null, uses [headerInteractionsEnabled]. */
+        enabled: Boolean? = null,
     )
 
     /**
@@ -195,6 +214,25 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
     }
 
     @Composable
+    override fun CloseAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier,
+        icon: ImageVector,
+        tooltip: String?,
+        enabled: Boolean?,
+    ) {
+        HeaderIconAction(
+            onClick = onClick,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            icon = icon,
+            tooltip = tooltip,
+            enabled = enabled,
+        )
+    }
+
+    @Composable
     override fun SearchAction(
         onClick: () -> Unit,
         contentDescription: String,
@@ -203,19 +241,14 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
         tooltip: String?,
         enabled: Boolean?,
     ) {
-        GeoVaultIconButton(
+        HeaderIconAction(
             onClick = onClick,
-            modifier = modifier.size(36.dp),
-            enabled = enabled ?: headerInteractionsEnabled,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            icon = icon,
             tooltip = tooltip,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = GeoVaultMapScaffoldDefaults.HeaderTitleColor,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+            enabled = enabled,
+        )
     }
 
     @Composable
@@ -227,6 +260,25 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
         tooltip: String?,
         enabled: Boolean?,
     ) {
+        HeaderIconAction(
+            onClick = onClick,
+            contentDescription = contentDescription,
+            modifier = modifier,
+            icon = icon,
+            tooltip = tooltip,
+            enabled = enabled,
+        )
+    }
+
+    @Composable
+    private fun HeaderIconAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier,
+        icon: ImageVector,
+        tooltip: String?,
+        enabled: Boolean?,
+    ) {
         GeoVaultIconButton(
             onClick = onClick,
             modifier = modifier.size(36.dp),
@@ -236,7 +288,7 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = GeoVaultMapScaffoldDefaults.HeaderTitleColor,
+                tint = GeoVaultMapScaffoldDefaults.HeaderActionColor,
                 modifier = Modifier.size(22.dp),
             )
         }

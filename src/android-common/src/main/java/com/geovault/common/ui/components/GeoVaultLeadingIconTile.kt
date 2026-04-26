@@ -68,6 +68,21 @@ fun GeoVaultLeadingIconTile(
 }
 
 @Composable
+fun GeoVaultLeadingIconTile(
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    tileClickEnabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    GeoVaultLeadingIconTileImpl(
+        modifier = modifier,
+        onClick = onClick,
+        tileClickEnabled = tileClickEnabled,
+        icon = content,
+    )
+}
+
+@Composable
 private fun GeoVaultLeadingIconTileImpl(
     modifier: Modifier,
     onClick: (() -> Unit)?,

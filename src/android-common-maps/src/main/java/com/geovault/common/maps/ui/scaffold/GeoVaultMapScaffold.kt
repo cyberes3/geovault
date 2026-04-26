@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
@@ -65,12 +66,22 @@ import androidx.compose.ui.unit.dp
  * anchored drag (e.g. while the map style is still loading). Programmatic [GeoVaultMapDrawerState]
  * moves still work. [GeoVaultMapDrawerHeaderScope.headerInteractionsEnabled] matches this flag so
  * built-in search/settings header buttons are disabled until the drawer is interactive again.
+ * @param drawerTitle Optional leading title rendered by the scaffold before [drawerHeader]
+ * actions. Prefer this over app-local title text so drawer title styling remains centralized.
+ * @param drawerTitleChip Optional leading title chip rendered instead of [drawerTitle].
+ * @param onDrawerClose Optional first-party close/X action rendered before the title.
  */
 @Composable
 fun GeoVaultMapScaffold(
     modifier: Modifier = Modifier,
     drawerState: GeoVaultMapDrawerState = rememberGeoVaultMapDrawerState(),
     drawerDragEnabled: Boolean = true,
+    drawerTitle: String? = null,
+    drawerTitleCentered: Boolean = false,
+    drawerTitleChip: GeoVaultMapDrawerTitleChip? = null,
+    onDrawerClose: (() -> Unit)? = null,
+    drawerCloseContentDescription: String = "Close",
+    drawerCloseTooltip: String? = "Close",
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
     topStart: (@Composable BoxScope.() -> Unit)? = null,
@@ -98,6 +109,12 @@ fun GeoVaultMapScaffold(
         DrawerLayer(
             drawerState = drawerState,
             drawerDragEnabled = drawerDragEnabled,
+            drawerTitle = drawerTitle,
+            drawerTitleCentered = drawerTitleCentered,
+            drawerTitleChip = drawerTitleChip,
+            onDrawerClose = onDrawerClose,
+            drawerCloseContentDescription = drawerCloseContentDescription,
+            drawerCloseTooltip = drawerCloseTooltip,
             drawerHeader = drawerHeader,
             drawerBody = drawerBody,
         )
@@ -123,6 +140,12 @@ fun GeoVaultMapScaffold(
 private fun BoxScope.DrawerLayer(
     drawerState: GeoVaultMapDrawerState,
     drawerDragEnabled: Boolean,
+    drawerTitle: String?,
+    drawerTitleCentered: Boolean,
+    drawerTitleChip: GeoVaultMapDrawerTitleChip?,
+    onDrawerClose: (() -> Unit)?,
+    drawerCloseContentDescription: String,
+    drawerCloseTooltip: String?,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
 ) {
@@ -203,6 +226,12 @@ private fun BoxScope.DrawerLayer(
             DrawerHeaderRow(
                 modifier = headerDragModifier,
                 headerInteractionsEnabled = drawerDragEnabled,
+                drawerTitle = drawerTitle,
+                drawerTitleCentered = drawerTitleCentered,
+                drawerTitleChip = drawerTitleChip,
+                onDrawerClose = onDrawerClose,
+                drawerCloseContentDescription = drawerCloseContentDescription,
+                drawerCloseTooltip = drawerCloseTooltip,
                 drawerHeader = drawerHeader,
             )
             Box(
@@ -321,6 +350,12 @@ private fun DragHandle(modifier: Modifier = Modifier) {
 private fun DrawerHeaderRow(
     modifier: Modifier = Modifier,
     headerInteractionsEnabled: Boolean,
+    drawerTitle: String?,
+    drawerTitleCentered: Boolean,
+    drawerTitleChip: GeoVaultMapDrawerTitleChip?,
+    onDrawerClose: (() -> Unit)?,
+    drawerCloseContentDescription: String,
+    drawerCloseTooltip: String?,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
 ) {
     Row(
@@ -336,6 +371,34 @@ private fun DrawerHeaderRow(
         DefaultGeoVaultMapDrawerHeaderScope(
             rowScope = this,
             headerInteractionsEnabled = headerInteractionsEnabled,
-        ).drawerHeader()
+        ).apply {
+            onDrawerClose?.let { close ->
+                CloseAction(
+                    onClick = close,
+                    contentDescription = drawerCloseContentDescription,
+                    tooltip = drawerCloseTooltip,
+                )
+            }
+            val titleModifier = if (drawerTitleCentered || drawerTitleChip != null) {
+                Modifier.weight(1f).wrapContentWidth(Alignment.CenterHorizontally)
+            } else {
+                Modifier.weight(1f)
+            }
+            if (drawerTitleChip != null) {
+                TitleChip(
+                    icon = drawerTitleChip.icon,
+                    text = drawerTitleChip.text,
+                    modifier = titleModifier,
+                )
+            } else {
+                drawerTitle?.takeIf { it.isNotBlank() }?.let { title ->
+                    PlainTitle(
+                        text = title,
+                        modifier = titleModifier,
+                    )
+                }
+            }
+            drawerHeader()
+        }
     }
 }

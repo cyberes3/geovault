@@ -126,7 +126,8 @@ object GeoVaultMapScaffoldDefaults {
         }
 
     /** Title text color for drawer headers. */
-    val HeaderTitleColor: Color get() = GeoVaultColorTokens.TextPrimary
+    val HeaderTitleColor: Color get() = GeoVaultColorTokens.MainBlue
+    val HeaderActionColor: Color get() = GeoVaultColorTokens.MainBlue
     val TitleChipBackgroundColor: Color get() = GeoVaultColorTokens.Blue100
     val TitleChipContentColor: Color get() = GeoVaultColorTokens.MainBlue
 }

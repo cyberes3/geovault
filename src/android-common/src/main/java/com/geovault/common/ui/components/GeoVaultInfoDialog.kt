@@ -20,6 +20,26 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 object GeoVaultInfoDialogDefaults {
+    val TextColor = Color.Black
+
+    @Composable
+    fun titleTextStyle() =
+        MaterialTheme.typography.subtitle1.copy(
+            color = GeoVaultColorTokens.MainBlue,
+            fontWeight = FontWeight.Bold,
+        )
+
+    @Composable
+    fun bodyTextStyle() =
+        MaterialTheme.typography.body2.copy(color = TextColor)
+
+    @Composable
+    fun sectionHeadingTextStyle() =
+        MaterialTheme.typography.subtitle2.copy(
+            color = TextColor,
+            fontWeight = FontWeight.Bold,
+        )
+
     @Composable
     fun closeButtonColor() =
         if (MaterialTheme.colors.isLight) {
@@ -36,12 +56,14 @@ fun GeoVaultInfoDialog(
     closeButtonText: String = "Close",
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val titleTextStyle = GeoVaultInfoDialogDefaults.titleTextStyle()
+    val bodyTextStyle = GeoVaultInfoDialogDefaults.bodyTextStyle()
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold)
+                style = titleTextStyle,
             )
         },
         text = {
@@ -51,8 +73,8 @@ fun GeoVaultInfoDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 CompositionLocalProvider(
-                    LocalContentColor provides Color.Black,
-                    LocalTextStyle provides MaterialTheme.typography.body2,
+                    LocalContentColor provides GeoVaultInfoDialogDefaults.TextColor,
+                    LocalTextStyle provides bodyTextStyle,
                 ) {
                     content()
                 }

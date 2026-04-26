@@ -10,6 +10,8 @@ import androidx.core.graphics.drawable.DrawableCompat
 import com.geovault.common.maps.R
 import com.geovault.common.maps.render.MapMarkerStyle
 import com.geovault.common.maps.render.MapSymbolIconStyle
+import com.geovault.common.maps.render.StationMarkerSymbol
+import kotlin.math.min
 import org.maplibre.android.utils.BitmapUtils
 
 object MapMarkerUtils {
@@ -17,6 +19,9 @@ object MapMarkerUtils {
     private const val OUTER_RADIUS_RATIO = 0.5f
     private const val INNER_RADIUS_RATIO = 7.25f / 16f
     private const val CENTER_RADIUS_RATIO = 6f / 16f
+    private const val STATION_HEAD_CENTER_Y_RATIO = 0.39f
+    private const val STATION_SYMBOL_EXTENT_RATIO = 0.16f
+    private const val STATION_SYMBOL_STROKE_RATIO = 0.075f
 
     fun getMarkerBitmap(context: Context, drawableRes: Int): Bitmap? {
         return BitmapUtils.getBitmapFromDrawable(ContextCompat.getDrawable(context, drawableRes))
@@ -105,12 +110,72 @@ object MapMarkerUtils {
         val base = requireNotNull(BitmapUtils.getBitmapFromDrawable(wrapped)) {
             "Unable to rasterize map symbol icon drawable: ${style.backgroundDrawableResId}"
         }
-        val strokeRes = style.overlayStrokeDrawableResId ?: return base
-        val strokeDrawable = ContextCompat.getDrawable(context, strokeRes) ?: return base
         val composed = base.copy(base.config ?: Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(composed)
-        strokeDrawable.setBounds(0, 0, composed.width, composed.height)
-        strokeDrawable.draw(canvas)
+        val strokeRes = style.overlayStrokeDrawableResId
+        if (strokeRes != null) {
+            val strokeDrawable = ContextCompat.getDrawable(context, strokeRes)
+            strokeDrawable?.setBounds(0, 0, composed.width, composed.height)
+            strokeDrawable?.draw(canvas)
+        }
+        drawStationMarkerSymbol(canvas, composed, style)
         return composed
+    }
+
+    private fun drawStationMarkerSymbol(canvas: Canvas, bitmap: Bitmap, style: MapSymbolIconStyle) {
+        val symbol = style.stationMarkerSymbol ?: return
+        val size = min(bitmap.width, bitmap.height).toFloat()
+        val centerX = bitmap.width / 2f
+        val centerY = bitmap.height * STATION_HEAD_CENTER_Y_RATIO
+        val extent = size * STATION_SYMBOL_EXTENT_RATIO
+        val strokeWidth = (size * STATION_SYMBOL_STROKE_RATIO).coerceAtLeast(2f)
+        val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = style.stationMarkerSymbolHaloColorInt
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            this.strokeWidth = strokeWidth * 1.65f
+        }
+        val symbolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = style.stationMarkerSymbolColorInt
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            this.strokeWidth = strokeWidth
+        }
+        drawStationMarkerSymbolShape(canvas, symbol, centerX, centerY, extent, haloPaint)
+        drawStationMarkerSymbolShape(canvas, symbol, centerX, centerY, extent, symbolPaint)
+    }
+
+    private fun drawStationMarkerSymbolShape(
+        canvas: Canvas,
+        symbol: StationMarkerSymbol,
+        centerX: Float,
+        centerY: Float,
+        extent: Float,
+        paint: Paint,
+    ) {
+        when (symbol) {
+            StationMarkerSymbol.Plus -> {
+                paint.style = Paint.Style.STROKE
+                canvas.drawLine(centerX - extent, centerY, centerX + extent, centerY, paint)
+                canvas.drawLine(centerX, centerY - extent, centerX, centerY + extent, paint)
+            }
+            StationMarkerSymbol.Minus -> {
+                paint.style = Paint.Style.STROKE
+                canvas.drawLine(centerX - extent, centerY, centerX + extent, centerY, paint)
+            }
+            StationMarkerSymbol.Pipe -> {
+                paint.style = Paint.Style.STROKE
+                canvas.drawLine(centerX, centerY - extent, centerX, centerY + extent, paint)
+            }
+            StationMarkerSymbol.Disk -> {
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(centerX, centerY, extent * 0.72f, paint)
+            }
+            StationMarkerSymbol.Intersection -> {
+                paint.style = Paint.Style.STROKE
+                canvas.drawLine(centerX - extent, centerY - extent, centerX + extent, centerY + extent, paint)
+                canvas.drawLine(centerX + extent, centerY - extent, centerX - extent, centerY + extent, paint)
+            }
+        }
     }
 }
