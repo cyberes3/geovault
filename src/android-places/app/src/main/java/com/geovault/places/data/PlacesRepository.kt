@@ -3,7 +3,6 @@ package com.geovault.places.data
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.places.domain.PlacesRemoteDataSource
-import com.geovault.places.model.AddressSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import kotlin.coroutines.resume
@@ -81,14 +80,6 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             val response = api().deletePlace(id).execute()
             if (!response.isSuccessful) error("Failed to delete place: ${response.code()}")
             Unit
-        }
-    }
-
-    fun geocodingSearch(query: String): Result<List<AddressSearchResult>> {
-        return runCatching {
-            val response = api().geocodingSearch(query).execute()
-            if (!response.isSuccessful) error("Geocoding failed: ${response.code()}")
-            response.body()?.data?.features.orEmpty()
         }
     }
 

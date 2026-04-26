@@ -63,7 +63,8 @@ import androidx.compose.ui.unit.dp
  *
  * @param drawerDragEnabled When false, the drag handle and header row do not participate in
  * anchored drag (e.g. while the map style is still loading). Programmatic [GeoVaultMapDrawerState]
- * moves still work.
+ * moves still work. [GeoVaultMapDrawerHeaderScope.headerInteractionsEnabled] matches this flag so
+ * built-in search/settings header buttons are disabled until the drawer is interactive again.
  */
 @Composable
 fun GeoVaultMapScaffold(
@@ -194,7 +195,11 @@ private fun BoxScope.DrawerLayer(
         val headerDividerColor = GeoVaultMapScaffoldDefaults.HeaderDividerColor
         Column(modifier = Modifier.fillMaxSize()) {
             DragHandle(modifier = headerDragModifier)
-            DrawerHeaderRow(modifier = headerDragModifier, drawerHeader = drawerHeader)
+            DrawerHeaderRow(
+                modifier = headerDragModifier,
+                headerInteractionsEnabled = drawerDragEnabled,
+                drawerHeader = drawerHeader,
+            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -312,6 +317,7 @@ private fun DragHandle(modifier: Modifier = Modifier) {
 @Composable
 private fun DrawerHeaderRow(
     modifier: Modifier = Modifier,
+    headerInteractionsEnabled: Boolean,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
 ) {
     Row(
@@ -324,6 +330,9 @@ private fun DrawerHeaderRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        DefaultGeoVaultMapDrawerHeaderScope(rowScope = this).drawerHeader()
+        DefaultGeoVaultMapDrawerHeaderScope(
+            rowScope = this,
+            headerInteractionsEnabled = headerInteractionsEnabled,
+        ).drawerHeader()
     }
 }

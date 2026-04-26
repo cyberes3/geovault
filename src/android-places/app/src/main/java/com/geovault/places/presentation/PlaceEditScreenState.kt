@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.geovault.common.CoordinateParser
-import com.geovault.places.model.AddressSearchResult
+import com.geovault.common.maps.geocoding.GeocodeSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.Geometry
 import com.geovault.places.model.Properties
@@ -30,11 +30,7 @@ class PlaceEditScreenState(
     var selectedLon by mutableStateOf(initial?.geometry?.coordinates?.getOrNull(0))
     var selectedAddress by mutableStateOf(initial?.properties?.address)
     var showSelectedPointMarker by mutableStateOf(true)
-    var mapSearchQuery by mutableStateOf("")
-    var mapSearchResults by mutableStateOf<List<AddressSearchResult>>(emptyList())
-    var isSearching by mutableStateOf(false)
     var coordinatesError by mutableStateOf<String?>(null)
-    var showSearchPanel by mutableStateOf(false)
     var showDiscardDialog by mutableStateOf(false)
     var showDeleteDialog by mutableStateOf(false)
     private var pendingCameraMotion by mutableStateOf(
@@ -83,25 +79,16 @@ class PlaceEditScreenState(
         pendingCameraMotion = CameraMotionRequest.FocusSelection
     }
 
-    fun setFromSearchResult(result: AddressSearchResult) {
+    fun setFromSearchResult(result: GeocodeSearchResult) {
         val coords = result.coordinates ?: return
         if (coords.size < 2) return
         selectedLon = coords[0]
         selectedLat = coords[1]
         selectedAddress = result.place_name ?: result.text
         coordinatesInput = selectedAddress ?: String.format("%.6f, %.6f", coords[1], coords[0])
-        mapSearchResults = emptyList()
-        mapSearchQuery = ""
-        showSearchPanel = false
         coordinatesError = null
         showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.FocusSelection
-    }
-
-    fun clearMapSearch() {
-        mapSearchQuery = ""
-        mapSearchResults = emptyList()
-        isSearching = false
     }
 
     fun onCoordinatesEdited(value: String) {

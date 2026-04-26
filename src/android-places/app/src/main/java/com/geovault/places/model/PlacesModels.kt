@@ -35,19 +35,3 @@ data class OfflineFeature(
     val feature: Feature,
     val original: Feature? = null,
 ) : JSerializable
-
-@Serializable
-data class AddressSearchResponse(val data: GeocodingResponseData?)
-
-@Serializable
-data class GeocodingResponseData(
-    val query: String? = null,
-    val features: List<AddressSearchResult>? = null,
-)
-
-@Serializable
-data class AddressSearchResult(
-    val coordinates: List<Double>?,
-    val place_name: String?,
-    val text: String?,
-)

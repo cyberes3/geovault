@@ -1,6 +1,5 @@
 package com.geovault.places.data
 
-import com.geovault.places.model.AddressSearchResponse
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import retrofit2.Call
@@ -30,7 +29,4 @@ interface PlacesApi {
 
     @POST("api/extensions/places/features/{id}/navigate/")
     fun trackNavigation(@Path("id") id: Int): Call<Void>
-
-    @GET("api/geocoding/search/")
-    fun geocodingSearch(@Query("q") query: String): Call<AddressSearchResponse>
 }

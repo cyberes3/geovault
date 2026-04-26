@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.content.IntentCompat
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,8 +22,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
@@ -44,7 +43,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +51,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
@@ -69,8 +66,10 @@ import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
+import com.geovault.common.maps.geocoding.GeocodingRepository
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
+import com.geovault.common.maps.ui.geocoding.GeoVaultMapGeocodeSearchDialog
 import com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterController
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
@@ -85,14 +84,11 @@ import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
-import com.geovault.places.model.AddressSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.PlaceEditScreenState
 import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -138,11 +134,6 @@ class PlaceEditActivity : ComponentActivity() {
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
-                        }
-                    },
-                    onGeocodeSearch = { query ->
-                        withContext(Dispatchers.IO) {
-                            PlacesAppServices.from(application).placesRepository().geocodingSearch(query).getOrDefault(emptyList())
                         }
                     },
                     onSave = { updated ->
@@ -192,13 +183,13 @@ private fun PlaceEditScreen(
     isOfflineEdit: Boolean,
     onClose: () -> Unit,
     onDeleteOrRevert: () -> Unit,
-    onGeocodeSearch: suspend (String) -> List<AddressSearchResult>,
     onSave: (Feature) -> Unit,
 ) {
     val state = remember(initial, isOfflineEdit) { PlaceEditScreenState(initial = initial, isOfflineEdit = isOfflineEdit) }
     val map = rememberGeoVaultStandardMap()
-    val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val geocodingRepository = remember(context) { GeocodingRepository(context) }
+    var showGeocodeSearchDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val dismissInputFocus = {
@@ -226,7 +217,6 @@ private fun PlaceEditScreen(
         showUserLocationPuck = false,
     )
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map, order = 1) }
-    var geocodeJob by remember { mutableStateOf<Job?>(null) }
     val formScrollState = rememberScrollState()
 
     GeoVaultRegisterBackHandler(
@@ -294,26 +284,6 @@ private fun PlaceEditScreen(
         state.markSelectionCameraFocusHandled()
     }
 
-    LaunchedEffect(state.mapSearchQuery, state.showSearchPanel) {
-        if (!state.showSearchPanel) {
-            state.clearMapSearch()
-            return@LaunchedEffect
-        }
-        val query = state.mapSearchQuery.trim()
-        if (query.length < 2) {
-            state.mapSearchResults = emptyList()
-            state.isSearching = false
-            return@LaunchedEffect
-        }
-        geocodeJob?.cancel()
-        geocodeJob = scope.launch {
-            delay(280)
-            state.isSearching = true
-            state.mapSearchResults = runCatching { onGeocodeSearch(query) }.getOrDefault(emptyList())
-            state.isSearching = false
-        }
-    }
-
     Scaffold(
         backgroundColor = GeoVaultColorTokens.ListBackground,
         topBar = {
@@ -375,9 +345,8 @@ private fun PlaceEditScreen(
                                 contentDescription = "Search location",
                                 onTap = {
                                     dismissInputFocus()
-                                    state.showSearchPanel = !state.showSearchPanel
+                                    showGeocodeSearchDialog = true
                                 },
-                                emphasized = state.showSearchPanel,
                             )
                             action(
                                 id = "layers",
@@ -394,52 +363,6 @@ private fun PlaceEditScreen(
                             .align(Alignment.TopEnd)
                             .padding(top = 16.dp, end = 16.dp),
                     )
-                    if (state.showSearchPanel) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(12.dp)
-                                .fillMaxWidth()
-                                .height(240.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            color = GeoVaultColorTokens.Surface,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
-                            elevation = 0.dp,
-                        ) {
-                            Column(modifier = Modifier.fillMaxSize().padding(10.dp)) {
-                                GeoVaultInput(
-                                    value = state.mapSearchQuery,
-                                    onValueChange = { state.mapSearchQuery = it },
-                                    label = null,
-                                    placeholder = "Search address",
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                if (state.isSearching) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                    ) {
-                                        GeoVaultLoadingSpinner(spinnerSize = 18.dp)
-                                    }
-                                } else {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .verticalScroll(rememberScrollState()),
-                                    ) {
-                                        state.mapSearchResults.forEach { result ->
-                                            SearchResultRow(
-                                                title = result.text ?: result.place_name.orEmpty(),
-                                                subtitle = result.place_name?.takeIf { it != result.text },
-                                                onClick = { state.setFromSearchResult(result) },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
 
                 Surface(
@@ -626,38 +549,13 @@ private fun PlaceEditScreen(
             cancelText = "Cancel",
         )
     }
-}
 
-@Composable
-private fun SearchResultRow(
-    title: String,
-    subtitle: String?,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = title,
-            color = GeoVaultColorTokens.TextSecondary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+    if (showGeocodeSearchDialog) {
+        GeoVaultMapGeocodeSearchDialog(
+            visible = true,
+            repository = geocodingRepository,
+            onDismiss = { showGeocodeSearchDialog = false },
+            onPickResult = state::setFromSearchResult,
         )
-        if (!subtitle.isNullOrBlank()) {
-            Text(
-                text = subtitle,
-                modifier = Modifier.padding(top = 1.dp),
-                color = GeoVaultColorTokens.TextSecondary,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }

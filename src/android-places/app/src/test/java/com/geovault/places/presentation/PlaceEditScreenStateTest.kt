@@ -1,6 +1,6 @@
 package com.geovault.places.presentation
 
-import com.geovault.places.model.AddressSearchResult
+import com.geovault.common.maps.geocoding.GeocodeSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.Geometry
 import com.geovault.places.model.Properties
@@ -53,13 +53,11 @@ class PlaceEditScreenStateTest {
     }
 
     @Test
-    fun setFromSearchResult_updatesMarkerAndClosesSearchPanel() {
+    fun setFromSearchResult_updatesMarkerAndAddress() {
         val state = PlaceEditScreenState(initial = null, isOfflineEdit = false)
-        state.showSearchPanel = true
-        state.mapSearchQuery = "san"
 
         state.setFromSearchResult(
-            AddressSearchResult(
+            GeocodeSearchResult(
                 coordinates = listOf(-122.4194, 37.7749),
                 place_name = "San Francisco, CA",
                 text = "San Francisco",
@@ -69,8 +67,6 @@ class PlaceEditScreenStateTest {
         assertEquals(37.7749, state.selectedLat!!, 0.0)
         assertEquals(-122.4194, state.selectedLon!!, 0.0)
         assertEquals("San Francisco, CA", state.coordinatesInput)
-        assertFalse(state.showSearchPanel)
-        assertEquals("", state.mapSearchQuery)
         assertTrue(state.showSelectedPointMarker)
         assertTrue(state.shouldFocusCameraOnSelection())
     }

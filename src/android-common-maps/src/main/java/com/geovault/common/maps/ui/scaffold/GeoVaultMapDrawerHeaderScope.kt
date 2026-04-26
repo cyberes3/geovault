@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -29,7 +30,7 @@ import com.geovault.common.ui.components.GeoVaultIconButton
  * Typed receiver scope for [GeoVaultMapScaffold]'s `drawerHeader` slot.
  *
  * Giving the header a scope (rather than a plain `() -> Unit`) lets the scaffold expose the
- * canonical helpers ([TitleChip], [PlainTitle], [SettingsAction]) without forcing a specific
+ * canonical helpers ([TitleChip], [PlainTitle], [SearchAction], [SettingsAction]) without forcing a specific
  * layout on consumers — feature code remains free to arrange them inside any row/column
  * composition it needs.
  *
@@ -37,6 +38,13 @@ import com.geovault.common.ui.components.GeoVaultIconButton
  */
 @Stable
 interface GeoVaultMapDrawerHeaderScope : RowScope {
+
+    /**
+     * Mirrors [GeoVaultMapScaffold]'s [drawerDragEnabled]. When false, [SearchAction] and
+     * [SettingsAction] use `enabled = false` unless the caller passes an explicit [enabled]
+     * override (e.g. keep a close affordance active while the map loads).
+     */
+    val headerInteractionsEnabled: Boolean
 
     /**
      * Pill-shaped title chip with a leading icon, mirroring the old survey app's file
@@ -68,6 +76,23 @@ interface GeoVaultMapDrawerHeaderScope : RowScope {
     )
 
     /**
+     * Search action placed immediately left of [SettingsAction] in the typical layout:
+     * `Spacer(Modifier.weight(1f)); SearchAction(...); SettingsAction(...)`.
+     *
+     * Renders as the canonical [GeoVaultIconButton] with long-press tooltip support.
+     */
+    @Composable
+    fun SearchAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier = Modifier,
+        icon: ImageVector = Icons.Filled.Search,
+        tooltip: String? = null,
+        /** When null, uses [headerInteractionsEnabled]. */
+        enabled: Boolean? = null,
+    )
+
+    /**
      * Trailing settings/gear action. Renders as the canonical [GeoVaultIconButton] with
      * long-press tooltip support so every app's map-settings affordance looks identical.
      */
@@ -78,6 +103,8 @@ interface GeoVaultMapDrawerHeaderScope : RowScope {
         modifier: Modifier = Modifier,
         icon: ImageVector = Icons.Filled.Settings,
         tooltip: String? = null,
+        /** When null, uses [headerInteractionsEnabled]. */
+        enabled: Boolean? = null,
     )
 }
 
@@ -90,6 +117,7 @@ interface GeoVaultMapDrawerHeaderScope : RowScope {
  */
 internal class DefaultGeoVaultMapDrawerHeaderScope(
     rowScope: RowScope,
+    override val headerInteractionsEnabled: Boolean,
 ) : GeoVaultMapDrawerHeaderScope, RowScope by rowScope {
 
     @Composable
@@ -167,16 +195,42 @@ internal class DefaultGeoVaultMapDrawerHeaderScope(
     }
 
     @Composable
+    override fun SearchAction(
+        onClick: () -> Unit,
+        contentDescription: String,
+        modifier: Modifier,
+        icon: ImageVector,
+        tooltip: String?,
+        enabled: Boolean?,
+    ) {
+        GeoVaultIconButton(
+            onClick = onClick,
+            modifier = modifier.size(36.dp),
+            enabled = enabled ?: headerInteractionsEnabled,
+            tooltip = tooltip,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = GeoVaultMapScaffoldDefaults.HeaderTitleColor,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+
+    @Composable
     override fun SettingsAction(
         onClick: () -> Unit,
         contentDescription: String,
         modifier: Modifier,
         icon: ImageVector,
         tooltip: String?,
+        enabled: Boolean?,
     ) {
         GeoVaultIconButton(
             onClick = onClick,
             modifier = modifier.size(36.dp),
+            enabled = enabled ?: headerInteractionsEnabled,
             tooltip = tooltip,
         ) {
             Icon(
