@@ -4,7 +4,6 @@
     <string name="gv_common_map_toggle_content_description">Toggle map source</string>
     <string name="gv_common_geocode_search_dialog_title">Search location</string>
     <string name="gv_common_geocode_search_placeholder">Search address or place</string>
-    <string name="gv_common_geocode_search_hint_short_query">Enter at least 2 characters</string>
     <string name="gv_common_geocode_search_empty_no_results">No results found</string>
     <string name="gv_common_geocode_search_done">Done</string>
     <string name="gv_common_map_drawer_search_content_description">Search map</string>

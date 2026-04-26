@@ -2,10 +2,12 @@ package com.geovault.common.maps.ui.geocoding
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,7 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,19 +56,24 @@ fun GeoVaultMapGeocodeSearchDialog(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<GeocodeSearchResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
+    val searchFieldFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(visible) {
         if (visible) {
             query = ""
             results = emptyList()
             isSearching = false
+            // Wait one frame so the field is laid out and attached before requesting focus —
+            // requesting on the same frame the dialog mounts silently no-ops on the IME.
+            withFrameNanos { }
+            searchFieldFocusRequester.requestFocus()
         }
     }
 
     LaunchedEffect(query, visible) {
         if (!visible) return@LaunchedEffect
         val trimmed = query.trim()
-        if (trimmed.length < 2) {
+        if (trimmed.isEmpty()) {
             results = emptyList()
             isSearching = false
             return@LaunchedEffect
@@ -91,63 +101,62 @@ fun GeoVaultMapGeocodeSearchDialog(
             )
         },
         text = {
+            // Fixed-height container so the dialog reserves space for results from the moment
+            // it opens — keyboard appearing + first results no longer cause it to grow/shift.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp),
+                    .height(360.dp),
             ) {
                 GeoVaultSearchField(
                     value = query,
                     onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(searchFieldFocusRequester),
                     placeholder = stringResource(R.string.gv_common_geocode_search_placeholder),
                 )
-                when {
-                    isSearching -> {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 16.dp),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            GeoVaultLoadingSpinner(spinnerSize = 18.dp)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        isSearching -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                GeoVaultLoadingSpinner(spinnerSize = 18.dp)
+                            }
                         }
-                    }
-                    query.trim().length < 2 -> {
-                        Text(
-                            text = stringResource(R.string.gv_common_geocode_search_hint_short_query),
-                            style = MaterialTheme.typography.body2,
-                            color = GeoVaultColorTokens.TextSecondary,
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
-                    }
-                    results.isEmpty() -> {
-                        Text(
-                            text = stringResource(R.string.gv_common_geocode_search_empty_no_results),
-                            style = MaterialTheme.typography.body2,
-                            color = GeoVaultColorTokens.TextSecondary,
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                        ) {
-                            items(
-                                count = results.size,
-                                key = { index -> index },
-                            ) { index ->
-                                val item = results[index]
-                                GeoVaultGeocodeSearchResultRow(
-                                    result = item,
-                                    onClick = {
-                                        onPickResult(item)
-                                        onDismiss()
-                                    },
-                                )
-                                Divider(color = GeoVaultColorTokens.BorderLight)
+                        query.trim().isEmpty() -> Unit
+                        results.isEmpty() -> {
+                            Text(
+                                text = stringResource(R.string.gv_common_geocode_search_empty_no_results),
+                                style = MaterialTheme.typography.body2,
+                                color = GeoVaultColorTokens.TextSecondary,
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
+                        }
+                        else -> {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = 8.dp),
+                            ) {
+                                items(
+                                    count = results.size,
+                                    key = { index -> index },
+                                ) { index ->
+                                    val item = results[index]
+                                    GeoVaultGeocodeSearchResultRow(
+                                        result = item,
+                                        onClick = {
+                                            onPickResult(item)
+                                            onDismiss()
+                                        },
+                                    )
+                                    Divider(color = GeoVaultColorTokens.BorderLight)
+                                }
                             }
                         }
                     }
