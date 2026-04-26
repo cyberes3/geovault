@@ -22,16 +22,25 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.TransitionOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.GeoJsonOptions
-import org.maplibre.geojson.Feature
-import org.maplibre.geojson.FeatureCollection
-import org.maplibre.geojson.LineString
-import org.maplibre.geojson.Point
-import org.maplibre.geojson.Polygon
 
+/**
+ * Prepared GeoJSON payloads for the three sources owned by [GeoJsonRenderPlugin].
+ *
+ * The strings are full GeoJSON `FeatureCollection` documents built directly with a
+ * [StringBuilder] on the plugin's background executor (see [GeoJsonRenderPlugin.prepareState])
+ * so the dominant Java-side allocation cost — one [org.maplibre.geojson.Feature] +
+ * geometry + properties wrapper per point — is avoided entirely. The main-thread apply
+ * step then hands the string to `GeoJsonSource.setGeoJson(String)`, which forwards
+ * directly to `nativeSetGeoJsonString` (no defensive `ArrayList(features)` copy and no
+ * `FeatureCollection.toJson()` Gson serialization on the main thread, both of which are
+ * required by the `setGeoJson(FeatureCollection)` overload). At ~100k points this turns
+ * the initial map paint from a multi-second main-thread freeze into a fast JNI string
+ * handoff with the parse happening on MapLibre's native worker.
+ */
 private data class PreparedGeoJsonRenderState(
-    val points: FeatureCollection,
-    val lines: FeatureCollection,
-    val polygons: FeatureCollection,
+    val pointsJson: String,
+    val linesJson: String,
+    val polygonsJson: String,
 )
 
 /**
@@ -339,64 +348,26 @@ class GeoJsonRenderPlugin(
     }
 
     private fun prepareState(state: MapRenderState): PreparedGeoJsonRenderState {
-        val pointFeatures = state.points.map { point ->
-            Feature.fromGeometry(Point.fromLngLat(point.longitude, point.latitude)).also { feature ->
-                feature.addStringProperty("id", point.id)
-                point.title?.let { feature.addStringProperty("title", it) }
-                point.iconImageId?.let { feature.addStringProperty("iconImageId", it) }
-                point.pointRadius?.let { feature.addNumberProperty("pointRadius", it) }
-                point.pointFillColorHex?.let { feature.addStringProperty("pointFillColorHex", it) }
-                point.pointStrokeColorHex?.let { feature.addStringProperty("pointStrokeColorHex", it) }
-                point.pointStrokeWidth?.let { feature.addNumberProperty("pointStrokeWidth", it) }
-                point.labelTextColorHex?.let { feature.addStringProperty("labelTextColorHex", it) }
-                point.labelTextSize?.let { feature.addNumberProperty("labelTextSize", it) }
-                point.iconSize?.let { feature.addNumberProperty("iconSize", it) }
-                point.iconRotationDegrees?.let { feature.addNumberProperty("iconRotationDegrees", it.toDouble()) }
-            }
-        }
-        val lineFeatures = state.lines.map { line ->
-            Feature.fromGeometry(
-                LineString.fromLngLats(
-                    line.coordinates.map { (lat, lon) -> Point.fromLngLat(lon, lat) },
-                ),
-            ).also { feature ->
-                feature.addStringProperty("id", line.id)
-                feature.addStringProperty(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, line.lineColorHex)
-            }
-        }
-        val polygonFeatures = state.polygons.map { polygon ->
-            val rings = polygon.rings.map { ring ->
-                ring.map { (lat, lon) -> Point.fromLngLat(lon, lat) }
-            }
-            Feature.fromGeometry(Polygon.fromLngLats(rings)).also { feature ->
-                feature.addStringProperty("id", polygon.id)
-                feature.addStringProperty("fillColor", polygon.fillColorHex)
-                feature.addStringProperty("outlineColor", polygon.outlineColorHex)
-                if (!config.showPolygonOutline) {
-                    feature.addStringProperty(
-                        OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR,
-                        polygon.outlineColorHex,
-                    )
-                }
-            }
-        }
         return PreparedGeoJsonRenderState(
-            points = FeatureCollection.fromFeatures(pointFeatures),
-            lines = FeatureCollection.fromFeatures(lineFeatures),
-            polygons = FeatureCollection.fromFeatures(polygonFeatures),
+            pointsJson = buildPointsFeatureCollectionJson(state.points),
+            linesJson = buildLinesFeatureCollectionJson(state.lines),
+            polygonsJson = buildPolygonsFeatureCollectionJson(
+                polygons = state.polygons,
+                emitLineColorProperty = !config.showPolygonOutline,
+            ),
         )
     }
 
     private fun applyPreparedState(prepared: PreparedGeoJsonRenderState) {
         val style = map?.style ?: return
-        updateSource(style, pointsSourceId, prepared.points)
-        updateSource(style, linesSourceId, prepared.lines)
-        updateSource(style, polygonsSourceId, prepared.polygons)
+        updateSource(style, pointsSourceId, prepared.pointsJson)
+        updateSource(style, linesSourceId, prepared.linesJson)
+        updateSource(style, polygonsSourceId, prepared.polygonsJson)
     }
 
-    private fun updateSource(style: Style, id: String, featureCollection: FeatureCollection) {
+    private fun updateSource(style: Style, id: String, json: String) {
         val source = style.getSourceAs<GeoJsonSource>(id) ?: return
-        source.setGeoJson(featureCollection)
+        source.setGeoJson(json)
     }
 
     private fun ensureSource(
@@ -405,11 +376,11 @@ class GeoJsonRenderPlugin(
         options: GeoJsonOptions? = buildGeoJsonOptions(pointClustering = null),
     ) {
         if (style.getSource(id) == null) {
-            val emptyCollection = FeatureCollection.fromFeatures(emptyList())
+            val emptyJson = GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
             if (options == null) {
-                style.addSource(GeoJsonSource(id, emptyCollection))
+                style.addSource(GeoJsonSource(id, emptyJson))
             } else {
-                style.addSource(GeoJsonSource(id, emptyCollection, options))
+                style.addSource(GeoJsonSource(id, emptyJson, options))
             }
         }
     }
@@ -539,4 +510,229 @@ class GeoJsonRenderPlugin(
                 pointClusterCircleLayerId(sourceIdPrefix, index)
             } + pointClusterCountLayerId(sourceIdPrefix)
     }
+}
+
+/**
+ * Builds GeoJSON `FeatureCollection` documents directly with a [StringBuilder] for the
+ * plugin's background `prepareState` step.
+ *
+ * Skipping the [org.maplibre.geojson.FeatureCollection] object graph — and therefore the
+ * Gson serialization MapLibre's `setGeoJson(FeatureCollection)` would otherwise trigger
+ * on the main thread — is critical at NGS-scale point counts (~100k features), where
+ * per-feature wrapper allocations alone produced multi-second freezes during the initial
+ * map draw.
+ *
+ * The encoder owns all separator-character bookkeeping (commas between features, commas
+ * between properties), so call sites describe data only and never thread "have I written
+ * one yet" flags through helper functions.
+ *
+ * Property names emitted here are fixed identifiers controlled by this plugin and its
+ * layer expressions; they are appended raw without escaping. Only externally-supplied
+ * string values (ids, titles, color hexes) flow through the JSON string-escape path.
+ */
+private class GeoJsonFeatureCollectionEncoder(initialCapacity: Int = 0) {
+    private val out: StringBuilder =
+        if (initialCapacity > 0) StringBuilder(initialCapacity) else StringBuilder()
+    private val properties: PropertyWriter = PropertyWriter(out)
+    private var hasFeature: Boolean = false
+
+    init {
+        out.append(FEATURE_COLLECTION_PREFIX)
+    }
+
+    fun pointFeature(
+        longitude: Double,
+        latitude: Double,
+        properties: PropertyWriter.() -> Unit,
+    ) {
+        beginFeature()
+        out.append(POINT_GEOMETRY_PREFIX)
+        out.append(longitude).append(',').append(latitude)
+        out.append(GEOMETRY_TO_PROPERTIES_BRIDGE)
+        writeProperties(properties)
+        out.append(FEATURE_SUFFIX)
+    }
+
+    fun lineFeature(
+        coordinates: List<Pair<Double, Double>>,
+        properties: PropertyWriter.() -> Unit,
+    ) {
+        beginFeature()
+        out.append(LINE_STRING_GEOMETRY_PREFIX)
+        coordinates.forEachIndexed { index, coord ->
+            if (index > 0) out.append(',')
+            appendCoordinatePair(coord)
+        }
+        out.append(GEOMETRY_TO_PROPERTIES_BRIDGE)
+        writeProperties(properties)
+        out.append(FEATURE_SUFFIX)
+    }
+
+    fun polygonFeature(
+        rings: List<List<Pair<Double, Double>>>,
+        properties: PropertyWriter.() -> Unit,
+    ) {
+        beginFeature()
+        out.append(POLYGON_GEOMETRY_PREFIX)
+        rings.forEachIndexed { ringIndex, ring ->
+            if (ringIndex > 0) out.append(',')
+            out.append('[')
+            ring.forEachIndexed { coordIndex, coord ->
+                if (coordIndex > 0) out.append(',')
+                appendCoordinatePair(coord)
+            }
+            out.append(']')
+        }
+        out.append(GEOMETRY_TO_PROPERTIES_BRIDGE)
+        writeProperties(properties)
+        out.append(FEATURE_SUFFIX)
+    }
+
+    fun build(): String {
+        out.append(FEATURE_COLLECTION_SUFFIX)
+        return out.toString()
+    }
+
+    private fun beginFeature() {
+        if (hasFeature) out.append(',') else hasFeature = true
+        out.append(FEATURE_PREFIX)
+    }
+
+    private fun writeProperties(block: PropertyWriter.() -> Unit) {
+        properties.beginBlock()
+        properties.block()
+    }
+
+    /** Pairs are stored as `(latitude, longitude)`; GeoJSON requires `[lon, lat]`. */
+    private fun appendCoordinatePair(coord: Pair<Double, Double>) {
+        out.append('[').append(coord.second).append(',').append(coord.first).append(']')
+    }
+
+    /** Writes the `"properties":{ ... }` body of a single feature. */
+    class PropertyWriter internal constructor(private val out: StringBuilder) {
+        private var hasProperty: Boolean = false
+
+        internal fun beginBlock() {
+            hasProperty = false
+        }
+
+        fun string(name: String, value: String) {
+            beginProperty(name)
+            appendEscapedJsonString(out, value)
+        }
+
+        fun number(name: String, value: Float) {
+            beginProperty(name)
+            out.append(value)
+        }
+
+        fun number(name: String, value: Double) {
+            beginProperty(name)
+            out.append(value)
+        }
+
+        private fun beginProperty(name: String) {
+            if (hasProperty) out.append(',') else hasProperty = true
+            out.append('"').append(name).append("\":")
+        }
+    }
+
+    companion object {
+        const val EMPTY_FEATURE_COLLECTION_JSON: String =
+            """{"type":"FeatureCollection","features":[]}"""
+
+        private const val FEATURE_COLLECTION_PREFIX: String =
+            """{"type":"FeatureCollection","features":["""
+        private const val FEATURE_COLLECTION_SUFFIX: String = "]}"
+        private const val FEATURE_PREFIX: String = """{"type":"Feature","geometry":"""
+        private const val FEATURE_SUFFIX: String = "}}"
+        private const val POINT_GEOMETRY_PREFIX: String = """{"type":"Point","coordinates":["""
+        private const val LINE_STRING_GEOMETRY_PREFIX: String =
+            """{"type":"LineString","coordinates":["""
+        private const val POLYGON_GEOMETRY_PREFIX: String =
+            """{"type":"Polygon","coordinates":["""
+        private const val GEOMETRY_TO_PROPERTIES_BRIDGE: String = """]},"properties":{"""
+
+        private val HEX_DIGITS: CharArray = "0123456789abcdef".toCharArray()
+
+        private fun appendEscapedJsonString(out: StringBuilder, value: String) {
+            out.append('"')
+            for (i in value.indices) {
+                val c = value[i]
+                when {
+                    c == '"' -> out.append("\\\"")
+                    c == '\\' -> out.append("\\\\")
+                    c == '\n' -> out.append("\\n")
+                    c == '\r' -> out.append("\\r")
+                    c == '\t' -> out.append("\\t")
+                    c == '\b' -> out.append("\\b")
+                    c == '\u000C' -> out.append("\\f")
+                    c.code < 0x20 -> {
+                        val code = c.code
+                        out.append("\\u")
+                        out.append(HEX_DIGITS[(code shr 12) and 0xF])
+                        out.append(HEX_DIGITS[(code shr 8) and 0xF])
+                        out.append(HEX_DIGITS[(code shr 4) and 0xF])
+                        out.append(HEX_DIGITS[code and 0xF])
+                    }
+                    else -> out.append(c)
+                }
+            }
+            out.append('"')
+        }
+    }
+}
+
+private fun buildPointsFeatureCollectionJson(points: List<MapRenderPoint>): String {
+    if (points.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
+    // Empirical sizing: most NGS station features serialize to ~140-200 chars; a small
+    // pad keeps a single allocation for the common case without over-committing.
+    val encoder = GeoJsonFeatureCollectionEncoder(initialCapacity = points.size * 160 + 64)
+    points.forEach { point ->
+        encoder.pointFeature(longitude = point.longitude, latitude = point.latitude) {
+            string("id", point.id)
+            point.title?.let { string("title", it) }
+            point.iconImageId?.let { string("iconImageId", it) }
+            point.pointRadius?.let { number("pointRadius", it) }
+            point.pointFillColorHex?.let { string("pointFillColorHex", it) }
+            point.pointStrokeColorHex?.let { string("pointStrokeColorHex", it) }
+            point.pointStrokeWidth?.let { number("pointStrokeWidth", it) }
+            point.labelTextColorHex?.let { string("labelTextColorHex", it) }
+            point.labelTextSize?.let { number("labelTextSize", it) }
+            point.iconSize?.let { number("iconSize", it) }
+            point.iconRotationDegrees?.let { number("iconRotationDegrees", it.toDouble()) }
+        }
+    }
+    return encoder.build()
+}
+
+private fun buildLinesFeatureCollectionJson(lines: List<MapRenderLine>): String {
+    if (lines.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
+    val encoder = GeoJsonFeatureCollectionEncoder()
+    lines.forEach { line ->
+        encoder.lineFeature(coordinates = line.coordinates) {
+            string("id", line.id)
+            string(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, line.lineColorHex)
+        }
+    }
+    return encoder.build()
+}
+
+private fun buildPolygonsFeatureCollectionJson(
+    polygons: List<MapRenderPolygon>,
+    emitLineColorProperty: Boolean,
+): String {
+    if (polygons.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
+    val encoder = GeoJsonFeatureCollectionEncoder()
+    polygons.forEach { polygon ->
+        encoder.polygonFeature(rings = polygon.rings) {
+            string("id", polygon.id)
+            string("fillColor", polygon.fillColorHex)
+            string("outlineColor", polygon.outlineColorHex)
+            if (emitLineColorProperty) {
+                string(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, polygon.outlineColorHex)
+            }
+        }
+    }
+    return encoder.build()
 }
