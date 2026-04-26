@@ -37,8 +37,9 @@ private data class PreparedGeoJsonRenderState(
 /**
  * Renders [MapRenderState] as MapLibre GeoJSON sources and layers.
  *
- * Labeled point features use a built-in **icon + label** symbol stack (see [GeoJsonRenderConfig])
- * whenever text labels are enabled—callers should not duplicate collision logic in app code.
+ * Labeled point features use a built-in **label then icon** symbol stack (see [GeoJsonRenderConfig])
+ * whenever text labels are enabled—icons paint above text; callers should not duplicate collision
+ * logic in app code.
  */
 class GeoJsonRenderPlugin(
     private val sourceIdPrefix: String = "gv-common-render",
@@ -218,7 +219,7 @@ class GeoJsonRenderPlugin(
                     // Top anchor + downward offset: long / multi-line labels extend below the
                     // marker instead of growing upward over the icon (center anchor default).
                     PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
-                    PropertyFactory.textOffset(arrayOf(0f, 0.85f)),
+                    PropertyFactory.textOffset(arrayOf(0f, config.pointLabelTextOffsetYEm)),
                     PropertyFactory.textAllowOverlap(false),
                     PropertyFactory.textIgnorePlacement(false),
                 ).withUnclusteredPointFilter().also { layer ->
@@ -232,14 +233,10 @@ class GeoJsonRenderPlugin(
                 null
             }
             fun attachPointSymbolLayers() {
-                addPointPresentationLayer(iconLayer)
                 if (labelLayer != null) {
-                    if (config.renderPointSymbolsAboveLines) {
-                        pendingPointPresentationLayers += labelLayer
-                    } else {
-                        style.addLayerAbove(labelLayer, pointsIconLayerId)
-                    }
+                    addPointPresentationLayer(labelLayer)
                 }
+                addPointPresentationLayer(iconLayer)
             }
             attachPointSymbolLayers()
         }
@@ -508,9 +505,9 @@ class GeoJsonRenderPlugin(
     private val linesSourceId = "$sourceIdPrefix-lines-source"
     private val polygonsSourceId = "$sourceIdPrefix-polygons-source"
     private val pointsCircleLayerId = "$sourceIdPrefix-points-circle-layer"
-    /** Visible markers; always above linework when [GeoJsonRenderConfig.renderPointSymbolsAboveLines]. */
+    /** Visible markers; painted above [pointsLabelLayerId] and above linework when [GeoJsonRenderConfig.renderPointSymbolsAboveLines]. */
     private val pointsIconLayerId = pointsIconLayerId(sourceIdPrefix)
-    /** Text stacked above [pointsIconLayerId]; collision hides overlapping labels, not icons. */
+    /** Text below [pointsIconLayerId]; collision hides overlapping labels, not icons. */
     private val pointsLabelLayerId = pointsLabelLayerId(sourceIdPrefix)
     private val lineOuterLayerId = "$sourceIdPrefix-lines-outer-layer"
     private val lineBorderLayerId = "$sourceIdPrefix-lines-border-layer"

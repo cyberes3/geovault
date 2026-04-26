@@ -8,11 +8,11 @@ import org.maplibre.android.style.layers.Property
  *
  * **Point icons and text labels:** Whenever [showPointLabelsAndIcons] is true and
  * [showPointTextLabels] is true, the plugin **automatically** registers two MapLibre symbol
- * layers on the same GeoJSON source—`{sourceIdPrefix}-points-icon-layer` (visible markers) and
- * `{sourceIdPrefix}-points-label-layer` (text with a zero-opacity icon for anchoring)—so labels
- * hide under collision with other markers while icons stay visible. Apps do not opt in to
- * this; it is the default map behavior for labeled points. When [showPointTextLabels] is false,
- * only the icon layer is created (e.g. icon-only maps).
+ * layers on the same GeoJSON source—`{sourceIdPrefix}-points-label-layer` (text with a
+ * zero-opacity icon for anchoring) is added **below** `{sourceIdPrefix}-points-icon-layer`
+ * (visible markers), so icons always paint on top of names. Label collision still hides
+ * overlapping labels ([showPointTextLabels] layer uses MapLibre collision), not icons.
+ * When [showPointTextLabels] is false, only the icon layer is created (e.g. icon-only maps).
  */
 data class GeoJsonRenderConfig(
     val belowLayerId: String? = null,
@@ -44,6 +44,12 @@ data class GeoJsonRenderConfig(
     val defaultPointStrokeWidth: Float = 1.5f,
     val defaultLabelTextColorHex: String = GeoVaultColorTokens.Hex.MapLabelText,
     val defaultLabelTextSize: Float = 12f,
+    /**
+     * Vertical component of [org.maplibre.android.style.layers.PropertyFactory.textOffset] (in em)
+     * for point name labels when [showPointTextLabels] is true. Positive values offset text
+     * downward from the top anchor; smaller values sit names closer to the geometry.
+     */
+    val pointLabelTextOffsetYEm: Float = 0.72f,
     val defaultIconSize: Float = 1f,
     val defaultIconAnchor: String = Property.ICON_ANCHOR_CENTER,
     val defaultPolygonFillOpacity: Float = 0.35f,
