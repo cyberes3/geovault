@@ -49,6 +49,13 @@ fun rememberGeoVaultGpsRecenterController(
     onPermissionDenied: (() -> Unit)? = null,
     /** When false, only resolves coordinates and does not show the MapLibre user location puck, accuracy ring, or camera move (for hosts that handle the marker and camera themselves). */
     showUserLocationPuck: Boolean = true,
+    /**
+     * When true, the FAB shows the engaged (fixed) icon and one-shot recenter skips the spinner,
+     * because the host already turned on continuous position follow (typically via
+     * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle] —
+     * the heading FAB enables position follow together with heading).
+     */
+    positionFollowActive: Boolean = false,
 ): GeoVaultGpsRecenterController {
     val context = LocalContext.current
     var locationEnabled by remember { mutableStateOf(false) }
@@ -135,23 +142,24 @@ fun rememberGeoVaultGpsRecenterController(
         val granted = result[GeoVaultMapLocationPermission.FINE_AND_COARSE[0]] == true ||
             result[GeoVaultMapLocationPermission.FINE_AND_COARSE[1]] == true
         if (granted) {
-            recenterOnUser(showSpinner = !locationEnabled)
+            recenterOnUser(showSpinner = !(locationEnabled || positionFollowActive))
         } else {
             locationLocking = false
             onPermissionDenied?.invoke()
         }
     }
 
+    val showsLocationEngaged = locationEnabled || positionFollowActive
     val fabIcon = when {
         locationLocking -> GeoVaultMapFabIcon.Spinner(spinnerColor = Color.White)
-        locationEnabled -> GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
+        showsLocationEngaged -> GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
         else -> GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
     }
 
     val onRecenter: () -> Unit = {
         if (!locationLocking) {
             if (context.geoVaultMapHasFineOrCoarseLocation()) {
-                recenterOnUser(showSpinner = !locationEnabled)
+                recenterOnUser(showSpinner = !showsLocationEngaged)
             } else {
                 permissionLauncher.launch(GeoVaultMapLocationPermission.FINE_AND_COARSE)
             }
@@ -165,6 +173,11 @@ fun rememberGeoVaultGpsRecenterController(
     )
 }
 
+/**
+ * GPS recenter FAB preset; [positionFollowActive] should match
+ * [com.geovault.common.maps.ui.camerafollow.GeoVaultMapHeadingFollowFabBundle.positionFollowDesired]
+ * when the host uses heading follow so the icon stays aligned after enabling rotation first.
+ */
 @Composable
 fun rememberGeoVaultGpsRecenterFabAction(
     map: GeoVaultBaseMap,
@@ -175,6 +188,7 @@ fun rememberGeoVaultGpsRecenterFabAction(
     onLocationResolved: ((LatLng) -> Unit)? = null,
     onPermissionDenied: (() -> Unit)? = null,
     showUserLocationPuck: Boolean = true,
+    positionFollowActive: Boolean = false,
 ): GeoVaultMapFabAction {
     val controller = rememberGeoVaultGpsRecenterController(
         map = map,
@@ -182,6 +196,7 @@ fun rememberGeoVaultGpsRecenterFabAction(
         onLocationResolved = onLocationResolved,
         onPermissionDenied = onPermissionDenied,
         showUserLocationPuck = showUserLocationPuck,
+        positionFollowActive = positionFollowActive,
     )
     return GeoVaultMapFabAction(
         id = id,
