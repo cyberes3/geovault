@@ -1,5 +1,5 @@
 """
-Tests for the ngs_data extension (NGS per-state SQLite download).
+Tests for the ngs_data extension (NGS per-region SQLite download).
 """
 import json
 import os
@@ -41,23 +41,23 @@ class TestNgsDataExtensionAPI(TestCase):
         with _patch_ngs_data_enabled():
             response = self.client.get(
                 "/api/extensions/ngs-data/download/",
-                {"state": "CA"},
+                {"region": "CA"},
             )
         self.assertEqual(response.status_code, 401)
 
-    def test_missing_state_400(self):
+    def test_missing_region_400(self):
         with _patch_ngs_data_enabled():
             response = self.client.get(
                 "/api/extensions/ngs-data/download/",
             )
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"state", response.content)
+        self.assertIn(b"region", response.content)
 
-    def test_unknown_state_404(self):
+    def test_unknown_region_404(self):
         with _patch_ngs_data_enabled():
             response = self.client.get(
                 "/api/extensions/ngs-data/download/",
-                {"state": "ZZ"},
+                {"region": "ZZ"},
             )
         self.assertEqual(response.status_code, 404)
 
@@ -73,7 +73,7 @@ class TestNgsDataExtensionAPI(TestCase):
             ):
                 response = self.client.get(
                     "/api/extensions/ngs-data/download/",
-                    {"state": "ca"},
+                    {"region": "ca"},
                 )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -89,7 +89,7 @@ class TestNgsDataExtensionAPI(TestCase):
         ):
             response = self.client.get(
                 "/api/extensions/ngs-data/download/",
-                {"state": "CA"},
+                {"region": "CA"},
             )
         self.assertEqual(response.status_code, 404)
 

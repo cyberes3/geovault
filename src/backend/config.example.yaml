@@ -253,7 +253,7 @@ extensions:
     pwa_builder_url: "http://pwabuilder:5858"
 
   ngs_data:
-    # Serves NGS per-state .sqlite files for the NGS Navigator app (no website UI).
+    # Serves NGS per-region .sqlite files for the NGS Navigator app (no website UI).
     # Files are read from {BASE_DIR}/data/ngs_data (see ngs-navigator-android/server for generator).
     enabled: true
 

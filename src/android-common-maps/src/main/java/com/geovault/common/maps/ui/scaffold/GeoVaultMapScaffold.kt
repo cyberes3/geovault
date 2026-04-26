@@ -60,11 +60,16 @@ import androidx.compose.ui.unit.dp
  * [com.geovault.common.maps.core.GeoVaultMapPaddingPolicy] / `mapPaddingDp.bottom`. The
  * scaffold *never* mutates the map directly — one-way data flow keeps MapLibre state
  * recoverable when the drawer re-anchors unexpectedly (config change, theme switch, etc.).
+ *
+ * @param drawerDragEnabled When false, the drag handle and header row do not participate in
+ * anchored drag (e.g. while the map style is still loading). Programmatic [GeoVaultMapDrawerState]
+ * moves still work.
  */
 @Composable
 fun GeoVaultMapScaffold(
     modifier: Modifier = Modifier,
     drawerState: GeoVaultMapDrawerState = rememberGeoVaultMapDrawerState(),
+    drawerDragEnabled: Boolean = true,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
     topStart: (@Composable BoxScope.() -> Unit)? = null,
@@ -91,6 +96,7 @@ fun GeoVaultMapScaffold(
 
         DrawerLayer(
             drawerState = drawerState,
+            drawerDragEnabled = drawerDragEnabled,
             drawerHeader = drawerHeader,
             drawerBody = drawerBody,
         )
@@ -115,6 +121,7 @@ fun GeoVaultMapScaffold(
 @Composable
 private fun BoxScope.DrawerLayer(
     drawerState: GeoVaultMapDrawerState,
+    drawerDragEnabled: Boolean,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
 ) {
@@ -175,11 +182,15 @@ private fun BoxScope.DrawerLayer(
         shape = shape,
         elevation = GeoVaultMapScaffoldDefaults.DrawerElevation,
     ) {
-        val headerDragModifier = Modifier.anchoredDraggable(
-            state = drawerState.anchoredDraggableState,
-            orientation = Orientation.Vertical,
-            flingBehavior = flingBehavior,
-        )
+        val headerDragModifier = if (drawerDragEnabled) {
+            Modifier.anchoredDraggable(
+                state = drawerState.anchoredDraggableState,
+                orientation = Orientation.Vertical,
+                flingBehavior = flingBehavior,
+            )
+        } else {
+            Modifier
+        }
         val headerDividerColor = GeoVaultMapScaffoldDefaults.HeaderDividerColor
         Column(modifier = Modifier.fillMaxSize()) {
             DragHandle(modifier = headerDragModifier)
