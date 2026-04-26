@@ -20,10 +20,12 @@ object CommonMapSymbolIconStyles {
     fun station(): MapSymbolIconStyle = MapSymbolIconStyle(
         backgroundDrawableResId = R.drawable.gv_common_ic_station_point,
         backgroundTintColorInt = GeoVaultColorTokens.MainGreen.toArgb(),
+        overlayStrokeDrawableResId = R.drawable.gv_common_ic_station_point_stroke,
     )
 
     fun selectedStation(): MapSymbolIconStyle = MapSymbolIconStyle(
         backgroundDrawableResId = R.drawable.gv_common_ic_station_point,
         backgroundTintColorInt = GeoVaultColorTokens.MainYellow.toArgb(),
+        overlayStrokeDrawableResId = R.drawable.gv_common_ic_station_point_stroke,
     )
 }

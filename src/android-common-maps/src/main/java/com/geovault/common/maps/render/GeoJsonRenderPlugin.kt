@@ -204,13 +204,14 @@ class GeoJsonRenderPlugin(
                 Expression.toNumber(Expression.get("iconRotationDegrees")),
                 Expression.literal(0.0),
             )
+            // Icon-only layer: point names are drawn on the separate label symbol layer below.
             val iconLayer = SymbolLayer(pointsIconLayerId, pointsSourceId).withProperties(
-                PropertyFactory.textField(Expression.literal("")),
                 PropertyFactory.iconImage(Expression.get("iconImageId")),
                 PropertyFactory.iconSize(iconSizeExpr),
                 PropertyFactory.iconAnchor(config.defaultIconAnchor),
                 PropertyFactory.iconRotate(iconRotateExpr),
-                PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT),
+                PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
                 PropertyFactory.iconAllowOverlap(true),
                 PropertyFactory.iconIgnorePlacement(true),
             ).withUnclusteredPointFilter()
@@ -225,9 +226,10 @@ class GeoJsonRenderPlugin(
                     add(PropertyFactory.iconSize(iconSizeExpr))
                     add(PropertyFactory.iconAnchor(config.defaultIconAnchor))
                     add(PropertyFactory.iconRotate(iconRotateExpr))
-                    add(PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP))
+                    add(PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_VIEWPORT))
                     add(PropertyFactory.iconAllowOverlap(true))
                     add(PropertyFactory.iconIgnorePlacement(true))
+                    add(PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT))
                     add(PropertyFactory.textField(Expression.get("title")))
                     add(
                         PropertyFactory.textSize(
