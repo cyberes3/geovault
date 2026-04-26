@@ -3,7 +3,9 @@ package com.geovault.common.maps.render
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.maps.core.MapMarkerUtils
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
 import java.util.concurrent.Executors
@@ -18,6 +20,7 @@ import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.PropertyValue
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.TransitionOptions
 import org.maplibre.android.style.sources.GeoJsonSource
@@ -106,6 +109,19 @@ class GeoJsonRenderPlugin(
         ensureCommonPlacemarkImages(style)
         ensureLayers(style)
         setRenderState(renderState)
+    }
+
+    /**
+     * Sets point-name label halo for the current style. Use [haloWidthPx] `0f` to disable the halo.
+     * No-op if [GeoJsonRenderConfig.showPointTextLabels] is false or the label layer is missing.
+     */
+    fun applyPointLabelHalo(style: Style, haloWidthPx: Float, haloColorArgb: Int) {
+        if (!config.showPointTextLabels) return
+        val layer = style.getLayer(pointsLabelLayerId) as? SymbolLayer ?: return
+        layer.setProperties(
+            PropertyFactory.textHaloWidth(haloWidthPx),
+            PropertyFactory.textHaloColor(haloColorArgb),
+        )
     }
 
     private fun schedulePreparedApply(state: MapRenderState, generation: Long) {
@@ -203,34 +219,50 @@ class GeoJsonRenderPlugin(
                 iconLayer.setIconOpacityTransition(instant)
             }
             val labelLayer: SymbolLayer? = if (config.showPointTextLabels) {
-                SymbolLayer(pointsLabelLayerId, pointsSourceId).withProperties(
-                    PropertyFactory.iconImage(Expression.get("iconImageId")),
-                    PropertyFactory.iconOpacity(Expression.literal(0.0)),
-                    PropertyFactory.iconSize(iconSizeExpr),
-                    PropertyFactory.iconAnchor(config.defaultIconAnchor),
-                    PropertyFactory.iconRotate(iconRotateExpr),
-                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
-                    PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(true),
-                    PropertyFactory.textField(Expression.get("title")),
-                    PropertyFactory.textSize(
-                        Expression.coalesce(
-                            Expression.get("labelTextSize"),
-                            Expression.literal(config.defaultLabelTextSize),
+                val labelPointProperties: Array<PropertyValue<*>> = buildList {
+                    add(PropertyFactory.iconImage(Expression.get("iconImageId")))
+                    add(PropertyFactory.iconOpacity(Expression.literal(0.0)))
+                    add(PropertyFactory.iconSize(iconSizeExpr))
+                    add(PropertyFactory.iconAnchor(config.defaultIconAnchor))
+                    add(PropertyFactory.iconRotate(iconRotateExpr))
+                    add(PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP))
+                    add(PropertyFactory.iconAllowOverlap(true))
+                    add(PropertyFactory.iconIgnorePlacement(true))
+                    add(PropertyFactory.textField(Expression.get("title")))
+                    add(
+                        PropertyFactory.textSize(
+                            Expression.coalesce(
+                                Expression.get("labelTextSize"),
+                                Expression.literal(config.defaultLabelTextSize),
+                            ),
                         ),
-                    ),
-                    PropertyFactory.textColor(
-                        Expression.coalesce(
-                            Expression.get("labelTextColorHex"),
-                            Expression.literal(config.defaultLabelTextColorHex),
+                    )
+                    add(
+                        PropertyFactory.textColor(
+                            Expression.coalesce(
+                                Expression.get("labelTextColorHex"),
+                                Expression.literal(config.defaultLabelTextColorHex),
+                            ),
                         ),
-                    ),
+                    )
+                    if (config.pointLabelHaloWidth > 0f) {
+                        add(PropertyFactory.textHaloWidth(config.pointLabelHaloWidth))
+                        add(
+                            PropertyFactory.textHaloColor(
+                                config.pointLabelHaloColorArgb
+                                    ?: GeoVaultColorTokens.MapLineworkHalo.toArgb(),
+                            ),
+                        )
+                    }
                     // Top anchor + downward offset: long / multi-line labels extend below the
                     // marker instead of growing upward over the icon (center anchor default).
-                    PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
-                    PropertyFactory.textOffset(arrayOf(0f, config.pointLabelTextOffsetYEm)),
-                    PropertyFactory.textAllowOverlap(false),
-                    PropertyFactory.textIgnorePlacement(false),
+                    add(PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP))
+                    add(PropertyFactory.textOffset(arrayOf(0f, config.pointLabelTextOffsetYEm)))
+                    add(PropertyFactory.textAllowOverlap(false))
+                    add(PropertyFactory.textIgnorePlacement(false))
+                }.toTypedArray()
+                SymbolLayer(pointsLabelLayerId, pointsSourceId).withProperties(
+                    *labelPointProperties,
                 ).withUnclusteredPointFilter().also { layer ->
                     if (config.disablePointSymbolFade) {
                         val instant = TransitionOptions(0L, 0L)

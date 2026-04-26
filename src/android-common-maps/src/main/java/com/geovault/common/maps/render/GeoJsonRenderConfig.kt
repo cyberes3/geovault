@@ -13,6 +13,11 @@ import org.maplibre.android.style.layers.Property
  * (visible markers), so icons always paint on top of names. Label collision still hides
  * overlapping labels ([showPointTextLabels] layer uses MapLibre collision), not icons.
  * When [showPointTextLabels] is false, only the icon layer is created (e.g. icon-only maps).
+ *
+ * **Text halo:** [pointLabelHaloWidth] optionally draws an outline around point name labels
+ * (e.g. on satellite or busy imagery) so names stay legible. When [pointLabelHaloWidth] is
+ * positive and [pointLabelHaloColorArgb] is null, [GeoJsonRenderPlugin] uses
+ * [com.geovault.common.ui.theme.GeoVaultColorTokens.MapLineworkHalo].
  */
 data class GeoJsonRenderConfig(
     val belowLayerId: String? = null,
@@ -50,6 +55,13 @@ data class GeoJsonRenderConfig(
      * downward from the top anchor; smaller values sit names closer to the geometry.
      */
     val pointLabelTextOffsetYEm: Float = 0.72f,
+    /**
+     * Text halo width in pixels for point name labels. When `<= 0f`, no halo is applied.
+     * [GeoJsonRenderPlugin.applyPointLabelHalo] can still override at runtime.
+     */
+    val pointLabelHaloWidth: Float = 0f,
+    /** ARGB text halo color; if null and [pointLabelHaloWidth] is positive, the plugin uses MapLineworkHalo. */
+    val pointLabelHaloColorArgb: Int? = null,
     val defaultIconSize: Float = 1f,
     val defaultIconAnchor: String = Property.ICON_ANCHOR_CENTER,
     val defaultPolygonFillOpacity: Float = 0.35f,
