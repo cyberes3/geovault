@@ -135,7 +135,7 @@ if [ "$BUILD_TYPE" = "release" ]; then
         BUILD_DATE="$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)"
         COMMIT_HASH="$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")"
     fi
-    DEST_NAME="GeoVault Tracker ${BUILD_DATE} ${COMMIT_HASH}.apk"
+    DEST_NAME="GeoVault-Live-Tracker-${BUILD_DATE}-${COMMIT_HASH}.apk"
     cp "$APK_PATH" "$SCRIPT_DIR/$DEST_NAME"
     echo "Copied release APK to: $SCRIPT_DIR/$DEST_NAME"
 fi

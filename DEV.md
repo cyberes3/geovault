@@ -13,11 +13,11 @@ configurable). To have new releases picked up automatically, use the repo and na
 
 **Asset naming (per release):**
 
-| App      | Rule for APK filename                                                                                                                |
-|----------|--------------------------------------------------------------------------------------------------------------------------------------|
-| Uploader | Name must **start with** `GeoVault Uploader` and **end with** `.apk`. Example: `GeoVault Uploader 2026-01-02 0168732762.apk`         |
-| Places   | Name must **start with** `GeoVault Places` and **end with** `.apk`. Example: `GeoVault Places 2026-02-12 abc123def.apk`              |
-| Tracker  | Name must **start with** `GeoVault Live Tracker` and **end with** `.apk`. Example: `GeoVault Live Tracker 2026-03-15 453b77a645.apk` |
+| App      | Rule for APK filename                                                                                                                  |
+|----------|----------------------------------------------------------------------------------------------------------------------------------------|
+| Uploader | Name must **start with** `GeoVault-Uploader` and **end with** `.apk`. Example: `GeoVault-Uploader-2026-01-02-0168732762.apk`           |
+| Places   | Name must **start with** `GeoVault-Places` and **end with** `.apk`. Example: `GeoVault-Places-2026-02-12-abc123def0.apk`               |
+| Tracker  | Name must **start with** `GeoVault-Live-Tracker` and **end with** `.apk`. Example: `GeoVault-Live-Tracker-2026-03-15-453b77a645.apk`   |
 
 Only the **latest** release (by Gitea’s order) is used. After publishing a new release, the dashboard will show the new
 APK links within the cache window (30 minutes) or on the next request after cache expiry.
