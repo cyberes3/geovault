@@ -138,7 +138,9 @@ class GeoVaultNavigationToPointPlugin(
         lineLayer.setFilter(
             Expression.eq(Expression.geometryType(), Expression.literal("LineString")),
         )
-        if (lineLayerRenderBelowId != null && style.getLayer(lineLayerRenderBelowId) != null) {
+        if (style.getLayer(LABEL_LAYER_ID) != null) {
+            style.addLayerBelow(lineLayer, LABEL_LAYER_ID)
+        } else if (lineLayerRenderBelowId != null && style.getLayer(lineLayerRenderBelowId) != null) {
             style.addLayerBelow(lineLayer, lineLayerRenderBelowId)
         } else {
             style.addLayer(lineLayer)
@@ -204,9 +206,20 @@ class GeoVaultNavigationToPointPlugin(
         addLabelLayer(style)
     }
 
+    private fun ensureLineBelowLabelLayer(style: Style) {
+        if (style.getLayer(LINE_LAYER_ID) == null || style.getLayer(LABEL_LAYER_ID) == null) return
+        val layers = style.layers
+        val lineIdx = layers.indexOfFirst { it.id == LINE_LAYER_ID }
+        val labelIdx = layers.indexOfFirst { it.id == LABEL_LAYER_ID }
+        if (lineIdx < 0 || labelIdx < 0 || lineIdx < labelIdx) return
+        style.removeLayer(LINE_LAYER_ID)
+        ensureLineLayer(style)
+    }
+
     private fun applyToStyle() {
         val style = style ?: return
         ensureLabelAboveLocationLayer(style)
+        ensureLineBelowLabelLayer(style)
         val navSource = style.getSource(SOURCE_ID) as? GeoJsonSource
         val labelSource = style.getSource(LABEL_SOURCE_ID) as? GeoJsonSource
         navSource?.setGeoJson(buildFeatureCollection(target, userLocation))
