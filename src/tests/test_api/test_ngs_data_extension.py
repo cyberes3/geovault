@@ -81,6 +81,12 @@ class TestNgsDataExtensionAPI(TestCase):
             b"test-sqlite-payload",
         )
         self.assertIn("attachment", response.get("Content-Disposition", ""))
+        self.assertEqual(
+            response["CDN-Cache-Control"],
+            f"public, max-age={ngs_views._NGS_DOWNLOAD_CDN_CACHE_MAX_AGE_SECONDS}",
+        )
+        self.assertEqual(response["Cache-Control"], "private, max-age=0")
+        self.assertEqual(response["Vary"], "Authorization, Cookie")
 
     def test_missing_on_disk_404(self):
         with tempfile.TemporaryDirectory() as tmp, _patch_ngs_data_enabled(), patch(
@@ -134,6 +140,12 @@ class TestNgsDataExtensionAPI(TestCase):
                 "size_bytes": len(payload),
             },
         )
+        self.assertEqual(
+            response["CDN-Cache-Control"],
+            f"public, max-age={ngs_views._NGS_CATALOG_CDN_CACHE_MAX_AGE_SECONDS}",
+        )
+        self.assertEqual(response["Cache-Control"], "private, max-age=0")
+        self.assertEqual(response["Vary"], "Authorization, Cookie")
 
     def test_catalog_second_request_uses_server_cache(self):
         from extensions.ngs_data.src.backend import views as ngs_views
