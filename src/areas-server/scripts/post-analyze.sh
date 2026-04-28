@@ -49,6 +49,23 @@ fi
 
 SCHEMA="is_in"
 
+_table_exists() {
+  local table="$1"
+  [[ "$(psql "$DB" -AtX -v ON_ERROR_STOP=1 -c "SELECT to_regclass('$table') IS NOT NULL;")" == "t" ]]
+}
+
+_index_and_analyze_if_exists() {
+  local table="$1"
+  local index_name="$2"
+
+  if _table_exists "\"$SCHEMA\".$table"; then
+    psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS $index_name ON \"$SCHEMA\".$table USING GIST (geom);"
+    psql "$DB" -v ON_ERROR_STOP=1 -c "ANALYZE \"$SCHEMA\".$table;"
+  else
+    echo "Skipping optional table \"$SCHEMA\".$table: table does not exist."
+  fi
+}
+
 # Geometry GIST for ST_Contains/&& on admin and protected (critical for single-point and batch latency)
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS admin_areas_geom_gist ON \"$SCHEMA\".admin_areas USING GIST (geom);"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS protected_areas_geom_gist ON \"$SCHEMA\".protected_areas USING GIST (geom);"
@@ -58,11 +75,12 @@ psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS place_nodes_geom_gi
 # Geography GIST speeds up ST_DWithin(geography(geom), ...) if any remaining geography lookups are used
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS water_bodies_geom_geog_gist ON \"$SCHEMA\".water_bodies USING GIST ((geom::geography));"
 psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS place_nodes_geom_geog_gist ON \"$SCHEMA\".place_nodes USING GIST ((geom::geography));"
-# Geometry GIST for ST_Contains on ocean/ski tables (import scripts may only add geography GIST)
-psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS ocean_regions_geom_gist ON \"$SCHEMA\".ocean_regions USING GIST (geom);"
-psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS oceans_geom_gist ON \"$SCHEMA\".oceans USING GIST (geom);"
-psql "$DB" -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS ski_resorts_geom_gist ON \"$SCHEMA\".ski_resorts USING GIST (geom);"
-psql "$DB" -v ON_ERROR_STOP=1 -c "ANALYZE \"$SCHEMA\".admin_areas; ANALYZE \"$SCHEMA\".protected_areas; ANALYZE \"$SCHEMA\".water_bodies; ANALYZE \"$SCHEMA\".place_nodes; ANALYZE \"$SCHEMA\".ocean_regions; ANALYZE \"$SCHEMA\".oceans; ANALYZE \"$SCHEMA\".ski_resorts;"
+psql "$DB" -v ON_ERROR_STOP=1 -c "ANALYZE \"$SCHEMA\".admin_areas; ANALYZE \"$SCHEMA\".protected_areas; ANALYZE \"$SCHEMA\".water_bodies; ANALYZE \"$SCHEMA\".place_nodes;"
+
+# Geometry GIST for optional ocean/ski tables (import scripts may only add geography GIST)
+_index_and_analyze_if_exists ocean_regions ocean_regions_geom_gist
+_index_and_analyze_if_exists oceans oceans_geom_gist
+_index_and_analyze_if_exists ski_resorts ski_resorts_geom_gist
 
 # Waterways lookup requires geometry index for optimized distance/within-distance checks
 # Geography index is kept for backward compatibility or direct geography queries

@@ -45,11 +45,11 @@ osm2pgsql_extra=()
 [[ -n "$PROCESSES" ]] && osm2pgsql_extra+=(--number-processes "$PROCESSES")
 
 if [[ "$cmd" == init ]]; then
-  exec "$REP" init -d "$DB" --schema "$SCHEMA" --server "$DAY_URL"
+  exec "$REP" init -d "$DB" --schema "$SCHEMA" --middle-schema "$SCHEMA" --server "$DAY_URL"
 fi
 
 # update
-rep_args=(--max-diff-size "$MAX_DIFF_MB")
+rep_args=(-d "$DB" --schema "$SCHEMA" --middle-schema "$SCHEMA" --max-diff-size "$MAX_DIFF_MB")
 [[ "$ONCE" == true ]] && rep_args+=(--once)
 
 if [[ -f "$SCRIPT_DIR/post-analyze.sh" ]]; then
