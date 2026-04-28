@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
@@ -37,6 +38,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /**
  * Reusable "map surface + bottom drawer" scaffold shared by every GeoVault app.
@@ -48,12 +50,19 @@ import androidx.compose.ui.unit.dp
  *
  * ### Layout contract
  *
- * - The map fills the entire container (it sits *under* the drawer, not *beside* it).
+ * - The map fills the entire container (it sits *under* the drawer, not *beside* it). The
+ *   map's pixel size is deliberately decoupled from the system navigation-bar inset: only
+ *   the chrome subtree (drawer + [bottomStart] + [bottomEnd]) reserves bottom safe-area, so
+ *   `MapView`'s GL surface does not re-measure when the OS animates the system bars during
+ *   keyguard transitions (which would otherwise visibly squish the map on screen-off →
+ *   resume).
  * - The drawer is positioned by an offset driven by [drawerState] and clipped with the
  *   scaffold's rounded-top shape. Consumers should not apply their own offset/shape modifiers
  *   to the drawer body — the scaffold owns them.
  * - Overlay slots ([topStart], [topEnd], [bottomStart], [bottomEnd]) render above the map and
- *   below the drawer. FAB columns, chips, and banners live here.
+ *   below the drawer. FAB columns, chips, and banners live here. [bottomStart] / [bottomEnd]
+ *   inherit nav-bar safe-area through the chrome subtree; [topStart] / [topEnd] do not (the
+ *   parent topbar/scaffold owns top safe-area).
  *
  * ### Camera-padding contract
  *
@@ -90,11 +99,7 @@ fun GeoVaultMapScaffold(
     bottomEnd: (@Composable BoxScope.() -> Unit)? = null,
     mapContent: @Composable BoxScope.() -> Unit,
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .onSizeChanged { size -> drawerState.updateAnchors(size.height) },
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             mapContent()
         }
@@ -106,24 +111,45 @@ fun GeoVaultMapScaffold(
             Box(modifier = Modifier.align(Alignment.TopEnd), content = topEnd)
         }
 
-        DrawerLayer(
-            drawerState = drawerState,
-            drawerDragEnabled = drawerDragEnabled,
-            drawerTitle = drawerTitle,
-            drawerTitleCentered = drawerTitleCentered,
-            drawerTitleChip = drawerTitleChip,
-            onDrawerClose = onDrawerClose,
-            drawerCloseContentDescription = drawerCloseContentDescription,
-            drawerCloseTooltip = drawerCloseTooltip,
-            drawerHeader = drawerHeader,
-            drawerBody = drawerBody,
-        )
+        // Chrome safe-area subtree. The OUTER Box claims nav-bar inset for the chrome only —
+        // the underlying map (sibling above) is intentionally not in this padded subtree, so
+        // its GL surface never re-measures when the OS toggles system-bar visibility during
+        // keyguard/screen-off animations. The INNER Box is what the drawer + bottom overlay
+        // slots actually live in: its size equals the visible (post-padding) area, which is
+        // what `onSizeChanged` must report so drawer anchor offsets land just above the
+        // system bar. `clipToBounds` keeps the drawer's overflow Surface (translated past
+        // the chrome bottom in the Collapsed state) from painting into the system-bar zone.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .geoVaultStableNavigationBarsPadding(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+                    .onSizeChanged { size -> drawerState.updateAnchors(size.height) },
+            ) {
+                DrawerLayer(
+                    drawerState = drawerState,
+                    drawerDragEnabled = drawerDragEnabled,
+                    drawerTitle = drawerTitle,
+                    drawerTitleCentered = drawerTitleCentered,
+                    drawerTitleChip = drawerTitleChip,
+                    onDrawerClose = onDrawerClose,
+                    drawerCloseContentDescription = drawerCloseContentDescription,
+                    drawerCloseTooltip = drawerCloseTooltip,
+                    drawerHeader = drawerHeader,
+                    drawerBody = drawerBody,
+                )
 
-        if (bottomStart != null) {
-            Box(modifier = Modifier.align(Alignment.BottomStart), content = bottomStart)
-        }
-        if (bottomEnd != null) {
-            Box(modifier = Modifier.align(Alignment.BottomEnd), content = bottomEnd)
+                if (bottomStart != null) {
+                    Box(modifier = Modifier.align(Alignment.BottomStart), content = bottomStart)
+                }
+                if (bottomEnd != null) {
+                    Box(modifier = Modifier.align(Alignment.BottomEnd), content = bottomEnd)
+                }
+            }
         }
     }
 

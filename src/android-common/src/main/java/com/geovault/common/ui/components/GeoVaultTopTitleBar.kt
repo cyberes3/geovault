@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
@@ -44,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.ComponentActivity
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ui.modifier.geoVaultStableStatusBarsPadding
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
@@ -245,7 +245,11 @@ fun GeoVaultTopTitleBar(
             .background(backgroundColor)
     ) {
         TopAppBar(
-            modifier = Modifier.statusBarsPadding(),
+            // Use the visibility-ignoring status-bar inset so the bar's height does not
+            // oscillate while the OS animates the status bar in/out during keyguard /
+            // screen-off transitions — Material `Scaffold`'s content area would otherwise
+            // resize over several frames and visibly jiggle any map subtree below us.
+            modifier = Modifier.geoVaultStableStatusBarsPadding(),
             title = {
                 if (subtitle.isNullOrBlank()) {
                     Text(text = title, color = contentColor)

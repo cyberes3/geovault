@@ -3,7 +3,6 @@ package com.geovault.common.ui.theme
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.Colors
 import androidx.compose.material.MaterialTheme
@@ -59,10 +58,14 @@ fun GeoVaultTheme(
         colors = if (darkTheme) darkScheme() else lightScheme()
     ) {
         GeoVaultBackHandlerHost {
+            // Theme is intentionally inset-agnostic. Navigation-bar safe-area is owned by the
+            // chrome that needs it (GeoVaultBottomNavScaffold, GeoVaultMapScaffold,
+            // GeoVaultSubViewScaffold, GeoVaultAuthGate, GeoVaultSnackbarHost). Padding here
+            // would force the map's GL surface to re-measure on every transient WindowInsets
+            // dispatch (e.g. after screen-off → resume), producing a vertical squish.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .navigationBarsPadding()
                     .dismissKeyboardOnOutsideTap()
             ) {
                 content()

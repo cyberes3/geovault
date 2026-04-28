@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /**
  * Standard chrome for a dismissible sub-view that is presented below the shell's branded
@@ -70,9 +71,15 @@ fun GeoVaultSubViewScaffold(
             }
         }
     }
+    // Sub-views own nav-bar safe-area for their content/bottomBar so settings, edit forms,
+    // station detail, etc. never bleed underneath the system navigation bar even when the
+    // surrounding theme/scaffold is intentionally inset-agnostic (see GeoVaultTheme).
     val outerModifier = when (chromeMode) {
-        is GeoVaultSubViewChromeMode.WithBrandedTabBar -> modifier.fillMaxSize()
+        is GeoVaultSubViewChromeMode.WithBrandedTabBar -> modifier
+            .fillMaxSize()
+            .geoVaultStableNavigationBarsPadding()
         is GeoVaultSubViewChromeMode.CompactOnly -> modifier
+            .geoVaultStableNavigationBarsPadding()
     }
     Scaffold(
         modifier = outerModifier,

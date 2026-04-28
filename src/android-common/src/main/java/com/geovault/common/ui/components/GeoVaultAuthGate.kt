@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /** Wraps content when signed in; otherwise shows [GeoVaultInitialAuthView] (see that composable for connect UX). */
 @Composable
@@ -23,6 +24,9 @@ fun GeoVaultAuthGate(
             authenticatedContent()
         } else {
             GeoVaultRequestBottomTabsHidden(shouldHide = true)
+            // The sign-in form can be the only thing on screen (e.g. NGS / Survey before
+            // first authentication) so it owns its own nav-bar safe-area; the surrounding
+            // theme is intentionally inset-agnostic.
             GeoVaultInitialAuthView(
                 serverUrl = serverUrl,
                 onServerUrlChanged = onServerUrlChanged,
@@ -30,7 +34,9 @@ fun GeoVaultAuthGate(
                 isConnecting = isConnecting,
                 connectButtonTooltip = connectButtonTooltip,
                 extraActions = extraActions,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .geoVaultStableNavigationBarsPadding()
             )
         }
     }

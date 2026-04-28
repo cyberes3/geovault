@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
+import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
@@ -151,8 +152,18 @@ fun GeoVaultBottomNavScaffold(
         LocalGeoVaultBottomNavVisibilityController provides visibilityController,
         LocalGeoVaultBottomNavDisableController provides disableController,
     ) {
+        // The bottom-nav scaffold owns nav-bar safe-area for its subtree: the row sits above
+        // the system navigation bar and the content area stops at the system bar so list/form
+        // screens never bleed underneath. We use the stable (visibility-ignoring) variant so
+        // that any map subtree hosted inside a tab does not re-measure when the OS animates
+        // the system bars hidden/visible during keyguard transitions. Descendants that pad
+        // with the same inset type (e.g. GeoVaultMapScaffold's drawer) read zero thanks to
+        // the standard "consumed by parent" semantics of windowInsetsPadding, so nesting does
+        // not double-pad.
         Column(
-            modifier = modifier.fillMaxSize(),
+            modifier = modifier
+                .fillMaxSize()
+                .geoVaultStableNavigationBarsPadding(),
         ) {
             Box(
                 modifier = Modifier
@@ -206,8 +217,9 @@ fun GeoVaultBottomNavRow(
         modifier = modifier
             .fillMaxWidth()
             .background(GeoVaultColorTokens.MainBlue)
-            // Do not use navigationBarsPadding here: GeoVaultTheme already applies it at the root.
-            // A second inset shrinks the tab content area and squishes screens (e.g. map) above the bar.
+            // Nav-bar safe-area is applied by GeoVaultBottomNavScaffold's outer Column so the
+            // tab row and the content area both rest above the system navigation bar without
+            // double-padding.
             .padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
