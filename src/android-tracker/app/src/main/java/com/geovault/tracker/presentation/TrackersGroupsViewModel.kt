@@ -150,7 +150,13 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun openCreateTrackerDialog() {
-        _uiState.update { it.copy(dialog = TrackersGroupsDialog.CreateTracker()) }
+        _uiState.update {
+            it.copy(
+                dialog = TrackersGroupsDialog.CreateTracker(
+                    colorDraft = GeoVaultColorTokens.Hex.Blue400,
+                ),
+            )
+        }
     }
 
     fun openCreateGroupDialog() {

@@ -63,7 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.ui.components.GeoVaultCheckmark
+import com.geovault.common.ui.files.ExportedFileToast
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormDialog
 import com.geovault.common.ui.components.GeoVaultInput
@@ -221,34 +221,48 @@ fun TrackersScreen(
         onDispose { vm.dismissDialog() }
     }
     val context = LocalContext.current
-    var pendingKmlBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingKmlExport by remember { mutableStateOf<TrackerKmlExportEvent?>(null) }
     val createKmlDocumentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
     ) { uri: Uri? ->
-        val bytes = pendingKmlBytes
-        pendingKmlBytes = null
-        if (uri == null || bytes == null) return@rememberLauncherForActivityResult
+        val pending = pendingKmlExport
+        pendingKmlExport = null
+        if (pending == null) return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             val stream = context.contentResolver.openOutputStream(uri)
                 ?: return@runCatching false
-            stream.use { it.write(bytes) }
+            stream.use { it.write(pending.bytes) }
             true
         }.fold(
             onSuccess = { saved ->
-                vm.postUserMessage(
-                    context.getString(
-                        if (saved) R.string.trackers_kml_exported else R.string.trackers_kml_write_failed
+                if (saved) {
+                    ExportedFileToast.show(
+                        context = context,
+                        destinationUri = uri,
+                        fallbackBaseName = pending.fileBaseName,
+                        extensionWithoutDot = "kml",
                     )
-                )
+                } else {
+                    Toast.makeText(
+                        context.applicationContext,
+                        context.getString(R.string.trackers_kml_write_failed),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             },
             onFailure = {
-                vm.postUserMessage(context.getString(R.string.trackers_kml_write_failed))
+                Toast.makeText(
+                    context.applicationContext,
+                    context.getString(R.string.trackers_kml_write_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
             },
         )
     }
     LaunchedEffect(vm) {
         vm.kmlExportEvents.collect { event: TrackerKmlExportEvent ->
-            pendingKmlBytes = event.bytes
+            pendingKmlExport = event
             createKmlDocumentLauncher.launch("${event.fileBaseName}.kml")
         }
     }
@@ -267,6 +281,7 @@ fun TrackersScreen(
     var groupEditReturnOverlay by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
     val activeTrackerEditLoadingDialog = state.dialog as? TrackersGroupsDialog.EditTrackerLoading
     val activeTrackerEditDialog = state.dialog as? TrackersGroupsDialog.EditTracker
+    val activeCreateTrackerDialog = state.dialog as? TrackersGroupsDialog.CreateTracker
     val activeGroupEditDialog = state.dialog as? TrackersGroupsDialog.EditGroup
 
     LaunchedEffect(navigationRequest) {
@@ -277,7 +292,10 @@ fun TrackersScreen(
     }
 
     LaunchedEffect(state.dialog) {
-        if (state.dialog !is TrackersGroupsDialog.EditTracker && state.dialog !is TrackersGroupsDialog.EditGroup) {
+        if (state.dialog !is TrackersGroupsDialog.EditTracker &&
+            state.dialog !is TrackersGroupsDialog.EditGroup &&
+            state.dialog !is TrackersGroupsDialog.CreateTracker
+        ) {
             editFlowHasUnsaved = false
         }
     }
@@ -285,6 +303,7 @@ fun TrackersScreen(
     val isTrackerOrGroupEditOpen =
         activeTrackerEditLoadingDialog != null ||
             activeTrackerEditDialog != null ||
+            activeCreateTrackerDialog != null ||
             activeGroupEditDialog != null
 
     val onOpenSettingsWithEditGuard: () -> Unit = {
@@ -323,7 +342,13 @@ fun TrackersScreen(
         authenticatedBottomSpacer = 0.dp,
         settingsMenuEnabled = !isTrackerOrGroupEditOpen,
         authenticatedFloatingAction = {
-            if (activeTrackerEditDialog == null && activeTrackerEditLoadingDialog == null && groupActionsDialog == null && activeGroupEditDialog == null && groupMembershipDialog == null) {
+            if (activeTrackerEditDialog == null &&
+                activeTrackerEditLoadingDialog == null &&
+                activeCreateTrackerDialog == null &&
+                groupActionsDialog == null &&
+                activeGroupEditDialog == null &&
+                groupMembershipDialog == null
+            ) {
                 GeoVaultFloatingActionButtonWithTooltip(
                     onClick = {
                         if (state.subTab == TrackersGroupsSubTab.TRACKERS) {
@@ -470,50 +495,75 @@ fun TrackersScreen(
                         },
                     )
                 }
-            } else if (activeTrackerEditDialog != null) {
+            } else if (activeCreateTrackerDialog != null) {
+                val createDialog = activeCreateTrackerDialog
                 Box(modifier = Modifier.fillMaxSize()) {
                     renderTrackersBody()
-                    TrackerEditScreen(
+                    TrackerEditorScreen(
                         chromeMode = trackersTabChrome,
-                        dialog = activeTrackerEditDialog,
+                        mode = TrackerEditorMode.Create(createDialog),
+                        createBindings = TrackerEditorCreateBindings(
+                            onDraftChanged = vm::updateCreateTrackerDraft,
+                            onSetAsSelected = vm::updateCreateTrackerSetAsSelected,
+                            onSubmit = vm::submitCreateTracker,
+                        ),
+                        editBindings = null,
+                        shareRecipientUsers = emptyList(),
+                        isShareRecipientSuggestionsLoading = false,
+                        isKmlExportLoading = false,
+                        isSaving = state.isLoading,
+                        onDismiss = dismissEditDialog,
+                        onUnsavedChangesChanged = { editFlowHasUnsaved = it },
+                    )
+                }
+            } else if (activeTrackerEditDialog != null) {
+                val editDialog = activeTrackerEditDialog
+                Box(modifier = Modifier.fillMaxSize()) {
+                    renderTrackersBody()
+                    TrackerEditorScreen(
+                        chromeMode = trackersTabChrome,
+                        mode = TrackerEditorMode.Edit(editDialog),
+                        createBindings = null,
+                        editBindings = TrackerEditorEditBindings(
+                            onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
+                            onNameDraftChanged = vm::updateEditTrackerDraft,
+                            onColorDraftChanged = vm::updateEditTrackerColorDraft,
+                            onSetAsSelectedChanged = vm::updateEditTrackerSetAsSelected,
+                            onHiddenChanged = vm::updateEditTrackerHidden,
+                            onRecentDataWindowChanged = vm::updateEditTrackerRecentDataWindow,
+                            onVisibilityChanged = vm::updateEditTrackerVisibility,
+                            onShareParamsWithRecipientsChanged = vm::updateEditTrackerShareParamsWithRecipients,
+                            onAllowGroupReshareChanged = vm::updateEditTrackerAllowGroupReshare,
+                            onToggleSharedEmail = vm::toggleEditTrackerSharedEmailSelection,
+                            onWorldShareEnabledChanged = vm::updateEditTrackerWorldShareEnabled,
+                            onShareParamsWithWorldChanged = vm::updateEditTrackerShareParamsWithWorld,
+                            onClearHistory = {
+                                pendingConfirmAction = TrackersConfirmAction.ClearTrackerHistory(
+                                    trackerId = editDialog.tracker.id,
+                                    trackerName = editDialog.tracker.name,
+                                )
+                            },
+                            onDeleteTracker = {
+                                pendingConfirmAction = TrackersConfirmAction.DeleteTracker(
+                                    trackerId = editDialog.tracker.id,
+                                    trackerName = editDialog.tracker.name,
+                                )
+                            },
+                            onExportKml = {
+                                vm.exportTrackerKml(
+                                    trackerId = editDialog.tracker.id,
+                                    trackerDisplayName = editDialog.nameDraft.ifBlank {
+                                        editDialog.tracker.name
+                                    },
+                                )
+                            },
+                            onSubmit = vm::submitEditTracker,
+                        ),
                         shareRecipientUsers = state.shareRecipientUsers,
                         isShareRecipientSuggestionsLoading = state.isShareRecipientSuggestionsLoading,
                         isKmlExportLoading = state.isKmlExportLoading,
                         isSaving = state.isLoading,
                         onDismiss = dismissEditDialog,
-                        onReloadShareRecipients = vm::refreshShareRecipientSuggestions,
-                        onNameDraftChanged = vm::updateEditTrackerDraft,
-                        onColorDraftChanged = vm::updateEditTrackerColorDraft,
-                        onSetAsSelectedChanged = vm::updateEditTrackerSetAsSelected,
-                        onHiddenChanged = vm::updateEditTrackerHidden,
-                        onRecentDataWindowChanged = vm::updateEditTrackerRecentDataWindow,
-                        onVisibilityChanged = vm::updateEditTrackerVisibility,
-                        onShareParamsWithRecipientsChanged = vm::updateEditTrackerShareParamsWithRecipients,
-                        onAllowGroupReshareChanged = vm::updateEditTrackerAllowGroupReshare,
-                        onToggleSharedEmail = vm::toggleEditTrackerSharedEmailSelection,
-                        onWorldShareEnabledChanged = vm::updateEditTrackerWorldShareEnabled,
-                        onShareParamsWithWorldChanged = vm::updateEditTrackerShareParamsWithWorld,
-                        onClearHistory = {
-                            pendingConfirmAction = TrackersConfirmAction.ClearTrackerHistory(
-                                trackerId = activeTrackerEditDialog.tracker.id,
-                                trackerName = activeTrackerEditDialog.tracker.name,
-                            )
-                        },
-                        onDeleteTracker = {
-                            pendingConfirmAction = TrackersConfirmAction.DeleteTracker(
-                                trackerId = activeTrackerEditDialog.tracker.id,
-                                trackerName = activeTrackerEditDialog.tracker.name,
-                            )
-                        },
-                        onExportKml = {
-                            vm.exportTrackerKml(
-                                trackerId = activeTrackerEditDialog.tracker.id,
-                                trackerDisplayName = activeTrackerEditDialog.nameDraft.ifBlank {
-                                    activeTrackerEditDialog.tracker.name
-                                },
-                            )
-                        },
-                        onSave = vm::submitEditTracker,
                         onUnsavedChangesChanged = { editFlowHasUnsaved = it },
                     )
                 }
@@ -630,7 +680,8 @@ fun TrackersScreen(
     )
 
     if (showOpenSettingsDiscardConfirm) {
-        val isTracker = state.dialog is TrackersGroupsDialog.EditTracker
+        val isTracker = state.dialog is TrackersGroupsDialog.EditTracker ||
+            state.dialog is TrackersGroupsDialog.CreateTracker
         GeoVaultConfirmationDialog(
             title = stringResource(
                 if (isTracker) R.string.trackers_edit_discard_title
@@ -654,10 +705,7 @@ fun TrackersScreen(
     TrackersGroupsDialogs(
         dialog = state.dialog,
         onDismiss = vm::dismissDialog,
-        onCreateTrackerDraft = vm::updateCreateTrackerDraft,
-        onCreateTrackerSetAsSelected = vm::updateCreateTrackerSetAsSelected,
         onCreateGroupDraft = vm::updateCreateGroupDraft,
-        onSubmitCreateTracker = vm::submitCreateTracker,
         onSubmitCreateGroup = vm::submitCreateGroup,
     )
 
@@ -1259,46 +1307,13 @@ private fun TrackerEditLoadingSurface(
 private fun TrackersGroupsDialogs(
     dialog: TrackersGroupsDialog,
     onDismiss: () -> Unit,
-    onCreateTrackerDraft: (String, String) -> Unit,
-    onCreateTrackerSetAsSelected: (Boolean) -> Unit,
     onCreateGroupDraft: (String) -> Unit,
-    onSubmitCreateTracker: () -> Unit,
     onSubmitCreateGroup: () -> Unit,
 ) {
     when (dialog) {
         TrackersGroupsDialog.Hidden -> Unit
         is TrackersGroupsDialog.EditTrackerLoading -> Unit
-        is TrackersGroupsDialog.CreateTracker -> {
-            GeoVaultFormDialog(
-                title = stringResource(R.string.trackers_dialog_create_tracker_title),
-                onConfirm = onSubmitCreateTracker,
-                onDismiss = onDismiss,
-                confirmText = stringResource(R.string.trackers_dialog_confirm_create),
-                cancelText = stringResource(R.string.trackers_dialog_cancel),
-            ) {
-                GeoVaultInput(
-                    value = dialog.nameDraft,
-                    onValueChange = { onCreateTrackerDraft(it, dialog.colorDraft) },
-                    label = stringResource(R.string.trackers_field_name),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                GeoVaultInput(
-                    value = dialog.colorDraft,
-                    onValueChange = { onCreateTrackerDraft(dialog.nameDraft, it) },
-                    label = stringResource(R.string.trackers_field_color_optional),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                GeoVaultCheckmark(
-                    checked = dialog.setAsSelectedTracker,
-                    onCheckedChange = onCreateTrackerSetAsSelected,
-                    label = stringResource(R.string.trackers_field_set_as_selected_tracker),
-                )
-            }
-        }
+        is TrackersGroupsDialog.CreateTracker -> Unit
         is TrackersGroupsDialog.CreateGroup -> {
             GeoVaultFormDialog(
                 title = stringResource(R.string.trackers_dialog_create_group_title),

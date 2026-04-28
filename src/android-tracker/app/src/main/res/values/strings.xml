@@ -153,6 +153,7 @@
     <string name="tooltip_edit_tracker_clear_history">Delete stored history for this tracker on the server.</string>
     <string name="tooltip_edit_tracker_delete">Permanently delete this tracker and its data.</string>
     <string name="tooltip_edit_tracker_save">Save changes to this tracker.</string>
+    <string name="tooltip_create_tracker_submit">Create this tracker with the entered settings.</string>
     <string name="tooltip_discover_row_add">Add this tracker or group to your map, or accept an incoming share.</string>
     <string name="tooltip_public_row_add">Subscribe to this public tracker on your map.</string>
     <string name="tooltip_discover_row_remove">Remove from your map, leave a group, or decline, depending on the row.</string>
