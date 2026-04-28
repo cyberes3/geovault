@@ -16,6 +16,7 @@ internal class LowAccuracyFallbackCoordinator {
     private var latestCandidate: CandidateFingerprint? = null
     private var lastEmittedCandidate: CandidateFingerprint? = null
 
+    @Synchronized
     fun onRejectedFixForLock(
         fallbackEligible: Boolean,
         candidateLatitude: Double,
@@ -33,23 +34,27 @@ internal class LowAccuracyFallbackCoordinator {
         return shouldStartTimer
     }
 
+    @Synchronized
     fun onAcceptedFix() {
         awaitingLock = false
         latestCandidate = null
         lastEmittedCandidate = null
     }
 
+    @Synchronized
     fun onTrackingStopped() {
         awaitingLock = false
         latestCandidate = null
         lastEmittedCandidate = null
     }
 
+    @Synchronized
     fun onFallbackTimerStopped() {
         awaitingLock = false
         latestCandidate = null
     }
 
+    @Synchronized
     fun shouldEmitFallback(fallbackEligible: Boolean, hasCandidate: Boolean): Boolean {
         if (!fallbackEligible || !hasCandidate || !awaitingLock) return false
         val latest = latestCandidate ?: return false
@@ -58,6 +63,7 @@ internal class LowAccuracyFallbackCoordinator {
         return distanceMeters(latest, emitted) >= MIN_NEW_SAMPLE_DISTANCE_METERS
     }
 
+    @Synchronized
     fun onFallbackEmitted(
         candidateLatitude: Double,
         candidateLongitude: Double,

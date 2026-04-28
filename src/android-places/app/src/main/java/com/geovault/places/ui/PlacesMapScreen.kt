@@ -79,6 +79,7 @@ fun PlacesMapScreen(
     onOpenEdit: (Feature) -> Unit,
     onViewInList: (Feature) -> Unit,
     onNavigate: (Feature) -> Unit,
+    onLaunchArgsConsumed: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
@@ -150,7 +151,10 @@ fun PlacesMapScreen(
             val hitRadiusPx = with(density) { 20.dp.toPx() }
             val near = viewModel.findFeaturesNearTap(tapLatLng, mapLibreMap.projection, hitRadiusPx)
             when {
-                near.isEmpty() -> false
+                near.isEmpty() -> {
+                    viewModel.setSelectedFeature(null)
+                    false
+                }
                 near.size == 1 -> {
                     viewModel.setSelectedFeature(near.first())
                     true
@@ -184,22 +188,34 @@ fun PlacesMapScreen(
     LaunchedEffect(phase, state.features, launchArgs) {
         map.maplibreMap ?: return@LaunchedEffect
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        if (launchArgs.zoomToId != null && launchArgs.zoomToId >= 0) {
-            viewModel.selectByDatabaseId(launchArgs.zoomToId)
+        val requestedId = launchArgs.zoomToId?.takeIf { it >= 0 }
+        if (requestedId != null &&
+            state.features.none { it.properties.database_id == requestedId }
+        ) {
+            return@LaunchedEffect
         }
         if (!viewModel.shouldApplyInitialCamera(launchArgs.requestToken)) return@LaunchedEffect
         viewModel.markInitialCameraApplied(launchArgs.requestToken)
+        if (requestedId != null) {
+            viewModel.selectByDatabaseId(requestedId)
+        }
         if (launchArgs.zoomToLat != null && launchArgs.zoomToLon != null) {
             val camera = CameraPosition.Builder()
                 .target(org.maplibre.android.geometry.LatLng(launchArgs.zoomToLat, launchArgs.zoomToLon))
                 .zoom(com.geovault.common.maps.core.MapLibreManager.DEFAULT_POINT_ZOOM)
                 .build()
             map.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
+            if (launchArgs.requestToken != 0L) {
+                onLaunchArgsConsumed()
+            }
             return@LaunchedEffect
         }
         val bounds = viewModel.featureBounds()
         if (bounds != null) {
             map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
+        }
+        if (launchArgs.requestToken != 0L) {
+            onLaunchArgsConsumed()
         }
     }
 

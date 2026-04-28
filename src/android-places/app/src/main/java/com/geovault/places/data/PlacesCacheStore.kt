@@ -42,9 +42,11 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
         }.getOrElse { emptyList() }
     }
 
-    fun getDisplayFeatures(): List<Feature> = buildList {
-        addAll(getOfflineFeatures().map { it.feature })
-        addAll(getCachedFeatures())
+    fun getDisplayFeatures(): List<Feature> {
+        return computeDisplayFeatures(
+            cached = getCachedFeatures(),
+            offline = getOfflineFeatures(),
+        )
     }
 
     fun getLastSyncTime(): Long = store.getBlocking(KEY_LAST_SYNC_TIME)
@@ -148,6 +150,15 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
     }
 
     companion object {
+        fun computeDisplayFeatures(
+            cached: List<Feature>,
+            offline: List<OfflineFeature>,
+        ): List<Feature> = buildList {
+            val offlineDatabaseIds = offline.mapNotNull { it.feature.properties.database_id }.toSet()
+            addAll(offline.map { it.feature })
+            addAll(cached.filterNot { it.properties.database_id in offlineDatabaseIds })
+        }
+
         private const val PREFS_NAME = "geovault_places_cache"
         private const val SCHEMA_VERSION = 1
         private val KEY_CACHED_PLACES = PrefKey.StringKey("cached_places")

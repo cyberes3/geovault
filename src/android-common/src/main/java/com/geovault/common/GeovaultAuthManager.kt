@@ -15,6 +15,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -57,6 +58,7 @@ object GeovaultAuthManager {
     private val refreshLock = Any()
     private var authFailureListener: AuthFailureListener? = null
     private val resolveExecutor = Executors.newSingleThreadExecutor()
+    private val secureRandom = SecureRandom()
 
     interface AuthFailureListener {
         fun onAuthFailure(context: Context)
@@ -214,7 +216,7 @@ object GeovaultAuthManager {
 
     fun generatePkcePair(): Pair<String, String> {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-        val verifier = (1..64).map { chars.random() }.joinToString("")
+        val verifier = randomString(chars, length = 64)
         val bytes = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII))
         val challenge = Base64.encodeToString(bytes, Base64.NO_WRAP or Base64.NO_PADDING)
             .replace('+', '-')
@@ -225,7 +227,15 @@ object GeovaultAuthManager {
 
     fun generateOAuthStateNonce(length: Int = 16): String {
         val chars = "abcdef0123456789"
-        return (1..length).map { chars.random() }.joinToString("")
+        return randomString(chars, length)
+    }
+
+    private fun randomString(chars: String, length: Int): String {
+        return buildString(length.coerceAtLeast(0)) {
+            repeat(length.coerceAtLeast(0)) {
+                append(chars[secureRandom.nextInt(chars.length)])
+            }
+        }
     }
 
     fun savePkceState(context: Context, verifier: String, state: String) {

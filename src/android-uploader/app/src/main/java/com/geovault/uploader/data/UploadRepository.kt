@@ -20,7 +20,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 class UploadRepository(
     private val context: Context,
@@ -43,18 +46,23 @@ class UploadRepository(
         if (serverUrl.isBlank()) return UploadResult(false, errorMessage = "Missing server URL")
         if (!authSessionService.isLoggedIn()) return UploadResult(false, errorMessage = "Not signed in")
 
-        val tmpFile = File(context.cacheDir, finalFilename)
+        var tmpFile: File? = null
         return try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(tmpFile).use { output -> input.copyTo(output) }
-            } ?: return UploadResult(false, errorMessage = "Could not read file")
+            tmpFile = withContext(Dispatchers.IO) {
+                val file = File.createTempFile("geovault-upload-", ".tmp", context.cacheDir)
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(file).use { output -> input.copyTo(output) }
+                } ?: error("Could not read file")
+                file
+            }
+            val uploadFile = tmpFile ?: return UploadResult(false, errorMessage = "Could not read file")
 
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
                     "file",
                     finalFilename,
-                    tmpFile.asRequestBody("application/octet-stream".toMediaType())
+                    uploadFile.asRequestBody("application/octet-stream".toMediaType())
                 )
                 .build()
             val request = Request.Builder()
@@ -129,13 +137,14 @@ class UploadRepository(
                 })
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             UploadResult(success = false, errorMessage = "Connection failed\n${e.message ?: "Unknown error"}")
         } finally {
             synchronized(callLock) {
                 activeCall = null
             }
-            if (tmpFile.exists()) {
-                tmpFile.delete()
+            withContext(Dispatchers.IO) {
+                tmpFile?.takeIf { it.exists() }?.delete()
             }
         }
     }

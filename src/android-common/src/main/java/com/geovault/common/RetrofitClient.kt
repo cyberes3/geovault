@@ -28,12 +28,8 @@ object RetrofitClient {
 
     private fun authFailureInterceptor(appContext: Context): Interceptor = Interceptor { chain ->
         val response = chain.proceed(chain.request())
-        if (response.code == 403) {
+        if (response.code == 401 && response.request.header("X-Geovault-Retry") != null) {
             GeovaultAuthManager.handleAuthFailure(appContext)
-        } else if (response.code == 401) {
-            if (response.request.header("X-Geovault-Retry") != null) {
-                GeovaultAuthManager.handleAuthFailure(appContext)
-            }
         }
         response
     }

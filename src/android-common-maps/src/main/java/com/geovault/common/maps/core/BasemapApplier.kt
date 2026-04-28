@@ -38,6 +38,7 @@ internal class BasemapApplier(
 
     private var lastAppliedSourceKey: String? = null
     private var pendingSourceKey: String? = null
+    private var styleRequestGeneration: Long = 0L
 
     /**
      * @return `true` when a full style load was started (callers should
@@ -73,13 +74,14 @@ internal class BasemapApplier(
         }
 
         pendingSourceKey = requestedKey
+        val generation = nextStyleRequestGeneration()
         val restoreCamera = restoreCameraOf(map, savedCamera, defaultPadding)
 
         return try {
             when (basemap) {
-                null -> applyEmptyStyle(map, requestedKey, restoreCamera)
-                is ResolvedBasemap.Raster -> applyRaster(map, basemap, requestedKey, restoreCamera)
-                is ResolvedBasemap.Vector -> applyVector(map, basemap, requestedKey, restoreCamera)
+                null -> applyEmptyStyle(map, requestedKey, generation, restoreCamera)
+                is ResolvedBasemap.Raster -> applyRaster(map, basemap, requestedKey, generation, restoreCamera)
+                is ResolvedBasemap.Vector -> applyVector(map, basemap, requestedKey, generation, restoreCamera)
             }
             true
         } catch (e: Exception) {
@@ -90,7 +92,7 @@ internal class BasemapApplier(
                 e,
             )
             onStyleLoadFailed?.invoke(e.message ?: e.javaClass.simpleName)
-            applyEmptyStyle(map, requestedKey, restoreCamera)
+            applyEmptyStyle(map, requestedKey, generation, restoreCamera)
             true
         }
     }
@@ -100,11 +102,12 @@ internal class BasemapApplier(
         val savedCamera = map.cameraPosition
         val restoreCamera = restoreCameraOf(map, savedCamera, defaultPadding)
         val osm = sourceManager.resolveStreetFallbackBasemap()
+        val generation = nextStyleRequestGeneration()
         if (osm == null) {
-            applyEmptyStyle(map, EMPTY_STYLE_KEY, restoreCamera)
+            applyEmptyStyle(map, EMPTY_STYLE_KEY, generation, restoreCamera)
             return
         }
-        applyRaster(map, osm, osm.cacheKey, restoreCamera)
+        applyRaster(map, osm, osm.cacheKey, generation, restoreCamera)
     }
 
     fun isCurrentBasemapApplied(map: MapLibreMap): Boolean {
@@ -131,10 +134,12 @@ internal class BasemapApplier(
         map: MapLibreMap,
         raster: ResolvedBasemap.Raster,
         sourceKey: String,
+        generation: Long,
         restoreCamera: () -> Unit,
     ) {
         zoomPolicy.applyForRaster(map)
         map.setStyle(Style.Builder()) { style ->
+            if (generation != styleRequestGeneration) return@setStyle
             zoomPolicy.applyForRaster(map)
             try {
                 style.addSource(buildRasterSource(raster.tileTemplate))
@@ -154,14 +159,17 @@ internal class BasemapApplier(
         map: MapLibreMap,
         vector: ResolvedBasemap.Vector,
         sourceKey: String,
+        generation: Long,
         restoreCamera: () -> Unit,
     ) {
         zoomPolicy.applyForVector(map)
         val styleUrlString = vector.styleUrl.toString()
         val isOurServer = isGeoVaultServerStyle(vector.styleUrl)
         MapStyleCache.getStyleJson(context, styleUrlString, isOurServer) { json ->
+            if (generation != styleRequestGeneration) return@getStyleJson
             if (!json.isNullOrBlank()) {
                 map.setStyle(Style.Builder().fromJson(json)) { style ->
+                    if (generation != styleRequestGeneration) return@setStyle
                     zoomPolicy.applyForVector(map)
                     lastAppliedSourceKey = sourceKey
                     pendingSourceKey = null
@@ -181,9 +189,15 @@ internal class BasemapApplier(
         }
     }
 
-    private fun applyEmptyStyle(map: MapLibreMap, sourceKey: String, restoreCamera: () -> Unit) {
+    private fun applyEmptyStyle(
+        map: MapLibreMap,
+        sourceKey: String,
+        generation: Long,
+        restoreCamera: () -> Unit,
+    ) {
         zoomPolicy.applyForRaster(map)
         map.setStyle(Style.Builder()) { style ->
+            if (generation != styleRequestGeneration) return@setStyle
             zoomPolicy.applyForRaster(map)
             lastAppliedSourceKey = sourceKey
             pendingSourceKey = null
@@ -219,6 +233,11 @@ internal class BasemapApplier(
             Log.w(TAG, "Raster layer insertion fallback to top-layer add", layerError)
             style.addLayer(rasterLayer)
         }
+    }
+
+    private fun nextStyleRequestGeneration(): Long {
+        styleRequestGeneration += 1L
+        return styleRequestGeneration
     }
 
     private fun firstLayerAboveBaseMap(style: Style): String? =

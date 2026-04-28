@@ -426,6 +426,7 @@ fun MainScreen(
                 }
                 }
             }
+            TrackerParamsOverlayLayer()
         }
         val globalInfoModel = state.infoMessage
             ?.takeIf { it.isNotBlank() }

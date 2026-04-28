@@ -81,9 +81,11 @@ class MainScreenViewModel(
         }
     }
 
-    fun initialize(intent: Intent?) {
+    fun initialize(intent: Intent?, handleFileIntent: Boolean = true) {
         refreshAuthState()
-        handleIntent(intent)
+        if (handleFileIntent) {
+            handleIntent(intent)
+        }
         intent?.getStringExtra(MainActivity.EXTRA_OAUTH_ERROR)?.let { msg ->
             _state.update {
                 it.copy(importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = msg))
@@ -250,6 +252,13 @@ class MainScreenViewModel(
             val fileUri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             if (fileUri != null) {
                 populateUploadState(fileUri)
+                return
+            }
+        }
+        if (intent?.action == Intent.ACTION_SEND_MULTIPLE) {
+            val fileUris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+            if (fileUris.size == 1) {
+                populateUploadState(fileUris.single())
                 return
             }
         }

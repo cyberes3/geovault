@@ -9,6 +9,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
@@ -54,10 +55,10 @@ fun GeoVaultSubViewScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val reporter = LocalGeoVaultIntegratedSubViewBrandedChromeReporter.current
-    val leave = onLeaveComposition
-    if (leave != null) {
-        DisposableEffect(leave) {
-            onDispose { leave() }
+    val leaveState = rememberUpdatedState(onLeaveComposition)
+    DisposableEffect(Unit) {
+        onDispose {
+            leaveState.value?.invoke()
         }
     }
     DisposableEffect(chromeMode) {

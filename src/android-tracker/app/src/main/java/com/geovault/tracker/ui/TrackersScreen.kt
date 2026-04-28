@@ -627,7 +627,6 @@ fun TrackersScreen(
                 renderTrackersBody()
             }
         },
-        tabOverlay = { TrackerParamsOverlayLayer() },
     )
 
     if (showOpenSettingsDiscardConfirm) {
@@ -802,6 +801,9 @@ private fun TrackersGroupsAuthenticatedBody(
             is TrackersListPositioningAction.ScrollToTracker -> {
                 val targetIndex = orderedVisibleTrackers.indexOfFirst { it.id == action.trackerId }
                 if (targetIndex < 0 && request != null) {
+                    if (state.isLoading || state.isPullRefreshing) {
+                        return@LaunchedEffect
+                    }
                     val requestKey = request.toNavigationKey()
                     val attempts = navigationRefreshAttempts[requestKey] ?: 0
                     if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {
@@ -826,6 +828,9 @@ private fun TrackersGroupsAuthenticatedBody(
             is TrackersListPositioningAction.ScrollToGroup -> {
                 val targetIndex = visibleGroups.indexOfFirst { it.id == action.groupId }
                 if (targetIndex < 0 && request != null) {
+                    if (state.isLoading || state.isPullRefreshing) {
+                        return@LaunchedEffect
+                    }
                     val requestKey = request.toNavigationKey()
                     val attempts = navigationRefreshAttempts[requestKey] ?: 0
                     if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {
@@ -853,6 +858,9 @@ private fun TrackersGroupsAuthenticatedBody(
                 }
                 val targetGroupId = if (targetIndex >= 0) visibleGroups[targetIndex].id else null
                 if (targetIndex < 0 && request != null) {
+                    if (state.isLoading || state.isPullRefreshing) {
+                        return@LaunchedEffect
+                    }
                     val requestKey = request.toNavigationKey()
                     val attempts = navigationRefreshAttempts[requestKey] ?: 0
                     if (attempts == 0 && !state.isLoading && !state.isPullRefreshing) {

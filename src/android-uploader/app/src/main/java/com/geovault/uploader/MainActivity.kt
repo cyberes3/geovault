@@ -39,9 +39,10 @@ class MainActivity : ComponentActivity() {
         chooseFilesLauncher = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             routeUrisToUploadTarget(uris.orEmpty(), applyExtensionFilter = true)
         }
-        if (routeIncomingIntentToUploadTarget(intent)) return
         GeoVaultSystemBars.applyAppChrome(activity = this)
-        viewModel.initialize(intent)
+        val incomingRoute = routeIncomingIntentToUploadTarget(intent)
+        viewModel.initialize(intent, handleFileIntent = !incomingRoute.handled)
+        if (incomingRoute.finishedActivity) return
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
@@ -76,8 +77,8 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (routeIncomingIntentToUploadTarget(intent)) return
-        viewModel.initialize(intent)
+        val incomingRoute = routeIncomingIntentToUploadTarget(intent)
+        viewModel.initialize(intent, handleFileIntent = !incomingRoute.handled)
     }
 
     override fun onResume() {
@@ -94,7 +95,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OAUTH_ERROR = GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY
     }
 
-    private fun routeIncomingIntentToUploadTarget(intent: Intent?): Boolean {
+    private fun routeIncomingIntentToUploadTarget(intent: Intent?): IncomingRouteResult {
         val incomingUris = when (intent?.action) {
             Intent.ACTION_SEND_MULTIPLE -> {
                 intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
@@ -104,20 +105,24 @@ class MainActivity : ComponentActivity() {
             }
             else -> emptyList()
         }
-        if (incomingUris.isEmpty()) return false
-        routeUrisToUploadTarget(incomingUris, applyExtensionFilter = false)
-        return incomingUris.size > 1
+        if (incomingUris.isEmpty()) return IncomingRouteResult.NotHandled
+        return routeUrisToUploadTarget(incomingUris, applyExtensionFilter = true)
     }
 
-    private fun routeUrisToUploadTarget(uris: List<Uri>, applyExtensionFilter: Boolean) {
-        when (val decision = pickerSelectionRouter.decide(uris, applyExtensionFilter)) {
-            PickerRouteDecision.NoSelection -> Unit
+    private fun routeUrisToUploadTarget(
+        uris: List<Uri>,
+        applyExtensionFilter: Boolean,
+    ): IncomingRouteResult {
+        return when (val decision = pickerSelectionRouter.decide(uris, applyExtensionFilter)) {
+            PickerRouteDecision.NoSelection -> IncomingRouteResult.NotHandled
             is PickerRouteDecision.RejectedOnly -> {
                 invalidFilesDialogNamesState.value = decision.rejectedFileNames
+                IncomingRouteResult.Handled
             }
             is PickerRouteDecision.SingleFile -> {
                 invalidFilesDialogNamesState.value = decision.rejectedFileNames.takeIf { it.isNotEmpty() }
                 viewModel.onFileChosen(decision.uri)
+                IncomingRouteResult.Handled
             }
             is PickerRouteDecision.MultiFile -> {
                 startActivity(
@@ -128,7 +133,19 @@ class MainActivity : ComponentActivity() {
                     )
                 )
                 finish()
+                IncomingRouteResult.Finished
             }
+        }
+    }
+
+    private data class IncomingRouteResult(
+        val handled: Boolean,
+        val finishedActivity: Boolean,
+    ) {
+        companion object {
+            val NotHandled = IncomingRouteResult(handled = false, finishedActivity = false)
+            val Handled = IncomingRouteResult(handled = true, finishedActivity = false)
+            val Finished = IncomingRouteResult(handled = true, finishedActivity = true)
         }
     }
 }

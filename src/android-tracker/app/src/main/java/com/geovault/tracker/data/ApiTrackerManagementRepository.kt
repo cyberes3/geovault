@@ -26,12 +26,12 @@ import com.geovault.tracker.UsersResponse
 import com.geovault.tracker.toDomainModel
 import com.geovault.tracker.toDomainModels
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import org.json.JSONObject
 import retrofit2.Response
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 class ApiTrackerManagementRepository(
     private val appContext: Context,
@@ -41,7 +41,7 @@ class ApiTrackerManagementRepository(
         const val TAG = "ApiTrackerMgmtRepo"
     }
 
-    private val cacheMutex = Mutex()
+    private val cacheMutex = ReentrantLock()
     @Volatile private var trackersCache: List<Tracker>? = null
     @Volatile private var groupsCache: List<Group>? = null
     @Volatile private var availableToAddCache: AvailableToAddResponse? = null
@@ -344,7 +344,7 @@ class ApiTrackerManagementRepository(
     }
 
     override fun getTrackerFromCache(trackerId: String): Tracker? {
-        return trackersCache?.firstOrNull { it.id == trackerId }
+        return cacheMutex.withLock { trackersCache?.firstOrNull { it.id == trackerId } }
             ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
     }
 

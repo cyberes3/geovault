@@ -263,6 +263,9 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     },
+                                    onLaunchArgsConsumed = {
+                                        mapLaunchArgs = PlacesMapLaunchArgs(requestToken = mapLaunchArgs.requestToken)
+                                    },
                                 )
                             }
                         }
@@ -283,7 +286,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        viewModel.setSelectedPlaceId(null)
         viewModel.onOauthUrlConsumed()
     }
 

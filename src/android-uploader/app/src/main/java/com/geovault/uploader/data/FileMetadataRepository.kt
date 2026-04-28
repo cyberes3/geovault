@@ -23,24 +23,37 @@ class FileMetadataRepository(private val contentResolver: ContentResolver) {
     }
 
     fun fileSizeFromUri(uri: Uri): Long {
-        var size = 0L
         try {
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
                 if (sizeIndex >= 0 && cursor.moveToFirst()) {
-                    size = cursor.getLong(sizeIndex)
+                    cursor.getLong(sizeIndex).takeIf { it > 0L }?.let { return it }
                 }
             }
         } catch (_: Exception) {
-            try {
-                contentResolver.openInputStream(uri)?.use { stream ->
-                    size = stream.available().toLong()
-                }
-            } catch (_: Exception) {
-                // Keep zero.
-            }
+            // Fall through to descriptor fallback.
         }
-        return size
+        try {
+            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                descriptor.statSize.takeIf { it > 0L }?.let { return it }
+            }
+        } catch (_: Exception) {
+            // Fall through to stream-count fallback.
+        }
+        return try {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var total = 0L
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    total += read
+                }
+                total
+            } ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
     }
 
     fun fileModifiedAtFromUri(uri: Uri): Long? {

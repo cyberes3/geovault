@@ -53,31 +53,48 @@ object LocationUpdates {
                 if (location != null) {
                     deliver(LatLng(location.latitude, location.longitude))
                 } else {
-                    deliver(getBestLastKnownLatLng(manager))
+                    requestCurrentLocationWithLocationManager(
+                        appContext = appContext,
+                        manager = manager,
+                        deliver = ::deliver,
+                    )
                 }
             }
             .addOnFailureListener {
-                val provider = pickBestProvider(manager)
-                if (provider == null) {
-                    deliver(getBestLastKnownLatLng(manager))
-                    return@addOnFailureListener
-                }
-                runCatching {
-                    manager.getCurrentLocation(
-                        provider,
-                        null,
-                        ContextCompat.getMainExecutor(appContext),
-                    ) { location ->
-                        if (location != null) {
-                            deliver(LatLng(location.latitude, location.longitude))
-                        } else {
-                            deliver(getBestLastKnownLatLng(manager))
-                        }
-                    }
-                }.onFailure {
+                requestCurrentLocationWithLocationManager(
+                    appContext = appContext,
+                    manager = manager,
+                    deliver = ::deliver,
+                )
+            }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestCurrentLocationWithLocationManager(
+        appContext: Context,
+        manager: LocationManager,
+        deliver: (LatLng?) -> Unit,
+    ) {
+        val provider = pickBestProvider(manager)
+        if (provider == null) {
+            deliver(getBestLastKnownLatLng(manager))
+            return
+        }
+        runCatching {
+            manager.getCurrentLocation(
+                provider,
+                null,
+                ContextCompat.getMainExecutor(appContext),
+            ) { location ->
+                if (location != null) {
+                    deliver(LatLng(location.latitude, location.longitude))
+                } else {
                     deliver(getBestLastKnownLatLng(manager))
                 }
             }
+        }.onFailure {
+            deliver(getBestLastKnownLatLng(manager))
+        }
     }
 
     @SuppressLint("MissingPermission")

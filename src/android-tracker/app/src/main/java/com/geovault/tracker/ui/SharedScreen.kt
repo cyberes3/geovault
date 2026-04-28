@@ -303,7 +303,6 @@ fun SharedScreen(
             )
             }
         },
-        tabOverlay = { TrackerParamsOverlayLayer() },
     )
     GeoVaultSnackbarHost(
         model = snackbarModel,
@@ -425,6 +424,9 @@ private fun ColumnScope.SharedAuthenticatedBody(
         }
         val requestKey = request.toNavigationKey()
         if (targetIndex < 0 && (request.trackerId != null || request.groupId != null)) {
+            if (state.isLoading) {
+                return@LaunchedEffect
+            }
             val attempts = navigationRefreshAttempts[requestKey] ?: 0
             if (attempts == 0 && !state.isLoading) {
                 navigationRefreshAttempts = navigationRefreshAttempts + (requestKey to 1)

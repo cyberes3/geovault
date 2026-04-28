@@ -212,7 +212,6 @@ fun HomeScreen(
                 }
             }
         },
-        tabOverlay = { TrackerParamsOverlayLayer() },
     )
     if (showStopTrackingConfirm) {
         GeoVaultConfirmationDialog(

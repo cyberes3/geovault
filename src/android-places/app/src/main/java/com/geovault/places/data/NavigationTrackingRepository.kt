@@ -23,6 +23,7 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
     )
     private val gson = Gson()
     private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
+    private val pendingLock = Any()
 
     fun preloadOnLaunch() {
         store.preloadAllDataBlocking()
@@ -45,7 +46,9 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         val api = PlacesApiFactory.create(context, serverUrl)
         flushPending(serverUrl)
         api.trackNavigation(dbId).enqueue(object : Callback<Void> {
-            override fun onResponse(call: Call<Void>, response: Response<Void>) = Unit
+            override fun onResponse(call: Call<Void>, response: Response<Void>) {
+                if (!response.isSuccessful) addPending(dbId)
+            }
             override fun onFailure(call: Call<Void>, t: Throwable) {
                 addPending(dbId)
             }
@@ -66,26 +69,38 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
     }
 
     fun clearPending() {
-        store.removeBlocking(KEY_PENDING_NAVIGATION_IDS)
+        synchronized(pendingLock) {
+            store.removeBlocking(KEY_PENDING_NAVIGATION_IDS)
+        }
     }
 
     private fun getPending(): List<Int> {
-        val json = store.getBlocking(KEY_PENDING_NAVIGATION_IDS)
-        return runCatching { gson.fromJson<List<Int>>(json, intListType) ?: emptyList() }.getOrElse { emptyList() }
+        return synchronized(pendingLock) {
+            readPendingLocked()
+        }
     }
 
     private fun addPending(id: Int) {
-        val pending = getPending().toMutableList()
-        if (id !in pending) {
-            pending.add(id)
-            store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
+        synchronized(pendingLock) {
+            val pending = readPendingLocked().toMutableList()
+            if (id !in pending) {
+                pending.add(id)
+                store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
+            }
         }
     }
 
     private fun removePending(id: Int) {
-        val pending = getPending().toMutableList()
-        pending.remove(id)
-        store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
+        synchronized(pendingLock) {
+            val pending = readPendingLocked().toMutableList()
+            pending.remove(id)
+            store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
+        }
+    }
+
+    private fun readPendingLocked(): List<Int> {
+        val json = store.getBlocking(KEY_PENDING_NAVIGATION_IDS)
+        return runCatching { gson.fromJson<List<Int>>(json, intListType) ?: emptyList() }.getOrElse { emptyList() }
     }
 
     companion object {

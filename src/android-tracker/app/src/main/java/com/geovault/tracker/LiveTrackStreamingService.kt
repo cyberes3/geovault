@@ -74,6 +74,7 @@ class LiveTrackStreamingService : Service() {
     private val connectionSessionId = AtomicLong(0L)
     private var lifecycle = StreamingLifecycleState()
     private val sessionGuard = StreamingSessionGuard.createDefault()
+    private val stateLock = Any()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
@@ -100,12 +101,14 @@ class LiveTrackStreamingService : Service() {
                     return START_STICKY
                 }
 
-                val assessment = sessionGuard.assess(
-                    requestedTrackerIds = trackerIds,
-                    currentTrackerIds = currentTrackerIds,
-                    hasSocket = webSocket != null,
-                    lifecycleState = lifecycle.lifecycleState
-                )
+                val assessment = synchronized(stateLock) {
+                    sessionGuard.assess(
+                        requestedTrackerIds = trackerIds,
+                        currentTrackerIds = currentTrackerIds,
+                        hasSocket = webSocket != null,
+                        lifecycleState = lifecycle.lifecycleState
+                    )
+                }
                 if (assessment.decision == StreamingSessionReuseDecision.REUSE) {
                     applyLifecycleEvent(StreamingLifecycleEvent.Connected, trackerIds)
                     return START_STICKY
@@ -113,8 +116,10 @@ class LiveTrackStreamingService : Service() {
 
                 applyLifecycleEvent(StreamingLifecycleEvent.StartRequested, trackerIds)
                 disconnectWebSocket()
-                currentTrackerIds = trackerIds
-                currentTrackerName = trackerName
+                synchronized(stateLock) {
+                    currentTrackerIds = trackerIds
+                    currentTrackerName = trackerName
+                }
                 val sessionId = connectionSessionId.incrementAndGet()
                 connectJob?.cancel()
                 connectJob = serviceScope.launch { connect(sessionId) }
@@ -130,10 +135,13 @@ class LiveTrackStreamingService : Service() {
             }
 
             ACTION_RESHOW_FOREGROUND -> {
-                if (isRunning && currentTrackerIds.isNotEmpty()) {
+                val snapshot = synchronized(stateLock) {
+                    Triple(isRunning, currentTrackerIds, currentTrackerName)
+                }
+                if (snapshot.first && snapshot.second.isNotEmpty()) {
                     ensureStreamingChannel()
                     startForegroundForStreaming(
-                        createNotification(currentTrackerName, currentTrackerIds.size),
+                        createNotification(snapshot.third, snapshot.second.size),
                     )
                 }
             }
@@ -167,7 +175,7 @@ class LiveTrackStreamingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private suspend fun connect(sessionId: Long) {
-        if (!serviceScope.isActive || currentTrackerIds.isEmpty()) return
+        if (!serviceScope.isActive || currentTrackerIdsSnapshot().isEmpty()) return
         val token = withContext(Dispatchers.IO) {
             runCatching { GeovaultAuthManager.getValidAccessToken(applicationContext, null) }.getOrNull()
         }
@@ -181,7 +189,7 @@ class LiveTrackStreamingService : Service() {
         if (serverUrl.isBlank()) {
             val reason = getString(R.string.error_server_unreachable)
             emitStreamingError(reason)
-            applyLifecycleEvent(StreamingLifecycleEvent.PermanentFailure, currentTrackerIds, reason)
+            applyLifecycleEvent(StreamingLifecycleEvent.PermanentFailure, currentTrackerIdsSnapshot(), reason)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -196,7 +204,7 @@ class LiveTrackStreamingService : Service() {
             .url("$wsScheme://$base/ws/extensions/live-track/trackers-live/")
             .addHeader("Authorization", "Bearer $token")
             .build()
-        val trackerIdsSnapshot = currentTrackerIds
+        val trackerIdsSnapshot = currentTrackerIdsSnapshot()
         val listener = TrackersWebSocketListener(
             filterTrackIds = trackerIdsSnapshot,
             onPoint = { point -> publishRemotePoint(point) },
@@ -213,13 +221,20 @@ class LiveTrackStreamingService : Service() {
         try {
             RemoteStreamIngressPolicy.resetTracks(trackerIdsSnapshot)
             val socket = getWebSocketClient().newWebSocket(request, listener)
-            if (sessionId != connectionSessionId.get() || currentTrackerIds.isEmpty()) {
+            val accepted = synchronized(stateLock) {
+                if (sessionId == connectionSessionId.get() && currentTrackerIds.isNotEmpty()) {
+                    webSocket = socket
+                    true
+                } else {
+                    false
+                }
+            }
+            if (!accepted) {
                 socket.close(1000, "stale_session")
                 return
             }
-            webSocket = socket
             sessionGuard.markConnected()
-            applyLifecycleEvent(StreamingLifecycleEvent.Connected, currentTrackerIds)
+            applyLifecycleEvent(StreamingLifecycleEvent.Connected, currentTrackerIdsSnapshot())
         } catch (e: Exception) {
             Log.e(TAG, "WebSocket connect failed", e)
             scheduleReconnect(
@@ -231,17 +246,19 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun scheduleReconnect(sessionId: Long, failureClass: StreamingFailureClass, failureReason: String) {
-        if (currentTrackerIds.isEmpty() || failureClass == StreamingFailureClass.PERMANENT) return
-        applyLifecycleEvent(StreamingLifecycleEvent.RecoverableFailure, currentTrackerIds, failureReason)
+        val trackerIdsSnapshot = currentTrackerIdsSnapshot()
+        if (trackerIdsSnapshot.isEmpty() || failureClass == StreamingFailureClass.PERMANENT) return
+        applyLifecycleEvent(StreamingLifecycleEvent.RecoverableFailure, trackerIdsSnapshot, failureReason)
         connectJob?.cancel()
         connectJob = serviceScope.launch {
             val delayMs = StreamingLifecycleOrchestrator.nextReconnectDelayMs(
-                reconnectAttempt = lifecycle.reconnectAttempt,
+                reconnectAttempt = synchronized(stateLock) { lifecycle.reconnectAttempt },
                 failureClass = failureClass
             )
             delay(delayMs)
-            if (sessionId == connectionSessionId.get() && currentTrackerIds.isNotEmpty()) {
-                applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, currentTrackerIds)
+            val retryTrackerIds = currentTrackerIdsSnapshot()
+            if (sessionId == connectionSessionId.get() && retryTrackerIds.isNotEmpty()) {
+                applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, retryTrackerIds)
                 connect(sessionId)
             }
         }
@@ -250,25 +267,31 @@ class LiveTrackStreamingService : Service() {
     private fun disconnectWebSocket() {
         connectJob?.cancel()
         connectJob = null
-        runCatching { webSocket?.close(1000, null) }
-        webSocket = null
-        sessionGuard.markDisconnected()
-        currentTrackerIds = emptySet()
-        currentTrackerName = null
+        val socket = synchronized(stateLock) {
+            webSocket.also {
+                webSocket = null
+                sessionGuard.markDisconnected()
+                currentTrackerIds = emptySet()
+                currentTrackerName = null
+            }
+        }
+        runCatching { socket?.close(1000, null) }
     }
 
     private fun getWebSocketClient(): OkHttpClient {
-        val existingClient = wsHttpClient
-        if (existingClient != null) {
-            return existingClient
+        synchronized(stateLock) {
+            val existingClient = wsHttpClient
+            if (existingClient != null) {
+                return existingClient
+            }
+            return RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
+                .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
+                .build()
+                .also { builtClient -> wsHttpClient = builtClient }
         }
-        return RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
-            .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
-            .build()
-            .also { builtClient -> wsHttpClient = builtClient }
     }
 
     private fun applyLifecycleEvent(
@@ -276,21 +299,28 @@ class LiveTrackStreamingService : Service() {
         activeTrackerIds: Set<String>,
         failureReason: String? = null,
     ) {
-        lifecycle = StreamingLifecycleOrchestrator.transition(
-            current = lifecycle,
-            event = event,
-            failureReason = failureReason
-        )
-        val running = lifecycle.lifecycleState == TrackingLifecycleState.RUNNING
-        isRunning = running
+        val snapshot = synchronized(stateLock) {
+            lifecycle = StreamingLifecycleOrchestrator.transition(
+                current = lifecycle,
+                event = event,
+                failureReason = failureReason
+            )
+            val running = lifecycle.lifecycleState == TrackingLifecycleState.RUNNING
+            isRunning = running
+            Triple(running, lifecycle.lifecycleState, lifecycle.failureReason)
+        }
         LiveStreamRuntimeStateStore.update {
             it.copy(
-                isRunning = running,
-                lifecycleState = lifecycle.lifecycleState,
+                isRunning = snapshot.first,
+                lifecycleState = snapshot.second,
                 activeTrackerIds = activeTrackerIds,
-                failureReason = lifecycle.failureReason
+                failureReason = snapshot.third
             )
         }
+    }
+
+    private fun currentTrackerIdsSnapshot(): Set<String> {
+        return synchronized(stateLock) { currentTrackerIds }
     }
 
     private fun publishRemotePoint(point: StreamingTrackPoint) {
@@ -331,7 +361,10 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun emitStreamingErrorIfNeeded(message: String) {
-        if (lifecycle.lifecycleState != TrackingLifecycleState.FAILED || lifecycle.failureReason != message) {
+        val shouldEmit = synchronized(stateLock) {
+            lifecycle.lifecycleState != TrackingLifecycleState.FAILED || lifecycle.failureReason != message
+        }
+        if (shouldEmit) {
             emitStreamingError(message)
         }
     }

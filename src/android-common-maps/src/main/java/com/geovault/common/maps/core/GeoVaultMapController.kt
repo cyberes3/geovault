@@ -86,11 +86,11 @@ sealed class GeoVaultBaseMap(
                 if (_mapManager === manager && mapView === view) {
                     styleDeliveredForGeneration = true
                     clearStyleLoadWatchdog()
-                    _phase.value = GeoVaultMapPhase.Ready
                     onStyleLoaded?.invoke(map, style)
                     onMapReady?.invoke(map, style)
                     pluginRegistry.onStyleLoaded(map, style)
                     onStyleReady?.invoke(map, style)
+                    _phase.value = GeoVaultMapPhase.Ready
                 }
             }
             if (forceOsmOnly) {
@@ -110,14 +110,13 @@ sealed class GeoVaultBaseMap(
             _phase.value = GeoVaultMapPhase.StyleLoading
             attachedManager.setupBaseMapSettings(map)
             pluginRegistry.onMapAttached(map)
-            styleLoadGeneration += 1L
-            styleDeliveredForGeneration = false
-            scheduleStyleLoadWatchdog(map, styleLoadGeneration)
+            val applyGeneration = beginStyleLoad(map)
             if (forceOsmOnly) {
                 attachedManager.applySelectedSource(map)
             } else {
                 attachedManager.fetchMapSources {
                     if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
+                    if (styleLoadGeneration != applyGeneration) return@fetchMapSources
                     if (!attachedManager.isCurrentSourceApplied(map)) {
                         attachedManager.applySelectedSource(map)
                     }
@@ -172,7 +171,10 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(manager.sourceManager.getNextSourceId())
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginStyleLoad(map)
         if (!manager.applySelectedSource(map)) {
+            styleDeliveredForGeneration = true
+            clearStyleLoadWatchdog()
             _phase.value = GeoVaultMapPhase.Ready
         }
     }
@@ -183,7 +185,10 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(optionId)
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginStyleLoad(map)
         if (!manager.applySelectedSource(map)) {
+            styleDeliveredForGeneration = true
+            clearStyleLoadWatchdog()
             _phase.value = GeoVaultMapPhase.Ready
         }
     }
@@ -296,8 +301,16 @@ sealed class GeoVaultBaseMap(
         // looping into it wastes work.
         val effectiveId = manager.sourceManager.getEffectiveSourceId()
         if (manager.sourceManager.resolveBasemap(effectiveId) is ResolvedBasemap.Vector) {
+            beginStyleLoad(map)
             manager.loadOsmFallback(map)
         }
+    }
+
+    private fun beginStyleLoad(map: MapLibreMap): Long {
+        styleLoadGeneration += 1L
+        styleDeliveredForGeneration = false
+        scheduleStyleLoadWatchdog(map, styleLoadGeneration)
+        return styleLoadGeneration
     }
 
     private fun scheduleStyleLoadWatchdog(map: MapLibreMap, generation: Long) {
@@ -306,6 +319,7 @@ sealed class GeoVaultBaseMap(
             if (generation != styleLoadGeneration) return@Runnable
             if (styleDeliveredForGeneration) return@Runnable
             _phase.value = GeoVaultMapPhase.Recovering
+            beginStyleLoad(map)
             _mapManager?.loadOsmFallback(map)
         }
         mainHandler.postDelayed(styleLoadWatchdog!!, STYLE_LOAD_TIMEOUT_MS)
