@@ -4,6 +4,7 @@ import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import com.geovault.places.model.Geometry
 import com.geovault.places.model.Properties
+import java.net.UnknownHostException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,6 +80,109 @@ class OfflineSyncCoordinatorTest {
         val result = kotlinx.coroutines.runBlocking { coordinator.fetchAndCacheServerSnapshot() }
 
         assertTrue(result is SnapshotFetchResult.Failed)
+        assertEquals(0, store.cachedSnapshots.size)
+    }
+
+    @Test
+    fun transientFetchFailureRetriesUntilSuccess() {
+        val firstCollection = FeatureCollection(features = listOf(place(1, "A")))
+        val repository = SequenceRepo(
+            fetchResults = mutableListOf(
+                Result.failure(UnknownHostException("cold start")),
+                Result.success(firstCollection),
+            )
+        )
+        val store = CoordinatorStore()
+        val coordinator = OfflineSyncCoordinator(
+            repository = repository,
+            cacheStore = store,
+            syncExecutor = FakeSyncUseCase(
+                SyncResult(
+                    hadQueuedItems = false,
+                    successCount = 0,
+                    failedCount = 0,
+                    queueBecameEmpty = true,
+                    conflictCount = 0,
+                    failures = emptyList(),
+                    events = emptyList(),
+                )
+            ),
+            navigationRetryFlusher = CountingFlusher(),
+            serverUrlProvider = { "https://example.test" },
+        )
+
+        val fetchResult = kotlinx.coroutines.runBlocking { coordinator.fetchAndCacheServerSnapshot() }
+
+        assertTrue(fetchResult is SnapshotFetchResult.Success)
+        assertEquals(2, repository.fetchCount)
+        assertEquals(1, store.cachedSnapshots.size)
+    }
+
+    @Test
+    fun transientFetchFailuresExhaustRetries() {
+        val repository = SequenceRepo(
+            fetchResults = mutableListOf(
+                Result.failure(UnknownHostException("a")),
+                Result.failure(UnknownHostException("b")),
+                Result.failure(UnknownHostException("c")),
+            )
+        )
+        val store = CoordinatorStore()
+        val coordinator = OfflineSyncCoordinator(
+            repository = repository,
+            cacheStore = store,
+            syncExecutor = FakeSyncUseCase(
+                SyncResult(
+                    hadQueuedItems = false,
+                    successCount = 0,
+                    failedCount = 0,
+                    queueBecameEmpty = true,
+                    conflictCount = 0,
+                    failures = emptyList(),
+                    events = emptyList(),
+                )
+            ),
+            navigationRetryFlusher = CountingFlusher(),
+            serverUrlProvider = { "https://example.test" },
+        )
+
+        val fetchResult = kotlinx.coroutines.runBlocking { coordinator.fetchAndCacheServerSnapshot() }
+
+        assertTrue(fetchResult is SnapshotFetchResult.Failed)
+        assertEquals(3, repository.fetchCount)
+        assertEquals(0, store.cachedSnapshots.size)
+    }
+
+    @Test
+    fun serverErrorDoesNotRetryFetch() {
+        val repository = SequenceRepo(
+            fetchResults = mutableListOf(
+                Result.failure(IllegalStateException("Server error: 503")),
+            )
+        )
+        val store = CoordinatorStore()
+        val coordinator = OfflineSyncCoordinator(
+            repository = repository,
+            cacheStore = store,
+            syncExecutor = FakeSyncUseCase(
+                SyncResult(
+                    hadQueuedItems = false,
+                    successCount = 0,
+                    failedCount = 0,
+                    queueBecameEmpty = true,
+                    conflictCount = 0,
+                    failures = emptyList(),
+                    events = emptyList(),
+                )
+            ),
+            navigationRetryFlusher = CountingFlusher(),
+            serverUrlProvider = { "https://example.test" },
+        )
+
+        val fetchResult = kotlinx.coroutines.runBlocking { coordinator.fetchAndCacheServerSnapshot() }
+
+        assertTrue(fetchResult is SnapshotFetchResult.Failed)
+        assertEquals(1, repository.fetchCount)
         assertEquals(0, store.cachedSnapshots.size)
     }
 
