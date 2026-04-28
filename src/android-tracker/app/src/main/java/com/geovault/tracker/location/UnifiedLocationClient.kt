@@ -1,13 +1,10 @@
 package com.geovault.tracker.location
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Looper
-import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -27,10 +24,9 @@ class UnifiedLocationClient(context: Context) {
     private var sessionCallback: LocationCallback? = null
 
     fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
+        return TrackingLocationAvailabilityPolicy.canRequestTrackingLocationUpdates(
+            hasFineLocationPermission = TrackingPermissionGate.hasLocationPermission(appContext)
+        )
     }
 
     fun isGpsProviderEnabled(): Boolean {
@@ -40,6 +36,8 @@ class UnifiedLocationClient(context: Context) {
             false
         }
     }
+
+    fun isLocationServicesEnabled(): Boolean = TrackingPermissionGate.isLocationServicesEnabled(appContext)
 
     @SuppressLint("MissingPermission")
     fun startSession(

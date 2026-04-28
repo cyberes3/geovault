@@ -76,6 +76,10 @@
     <string name="permissions_required_title">Permissions Required</string>
     <string name="permissions_required_message">To track your location, the app needs the following permissions:</string>
     <string name="grant_location_permission">Allow Precise Location</string>
+    <string name="grant_location_permission_first">Grant location permission first</string>
+    <string name="precise_location_required_title">Precise Location Required</string>
+    <string name="precise_location_required_message">This app requires precise location to function correctly.\n\nIn the app settings that will open next, go to Permissions → Location. The &quot;Use precise location&quot; switch is below the main location access options.</string>
+    <string name="open_settings">Open Settings</string>
     <string name="grant_background_location">Grant Background Location</string>
     <string name="grant_notification_permission">Grant Notification Permission</string>
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
@@ -324,6 +328,7 @@
     <string name="trackers_field_world_share_enabled">Enable world share link</string>
     <string name="trackers_field_share_params_with_world">Share parameters with world</string>
     <string name="trackers_action_copy_world_share_link">Copy world share link</string>
+    <string name="world_share_link_clip_label">World share link</string>
     <string name="trackers_action_share_world_share_link">Share world share link</string>
     <string name="trackers_failed_to_enable_world_share">Could not enable world share link.</string>
     <string name="trackers_failed_to_disable_world_share">Could not disable world share link.</string>
@@ -346,6 +351,7 @@
     <string name="trackers_error_server">Server error (%1$d).</string>
     <string name="trackers_error_validation">Request could not be validated.</string>
     <string name="trackers_error_unknown">Something went wrong.</string>
+    <string name="shared_navigation_target_not_found">That tracker or group is no longer visible in Shared.</string>
     <string name="trackers_history_cleared">Tracker history cleared.</string>
     <string name="trackers_deleted">Tracker deleted.</string>
     <string name="trackers_group_actions_empty">This group has no members yet.</string>

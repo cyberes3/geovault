@@ -39,6 +39,21 @@ data class QueueUploadConfig(
     val deviceIdentifier: String
 )
 
+internal object QueueUploadOutcomePolicy {
+    fun httpFailureClass(code: Int): SyncFailureClass {
+        if (code == 408 || code == 429) return SyncFailureClass.TRANSIENT
+        return if (code in 400..499) SyncFailureClass.PERMANENT else SyncFailureClass.TRANSIENT
+    }
+
+    fun finalOutcome(batchesSent: Int, interruptedByFailure: Boolean): SyncFailureClass {
+        return when {
+            interruptedByFailure -> SyncFailureClass.TRANSIENT
+            batchesSent > 0 -> SyncFailureClass.NONE
+            else -> SyncFailureClass.TRANSIENT
+        }
+    }
+}
+
 /**
  * Domain-agnostic in-flight reservation set. Tracks which row ids are currently being uploaded so
  * a second concurrent push cannot claim the same rows. Knows nothing about trackers.
@@ -130,7 +145,7 @@ class QueueUploadEngine(
         }
         if (!lockAcquired) {
             Log.d(TAG, "Push already in progress for scope=$scope")
-            return@withContext SyncFailureClass.TRANSIENT
+            return@withContext SyncFailureClass.SKIPPED
         }
 
         try {
@@ -146,6 +161,7 @@ class QueueUploadEngine(
             val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
             var batchesSent = 0
             var shouldContinuePush = true
+            var interruptedByFailure = false
             while (batchesSent < config.maxBatchesPerPush && shouldContinuePush) {
                 val batch = claimNextBatch(
                     scope = scope,
@@ -192,9 +208,11 @@ class QueueUploadEngine(
                         } else {
                             releaseClaimedBatch(batch)
                             locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
-                            if (response.code in 400..499) {
+                            val failureClass = QueueUploadOutcomePolicy.httpFailureClass(response.code)
+                            if (failureClass == SyncFailureClass.PERMANENT) {
                                 return@withContext SyncFailureClass.PERMANENT
                             }
+                            interruptedByFailure = true
                             shouldContinuePush = false
                         }
                     }
@@ -202,10 +220,14 @@ class QueueUploadEngine(
                     Log.e(TAG, "Exception pushing locations", e)
                     releaseClaimedBatch(batch)
                     locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
+                    interruptedByFailure = true
                     shouldContinuePush = false
                 }
             }
-            return@withContext if (batchesSent > 0) SyncFailureClass.NONE else SyncFailureClass.TRANSIENT
+            return@withContext QueueUploadOutcomePolicy.finalOutcome(
+                batchesSent = batchesSent,
+                interruptedByFailure = interruptedByFailure
+            )
         } finally {
             if (locallyClaimedIds.isNotEmpty()) {
                 inFlightClaims.releaseIds(locallyClaimedIds.toSet())

@@ -67,6 +67,13 @@ object RemoteStreamIngressPolicy {
         TrackPointCrossSourceState.resetTrack(trackId)
     }
 
+    fun resetTracks(trackIds: Collection<String>) {
+        trackIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach(::resetTrack)
+    }
+
     fun resetForTests() {
         lastAcceptedByStream.clear()
         acceptedHistoryByStream.clear()

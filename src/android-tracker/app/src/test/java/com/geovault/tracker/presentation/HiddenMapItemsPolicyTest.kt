@@ -51,4 +51,28 @@ class HiddenMapItemsPolicyTest {
         assertEquals("missing-group", hidden[0].name)
         assertEquals("missing-track", hidden[1].name)
     }
+
+    @Test
+    fun visibleTrackerIdsForMap_excludesHiddenAndOwnerHiddenTrackers() {
+        val visibility = MapVisibilityResponse(hidden_track_ids = listOf("t2"))
+        val trackers = listOf(
+            Tracker(id = "t1", name = "Alpha", color = null),
+            Tracker(id = "t2", name = "Bravo", color = null),
+            Tracker(
+                id = "t3",
+                name = "Hidden Owner",
+                color = null,
+                is_owner = true,
+                settings = mapOf("hidden" to true)
+            ),
+        )
+
+        val visible = HiddenMapItemsPolicy.visibleTrackerIdsForMap(
+            rosterTrackerIds = listOf("t1", "t2", "t3", " "),
+            mapVisibility = visibility,
+            trackers = trackers,
+        )
+
+        assertEquals(setOf("t1"), visible)
+    }
 }

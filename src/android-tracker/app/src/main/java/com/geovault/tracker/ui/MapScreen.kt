@@ -320,8 +320,8 @@ private fun TrackerMapAuthenticatedContent(
     val tooltipMapSelectionZoomLock = stringResource(R.string.tooltip_map_selection_zoom_lock)
 
     val phase by map.phase.collectAsState()
-    LaunchedEffect(phase) {
-        viewModel.setMapReady(phase == GeoVaultMapPhase.Ready)
+    LaunchedEffect(phase, isActive) {
+        viewModel.setMapReady(isActive && phase == GeoVaultMapPhase.Ready)
     }
     LaunchedEffect(isActive, state.followLockEnabled) {
         if (!isActive || !state.followLockEnabled) {
@@ -446,7 +446,9 @@ private fun TrackerMapAuthenticatedContent(
         state.mode,
         state.remoteLastPoints,
         state.activeStreamedTrackerIds,
+        state.streamTargetIds,
         state.selectedMapTracker,
+        state.renderMetadataSignature,
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         delay(RENDER_COALESCE_MS)

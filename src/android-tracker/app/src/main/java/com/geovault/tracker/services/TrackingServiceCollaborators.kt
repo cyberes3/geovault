@@ -150,7 +150,10 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 location.elapsedRealtimeNanos = canonical.elapsedRealtimeNanos
             }
             if (decision.adjustmentReason == TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED) {
-                val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
+                val visible = locationDao.getCurrentSessionCountForTracker(
+                    trackerId = queuedTrackerId,
+                    sessionBoundaryId = sessionVisibleBoundaryId
+                )
                 val nextSessionDistanceMeters = computeNextSessionDistanceMeters(
                     currentSessionDistanceMeters = totalDistanceMeters,
                     previousAcceptedLocation = previousAcceptedLocation,
@@ -195,7 +198,10 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             )
             updateAcceptedStateForLocalStream(trackId = trackId, canonical = canonical, historyWindowSize = 5)
         }
-        val visible = locationDao.getCurrentSessionCountById(sessionVisibleBoundaryId)
+        val visible = locationDao.getCurrentSessionCountForTracker(
+            trackerId = queuedTrackerId,
+            sessionBoundaryId = sessionVisibleBoundaryId
+        )
         return LocationIngestResult(
             accepted = true,
             rejectReason = null,

@@ -168,21 +168,22 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private fun optimisticTrackerForId(state: SharedUiState, trackerId: String): Tracker {
         val fromExisting = state.trackers.firstOrNull { it.id == trackerId }
         if (fromExisting != null) return fromExisting
-        val fromAvailable = state.availableToAdd
+        val fromIncoming = state.availableToAdd
             ?.shared_with_me
             .orEmpty()
             .firstOrNull { it.id == trackerId }
-            ?: state.availableToAdd
-                ?.public
-                .orEmpty()
-                .firstOrNull { it.id == trackerId }
+        val fromPublic = state.availableToAdd
+            ?.public
+            .orEmpty()
+            .firstOrNull { it.id == trackerId }
+        val fromAvailable = fromIncoming ?: fromPublic
         return Tracker(
             id = trackerId,
             name = fromAvailable?.name ?: trackerId,
             color = fromAvailable?.color,
             owner_email = fromAvailable?.owner_email,
             is_owner = false,
-            visibility = "shared",
+            visibility = if (fromPublic != null && fromIncoming == null) "public" else "shared",
         )
     }
 

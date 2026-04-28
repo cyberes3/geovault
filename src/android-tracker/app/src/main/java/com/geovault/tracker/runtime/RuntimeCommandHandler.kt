@@ -128,6 +128,21 @@ class RuntimeCommandHandler(
             "restartTrackingIfKilled=${request.restartTrackingIfKilled} wasTrackingBeforeExit=${request.wasTrackingBeforeExit} desiredRunning=$desiredRunning"
         )
         if (!desiredRunning) {
+            if (repository.isServiceRunning()) {
+                effects.cancelWatchdog()
+                telemetry.event(
+                    "watchdog",
+                    "disabled_but_service_running restartTrackingIfKilled=${request.restartTrackingIfKilled} wasTrackingBeforeExit=${request.wasTrackingBeforeExit}"
+                )
+                return TrackingSessionUpdateResult(
+                    state = reconciledCurrent,
+                    effects = listOf(RuntimeEffect(RuntimeEffectType.CANCEL_WATCHDOG, "watchdog_disabled_service_running")),
+                    commandResult = RuntimeCommandResult(
+                        action = RuntimeActionType.NOOP,
+                        reason = "watchdog_disabled_service_running"
+                    )
+                )
+            }
             val after = repository.updateState {
                 it.copy(
                     shouldBeRunning = false,

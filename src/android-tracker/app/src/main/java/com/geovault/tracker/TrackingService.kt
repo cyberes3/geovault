@@ -38,6 +38,8 @@ import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
 import com.geovault.tracker.location.TrackingControlState
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.location.TrackingLocationRequestInput
+import com.geovault.tracker.location.TrackingLocationRequestPolicy
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingSyncPolicy
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
@@ -76,8 +78,6 @@ import com.geovault.tracker.services.RuntimeSnapshotProjector
 import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -168,7 +168,7 @@ class TrackingService : Service() {
 
     private val locationListener: LocationListener = LocationListener { location ->
         if (!isTracking) return@LocationListener
-        if (!isGpsProviderEnabled()) {
+        if (!isLocationServicesEnabled()) {
             enterWaitingForGpsProvider(reason = "location_callback")
             return@LocationListener
         }
@@ -179,9 +179,10 @@ class TrackingService : Service() {
                 return@LocationListener
             }
         }
-        latestObservedRawLocation = Location(location)
+        val locationSnapshot = Location(location)
+        latestObservedRawLocation = Location(locationSnapshot)
         ingestScope.launch {
-            processLocationUpdateSerialized(location)
+            processLocationUpdateSerialized(locationSnapshot)
         }
     }
 
@@ -193,7 +194,7 @@ class TrackingService : Service() {
     private val gpsProviderReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (!isTracking) return
-            if (isGpsProviderEnabled()) {
+            if (isLocationServicesEnabled()) {
                 resumeFromGpsProviderWait(reason = "provider_broadcast")
             } else {
                 enterWaitingForGpsProvider(reason = "provider_broadcast")
@@ -268,15 +269,11 @@ class TrackingService : Service() {
         private const val FAST_GPS_LOCK_MAX_LAST_LOCATION_AGE_MS = 30_000L
         private const val FAST_GPS_LOCK_MAX_SAMPLE_AGE_MS = 30_000L
         private const val FAST_GPS_LOCK_SUMMARY_INTERVAL_MS = 30_000L
-        private const val FAST_GPS_LOCK_INTERVAL_MS = 0L
-        private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 0L
-        private const val FAST_GPS_LOCK_MIN_DISTANCE_METERS = 0f
         private const val ELASTICITY_SPEED_BUCKET_SIZE_MPS = 5f
         private const val ELASTICITY_MULTIPLIER = 0.35f
         private const val ELASTICITY_MAX_SPEED_BUCKET = 8
         private const val WALKING_ELASTICITY_MAX_SPEED_BUCKET = 2
         private const val ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS = 0.5f
-        private const val MAX_NORMAL_REQUEST_DEFER_MS = 60_000L
 
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(): Boolean = false
@@ -398,7 +395,11 @@ class TrackingService : Service() {
             StartupCommandPath.ReshowForeground -> {
                 if (isTracking) {
                     serviceScope.launch(Dispatchers.IO) {
-                        val count = database.locationDao().getCurrentSessionCountById(sessionVisibleBoundaryId)
+                        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService)
+                        val count = database.locationDao().getCurrentSessionCountForTracker(
+                            trackerId = trackerId,
+                            sessionBoundaryId = sessionVisibleBoundaryId
+                        )
                         updateRuntimeSnapshot { it.copy(queuedPointsVisible = count) }
                         syncRuntimeStateStore()
                         withContext(Dispatchers.Main) {
@@ -497,14 +498,14 @@ class TrackingService : Service() {
             )
             return false
         }
-        if (!isGpsProviderEnabled()) {
-            Log.w(TAG, "Start blocked: GPS provider disabled")
+        if (!isLocationServicesEnabled()) {
+            Log.w(TAG, "Start blocked: location services disabled")
             setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.gps_provider_required),
                 path = path,
                 trigger = trigger,
-                reason = "gps_disabled"
+                reason = "location_services_disabled"
             )
             return false
         }
@@ -1019,7 +1020,10 @@ class TrackingService : Service() {
     private fun updateNotificationFromDb(broadcastStats: Boolean) {
         serviceScope.launch(Dispatchers.IO) {
             val count = if (isTracking) {
-                database.locationDao().getCurrentSessionCountById(sessionVisibleBoundaryId)
+                database.locationDao().getCurrentSessionCountForTracker(
+                    trackerId = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService),
+                    sessionBoundaryId = sessionVisibleBoundaryId
+                )
             } else {
                 0
             }
@@ -1131,6 +1135,10 @@ class TrackingService : Service() {
         return locationSessionCoordinator.isGpsProviderEnabled()
     }
 
+    private fun isLocationServicesEnabled(): Boolean {
+        return locationSessionCoordinator.isLocationServicesEnabled()
+    }
+
     private fun startRecoveryHeartbeat() {
         recoveryHeartbeatJob?.cancel()
         recoveryHeartbeatJob = serviceScope.launch {
@@ -1161,7 +1169,11 @@ class TrackingService : Service() {
                 val jitter = Random.nextLong(-RETRY_JITTER_MS, RETRY_JITTER_MS + 1)
                 delay((baseDelay + jitter).coerceAtLeast(5_000L))
                 if (!isTracking || runGeneration != trackingGeneration) break
-                val count = database.locationDao().getCurrentSessionCountById(sessionBoundaryForBacklogId)
+                val trackerId = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService)
+                val count = database.locationDao().getCurrentSessionCountForTracker(
+                    trackerId = trackerId,
+                    sessionBoundaryId = sessionBoundaryForBacklogId
+                )
                 if (count > 0) {
                     pushQueuedLocations(scope = QueueUploadScope.LIVE_ONLY)
                 }
@@ -1178,7 +1190,11 @@ class TrackingService : Service() {
         backlogUploaderJob?.cancel()
         backlogUploaderJob = serviceScope.launch(Dispatchers.IO) {
             while (isTracking && runGeneration == trackingGeneration) {
-                val backlogCount = database.locationDao().getBacklogCountById(sessionBoundaryId)
+                val trackerId = SelectedTrackerPrefs.selectedTrackerId(this@TrackingService)
+                val backlogCount = database.locationDao().getBacklogCountForTracker(
+                    trackerId = trackerId,
+                    sessionBoundaryId = sessionBoundaryId
+                )
                 if (backlogCount > 0) {
                     pushQueuedLocations(scope = QueueUploadScope.BACKLOG_ONLY)
                     delay(5_000L)
@@ -1227,7 +1243,7 @@ class TrackingService : Service() {
                     }
                     return@launch
                 }
-                if (!isGpsProviderEnabled()) {
+                if (!isLocationServicesEnabled()) {
                     withContext(Dispatchers.Main) {
                         enterWaitingForGpsProvider(reason = "preflight_monitor")
                     }
@@ -1363,6 +1379,9 @@ class TrackingService : Service() {
             }
             lowAccuracyFallbackTimerArmedAtMs = 0L
             lowAccuracyFallbackJob = null
+            if (isTracking && runGeneration == trackingGeneration) {
+                lowAccuracyFallbackCoordinator.onFallbackTimerStopped()
+            }
         }
     }
 
@@ -1384,7 +1403,8 @@ class TrackingService : Service() {
         updateFailureCounters: Boolean = true
     ): SyncFailureClass {
         if (!isTracking) return SyncFailureClass.NONE
-        trimQueuedLocationsRetention()
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        trimQueuedLocationsRetention(trackerId)
         if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
             if (scope != QueueUploadScope.BACKLOG_ONLY) {
                 lastSyncFailureClass = SyncFailureClass.TRANSIENT
@@ -1397,7 +1417,6 @@ class TrackingService : Service() {
             }
             return SyncFailureClass.TRANSIENT
         }
-        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(trackerId)) {
             runtimeTelemetry.event("queue_skip_invalid_tracker", "scope=$scope")
             val trackerError = if (trackerId.isBlank()) {
@@ -1452,7 +1471,7 @@ class TrackingService : Service() {
         )
         if (scope != QueueUploadScope.BACKLOG_ONLY) {
             lastSyncFailureClass = outcome
-            if (updateFailureCounters) {
+            if (updateFailureCounters && outcome != SyncFailureClass.SKIPPED) {
                 if (outcome == SyncFailureClass.NONE) {
                     consecutivePushFailures = 0
                 } else {
@@ -1460,19 +1479,28 @@ class TrackingService : Service() {
                 }
             }
         }
-        trimQueuedLocationsRetention()
+        trimQueuedLocationsRetention(trackerId)
         withContext(Dispatchers.Main) {
             updateNotificationFromDb(broadcastStats = true)
         }
         return outcome
     }
 
-    private fun trimQueuedLocationsRetention() {
+    private fun trimQueuedLocationsRetention(trackerId: String) {
+        if (trackerId.isBlank()) return
         val cutoff = System.currentTimeMillis() - MAX_QUEUE_AGE_MS
-        database.locationDao().deleteOlderThan(cutoff)
-        val count = database.locationDao().getCount()
-        if (count > MAX_QUEUE_SIZE) {
-            database.locationDao().deleteOldestCount(count - MAX_QUEUE_SIZE)
+        val deletedByAge = database.locationDao().deleteOlderThanForTracker(trackerId, cutoff)
+        val count = database.locationDao().getCountForTracker(trackerId)
+        val deletedBySize = if (count > MAX_QUEUE_SIZE) {
+            database.locationDao().deleteOldestCountForTracker(trackerId, count - MAX_QUEUE_SIZE)
+        } else {
+            0
+        }
+        if (deletedByAge > 0 || deletedBySize > 0) {
+            runtimeTelemetry.event(
+                name = "queue_retention_trim",
+                details = "trackerId=$trackerId deletedByAge=$deletedByAge deletedBySize=$deletedBySize maxSize=$MAX_QUEUE_SIZE maxAgeMs=$MAX_QUEUE_AGE_MS"
+            )
         }
     }
 
@@ -1533,9 +1561,14 @@ class TrackingService : Service() {
         if (!TrackingPermissionGate.hasLocationPermission(this)) return false
         val (intervalSec, distanceFilter) = resolveCurrentIntervalAndDistance()
         val request = if (isFastGpsLockWindowActive) {
-            buildFastGpsLockLocationRequest()
+            TrackingLocationRequestPolicy.buildFastLockRequest()
         } else {
-            buildLocationRequest(intervalSec = intervalSec, distanceFilter = distanceFilter.coerceAtLeast(0f))
+            TrackingLocationRequestPolicy.buildNormalRequest(
+                TrackingLocationRequestInput(
+                    intervalSec = intervalSec,
+                    distanceFilterMeters = distanceFilter
+                )
+            )
         }
         return try {
             locationSessionCoordinator.stopSession()
@@ -2160,30 +2193,6 @@ class TrackingService : Service() {
         if (speedBucket <= 0 || base <= 0f) return base
         val extra = base * ELASTICITY_MULTIPLIER * speedBucket.toFloat()
         return (base + extra).coerceAtMost(TrackerSettings.MAX_DISTANCE_FILTER_METERS)
-    }
-
-    private fun buildLocationRequest(intervalSec: Long, distanceFilter: Float): LocationRequest {
-        val (intervalMs, minUpdateMs) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
-        val maxUpdateDelayMs = computeNormalRequestMaxDelayMs(intervalSec)
-        return LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-            .setMinUpdateDistanceMeters(distanceFilter)
-            .setMinUpdateIntervalMillis(minUpdateMs)
-            .setMaxUpdateDelayMillis(maxUpdateDelayMs)
-            .build()
-    }
-
-    private fun buildFastGpsLockLocationRequest(): LocationRequest {
-        return LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FAST_GPS_LOCK_INTERVAL_MS)
-            .setMinUpdateIntervalMillis(FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS)
-            .setMinUpdateDistanceMeters(FAST_GPS_LOCK_MIN_DISTANCE_METERS)
-            .setWaitForAccurateLocation(true)
-            .build()
-    }
-
-    private fun computeNormalRequestMaxDelayMs(intervalSec: Long): Long {
-        val (intervalMs, _) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
-        val candidate = intervalMs * 3L
-        return candidate.coerceIn(intervalMs, MAX_NORMAL_REQUEST_DEFER_MS)
     }
 
     private fun computeElasticityModeBoundBucket(speedBucket: Int, motionMode: TrackingMotionMode): Int {

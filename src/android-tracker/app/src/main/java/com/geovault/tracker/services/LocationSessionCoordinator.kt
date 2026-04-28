@@ -29,8 +29,9 @@ class LocationSessionCoordinator(
         return unifiedLocationClient.startSession(
             sessionRequest = UnifiedLocationSessionRequest(request),
             onLocation = { location ->
-                lastDeliveredLocation = Location(location)
-                listener.onLocationChanged(location)
+                val snapshot = Location(location)
+                lastDeliveredLocation = snapshot
+                listener.onLocationChanged(Location(snapshot))
             },
             onError = { error ->
                 Log.e(TAG, "Unable to start fused location session", error)
@@ -44,6 +45,10 @@ class LocationSessionCoordinator(
 
     fun isGpsProviderEnabled(): Boolean {
         return unifiedLocationClient.isGpsProviderEnabled()
+    }
+
+    fun isLocationServicesEnabled(): Boolean {
+        return unifiedLocationClient.isLocationServicesEnabled()
     }
 
     fun lastKnownGpsLocation(): Location? {

@@ -16,6 +16,32 @@ data class HiddenMapItem(
 )
 
 object HiddenMapItemsPolicy {
+    fun hiddenOwnerTrackerIds(trackers: List<Tracker>): Set<String> {
+        return trackers
+            .asSequence()
+            .filter { it.isOwner() && it.settingBoolean("hidden") == true }
+            .map { it.id.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    }
+
+    fun visibleTrackerIdsForMap(
+        rosterTrackerIds: Collection<String>,
+        mapVisibility: MapVisibilityResponse?,
+        trackers: List<Tracker>,
+    ): Set<String> {
+        val hiddenTrackIds = mapVisibility?.hidden_track_ids.orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        val hiddenOwnerIds = hiddenOwnerTrackerIds(trackers)
+        return rosterTrackerIds
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it !in hiddenTrackIds && it !in hiddenOwnerIds }
+            .toSet()
+    }
+
     fun buildHiddenItems(
         mapVisibility: MapVisibilityResponse?,
         trackers: List<Tracker>,
@@ -41,5 +67,15 @@ object HiddenMapItemsPolicy {
         return (hiddenTrackers + hiddenGroups).sortedWith(
             compareBy<HiddenMapItem>({ it.type.name }, { it.name.lowercase() }, { it.id })
         )
+    }
+}
+
+private fun Tracker.settingBoolean(key: String): Boolean? {
+    val raw = settings?.get(key) ?: return null
+    return when (raw) {
+        is Boolean -> raw
+        is String -> raw.equals("true", ignoreCase = true)
+        is Number -> raw.toInt() != 0
+        else -> null
     }
 }

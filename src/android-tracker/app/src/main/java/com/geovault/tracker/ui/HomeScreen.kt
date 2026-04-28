@@ -229,14 +229,14 @@ fun HomeScreen(
     }
     if (showPreciseLocationRequiredDialog) {
         GeoVaultInfoDialog(
-            title = "Precise Location Required",
+            title = stringResource(R.string.precise_location_required_title),
             onDismissRequest = {
                 showPreciseLocationRequiredDialog = false
                 openLocationPermissionSettings(context)
             },
-            closeButtonText = "Open Settings",
+            closeButtonText = stringResource(R.string.open_settings),
         ) {
-            Text("This app requires precise location to function correctly.\n\nIn the app settings that will open next, go to Permissions \u2192 Location. The \"Use precise location\" switch is below the main location access options.")
+            Text(stringResource(R.string.precise_location_required_message))
         }
     }
 }
@@ -292,7 +292,11 @@ private fun PermissionsContainer(
                     if (hasForegroundLocation) {
                         onGrantBackground()
                     } else {
-                        Toast.makeText(context, "Grant location permission first", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.grant_location_permission_first),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 },
                 tooltip = stringResource(R.string.tooltip_grant_background_location),

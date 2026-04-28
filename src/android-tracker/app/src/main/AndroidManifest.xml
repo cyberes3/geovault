@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="com.geovault.common.permission.READ_SERVER_URL" />
 
+    <!-- HTTP is intentionally supported for self-hosted/internal GeoVault servers. -->
     <application
         android:name=".TrackerApplication"
         android:allowBackup="true"

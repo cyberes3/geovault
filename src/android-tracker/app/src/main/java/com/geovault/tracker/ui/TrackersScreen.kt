@@ -228,10 +228,23 @@ fun TrackersScreen(
         val bytes = pendingKmlBytes
         pendingKmlBytes = null
         if (uri == null || bytes == null) return@rememberLauncherForActivityResult
-        val stream = context.contentResolver.openOutputStream(uri)
-            ?: error("Unable to open output stream for KML export URI: $uri")
-        stream.use { it.write(bytes) }
-        vm.postUserMessage(context.getString(R.string.trackers_kml_exported))
+        runCatching {
+            val stream = context.contentResolver.openOutputStream(uri)
+                ?: return@runCatching false
+            stream.use { it.write(bytes) }
+            true
+        }.fold(
+            onSuccess = { saved ->
+                vm.postUserMessage(
+                    context.getString(
+                        if (saved) R.string.trackers_kml_exported else R.string.trackers_kml_write_failed
+                    )
+                )
+            },
+            onFailure = {
+                vm.postUserMessage(context.getString(R.string.trackers_kml_write_failed))
+            },
+        )
     }
     LaunchedEffect(vm) {
         vm.kmlExportEvents.collect { event: TrackerKmlExportEvent ->

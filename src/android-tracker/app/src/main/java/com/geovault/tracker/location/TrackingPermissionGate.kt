@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 
 object TrackingPermissionGate {
     fun hasLocationPermission(context: Context): Boolean {
@@ -36,6 +37,17 @@ object TrackingPermissionGate {
             hasNotificationPermission(context)
     }
 
+    fun canStartTracking(context: Context): Boolean {
+        return TrackingLocationAvailabilityPolicy.canStartTracking(
+            TrackingLocationAvailabilityInput(
+                hasFineLocationPermission = hasLocationPermission(context),
+                hasBackgroundLocationPermission = hasBackgroundLocationPermission(context),
+                hasNotificationPermission = hasNotificationPermission(context),
+                locationServicesEnabled = isLocationServicesEnabled(context),
+            )
+        )
+    }
+
     fun hasBatteryOptimizationExemption(context: Context): Boolean {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
         return powerManager.isIgnoringBatteryOptimizations(context.packageName)
@@ -49,5 +61,10 @@ object TrackingPermissionGate {
     fun isGpsProviderEnabled(context: Context): Boolean {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
         return runCatching { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
+    }
+
+    fun isLocationServicesEnabled(context: Context): Boolean {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return runCatching { LocationManagerCompat.isLocationEnabled(locationManager) }.getOrDefault(false)
     }
 }

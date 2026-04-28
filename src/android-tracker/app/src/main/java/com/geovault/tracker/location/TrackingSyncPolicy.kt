@@ -2,6 +2,7 @@ package com.geovault.tracker.location
 
 enum class SyncFailureClass {
     NONE,
+    SKIPPED,
     TRANSIENT,
     PERMANENT
 }
@@ -16,7 +17,8 @@ object TrackingSyncPolicy {
         failureClass: SyncFailureClass
     ): Long {
         return when (failureClass) {
-            SyncFailureClass.NONE -> BASE_DELAY_MS
+            SyncFailureClass.NONE,
+            SyncFailureClass.SKIPPED -> BASE_DELAY_MS
             SyncFailureClass.TRANSIENT -> {
                 val clampedFailures = consecutiveFailures.coerceIn(1, 8)
                 val multiplier = 1L shl (clampedFailures - 1)

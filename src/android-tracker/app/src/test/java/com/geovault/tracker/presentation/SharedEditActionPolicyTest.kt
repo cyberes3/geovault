@@ -25,6 +25,22 @@ class SharedEditActionPolicyTest {
     }
 
     @Test
+    fun trackerActions_unsubscribeOnly_whenSubscribedSharedNonOwner() {
+        val tracker = Tracker(
+            id = "t1-shared",
+            name = "Tracker 1 Shared",
+            color = null,
+            is_owner = false,
+            visibility = "shared",
+            subscribed_at = 123L,
+        )
+
+        val actions = SharedEditActionPolicy.trackerActions(tracker)
+        assertTrue(actions.canUnsubscribe)
+        assertFalse(actions.canLeaveShare)
+    }
+
+    @Test
     fun trackerActions_leaveShare_whenNotSubscribedShared() {
         val tracker = Tracker(
             id = "t2",

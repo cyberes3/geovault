@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -54,6 +55,13 @@ fun TrackerParamsScreen(
         factory = TrackerParamsViewModel.factory(application, args),
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    DisposableEffect(args.trackerId, viewModel) {
+        viewModel.onScreenStarted()
+        onDispose {
+            viewModel.onScreenStopped()
+        }
+    }
 
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,

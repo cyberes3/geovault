@@ -45,6 +45,11 @@ internal class LowAccuracyFallbackCoordinator {
         lastEmittedCandidate = null
     }
 
+    fun onFallbackTimerStopped() {
+        awaitingLock = false
+        latestCandidate = null
+    }
+
     fun shouldEmitFallback(fallbackEligible: Boolean, hasCandidate: Boolean): Boolean {
         if (!fallbackEligible || !hasCandidate || !awaitingLock) return false
         val latest = latestCandidate ?: return false

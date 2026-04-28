@@ -55,6 +55,7 @@ data class TrackerMapUiState(
     val followLockEnabled: Boolean = false,
     val liveActiveFitEnabled: Boolean = false,
     val isGeometryLoading: Boolean = false,
+    val renderMetadataSignature: String = "",
 )
 
 data class TrackerMapSelectionCard(
@@ -320,7 +321,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 trackerManagementStateStore.mapVisibility
             ) { trackers, groups, visibility ->
                 val trackerFingerprint = trackers.joinToString(separator = "|") { tracker ->
-                    "${tracker.id}:${tracker.updated_at ?: 0L}:${tracker.geometry?.coordinates?.size ?: 0}"
+                    "${tracker.id}:${tracker.updated_at ?: 0L}:${tracker.name}:${tracker.color}:${tracker.geometry?.coordinates?.size ?: 0}"
                 }
                 val groupFingerprint = groups.joinToString(separator = "|") { group ->
                     "${group.id}:${group.updated_at ?: 0L}:${group.track_ids?.size ?: 0}"
@@ -331,7 +332,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     "${visibility.hidden_group_ids.orEmpty().sorted()}|${visibility.hidden_track_ids.orEmpty().sorted()}"
                 }
                 "$trackerFingerprint#$groupFingerprint#$visibilityFingerprint"
-            }.distinctUntilChanged().collectLatest {
+            }.distinctUntilChanged().collectLatest { metadataSignature ->
+                _uiState.value = _uiState.value.copy(renderMetadataSignature = metadataSignature)
                 requestRuntimeTrailReload()
                 refreshStreamTargets()
             }
@@ -919,6 +921,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             runtime = s.runtime,
             remoteLastPoints = s.remoteLastPoints,
             activeStreamedTrackerIds = s.activeStreamedTrackerIds,
+            streamTargetIds = s.streamTargetIds,
             allQueueTrailsByTracker = s.allQueueTrailsByTracker,
             trackerColorById = trackerColors,
             trackerDisplayNameById = trackerDisplayNames,
@@ -1052,13 +1055,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private fun refreshStreamTargets() {
         val state = _uiState.value
         val groupSelection = resolveGroupModeSelection(state)
+        val visibleRosterTrackerIds = visibleMapRosterTrackerIds()
         val seed = TrackerMapReloadSeedPolicy.streamSeed(
             TrackerMapStreamSeedInput(
                 mode = state.mode,
                 runtimeRunning = state.runtime.isRunning,
                 selectedTrackerId = state.runtime.selectedTrackerId,
                 displayedTrackerId = effectiveDisplayedTrackerId(state),
-                rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id },
+                rosterTrackerIds = visibleRosterTrackerIds,
                 groupSelection = groupSelection
             )
         )
@@ -1070,10 +1074,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 runtimeRunning = state.runtime.isRunning,
                 selectedTrackerId = state.runtime.selectedTrackerId,
                 displayedTrackerId = effectiveDisplayedTrackerId(state),
-                rosterTrackerIds = trackerManagementStateStore.trackers.value
-                    .map { it.id.trim() }
-                    .filter { it.isNotEmpty() }
-                    .toSet(),
+                rosterTrackerIds = visibleRosterTrackerIds,
                 groupSelection = groupSelection
             )
         )
@@ -1105,7 +1106,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         if (!TrackerMapTrailReloadGuardPolicy.shouldProceed(guardInput)) return
         val groupSelection = resolveGroupModeSelection(state)
-        val rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id }.toSet()
+        val rosterTrackerIds = visibleMapRosterTrackerIds()
         val seed = TrackerMapReloadSeedPolicy.trailSeed(
             TrackerMapTrailSeedInput(
                 mode = state.mode,
@@ -1306,11 +1307,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val visibility = trackerManagementStateStore.mapVisibility.value
         val hiddenGroupIds = visibility?.hidden_group_ids.orEmpty().toSet()
         val hiddenTrackIds = visibility?.hidden_track_ids.orEmpty().toSet()
-        val hiddenOwnerTrackerIds = trackerManagementStateStore.trackers.value
-            .filter { it.isOwner() && it.settingBoolean("hidden") == true }
-            .map { it.id.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
+        val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(trackerManagementStateStore.trackers.value)
         val preferredTrackerId = effectiveDisplayedTrackerId(state).ifBlank { state.runtime.selectedTrackerId }
         return TrackerMapGroupModePolicy.resolveSelection(
             groups = trackerManagementStateStore.groups.value,
@@ -1322,15 +1319,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
+    private fun visibleMapRosterTrackerIds(): Set<String> {
+        val trackers = trackerManagementStateStore.trackers.value
+        return HiddenMapItemsPolicy.visibleTrackerIdsForMap(
+            rosterTrackerIds = trackers.map { it.id },
+            mapVisibility = trackerManagementStateStore.mapVisibility.value,
+            trackers = trackers,
+        )
+    }
+
     private fun resolveGroupModeOptions(): List<TrackerMapGroupModeOption> {
         val visibility = trackerManagementStateStore.mapVisibility.value
         val hiddenGroupIds = visibility?.hidden_group_ids.orEmpty().toSet()
         val hiddenTrackIds = visibility?.hidden_track_ids.orEmpty().toSet()
-        val hiddenOwnerTrackerIds = trackerManagementStateStore.trackers.value
-            .filter { it.isOwner() && it.settingBoolean("hidden") == true }
-            .map { it.id.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
+        val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(trackerManagementStateStore.trackers.value)
         return TrackerMapGroupModePolicy.resolveEligibleGroups(
             groups = trackerManagementStateStore.groups.value,
             hiddenGroupIds = hiddenGroupIds,
@@ -1455,7 +1457,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 runtimeRunning = state.runtime.isRunning,
                 activeTrackerId = effectiveDisplayedTrackerId(state),
                 sessionVisibleBoundaryId = state.runtime.sessionVisibleBoundaryId,
-                rosterTrackerIds = trackerManagementStateStore.trackers.value.map { it.id }.toSet(),
+                rosterTrackerIds = visibleMapRosterTrackerIds(),
                 groupSelection = resolveGroupModeSelection(state),
             )
         )

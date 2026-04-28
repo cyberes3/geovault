@@ -62,7 +62,7 @@ class DatabaseMigrationsTest {
     }
 
     @Test
-    fun migrate_backfillsNullTrackerFromSelectedTrackerId() {
+    fun migrate_dropsUnattributableRowsEvenWithSelectedTrackerId() {
         val db = helper.writableDatabase
         insertRow(db, trackerId = null, time = 100L)
         insertRow(db, trackerId = "   ", time = 150L)
@@ -71,11 +71,9 @@ class DatabaseMigrationsTest {
         DatabaseMigrations.migration3To4(selectedTrackerId = "tracker-selected").migrate(db)
 
         val rows = readAllRows(db)
-        assertEquals(3, rows.size)
-        val times = rows.associateBy { it.time }
-        assertEquals("tracker-selected", times[100L]?.trackerId)
-        assertEquals("tracker-selected", times[150L]?.trackerId)
-        assertEquals("tracker-a", times[200L]?.trackerId)
+        assertEquals(1, rows.size)
+        assertEquals("tracker-a", rows.single().trackerId)
+        assertEquals(200L, rows.single().time)
     }
 
     @Test

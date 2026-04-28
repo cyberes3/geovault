@@ -23,22 +23,17 @@ object DatabaseMigrations {
 
     /**
      * Version 4 promotes `tracker_id` to `NOT NULL`. Rows inserted before the
-     * column existed (or while the producer still allowed blank ids) are backfilled
-     * with [selectedTrackerId] when provided; rows that cannot be attributed to any
-     * tracker are dropped since there is no server they could be uploaded to.
+     * column existed (or while the producer still allowed blank ids) cannot be
+     * attributed safely, even when a tracker is currently selected, so they are
+     * dropped instead of being silently uploaded to the wrong tracker.
      */
     fun migration3To4(selectedTrackerId: String?): Migration = object : Migration(3, 4) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            val fallback = selectedTrackerId?.trim()?.takeIf { it.isNotEmpty() }
             val beforeCount = singleLongQuery(db, "SELECT COUNT(*) FROM queued_locations")
-            val attributableBefore = if (fallback != null) {
-                beforeCount
-            } else {
-                singleLongQuery(
-                    db,
-                    "SELECT COUNT(*) FROM queued_locations WHERE tracker_id IS NOT NULL AND TRIM(tracker_id) <> ''"
-                )
-            }
+            val attributableBefore = singleLongQuery(
+                db,
+                "SELECT COUNT(*) FROM queued_locations WHERE tracker_id IS NOT NULL AND TRIM(tracker_id) <> ''"
+            )
             db.execSQL(
                 """
                 CREATE TABLE queued_locations_new (
@@ -57,29 +52,16 @@ object DatabaseMigrations {
                 )
                 """.trimIndent()
             )
-            if (fallback != null) {
-                db.execSQL(
-                    """
-                    INSERT INTO queued_locations_new (id, tracker_id, time, latitude, longitude,
-                        altitude, speed, bearing, accuracy, sat, prov, dist)
-                    SELECT id, COALESCE(NULLIF(TRIM(tracker_id), ''), ?), time, latitude, longitude,
-                        altitude, speed, bearing, accuracy, sat, prov, dist
-                    FROM queued_locations
-                    """.trimIndent(),
-                    arrayOf<Any>(fallback)
-                )
-            } else {
-                db.execSQL(
-                    """
-                    INSERT INTO queued_locations_new (id, tracker_id, time, latitude, longitude,
-                        altitude, speed, bearing, accuracy, sat, prov, dist)
-                    SELECT id, TRIM(tracker_id), time, latitude, longitude,
-                        altitude, speed, bearing, accuracy, sat, prov, dist
-                    FROM queued_locations
-                    WHERE tracker_id IS NOT NULL AND TRIM(tracker_id) <> ''
-                    """.trimIndent()
-                )
-            }
+            db.execSQL(
+                """
+                INSERT INTO queued_locations_new (id, tracker_id, time, latitude, longitude,
+                    altitude, speed, bearing, accuracy, sat, prov, dist)
+                SELECT id, TRIM(tracker_id), time, latitude, longitude,
+                    altitude, speed, bearing, accuracy, sat, prov, dist
+                FROM queued_locations
+                WHERE tracker_id IS NOT NULL AND TRIM(tracker_id) <> ''
+                """.trimIndent()
+            )
             db.execSQL("DROP TABLE queued_locations")
             db.execSQL("ALTER TABLE queued_locations_new RENAME TO queued_locations")
             db.execSQL(
@@ -90,7 +72,7 @@ object DatabaseMigrations {
                 Log.i(
                     TAG,
                     "MIGRATION_3_4 dropped $dropped unattributable queued_locations row(s); " +
-                        "selectedTrackerId=${if (fallback != null) "present" else "absent"}"
+                        "selectedTrackerId=${if (selectedTrackerId.isNullOrBlank()) "absent" else "present"}"
                 )
             }
         }

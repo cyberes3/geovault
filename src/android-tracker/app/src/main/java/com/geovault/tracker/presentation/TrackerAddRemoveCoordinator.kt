@@ -2,6 +2,7 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
+import com.geovault.tracker.AppError
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
@@ -117,12 +118,9 @@ class TrackerAddRemoveCoordinator(
                 .unsubscribeTracker(operation.trackerId)
             is SharedAddRemoveOperation.DiscoverOnMapTrackerRemove -> {
                 val tracker = trackerResolver(operation.trackerId)
-                val command = tracker
-                    ?.let(SharedOwnershipTransitionPolicy::forTrackerLeave)
-                    ?: SharedTrackerTransitionCommand(
-                        trackerId = operation.trackerId,
-                        action = SharedTrackerTransitionAction.Unsubscribe,
-                    )
+                    ?: return RepositoryResult.Failure(AppError.Unknown)
+                val command = SharedOwnershipTransitionPolicy.forTrackerLeave(tracker)
+                    ?: return RepositoryResult.Failure(AppError.Unknown)
                 executeTrackerCommand(command)
             }
             is SharedAddRemoveOperation.IncomingGroupAccept -> groupRepository

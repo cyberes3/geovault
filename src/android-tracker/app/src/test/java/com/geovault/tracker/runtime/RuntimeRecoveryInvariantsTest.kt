@@ -135,10 +135,10 @@ class RuntimeRecoveryInvariantsTest {
         )
 
         assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
-        assertEquals("watchdog_disabled", result.commandResult?.reason)
+        assertEquals("watchdog_disabled_service_running", result.commandResult?.reason)
         assertEquals(1, effects.cancelWatchdogCalls)
-        assertFalse(result.state.runtime.shouldBeRunning)
-        assertEquals(RuntimeLifecycleState.IDLE, result.state.runtime.lifecycleState)
+        assertTrue(result.state.runtime.shouldBeRunning)
+        assertEquals(RuntimeLifecycleState.ACTIVE, result.state.runtime.lifecycleState)
     }
 
     @Test

@@ -44,6 +44,7 @@ class ApiTrackerManagementRepository(
     private val cacheMutex = Mutex()
     @Volatile private var trackersCache: List<Tracker>? = null
     @Volatile private var groupsCache: List<Group>? = null
+    @Volatile private var availableToAddCache: AvailableToAddResponse? = null
     @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
     @Volatile private var cachedApiBaseUrl: String? = null
     @Volatile private var cachedApi: TrackerApi? = null
@@ -78,9 +79,25 @@ class ApiTrackerManagementRepository(
     }
 
     override suspend fun loadAvailableToAdd(forceRefresh: Boolean): RepositoryResult<AvailableToAddResponse> {
+        if (!forceRefresh) {
+            val cachedAvailable = cacheMutex.withLock { availableToAddCache }
+            if (cachedAvailable != null) {
+                return RepositoryResult.Success(cachedAvailable)
+            }
+        }
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("available-to-add") {
-            executeApiCall { api -> api.getAvailableToAdd().execute() } as Any
+            if (!forceRefresh) {
+                val cachedAvailable = cacheMutex.withLock { availableToAddCache }
+                if (cachedAvailable != null) {
+                    return@run RepositoryResult.Success(cachedAvailable) as Any
+                }
+            }
+            val networkResult = executeApiCall { api -> api.getAvailableToAdd().execute() }
+            if (networkResult is RepositoryResult.Success) {
+                cacheMutex.withLock { availableToAddCache = networkResult.data }
+            }
+            networkResult as Any
         } as RepositoryResult<AvailableToAddResponse>
     }
 
@@ -196,6 +213,7 @@ class ApiTrackerManagementRepository(
             val tracker = networkResult.data.toDomainModel()
             cacheMutex.withLock {
                 trackersCache = trackersCache.orEmpty().plus(tracker).let(stateStore::canonicalizeTrackers)
+                availableToAddCache = null
             }
             stateStore.publishTracker(tracker)
             return RepositoryResult.Success(tracker)
@@ -219,6 +237,7 @@ class ApiTrackerManagementRepository(
                 trackersCache = trackersCache
                     ?.map { if (it.id == trackerId) tracker else it }
                     ?.let(stateStore::canonicalizeTrackers)
+                availableToAddCache = null
             }
             stateStore.publishTracker(tracker, emitEvent = publishToStore)
             Log.d(
@@ -240,6 +259,7 @@ class ApiTrackerManagementRepository(
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
                 trackersCache = trackersCache?.filterNot { it.id == trackerId }
+                availableToAddCache = null
             }
             stateStore.deleteTracker(trackerId)
         }
@@ -251,6 +271,7 @@ class ApiTrackerManagementRepository(
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
                 trackersCache = null
+                availableToAddCache = null
             }
             stateStore.publishHistoryCleared(trackerId)
         }
@@ -262,6 +283,7 @@ class ApiTrackerManagementRepository(
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
                 trackersCache = trackersCache?.filterNot { it.id == trackerId }
+                availableToAddCache = null
             }
             stateStore.deleteTracker(trackerId)
         }
@@ -273,6 +295,7 @@ class ApiTrackerManagementRepository(
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
                 trackersCache = trackersCache?.filterNot { it.id == trackerId }
+                availableToAddCache = null
             }
             stateStore.deleteTracker(trackerId)
         }
@@ -290,6 +313,7 @@ class ApiTrackerManagementRepository(
                     .plus(tracker)
                     .distinctBy { it.id }
                     .let(stateStore::canonicalizeTrackers)
+                availableToAddCache = null
             }
             stateStore.publishTracker(tracker)
             return RepositoryResult.Success(tracker)
@@ -311,6 +335,7 @@ class ApiTrackerManagementRepository(
     override fun clearSelectedTrackerCaches() {
         trackersCache = null
         groupsCache = null
+        availableToAddCache = null
         mapVisibilityCache = null
         cachedApiBaseUrl = null
         cachedApi = null
@@ -435,6 +460,7 @@ class ApiTrackerManagementRepository(
                     .orEmpty()
                     .plus(result.data)
                     .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                availableToAddCache = null
             }
             stateStore.publishGroup(result.data)
         }
@@ -452,6 +478,7 @@ class ApiTrackerManagementRepository(
                 groupsCache = groupsCache
                     ?.map { if (it.id == groupId) result.data else it }
                     ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                availableToAddCache = null
             }
             stateStore.publishGroup(result.data, emitEvent = publishToStore)
         }
@@ -463,6 +490,7 @@ class ApiTrackerManagementRepository(
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
                 groupsCache = groupsCache?.filterNot { it.id == groupId }
+                availableToAddCache = null
             }
             stateStore.deleteGroup(groupId)
         }
@@ -476,6 +504,7 @@ class ApiTrackerManagementRepository(
                 groupsCache = groupsCache
                     ?.map { if (it.id == groupId) result.data else it }
                     ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                availableToAddCache = null
             }
             stateStore.publishGroup(result.data)
         }
@@ -491,6 +520,7 @@ class ApiTrackerManagementRepository(
                         groupsCache = groupsCache
                             ?.map { if (it.id == groupId) updated.data else it }
                             ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                        availableToAddCache = null
                     }
                     stateStore.publishGroup(updated.data)
                 }
@@ -504,6 +534,7 @@ class ApiTrackerManagementRepository(
         if (result is RepositoryResult.Success) {
             cacheMutex.withLock {
                 groupsCache = groupsCache?.filterNot { it.id == groupId }
+                availableToAddCache = null
             }
             stateStore.deleteGroup(groupId)
         }
@@ -519,6 +550,7 @@ class ApiTrackerManagementRepository(
                     .filterNot { it.id == groupId }
                     .plus(result.data)
                     .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                availableToAddCache = null
             }
             stateStore.publishGroup(result.data)
         }
@@ -535,6 +567,7 @@ class ApiTrackerManagementRepository(
                     if (body != null) {
                         RepositoryResult.Success(body)
                     } else {
+                        Log.w(TAG, "Successful API response had no body code=${response.code()}")
                         RepositoryResult.Failure(AppError.Unknown)
                     }
                 } else {

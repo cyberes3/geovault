@@ -32,6 +32,7 @@ object TrackerMapStateTransforms {
         runtime: TrackingRuntimeSnapshot,
         remoteLastPoints: Map<String, TrackPointEvent> = emptyMap(),
         activeStreamedTrackerIds: Set<String> = emptySet(),
+        streamTargetIds: Set<String> = emptySet(),
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
         trackerColorById: Map<String, String> = emptyMap(),
         trackerDisplayNameById: Map<String, String> = emptyMap(),
@@ -114,8 +115,9 @@ object TrackerMapStateTransforms {
                     )
             }
             val renderedTrackerIds = markers.map { it.id.removePrefix("remote-") }.toSet()
+            val remoteMarkerTrackerIds = activeStreamedTrackerIds.ifEmpty { streamTargetIds }
             remoteLastPoints.values
-                .filter { activeStreamedTrackerIds.isNotEmpty() && it.trackId in activeStreamedTrackerIds }
+                .filter { remoteMarkerTrackerIds.isNotEmpty() && it.trackId in remoteMarkerTrackerIds }
                 .filter { it.trackId !in renderedTrackerIds }
                 .forEach { point ->
                     val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(

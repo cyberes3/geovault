@@ -312,14 +312,26 @@ private class FakeLocationDao : LocationDao {
 
     override fun getCount(): Int = rows.size
 
+    override fun getCountForTracker(trackerId: String): Int {
+        return rows.count { it.trackerId == trackerId }
+    }
+
     override fun getMaxId(): Long = rows.maxOfOrNull { it.id } ?: 0L
 
     override fun getCurrentSessionCountById(sessionBoundaryId: Long): Int {
         return rows.count { it.id > sessionBoundaryId }
     }
 
+    override fun getCurrentSessionCountForTracker(trackerId: String, sessionBoundaryId: Long): Int {
+        return rows.count { it.trackerId == trackerId && it.id > sessionBoundaryId }
+    }
+
     override fun getBacklogCountById(sessionBoundaryId: Long): Int {
         return rows.count { it.id <= sessionBoundaryId }
+    }
+
+    override fun getBacklogCountForTracker(trackerId: String, sessionBoundaryId: Long): Int {
+        return rows.count { it.trackerId == trackerId && it.id <= sessionBoundaryId }
     }
 
     override fun deleteOlderThan(cutoffTimeMs: Long): Int {
@@ -328,9 +340,28 @@ private class FakeLocationDao : LocationDao {
         return before - rows.size
     }
 
+    override fun deleteOlderThanForTracker(trackerId: String, cutoffTimeMs: Long): Int {
+        val before = rows.size
+        rows.removeAll { it.trackerId == trackerId && it.time < cutoffTimeMs }
+        return before - rows.size
+    }
+
     override fun deleteOldestCount(count: Int): Int {
         if (count <= 0) return 0
         val oldest = rows.sortedBy { it.time }.take(count).map { it.id }.toSet()
+        val before = rows.size
+        rows.removeAll { it.id in oldest }
+        return before - rows.size
+    }
+
+    override fun deleteOldestCountForTracker(trackerId: String, count: Int): Int {
+        if (count <= 0) return 0
+        val oldest = rows
+            .filter { it.trackerId == trackerId }
+            .sortedBy { it.time }
+            .take(count)
+            .map { it.id }
+            .toSet()
         val before = rows.size
         rows.removeAll { it.id in oldest }
         return before - rows.size

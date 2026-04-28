@@ -13,7 +13,7 @@ object SharedEditActionPolicy {
         val leaveKind = OwnershipActionPolicy.trackerLeaveKind(tracker)
         return SharedTrackerEditActions(
             canUnsubscribe = leaveKind == TrackerLeaveKind.Unsubscribe,
-            canLeaveShare = tracker.visibility == "shared" || leaveKind == TrackerLeaveKind.LeaveShare,
+            canLeaveShare = leaveKind == TrackerLeaveKind.LeaveShare,
         )
     }
 

@@ -26,6 +26,7 @@ import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -63,7 +64,8 @@ class LiveTrackStreamingService : Service() {
             private set
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val serviceJob = Job()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var webSocket: WebSocket? = null
     private var currentTrackerIds: Set<String> = emptySet()
     private var currentTrackerName: String? = null
@@ -158,6 +160,7 @@ class LiveTrackStreamingService : Service() {
         connectJob?.cancel()
         disconnectWebSocket()
         applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
+        serviceJob.cancel()
         super.onDestroy()
     }
 
@@ -179,6 +182,7 @@ class LiveTrackStreamingService : Service() {
             val reason = getString(R.string.error_server_unreachable)
             emitStreamingError(reason)
             applyLifecycleEvent(StreamingLifecycleEvent.PermanentFailure, currentTrackerIds, reason)
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
@@ -207,6 +211,7 @@ class LiveTrackStreamingService : Service() {
             }
         )
         try {
+            RemoteStreamIngressPolicy.resetTracks(trackerIdsSnapshot)
             val socket = getWebSocketClient().newWebSocket(request, listener)
             if (sessionId != connectionSessionId.get() || currentTrackerIds.isEmpty()) {
                 socket.close(1000, "stale_session")

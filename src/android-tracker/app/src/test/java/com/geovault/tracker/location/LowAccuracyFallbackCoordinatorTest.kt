@@ -74,6 +74,17 @@ class LowAccuracyFallbackCoordinatorTest {
     }
 
     @Test
+    fun fallbackTimerStopped_allowsNewRejectToArmTimer() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
+
+        coordinator.onFallbackTimerStopped()
+
+        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2000L))
+    }
+
+    @Test
     fun fallbackEmitted_withoutMeaningfulChange_doesNotReemit() {
         val coordinator = LowAccuracyFallbackCoordinator()
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)

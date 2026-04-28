@@ -26,6 +26,7 @@ import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,9 +53,14 @@ class TrackerParamsViewModel(
 ) : AndroidViewModel(application) {
 
     private val formatter = TrackerParamValueFormatter(application)
+    private val streamingController = TrackerParamsStreamingController(application.applicationContext)
 
     private val _uiState = MutableStateFlow(buildInitialUiState())
     val uiState: StateFlow<TrackerParamsScreenUiState> = _uiState.asStateFlow()
+
+    private var pointStreamJob: Job? = null
+    private var screenStarted = false
+    private var streamTrackerName: String? = args.seed.displayName.trim().ifBlank { null }
 
     @Volatile
     private var lastAppliedTimestampMs: Long = 0L
@@ -65,18 +71,28 @@ class TrackerParamsViewModel(
                 _uiState.update {
                     it.copy(motionModeText = motionModeLabel(runtime, args.trackerId))
                 }
+                if (screenStarted) {
+                    startParamsStreaming(runtime)
+                }
             }
         }
-        viewModelScope.launch {
+        loadTrackerData(refresh = false)
+    }
+
+    fun onScreenStarted() {
+        screenStarted = true
+        startParamsStreaming(TrackingRuntimeStateStore.state.value)
+        if (pointStreamJob?.isActive == true) return
+        pointStreamJob = viewModelScope.launch {
             TrackPointBus.events.collect { event ->
-                val selectedId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
+                val latestSelectedId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
                 val trackingRunning = TrackingRuntimeStateStore.state.value.isRunning
                 if (
                     TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(
                         event = event,
                         trackerId = args.trackerId,
                         trackingRunning = trackingRunning,
-                        selectedTrackerId = selectedId,
+                        selectedTrackerId = latestSelectedId,
                     )
                 ) {
                     applyPointPayload(
@@ -88,7 +104,25 @@ class TrackerParamsViewModel(
                 }
             }
         }
-        loadTrackerData(refresh = false)
+    }
+
+    fun onScreenStopped() {
+        screenStarted = false
+        pointStreamJob?.cancel()
+        pointStreamJob = null
+        streamingController.onScreenStopped()
+        _uiState.update { it.copy(isRefreshing = false) }
+    }
+
+    private fun startParamsStreaming(runtime: TrackingRuntimeSnapshot) {
+        val app = getApplication<Application>()
+        val selectedId = SelectedTrackerPrefs.selectedTrackerId(app)
+        streamingController.onScreenStarted(
+            trackerId = args.trackerId,
+            trackerName = streamTrackerName,
+            selectedTrackerId = selectedId,
+            trackingRunning = runtime.isRunning,
+        )
     }
 
     fun loadTrackerData(refresh: Boolean = false) {
@@ -214,12 +248,27 @@ class TrackerParamsViewModel(
         val lastTs = tracker.lastTimestampMs()
         val pos = tracker.lastPositionPair()
         val latestParams = tracker.point_params?.lastOrNull().orEmpty()
-        synchronized(this) {
+        val shouldApplyPoint = synchronized(this) {
             if (lastTs != null && lastTs > 0L) {
-                lastAppliedTimestampMs = maxOf(lastAppliedTimestampMs, lastTs)
+                if (lastTs < lastAppliedTimestampMs) {
+                    false
+                } else {
+                    lastAppliedTimestampMs = maxOf(lastAppliedTimestampMs, lastTs)
+                    true
+                }
+            } else {
+                lastAppliedTimestampMs == 0L
             }
         }
         val app = getApplication<Application>()
+        tracker.name.trim().takeIf { it.isNotBlank() }?.let { streamTrackerName = it }
+        val title = tracker.name.takeIf { it.isNotBlank() }?.uppercase(Locale.getDefault())
+        if (!shouldApplyPoint) {
+            _uiState.update { prev ->
+                prev.copy(trackerTitle = title ?: prev.trackerTitle)
+            }
+            return
+        }
         val lastText = if (lastTs != null && lastTs > 0L) {
             formatTimeLocal(lastTs)
         } else {
@@ -228,7 +277,6 @@ class TrackerParamsViewModel(
         val posText = pos?.let { formatLatLon(it.first, it.second) } ?: "-"
         val bodyKind = TrackerParamsContentReducer.resolve(latestParams, lastTs, pos)
         val gridRows = buildGridRows(bodyKind, latestParams)
-        val title = tracker.name.takeIf { it.isNotBlank() }?.uppercase(Locale.getDefault())
         _uiState.update { prev ->
             prev.copy(
                 trackerTitle = title ?: prev.trackerTitle,
@@ -301,6 +349,11 @@ class TrackerParamsViewModel(
                 ?: ctx.getString(R.string.trackers_error_validation)
             AppError.Unknown -> ctx.getString(R.string.trackers_error_unknown)
         }
+    }
+
+    override fun onCleared() {
+        onScreenStopped()
+        super.onCleared()
     }
 
     companion object {

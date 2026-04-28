@@ -664,7 +664,9 @@ private fun EditVisibilityPill(
 private fun copyWorldShareLink(context: Context, worldShareUrl: String?) {
     if (worldShareUrl.isNullOrBlank()) return
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-    clipboard.setPrimaryClip(ClipData.newPlainText("World share link", worldShareUrl))
+    clipboard.setPrimaryClip(
+        ClipData.newPlainText(context.getString(R.string.world_share_link_clip_label), worldShareUrl)
+    )
 }
 
 private fun shareWorldShareLink(context: Context, worldShareUrl: String?) {

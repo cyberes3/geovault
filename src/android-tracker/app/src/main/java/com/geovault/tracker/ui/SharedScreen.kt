@@ -244,8 +244,6 @@ fun SharedScreen(
                 onDiscoverIncomingQueryChanged = vm::updateDiscoverIncomingQuery,
                 onPublicQueryChanged = vm::updatePublicQuery,
                 onRefresh = vm::refreshAll,
-                onToggleTrackerMapHidden = vm::toggleTrackerHiddenOnMap,
-                onToggleGroupMapHidden = vm::toggleGroupHiddenOnMap,
                 onLeaveTracker = { tracker ->
                     pendingConfirmAction = SharedConfirmAction.LeaveTracker(tracker)
                 },
@@ -285,6 +283,12 @@ fun SharedScreen(
                 },
                 navigationRequest = pendingNavigationRequest,
                 onNavigationRequestHandled = { pendingNavigationRequest = null },
+                onNavigationTargetMissing = { message ->
+                    snackbarModel = GeoVaultSnackbarModel(
+                        id = "shared-nav-missing-${message.hashCode()}-${System.currentTimeMillis()}",
+                        message = message,
+                    )
+                },
                 onOpenTrackerOnMap = onOpenTrackerOnMap,
                 onOpenGroupOnMap = onOpenGroupOnMap,
                 onViewTrackerParams = { tracker ->
@@ -336,8 +340,6 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onDiscoverIncomingQueryChanged: (String) -> Unit,
     onPublicQueryChanged: (String) -> Unit,
     onRefresh: () -> Unit,
-    onToggleTrackerMapHidden: (String) -> Unit,
-    onToggleGroupMapHidden: (String) -> Unit,
     onLeaveTracker: (Tracker) -> Unit,
     onLeaveGroup: (String, String) -> Unit,
     onAcceptGroup: (String) -> Unit,
@@ -354,6 +356,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onEditSharedGroup: (Group) -> Unit,
     navigationRequest: SharedHostNavigationRequest?,
     onNavigationRequestHandled: () -> Unit,
+    onNavigationTargetMissing: (String) -> Unit,
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit,
     onOpenGroupOnMap: (groupId: String) -> Unit,
     onViewTrackerParams: (Tracker) -> Unit,
@@ -379,6 +382,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
     val filteredIncomingGroups = state.filteredSections.incomingGroups
     val filteredPublicTrackers = state.filteredSections.publicTrackers
     val filteredPublicGroups = state.filteredSections.publicGroups
+    val navigationTargetMissingMessage = stringResource(R.string.shared_navigation_target_not_found)
 
     LaunchedEffect(navigationRequest, sharedListRows, state.isLoading) {
         val request = navigationRequest ?: return@LaunchedEffect
@@ -431,6 +435,8 @@ private fun ColumnScope.SharedAuthenticatedBody(
         if (targetIndex >= 0) {
             sharedListState.animateScrollToItem(targetIndex)
             highlightedItemKey = targetItemKey
+        } else if (request.trackerId != null || request.groupId != null) {
+            onNavigationTargetMissing(navigationTargetMissingMessage)
         }
         navigationRefreshAttempts = navigationRefreshAttempts - requestKey
         onNavigationRequestHandled()
