@@ -1,4 +1,4 @@
-package com.geovault.common.maps.ui.recenter
+package com.geovault.common.maps.ui.oneshot
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,70 +24,66 @@ import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 
-/** Map zoom used for the camera animation after a one-shot recenter. */
-private const val GPS_RECENTER_ZOOM: Double = 12.0
+/** Map zoom used for the camera animation after a one-shot “my location” jump. */
+private const val GPS_ONE_SHOT_ZOOM: Double = 12.0
 
 /**
- * One-shot "recenter map on my location" FAB preset.
- *
- * For continuous **position** + **heading** follow (MapLibre [CameraMode]), use
- * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle] and
- * [com.geovault.common.maps.ui.GeoVaultMapCameraFollowMachine]. One-shot recenter stays here.
+ * Controller for a single map jump to the device location (spinner, icon). Does **not** enable
+ * continuous MapLibre camera tracking — use
+ * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle] for that.
  */
-data class GeoVaultGpsRecenterController(
-    val onRecenter: () -> Unit,
+data class GeoVaultGpsOneShotMyLocationController(
+    val onJumpToMyLocation: () -> Unit,
     val fabIcon: GeoVaultMapFabIcon,
-    val isLocking: Boolean,
+    val isWaitingForFix: Boolean,
 )
 
 @Composable
-fun rememberGeoVaultGpsRecenterController(
+fun rememberGeoVaultGpsOneShotMyLocationController(
     map: GeoVaultBaseMap,
     userLocation: GeoVaultUserLocationCapability,
     onLocationResolved: ((LatLng) -> Unit)? = null,
-    /** Invoked when the system permission dialog returns denied (same contract as the camera-follow FABs). */
     onPermissionDenied: (() -> Unit)? = null,
-    /** When false, only resolves coordinates and does not show the MapLibre user location puck, accuracy ring, or camera move (for hosts that handle the marker and camera themselves). */
+    /**
+     * When false, only resolves coordinates and does not show the MapLibre user location puck,
+     * accuracy ring, or camera move (for hosts that handle the marker and camera themselves).
+     */
     showUserLocationPuck: Boolean = true,
     /**
-     * When true, the FAB shows the engaged (fixed) icon and one-shot recenter skips the spinner,
-     * because the host already turned on continuous position follow (typically via
-     * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle] —
-     * the heading FAB enables position follow together with heading).
+     * When true, the FAB shows the engaged (fixed) icon and one-shot lookup skips the spinner,
+     * because the host already has continuous position follow from the heading-follow bundle.
      */
     positionFollowActive: Boolean = false,
-): GeoVaultGpsRecenterController {
+): GeoVaultGpsOneShotMyLocationController {
     val context = LocalContext.current
-    var locationEnabled by remember { mutableStateOf(false) }
-    var locationLocking by remember { mutableStateOf(false) }
-    var activeRecenterRequestId by remember { mutableStateOf(0) }
+    var hadSuccessfulJump by remember { mutableStateOf(false) }
+    var waitingForFix by remember { mutableStateOf(false) }
+    var activeRequestId by remember { mutableStateOf(0) }
 
     DisposableEffect(Unit) {
         onDispose {
-            // Invalidate in-flight callbacks after host leaves composition.
-            activeRecenterRequestId += 1
+            activeRequestId += 1
         }
     }
 
-    fun recenterOnUser(showSpinner: Boolean) {
+    fun jumpToMyLocation(showSpinner: Boolean) {
         if (showSpinner) {
-            locationLocking = true
+            waitingForFix = true
         }
-        activeRecenterRequestId += 1
-        val requestId = activeRecenterRequestId
+        activeRequestId += 1
+        val requestId = activeRequestId
         map.ensureInteractiveGestures()
         if (showUserLocationPuck) {
             userLocation.setEnabled(true)
             userLocation.setCameraTracking(false)
             userLocation.setAccuracyCircleVisible(true)
         }
-        // Post to next UI tick so loading state is visible before fast callbacks.
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            if (requestId != activeRecenterRequestId) return@post
+            if (requestId != activeRequestId) return@post
             LocationUpdates.getCurrentLocation(context) { latLng ->
-                if (requestId != activeRecenterRequestId) return@getCurrentLocation
+                if (requestId != activeRequestId) return@getCurrentLocation
                 if (showSpinner) {
-                    locationLocking = false
+                    waitingForFix = false
                 }
                 if (latLng == null) {
                     if (!showUserLocationPuck) {
@@ -97,10 +93,10 @@ fun rememberGeoVaultGpsRecenterController(
                     return@getCurrentLocation
                 }
                 if (map.phase.value != GeoVaultMapPhase.Ready) return@getCurrentLocation
-                locationEnabled = true
+                hadSuccessfulJump = true
                 onLocationResolved?.invoke(latLng)
                 if (showUserLocationPuck) {
-                    val syntheticLocation = android.location.Location("geovault-gps-fab").apply {
+                    val syntheticLocation = android.location.Location("geovault-gps-oneshot").apply {
                         latitude = latLng.latitude
                         longitude = latLng.longitude
                         accuracy = 10f
@@ -109,7 +105,7 @@ fun rememberGeoVaultGpsRecenterController(
                     userLocation.renderLocation(syntheticLocation)
                     val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
                     map.animateCameraWithPadding(
-                        CameraUpdateFactory.newLatLngZoom(latLng, GPS_RECENTER_ZOOM),
+                        CameraUpdateFactory.newLatLngZoom(latLng, GPS_ONE_SHOT_ZOOM),
                         callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
                             override fun onCancel() {
                                 map.ensureInteractiveGestures()
@@ -122,7 +118,7 @@ fun rememberGeoVaultGpsRecenterController(
                     )
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
                         {
-                            if (requestId == activeRecenterRequestId) {
+                            if (requestId == activeRequestId) {
                                 map.ensureInteractiveGestures()
                             }
                         },
@@ -142,47 +138,42 @@ fun rememberGeoVaultGpsRecenterController(
         val granted = result[GeoVaultMapLocationPermission.FINE_AND_COARSE[0]] == true ||
             result[GeoVaultMapLocationPermission.FINE_AND_COARSE[1]] == true
         if (granted) {
-            recenterOnUser(showSpinner = !(locationEnabled || positionFollowActive))
+            jumpToMyLocation(showSpinner = !(hadSuccessfulJump || positionFollowActive))
         } else {
-            locationLocking = false
+            waitingForFix = false
             onPermissionDenied?.invoke()
         }
     }
 
-    val showsLocationEngaged = locationEnabled || positionFollowActive
+    val showsEngagedIcon = hadSuccessfulJump || positionFollowActive
     val fabIcon = when {
-        locationLocking -> GeoVaultMapFabIcon.Spinner(spinnerColor = Color.White)
-        showsLocationEngaged -> GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
+        waitingForFix -> GeoVaultMapFabIcon.Spinner(spinnerColor = Color.White)
+        showsEngagedIcon -> GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
         else -> GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
     }
 
-    val onRecenter: () -> Unit = {
-        if (!locationLocking) {
+    val onJump: () -> Unit = {
+        if (!waitingForFix) {
             if (context.geoVaultMapHasFineOrCoarseLocation()) {
-                recenterOnUser(showSpinner = !showsLocationEngaged)
+                jumpToMyLocation(showSpinner = !showsEngagedIcon)
             } else {
                 permissionLauncher.launch(GeoVaultMapLocationPermission.FINE_AND_COARSE)
             }
         }
     }
 
-    return GeoVaultGpsRecenterController(
-        onRecenter = onRecenter,
+    return GeoVaultGpsOneShotMyLocationController(
+        onJumpToMyLocation = onJump,
         fabIcon = fabIcon,
-        isLocking = locationLocking,
+        isWaitingForFix = waitingForFix,
     )
 }
 
-/**
- * GPS recenter FAB preset; [positionFollowActive] should match
- * [com.geovault.common.maps.ui.camerafollow.GeoVaultMapHeadingFollowFabBundle.positionFollowDesired]
- * when the host uses heading follow so the icon stays aligned after enabling rotation first.
- */
 @Composable
-fun rememberGeoVaultGpsRecenterFabAction(
+fun rememberGeoVaultGpsOneShotMyLocationFabAction(
     map: GeoVaultBaseMap,
     userLocation: GeoVaultUserLocationCapability,
-    id: String = "gps_recenter",
+    id: String = "gps_one_shot_my_location",
     order: Int = 30,
     contentDescription: String = "Recenter on my location",
     onLocationResolved: ((LatLng) -> Unit)? = null,
@@ -190,7 +181,7 @@ fun rememberGeoVaultGpsRecenterFabAction(
     showUserLocationPuck: Boolean = true,
     positionFollowActive: Boolean = false,
 ): GeoVaultMapFabAction {
-    val controller = rememberGeoVaultGpsRecenterController(
+    val controller = rememberGeoVaultGpsOneShotMyLocationController(
         map = map,
         userLocation = userLocation,
         onLocationResolved = onLocationResolved,
@@ -203,6 +194,6 @@ fun rememberGeoVaultGpsRecenterFabAction(
         order = order,
         icon = controller.fabIcon,
         contentDescription = contentDescription,
-        onTap = controller.onRecenter,
+        onTap = controller.onJumpToMyLocation,
     )
 }

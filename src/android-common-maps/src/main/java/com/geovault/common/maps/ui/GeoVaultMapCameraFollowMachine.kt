@@ -6,12 +6,13 @@ import org.maplibre.android.location.modes.CameraMode
  * Desired **position** follow and **heading** follow flags for a single MapLibre location camera.
  *
  * "Position follow" is MapLibre [CameraMode.TRACKING] (or [CameraMode.NONE] when both flags are on;
- * see [toCameraMode]). The host’s **one-shot** “go to my position” is
- * [com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterFabAction] — this type does not
- * model that tap.
+ * see [toCameraMode]). Toggling position follow is the GPS FAB on
+ * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle]. One-shot
+ * “jump to my location once” (no continuous follow) is
+ * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
  *
  * MapLibre exposes one [CameraMode] at a time. Map bearing while "heading follow" is on is
- * driven manually (puck [MapLocationRendererPlugin] bearing in
+ * driven manually (same pipeline as
  * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle]) like
  * other GeoVault map hosts, not [CameraMode.TRACKING_COMPASS], which tends to feel choppy.
  */
@@ -66,6 +67,14 @@ object GeoVaultMapCameraFollowMachine {
         }
 
     /**
+     * User tapped the GPS / my-location FAB: flip position follow on or off. Heading follow is
+     * unchanged (compass-only mode with position off remains valid until the user re-enables
+     * position follow or turns heading off).
+     */
+    fun togglePositionFollowOnTap(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
+        current.copy(positionFollowDesired = !current.positionFollowDesired)
+
+    /**
      * User panned or zoomed the map: drop **position** follow but keep heading follow so the
      * map can stay compass-locked.
      */
@@ -73,9 +82,11 @@ object GeoVaultMapCameraFollowMachine {
         current.copy(positionFollowDesired = false)
 
     /**
-     * User tapped a one-shot GPS recenter. Preserve any compass lock; if heading follow is active
-     * without position follow, re-engage position so the map recenters and resumes rotating around
-     * the user's location.
+     * Heading follow is on but position follow was cleared (e.g. user panned): re-engage position
+     * so the map stays centered on the user while rotating. Hosts may use this when resuming
+     * follow after a one-shot action; **navigation start** in Survey/NGS uses
+     * [afterProgrammaticCamera] / [GeoVaultMapHeadingFollowFabBundle.clearForProgrammaticCameraMove]
+     * instead so framing animations are not fighting MapLibre tracking.
      */
     fun afterGpsRecenter(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
         if (current.headingFollowDesired) {
@@ -83,13 +94,6 @@ object GeoVaultMapCameraFollowMachine {
         } else {
             current
         }
-
-    /**
-     * User started navigation to a point. Preserve heading follow exactly like a user recenter:
-     * navigation is a user-requested location mode, not a generic host camera reset.
-     */
-    fun afterNavigationStart(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
-        afterGpsRecenter(current)
 
     /** Host-driven camera (fit bounds, focus selection, navigation framing, etc.). */
     fun afterProgrammaticCamera(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =

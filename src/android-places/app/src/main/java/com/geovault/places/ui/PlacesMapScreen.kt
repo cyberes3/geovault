@@ -1,5 +1,6 @@
 package com.geovault.places.ui
 
+import android.location.Location
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,9 +22,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,10 +33,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
+import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.rememberGeoVaultMapBoundsFitPaddingPx
+import com.geovault.common.maps.location.LocationUpdates
+import com.geovault.common.maps.location.rememberGeoVaultMapLocationPermissionState
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
@@ -45,9 +47,9 @@ import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
+import com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle
 import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
-import com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterFabAction
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility
@@ -94,16 +96,40 @@ fun PlacesMapScreen(
         )
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
-    var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
+    val phase by map.phase.collectAsState()
+    val hasLocationPermissionState = rememberGeoVaultMapLocationPermissionState()
+    val hasLocationPermission by hasLocationPermissionState
+    val headingFollowFabs = rememberGeoVaultMapHeadingFollowFabBundle(
+        map = map,
+        userLocation = locationPlugin,
+        allowFollowCamera = phase == GeoVaultMapPhase.Ready,
+    )
+    val gpsFabAction = headingFollowFabs.gpsPositionFollowFab
+    val orientationFabAction = headingFollowFabs.headingFollowFab
+    val shouldStreamGps = hasLocationPermission &&
+        phase == GeoVaultMapPhase.Ready &&
+        (headingFollowFabs.positionFollowDesired || headingFollowFabs.headingFollowDesired)
+    DisposableEffect(locationPlugin, shouldStreamGps) {
+        if (shouldStreamGps) {
+            locationPlugin.startRenderingGpsLocation(intervalMs = PLACES_GPS_STREAM_INTERVAL_MS)
+        }
+        onDispose { locationPlugin.stopRenderingGpsLocation() }
+    }
+    LaunchedEffect(locationPlugin, shouldStreamGps) {
+        locationPlugin.setEnabled(shouldStreamGps)
+        if (!shouldStreamGps) return@LaunchedEffect
+        val latLng = LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L) ?: return@LaunchedEffect
+        val synthetic = Location("places-map-prime").apply {
+            latitude = latLng.latitude
+            longitude = latLng.longitude
+            accuracy = 12f
+            time = System.currentTimeMillis()
+        }
+        locationPlugin.renderLocation(synthetic)
+    }
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
     val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
-    val gpsFabAction = rememberGeoVaultGpsRecenterFabAction(
-        map = map,
-        userLocation = locationPlugin,
-        order = 30,
-        onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
-    )
 
     LaunchedEffect(Unit) {
         viewModel.loadFromCache()
@@ -155,10 +181,9 @@ fun PlacesMapScreen(
         renderPlugin.setRenderState(viewModel.buildMapRenderState())
     }
 
-    val phase by map.phase.collectAsState()
     LaunchedEffect(phase, state.features, launchArgs) {
         map.maplibreMap ?: return@LaunchedEffect
-        if (phase != com.geovault.common.maps.core.GeoVaultMapPhase.Ready) return@LaunchedEffect
+        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (launchArgs.zoomToId != null && launchArgs.zoomToId >= 0) {
             viewModel.selectByDatabaseId(launchArgs.zoomToId)
         }
@@ -235,7 +260,9 @@ fun PlacesMapScreen(
                             )
                         }
                         val bounds = viewModel.featureBounds()
-                        val gpsAnchor = gpsHomeAnchor
+                        val gpsAnchor = locationPlugin.getLastLocation()?.let { loc ->
+                            LatLng(loc.latitude, loc.longitude)
+                        }
                         val effectiveBounds = when {
                             bounds != null && gpsAnchor != null ->
                                 geoVaultLatLngBoundsUnion(bounds, listOf(gpsAnchor))
@@ -252,6 +279,16 @@ fun PlacesMapScreen(
                     icon = gpsFabAction.icon,
                     contentDescription = gpsFabAction.contentDescription,
                     onTap = gpsFabAction.onTap,
+                )
+                action(
+                    id = orientationFabAction.id,
+                    order = orientationFabAction.order,
+                    icon = orientationFabAction.icon,
+                    contentDescription = orientationFabAction.contentDescription,
+                    onTap = orientationFabAction.onTap,
+                    tooltip = orientationFabAction.tooltip,
+                    iconRotationDegrees = orientationFabAction.iconRotationDegrees,
+                    useIntrinsicIconColors = orientationFabAction.useIntrinsicIconColors,
                 )
                 action(
                     id = "zoom_in",
@@ -336,3 +373,5 @@ fun PlacesMapScreen(
         }
     }
 }
+
+private const val PLACES_GPS_STREAM_INTERVAL_MS = 2_000L

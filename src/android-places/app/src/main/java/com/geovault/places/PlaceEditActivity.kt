@@ -70,7 +70,7 @@ import com.geovault.common.maps.geocoding.GeocodingRepository
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.geocoding.GeoVaultMapGeocodeSearchDialog
-import com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterController
+import com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationController
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -208,7 +208,7 @@ private fun PlaceEditScreen(
         )
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
-    val gpsRecenterController = rememberGeoVaultGpsRecenterController(
+    val gpsOneShotController = rememberGeoVaultGpsOneShotMyLocationController(
         map = map,
         userLocation = locationPlugin,
         onLocationResolved = { latLng ->
@@ -451,10 +451,10 @@ private fun PlaceEditScreen(
                                 text = "Use my location",
                                 onClick = {
                                     dismissInputFocus()
-                                    gpsRecenterController.onRecenter()
+                                    gpsOneShotController.onJumpToMyLocation()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = !gpsRecenterController.isLocking,
+                                enabled = !gpsOneShotController.isWaitingForFix,
                                 tooltip = "Use my location",
                                 centeredContent = {
                                     val locationButtonTint = LocalContentColor.current
@@ -462,7 +462,7 @@ private fun PlaceEditScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
-                                        if (gpsRecenterController.isLocking) {
+                                        if (gpsOneShotController.isWaitingForFix) {
                                             GeoVaultLoadingSpinner(
                                                 spinnerSize = 18.dp,
                                                 color = locationButtonTint,

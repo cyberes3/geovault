@@ -3,7 +3,9 @@ package com.geovault.common.maps.ui.camerafollow
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.GpsNotFixed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -35,28 +37,24 @@ import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.maps.MapLibreMap
 
 /**
- * Heading/compass follow FAB and MapLibre location camera wiring. **One-shot** "go to my
- * position" is [com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterFabAction], not
- * a second FAB here.
+ * Heading/compass follow FAB, GPS position-follow FAB, and MapLibre location camera wiring.
+ *
+ * One-shot “animate to my location once” (e.g. tracker escape hatch) is
+ * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
  */
 data class GeoVaultMapHeadingFollowFabBundle(
     val headingFollowFab: GeoVaultMapFabAction,
     /**
+     * Toggles continuous position follow ([CameraMode.TRACKING] when heading is off). Icon
+     * reflects [positionFollowDesired].
+     */
+    val gpsPositionFollowFab: GeoVaultMapFabAction,
+    /**
      * Clears follow flags and camera tracking before host-driven camera moves (fit bounds,
-     * selection zoom, navigation framing) so MapLibre does not fight programmatic animations.
+     * selection zoom, **navigation start / framing**) so MapLibre does not fight programmatic
+     * animations. Survey and NGS both call this when turn-by-turn navigation begins.
      */
     val clearForProgrammaticCameraMove: () -> Unit,
-    /**
-     * Prepares follow state for a user-initiated GPS recenter without treating it as a
-     * host-driven camera move. Heading follow is preserved, and heading-only mode resumes
-     * position follow so rotation remains centered on the user.
-     */
-    val prepareForGpsRecenter: () -> Unit,
-    /**
-     * Prepares follow state for user-started point navigation. Navigation should keep compass
-     * follow alive instead of behaving like a generic host-driven camera reset.
-     */
-    val prepareForNavigationStart: () -> Unit,
     /**
      * True while position / camera follow is active ([CameraMode.TRACKING] or the dual-mode
      * manual path when heading is also on).
@@ -68,6 +66,7 @@ data class GeoVaultMapHeadingFollowFabBundle(
 
 private enum class GeoVaultMapHeadingFollowPendingGrant {
     Heading,
+    GpsPositionFollow,
 }
 
 /**
@@ -81,10 +80,11 @@ private const val INITIAL_FOLLOW_ZOOM: Double = 10.0
 private const val HEADING_FAB_BEARING_WAIT_TIMEOUT_MS: Long = 2_500L
 
 /**
- * Coordinates the **heading** follow FAB, MapLibre [CameraMode], and optional first-follow zoom.
+ * Coordinates the **heading** follow FAB, **GPS position-follow** FAB, MapLibre [CameraMode], and
+ * optional first-follow zoom.
  *
- * For a one-shot recenter, use
- * [com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterFabAction].
+ * For a one-shot recenter (no continuous follow), use
+ * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
  *
  * - A user pan/zoom clears **position** follow only; heading follow can stay (compass lock).
  * - Map bearing is driven manually only when **both** position and heading follow are on.
@@ -96,6 +96,9 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     map: GeoVaultBaseMap,
     userLocation: GeoVaultUserLocationCapability,
     allowFollowCamera: Boolean = true,
+    gpsPositionFollowFabId: String = "gps_position_follow",
+    gpsPositionFollowFabOrder: Int = 30,
+    gpsPositionFollowContentDescription: String = "Follow my location",
     orientationFollowFabId: String = "orientation_lock",
     orientationFollowFabOrder: Int = 35,
     orientationFollowContentDescription: String = "Follow my heading",
@@ -136,11 +139,21 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             result[GeoVaultMapLocationPermission.FINE_AND_COARSE[1]] == true
         val pending = pendingGrant
         pendingGrant = null
-        if (granted && pending == GeoVaultMapHeadingFollowPendingGrant.Heading) {
-            val next = GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(followState())
-            positionFollowDesired = next.positionFollowDesired
-            headingFollowDesired = next.headingFollowDesired
-        } else if (!granted) {
+        if (granted) {
+            when (pending) {
+                GeoVaultMapHeadingFollowPendingGrant.Heading -> {
+                    val next = GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(followState())
+                    positionFollowDesired = next.positionFollowDesired
+                    headingFollowDesired = next.headingFollowDesired
+                }
+                GeoVaultMapHeadingFollowPendingGrant.GpsPositionFollow -> {
+                    val next = GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(followState())
+                    positionFollowDesired = next.positionFollowDesired
+                    headingFollowDesired = next.headingFollowDesired
+                }
+                null -> Unit
+            }
+        } else {
             onPermissionDenied?.invoke()
         }
     }
@@ -247,18 +260,6 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         headingFollowDesired = false
     }
 
-    val prepareForGpsRecenter: () -> Unit = {
-        val next = GeoVaultMapCameraFollowMachine.afterGpsRecenter(followState())
-        positionFollowDesired = next.positionFollowDesired
-        headingFollowDesired = next.headingFollowDesired
-    }
-
-    val prepareForNavigationStart: () -> Unit = {
-        val next = GeoVaultMapCameraFollowMachine.afterNavigationStart(followState())
-        positionFollowDesired = next.positionFollowDesired
-        headingFollowDesired = next.headingFollowDesired
-    }
-
     val onHeadingTap: () -> Unit = {
         if (context.geoVaultMapHasFineOrCoarseLocation()) {
             val next = GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(followState())
@@ -269,6 +270,29 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             permissionLauncher.launch(GeoVaultMapLocationPermission.FINE_AND_COARSE)
         }
     }
+
+    val onGpsPositionFollowTap: () -> Unit = {
+        if (context.geoVaultMapHasFineOrCoarseLocation()) {
+            val next = GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(followState())
+            positionFollowDesired = next.positionFollowDesired
+            headingFollowDesired = next.headingFollowDesired
+        } else {
+            pendingGrant = GeoVaultMapHeadingFollowPendingGrant.GpsPositionFollow
+            permissionLauncher.launch(GeoVaultMapLocationPermission.FINE_AND_COARSE)
+        }
+    }
+
+    val gpsPositionFab = GeoVaultMapFabAction(
+        id = gpsPositionFollowFabId,
+        order = gpsPositionFollowFabOrder,
+        icon = if (positionFollowDesired) {
+            GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
+        } else {
+            GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
+        },
+        contentDescription = gpsPositionFollowContentDescription,
+        onTap = onGpsPositionFollowTap,
+    )
 
     val showHeadingCompass =
         headingFollowDesired && headingFabBearingReady
@@ -288,9 +312,8 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
 
     return GeoVaultMapHeadingFollowFabBundle(
         headingFollowFab = orientationFab,
+        gpsPositionFollowFab = gpsPositionFab,
         clearForProgrammaticCameraMove = clearForProgrammaticCameraMove,
-        prepareForGpsRecenter = prepareForGpsRecenter,
-        prepareForNavigationStart = prepareForNavigationStart,
         positionFollowDesired = positionFollowDesired,
         headingFollowDesired = headingFollowDesired,
     )

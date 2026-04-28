@@ -1,7 +1,7 @@
 package com.geovault.tracker.presentation
 
 /**
- * Whether the map chrome should show the my-location (GPS recenter) FAB.
+ * Whether the map chrome should show the my-location (one-shot jump to device location) FAB.
  *
  * Matches the pre-rewrite intent of `MapFragment.isSelectedDefaultTrackerMode` and the
  * `!isSelectedDefaultTracker` part of `MapMyLocationPolicy.shouldShowButton` in `old android-tracker`

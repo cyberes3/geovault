@@ -120,30 +120,6 @@ class GeoVaultMapCameraFollowMachineTest {
     }
 
     @Test
-    fun afterNavigationStart_whenPositionAndHeadingOn_preservesRotation() {
-        val prev = GeoVaultMapCameraFollowState(
-            positionFollowDesired = true,
-            headingFollowDesired = true,
-        )
-        assertEquals(prev, GeoVaultMapCameraFollowMachine.afterNavigationStart(prev))
-    }
-
-    @Test
-    fun afterNavigationStart_whenHeadingOnly_reengagesPosition() {
-        val prev = GeoVaultMapCameraFollowState(
-            positionFollowDesired = false,
-            headingFollowDesired = true,
-        )
-        assertEquals(
-            GeoVaultMapCameraFollowState(
-                positionFollowDesired = true,
-                headingFollowDesired = true,
-            ),
-            GeoVaultMapCameraFollowMachine.afterNavigationStart(prev),
-        )
-    }
-
-    @Test
     fun shouldResetNorthToUp_onlyWhenHeadingTurnsOff() {
         assertTrue(
             GeoVaultMapCameraFollowMachine.shouldResetNorthToUp(
@@ -214,6 +190,36 @@ class GeoVaultMapCameraFollowMachineTest {
                     positionFollowDesired = false,
                     headingFollowDesired = true,
                 ),
+            ),
+        )
+    }
+
+    @Test
+    fun togglePositionFollowOnTap_flipsPositionOnly() {
+        assertEquals(
+            GeoVaultMapCameraFollowState(true, false),
+            GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(GeoVaultMapCameraFollowState.NONE),
+        )
+        assertEquals(
+            GeoVaultMapCameraFollowState.NONE,
+            GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(
+                GeoVaultMapCameraFollowState(true, false),
+            ),
+        )
+    }
+
+    @Test
+    fun togglePositionFollowOnTap_preservesHeading() {
+        assertEquals(
+            GeoVaultMapCameraFollowState(true, true),
+            GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(
+                GeoVaultMapCameraFollowState(false, true),
+            ),
+        )
+        assertEquals(
+            GeoVaultMapCameraFollowState(false, true),
+            GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(
+                GeoVaultMapCameraFollowState(true, true),
             ),
         )
     }

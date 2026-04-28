@@ -8,9 +8,10 @@ import com.geovault.common.maps.core.GeoVaultBaseMap
 import org.maplibre.android.camera.CameraUpdateFactory
 
 /**
- * Non-location map FAB presets (layers + zoom). For GPS, see
- * [com.geovault.common.maps.ui.recenter.rememberGeoVaultGpsRecenterFabAction] and
- * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle].
+ * Non-location map FAB presets (layers + zoom). For continuous position follow, see
+ * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle]. For a
+ * one-shot map jump to the device location, see
+ * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
  */
 fun geoVaultLayerToggleFabAction(
     map: GeoVaultBaseMap,
