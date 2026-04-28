@@ -291,8 +291,11 @@ sealed class GeoVaultBaseMap(
         styleDeliveredForGeneration = true
         clearStyleLoadWatchdog()
         _phase.value = GeoVaultMapPhase.Recovering
+        // Only fall back when the configured basemap is a vector style — a raster-source
+        // failure usually means the OSM fallback would hit the same network problem and
+        // looping into it wastes work.
         val effectiveId = manager.sourceManager.getEffectiveSourceId()
-        if (manager.sourceManager.isVectorSource(effectiveId)) {
+        if (manager.sourceManager.resolveBasemap(effectiveId) is ResolvedBasemap.Vector) {
             manager.loadOsmFallback(map)
         }
     }

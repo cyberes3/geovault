@@ -79,6 +79,71 @@ class GeoVaultMapCameraFollowMachineTest {
     }
 
     @Test
+    fun afterGpsRecenter_whenPositionAndHeadingOn_preservesBoth() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = true,
+            headingFollowDesired = true,
+        )
+        assertEquals(prev, GeoVaultMapCameraFollowMachine.afterGpsRecenter(prev))
+    }
+
+    @Test
+    fun afterGpsRecenter_whenHeadingOnly_reengagesPosition() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = false,
+            headingFollowDesired = true,
+        )
+        assertEquals(
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = true,
+            ),
+            GeoVaultMapCameraFollowMachine.afterGpsRecenter(prev),
+        )
+    }
+
+    @Test
+    fun afterGpsRecenter_whenPositionOnly_noOp() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = true,
+            headingFollowDesired = false,
+        )
+        assertEquals(prev, GeoVaultMapCameraFollowMachine.afterGpsRecenter(prev))
+    }
+
+    @Test
+    fun afterGpsRecenter_whenNoFollow_noOp() {
+        assertEquals(
+            GeoVaultMapCameraFollowState.NONE,
+            GeoVaultMapCameraFollowMachine.afterGpsRecenter(GeoVaultMapCameraFollowState.NONE),
+        )
+    }
+
+    @Test
+    fun afterNavigationStart_whenPositionAndHeadingOn_preservesRotation() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = true,
+            headingFollowDesired = true,
+        )
+        assertEquals(prev, GeoVaultMapCameraFollowMachine.afterNavigationStart(prev))
+    }
+
+    @Test
+    fun afterNavigationStart_whenHeadingOnly_reengagesPosition() {
+        val prev = GeoVaultMapCameraFollowState(
+            positionFollowDesired = false,
+            headingFollowDesired = true,
+        )
+        assertEquals(
+            GeoVaultMapCameraFollowState(
+                positionFollowDesired = true,
+                headingFollowDesired = true,
+            ),
+            GeoVaultMapCameraFollowMachine.afterNavigationStart(prev),
+        )
+    }
+
+    @Test
     fun shouldResetNorthToUp_onlyWhenHeadingTurnsOff() {
         assertTrue(
             GeoVaultMapCameraFollowMachine.shouldResetNorthToUp(

@@ -144,29 +144,37 @@ class MapSourceManager(private val context: Context) {
 
     fun getSource(id: String): TileSource? = availableSources.find { it.id == id }
 
-    fun isVectorSource(id: String): Boolean {
-        val source = getSource(id) ?: return false
-        val cfg = source.client_config
-        return cfg.style_url != null || cfg.type == "maptiler"
-    }
-
-    fun getStyleUrl(id: String): String? = getSource(id)?.client_config?.style_url
-
-    fun getResolvedStyleUrl(id: String): String? {
-        val url = getStyleUrl(id) ?: return null
-        if (!url.startsWith("/")) return url
-        val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
-        return if (baseUrl.isBlank()) null else "$baseUrl$url"
-    }
-
-    fun getStreetFallbackRasterUrl(): String? = getRasterUrl(SOURCE_OSM)
-
-    fun getRasterUrl(id: String): String? {
+    /**
+     * Resolves the configured tile-source [id] into a typed [ResolvedBasemap]
+     * with a non-blank URL guaranteed at the type level. Vector sources whose
+     * `style_url` is missing/blank/unparseable, or raster sources whose `url`
+     * is missing/blank, return `null` so callers can drop to OSM fallback
+     * explicitly instead of silently passing empty strings to MapLibre.
+     */
+    fun resolveBasemap(id: String): ResolvedBasemap? {
         val source = getSource(id) ?: return null
-        val url = source.client_config.url ?: return null
-        if (!url.startsWith("/")) return url
+        val cfg = source.client_config
+        val isVector = !cfg.style_url.isNullOrBlank() || cfg.type == "maptiler"
+        return if (isVector) {
+            val resolved = resolveServerRelative(cfg.style_url) ?: return null
+            ResolvedBasemap.vector(id, resolved)
+        } else {
+            val resolved = resolveServerRelative(cfg.url) ?: return null
+            ResolvedBasemap.raster(id, resolved)
+        }
+    }
+
+    /** OSM-as-Raster fallback. Always present (the default OSM source is hard-coded). */
+    fun resolveStreetFallbackBasemap(): ResolvedBasemap.Raster? {
+        return resolveBasemap(SOURCE_OSM) as? ResolvedBasemap.Raster
+    }
+
+    private fun resolveServerRelative(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        if (!trimmed.startsWith("/")) return trimmed
         val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
-        return if (baseUrl.isBlank()) null else "$baseUrl$url"
+        return if (baseUrl.isBlank()) null else "$baseUrl$trimmed"
     }
 
     private fun defaultOsmSource(): TileSource = TileSource(

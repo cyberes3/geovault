@@ -72,6 +72,25 @@ object GeoVaultMapCameraFollowMachine {
     fun afterUserGesture(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
         current.copy(positionFollowDesired = false)
 
+    /**
+     * User tapped a one-shot GPS recenter. Preserve any compass lock; if heading follow is active
+     * without position follow, re-engage position so the map recenters and resumes rotating around
+     * the user's location.
+     */
+    fun afterGpsRecenter(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
+        if (current.headingFollowDesired) {
+            current.copy(positionFollowDesired = true)
+        } else {
+            current
+        }
+
+    /**
+     * User started navigation to a point. Preserve heading follow exactly like a user recenter:
+     * navigation is a user-requested location mode, not a generic host camera reset.
+     */
+    fun afterNavigationStart(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
+        afterGpsRecenter(current)
+
     /** Host-driven camera (fit bounds, focus selection, navigation framing, etc.). */
     fun afterProgrammaticCamera(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
         GeoVaultMapCameraFollowState.NONE

@@ -30,5 +30,5 @@ internal object MapSourceApplyPlanner {
         }
     }
 
-    private fun String.isRasterSourceKey(): Boolean = startsWith("raster:")
+    private fun String.isRasterSourceKey(): Boolean = startsWith(ResolvedBasemap.RASTER_KEY_PREFIX)
 }

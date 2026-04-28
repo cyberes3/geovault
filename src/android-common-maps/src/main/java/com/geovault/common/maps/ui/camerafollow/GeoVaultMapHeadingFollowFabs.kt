@@ -47,6 +47,17 @@ data class GeoVaultMapHeadingFollowFabBundle(
      */
     val clearForProgrammaticCameraMove: () -> Unit,
     /**
+     * Prepares follow state for a user-initiated GPS recenter without treating it as a
+     * host-driven camera move. Heading follow is preserved, and heading-only mode resumes
+     * position follow so rotation remains centered on the user.
+     */
+    val prepareForGpsRecenter: () -> Unit,
+    /**
+     * Prepares follow state for user-started point navigation. Navigation should keep compass
+     * follow alive instead of behaving like a generic host-driven camera reset.
+     */
+    val prepareForNavigationStart: () -> Unit,
+    /**
      * True while position / camera follow is active ([CameraMode.TRACKING] or the dual-mode
      * manual path when heading is also on).
      */
@@ -236,6 +247,18 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         headingFollowDesired = false
     }
 
+    val prepareForGpsRecenter: () -> Unit = {
+        val next = GeoVaultMapCameraFollowMachine.afterGpsRecenter(followState())
+        positionFollowDesired = next.positionFollowDesired
+        headingFollowDesired = next.headingFollowDesired
+    }
+
+    val prepareForNavigationStart: () -> Unit = {
+        val next = GeoVaultMapCameraFollowMachine.afterNavigationStart(followState())
+        positionFollowDesired = next.positionFollowDesired
+        headingFollowDesired = next.headingFollowDesired
+    }
+
     val onHeadingTap: () -> Unit = {
         if (context.geoVaultMapHasFineOrCoarseLocation()) {
             val next = GeoVaultMapCameraFollowMachine.toggleHeadingOnTap(followState())
@@ -266,6 +289,8 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     return GeoVaultMapHeadingFollowFabBundle(
         headingFollowFab = orientationFab,
         clearForProgrammaticCameraMove = clearForProgrammaticCameraMove,
+        prepareForGpsRecenter = prepareForGpsRecenter,
+        prepareForNavigationStart = prepareForNavigationStart,
         positionFollowDesired = positionFollowDesired,
         headingFollowDesired = headingFollowDesired,
     )
