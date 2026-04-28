@@ -29,6 +29,7 @@ fun GeoVaultFormDialog(
     confirmText: String = "Save",
     cancelText: String = "Cancel",
     confirmEnabled: Boolean = true,
+    showDismissButton: Boolean = true,
     body: @Composable ColumnScope.() -> Unit,
 ) {
     AlertDialog(
@@ -55,13 +56,17 @@ fun GeoVaultFormDialog(
                 )
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = cancelText,
-                    color = GeoVaultColorTokens.MainBlue,
-                )
+        dismissButton = if (showDismissButton) {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = cancelText,
+                        color = GeoVaultColorTokens.MainBlue,
+                    )
+                }
             }
+        } else {
+            null
         },
     )
 }

@@ -53,12 +53,14 @@ object GeoVaultInfoDialogDefaults {
 fun GeoVaultInfoDialog(
     title: String,
     onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
     closeButtonText: String = "Close",
     content: @Composable ColumnScope.() -> Unit
 ) {
     val titleTextStyle = GeoVaultInfoDialogDefaults.titleTextStyle()
     val bodyTextStyle = GeoVaultInfoDialogDefaults.bodyTextStyle()
     AlertDialog(
+        modifier = modifier,
         onDismissRequest = onDismissRequest,
         title = {
             Text(

@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Card
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -66,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultCheckmark
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
+import com.geovault.common.ui.components.GeoVaultFormDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
@@ -1269,70 +1269,52 @@ private fun TrackersGroupsDialogs(
         TrackersGroupsDialog.Hidden -> Unit
         is TrackersGroupsDialog.EditTrackerLoading -> Unit
         is TrackersGroupsDialog.CreateTracker -> {
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(stringResource(R.string.trackers_dialog_create_tracker_title)) },
-                text = {
-                    Column {
-                        GeoVaultInput(
-                            value = dialog.nameDraft,
-                            onValueChange = { onCreateTrackerDraft(it, dialog.colorDraft) },
-                            label = stringResource(R.string.trackers_field_name),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        GeoVaultInput(
-                            value = dialog.colorDraft,
-                            onValueChange = { onCreateTrackerDraft(dialog.nameDraft, it) },
-                            label = stringResource(R.string.trackers_field_color_optional),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        GeoVaultCheckmark(
-                            checked = dialog.setAsSelectedTracker,
-                            onCheckedChange = onCreateTrackerSetAsSelected,
-                            label = stringResource(R.string.trackers_field_set_as_selected_tracker),
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = onSubmitCreateTracker) {
-                        Text(stringResource(R.string.trackers_dialog_confirm_create))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.trackers_dialog_cancel))
-                    }
-                },
-            )
+            GeoVaultFormDialog(
+                title = stringResource(R.string.trackers_dialog_create_tracker_title),
+                onConfirm = onSubmitCreateTracker,
+                onDismiss = onDismiss,
+                confirmText = stringResource(R.string.trackers_dialog_confirm_create),
+                cancelText = stringResource(R.string.trackers_dialog_cancel),
+            ) {
+                GeoVaultInput(
+                    value = dialog.nameDraft,
+                    onValueChange = { onCreateTrackerDraft(it, dialog.colorDraft) },
+                    label = stringResource(R.string.trackers_field_name),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                GeoVaultInput(
+                    value = dialog.colorDraft,
+                    onValueChange = { onCreateTrackerDraft(dialog.nameDraft, it) },
+                    label = stringResource(R.string.trackers_field_color_optional),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                GeoVaultCheckmark(
+                    checked = dialog.setAsSelectedTracker,
+                    onCheckedChange = onCreateTrackerSetAsSelected,
+                    label = stringResource(R.string.trackers_field_set_as_selected_tracker),
+                )
+            }
         }
         is TrackersGroupsDialog.CreateGroup -> {
-            AlertDialog(
-                onDismissRequest = onDismiss,
-                title = { Text(stringResource(R.string.trackers_dialog_create_group_title)) },
-                text = {
-                    GeoVaultInput(
-                        value = dialog.nameDraft,
-                        onValueChange = onCreateGroupDraft,
-                        label = stringResource(R.string.trackers_field_name),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = onSubmitCreateGroup) {
-                        Text(stringResource(R.string.trackers_dialog_confirm_create))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.trackers_dialog_cancel))
-                    }
-                },
-            )
+            GeoVaultFormDialog(
+                title = stringResource(R.string.trackers_dialog_create_group_title),
+                onConfirm = onSubmitCreateGroup,
+                onDismiss = onDismiss,
+                confirmText = stringResource(R.string.trackers_dialog_confirm_create),
+                cancelText = stringResource(R.string.trackers_dialog_cancel),
+            ) {
+                GeoVaultInput(
+                    value = dialog.nameDraft,
+                    onValueChange = onCreateGroupDraft,
+                    label = stringResource(R.string.trackers_field_name),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         is TrackersGroupsDialog.EditTracker -> Unit
         is TrackersGroupsDialog.EditGroup -> Unit
