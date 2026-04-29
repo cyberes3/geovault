@@ -22,6 +22,12 @@ class TrackingServiceProcessRestartTest {
     }
 
     @Test
+    fun locationUpdateAction_doesNotRequireForegroundPromotion() {
+        val path = TrackingService.resolveStartupCommandPath(TrackingService.ACTION_LOCATION_UPDATE)
+        assertFalse(TrackingService.requiresForegroundPromotion(path))
+    }
+
+    @Test
     fun runtimeTriggerMapping_mapsProcessRestartAndWatchdogTick() {
         assertEquals(RuntimeTrigger.PROCESS_RESTART, invokeMapRuntimeTrigger("process_restart"))
         assertEquals(RuntimeTrigger.WATCHDOG_TICK, invokeMapRuntimeTrigger("watchdog_tick"))

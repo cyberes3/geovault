@@ -101,6 +101,10 @@
         </receiver>
 
         <receiver
+            android:name=".TrackingLocationUpdateReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".TrackingRecoveryReceiver"
             android:exported="false">
             <intent-filter>

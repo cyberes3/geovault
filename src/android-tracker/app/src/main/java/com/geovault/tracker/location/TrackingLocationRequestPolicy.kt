@@ -11,7 +11,7 @@ data class TrackingLocationRequestInput(
 )
 
 object TrackingLocationRequestPolicy {
-    private const val MAX_NORMAL_REQUEST_DEFER_MS = 60_000L
+    private const val NORMAL_REQUEST_MAX_DELAY_MS = 0L
     private const val FAST_GPS_LOCK_INTERVAL_MS = 0L
     private const val FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS = 0L
     private const val FAST_GPS_LOCK_MIN_DISTANCE_METERS = 0f
@@ -21,7 +21,7 @@ object TrackingLocationRequestPolicy {
         return LocationRequest.Builder(input.priority, intervalMs)
             .setMinUpdateDistanceMeters(input.distanceFilterMeters.coerceAtLeast(0f))
             .setMinUpdateIntervalMillis(minUpdateMs)
-            .setMaxUpdateDelayMillis(normalRequestMaxDelayMs(input.intervalSec))
+            .setMaxUpdateDelayMillis(NORMAL_REQUEST_MAX_DELAY_MS)
             .build()
     }
 
@@ -33,9 +33,4 @@ object TrackingLocationRequestPolicy {
             .build()
     }
 
-    fun normalRequestMaxDelayMs(intervalSec: Long): Long {
-        val (intervalMs, _) = TrackingLocationPolicy.locationRequestIntervalFromSec(intervalSec)
-        val candidate = intervalMs * 3L
-        return candidate.coerceIn(intervalMs, MAX_NORMAL_REQUEST_DEFER_MS)
-    }
 }

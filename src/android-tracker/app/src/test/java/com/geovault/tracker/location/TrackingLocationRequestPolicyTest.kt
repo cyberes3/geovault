@@ -7,7 +7,7 @@ import org.junit.Test
 
 class TrackingLocationRequestPolicyTest {
     @Test
-    fun buildNormalRequest_mapsIntervalDistancePriorityAndMaxDelay() {
+    fun buildNormalRequest_mapsIntervalDistancePriorityAndDoesNotDeferBeyondInterval() {
         val request = TrackingLocationRequestPolicy.buildNormalRequest(
             TrackingLocationRequestInput(
                 intervalSec = 20L,
@@ -19,7 +19,7 @@ class TrackingLocationRequestPolicyTest {
         assertEquals(Priority.PRIORITY_BALANCED_POWER_ACCURACY, request.priority)
         assertEquals(20_000L, request.intervalMillis)
         assertEquals(10_000L, request.minUpdateIntervalMillis)
-        assertEquals(60_000L, request.maxUpdateDelayMillis)
+        assertEquals(20_000L, request.maxUpdateDelayMillis)
         assertEquals(7f, request.minUpdateDistanceMeters, 0.001f)
     }
 

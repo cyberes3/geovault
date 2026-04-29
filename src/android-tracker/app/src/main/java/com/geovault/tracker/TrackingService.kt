@@ -212,6 +212,7 @@ class TrackingService : Service() {
         const val ACTION_STOP = "com.geovault.tracker.ACTION_STOP"
         const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
         const val ACTION_SEND_MANUAL_POINT = "com.geovault.tracker.ACTION_SEND_MANUAL_POINT"
+        const val ACTION_LOCATION_UPDATE = "com.geovault.tracker.ACTION_LOCATION_UPDATE"
         const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
         const val EXTRA_TRACKING_ERROR_MESSAGE = "extra_tracking_error_message"
         const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
@@ -262,6 +263,7 @@ class TrackingService : Service() {
         private const val EXTRAS_KEY_LOW_ACCURACY_FALLBACK = "low_accuracy_fallback"
         private const val EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER = "fallback_source_provider"
         private const val EXTRAS_KEY_MANUAL_SEND = "manual_send"
+        private const val EXTRA_LOCATION_UPDATES = "extra_location_updates"
         private const val FALLBACK_REJECT_SUMMARY_INTERVAL_MS = 30_000L
         private const val FAST_GPS_LOCK_WINDOW_MS = 60_000L
         private const val FAST_GPS_LOCK_MIN_SAMPLES = 3
@@ -283,6 +285,7 @@ class TrackingService : Service() {
             StopNoRestart,
             ReshowForeground,
             ManualSendPoint,
+            LocationUpdate,
             StopUnknown
         }
 
@@ -293,6 +296,7 @@ class TrackingService : Service() {
                 ACTION_STOP -> StartupCommandPath.StopUnknown
                 ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
                 ACTION_SEND_MANUAL_POINT -> StartupCommandPath.ManualSendPoint
+                ACTION_LOCATION_UPDATE -> StartupCommandPath.LocationUpdate
                 null -> {
                     if (shouldRestartTrackingAfterProcessDeath()) {
                         StartupCommandPath.StartTracking
@@ -316,9 +320,30 @@ class TrackingService : Service() {
                 ACTION_STOP -> "explicit_stop"
                 ACTION_RESHOW_FOREGROUND -> "reshow_foreground"
                 ACTION_SEND_MANUAL_POINT -> "manual_send_point"
+                ACTION_LOCATION_UPDATE -> "location_update"
                 null -> "process_restart"
                 else -> "unknown_action"
             }
+        }
+
+        @JvmStatic
+        fun buildLocationUpdateIntent(context: Context, locations: List<Location>): Intent {
+            val appContext = context.applicationContext
+            return Intent(appContext, TrackingService::class.java).apply {
+                action = ACTION_LOCATION_UPDATE
+                setPackage(appContext.packageName)
+                putParcelableArrayListExtra(
+                    EXTRA_LOCATION_UPDATES,
+                    ArrayList(locations.map { Location(it) })
+                )
+            }
+        }
+
+        internal fun extractLocationUpdateIntentLocations(intent: Intent?): List<Location> {
+            if (intent?.action != ACTION_LOCATION_UPDATE) return emptyList()
+            return intent.getParcelableArrayListExtra(EXTRA_LOCATION_UPDATES, Location::class.java)
+                ?.map { Location(it) }
+                .orEmpty()
         }
 
         @JvmStatic
@@ -366,12 +391,14 @@ class TrackingService : Service() {
             TAG,
             "onStartCommand action=${intent?.action} path=$commandPath startId=$startId trigger=$startupTrigger isTracking=$isTracking"
         )
-        logNotificationSurfaceDiagnostics(
-            trigger = startupTrigger,
-            action = intent?.action,
-            path = commandPath,
-            stage = "on_start_command"
-        )
+        if (commandPath != StartupCommandPath.LocationUpdate) {
+            logNotificationSurfaceDiagnostics(
+                trigger = startupTrigger,
+                action = intent?.action,
+                path = commandPath,
+                stage = "on_start_command"
+            )
+        }
         if (requiresForegroundPromotion(commandPath) &&
             !promoteToForegroundForStartup(
                 trigger = startupTrigger,
@@ -422,6 +449,14 @@ class TrackingService : Service() {
             StartupCommandPath.ManualSendPoint -> {
                 handleManualSendPointCommand()
                 if (isTracking) START_STICKY else START_NOT_STICKY
+            }
+            StartupCommandPath.LocationUpdate -> {
+                if (handleLocationUpdateCommand(intent)) {
+                    START_STICKY
+                } else {
+                    stopSelfSafelyAfterStartup(reason = "location_update_not_tracking")
+                    START_NOT_STICKY
+                }
             }
             StartupCommandPath.StopUnknown -> {
                 if (intent?.action == ACTION_STOP) {
@@ -881,6 +916,16 @@ class TrackingService : Service() {
                 }
             }
         }
+    }
+
+    private fun handleLocationUpdateCommand(intent: Intent?): Boolean {
+        if (!isTracking) return false
+        val locations = extractLocationUpdateIntentLocations(intent)
+        locations.forEach { location ->
+            val snapshot = Location(location)
+            locationListener.onLocationChanged(snapshot)
+        }
+        return true
     }
 
     private fun handleManualSendPointCommand(): Boolean {
@@ -1572,7 +1617,7 @@ class TrackingService : Service() {
         }
         return try {
             locationSessionCoordinator.stopSession()
-            val started = locationSessionCoordinator.startSession(request = request, listener = locationListener)
+            val started = locationSessionCoordinator.startSession(request = request)
             if (!started) return false
             runtimeTelemetry.decision(
                 name = "location_request_applied",

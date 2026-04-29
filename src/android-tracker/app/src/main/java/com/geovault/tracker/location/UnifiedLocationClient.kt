@@ -4,11 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
 import android.location.LocationManager
-import android.os.Looper
+import com.geovault.tracker.TrackingLocationUpdateReceiver
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 
 data class UnifiedLocationSessionRequest(
@@ -20,8 +18,7 @@ class UnifiedLocationClient(context: Context) {
     private val fusedClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(appContext)
     private val locationManager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-
-    private var sessionCallback: LocationCallback? = null
+    private val sessionPendingIntent = TrackingLocationUpdateReceiver.pendingIntent(appContext)
 
     fun hasLocationPermission(): Boolean {
         return TrackingLocationAvailabilityPolicy.canRequestTrackingLocationUpdates(
@@ -42,22 +39,14 @@ class UnifiedLocationClient(context: Context) {
     @SuppressLint("MissingPermission")
     fun startSession(
         sessionRequest: UnifiedLocationSessionRequest,
-        onLocation: (Location) -> Unit,
         onError: (Throwable) -> Unit
     ): Boolean {
         stopSession()
-        val callback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.locations.forEach(onLocation)
-            }
-        }
         return try {
             fusedClient.requestLocationUpdates(
                 sessionRequest.request,
-                callback,
-                Looper.getMainLooper()
+                sessionPendingIntent
             )
-            sessionCallback = callback
             true
         } catch (t: Throwable) {
             onError(t)
@@ -66,9 +55,7 @@ class UnifiedLocationClient(context: Context) {
     }
 
     fun stopSession() {
-        val callback = sessionCallback ?: return
-        fusedClient.removeLocationUpdates(callback)
-        sessionCallback = null
+        fusedClient.removeLocationUpdates(sessionPendingIntent)
     }
 
     @SuppressLint("MissingPermission")
