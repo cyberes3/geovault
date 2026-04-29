@@ -224,6 +224,23 @@ class TestTilesAPI(TestCase):
         self.assertEqual(user_agent, get_user_agent(), "User-Agent should match get_user_agent()")
 
     @patch('geo_lib.tiles.requests.get')
+    @override_settings(DEBUG=False, SITE_DOMAIN='public.example.test', TILE_CACHE_ENABLED=False)
+    def test_tile_proxy_fallback_referer_ignores_internal_proxy_host(self, mock_requests_get):
+        """Fallback tile Referer must not use backend/reverse-proxy hosts."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b'fake tile data'
+        mock_response.headers = {'Content-Type': 'image/png'}
+        mock_requests_get.return_value = mock_response
+
+        response = self.client.get('/api/tiles/osm/2/1/1', HTTP_HOST='172.0.2.102')
+
+        self.assertEqual(response.status_code, 200)
+        actual_headers = mock_requests_get.call_args.kwargs.get('headers', {})
+        self.assertEqual(actual_headers.get('Referer'), 'https://public.example.test/')
+        self.assertNotIn('172.0.2.102', actual_headers.get('Referer', ''))
+
+    @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_uses_custom_user_agent(self, mock_requests_get):
         """Test that tile proxy uses custom User-Agent header from proxy_config when proxying is enabled."""

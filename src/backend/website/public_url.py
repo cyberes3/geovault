@@ -5,3 +5,9 @@ def public_base_url() -> str:
     protocol = "https" if not settings.DEBUG else "http"
     domain = getattr(settings, "SITE_DOMAIN", "").strip() or "localhost"
     return f"{protocol}://{domain}"
+
+
+def build_public_url(path: str) -> str:
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{public_base_url()}{path}"

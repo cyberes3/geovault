@@ -8,7 +8,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
@@ -24,6 +24,10 @@ from extensions.live_track.src.backend.models import (
     LiveTrackSubscription,
 )
 from extensions.live_track.src.backend.validation import get_ingress_body_template
+from extensions.live_track.src.backend.world_share_views import (
+    build_live_track_group_share_url,
+    build_live_track_share_url,
+)
 
 
 def _patch_live_track_enabled():
@@ -50,6 +54,27 @@ def _basic_auth_header(username: str, password: str) -> str:
     credentials = f"{username}:{password}"
     encoded = base64.b64encode(credentials.encode()).decode()
     return f"Basic {encoded}"
+
+
+class TestLiveTrackWorldShareUrlBuilder(TestCase):
+    """Test Live Track extension world-share URL generation."""
+
+    def test_share_urls_are_relative_and_ignore_internal_proxy_host(self):
+        """World-share links must not leak backend/reverse-proxy hosts."""
+        share_id = "f8a918ab-7f53-4ef3-be11-a957c40ebd02"
+        request = RequestFactory().get(
+            "/api/extensions/live-track/trackers/example/settings/",
+            HTTP_HOST="172.0.2.102",
+        )
+        expected_url = f"/#/extensions/live-track/share?id={share_id}"
+
+        track_url = build_live_track_share_url(request, share_id)
+        group_url = build_live_track_group_share_url(request, share_id)
+
+        self.assertEqual(track_url, expected_url)
+        self.assertEqual(group_url, expected_url)
+        self.assertNotIn("172.0.2.102", track_url)
+        self.assertNotIn("172.0.2.102", group_url)
 
 
 class TestLiveTrackAPI(TestCase):
@@ -417,6 +442,10 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(data.get("visibility"), "shared")
         self.assertIn("world_share_id", data)
         self.assertIn("world_share_url", data)
+        self.assertEqual(
+            data["world_share_url"],
+            f"/#/extensions/live-track/share?id={data['world_share_id']}",
+        )
         self.assertTrue(LiveTrackWorldShare.objects.filter(track=track).exists())
         self.assertTrue(
             LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists()
@@ -3067,6 +3096,26 @@ class TestLiveTrackAPI(TestCase):
         else:
             self.fail("log_customurl_url not found in profile body")
 
+    @override_settings(DEBUG=False, SITE_DOMAIN="public.example.test")
+    def test_profile_properties_ingress_url_ignores_internal_proxy_host(self):
+        """Profile body log_customurl_url must not leak backend/reverse-proxy hosts."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "ProxyHostTrack"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        with _patch_live_track_enabled():
+            response = self.client.get(
+                f"/api/extensions/live-track/trackers/{track_id}/profile.properties",
+                HTTP_HOST="172.0.2.102",
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertIn("log_customurl_url=https://public.example.test/api/extensions/live-track/ingress/", body)
+        self.assertNotIn("172.0.2.102", body)
+
     def test_profile_properties_optional_accuracy(self):
         """Profile body contains accuracy_before_logging=50."""
         with _patch_live_track_enabled():
@@ -4557,6 +4606,10 @@ class TestLiveTrackGroups(TestCase):
         data = response.json()
         self.assertIn("world_share_id", data)
         self.assertIn("world_share_url", data)
+        self.assertEqual(
+            data["world_share_url"],
+            f"/#/extensions/live-track/share?id={data['world_share_id']}",
+        )
         self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
         share_id = data["world_share_id"]
         with _patch_live_track_enabled():
@@ -4596,6 +4649,10 @@ class TestLiveTrackGroups(TestCase):
         self.assertEqual(data.get("visibility"), "shared")
         self.assertIn("world_share_id", data)
         self.assertIn("world_share_url", data)
+        self.assertEqual(
+            data["world_share_url"],
+            f"/#/extensions/live-track/share?id={data['world_share_id']}",
+        )
         self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
         self.assertTrue(
             LiveTrackGroupShare.objects.filter(group=group, shared_with=self.other_user).exists()

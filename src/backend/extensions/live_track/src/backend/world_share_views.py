@@ -10,6 +10,8 @@ import re
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from api.views.sharing.utils import build_client_share_url
+
 from .helpers import track_to_response
 from .models import LiveTrack, LiveTrackGroupMember, LiveTrackGroupWorldShare, LiveTrackWorldShare
 
@@ -25,13 +27,13 @@ def _validate_share_id(share_id: str) -> bool:
 
 
 def build_live_track_share_url(request, share_id: str) -> str:
-    """Return the full URL for the world share, using the request's host."""
-    return request.build_absolute_uri(f"{_SHARE_HASH_PATH}{share_id}")
+    """Return the client-resolved URL for the world share."""
+    return build_client_share_url(f"{_SHARE_HASH_PATH}{share_id}")
 
 
 def build_live_track_group_share_url(request, share_id: str) -> str:
-    """Return the full URL for the group world share, using the request's host."""
-    return request.build_absolute_uri(f"{_SHARE_HASH_PATH}{share_id}")
+    """Return the client-resolved URL for the group world share."""
+    return build_client_share_url(f"{_SHARE_HASH_PATH}{share_id}")
 
 
 @require_http_methods(["GET"])

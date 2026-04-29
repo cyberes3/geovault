@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from django.contrib.auth import get_user_model
+from website.public_url import public_base_url
 
 from .helpers import parse_ingress_body
 from .ingress_views import append_point_to_track
@@ -92,14 +93,11 @@ def hauk_create(request):
     sid = secrets.token_urlsafe(24)
     _set_hauk_session(sid, track.id, dur)
 
-    host = request.get_host().split(",")[0].strip()
-    scheme = request.META.get("HTTP_X_FORWARDED_PROTO") or request.scheme or "https"
-    base = f"{scheme}://{host}"
     # Hauk clients (see external sources/Hauk, external sources/hauk-ios) treat line 3 as a public URL.
     # It must still be an absolute URL: iOS SharingManager uses URL(string: parts[2]) and fails if nil.
     # Hauk iOS StartSharingIntent waits until shareUrl != baseUrl; users often enter the server URL without
     # a trailing slash, so returning scheme://host/ usually keeps inequality without issuing a world share link.
-    view_url = base.rstrip("/") + "/"
+    view_url = public_base_url().rstrip("/") + "/"
 
     # Hauk Android uses line 4 as "view_id" shown in the active share list.
     view_id = (track.name or "").replace("\r", " ").replace("\n", " ").strip() or str(track.id)

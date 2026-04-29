@@ -15,7 +15,7 @@ from website.map_share_social.preview_image import (
     render_social_preview_png,
     resolve_social_preview_raster_source,
 )
-from website.map_share_social.public_base import public_base_url
+from website.public_url import public_base_url
 
 _crawler_detect = CrawlerDetect()
 _logger = get_tagged_logger("social_preview")

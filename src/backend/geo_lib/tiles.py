@@ -15,6 +15,7 @@ from website.settings_utils import get_required_setting, get_setting
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename
 from website.config_loader import get_config_loader
+from website.public_url import public_base_url
 
 _logger = get_tagged_logger()
 
@@ -142,7 +143,7 @@ def tile_proxy(request, service, z, x, y):
         if service in ('osm', 'opentopomap', 'openhikingmap'):
             referer = request.META.get('HTTP_REFERER', '').strip()
             if not referer:
-                referer = request.build_absolute_uri('/')
+                referer = f'{public_base_url()}/'
             if referer:
                 headers['Referer'] = referer
 

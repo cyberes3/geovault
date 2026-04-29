@@ -17,6 +17,7 @@ from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
 from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
+from website.public_url import build_public_url
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -822,13 +823,9 @@ def tracker_profile_properties(request, tracker_id, profile_basename=None):
     )
     if not allowed:
         return error_response("Not found", 404)
-    # Use Host / X-Forwarded-Host so profile URLs match what the client sees (e.g. 192.168.1.235:5173 not 127.0.0.1:8000)
-    forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST")
-    host = (forwarded_host or request.META.get("HTTP_HOST") or request.get_host()).split(",")[0].strip()
-    scheme = request.META.get("HTTP_X_FORWARDED_PROTO") or request.scheme or "http"
     # Ingress URL: replace .../trackers/<id>/<anything>.properties with .../ingress/
     ingress_path = re.sub(r"/trackers/[^/]+/[^/]+\.properties$", "/ingress/", request.path)
-    ingress_url = f"{scheme}://{host}{ingress_path}"
+    ingress_url = build_public_url(ingress_path)
     # Body template uses our param names (e.g. bearing=%BEARING); GPSLogger substitutes placeholders.
     body_template = get_ingress_body_template()
     username = (track.user.email or "").strip()

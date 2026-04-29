@@ -6,7 +6,7 @@ and that points end up on the track.
 from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from extensions.live_track.src.backend.models import LiveTrack, LiveTrackWorldShare
 
@@ -112,6 +112,24 @@ class TestHaukClientCreatePostStop(TestCase):
             LiveTrackWorldShare.objects.filter(track_id=track_id).exists(),
             "Hauk create must not create LiveTrackWorldShare",
         )
+
+    @override_settings(DEBUG=False, SITE_DOMAIN="public.example.test")
+    def test_hauk_create_view_url_ignores_internal_proxy_host(self):
+        """Hauk view_url must not leak backend/reverse-proxy hosts."""
+        track_id, hauk_password = self._create_track_with_hauk_password(name="Hauk Proxy Track")
+        form = _hauk_create_form(self.user.email, hauk_password, dur=120, interval=10)
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/api/create.php",
+                data=urlencode(form),
+                content_type="application/x-www-form-urlencoded",
+                HTTP_HOST="172.0.2.102",
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        view_url = _parse_hauk_lines(response)[2]
+        self.assertEqual(view_url, "https://public.example.test/")
+        self.assertNotIn("172.0.2.102", view_url)
+        self.assertFalse(LiveTrackWorldShare.objects.filter(track_id=track_id).exists())
 
     def test_hauk_create_wrong_password_returns_401(self):
         """POST api/create.php with wrong pwd returns 401 and 'Incorrect password'."""

@@ -8,7 +8,7 @@ from PIL import Image
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source
 from website.config_loader import get_config_loader
-from website.map_share_social.public_base import public_base_url
+from website.public_url import public_base_url
 
 SOCIAL_PREVIEW_CACHE_SECONDS = 60 * 60 * 24 * 30
 _SOCIAL_PREVIEW_WIDTH = 1200

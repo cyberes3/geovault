@@ -14,6 +14,18 @@ def validate_share_id(share_id: str) -> bool:
     return bool(re.match(uuid_pattern, share_id.lower()))
 
 
+def build_client_share_url(path: str) -> str:
+    """
+    Build a share URL that clients resolve against their public origin.
+
+    Returning a relative URL avoids leaking internal proxy/backend hosts when
+    requests arrive through reverse proxies.
+    """
+    if not path.startswith("/"):
+        return f"/{path}"
+    return path
+
+
 def build_share_url(request, share_id: str) -> str:
     """
     Build a social-preview-capable share path.
@@ -25,4 +37,4 @@ def build_share_url(request, share_id: str) -> str:
     Returns:
         Share path (e.g., "/share/map/<id>/")
     """
-    return f"/share/map/{share_id}/"
+    return build_client_share_url(f"/share/map/{share_id}/")
