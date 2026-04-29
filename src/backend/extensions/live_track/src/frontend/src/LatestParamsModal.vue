@@ -34,7 +34,7 @@
           class="rounded-lg border border-blue-200 bg-white px-3 py-2 min-w-0 text-gray-900"
           :title="key === 'starttimestamp' ? formatDurationRunning(value) : undefined"
         >
-          <div class="text-xs font-medium truncate" :title="key === 'starttimestamp' ? undefined : ((paramLabels && paramLabels[key]) || key)">{{ (paramLabels && paramLabels[key]) || key }}</div>
+          <div class="text-xs font-medium truncate" :title="key === 'starttimestamp' ? undefined : getParamLabel(key)">{{ getParamLabel(key) }}</div>
           <div class="text-sm break-all mt-0.5">{{ formatParamDisplay(key, value) }}</div>
         </div>
       </div>
@@ -74,7 +74,7 @@
             class="rounded-lg border border-blue-200 bg-white px-3 py-2 min-w-0 text-gray-900"
             :title="key === 'starttimestamp' ? formatDurationRunning(value) : undefined"
           >
-            <div class="text-xs font-medium truncate" :title="key === 'starttimestamp' ? undefined : ((paramLabels && paramLabels[key]) || key)">{{ (paramLabels && paramLabels[key]) || key }}</div>
+            <div class="text-xs font-medium truncate" :title="key === 'starttimestamp' ? undefined : getParamLabel(key)">{{ getParamLabel(key) }}</div>
             <div class="text-sm break-all mt-0.5">{{ formatParamDisplay(key, value) }}</div>
           </div>
         </div>
@@ -144,6 +144,10 @@ export default {
       return `${Number(pos.lat).toFixed(6)}, ${Number(pos.lon).toFixed(6)}`;
     }
 
+    function getParamLabel(key) {
+      return props.paramLabels?.[key] || key;
+    }
+
     /** Tooltip for start timestamp: "Running for X days, Y hours, Z minutes". */
     function formatDurationRunning(timestamp) {
       if (timestamp == null) return '';
@@ -168,6 +172,7 @@ export default {
       sortedParamEntries,
       formatTimeLocal: formatTimestampLocal,
       formatLatLon,
+      getParamLabel,
       formatDurationRunning,
       formatParamDisplay
     };

@@ -881,11 +881,10 @@ def tracker_profile_properties(request, tracker_id, profile_basename=None):
     return resp
 
 
-@api_or_login_required_401()
 @require_http_methods(["GET"])
 @csrf_exempt
 def ingress_body_template(request):
-    """Return the form body template and param pretty names (for GPSLogger config and params table)."""
+    """Return public GPSLogger template metadata and param pretty names."""
     return JsonResponse({
         "body_template": get_ingress_body_template(),
         "param_labels": PARAM_PRETTY_NAMES,

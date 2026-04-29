@@ -149,7 +149,7 @@
       <LatestParamsModal
         v-if="showParamsSidebar"
         :track="paramsTrack"
-        :param-labels="{}"
+        :param-labels="paramLabels"
         :container-ref="mapWrapperRef"
         :disable-animations="true"
         @close="showParamsSidebar = false"
@@ -189,6 +189,7 @@ import { trackToParamsModalShape } from './trackParamsShape.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
 import { useTileSources } from './useTileSources.js';
 import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls.js';
+const LIVE_TRACK_API_BASE_URL = '/api/extensions/live-track';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
 const LINES_LAYER_ID = 'world-share-lines-layer';
@@ -222,6 +223,16 @@ async function fetchShareJson(url) {
     return { ok: false, status: response.status, data: null };
   }
   return { ok: true, status: response.status, data: await response.json() };
+}
+
+async function fetchParamLabels() {
+  const url = `${LIVE_TRACK_API_BASE_URL}/ingress-body-template/`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    return {};
+  }
+  const data = await response.json();
+  return data?.param_labels && typeof data.param_labels === 'object' ? data.param_labels : {};
 }
 
 async function resolveShareSource(shareId) {
@@ -269,6 +280,7 @@ export default {
     const shareIdRef = ref(null);
     const sourceMode = ref(null);
     const shareDataUrl = ref('');
+    const paramLabels = ref({});
     let map = null;
     let pollTimerId = null;
 
@@ -725,10 +737,12 @@ export default {
       }
       shareIdRef.value = shareId;
       try {
-        const [resolved] = await Promise.all([
+        const [resolved, , paramLabelData] = await Promise.all([
           resolveShareSource(shareId),
-          fetchTileSources()
+          fetchTileSources(),
+          fetchParamLabels()
         ]);
+        paramLabels.value = paramLabelData;
         if (!resolved) {
           error.value = 'Invalid share link';
           loading.value = false;
@@ -967,6 +981,7 @@ export default {
       showLayerSidebar,
       showParamsSidebar,
       paramsTrack,
+      paramLabels,
       selectedId,
       sourceMode,
       selectedItemLabel,

@@ -3424,6 +3424,18 @@ class TestLiveTrackAPI(TestCase):
         self.assertNotIn("only_log_if_significant_motion", body)
         self.assertIn("Content-Disposition", response)
 
+    def test_ingress_body_template_returns_public_param_labels(self):
+        """GET ingress-body-template returns non-secret template metadata and pretty param labels."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            response = self.client.get("/api/extensions/live-track/ingress-body-template/")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["body_template"], get_ingress_body_template())
+        self.assertEqual(data["param_labels"]["spd_kph"], "Speed")
+        self.assertEqual(data["param_labels"]["ischarging"], "Charging")
+
     def test_profile_properties_404_other_user(self):
         """GET profile.properties for another user's track returns 404 and does not leak secret."""
         with _patch_live_track_enabled():
