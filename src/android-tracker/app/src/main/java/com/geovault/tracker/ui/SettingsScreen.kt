@@ -96,6 +96,7 @@ fun SettingsScreen(
     onUnhideAllTrackerItems: () -> Unit,
     onOpenAllTrackersOnMap: () -> Unit = {},
     onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var showLoggingHelpDialog by remember { mutableStateOf(false) }
     var showHiddenTrackersOverlay by remember { mutableStateOf(false) }
@@ -326,23 +327,24 @@ fun SettingsScreen(
     }
     val distanceUnit = stringResource(if (state.usesImperialUnits) R.string.unit_ft else R.string.unit_m)
 
-    GeoVaultSubViewScaffold(
-        modifier = Modifier.fillMaxSize(),
-        title = stringResource(R.string.nav_settings),
-        onClose = onClose,
-        closeContentDescription = stringResource(R.string.close),
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            Column(
+    Box(modifier = modifier.fillMaxSize()) {
+        GeoVaultSubViewScaffold(
+            modifier = Modifier.fillMaxSize(),
+            title = stringResource(R.string.nav_settings),
+            onClose = onClose,
+            closeContentDescription = stringResource(R.string.close),
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .geoVaultKeyboardAwareVerticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                    .padding(innerPadding),
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .geoVaultKeyboardAwareVerticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                ) {
         if (state.trackerLoadState == TrackerSettingsLoadState.Loading) {
             Text(
                 text = stringResource(R.string.settings_tracker_loading),
@@ -721,16 +723,18 @@ fun SettingsScreen(
         }
             }
             TrackerParamsOverlayLayer()
-            if (showHiddenTrackersOverlay) {
-                HiddenTrackersSubView(
-                    items = state.hiddenTrackerItems,
-                    isLoading = state.isHiddenTrackerItemsLoading,
-                    onDismiss = { showHiddenTrackersOverlay = false },
-                    onRefresh = onRefreshHiddenTrackerItems,
-                    onUnhideItem = onUnhideTrackerItem,
-                    onUnhideAll = onUnhideAllTrackerItems,
-                )
-            }
+        }
+        }
+        if (showHiddenTrackersOverlay) {
+            HiddenTrackersSubView(
+                items = state.hiddenTrackerItems,
+                isLoading = state.isHiddenTrackerItemsLoading,
+                onDismiss = { showHiddenTrackersOverlay = false },
+                onRefresh = onRefreshHiddenTrackerItems,
+                onUnhideItem = onUnhideTrackerItem,
+                onUnhideAll = onUnhideAllTrackerItems,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 
@@ -793,6 +797,7 @@ private fun HiddenTrackersSubView(
     onRefresh: () -> Unit,
     onUnhideItem: (HiddenTrackerItem) -> Unit,
     onUnhideAll: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var showUnhideAllConfirm by remember { mutableStateOf(false) }
     GeoVaultRegisterBackHandler(
@@ -804,6 +809,7 @@ private fun HiddenTrackersSubView(
     )
     val scrollState = rememberScrollState()
     GeoVaultSubViewScaffold(
+        modifier = modifier.fillMaxSize(),
         title = stringResource(R.string.hidden_trackers),
         onClose = onDismiss,
         onLeaveComposition = onDismiss,

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,7 @@ import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
+import com.geovault.common.ui.components.GeoVaultPrewarmedOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
@@ -42,9 +44,11 @@ import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.MainScreenViewModel
 import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
 import com.geovault.places.presentation.PlacesMapViewModel
+import com.geovault.places.presentation.SettingsViewModel
 import com.geovault.places.ui.MainScreen
 import com.geovault.places.ui.PlacesMapLaunchArgs
 import com.geovault.places.ui.PlacesMapScreen
+import com.geovault.places.ui.SettingsScreen
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
@@ -55,6 +59,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainScreenViewModel by viewModels()
     private val mapViewModel: PlacesMapViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels()
     private val clipboardCopyHelper: ClipboardCopyHelper by lazy { ClipboardCopyHelper(this) }
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -93,11 +98,14 @@ class MainActivity : ComponentActivity() {
         GeoVaultSystemBars.applyAppChrome(this)
         clipboardCopyHelper.prewarm()
         viewModel.initialize()
+        settingsViewModel.initialize()
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
+                val settingsState by settingsViewModel.state.collectAsState()
                 val mainMap = rememberGeoVaultMainMap(PLACES_MAIN_MAP_KEY)
                 var selectedTab by rememberSaveable { mutableStateOf(PlacesTab.LIST.name) }
+                var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
                 var hasOpenedMapTab by rememberSaveable {
                     mutableStateOf(selectedTab == PlacesTab.MAP.name)
                 }
@@ -144,11 +152,17 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(state.oauthUrl) {
                     state.oauthUrl?.let { GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it) }
                 }
+                LaunchedEffect(settingsState.oauthUrl) {
+                    settingsState.oauthUrl?.let { GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it) }
+                }
                 LaunchedEffect(Unit) {
                     intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
                         viewModel.showExternalError(error)
                         intent?.removeExtra(EXTRA_OAUTH_ERROR)
                     }
+                }
+                BackHandler(enabled = isSettingsOpen) {
+                    isSettingsOpen = false
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                     GeoVaultMainMapPreloadHost(
@@ -177,8 +191,9 @@ class MainActivity : ComponentActivity() {
                                 visitedTabs = visitedTabs + selectedTab
                             }
                         }
+                        val composedTabs = visitedTabs + selectedTab
                         Box(modifier = Modifier.fillMaxSize()) {
-                            if (PlacesTab.LIST.name in visitedTabs) {
+                            if (PlacesTab.LIST.name in composedTabs) {
                                 val active = selectedTab == PlacesTab.LIST.name
                                 Box(
                                     modifier = Modifier
@@ -191,9 +206,7 @@ class MainActivity : ComponentActivity() {
                                         onSearchChanged = viewModel::onSearchChanged,
                                         onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                                         onAuthConnect = viewModel::connectAuth,
-                                        onOpenSettings = {
-                                            startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
-                                        },
+                                        onOpenSettings = { isSettingsOpen = true },
                                         onRefresh = viewModel::refreshNow,
                                         onAddPlace = {
                                             editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java))
@@ -265,7 +278,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
-                            if (PlacesTab.MAP.name in visitedTabs) {
+                            if (PlacesTab.MAP.name in composedTabs) {
                                 val active = selectedTab == PlacesTab.MAP.name
                                 Box(
                                     modifier = Modifier
@@ -277,9 +290,7 @@ class MainActivity : ComponentActivity() {
                                         map = mainMap,
                                         viewModel = mapViewModel,
                                         launchArgs = mapLaunchArgs,
-                                        onOpenSettings = {
-                                            startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
-                                        },
+                                        onOpenSettings = { isSettingsOpen = true },
                                         onOpenEdit = { feature ->
                                             val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
                                                 putExtra("feature", feature)
@@ -310,6 +321,15 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    GeoVaultPrewarmedOverlayHost(visible = isSettingsOpen) {
+                        SettingsScreen(
+                            state = settingsState,
+                            onServerUrlChanged = settingsViewModel::onServerUrlChanged,
+                            onConnect = settingsViewModel::connect,
+                            onDisconnect = { settingsViewModel.disconnect(MainActivity::class.java) },
+                            onClose = { isSettingsOpen = false },
+                        )
+                    }
                 }
             }
         }
@@ -321,12 +341,14 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Offline data saved to Files -> Downloads", Toast.LENGTH_SHORT).show()
         }
         viewModel.onHostResumed()
+        settingsViewModel.onHostResumed()
         mapViewModel.loadFromCache()
     }
 
     override fun onStop() {
         super.onStop()
         viewModel.onOauthUrlConsumed()
+        settingsViewModel.onOauthUrlConsumed()
     }
 
     private fun launchMapIntent(uri: Uri): Boolean =

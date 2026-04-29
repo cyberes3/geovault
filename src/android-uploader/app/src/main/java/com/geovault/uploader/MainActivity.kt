@@ -3,17 +3,24 @@ package com.geovault.uploader
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.auth.GeoVaultAuthExtras
+import com.geovault.common.ui.components.GeoVaultPrewarmedOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.uploader.data.FileMetadataRepository
@@ -21,10 +28,13 @@ import com.geovault.uploader.domain.PickerRouteDecision
 import com.geovault.uploader.domain.PickerSelectionRouter
 import com.geovault.uploader.navigation.MultiUploadNavigation
 import com.geovault.uploader.presentation.MainScreenViewModel
+import com.geovault.uploader.presentation.SettingsViewModel
 import com.geovault.uploader.ui.MainScreen
+import com.geovault.uploader.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainScreenViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels()
     private val fileMetadataRepository: FileMetadataRepository by lazy {
         FileMetadataRepository(contentResolver)
     }
@@ -42,34 +52,58 @@ class MainActivity : ComponentActivity() {
         GeoVaultSystemBars.applyAppChrome(activity = this)
         val incomingRoute = routeIncomingIntentToUploadTarget(intent)
         viewModel.initialize(intent, handleFileIntent = !incomingRoute.handled)
+        settingsViewModel.initialize()
         if (incomingRoute.finishedActivity) return
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
+                val settingsState by settingsViewModel.state.collectAsState()
+                var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
                 LaunchedEffect(state.oauthUrl) {
                     val oauthUrl = state.oauthUrl
                     if (!oauthUrl.isNullOrBlank()) {
                         GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, oauthUrl)
                     }
                 }
-                MainScreen(
-                    state = state,
-                    invalidFilesDialogNames = invalidFilesDialogNamesState.value,
-                    onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
-                    onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                    onAuthConnect = viewModel::connectAuth,
-                    onChooseFileClick = {
-                        chooseFilesLauncher.launch(arrayOf("*/*"))
-                    },
-                    onFilenameChanged = viewModel::onFilenameChanged,
-                    onUploadClick = {
-                        viewModel.uploadCurrentFile(onSuccessClose = { finish() })
-                    },
-                    onCloseClick = { finish() },
-                    onDismissImportant = viewModel::clearImportantMessage,
-                    onDismissInvalidFiles = { invalidFilesDialogNamesState.value = null },
-                    onDismissUpdatePrompt = viewModel::clearUpdatePrompt
-                )
+                LaunchedEffect(settingsState.oauthUrl) {
+                    val oauthUrl = settingsState.oauthUrl
+                    if (!oauthUrl.isNullOrBlank()) {
+                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, oauthUrl)
+                    }
+                }
+                BackHandler(enabled = isSettingsOpen) {
+                    isSettingsOpen = false
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    MainScreen(
+                        state = state,
+                        invalidFilesDialogNames = invalidFilesDialogNamesState.value,
+                        onOpenSettings = { isSettingsOpen = true },
+                        onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
+                        onAuthConnect = viewModel::connectAuth,
+                        onChooseFileClick = {
+                            chooseFilesLauncher.launch(arrayOf("*/*"))
+                        },
+                        onFilenameChanged = viewModel::onFilenameChanged,
+                        onUploadClick = {
+                            viewModel.uploadCurrentFile(onSuccessClose = { finish() })
+                        },
+                        onCloseClick = { finish() },
+                        onDismissImportant = viewModel::clearImportantMessage,
+                        onDismissInvalidFiles = { invalidFilesDialogNamesState.value = null },
+                        onDismissUpdatePrompt = viewModel::clearUpdatePrompt
+                    )
+                    GeoVaultPrewarmedOverlayHost(visible = isSettingsOpen) {
+                        SettingsScreen(
+                            state = settingsState,
+                            onServerUrlChanged = settingsViewModel::onServerUrlChanged,
+                            onSuffixChanged = settingsViewModel::onSuffixChanged,
+                            onConnect = settingsViewModel::connect,
+                            onDisconnect = { settingsViewModel.disconnect(MainActivity::class.java) },
+                            onClose = { isSettingsOpen = false },
+                        )
+                    }
+                }
             }
         }
     }
@@ -84,11 +118,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onHostResumed()
+        settingsViewModel.onHostResumed()
     }
 
     override fun onStop() {
         super.onStop()
         viewModel.onOauthUrlConsumed()
+        settingsViewModel.onOauthUrlConsumed()
     }
 
     companion object {

@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+if (rootProject != project) {
+    layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("shared-modules/${project.name}"))
+}
+
 android {
     namespace = "com.geovault.common.maps"
     compileSdk = 36

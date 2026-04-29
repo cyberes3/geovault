@@ -1,7 +1,6 @@
 package com.geovault.uploader.ui
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,13 +12,15 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import com.geovault.common.ui.components.GeoVaultInitialAuthView
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
-import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
+import com.geovault.uploader.R
 import com.geovault.uploader.presentation.SettingsState
 
 @Composable
@@ -34,57 +35,62 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             GeoVaultTopTitleBar(
-                title = "Settings",
-                rightActions = listOf(
-                    GeoVaultTopTitleBarDefaults.closeAction(onClick = onClose)
-                )
+                title = stringResource(R.string.app_title),
             )
         }
     ) { padding ->
-        Column(
+        GeoVaultSubViewScaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .then(
-                    if (state.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
-                )
-        ) {
-            if (!state.isLoggedIn) {
-                GeoVaultInitialAuthView(
-                    serverUrl = state.serverUrl,
-                    onServerUrlChanged = onServerUrlChanged,
-                    onConnect = onConnect,
-                    title = "Connect Account",
-                    helpText = "Enter your GeoVault server URL and connect your account.",
-                    connectButtonText = "Connect Account",
-                    connectingButtonText = "Connecting...",
-                    isConnecting = state.isConnecting,
-                    connectEnabled = true,
-                    inputEnabled = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                GeoVaultToggleHelpCard(
-                    checked = state.suffixEnabled,
-                    onCheckedChange = onSuffixChanged,
-                    title = "Add Android Upload Suffix",
-                    helpText = "Append '_android_upload' to uploaded filenames."
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                val loggedInEmail = state.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
-                GeoVaultServerConfigBlock(
-                    serverUrl = state.serverUrl,
-                    loggedInEmail = loggedInEmail,
-                    onDisconnectConfirmed = onDisconnect,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            if (!state.infoMessage.isNullOrBlank()) {
+                .padding(padding),
+            title = stringResource(R.string.settings_title),
+            onClose = onClose,
+            closeContentDescription = stringResource(R.string.close_button),
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    .then(
+                        if (state.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
+                    )
+            ) {
+                if (!state.isLoggedIn) {
+                    GeoVaultInitialAuthView(
+                        serverUrl = state.serverUrl,
+                        onServerUrlChanged = onServerUrlChanged,
+                        onConnect = onConnect,
+                        title = "Connect Account",
+                        helpText = "Enter your GeoVault server URL and connect your account.",
+                        connectButtonText = "Connect Account",
+                        connectingButtonText = "Connecting...",
+                        isConnecting = state.isConnecting,
+                        connectEnabled = true,
+                        inputEnabled = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    GeoVaultToggleHelpCard(
+                        checked = state.suffixEnabled,
+                        onCheckedChange = onSuffixChanged,
+                        title = "Add Android Upload Suffix",
+                        helpText = "Append '_android_upload' to uploaded filenames."
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    val loggedInEmail = state.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
+                    GeoVaultServerConfigBlock(
+                        serverUrl = state.serverUrl,
+                        loggedInEmail = loggedInEmail,
+                        onDisconnectConfirmed = onDisconnect,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(state.infoMessage)
+                if (!state.infoMessage.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(state.infoMessage)
+                }
             }
         }
     }

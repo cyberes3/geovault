@@ -2,6 +2,8 @@ package com.geovault.tracker.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.Scaffold
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -26,6 +28,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
+import com.geovault.common.ui.components.GeoVaultPrewarmedOverlayDefaults
+import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
@@ -329,6 +333,15 @@ fun MainScreen(
                         visitedTabs = visitedTabs + selectedTab
                     }
                 }
+                val composedTabs = visitedTabs + selectedTab
+                // Settings is reachable from every tab, so compose it shortly after startup
+                // instead of paying its first-composition cost during the settings tap.
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(GeoVaultPrewarmedOverlayDefaults.PrewarmDelayMillis)
+                    if (TrackerTab.SETTINGS.name !in visitedTabs) {
+                        visitedTabs = visitedTabs + TrackerTab.SETTINGS.name
+                    }
+                }
                 // Pre-warm the Trackers and Shared tabs after the initial frame so that the
                 // first tap on them is also instantaneous. We wait a bit so the visible tab's
                 // first frame can land before we pay extra composition cost.
@@ -362,7 +375,7 @@ fun MainScreen(
                             onRequestTrackerParams = { args -> trackerParamsArgs = args },
                         )
                     }
-                    if (TrackerTab.HOME.name in visitedTabs) {
+                    if (TrackerTab.HOME.name in composedTabs) {
                         val homeActive = selectedTab == TrackerTab.HOME.name
                         CompositionLocalProvider(LocalTrackerTabIsActive provides homeActive) {
                         Box(
@@ -390,7 +403,7 @@ fun MainScreen(
                         }
                         }
                     }
-                    if (TrackerTab.TRACKERS.name in visitedTabs) {
+                    if (TrackerTab.TRACKERS.name in composedTabs) {
                         val trackersActive = selectedTab == TrackerTab.TRACKERS.name
                         CompositionLocalProvider(LocalTrackerTabIsActive provides trackersActive) {
                         Box(
@@ -421,7 +434,7 @@ fun MainScreen(
                         }
                         }
                     }
-                    if (TrackerTab.SHARED.name in visitedTabs) {
+                    if (TrackerTab.SHARED.name in composedTabs) {
                         val sharedActive = selectedTab == TrackerTab.SHARED.name
                         CompositionLocalProvider(LocalTrackerTabIsActive provides sharedActive) {
                         Box(
@@ -451,7 +464,7 @@ fun MainScreen(
                         }
                         }
                     }
-                    if (TrackerTab.SETTINGS.name in visitedTabs) {
+                    if (TrackerTab.SETTINGS.name in composedTabs) {
                         val settingsActive = selectedTab == TrackerTab.SETTINGS.name
                         CompositionLocalProvider(LocalTrackerTabIsActive provides settingsActive) {
                         Box(
@@ -460,29 +473,40 @@ fun MainScreen(
                                 .alpha(if (settingsActive) 1f else 0f)
                                 .zIndex(if (settingsActive) 1f else 0f),
                         ) {
-                            SettingsScreen(
-                                state = settingsState,
-                                onServerUrlChanged = onSettingsServerUrlChanged,
-                                onConnect = onSettingsConnect,
-                                onDisconnect = onSettingsDisconnect,
-                                onTrackingProfileSelected = onSettingsTrackingProfileSelected,
-                                onLoggingIntervalInput = onSettingsLoggingIntervalInput,
-                                onDistanceFilterInput = onSettingsDistanceFilterInput,
-                                onAccuracyFilterInput = onSettingsAccuracyFilterInput,
-                                onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
-                                onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
-                                onStartOnBoot = onSettingsStartOnBoot,
-                                onStartOnLaunch = onSettingsStartOnLaunch,
-                                onSendExtendedData = onSettingsSendExtendedData,
-                                onSignificantMotionOnly = onSettingsSignificantMotionOnly,
-                                onAutoTrackingMode = onSettingsAutoTrackingMode,
-                                onKeepScreenOnMap = onSettingsKeepScreenOnMap,
-                                onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
-                                onUnhideTrackerItem = onSettingsUnhideTrackerItem,
-                                onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
-                                onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
-                                onClose = { selectedTab = TrackerTab.HOME.name },
-                            )
+                            Scaffold(
+                                topBar = {
+                                    GeoVaultTopTitleBar(
+                                        title = stringResource(R.string.home_title),
+                                    )
+                                },
+                            ) { padding ->
+                                SettingsScreen(
+                                    state = settingsState,
+                                    onServerUrlChanged = onSettingsServerUrlChanged,
+                                    onConnect = onSettingsConnect,
+                                    onDisconnect = onSettingsDisconnect,
+                                    onTrackingProfileSelected = onSettingsTrackingProfileSelected,
+                                    onLoggingIntervalInput = onSettingsLoggingIntervalInput,
+                                    onDistanceFilterInput = onSettingsDistanceFilterInput,
+                                    onAccuracyFilterInput = onSettingsAccuracyFilterInput,
+                                    onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
+                                    onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
+                                    onStartOnBoot = onSettingsStartOnBoot,
+                                    onStartOnLaunch = onSettingsStartOnLaunch,
+                                    onSendExtendedData = onSettingsSendExtendedData,
+                                    onSignificantMotionOnly = onSettingsSignificantMotionOnly,
+                                    onAutoTrackingMode = onSettingsAutoTrackingMode,
+                                    onKeepScreenOnMap = onSettingsKeepScreenOnMap,
+                                    onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
+                                    onUnhideTrackerItem = onSettingsUnhideTrackerItem,
+                                    onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
+                                    onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
+                                    onClose = { selectedTab = TrackerTab.HOME.name },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(padding),
+                                )
+                            }
                         }
                         }
                     }

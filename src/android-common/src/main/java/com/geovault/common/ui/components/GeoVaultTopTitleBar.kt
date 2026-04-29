@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,6 +49,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.modifier.geoVaultStableStatusBarsPadding
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import kotlinx.coroutines.delay
 
 data class TopBarIconAction(
     val icon: ImageVector,
@@ -185,6 +189,13 @@ private fun RowScope.GeoVaultTopBarOverflowMenu(
     modifier: Modifier = Modifier,
     menuContent: @Composable ColumnScope.() -> Unit
 ) {
+    var prewarmed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(GeoVaultPrewarmedOverlayDefaults.PrewarmDelayMillis)
+        prewarmed = true
+    }
+
     Box(modifier = modifier) {
         val icon: @Composable () -> Unit = {
             Icon(
@@ -213,6 +224,15 @@ private fun RowScope.GeoVaultTopBarOverflowMenu(
             onDismissRequest = { onExpandedChange(false) }
         ) {
             menuContent()
+        }
+        if (prewarmed && !expanded) {
+            Column(
+                modifier = Modifier
+                    .size(0.dp)
+                    .alpha(0f)
+                    .clearAndSetSemantics { },
+                content = menuContent,
+            )
         }
     }
 }
