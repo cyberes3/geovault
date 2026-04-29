@@ -22,6 +22,7 @@ sealed interface TrackerMapTopLeftChipUiModel {
         val mode: TrackerMapTopLeftChipMode,
         @param:DrawableRes val iconResId: Int,
         val title: TrackerMapTopLeftChipText,
+        val userLabel: String? = null,
         val subtitle: TrackerMapTopLeftChipText? = null,
         val showReset: Boolean,
         @param:StringRes val cardContentDescriptionResId: Int,
@@ -84,14 +85,26 @@ class TrackerMapTopLeftChipMapper {
             ?.let { TrackerMapTopLeftChipText.Value(it) }
             ?: TrackerMapTopLeftChipText.Resource(R.string.select_tracker)
 
+        val effectiveDisplayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
+        val tracker = roster.firstOrNull { it.id == effectiveDisplayedTrackerId }
+        val isStreamingDisplayedTracker = effectiveDisplayedTrackerId.isNotEmpty() &&
+            (effectiveDisplayedTrackerId in state.activeStreamedTrackerIds ||
+                effectiveDisplayedTrackerId in state.streamTargetIds)
+        val userLabel = if (isStreamingDisplayedTracker) {
+            tracker?.owner_email?.trim()?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
         val showReset = displayedTrackerId.isNotEmpty() && displayedTrackerId != selectedTrackerId
         val subtitle: TrackerMapTopLeftChipText? = when {
             selectedTrackerId.isNotEmpty() &&
                 displayedTrackerId == selectedTrackerId -> null
             else -> {
-                val eff = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
-                val tracker = roster.firstOrNull { it.id == eff }
-                val lastMs = TrackerMapLastPointResolver.resolve(state, eff, tracker)?.lastUpdatedMs
+                val lastMs = TrackerMapLastPointResolver.resolve(
+                    state,
+                    effectiveDisplayedTrackerId,
+                    tracker,
+                )?.lastUpdatedMs
                 if (lastMs == null) {
                     TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data)
                 } else {
@@ -107,6 +120,7 @@ class TrackerMapTopLeftChipMapper {
             mode = TrackerMapTopLeftChipMode.SINGLE_TRACKER,
             iconResId = R.drawable.ic_chevron_track,
             title = title,
+            userLabel = userLabel,
             subtitle = subtitle,
             showReset = showReset,
             cardContentDescriptionResId = R.string.map_chip_tracker_card_content_description,

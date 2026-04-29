@@ -32,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,17 +90,24 @@ fun MapTopLeftTrackerChip(
         backgroundColor = GeoVaultColorTokens.MainBlue,
     ) {
         BoxWithConstraints(
-            modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            modifier = Modifier
+                .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         ) {
-            val maxTitleWidth = ((maxWidth * 0.66f) - 90.dp).coerceAtLeast(72.dp)
+            val rowSpacing = if (model.showReset) 6.dp else 8.dp
+            val resetWidth = if (model.showReset) 28.dp else 0.dp
+            val spacingWidth = if (model.showReset) rowSpacing + rowSpacing else rowSpacing
+            val textMaxWidth = (
+                maxWidth -
+                    24.dp -
+                    resetWidth -
+                    spacingWidth
+                ).coerceAtLeast(72.dp)
             val titleLineHeight = 15.sp
             val subtitleLineHeight = 12.sp
             val subtitleTopSpacing = 2.dp
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(
-                    if (model.showReset) 6.dp else 8.dp
-                ),
+                horizontalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
                 Icon(
                     painter = painterResource(model.iconResId),
@@ -109,7 +117,7 @@ fun MapTopLeftTrackerChip(
                 )
                 Column(
                     modifier = Modifier
-                        .widthIn(max = maxTitleWidth)
+                        .widthIn(max = textMaxWidth)
                         .padding(end = if (model.showReset) 0.dp else 4.dp),
                 ) {
                     Text(
@@ -121,6 +129,20 @@ fun MapTopLeftTrackerChip(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    model.userLabel?.let { userLabel ->
+                        Text(
+                            text = userLabel,
+                            color = MaterialTheme.colors.onPrimary,
+                            fontSize = 12.sp,
+                            lineHeight = subtitleLineHeight,
+                            fontStyle = FontStyle.Italic,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = subtitleTopSpacing),
+                        )
+                    }
                     model.subtitle?.let { subtitle ->
                         when (subtitle) {
                             is TrackerMapTopLeftChipText.RelativeLastData -> {

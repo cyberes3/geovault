@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
@@ -653,20 +654,25 @@ private fun TrackerMapAuthenticatedContent(
             )
 
             if (topLeftChipModel is TrackerMapTopLeftChipUiModel.Visible) {
-                MapTopLeftTrackerChip(
+                BoxWithConstraints(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(top = 16.dp, start = 16.dp),
-                    model = topLeftChipModel,
-                    onCardClick = {
-                        onHostNavigationRequested(
-                            MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                viewModel.resolveListNavigationTarget()
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, start = 16.dp, end = 80.dp),
+                ) {
+                    MapTopLeftTrackerChip(
+                        modifier = Modifier.widthIn(max = maxWidth),
+                        model = topLeftChipModel,
+                        onCardClick = {
+                            onHostNavigationRequested(
+                                MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                    viewModel.resolveListNavigationTarget()
+                                )
                             )
-                        )
-                    },
-                    onResetClick = viewModel::restoreSelectedTrackerMapContext,
-                )
+                        },
+                        onResetClick = viewModel::restoreSelectedTrackerMapContext,
+                    )
+                }
             }
             if (state.isGeometryLoading) {
                 Box(

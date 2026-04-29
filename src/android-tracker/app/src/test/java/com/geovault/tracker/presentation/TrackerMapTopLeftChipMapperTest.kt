@@ -184,6 +184,89 @@ class TrackerMapTopLeftChipMapperTest {
     }
 
     @Test
+    fun singleTracker_streamedDisplayedTrackerWithOwnerEmail_usesUserLabel() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "other",
+            displayedTrackerName = "Other",
+            activeStreamedTrackerIds = setOf("other"),
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "sel",
+                selectedTrackerName = "Sel",
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "other",
+                name = "Other",
+                color = null,
+                last_point = listOf(-122.0, 37.0, 1.0),
+                updated_at = 1_700_000_000_000L,
+                owner_email = " owner@example.com ",
+            )
+        )
+
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertEquals("owner@example.com", result.userLabel)
+    }
+
+    @Test
+    fun singleTracker_nonStreamedDisplayedTracker_omitsUserLabel() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "other",
+            displayedTrackerName = "Other",
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "sel",
+                selectedTrackerName = "Sel",
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "other",
+                name = "Other",
+                color = null,
+                last_point = listOf(-122.0, 37.0, 1.0),
+                updated_at = 1_700_000_000_000L,
+                owner_email = "owner@example.com",
+            )
+        )
+
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertNull(result.userLabel)
+    }
+
+    @Test
+    fun singleTracker_streamedDisplayedTrackerWithBlankOwnerEmail_omitsUserLabel() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "other",
+            displayedTrackerName = "Other",
+            streamTargetIds = setOf("other"),
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "sel",
+                selectedTrackerName = "Sel",
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "other",
+                name = "Other",
+                color = null,
+                last_point = listOf(-122.0, 37.0, 1.0),
+                updated_at = 1_700_000_000_000L,
+                owner_email = "   ",
+            )
+        )
+
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertNull(result.userLabel)
+    }
+
+    @Test
     fun singleTracker_viewingOther_withNoPointData_usesWaitingSubtitle() {
         val state = baseState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -213,6 +296,8 @@ class TrackerMapTopLeftChipMapperTest {
         displayedTrackerName: String = "",
         currentGroupId: String = "",
         groupModeOptions: List<TrackerMapGroupModeOption> = emptyList(),
+        activeStreamedTrackerIds: Set<String> = emptySet(),
+        streamTargetIds: Set<String> = emptySet(),
         runtime: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot(),
     ): TrackerMapUiState {
         return TrackerMapUiState(
@@ -222,6 +307,8 @@ class TrackerMapTopLeftChipMapperTest {
             displayedTrackerName = displayedTrackerName,
             currentGroupId = currentGroupId,
             groupModeOptions = groupModeOptions,
+            activeStreamedTrackerIds = activeStreamedTrackerIds,
+            streamTargetIds = streamTargetIds,
         )
     }
 }

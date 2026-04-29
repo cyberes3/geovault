@@ -1,7 +1,17 @@
 package com.geovault.common.ui.components
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRow
 import androidx.compose.material.TabRowDefaults
@@ -10,18 +20,17 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 data class GeoVaultTab<T>(
     val value: T,
     val label: String,
+    val countBadge: Int? = null,
 )
 
 @Composable
@@ -77,8 +86,40 @@ fun <T> GeoVaultTabBar(
                 onClick = { onTabSelected(tab.value) },
                 selectedContentColor = GeoVaultColorTokens.TextPrimary,
                 unselectedContentColor = GeoVaultColorTokens.TextPrimary,
-                text = { Text(tab.label) },
+                text = { GeoVaultTabLabel(tab) },
             )
+        }
+    }
+}
+
+@Composable
+private fun <T> GeoVaultTabLabel(tab: GeoVaultTab<T>) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(tab.label)
+        val countBadge = tab.countBadge
+        if (countBadge != null && countBadge > 0) {
+            Surface(
+                color = GeoVaultColorTokens.MainYellow,
+                contentColor = GeoVaultColorTokens.TextPrimary,
+                shape = RoundedCornerShape(percent = 50),
+                modifier = Modifier
+                    .padding(start = 6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+                        .padding(horizontal = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = countBadge.toString(),
+                        style = MaterialTheme.typography.caption.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                }
+            }
         }
     }
 }

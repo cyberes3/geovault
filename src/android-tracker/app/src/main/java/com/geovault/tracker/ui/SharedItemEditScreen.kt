@@ -27,6 +27,7 @@ import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -43,8 +44,6 @@ fun SharedTrackerEditScreen(
     onLeaveShare: () -> Unit,
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
-    val context = LocalContext.current
-    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
         onBack = {
@@ -79,20 +78,9 @@ fun SharedTrackerEditScreen(
                 ),
                 style = MaterialTheme.typography.body2,
             )
-            Text(
-                text = stringResource(R.string.trackers_edit_internal_share_help),
-                style = MaterialTheme.typography.caption,
-            )
-            GeoVaultSecondaryButton(
-                text = stringResource(R.string.trackers_action_copy_internal_share_link),
-                onClick = {
-                    copySharedItemLink(
-                        context = context,
-                        clipboardHelper = clipboardHelper,
-                        shareUrl = tracker.internal_share_url,
-                        label = context.getString(R.string.internal_share_link_clip_label),
-                    )
-                },
+            InternalShareLinkCopySection(
+                helpText = stringResource(R.string.trackers_edit_internal_share_help),
+                shareUrl = tracker.internal_share_url,
                 enabled = !tracker.internal_share_url.isNullOrBlank(),
                 tooltip = stringResource(R.string.tooltip_edit_tracker_copy_internal_link),
                 modifier = Modifier.fillMaxWidth(),
@@ -221,6 +209,7 @@ private fun SharedDestructiveActionRow(
             enabled = !isPending,
             tooltip = tooltip,
             modifier = Modifier.fillMaxWidth(),
+            accentColor = GeoVaultColorTokens.MainRed,
         )
         if (isPending) {
             GeoVaultLoadingSpinner(

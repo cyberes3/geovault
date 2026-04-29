@@ -434,6 +434,7 @@
     <string name="shared_empty_public_trackers">No public trackers to add.</string>
     <string name="shared_empty_public_groups">No public groups to add.</string>
     <string name="shared_action_add_to_trackers">Add</string>
+    <string name="shared_action_remove_from_map">Remove</string>
     <string name="shared_action_reject_share">Reject</string>
     <string name="shared_action_add_group">Add group</string>
     <string name="shared_action_adding">Adding...</string>
@@ -456,6 +457,8 @@
     <string name="confirm_leave_group_message">Leave group \"%1$s\"?</string>
     <string name="confirm_reject_share_title">Reject Incoming Share</string>
     <string name="confirm_reject_share_message">Reject incoming share for \"%1$s\"?</string>
+    <string name="confirm_remove_from_map_title">Remove Tracker</string>
+    <string name="confirm_remove_from_map_message">Remove \"%1$s\" from your map?</string>
     <string name="confirm_unsubscribe_all_group_title">Unsubscribe Group Tracks</string>
     <string name="confirm_unsubscribe_all_group_message">Unsubscribe from all %2$d trackers in \"%1$s\"?</string>
     <string name="confirm_clear_history_title">Clear Tracker History</string>

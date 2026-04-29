@@ -1,5 +1,6 @@
 package com.geovault.tracker.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.Card
@@ -205,7 +208,12 @@ fun SharedScreen(
                         trackerName = trackerName
                     )
                 },
-                onRemoveOnMapTracker = vm::requestDiscoverOnMapTrackerRemove,
+                onRemoveOnMapTracker = { trackerId, trackerName ->
+                    pendingConfirmAction = SharedConfirmAction.RemoveDiscoverOnMapTracker(
+                        trackerId = trackerId,
+                        trackerName = trackerName,
+                    )
+                },
                 onRemoveOnMapGroup = vm::requestDiscoverOnMapGroupRemove,
                 onSubscribePublicTracker = vm::requestPublicTrackerAdd,
                 onSubscribePublicGroup = vm::requestPublicGroupAdd,
@@ -327,6 +335,9 @@ fun SharedScreen(
                 is SharedConfirmAction.LeaveTracker -> vm.leaveTracker(action.tracker)
                 is SharedConfirmAction.LeaveGroup -> vm.requestEditSharedGroupLeave(action.groupId)
                 is SharedConfirmAction.RejectIncomingShare -> vm.leaveIncomingShare(action.trackerId)
+                is SharedConfirmAction.RemoveDiscoverOnMapTracker -> {
+                    vm.requestDiscoverOnMapTrackerRemove(action.trackerId)
+                }
                 is SharedConfirmAction.UnsubscribeAllInGroup -> vm.unsubscribeAllTracksInGroup(action.trackIds)
             }
             pendingConfirmAction = null
@@ -350,7 +361,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onAcceptGroup: (String) -> Unit,
     onSubscribeIncomingTracker: (String) -> Unit,
     onLeaveIncomingShare: (String, String) -> Unit,
-    onRemoveOnMapTracker: (String) -> Unit,
+    onRemoveOnMapTracker: (String, String) -> Unit,
     onRemoveOnMapGroup: (String) -> Unit,
     onSubscribePublicTracker: (String) -> Unit,
     onSubscribePublicGroup: (String) -> Unit,
@@ -518,6 +529,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
             }
         }
         if (state.viewMode == SharedViewMode.SHARED_LIST) {
+            val incomingTrackerCount = state.incomingTrackers.size
             GeoVaultFloatingActionButtonWithTooltip(
                 onClick = onShowPublicOverlay,
                 backgroundColor = MaterialTheme.colors.primary,
@@ -541,11 +553,36 @@ private fun ColumnScope.SharedAuthenticatedBody(
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
+                DiscoverFabIcon(
+                    incomingTrackerCount = incomingTrackerCount,
                     contentDescription = stringResource(R.string.shared_action_open_discover),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverFabIcon(
+    incomingTrackerCount: Int,
+    contentDescription: String,
+) {
+    Box(
+        modifier = Modifier.size(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Add,
+            contentDescription = contentDescription,
+        )
+        if (incomingTrackerCount > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-2).dp, y = 2.dp)
+                    .size(10.dp)
+                    .background(GeoVaultColorTokens.MainYellow, CircleShape),
+            )
         }
     }
 }
@@ -704,7 +741,7 @@ private fun DiscoverOverlaySurface(
     onAddIncomingTracker: (String) -> Unit,
     onLeaveIncomingGroup: (String, String) -> Unit,
     onAcceptIncomingGroup: (String) -> Unit,
-    onRemoveOnMapTracker: (String) -> Unit,
+    onRemoveOnMapTracker: (String, String) -> Unit,
     onRemoveOnMapGroup: (String) -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -719,6 +756,7 @@ private fun DiscoverOverlaySurface(
         GeoVaultTab(
             value = DiscoverOverlayMode.INCOMING,
             label = stringResource(R.string.shared_discover_tab_incoming),
+            countBadge = state.incomingTrackers.size,
         ),
     )
     val loadingTrackersText = stringResource(R.string.loading_trackers)
@@ -778,7 +816,7 @@ private fun DiscoverOverlaySurface(
                     )
                     DiscoverOnMapTrackerCard(
                         item = item,
-                        onRemove = { onRemoveOnMapTracker(item.id) },
+                        onRemove = { onRemoveOnMapTracker(item.id, item.name) },
                         isPendingRemove = isPendingRemove,
                         enabled = !overlayLoading && !isPendingRemove,
                     )
@@ -815,7 +853,7 @@ private fun DiscoverOverlaySurface(
                     DiscoverIncomingTrackerCard(
                         item = item,
                         onAdd = { onAddIncomingTracker(item.id) },
-                        onRemove = { onRemoveOnMapTracker(item.id) },
+                        onRemove = { onRemoveOnMapTracker(item.id, item.name) },
                         isAdded = isAdded,
                         isPendingAdd = isPending,
                         isPendingRemove = isPendingRemove,
@@ -1007,6 +1045,7 @@ private sealed interface SharedConfirmAction {
     data class LeaveTracker(val tracker: Tracker) : SharedConfirmAction
     data class LeaveGroup(val groupId: String, val groupName: String) : SharedConfirmAction
     data class RejectIncomingShare(val trackerId: String, val trackerName: String) : SharedConfirmAction
+    data class RemoveDiscoverOnMapTracker(val trackerId: String, val trackerName: String) : SharedConfirmAction
     data class UnsubscribeAllInGroup(val groupName: String, val trackIds: List<String>) : SharedConfirmAction
 }
 
@@ -1060,6 +1099,11 @@ private fun SharedActionConfirmDialog(
             title = stringResource(R.string.confirm_reject_share_title)
             message = stringResource(R.string.confirm_reject_share_message, action.trackerName)
             confirmLabel = stringResource(R.string.shared_action_reject_share)
+        }
+        is SharedConfirmAction.RemoveDiscoverOnMapTracker -> {
+            title = stringResource(R.string.confirm_remove_from_map_title)
+            message = stringResource(R.string.confirm_remove_from_map_message, action.trackerName)
+            confirmLabel = stringResource(R.string.shared_action_remove_from_map)
         }
         is SharedConfirmAction.UnsubscribeAllInGroup -> {
             title = stringResource(R.string.confirm_unsubscribe_all_group_title)

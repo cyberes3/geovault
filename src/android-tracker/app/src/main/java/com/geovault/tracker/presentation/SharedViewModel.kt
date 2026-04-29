@@ -47,6 +47,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     private var refreshInFlightJob: Job? = null
     private var refreshPending: Boolean = false
     private var refreshPendingFeedbackMessage: String? = null
+    private var discoveryLoadJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -374,6 +375,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     fun resetSurfacePreloadAfterSignOut() {
         _uiState.update {
             it.copy(
+                availableToAdd = null,
                 hasCompletedInitialLoad = false,
                 isLoading = false,
             )
@@ -414,6 +416,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (!outcome.isServerAccessible) {
             emitSnackbar(appErrorMessage(AppError.Network))
+        } else {
+            ensureDiscoveryDataLoaded(showLoading = false)
         }
     }
 
@@ -666,21 +670,29 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         _snackbarEvents.tryEmit(message)
     }
 
-    private fun ensureDiscoveryDataLoaded() {
-        if (_uiState.value.availableToAdd != null) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+    private fun ensureDiscoveryDataLoaded(showLoading: Boolean = true) {
+        if (_uiState.value.availableToAdd != null || discoveryLoadJob?.isActive == true) return
+        discoveryLoadJob = viewModelScope.launch {
+            if (showLoading) {
+                _uiState.update { it.copy(isLoading = true) }
+            }
             when (val result = trackerRepository.loadAvailableToAdd(forceRefresh = false)) {
                 is RepositoryResult.Success -> {
                     _uiState.update {
                         it.copy(
-                            isLoading = false,
+                            isLoading = if (showLoading || it.viewMode != SharedViewMode.SHARED_LIST) {
+                                false
+                            } else {
+                                it.isLoading
+                            },
                             availableToAdd = result.data,
                         )
                     }
                 }
                 is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false) }
+                    if (showLoading || _uiState.value.viewMode != SharedViewMode.SHARED_LIST) {
+                        _uiState.update { it.copy(isLoading = false) }
+                    }
                     emitSnackbar(appErrorMessage(result.error))
                 }
             }
