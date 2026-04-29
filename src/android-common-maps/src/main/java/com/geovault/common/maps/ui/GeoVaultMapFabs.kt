@@ -152,7 +152,13 @@ fun GeoVaultMapFabColumn(
                 },
                 modifier = Modifier
                     .size(fabSize)
-                    .trackGeoVaultTooltipBounds { anchorBounds = it },
+                    .let {
+                        if (tooltipText != null) {
+                            it.trackGeoVaultTooltipBounds(interactionSource) { bounds ->
+                                anchorBounds = bounds
+                            }
+                        } else it
+                    },
                 interactionSource = interactionSource,
                 shape = CircleShape,
                 backgroundColor = if (action.enabled) backgroundColor else backgroundColor.copy(alpha = GeoVaultColorTokens.FabDisabledTint),

@@ -237,7 +237,7 @@ fun GroupItemCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .trackGeoVaultTooltipBounds { groupTitleBounds = it }
+                    .trackGeoVaultTooltipBounds(groupTitleInteractionSource) { groupTitleBounds = it }
                     .clickable(
                         interactionSource = groupTitleInteractionSource,
                         indication = null,

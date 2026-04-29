@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.zIndex
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapPreloadHost
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
@@ -165,121 +167,146 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
-                    ) { destination ->
-                        when (destination.id) {
-                            PlacesTab.LIST.name -> {
-                                MainScreen(
-                                    state = state,
-                                    onSearchChanged = viewModel::onSearchChanged,
-                                    onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                                    onAuthConnect = viewModel::connectAuth,
-                                    onOpenSettings = {
-                                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
-                                    },
-                                    onRefresh = viewModel::refreshNow,
-                                    onAddPlace = {
-                                        editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java))
-                                    },
-                                    onEditSavedPlace = { feature ->
-                                        val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
-                                        i.putExtra("feature", feature)
-                                        editLauncher.launch(i)
-                                    },
-                                    onEditOfflinePlace = { offlineFeature, offlineIndex ->
-                                        val i = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
-                                            putExtra("feature", offlineFeature.feature)
-                                            putExtra("original_feature", offlineFeature.original)
-                                            putExtra("is_offline_edit", true)
-                                            putExtra("offline_edit_index", offlineIndex)
-                                        }
-                                        editLauncher.launch(i)
-                                    },
-                                    onNavigatePlace = { feature ->
-                                        val url = PlacesAppServices.from(application).navigationRepository()
-                                            .buildMapsSearchUrl(feature)
-                                        if (url != null) {
-                                            if (launchMapIntent(Uri.parse(url))) {
-                                                PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                                    feature,
-                                                    GeovaultAuthManager.getServerUrl(this@MainActivity)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    onViewDescription = { feature ->
-                                        val intent = Intent(this@MainActivity, DescriptionViewActivity::class.java).apply {
-                                            putExtra(
-                                                DescriptionViewActivity.EXTRA_TITLE,
-                                                feature.properties.name ?: "Description"
-                                            )
-                                            putExtra(
-                                                DescriptionViewActivity.EXTRA_DESCRIPTION,
-                                                feature.properties.description.orEmpty()
-                                            )
-                                        }
-                                        startActivity(intent)
-                                    },
-                                    onOpenMapToPlace = { feature ->
-                                        val coords = feature.geometry.coordinates
-                                        mapLaunchArgs = PlacesMapLaunchArgs(
-                                            zoomToLat = coords.getOrNull(1),
-                                            zoomToLon = coords.getOrNull(0),
-                                            zoomToId = feature.properties.database_id,
-                                            requestToken = System.currentTimeMillis(),
-                                        )
-                                        hasOpenedMapTab = true
-                                        selectedTab = PlacesTab.MAP.name
-                                    },
-                                    onCopyCoordinates = { text ->
-                                        if (clipboardCopyHelper.copyText(text = text, label = "Coordinates")) {
-                                            Toast.makeText(
-                                                this@MainActivity,
-                                                "Coordinates copied",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    },
-                                    onCancelRefresh = {
-                                        viewModel.cancelRefresh()
-                                    },
-                                    onDismissSnackbar = viewModel::clearSnackbar,
-                                    onClearUpdatePrompt = viewModel::clearUpdatePrompt,
-                                )
+                    ) { _ ->
+                        // Keep visited tabs in composition so re-tapping a tab is instantaneous
+                        // instead of paying the full screen-composition cost every time. zIndex
+                        // puts the active tab on top for input routing; alpha hides the others.
+                        var visitedTabs by remember { mutableStateOf(setOf(selectedTab)) }
+                        LaunchedEffect(selectedTab) {
+                            if (selectedTab !in visitedTabs) {
+                                visitedTabs = visitedTabs + selectedTab
                             }
-                            PlacesTab.MAP.name -> {
-                                PlacesMapScreen(
-                                    map = mainMap,
-                                    viewModel = mapViewModel,
-                                    launchArgs = mapLaunchArgs,
-                                    onOpenSettings = {
-                                        startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
-                                    },
-                                    onOpenEdit = { feature ->
-                                        val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
-                                            putExtra("feature", feature)
-                                        }
-                                        editLauncher.launch(editIntent)
-                                    },
-                                    onViewInList = { feature ->
-                                        viewModel.setSelectedPlaceId(feature.properties.database_id)
-                                        selectedTab = PlacesTab.LIST.name
-                                    },
-                                    onNavigate = { feature ->
-                                        val url = PlacesAppServices.from(application).navigationRepository()
-                                            .buildMapsSearchUrl(feature)
-                                        if (url != null) {
-                                            if (launchMapIntent(Uri.parse(url))) {
-                                                PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                                    feature = feature,
-                                                    serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
+                        }
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (PlacesTab.LIST.name in visitedTabs) {
+                                val active = selectedTab == PlacesTab.LIST.name
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .alpha(if (active) 1f else 0f)
+                                        .zIndex(if (active) 1f else 0f),
+                                ) {
+                                    MainScreen(
+                                        state = state,
+                                        onSearchChanged = viewModel::onSearchChanged,
+                                        onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
+                                        onAuthConnect = viewModel::connectAuth,
+                                        onOpenSettings = {
+                                            startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                                        },
+                                        onRefresh = viewModel::refreshNow,
+                                        onAddPlace = {
+                                            editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java))
+                                        },
+                                        onEditSavedPlace = { feature ->
+                                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
+                                            i.putExtra("feature", feature)
+                                            editLauncher.launch(i)
+                                        },
+                                        onEditOfflinePlace = { offlineFeature, offlineIndex ->
+                                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
+                                                putExtra("feature", offlineFeature.feature)
+                                                putExtra("original_feature", offlineFeature.original)
+                                                putExtra("is_offline_edit", true)
+                                                putExtra("offline_edit_index", offlineIndex)
+                                            }
+                                            editLauncher.launch(i)
+                                        },
+                                        onNavigatePlace = { feature ->
+                                            val url = PlacesAppServices.from(application).navigationRepository()
+                                                .buildMapsSearchUrl(feature)
+                                            if (url != null) {
+                                                if (launchMapIntent(Uri.parse(url))) {
+                                                    PlacesAppServices.from(application).navigationRepository().trackNavigation(
+                                                        feature,
+                                                        GeovaultAuthManager.getServerUrl(this@MainActivity)
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onViewDescription = { feature ->
+                                            val intent = Intent(this@MainActivity, DescriptionViewActivity::class.java).apply {
+                                                putExtra(
+                                                    DescriptionViewActivity.EXTRA_TITLE,
+                                                    feature.properties.name ?: "Description"
+                                                )
+                                                putExtra(
+                                                    DescriptionViewActivity.EXTRA_DESCRIPTION,
+                                                    feature.properties.description.orEmpty()
                                                 )
                                             }
-                                        }
-                                    },
-                                    onLaunchArgsConsumed = {
-                                        mapLaunchArgs = PlacesMapLaunchArgs(requestToken = mapLaunchArgs.requestToken)
-                                    },
-                                )
+                                            startActivity(intent)
+                                        },
+                                        onOpenMapToPlace = { feature ->
+                                            val coords = feature.geometry.coordinates
+                                            mapLaunchArgs = PlacesMapLaunchArgs(
+                                                zoomToLat = coords.getOrNull(1),
+                                                zoomToLon = coords.getOrNull(0),
+                                                zoomToId = feature.properties.database_id,
+                                                requestToken = System.currentTimeMillis(),
+                                            )
+                                            hasOpenedMapTab = true
+                                            selectedTab = PlacesTab.MAP.name
+                                        },
+                                        onCopyCoordinates = { text ->
+                                            if (clipboardCopyHelper.copyText(text = text, label = "Coordinates")) {
+                                                Toast.makeText(
+                                                    this@MainActivity,
+                                                    "Coordinates copied",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        },
+                                        onCancelRefresh = {
+                                            viewModel.cancelRefresh()
+                                        },
+                                        onDismissSnackbar = viewModel::clearSnackbar,
+                                        onClearUpdatePrompt = viewModel::clearUpdatePrompt,
+                                    )
+                                }
+                            }
+                            if (PlacesTab.MAP.name in visitedTabs) {
+                                val active = selectedTab == PlacesTab.MAP.name
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .alpha(if (active) 1f else 0f)
+                                        .zIndex(if (active) 1f else 0f),
+                                ) {
+                                    PlacesMapScreen(
+                                        map = mainMap,
+                                        viewModel = mapViewModel,
+                                        launchArgs = mapLaunchArgs,
+                                        onOpenSettings = {
+                                            startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                                        },
+                                        onOpenEdit = { feature ->
+                                            val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
+                                                putExtra("feature", feature)
+                                            }
+                                            editLauncher.launch(editIntent)
+                                        },
+                                        onViewInList = { feature ->
+                                            viewModel.setSelectedPlaceId(feature.properties.database_id)
+                                            selectedTab = PlacesTab.LIST.name
+                                        },
+                                        onNavigate = { feature ->
+                                            val url = PlacesAppServices.from(application).navigationRepository()
+                                                .buildMapsSearchUrl(feature)
+                                            if (url != null) {
+                                                if (launchMapIntent(Uri.parse(url))) {
+                                                    PlacesAppServices.from(application).navigationRepository().trackNavigation(
+                                                        feature = feature,
+                                                        serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onLaunchArgsConsumed = {
+                                            mapLaunchArgs = PlacesMapLaunchArgs(requestToken = mapLaunchArgs.requestToken)
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

@@ -251,7 +251,13 @@ fun GeoVaultBottomNavRow(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .trackGeoVaultTooltipBounds { anchorBounds = it }
+                    .let {
+                        if (tooltipText != null) {
+                            it.trackGeoVaultTooltipBounds(interactionSource) { bounds ->
+                                anchorBounds = bounds
+                            }
+                        } else it
+                    }
                     .clickable(
                         interactionSource = interactionSource,
                         indication = null,

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
@@ -317,13 +318,37 @@ fun MainScreen(
                 },
                 modifier = Modifier.fillMaxSize(),
             ) { _ ->
+                // Keep visited tabs in composition so re-tapping a tab is instantaneous instead
+                // of paying the (heavy) composition cost every time. We start with only the
+                // initially-selected tab composed; each tap admits a tab into the visited set
+                // and from then on it stays composed. zIndex puts the currently-active tab on
+                // top for input routing; alpha hides the inactive ones.
+                var visitedTabs by remember { mutableStateOf(setOf(selectedTab)) }
+                LaunchedEffect(selectedTab) {
+                    if (selectedTab !in visitedTabs) {
+                        visitedTabs = visitedTabs + selectedTab
+                    }
+                }
+                // Pre-warm the Trackers and Shared tabs after the initial frame so that the
+                // first tap on them is also instantaneous. We wait a bit so the visible tab's
+                // first frame can land before we pay extra composition cost.
+                LaunchedEffect(state.isAuthenticated) {
+                    if (!state.isAuthenticated) return@LaunchedEffect
+                    kotlinx.coroutines.delay(1200L)
+                    val toAdd = listOf(TrackerTab.TRACKERS.name, TrackerTab.SHARED.name)
+                        .filterNot { it in visitedTabs }
+                    if (toAdd.isNotEmpty()) {
+                        visitedTabs = visitedTabs + toAdd
+                    }
+                }
                 Box(modifier = Modifier.fillMaxSize()) {
                     MapScreen(
                         map = trackerMainMap,
                         mapViewModel = mapViewModel,
                         modifier = Modifier
                             .fillMaxSize()
-                            .alpha(if (selectedTab == TrackerTab.MAP.name) 1f else 0f),
+                            .alpha(if (selectedTab == TrackerTab.MAP.name) 1f else 0f)
+                            .zIndex(if (selectedTab == TrackerTab.MAP.name) 1f else 0f),
                         isActive = selectedTab == TrackerTab.MAP.name,
                         isAuthenticated = state.isAuthenticated,
                         serverUrl = state.serverUrl,
@@ -334,96 +359,122 @@ fun MainScreen(
                         onHostNavigationRequested = onMapHostNavigationRequested,
                         onRequestTrackerParams = { args -> trackerParamsArgs = args },
                     )
-                    when (selectedTab) {
-                    TrackerTab.HOME.name -> {
-                    HomeScreen(
-                        isAuthenticated = state.isAuthenticated,
-                        isServerAccessible = state.isServerAccessible,
-                        isPreparingToTrack = state.isPreparingToTrack,
-                        serverUrl = state.serverUrl,
-                        onAuthServerUrlChanged = onAuthServerUrlChanged,
-                        onAuthConnect = onAuthConnect,
-                        isConnecting = state.isConnecting,
-                        onOpenSettings = openSettingsTab,
-                        infoMessage = state.infoMessage,
-                        onClearInfoMessage = onClearInfoMessage,
-                        onRequestStartTracking = onRequestStartTracking,
-                        onRequestStopTracking = onRequestStopTracking,
-                        onRequestManualPoint = onRequestManualPoint,
-                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
-                    )
+                    if (TrackerTab.HOME.name in visitedTabs) {
+                        val homeActive = selectedTab == TrackerTab.HOME.name
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (homeActive) 1f else 0f)
+                                .zIndex(if (homeActive) 1f else 0f),
+                        ) {
+                            HomeScreen(
+                                isAuthenticated = state.isAuthenticated,
+                                isServerAccessible = state.isServerAccessible,
+                                isPreparingToTrack = state.isPreparingToTrack,
+                                serverUrl = state.serverUrl,
+                                onAuthServerUrlChanged = onAuthServerUrlChanged,
+                                onAuthConnect = onAuthConnect,
+                                isConnecting = state.isConnecting,
+                                onOpenSettings = openSettingsTab,
+                                infoMessage = state.infoMessage,
+                                onClearInfoMessage = onClearInfoMessage,
+                                onRequestStartTracking = onRequestStartTracking,
+                                onRequestStopTracking = onRequestStopTracking,
+                                onRequestManualPoint = onRequestManualPoint,
+                                onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                            )
+                        }
                     }
-                    TrackerTab.MAP.name -> Unit
-
-                    TrackerTab.TRACKERS.name -> {
-                    TrackersScreen(
-                        vm = trackersGroupsViewModel,
-                        isAuthenticated = state.isAuthenticated,
-                        serverUrl = state.serverUrl,
-                        onAuthServerUrlChanged = onAuthServerUrlChanged,
-                        onAuthConnect = onAuthConnect,
-                        isConnecting = state.isConnecting,
-                        isServerAccessible = state.isServerAccessible,
-                        onOpenSettings = openSettingsTab,
-                        navigationRequest = pendingTrackersRequest,
-                        onNavigationTargetConsumed = { pendingTrackersRequest = null },
-                        onOpenTrackerOnMap = { trackerId, trackerName ->
-                            openTrackerOnMap(trackerId, trackerName, MapReturnSource.TRACKERS)
-                        },
-                        onOpenGroupOnMap = { groupId ->
-                            openGroupOnMap(groupId, MapReturnSource.TRACKERS)
-                        },
-                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
-                    )
+                    if (TrackerTab.TRACKERS.name in visitedTabs) {
+                        val trackersActive = selectedTab == TrackerTab.TRACKERS.name
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (trackersActive) 1f else 0f)
+                                .zIndex(if (trackersActive) 1f else 0f),
+                        ) {
+                            TrackersScreen(
+                                vm = trackersGroupsViewModel,
+                                isAuthenticated = state.isAuthenticated,
+                                serverUrl = state.serverUrl,
+                                onAuthServerUrlChanged = onAuthServerUrlChanged,
+                                onAuthConnect = onAuthConnect,
+                                isConnecting = state.isConnecting,
+                                isServerAccessible = state.isServerAccessible,
+                                onOpenSettings = openSettingsTab,
+                                navigationRequest = pendingTrackersRequest,
+                                onNavigationTargetConsumed = { pendingTrackersRequest = null },
+                                onOpenTrackerOnMap = { trackerId, trackerName ->
+                                    openTrackerOnMap(trackerId, trackerName, MapReturnSource.TRACKERS)
+                                },
+                                onOpenGroupOnMap = { groupId ->
+                                    openGroupOnMap(groupId, MapReturnSource.TRACKERS)
+                                },
+                                onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                            )
+                        }
                     }
-
-                    TrackerTab.SHARED.name -> {
-                    SharedScreen(
-                        vm = sharedViewModel,
-                        isAuthenticated = state.isAuthenticated,
-                        serverUrl = state.serverUrl,
-                        onAuthServerUrlChanged = onAuthServerUrlChanged,
-                        onAuthConnect = onAuthConnect,
-                        isConnecting = state.isConnecting,
-                        onOpenSettings = openSettingsTab,
-                        navigationRequest = pendingSharedRequest,
-                        onNavigationTargetConsumed = { pendingSharedRequest = null },
-                        onOpenTrackerOnMap = { trackerId, trackerName ->
-                            openTrackerOnMap(trackerId, trackerName, MapReturnSource.SHARED)
-                        },
-                        onOpenGroupOnMap = { groupId ->
-                            openGroupOnMap(groupId, MapReturnSource.SHARED)
-                        },
-                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
-                    )
+                    if (TrackerTab.SHARED.name in visitedTabs) {
+                        val sharedActive = selectedTab == TrackerTab.SHARED.name
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (sharedActive) 1f else 0f)
+                                .zIndex(if (sharedActive) 1f else 0f),
+                        ) {
+                            SharedScreen(
+                                vm = sharedViewModel,
+                                isAuthenticated = state.isAuthenticated,
+                                serverUrl = state.serverUrl,
+                                onAuthServerUrlChanged = onAuthServerUrlChanged,
+                                onAuthConnect = onAuthConnect,
+                                isConnecting = state.isConnecting,
+                                onOpenSettings = openSettingsTab,
+                                navigationRequest = pendingSharedRequest,
+                                onNavigationTargetConsumed = { pendingSharedRequest = null },
+                                onOpenTrackerOnMap = { trackerId, trackerName ->
+                                    openTrackerOnMap(trackerId, trackerName, MapReturnSource.SHARED)
+                                },
+                                onOpenGroupOnMap = { groupId ->
+                                    openGroupOnMap(groupId, MapReturnSource.SHARED)
+                                },
+                                onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                            )
+                        }
                     }
-
-                    TrackerTab.SETTINGS.name -> {
-                    SettingsScreen(
-                        state = settingsState,
-                        onServerUrlChanged = onSettingsServerUrlChanged,
-                        onConnect = onSettingsConnect,
-                        onDisconnect = onSettingsDisconnect,
-                        onTrackingProfileSelected = onSettingsTrackingProfileSelected,
-                        onLoggingIntervalInput = onSettingsLoggingIntervalInput,
-                        onDistanceFilterInput = onSettingsDistanceFilterInput,
-                        onAccuracyFilterInput = onSettingsAccuracyFilterInput,
-                        onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
-                        onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
-                        onStartOnBoot = onSettingsStartOnBoot,
-                        onStartOnLaunch = onSettingsStartOnLaunch,
-                        onSendExtendedData = onSettingsSendExtendedData,
-                        onSignificantMotionOnly = onSettingsSignificantMotionOnly,
-                        onAutoTrackingMode = onSettingsAutoTrackingMode,
-                        onKeepScreenOnMap = onSettingsKeepScreenOnMap,
-                        onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
-                        onUnhideTrackerItem = onSettingsUnhideTrackerItem,
-                        onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
-                        onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
-                        onClose = { selectedTab = TrackerTab.HOME.name },
-                    )
+                    if (TrackerTab.SETTINGS.name in visitedTabs) {
+                        val settingsActive = selectedTab == TrackerTab.SETTINGS.name
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (settingsActive) 1f else 0f)
+                                .zIndex(if (settingsActive) 1f else 0f),
+                        ) {
+                            SettingsScreen(
+                                state = settingsState,
+                                onServerUrlChanged = onSettingsServerUrlChanged,
+                                onConnect = onSettingsConnect,
+                                onDisconnect = onSettingsDisconnect,
+                                onTrackingProfileSelected = onSettingsTrackingProfileSelected,
+                                onLoggingIntervalInput = onSettingsLoggingIntervalInput,
+                                onDistanceFilterInput = onSettingsDistanceFilterInput,
+                                onAccuracyFilterInput = onSettingsAccuracyFilterInput,
+                                onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
+                                onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
+                                onStartOnBoot = onSettingsStartOnBoot,
+                                onStartOnLaunch = onSettingsStartOnLaunch,
+                                onSendExtendedData = onSettingsSendExtendedData,
+                                onSignificantMotionOnly = onSettingsSignificantMotionOnly,
+                                onAutoTrackingMode = onSettingsAutoTrackingMode,
+                                onKeepScreenOnMap = onSettingsKeepScreenOnMap,
+                                onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
+                                onUnhideTrackerItem = onSettingsUnhideTrackerItem,
+                                onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
+                                onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
+                                onClose = { selectedTab = TrackerTab.HOME.name },
+                            )
+                        }
                     }
-                }
                 }
             }
             TrackerParamsOverlayLayer()

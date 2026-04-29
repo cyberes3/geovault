@@ -155,6 +155,7 @@ fun <T> GeoVaultTopTabSurface(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                     userScrollEnabled = canSwipe,
+                    beyondViewportPageCount = 0,
                 ) { page ->
                     val tab = tabs.getOrNull(page) ?: return@HorizontalPager
                     val tabValue = tab.value

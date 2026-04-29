@@ -182,7 +182,7 @@ private fun GeoVaultBaseButtonWithTooltip(
         anchorBounds = anchorBounds,
         suppressNextClickAfterTooltip = suppressNextClickAfterTooltip,
     )
-    val buttonModifier = modifier.trackGeoVaultTooltipBounds { anchorBounds = it }
+    val buttonModifier = modifier.trackGeoVaultTooltipBounds(interactionSource) { anchorBounds = it }
     Button(
         onClick = {
             if (suppressNextClickAfterTooltip.value) {

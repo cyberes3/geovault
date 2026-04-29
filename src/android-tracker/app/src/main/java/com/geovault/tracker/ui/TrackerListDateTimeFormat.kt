@@ -8,8 +8,25 @@ import java.util.Locale
 object TrackerListDateTimeFormat {
     private val format = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
 
+    // Tracker list rebuilds happen frequently as live points stream in. Cache last formatted
+    // timestamp per ms key so that re-mapping a list of N rows after only one tracker changed
+    // is O(1) per unchanged row instead of paying SimpleDateFormat.format + Date alloc every time.
+    private val cache = LinkedHashMap<Long, String>(128, 0.75f, true)
+    private const val MAX_CACHE_SIZE = 256
+
+    @Synchronized
     fun formatLocal(timestampMs: Long): String {
-        return format.format(Date(timestampMs))
+        cache[timestampMs]?.let { return it }
+        val formatted = format.format(Date(timestampMs))
+        cache[timestampMs] = formatted
+        if (cache.size > MAX_CACHE_SIZE) {
+            val iterator = cache.entries.iterator()
+            if (iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+        }
+        return formatted
     }
 }
 

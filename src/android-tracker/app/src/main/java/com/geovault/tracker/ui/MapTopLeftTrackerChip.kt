@@ -69,7 +69,7 @@ fun MapTopLeftTrackerChip(
     )
     Card(
         modifier = modifier
-            .trackGeoVaultTooltipBounds { cardBounds = it }
+            .trackGeoVaultTooltipBounds(cardInteractionSource) { cardBounds = it }
             .semantics(mergeDescendants = true) {
                 contentDescription = cardDescription
             }
