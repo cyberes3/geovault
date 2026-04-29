@@ -14,9 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -24,10 +21,13 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 /**
- * Tracker-style tab body: [GeoVaultTopTitleBar] (hidden while a nested
- * [GeoVaultSubViewScaffold] uses [GeoVaultSubViewChromeMode.WithBrandedTabBar]),
- * auth gate, and weighted main column. Optional [tabOverlay] is drawn above authenticated
- * content (e.g. tracker params overlay).
+ * Tracker-style tab body: branded [GeoVaultTopTitleBar] (always visible), auth gate, and a
+ * weighted main column. Optional [tabOverlay] is drawn above [authenticatedMainContent]
+ * inside the same padded body — this is the slot for sub-views that should leave the
+ * outer title bar in place (tracker params, editor sub-views, group actions, etc.). Each
+ * such sub-view should render through [GeoVaultSubViewScaffold] so it gets the standard
+ * compact "<-Title  X" dismiss strip stacked under this bar (same model as the survey
+ * shell). The host's title bar is never swapped — there is no branded-take-over path.
  */
 @Composable
 fun GeoVaultNavTabShell(
@@ -50,88 +50,77 @@ fun GeoVaultNavTabShell(
     settingsMenuEnabled: Boolean = true,
     tabOverlay: (@Composable BoxScope.() -> Unit)? = null,
 ) {
-    val integratedSubViewBrandedActive = remember { mutableStateOf(false) }
-    val reporter = remember {
-        { active: Boolean ->
-            integratedSubViewBrandedActive.value = active
-        }
-    }
-    CompositionLocalProvider(LocalGeoVaultIntegratedSubViewBrandedChromeReporter provides reporter) {
-        val hideOuterBranded = integratedSubViewBrandedActive.value
-        Scaffold(
-            topBar = {
-                if (!hideOuterBranded) {
-                    GeoVaultTopTitleBar(
-                        title = title,
-                        actionsContent = {
-                            GeoVaultTopBarSettingsMenuAction(
-                                onOpenSettings = onOpenSettings,
-                                enabled = settingsMenuEnabled,
-                                overflowTooltip = settingsOverflowTooltip,
-                            )
-                        },
+    Scaffold(
+        topBar = {
+            GeoVaultTopTitleBar(
+                title = title,
+                actionsContent = {
+                    GeoVaultTopBarSettingsMenuAction(
+                        onOpenSettings = onOpenSettings,
+                        enabled = settingsMenuEnabled,
+                        overflowTooltip = settingsOverflowTooltip,
                     )
-                }
-            },
-        ) { padding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .background(GeoVaultColorTokens.ListBackground),
+                },
+            )
+        },
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(GeoVaultColorTokens.ListBackground),
+        ) {
+            GeoVaultAuthGate(
+                isAuthenticated = isAuthenticated,
+                serverUrl = serverUrl,
+                onServerUrlChanged = onAuthServerUrlChanged,
+                onConnect = onAuthConnect,
+                isConnecting = isConnecting,
+                connectButtonTooltip = connectButtonTooltip,
+                modifier = Modifier.fillMaxSize(),
             ) {
-                GeoVaultAuthGate(
-                    isAuthenticated = isAuthenticated,
-                    serverUrl = serverUrl,
-                    onServerUrlChanged = onAuthServerUrlChanged,
-                    onConnect = onAuthConnect,
-                    isConnecting = isConnecting,
-                    connectButtonTooltip = connectButtonTooltip,
+                Column(
                     modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (authenticatedMainContent != null) {
-                                val mainModifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = authenticatedContentHorizontalPadding)
-                                    .then(
-                                        if (scrollAuthenticatedMainContent) {
-                                            Modifier.verticalScroll(rememberScrollState())
-                                        } else {
-                                            Modifier
-                                        },
-                                    )
-                                Column(modifier = mainModifier) {
-                                    authenticatedMainContent()
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(placeholderText)
-                                }
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (authenticatedMainContent != null) {
+                            val mainModifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = authenticatedContentHorizontalPadding)
+                                .then(
+                                    if (scrollAuthenticatedMainContent) {
+                                        Modifier.verticalScroll(rememberScrollState())
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                            Column(modifier = mainModifier) {
+                                authenticatedMainContent()
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(placeholderText)
                             }
                         }
-                        authenticatedFooter?.invoke()
-                        Spacer(modifier = Modifier.height(authenticatedBottomSpacer))
                     }
+                    authenticatedFooter?.invoke()
+                    Spacer(modifier = Modifier.height(authenticatedBottomSpacer))
                 }
-                if (isAuthenticated && authenticatedFloatingAction != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = authenticatedContentHorizontalPadding),
-                        content = authenticatedFloatingAction,
-                    )
-                }
-                if (tabOverlay != null) {
-                    tabOverlay()
-                }
+            }
+            if (isAuthenticated && authenticatedFloatingAction != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = authenticatedContentHorizontalPadding),
+                    content = authenticatedFloatingAction,
+                )
+            }
+            if (tabOverlay != null) {
+                tabOverlay()
             }
         }
     }

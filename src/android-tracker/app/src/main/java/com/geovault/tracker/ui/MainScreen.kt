@@ -342,25 +342,29 @@ fun MainScreen(
                     }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
-                    MapScreen(
-                        map = trackerMainMap,
-                        mapViewModel = mapViewModel,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .alpha(if (selectedTab == TrackerTab.MAP.name) 1f else 0f)
-                            .zIndex(if (selectedTab == TrackerTab.MAP.name) 1f else 0f),
-                        isActive = selectedTab == TrackerTab.MAP.name,
-                        isAuthenticated = state.isAuthenticated,
-                        serverUrl = state.serverUrl,
-                        onAuthServerUrlChanged = onAuthServerUrlChanged,
-                        onAuthConnect = onAuthConnect,
-                        isConnecting = state.isConnecting,
-                        onOpenSettings = openSettingsTab,
-                        onHostNavigationRequested = onMapHostNavigationRequested,
-                        onRequestTrackerParams = { args -> trackerParamsArgs = args },
-                    )
+                    val mapActive = selectedTab == TrackerTab.MAP.name
+                    CompositionLocalProvider(LocalTrackerTabIsActive provides mapActive) {
+                        MapScreen(
+                            map = trackerMainMap,
+                            mapViewModel = mapViewModel,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(if (mapActive) 1f else 0f)
+                                .zIndex(if (mapActive) 1f else 0f),
+                            isActive = mapActive,
+                            isAuthenticated = state.isAuthenticated,
+                            serverUrl = state.serverUrl,
+                            onAuthServerUrlChanged = onAuthServerUrlChanged,
+                            onAuthConnect = onAuthConnect,
+                            isConnecting = state.isConnecting,
+                            onOpenSettings = openSettingsTab,
+                            onHostNavigationRequested = onMapHostNavigationRequested,
+                            onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                        )
+                    }
                     if (TrackerTab.HOME.name in visitedTabs) {
                         val homeActive = selectedTab == TrackerTab.HOME.name
+                        CompositionLocalProvider(LocalTrackerTabIsActive provides homeActive) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -384,9 +388,11 @@ fun MainScreen(
                                 onRequestTrackerParams = { args -> trackerParamsArgs = args },
                             )
                         }
+                        }
                     }
                     if (TrackerTab.TRACKERS.name in visitedTabs) {
                         val trackersActive = selectedTab == TrackerTab.TRACKERS.name
+                        CompositionLocalProvider(LocalTrackerTabIsActive provides trackersActive) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -413,9 +419,11 @@ fun MainScreen(
                                 onRequestTrackerParams = { args -> trackerParamsArgs = args },
                             )
                         }
+                        }
                     }
                     if (TrackerTab.SHARED.name in visitedTabs) {
                         val sharedActive = selectedTab == TrackerTab.SHARED.name
+                        CompositionLocalProvider(LocalTrackerTabIsActive provides sharedActive) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -441,9 +449,11 @@ fun MainScreen(
                                 onRequestTrackerParams = { args -> trackerParamsArgs = args },
                             )
                         }
+                        }
                     }
                     if (TrackerTab.SETTINGS.name in visitedTabs) {
                         val settingsActive = selectedTab == TrackerTab.SETTINGS.name
+                        CompositionLocalProvider(LocalTrackerTabIsActive provides settingsActive) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -474,10 +484,10 @@ fun MainScreen(
                                 onClose = { selectedTab = TrackerTab.HOME.name },
                             )
                         }
+                        }
                     }
                 }
             }
-            TrackerParamsOverlayLayer()
         }
         val globalInfoModel = state.infoMessage
             ?.takeIf { it.isNotBlank() }

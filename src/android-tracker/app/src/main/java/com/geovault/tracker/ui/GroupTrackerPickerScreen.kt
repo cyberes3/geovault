@@ -53,7 +53,6 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
-import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
@@ -77,7 +76,6 @@ private data class TrackerRowItem(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GroupTrackerPickerScreen(
-    chromeMode: GeoVaultSubViewChromeMode,
     groupName: String,
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
@@ -110,7 +108,6 @@ fun GroupTrackerPickerScreen(
     }
 
     PickerTabContent(
-        chromeMode = chromeMode,
         modifier = modifier,
         allTrackers = allTrackers,
         selectedTrackerIds = selectedTrackerIds,
@@ -129,7 +126,6 @@ fun GroupTrackerPickerScreen(
 
 @Composable
 private fun PickerTabContent(
-    chromeMode: GeoVaultSubViewChromeMode,
     modifier: Modifier = Modifier,
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
@@ -259,7 +255,6 @@ private fun PickerTabContent(
                 )
             }
         },
-        chromeMode = chromeMode,
     ) { innerPadding ->
         HorizontalPager(
             state = pagerState,

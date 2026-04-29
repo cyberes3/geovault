@@ -8,18 +8,17 @@ import org.junit.Test
 class TrackersListPositioningPolicyTest {
 
     @Test
-    fun resolve_scrollToTopOnce_whenTrackersReadyAndNoNavigation() {
+    fun resolve_noOp_whenTrackersReadyAndNoNavigation() {
         val action = TrackersListPositioningPolicy.resolve(
             TrackersListPositioningInput(
                 activeSubTab = TrackersGroupsSubTab.TRACKERS,
                 isLoading = false,
                 isPullRefreshing = false,
-                hasInitializedTrackersTop = false,
                 navigationRequest = null,
             )
         )
 
-        assertEquals(TrackersListPositioningAction.ScrollToTopOnce, action)
+        assertEquals(TrackersListPositioningAction.NoOp, action)
     }
 
     @Test
@@ -29,7 +28,6 @@ class TrackersListPositioningPolicyTest {
                 activeSubTab = TrackersGroupsSubTab.TRACKERS,
                 isLoading = false,
                 isPullRefreshing = false,
-                hasInitializedTrackersTop = false,
                 navigationRequest = TrackersHostNavigationRequest(
                     subTab = TrackersGroupsSubTab.GROUPS,
                     trackerId = "t1",
@@ -48,7 +46,6 @@ class TrackersListPositioningPolicyTest {
                 activeSubTab = TrackersGroupsSubTab.TRACKERS,
                 isLoading = false,
                 isPullRefreshing = false,
-                hasInitializedTrackersTop = false,
                 navigationRequest = TrackersHostNavigationRequest(
                     subTab = TrackersGroupsSubTab.TRACKERS,
                     trackerId = "t1",
@@ -67,7 +64,6 @@ class TrackersListPositioningPolicyTest {
                 activeSubTab = TrackersGroupsSubTab.GROUPS,
                 isLoading = false,
                 isPullRefreshing = false,
-                hasInitializedTrackersTop = false,
                 navigationRequest = TrackersHostNavigationRequest(
                     subTab = TrackersGroupsSubTab.GROUPS,
                     groupId = "g1",
@@ -86,7 +82,6 @@ class TrackersListPositioningPolicyTest {
                 activeSubTab = TrackersGroupsSubTab.GROUPS,
                 isLoading = false,
                 isPullRefreshing = false,
-                hasInitializedTrackersTop = false,
                 navigationRequest = TrackersHostNavigationRequest(
                     subTab = TrackersGroupsSubTab.GROUPS,
                     trackerId = "t5",
@@ -105,7 +100,6 @@ class TrackersListPositioningPolicyTest {
                 activeSubTab = TrackersGroupsSubTab.TRACKERS,
                 isLoading = false,
                 isPullRefreshing = false,
-                hasInitializedTrackersTop = false,
                 navigationRequest = TrackersHostNavigationRequest(
                     subTab = TrackersGroupsSubTab.TRACKERS,
                     trackerId = "t1",

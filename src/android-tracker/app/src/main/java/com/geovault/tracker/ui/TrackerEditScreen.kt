@@ -62,7 +62,6 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
-import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.NaturalSort
@@ -127,7 +126,6 @@ private data class TrackerEditInitialSnapshot(
 
 @Composable
 fun TrackerEditorScreen(
-    chromeMode: GeoVaultSubViewChromeMode,
     mode: TrackerEditorMode,
     createBindings: TrackerEditorCreateBindings?,
     editBindings: TrackerEditorEditBindings?,
@@ -226,7 +224,6 @@ fun TrackerEditorScreen(
                 )
             }
         },
-        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier

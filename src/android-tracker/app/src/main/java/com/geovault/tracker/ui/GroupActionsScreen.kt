@@ -23,7 +23,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
@@ -37,7 +36,6 @@ import com.geovault.tracker.ui.components.GroupMembersList
 
 @Composable
 fun GroupActionsScreen(
-    chromeMode: GeoVaultSubViewChromeMode,
     group: Group,
     allTrackers: List<Tracker>,
     highlightedTrackerId: String?,
@@ -113,7 +111,6 @@ fun GroupActionsScreen(
                 )
             }
         },
-        chromeMode = chromeMode,
     ) { innerPadding ->
         if (memberRows.isEmpty()) {
             Box(

@@ -7,14 +7,12 @@ data class TrackersListPositioningInput(
     val activeSubTab: TrackersGroupsSubTab,
     val isLoading: Boolean,
     val isPullRefreshing: Boolean,
-    val hasInitializedTrackersTop: Boolean,
     val navigationRequest: TrackersHostNavigationRequest?,
 )
 
 sealed interface TrackersListPositioningAction {
     data object NoOp : TrackersListPositioningAction
     data object ConsumeWithoutScroll : TrackersListPositioningAction
-    data object ScrollToTopOnce : TrackersListPositioningAction
     data class ScrollToTracker(val trackerId: String) : TrackersListPositioningAction
     data class ScrollToGroup(val groupId: String) : TrackersListPositioningAction
     data class ScrollToGroupContainingTracker(val trackerId: String) : TrackersListPositioningAction
@@ -48,14 +46,6 @@ object TrackersListPositioningPolicy {
                     }
                 }
             }
-        }
-        if (
-            input.activeSubTab == TrackersGroupsSubTab.TRACKERS &&
-            !input.hasInitializedTrackersTop &&
-            !input.isLoading &&
-            !input.isPullRefreshing
-        ) {
-            return TrackersListPositioningAction.ScrollToTopOnce
         }
         return TrackersListPositioningAction.NoOp
     }

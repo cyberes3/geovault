@@ -720,6 +720,7 @@ fun SettingsScreen(
             )
         }
             }
+            TrackerParamsOverlayLayer()
             if (showHiddenTrackersOverlay) {
                 HiddenTrackersSubView(
                     items = state.hiddenTrackerItems,

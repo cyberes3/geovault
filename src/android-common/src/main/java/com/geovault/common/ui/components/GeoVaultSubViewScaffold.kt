@@ -3,7 +3,6 @@ package com.geovault.common.ui.components
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
@@ -15,16 +14,16 @@ import androidx.compose.ui.graphics.Color
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /**
- * Standard chrome for a dismissible sub-view that is presented below the shell's branded
+ * Standard chrome for a dismissible sub-view that is presented below the host's branded
  * [GeoVaultTopTitleBar]. Every edit form, detail screen, filter/import overlay, and settings
  * sub-page should render through this scaffold so sub-view chrome has exactly one source of
  * truth. Hosts must lay this out **edge-to-edge** in the available viewport (no floating
  * modal card, scrim-with-inset sheet, or partial-height panel around this scaffold).
  *
- * [chromeMode] defaults to [GeoVaultSubViewChromeMode.CompactOnly] for sub-views under an existing
- * branded shell (survey, map, settings). Pass [GeoVaultSubViewChromeMode.WithBrandedTabBar] (see
- * [GeoVaultSubViewTabChrome.withStandardSettingsMenu]) when the tab host coordinates via
- * [LocalGeoVaultIntegratedSubViewBrandedChromeReporter] (see [GeoVaultNavTabShell]).
+ * The chrome is a single compact "<-Title  X" dismiss strip on top of the body; it never
+ * tries to swap the host's branded tab bar out (the host's title bar is expected to remain
+ * visible above this scaffold). This matches the survey app's "shell title bar always
+ * visible, sub-views render in-body with a compact dismiss strip" pattern.
  *
  * @param onLeaveComposition When non-null, invoked if this scaffold **permanently** leaves the
  *   composition (for example the host navigates to another tab). Use the same callback the
@@ -51,58 +50,22 @@ fun GeoVaultSubViewScaffold(
     headerExtras: (@Composable ColumnScope.() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     backgroundColor: Color = MaterialTheme.colors.background,
-    chromeMode: GeoVaultSubViewChromeMode = GeoVaultSubViewChromeMode.CompactOnly,
     content: @Composable (PaddingValues) -> Unit,
 ) {
-    val reporter = LocalGeoVaultIntegratedSubViewBrandedChromeReporter.current
     val leaveState = rememberUpdatedState(onLeaveComposition)
     DisposableEffect(Unit) {
         onDispose {
             leaveState.value?.invoke()
         }
     }
-    DisposableEffect(chromeMode) {
-        val branded = chromeMode is GeoVaultSubViewChromeMode.WithBrandedTabBar
-        if (branded) {
-            reporter(true)
-        }
-        onDispose {
-            if (branded) {
-                reporter(false)
-            }
-        }
-    }
-    // Sub-views own nav-bar safe-area for their content/bottomBar so settings, edit forms,
-    // station detail, etc. never bleed underneath the system navigation bar even when the
-    // surrounding theme/scaffold is intentionally inset-agnostic (see GeoVaultTheme).
-    val outerModifier = when (chromeMode) {
-        is GeoVaultSubViewChromeMode.WithBrandedTabBar -> modifier
-            .fillMaxSize()
-            .geoVaultStableNavigationBarsPadding()
-        is GeoVaultSubViewChromeMode.CompactOnly -> modifier
-            .geoVaultStableNavigationBarsPadding()
-    }
     Scaffold(
-        modifier = outerModifier,
+        // Sub-views own nav-bar safe-area for their content/bottomBar so settings, edit forms,
+        // station detail, etc. never bleed underneath the system navigation bar even when the
+        // surrounding theme/scaffold is intentionally inset-agnostic (see GeoVaultTheme).
+        modifier = modifier.geoVaultStableNavigationBarsPadding(),
         backgroundColor = backgroundColor,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                when (chromeMode) {
-                    is GeoVaultSubViewChromeMode.WithBrandedTabBar -> {
-                        val b = chromeMode.branded
-                        GeoVaultTopTitleBar(
-                            title = b.title,
-                            subtitle = b.subtitle,
-                            backgroundColor = b.resolvedBackgroundColor(),
-                            contentColor = b.contentColor,
-                            syncSystemStatusBarColor = b.syncSystemStatusBarColor,
-                            hideIconActions = b.hideIconActions,
-                            rightActions = b.rightActions,
-                            actionsContent = b.actionsContent,
-                        )
-                    }
-                    is GeoVaultSubViewChromeMode.CompactOnly -> Unit
-                }
                 GeoVaultCompactDismissTitleBar(
                     title = title,
                     onClose = onClose,

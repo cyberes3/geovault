@@ -162,6 +162,7 @@ fun MapScreen(
                     onRequestTrackerParams = onRequestTrackerParams,
                 )
             }
+            TrackerParamsOverlayLayer()
         }
     }
 }

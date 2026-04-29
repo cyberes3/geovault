@@ -58,9 +58,7 @@ import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
-import com.geovault.common.ui.components.GeoVaultSubViewTabChrome
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTopTabBehavior
 import com.geovault.common.ui.components.GeoVaultTopTabSurface
@@ -153,6 +151,14 @@ fun SharedScreen(
         }
     }
 
+    // Editor sub-views (SharedTracker/Group/GroupActions) sit on top of the body in
+    // [tabOverlay]. Each renders through [GeoVaultSubViewScaffold] (compact "<-Title  X"
+    // dismiss strip), so the outer NavTabShell title bar stays in place across open/close.
+    // Same in-body sub-view model as the survey shell and the params overlay.
+    val isEditorSubViewOpen =
+        groupActionsDialog != null ||
+            editSharedGroup != null ||
+            editSharedTracker != null
     GeoVaultNavTabShell(
         title = stringResource(R.string.shared_screen_title),
         placeholderText = stringResource(R.string.shared_placeholder_signed_out),
@@ -167,75 +173,13 @@ fun SharedScreen(
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
+        settingsMenuEnabled = !isEditorSubViewOpen,
         authenticatedMainContent = {
-            val sharedTabChrome = GeoVaultSubViewTabChrome.withStandardSettingsMenu(
-                title = stringResource(R.string.shared_screen_title),
-                onOpenSettings = onOpenSettings,
-                settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
-            )
-            if (groupActionsDialog != null) {
-                val dialog = groupActionsDialog!!
-                Box(modifier = Modifier.fillMaxSize()) {
-                    GroupActionsScreen(
-                        chromeMode = sharedTabChrome,
-                        group = dialog.group,
-                        allTrackers = state.trackers,
-                        highlightedTrackerId = dialog.highlightedTrackerId,
-                        onDismiss = { groupActionsDialog = null },
-                        onViewTrackerOnMap = { trackerId ->
-                            onOpenTrackerOnMap(trackerId, null)
-                        },
-                        onViewTrackerParams = { tracker ->
-                            onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
-                        },
-                        onViewTrackerInList = null,
-                        onEditGroup = { _ -> },
-                        onViewGroupOnMap = { groupId ->
-                            onOpenGroupOnMap(groupId)
-                        },
-                    )
-                }
-            } else if (editSharedGroup != null) {
-                val group = editSharedGroup!!
-                val leavePending = state.pendingRemoveActionKeys.contains(
-                    vm.editGroupLeavePendingKey(group.id)
-                )
-                SharedGroupEditScreen(
-                    chromeMode = sharedTabChrome,
-                    group = group,
-                    isLeavePending = leavePending,
-                    onDismiss = { editSharedGroup = null },
-                    onLeaveGroup = {
-                        pendingConfirmAction = SharedConfirmAction.LeaveGroup(
-                            groupId = group.id,
-                            groupName = group.name,
-                        )
-                    },
-                )
-            } else if (editSharedTracker != null) {
-                val tracker = editSharedTracker!!
-                val unsubscribePending = state.pendingRemoveActionKeys.contains(
-                    vm.editTrackerUnsubscribePendingKey(tracker.id)
-                )
-                val leaveSharePending = state.pendingRemoveActionKeys.contains(
-                    vm.editTrackerLeaveSharePendingKey(tracker.id)
-                )
-                val actions = SharedEditActionPolicy.trackerActions(tracker)
-                SharedTrackerEditScreen(
-                    chromeMode = sharedTabChrome,
-                    tracker = tracker,
-                    canUnsubscribe = actions.canUnsubscribe,
-                    canLeaveShare = actions.canLeaveShare,
-                    isUnsubscribePending = unsubscribePending,
-                    isLeaveSharePending = leaveSharePending,
-                    onDismiss = { editSharedTracker = null },
-                    onUnsubscribe = { pendingConfirmAction = SharedConfirmAction.UnsubscribeTracker(tracker) },
-                    onLeaveShare = { pendingConfirmAction = SharedConfirmAction.LeaveShareTracker(tracker) },
-                )
-            } else {
+            // Discover/Public overlays render *inside* the body — they wrap themselves in
+            // [GeoVaultSubViewScaffold] (compact dismiss strip), so the outer NavTabShell
+            // title bar stays in place across SHARED_LIST → DISCOVER → PUBLIC transitions.
             SharedAuthenticatedBody(
                 state = state,
-                integratedTabChrome = sharedTabChrome,
                 onShowSharedList = vm::showSharedList,
                 onShowDiscoverOverlay = vm::showDiscoverOverlay,
                 onShowPublicOverlay = vm::showPublicOverlay,
@@ -301,7 +245,70 @@ fun SharedScreen(
                     )
                 },
             )
+        },
+        tabOverlay = {
+            if (groupActionsDialog != null) {
+                val dialog = groupActionsDialog!!
+                Box(modifier = Modifier.fillMaxSize()) {
+                    GroupActionsScreen(
+                        group = dialog.group,
+                        allTrackers = state.trackers,
+                        highlightedTrackerId = dialog.highlightedTrackerId,
+                        onDismiss = { groupActionsDialog = null },
+                        onViewTrackerOnMap = { trackerId ->
+                            onOpenTrackerOnMap(trackerId, null)
+                        },
+                        onViewTrackerParams = { tracker ->
+                            onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
+                        },
+                        onViewTrackerInList = null,
+                        onEditGroup = { _ -> },
+                        onViewGroupOnMap = { groupId ->
+                            onOpenGroupOnMap(groupId)
+                        },
+                    )
+                }
+            } else if (editSharedGroup != null) {
+                val group = editSharedGroup!!
+                val leavePending = state.pendingRemoveActionKeys.contains(
+                    vm.editGroupLeavePendingKey(group.id)
+                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    SharedGroupEditScreen(
+                        group = group,
+                        isLeavePending = leavePending,
+                        onDismiss = { editSharedGroup = null },
+                        onLeaveGroup = {
+                            pendingConfirmAction = SharedConfirmAction.LeaveGroup(
+                                groupId = group.id,
+                                groupName = group.name,
+                            )
+                        },
+                    )
+                }
+            } else if (editSharedTracker != null) {
+                val tracker = editSharedTracker!!
+                val unsubscribePending = state.pendingRemoveActionKeys.contains(
+                    vm.editTrackerUnsubscribePendingKey(tracker.id)
+                )
+                val leaveSharePending = state.pendingRemoveActionKeys.contains(
+                    vm.editTrackerLeaveSharePendingKey(tracker.id)
+                )
+                val actions = SharedEditActionPolicy.trackerActions(tracker)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    SharedTrackerEditScreen(
+                        tracker = tracker,
+                        canUnsubscribe = actions.canUnsubscribe,
+                        canLeaveShare = actions.canLeaveShare,
+                        isUnsubscribePending = unsubscribePending,
+                        isLeaveSharePending = leaveSharePending,
+                        onDismiss = { editSharedTracker = null },
+                        onUnsubscribe = { pendingConfirmAction = SharedConfirmAction.UnsubscribeTracker(tracker) },
+                        onLeaveShare = { pendingConfirmAction = SharedConfirmAction.LeaveShareTracker(tracker) },
+                    )
+                }
             }
+            TrackerParamsOverlayLayer()
         },
     )
     GeoVaultSnackbarHost(
@@ -330,7 +337,6 @@ fun SharedScreen(
 @Composable
 private fun ColumnScope.SharedAuthenticatedBody(
     state: SharedUiState,
-    integratedTabChrome: GeoVaultSubViewChromeMode,
     onShowSharedList: () -> Unit,
     onShowDiscoverOverlay: () -> Unit,
     onShowPublicOverlay: () -> Unit,
@@ -496,7 +502,6 @@ private fun ColumnScope.SharedAuthenticatedBody(
             }
             SharedViewMode.PUBLIC_OVERLAY -> {
                 PublicOverlaySurface(
-                    chromeMode = integratedTabChrome,
                     state = state,
                     filteredPublicTrackers = filteredPublicTrackers,
                     filteredPublicGroups = filteredPublicGroups,
@@ -849,7 +854,6 @@ private fun DiscoverOverlaySurface(
 
 @Composable
 private fun PublicOverlaySurface(
-    chromeMode: GeoVaultSubViewChromeMode,
     state: SharedUiState,
     filteredPublicTrackers: List<AvailableToAddItem>,
     filteredPublicGroups: List<AvailableToAddGroup>,
@@ -886,7 +890,6 @@ private fun PublicOverlaySurface(
                 enabled = !overlayLoading,
             )
         },
-        chromeMode = chromeMode,
     ) { innerPadding ->
         GeoVaultPullRefreshLoadingContainer(
             refreshing = overlayLoading,

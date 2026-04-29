@@ -43,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geovault.common.NaturalSort
-import com.geovault.common.ui.components.GeoVaultSubViewChromeMode
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -74,7 +73,6 @@ private data class GroupEditInitialSnapshot(
 
 @Composable
 fun GroupEditScreen(
-    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditGroup,
     allTrackers: List<Tracker>,
     shareRecipientUsers: List<UserItem>,
@@ -154,7 +152,6 @@ fun GroupEditScreen(
     if (dialog.group.isOwner()) {
         Box(modifier = Modifier.fillMaxSize()) {
             GroupEditOwnerContent(
-                chromeMode = chromeMode,
                 dialog = dialog,
                 allTrackers = allTrackers,
                 shareRecipientUsers = shareRecipientUsers,
@@ -175,7 +172,6 @@ fun GroupEditScreen(
             )
             if (showMembershipPicker) {
                 GroupTrackerPickerScreen(
-                    chromeMode = chromeMode,
                     modifier = Modifier.fillMaxSize(),
                     groupName = dialog.group.name,
                     allTrackers = allTrackers,
@@ -187,13 +183,15 @@ fun GroupEditScreen(
                     onAddTracker = onAddTracker,
                     onDone = { showMembershipPicker = false },
                     onDismiss = { showMembershipPicker = false },
-                    onLeaveComposition = onDismiss,
+                    // Swapped away when returning to group edit — must not call outer
+                    // [onDismiss] or the whole editor would close (same issue as edit-tracker
+                    // loading → editor transition).
+                    onLeaveComposition = null,
                 )
             }
         }
     } else {
         GroupEditNonOwnerContent(
-            chromeMode = chromeMode,
             dialog = dialog,
             onDismiss = onDismiss,
             onLeaveGroup = onLeaveGroup,
@@ -217,7 +215,6 @@ fun GroupEditScreen(
 
 @Composable
 private fun GroupEditOwnerContent(
-    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditGroup,
     allTrackers: List<Tracker>,
     shareRecipientUsers: List<UserItem>,
@@ -281,7 +278,6 @@ private fun GroupEditOwnerContent(
                 )
             }
         },
-        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -520,7 +516,6 @@ private fun GroupEditOwnerContent(
 
 @Composable
 private fun GroupEditNonOwnerContent(
-    chromeMode: GeoVaultSubViewChromeMode,
     dialog: TrackersGroupsDialog.EditGroup,
     onDismiss: () -> Unit,
     onLeaveGroup: () -> Unit,
@@ -542,7 +537,6 @@ private fun GroupEditNonOwnerContent(
         onClose = onDismiss,
         onLeaveComposition = onDismiss,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
-        chromeMode = chromeMode,
     ) { innerPadding ->
         Column(
             modifier = Modifier

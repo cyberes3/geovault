@@ -212,6 +212,7 @@ fun HomeScreen(
                 }
             }
         },
+        tabOverlay = { TrackerParamsOverlayLayer() },
     )
     if (showStopTrackingConfirm) {
         GeoVaultConfirmationDialog(
@@ -721,8 +722,8 @@ private fun formatAccuracyPresentation(state: HomeUiState, imperial: Boolean): H
 private fun homeTrackerParamsRouteArgsOrNull(state: HomeUiState): TrackerParamsRouteArgs? {
     val trackerId = state.selectedTrackerId.trim()
     if (trackerId.isBlank()) return null
-    val lat = state.lastTrackedLatitude ?: return null
-    val lon = state.lastTrackedLongitude ?: return null
+    val lat = state.lastTrackedLatitude
+    val lon = state.lastTrackedLongitude
     val trackerName = state.selectedTrackerDisplayName.ifBlank { state.selectedTrackerId }
     if (trackerName.isBlank()) return null
     val lastUpdateMs = when {
