@@ -215,6 +215,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     sharedEmailsDraft = group.shared_with_emails.orEmpty().joinToString(", "),
                     worldShareEnabledDraft = !group.world_share_id.isNullOrBlank() ||
                         !group.world_share_url.isNullOrBlank(),
+                    internalShareUrlDraft = group.internal_share_url,
                     worldShareUrlDraft = group.world_share_url,
                     hiddenDraft = group.hidden == true,
                     memberTrackIds = trackIds,
@@ -310,150 +311,44 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun updateEditTrackerVisibility(visibility: TrackerShareVisibility) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditTracker) {
-            editTrackerWorldShareJob?.cancel()
-            editTrackerWorldShareJob = null
-            _uiState.update { it.copy(dialog = d.copy(visibilityDraft = visibility)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
+        val updated = d.copy(
+            visibilityDraft = visibility,
+            worldShareEnabledDraft = visibility != TrackerShareVisibility.PRIVATE &&
+                d.worldShareEnabledDraft,
+            shareParamsWithWorldDraft = visibility != TrackerShareVisibility.PRIVATE &&
+                d.shareParamsWithWorldDraft,
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     fun updateEditTrackerSharedEmails(emails: String) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditTracker) {
-            _uiState.update { it.copy(dialog = d.copy(sharedEmailsDraft = emails)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
+        val updated = d.copy(sharedEmailsDraft = emails)
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     fun toggleEditTrackerSharedEmailSelection(email: String) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditTracker) {
-            _uiState.update {
-                it.copy(
-                    dialog = d.copy(
-                        sharedEmailsDraft = SharedRecipientSelectionPolicy.toggle(d.sharedEmailsDraft, email)
-                    )
-                )
-            }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
+        val updated = d.copy(
+            sharedEmailsDraft = SharedRecipientSelectionPolicy.toggle(d.sharedEmailsDraft, email)
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     fun updateEditTrackerWorldShareEnabled(enabled: Boolean) {
         val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
-        val visibilityForWorldShare = when (d.visibilityDraft) {
-            TrackerShareVisibility.PRIVATE -> return
-            TrackerShareVisibility.SHARED,
-            TrackerShareVisibility.PUBLIC -> d.visibilityDraft
-        }
-        val trackerId = d.tracker.id
-        editTrackerWorldShareJob?.cancel()
-        if (enabled) {
-            editTrackerWorldShareJob = viewModelScope.launch {
-                _uiState.update {
-                    val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                    if (cur.tracker.id != trackerId) return@update it
-                    it.copy(
-                        dialog = cur.copy(
-                            worldShareEnabledDraft = true,
-                            isWorldShareLinkLoading = true,
-                        ),
-                    )
-                }
-                when (
-                    val result = trackerRepository.updateTrackerSettings(
-                        trackerId = trackerId,
-                        request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
-                            tracker = d.tracker,
-                            visibility = visibilityForWorldShare.apiValue,
-                            worldShareEnabled = true,
-                        ),
-                        publishToStore = true,
-                    )
-                ) {
-                    is RepositoryResult.Success -> {
-                        val t = result.data
-                        _uiState.update {
-                            val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                            if (cur.tracker.id != trackerId) return@update it
-                            it.copy(
-                                dialog = cur.copy(
-                                    tracker = t,
-                                    isWorldShareLinkLoading = false,
-                                    visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
-                                    worldShareEnabledDraft =
-                                        !t.world_share_id.isNullOrBlank() ||
-                                            !t.world_share_url.isNullOrBlank(),
-                                    worldShareUrlDraft = t.world_share_url,
-                                ),
-                            )
-                        }
-                    }
-                    is RepositoryResult.Failure -> {
-                        _uiState.update {
-                            val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                            if (cur.tracker.id != trackerId) return@update it
-                            it.copy(
-                                dialog = cur.copy(
-                                    isWorldShareLinkLoading = false,
-                                    worldShareEnabledDraft = false,
-                                ),
-                                userMessage = getApplication<Application>().getString(
-                                    R.string.trackers_failed_to_enable_world_share,
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            editTrackerWorldShareJob = viewModelScope.launch {
-                _uiState.update {
-                    val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                    if (cur.tracker.id != trackerId) return@update it
-                    it.copy(dialog = cur.copy(isWorldShareLinkLoading = true))
-                }
-                when (
-                    val result = trackerRepository.updateTrackerSettings(
-                        trackerId = trackerId,
-                        request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
-                            tracker = d.tracker,
-                            visibility = visibilityForWorldShare.apiValue,
-                            worldShareEnabled = false,
-                        ),
-                        publishToStore = true,
-                    )
-                ) {
-                    is RepositoryResult.Success -> {
-                        val t = result.data
-                        _uiState.update {
-                            val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                            if (cur.tracker.id != trackerId) return@update it
-                            it.copy(
-                                dialog = cur.copy(
-                                    tracker = t,
-                                    isWorldShareLinkLoading = false,
-                                    worldShareEnabledDraft = false,
-                                    worldShareUrlDraft = null,
-                                    shareParamsWithWorldDraft = false,
-                                ),
-                            )
-                        }
-                    }
-                    is RepositoryResult.Failure -> {
-                        _uiState.update {
-                            val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                            if (cur.tracker.id != trackerId) return@update it
-                            it.copy(
-                                dialog = cur.copy(isWorldShareLinkLoading = false),
-                                userMessage = getApplication<Application>().getString(
-                                    R.string.trackers_failed_to_disable_world_share,
-                                ),
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        val updated = d.copy(
+            worldShareEnabledDraft = enabled && d.visibilityDraft != TrackerShareVisibility.PRIVATE,
+            shareParamsWithWorldDraft = enabled &&
+                d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
+                d.shareParamsWithWorldDraft,
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     private fun bootstrapEditTrackerWorldShareUrlIfNeeded(tracker: Tracker) {
@@ -494,6 +389,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                                 tracker = t,
                                 isWorldShareLinkLoading = false,
                                 visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
+                                internalShareUrlDraft = t.internal_share_url,
                                 worldShareUrlDraft = t.world_share_url,
                             ),
                         )
@@ -515,25 +411,99 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    fun updateEditTrackerShareParamsWithRecipients(enabled: Boolean) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditTracker) {
-            _uiState.update { it.copy(dialog = d.copy(shareParamsWithRecipientsDraft = enabled)) }
+    private fun persistEditTrackerSharing(d: TrackersGroupsDialog.EditTracker) {
+        val trackerId = d.tracker.id
+        editTrackerWorldShareJob?.cancel()
+        editTrackerWorldShareJob = viewModelScope.launch {
+            _uiState.update {
+                val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                if (cur.tracker.id != trackerId) return@update it
+                it.copy(dialog = cur.copy(isWorldShareLinkLoading = true), userMessage = null)
+            }
+            val normalizedEmails = TrackerSharingSettingsPolicy.validate(
+                TrackerSharingDraft(
+                    visibility = d.visibilityDraft,
+                    sharedEmailsInput = d.sharedEmailsDraft,
+                    worldShareEnabled = d.worldShareEnabledDraft,
+                )
+            ).normalizedEmails
+            val worldShareEnabled = d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
+                d.worldShareEnabledDraft
+            val result = trackerRepository.updateTrackerSettings(
+                trackerId = trackerId,
+                request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                    tracker = d.tracker,
+                    visibility = d.visibilityDraft.apiValue,
+                    shareParamsWithRecipients = d.shareParamsWithRecipientsDraft,
+                    shareParamsWithWorld = worldShareEnabled && d.shareParamsWithWorldDraft,
+                    sharedWithEmails = if (d.visibilityDraft == TrackerShareVisibility.SHARED) {
+                        normalizedEmails
+                    } else {
+                        null
+                    },
+                    worldShareEnabled = worldShareEnabled,
+                    allowGroupReshare = d.allowGroupReshareDraft,
+                ),
+                publishToStore = true,
+            )
+            when (result) {
+                is RepositoryResult.Success -> {
+                    val t = result.data
+                    _uiState.update {
+                        val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                        if (cur.tracker.id != trackerId) return@update it
+                        it.copy(
+                            dialog = cur.copy(
+                                tracker = t,
+                                isWorldShareLinkLoading = false,
+                                visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
+                                sharedEmailsDraft = t.shared_with_emails.orEmpty().joinToString(", "),
+                                shareParamsWithRecipientsDraft = t.share_params_with_recipients == true,
+                                allowGroupReshareDraft = t.settingBoolean("allow_group_reshare"),
+                                worldShareEnabledDraft = !t.world_share_id.isNullOrBlank() ||
+                                    !t.world_share_url.isNullOrBlank(),
+                                shareParamsWithWorldDraft = t.share_params_with_world == true,
+                                internalShareUrlDraft = t.internal_share_url,
+                                worldShareUrlDraft = t.world_share_url,
+                            ),
+                        )
+                    }
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.update {
+                        val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                        if (cur.tracker.id != trackerId) return@update it
+                        it.copy(
+                            dialog = cur.copy(isWorldShareLinkLoading = false),
+                            userMessage = getApplication<Application>().getString(
+                                R.string.trackers_failed_to_save_sharing,
+                            ),
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    fun updateEditTrackerShareParamsWithRecipients(enabled: Boolean) {
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
+        val updated = d.copy(shareParamsWithRecipientsDraft = enabled)
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     fun updateEditTrackerAllowGroupReshare(enabled: Boolean) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditTracker) {
-            _uiState.update { it.copy(dialog = d.copy(allowGroupReshareDraft = enabled)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
+        val updated = d.copy(allowGroupReshareDraft = enabled)
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     fun updateEditTrackerShareParamsWithWorld(enabled: Boolean) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditTracker) {
-            _uiState.update { it.copy(dialog = d.copy(shareParamsWithWorldDraft = enabled)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditTracker ?: return
+        val updated = d.copy(shareParamsWithWorldDraft = enabled)
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditTrackerSharing(updated)
     }
 
     fun updateEditGroupDraft(name: String) {
@@ -544,37 +514,39 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun updateEditGroupVisibility(visibility: GroupShareVisibility) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditGroup) {
-            _uiState.update { it.copy(dialog = d.copy(visibilityDraft = visibility)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        val updated = d.copy(
+            visibilityDraft = visibility,
+            worldShareEnabledDraft = visibility != GroupShareVisibility.PRIVATE &&
+                d.worldShareEnabledDraft,
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditGroupSharing(updated)
     }
 
     fun updateEditGroupSharedEmails(emails: String) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditGroup) {
-            _uiState.update { it.copy(dialog = d.copy(sharedEmailsDraft = emails)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        val updated = d.copy(sharedEmailsDraft = emails)
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditGroupSharing(updated)
     }
 
     fun toggleEditGroupSharedEmailSelection(email: String) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditGroup) {
-            _uiState.update {
-                it.copy(
-                    dialog = d.copy(
-                        sharedEmailsDraft = SharedRecipientSelectionPolicy.toggle(d.sharedEmailsDraft, email)
-                    )
-                )
-            }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        val updated = d.copy(
+            sharedEmailsDraft = SharedRecipientSelectionPolicy.toggle(d.sharedEmailsDraft, email)
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditGroupSharing(updated)
     }
 
     fun updateEditGroupWorldShareEnabled(enabled: Boolean) {
-        val d = _uiState.value.dialog
-        if (d is TrackersGroupsDialog.EditGroup) {
-            _uiState.update { it.copy(dialog = d.copy(worldShareEnabledDraft = enabled)) }
-        }
+        val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
+        val updated = d.copy(
+            worldShareEnabledDraft = enabled && d.visibilityDraft != GroupShareVisibility.PRIVATE,
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditGroupSharing(updated)
     }
 
     fun updateEditGroupHidden(hidden: Boolean) {
@@ -615,24 +587,41 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
 
     fun toggleGroupWorldShare() {
         val d = _uiState.value.dialog as? TrackersGroupsDialog.EditGroup ?: return
-        if (d.visibilityDraft == GroupShareVisibility.PRIVATE) return
+        val updated = d.copy(
+            worldShareEnabledDraft = !d.worldShareEnabledDraft &&
+                d.visibilityDraft != GroupShareVisibility.PRIVATE,
+        )
+        _uiState.update { it.copy(dialog = updated) }
+        persistEditGroupSharing(updated)
+    }
+
+    private fun persistEditGroupSharing(d: TrackersGroupsDialog.EditGroup) {
         val groupId = d.group.id
-        val enabling = !d.worldShareEnabledDraft
         editGroupWorldShareJob?.cancel()
         editGroupWorldShareJob = viewModelScope.launch {
             _uiState.update {
                 val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
                 if (cur.group.id != groupId) return@update it
-                it.copy(
-                    dialog = cur.copy(
-                        worldShareEnabledDraft = enabling,
-                        isWorldShareLinkLoading = true,
-                    ),
-                )
+                it.copy(dialog = cur.copy(isWorldShareLinkLoading = true), userMessage = null)
             }
-            val request = GroupSharingSettingsPolicy.buildWorldShareTogglePatch(
+            val normalizedEmails = GroupSharingSettingsPolicy.validate(
+                GroupSharingDraft(
+                    visibility = d.visibilityDraft,
+                    sharedEmailsInput = d.sharedEmailsDraft,
+                    worldShareEnabled = d.worldShareEnabledDraft,
+                )
+            ).normalizedEmails
+            val worldShareEnabled = d.visibilityDraft != GroupShareVisibility.PRIVATE &&
+                d.worldShareEnabledDraft
+            val request = GroupSharingSettingsPolicy.buildPreservingPatchRequest(
                 group = d.group,
-                enabling = enabling,
+                visibility = d.visibilityDraft.apiValue,
+                sharedWithEmails = if (d.visibilityDraft == GroupShareVisibility.SHARED) {
+                    normalizedEmails
+                } else {
+                    null
+                },
+                worldShareEnabled = worldShareEnabled,
             )
             when (val result = groupRepository.patchGroup(groupId, request, publishToStore = true)) {
                 is RepositoryResult.Success -> {
@@ -644,8 +633,11 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                             dialog = cur.copy(
                                 group = g,
                                 isWorldShareLinkLoading = false,
+                                visibilityDraft = GroupShareVisibility.fromApiValue(g.visibility),
+                                sharedEmailsDraft = g.shared_with_emails.orEmpty().joinToString(", "),
                                 worldShareEnabledDraft = !g.world_share_id.isNullOrBlank() ||
                                     !g.world_share_url.isNullOrBlank(),
+                                internalShareUrlDraft = g.internal_share_url,
                                 worldShareUrlDraft = g.world_share_url,
                             ),
                         )
@@ -656,13 +648,9 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                         val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
                         if (cur.group.id != groupId) return@update it
                         it.copy(
-                            dialog = cur.copy(
-                                worldShareEnabledDraft = !enabling,
-                                isWorldShareLinkLoading = false,
-                            ),
+                            dialog = cur.copy(isWorldShareLinkLoading = false),
                             userMessage = getApplication<Application>().getString(
-                                if (enabling) R.string.trackers_failed_to_enable_world_share
-                                else R.string.trackers_failed_to_disable_world_share,
+                                R.string.trackers_failed_to_save_sharing,
                             ),
                         )
                     }
@@ -1299,6 +1287,7 @@ private fun toEditTrackerDialog(
         worldShareEnabledDraft = !tracker.world_share_id.isNullOrBlank() ||
             !tracker.world_share_url.isNullOrBlank(),
         shareParamsWithWorldDraft = tracker.share_params_with_world == true,
+        internalShareUrlDraft = tracker.internal_share_url,
         worldShareUrlDraft = tracker.world_share_url,
         isWorldShareLinkLoading = false,
     )

@@ -26,6 +26,8 @@ fun TrackerDto.toDomainModel(): Tracker {
         share_params_with_world = share_params_with_world,
         owner_email = owner_email,
         subscriber_count = subscriber_count,
+        internal_share_id = internal_share_id,
+        internal_share_url = internal_share_url,
         world_share_id = world_share_id,
         world_share_url = world_share_url,
         shared_with_emails = shared_with_emails

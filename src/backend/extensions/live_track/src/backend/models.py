@@ -76,6 +76,21 @@ class LiveTrackWorldShare(models.Model):
         app_label = "live_track"
 
 
+class LiveTrackInternalShare(models.Model):
+    """Authenticated share link for a track; authorization is still governed by track visibility and share recipients."""
+
+    share_id = models.CharField(max_length=36, unique=True, db_index=True)
+    track = models.OneToOneField(LiveTrack, on_delete=models.CASCADE, related_name="internal_share")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_internal_shares")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "live_track"
+        indexes = [
+            models.Index(fields=["user", "created_at"], name="lt_int_user_created_idx"),
+        ]
+
+
 class LiveTrackSubscription(models.Model):
     """User has added this track to their list (own or someone else's)."""
 
@@ -157,6 +172,21 @@ class LiveTrackGroupWorldShare(models.Model):
 
     class Meta:
         app_label = "live_track"
+
+
+class LiveTrackGroupInternalShare(models.Model):
+    """Authenticated share link for a group; authorization is still governed by group visibility and share recipients."""
+
+    share_id = models.CharField(max_length=36, unique=True, db_index=True)
+    group = models.OneToOneField(LiveTrackGroup, on_delete=models.CASCADE, related_name="internal_share")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="live_track_group_internal_shares")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "live_track"
+        indexes = [
+            models.Index(fields=["user", "created_at"], name="lt_grp_int_user_created_idx"),
+        ]
 
 
 class LiveTrackGroupMember(models.Model):

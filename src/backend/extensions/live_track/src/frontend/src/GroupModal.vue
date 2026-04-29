@@ -54,6 +54,8 @@
         :loading-users="loadingUsers"
         :world-share-enabled="worldShareEnabled"
         :full-world-share-url="fullWorldShareUrl"
+        :full-internal-share-url="fullInternalShareUrl"
+        :read-only="!group.is_owner"
         :disabled="!group.is_owner"
         @update:visibility="visibility = $event"
         @update:shared-with-emails="sharedWithEmails = $event"
@@ -128,6 +130,8 @@
             :loading-users="loadingUsers"
             :world-share-enabled="worldShareEnabled"
             :full-world-share-url="fullWorldShareUrl"
+            :full-internal-share-url="fullInternalShareUrl"
+            :read-only="!group.is_owner"
             :disabled="!group.is_owner"
             @update:visibility="visibility = $event"
             @update:shared-with-emails="sharedWithEmails = $event"
@@ -232,10 +236,17 @@ export default {
     const sharedWithEmails = ref([]);
     const worldShareEnabled = ref(!!(props.group?.world_share_id));
     const worldShareUrl = ref(props.group?.world_share_url || '');
+    const internalShareUrl = ref(props.group?.internal_share_url || '');
     const fullWorldShareUrl = computed(() => {
       if (!worldShareUrl.value) return '';
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       return origin ? `${origin}${worldShareUrl.value}` : worldShareUrl.value;
+    });
+    const fullInternalShareUrl = computed(() => {
+      if (!internalShareUrl.value) return '';
+      if (/^https?:\/\//i.test(internalShareUrl.value)) return internalShareUrl.value;
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return origin ? `${origin}${internalShareUrl.value}` : internalShareUrl.value;
     });
     const sharedWithEmailsForSelect = computed(() =>
       (sharedWithEmails.value || []).map((e) => String(e || '').toLowerCase()).filter(Boolean)
@@ -249,6 +260,7 @@ export default {
       sharedWithEmails.value = Array.isArray(g?.shared_with_emails) ? [...g.shared_with_emails] : [];
       worldShareEnabled.value = !!(g?.world_share_id);
       worldShareUrl.value = g?.world_share_url || '';
+      internalShareUrl.value = g?.internal_share_url || '';
       groupTrackIds.value = [...(g?.track_ids || [])];
       if (g?.id) fetchUsers();
     }, { immediate: true });
@@ -288,6 +300,7 @@ export default {
         if (patchData) {
           worldShareEnabled.value = !!(patchData.world_share_id);
           worldShareUrl.value = patchData.world_share_url || '';
+          internalShareUrl.value = patchData.internal_share_url || '';
         }
         const currentIds = new Set((groupTrackIds.value ?? []).map((id) => String(id)));
         const previousIds = new Set((props.group?.track_ids || []).map((id) => String(id)));
@@ -333,6 +346,8 @@ export default {
       worldShareEnabled,
       worldShareUrl,
       fullWorldShareUrl,
+      internalShareUrl,
+      fullInternalShareUrl,
       groupTrackIdsSafe,
       allTrackers,
       create,

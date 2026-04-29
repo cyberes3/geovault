@@ -1,35 +1,43 @@
 <template>
-  <button
+  <BaseButton
     type="button"
-    :class="buttonClass"
+    :variant="baseVariant"
+    :color="baseColor"
+    :size="baseSize"
     :disabled="disabled"
     :aria-label="copied ? 'Copied' : 'Copy'"
+    :class="buttonClass"
     @click="onClick"
   >
     <CheckIcon v-if="copied" class="h-5 w-5 text-green-700 shrink-0" aria-hidden="true" />
-    <span v-else>Copy</span>
-  </button>
+    <template v-else>
+      <ClipboardDocumentIcon class="mr-2 h-5 w-5 shrink-0" aria-hidden="true" />
+      <span>{{ label }}</span>
+    </template>
+  </BaseButton>
 </template>
 
 <script>
-import { CheckIcon } from '@heroicons/vue/24/outline';
-
-const SIZE_CLASSES = {
-  sm: 'min-w-[3.25rem] h-8 px-2 text-sm',
-  md: 'min-w-[3.5rem] h-9 px-2 py-1.5 text-sm',
-  wide: 'min-w-[4rem] h-10 px-3 text-sm',
-};
+import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/vue/24/outline';
+import BaseButton from 'platform/components/parts/BaseButton.vue';
 
 export default {
   name: 'CopyTextButton',
-  components: { CheckIcon },
+  components: { BaseButton, CheckIcon, ClipboardDocumentIcon },
   props: {
     text: { type: String, default: '' },
+    label: { type: String, default: 'Copy' },
     size: {
       type: String,
       default: 'md',
       validator: (v) => ['sm', 'md', 'wide'].includes(v),
     },
+    appearance: {
+      type: String,
+      default: 'default',
+      validator: (v) => ['default', 'secondary'].includes(v),
+    },
+    fullWidth: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -41,12 +49,19 @@ export default {
     disabled() {
       return !String(this.text || '').trim();
     },
+    baseVariant() {
+      return this.appearance === 'secondary' ? 'white' : 'secondary';
+    },
+    baseColor() {
+      return 'gray';
+    },
+    baseSize() {
+      if (this.size === 'sm') return 'xs';
+      if (this.size === 'wide') return 'md';
+      return 'sm';
+    },
     buttonClass() {
-      const base =
-        'inline-flex items-center justify-center flex-shrink-0 rounded bg-gray-200 hover:bg-gray-300 ' +
-        'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ' +
-        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-200';
-      return `${base} ${SIZE_CLASSES[this.size]}`;
+      return this.fullWidth ? 'w-full' : '';
     },
   },
   beforeUnmount() {

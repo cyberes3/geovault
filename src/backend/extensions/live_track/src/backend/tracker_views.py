@@ -53,6 +53,11 @@ from .models import (
     VISIBILITY_PUBLIC,
     VISIBILITY_SHARED,
 )
+from .internal_share_links import (
+    build_live_track_internal_share_url,
+    sync_track_internal_share,
+    visible_track_internal_share_for_user,
+)
 from .world_share_views import build_live_track_share_url
 from .validation import (
     PARAM_PRETTY_NAMES,
@@ -275,6 +280,8 @@ def _get_track_for_user_or_404(user, tracker_id):
         raise Http404
     if track.user_id == user.id:
         return track
+    if can_user_see_track(user, track):
+        return track
     has_track_subscription = LiveTrackSubscription.objects.filter(user=user, track=track).exists()
     if has_track_subscription and can_user_see_track(user, track):
         return track
@@ -359,6 +366,10 @@ def tracker_list_create(request):
             payload = track_to_response_metadata_only(t, include_secret=False, is_owner=True)
             payload["is_owner"] = True
             payload["subscriber_count"] = count_by_track.get(t.id, 0)
+            internal_share = visible_track_internal_share_for_user(t, request.user)
+            if internal_share:
+                payload["internal_share_id"] = internal_share.share_id
+                payload["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
             world_share = LiveTrackWorldShare.objects.filter(track=t).first()
             if world_share:
                 payload["world_share_id"] = world_share.share_id
@@ -371,6 +382,10 @@ def tracker_list_create(request):
             payload["owner_email"] = (t.user.email or "") if t.user_id else ""
             payload["visibility"] = t.visibility
             payload["subscribed_at"] = subscribed_at_by_track_id.get(t.id)
+            internal_share = visible_track_internal_share_for_user(t, request.user)
+            if internal_share:
+                payload["internal_share_id"] = internal_share.share_id
+                payload["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
             non_owned_out.append(TrackerListItemResponse.model_validate(payload).model_dump(exclude_none=True))
         non_owned_out.sort(key=lambda x: (x.get("subscribed_at") is None, x.get("subscribed_at") or 0, (x.get("name") or "").lower()))
         out.extend(non_owned_out)
@@ -415,6 +430,10 @@ def tracker_get_patch_delete(request, tracker_id):
         resp["is_owner"] = is_owner
         if not is_owner:
             resp["owner_email"] = (track.user.email or "") if track.user_id else ""
+        internal_share = visible_track_internal_share_for_user(track, request.user)
+        if internal_share:
+            resp["internal_share_id"] = internal_share.share_id
+            resp["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
         if is_owner:
             world_share = LiveTrackWorldShare.objects.filter(track=track).first()
             if world_share:
@@ -547,10 +566,14 @@ def tracker_post_settings(request, tracker_id):
     if update_fields:
         update_fields.append("updated_at")
         track.save(update_fields=update_fields)
+    internal_share = sync_track_internal_share(track)
     resp = track_to_response_metadata_only(track, include_secret=True, is_owner=True)
     resp["subscriber_count"] = LiveTrackSubscription.objects.filter(track=track).exclude(
         user_id=track.user_id
     ).count()
+    if internal_share:
+        resp["internal_share_id"] = internal_share.share_id
+        resp["internal_share_url"] = build_live_track_internal_share_url(request, internal_share.share_id)
     world_share = LiveTrackWorldShare.objects.filter(track=track).first()
     if world_share:
         resp["world_share_id"] = world_share.share_id

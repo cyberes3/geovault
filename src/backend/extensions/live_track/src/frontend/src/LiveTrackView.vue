@@ -972,7 +972,11 @@ export default {
             // Preserve list-only fields (is_owner, owner_email, visibility)
             is_owner: t.is_owner,
             owner_email: t.owner_email,
-            visibility: t.visibility
+            visibility: t.visibility,
+            internal_share_id: t.internal_share_id,
+            internal_share_url: t.internal_share_url,
+            world_share_id: t.world_share_id,
+            world_share_url: t.world_share_url
           });
         });
 
@@ -2532,9 +2536,8 @@ export default {
       }
       fetchIncomingShared();
       await fetchGroups();
-      fetchTrackers().finally(() => {
-        requestAnimationFrame(() => initMap());
-      });
+      await fetchTrackers();
+      requestAnimationFrame(() => initMap());
 
       function scheduleCenterOnSelectedTrack() {
         if (centerDebounceId) clearTimeout(centerDebounceId);

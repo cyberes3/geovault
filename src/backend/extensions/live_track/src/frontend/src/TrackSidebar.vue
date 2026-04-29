@@ -46,6 +46,7 @@
       :tracker-secret="effectiveTrackerSecret"
       :world-share-enabled="worldShareEnabled"
       :world-share-url="worldShareUrl"
+      :internal-share-url="internalShareUrl"
       :hidden="trackerHidden"
       :allow-group-reshare="allowGroupReshare"
       :hauk-domain="haukDomain"
@@ -139,6 +140,7 @@
         :tracker-secret="effectiveTrackerSecret"
         :world-share-enabled="worldShareEnabled"
         :world-share-url="worldShareUrl"
+        :internal-share-url="internalShareUrl"
         :hidden="trackerHidden"
         :allow-group-reshare="allowGroupReshare"
         :hauk-domain="haukDomain"
@@ -242,6 +244,7 @@ export default {
     const historyClearedThisSession = ref(false);
     const worldShareEnabled = ref(false);
     const worldShareUrl = ref('');
+    const internalShareUrl = ref('');
     const shareParamsWithWorld = ref(false);
     const trackerHidden = ref(false);
     const allowGroupReshare = ref(false);
@@ -418,6 +421,7 @@ export default {
         if (res?.data) {
           worldShareEnabled.value = !!(res.data.world_share_id);
           worldShareUrl.value = res.data.world_share_url || '';
+          internalShareUrl.value = res.data.internal_share_url || '';
         }
         if (recentWindowChanged) {
           emit('settings-changed', { trackId: props.track.id, refresh_map: true });
@@ -539,6 +543,7 @@ export default {
         sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
         worldShareEnabled.value = !!(t.world_share_id);
         worldShareUrl.value = t.world_share_url || '';
+        internalShareUrl.value = t.internal_share_url || '';
         trackerHidden.value = (t.settings && t.settings.hidden) === true;
         allowGroupReshare.value = (t.settings && t.settings.allow_group_reshare) === true;
         userPickedColor.value = true;
@@ -552,6 +557,7 @@ export default {
         sharedWithEmails.value = [];
         worldShareEnabled.value = false;
         worldShareUrl.value = '';
+        internalShareUrl.value = '';
         trackerHidden.value = false;
         allowGroupReshare.value = false;
       }
@@ -632,6 +638,7 @@ export default {
       trackerHidden,
       worldShareEnabled,
       worldShareUrl,
+      internalShareUrl,
       setWorldShareEnabled,
       onTrackerHiddenChange,
       onAllowGroupReshareChange,

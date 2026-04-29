@@ -103,6 +103,8 @@ class TrackerListItemResponse(BaseModel):
     is_owner: bool
     owner_email: Optional[str] = None
     subscriber_count: Optional[int] = None
+    internal_share_id: Optional[str] = None
+    internal_share_url: Optional[str] = None
     world_share_id: Optional[str] = None
     world_share_url: Optional[str] = None
     shared_with_emails: Optional[list[str]] = None
@@ -121,9 +123,24 @@ class GroupResponse(BaseModel):
     is_accepted: bool
     owner_email: Optional[str] = None
     shared_with_emails: Optional[list[str]] = None
+    internal_share_id: Optional[str] = None
+    internal_share_url: Optional[str] = None
     world_share_id: Optional[str] = None
     world_share_url: Optional[str] = None
     track_ids: list[str] = Field(default_factory=list)
+
+
+class InternalShareInfoResponse(BaseModel):
+    share_type: Literal["live_track", "live_track_group"]
+    track_id: Optional[str] = None
+    track_name: Optional[str] = None
+    group_id: Optional[str] = None
+    group_name: Optional[str] = None
+    created_at: str
+
+
+class ShareDiscoveryResponse(InternalShareInfoResponse):
+    share_access: Literal["world", "internal"]
 
 
 class AvailableToAddItemResponse(BaseModel):

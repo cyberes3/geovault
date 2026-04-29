@@ -188,8 +188,7 @@ import { ensureArrowImage } from './trackArrowMap.js';
 import { trackToParamsModalShape } from './trackParamsShape.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
 import { useTileSources } from './useTileSources.js';
-
-const BASE_URL = '/api/extensions/live-track/world/share';
+import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls.js';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
 const LINES_LAYER_ID = 'world-share-lines-layer';
@@ -217,6 +216,36 @@ function getShareIdFromUrl() {
   return params.get('id');
 }
 
+async function fetchShareJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    return { ok: false, status: response.status, data: null };
+  }
+  return { ok: true, status: response.status, data: await response.json() };
+}
+
+async function resolveShareSource(shareId) {
+  const infoResult = await fetchShareJson(shareInfoUrl(shareId));
+  if (!infoResult.ok) {
+    if (isShareNotAvailableStatus(infoResult.status)) return null;
+    throw new Error('Failed to load share');
+  }
+
+  const dataUrl = shareDataUrlForInfo(shareId, infoResult.data);
+  const dataResult = await fetchShareJson(dataUrl);
+  if (!dataResult.ok) {
+    if (isShareNotAvailableStatus(dataResult.status)) throw new Error('Invalid share link');
+    throw new Error('Failed to load share');
+  }
+
+  return {
+    sourceMode: infoResult.data?.share_access || SHARE_SOURCE_MODES.WORLD,
+    dataUrl,
+    info: infoResult.data,
+    data: dataResult.data
+  };
+}
+
 export default {
   name: 'WorldShareView',
   components: { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar, MapTrackList, MobileMapDrawer },
@@ -238,6 +267,8 @@ export default {
     const selectedId = ref(null);
     const followLocked = ref(false);
     const shareIdRef = ref(null);
+    const sourceMode = ref(null);
+    const shareDataUrl = ref('');
     let map = null;
     let pollTimerId = null;
 
@@ -694,23 +725,19 @@ export default {
       }
       shareIdRef.value = shareId;
       try {
-        const [infoRes, _] = await Promise.all([
-          fetch(`${BASE_URL}/${encodeURIComponent(shareId)}/info/`),
+        const [resolved] = await Promise.all([
+          resolveShareSource(shareId),
           fetchTileSources()
         ]);
-        if (!infoRes.ok) {
+        if (!resolved) {
           error.value = 'Invalid share link';
           loading.value = false;
           return;
         }
-        const info = await infoRes.json();
-        const dataRes = await fetch(`${BASE_URL}/${encodeURIComponent(shareId)}/`);
-        if (!dataRes.ok) {
-          error.value = 'Invalid share link';
-          loading.value = false;
-          return;
-        }
-        const data = await dataRes.json();
+        sourceMode.value = resolved.sourceMode;
+        shareDataUrl.value = resolved.dataUrl;
+        const info = resolved.info;
+        const data = resolved.data;
         if (info.share_type === 'live_track_group') {
           groupName.value = info.group_name || data.group_name || 'Shared group';
           const tracks = Array.isArray(data.tracks) ? data.tracks : [];
@@ -736,11 +763,11 @@ export default {
 
         if (!error.value && shareIdRef.value) {
           pollTimerId = setInterval(async () => {
-            if (!shareIdRef.value) return;
+            if (!shareIdRef.value || !shareDataUrl.value) return;
             try {
-              const res = await fetch(`${BASE_URL}/${encodeURIComponent(shareIdRef.value)}/`);
-              if (!res.ok) return;
-              const data = await res.json();
+              const result = await fetchShareJson(shareDataUrl.value);
+              if (!result.ok) return;
+              const data = result.data;
               if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
                 groupTracks.value = data.tracks.map((t) => normalizeTrackForWorld(t));
               } else {
@@ -754,7 +781,7 @@ export default {
           }, POLL_INTERVAL_MS);
         }
       } catch (e) {
-        error.value = 'Failed to load share';
+        error.value = e?.message === 'Invalid share link' ? 'Invalid share link' : 'Failed to load share';
         loading.value = false;
       }
     });
@@ -941,6 +968,7 @@ export default {
       showParamsSidebar,
       paramsTrack,
       selectedId,
+      sourceMode,
       selectedItemLabel,
       visibleTracks,
       followLocked,

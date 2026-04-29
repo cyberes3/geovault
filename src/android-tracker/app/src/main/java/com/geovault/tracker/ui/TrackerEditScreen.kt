@@ -1,16 +1,15 @@
 package com.geovault.tracker.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +31,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultSelectField
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -385,6 +387,7 @@ private fun TrackerCreateFormContent(
     onSetAsSelectedChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     val colorPreview = remember(dialog.colorDraft, context) {
         resolveTrackerColorPreview(dialog.colorDraft)
     }
@@ -491,6 +494,7 @@ private fun TrackerEditFormContent(
     onToggleSharedEmail: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     val colorPreview = remember(dialog.colorDraft, context) {
         resolveTrackerColorPreview(dialog.colorDraft)
     }
@@ -616,123 +620,138 @@ private fun TrackerEditFormContent(
                 shape = RoundedCornerShape(8.dp),
                 backgroundColor = sharingSectionBackground,
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            EditVisibilityPill(
-                                label = stringResource(R.string.trackers_visibility_private),
-                                selected = dialog.visibilityDraft == TrackerShareVisibility.PRIVATE,
-                                onClick = { onVisibilityChanged(TrackerShareVisibility.PRIVATE) },
-                                enabled = !isSaving,
-                                modifier = Modifier.weight(1f),
-                            )
-                            EditVisibilityPill(
-                                label = stringResource(R.string.trackers_visibility_shared),
-                                selected = dialog.visibilityDraft == TrackerShareVisibility.SHARED,
-                                onClick = { onVisibilityChanged(TrackerShareVisibility.SHARED) },
-                                enabled = !isSaving,
-                                modifier = Modifier.weight(1f),
-                            )
-                            EditVisibilityPill(
-                                label = stringResource(R.string.trackers_visibility_public),
-                                selected = dialog.visibilityDraft == TrackerShareVisibility.PUBLIC,
-                                onClick = { onVisibilityChanged(TrackerShareVisibility.PUBLIC) },
-                                enabled = !isSaving,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Text(
-                            text = when (dialog.visibilityDraft) {
-                                TrackerShareVisibility.PRIVATE ->
-                                    stringResource(R.string.trackers_edit_visibility_help_private)
-                                TrackerShareVisibility.SHARED ->
-                                    stringResource(R.string.trackers_edit_visibility_help_shared)
-                                TrackerShareVisibility.PUBLIC ->
-                                    stringResource(R.string.trackers_edit_visibility_help_public)
-                            },
-                            style = MaterialTheme.typography.caption,
-                            color = GeoVaultColorTokens.TextSecondary,
-                        )
-                    }
-                    when (dialog.visibilityDraft) {
-                        TrackerShareVisibility.SHARED,
-                        TrackerShareVisibility.PUBLIC -> {
-                            if (dialog.visibilityDraft == TrackerShareVisibility.SHARED) {
-                                GeoVaultSecondaryButton(
-                                    text = stringResource(R.string.trackers_edit_pick_users),
-                                    onClick = {
-                                        shareUserPickerSearch = ""
-                                        onReloadShareRecipients()
-                                        showPickUsersDialog = true
-                                    },
+                Box {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                EditVisibilityPill(
+                                    label = stringResource(R.string.trackers_visibility_private),
+                                    selected = dialog.visibilityDraft == TrackerShareVisibility.PRIVATE,
+                                    onClick = { onVisibilityChanged(TrackerShareVisibility.PRIVATE) },
                                     enabled = !isSaving,
-                                    tooltip = stringResource(R.string.tooltip_sharing_pick_users),
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.weight(1f),
                                 )
-                                Text(
-                                    text = pluralStringResource(
-                                        R.plurals.trackers_edit_shared_with_user_count,
-                                        sharedRecipientCount,
-                                        sharedRecipientCount,
-                                    ),
-                                    style = MaterialTheme.typography.caption,
-                                    color = GeoVaultColorTokens.TextSecondary,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                GeoVaultToggleHelpCard(
-                                    checked = dialog.shareParamsWithRecipientsDraft,
-                                    onCheckedChange = onShareParamsWithRecipientsChanged,
-                                    title = stringResource(R.string.trackers_field_share_params_with_recipients),
-                                    helpText = stringResource(R.string.trackers_edit_share_params_recipients_help),
+                                EditVisibilityPill(
+                                    label = stringResource(R.string.trackers_visibility_shared),
+                                    selected = dialog.visibilityDraft == TrackerShareVisibility.SHARED,
+                                    onClick = { onVisibilityChanged(TrackerShareVisibility.SHARED) },
                                     enabled = !isSaving,
+                                    modifier = Modifier.weight(1f),
                                 )
-                                GeoVaultToggleHelpCard(
-                                    checked = dialog.allowGroupReshareDraft,
-                                    onCheckedChange = onAllowGroupReshareChanged,
-                                    title = stringResource(R.string.trackers_field_allow_group_reshare),
-                                    helpText = stringResource(R.string.trackers_edit_allow_groups_help),
+                                EditVisibilityPill(
+                                    label = stringResource(R.string.trackers_visibility_public),
+                                    selected = dialog.visibilityDraft == TrackerShareVisibility.PUBLIC,
+                                    onClick = { onVisibilityChanged(TrackerShareVisibility.PUBLIC) },
                                     enabled = !isSaving,
+                                    modifier = Modifier.weight(1f),
                                 )
                             }
-                            GeoVaultToggleHelpCard(
-                                checked = dialog.worldShareEnabledDraft,
-                                onCheckedChange = onWorldShareEnabledChanged,
-                                title = stringResource(R.string.trackers_field_world_share_enabled),
-                                helpText = stringResource(R.string.trackers_edit_world_share_help),
-                                enabled = !isSaving && !dialog.isWorldShareLinkLoading,
+                            Text(
+                                text = when (dialog.visibilityDraft) {
+                                    TrackerShareVisibility.PRIVATE ->
+                                        stringResource(R.string.trackers_edit_visibility_help_private)
+                                    TrackerShareVisibility.SHARED ->
+                                        stringResource(R.string.trackers_edit_visibility_help_shared)
+                                    TrackerShareVisibility.PUBLIC ->
+                                        stringResource(R.string.trackers_edit_visibility_help_public)
+                                },
+                                style = MaterialTheme.typography.caption,
+                                color = GeoVaultColorTokens.TextSecondary,
                             )
-                            if (dialog.worldShareEnabledDraft) {
+                        }
+                        when (dialog.visibilityDraft) {
+                            TrackerShareVisibility.SHARED,
+                            TrackerShareVisibility.PUBLIC -> {
+                                if (dialog.visibilityDraft == TrackerShareVisibility.SHARED) {
+                                    GeoVaultSecondaryButton(
+                                        text = stringResource(R.string.trackers_edit_pick_users),
+                                        onClick = {
+                                            shareUserPickerSearch = ""
+                                            onReloadShareRecipients()
+                                            showPickUsersDialog = true
+                                        },
+                                        enabled = !isSaving,
+                                        tooltip = stringResource(R.string.tooltip_sharing_pick_users),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Text(
+                                        text = pluralStringResource(
+                                            R.plurals.trackers_edit_shared_with_user_count,
+                                            sharedRecipientCount,
+                                            sharedRecipientCount,
+                                        ),
+                                        style = MaterialTheme.typography.caption,
+                                        color = GeoVaultColorTokens.TextSecondary,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    GeoVaultToggleHelpCard(
+                                        checked = dialog.shareParamsWithRecipientsDraft,
+                                        onCheckedChange = onShareParamsWithRecipientsChanged,
+                                        title = stringResource(R.string.trackers_field_share_params_with_recipients),
+                                        helpText = stringResource(R.string.trackers_edit_share_params_recipients_help),
+                                        enabled = !isSaving,
+                                    )
+                                    GeoVaultToggleHelpCard(
+                                        checked = dialog.allowGroupReshareDraft,
+                                        onCheckedChange = onAllowGroupReshareChanged,
+                                        title = stringResource(R.string.trackers_field_allow_group_reshare),
+                                        helpText = stringResource(R.string.trackers_edit_allow_groups_help),
+                                        enabled = !isSaving,
+                                    )
+                                }
                                 GeoVaultToggleHelpCard(
-                                    checked = dialog.shareParamsWithWorldDraft,
-                                    onCheckedChange = onShareParamsWithWorldChanged,
-                                    title = stringResource(R.string.trackers_field_share_params_with_world),
-                                    helpText = stringResource(R.string.trackers_edit_share_params_world_help),
+                                    checked = dialog.worldShareEnabledDraft,
+                                    onCheckedChange = onWorldShareEnabledChanged,
+                                    title = stringResource(R.string.trackers_field_world_share_enabled),
+                                    helpText = stringResource(R.string.trackers_edit_world_share_help),
                                     enabled = !isSaving && !dialog.isWorldShareLinkLoading,
                                 )
-                                if (dialog.isWorldShareLinkLoading) {
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        elevation = 0.dp,
-                                        border = BorderStroke(1.dp, GeoVaultColorTokens.MainBlue),
-                                        backgroundColor = Color.Transparent,
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            GeoVaultLoadingSpinner(spinnerSize = 20.dp)
-                                        }
-                                    }
-                                } else {
+                                Text(
+                                    text = stringResource(R.string.trackers_edit_internal_share_help),
+                                    style = MaterialTheme.typography.caption,
+                                    color = GeoVaultColorTokens.TextSecondary,
+                                )
+                                GeoVaultSecondaryButton(
+                                    text = stringResource(R.string.trackers_action_copy_internal_share_link),
+                                    onClick = {
+                                        copyShareLink(
+                                            context = context,
+                                            clipboardHelper = clipboardHelper,
+                                            shareUrl = dialog.internalShareUrlDraft,
+                                            label = context.getString(R.string.internal_share_link_clip_label),
+                                        )
+                                    },
+                                    enabled = !isSaving && !dialog.internalShareUrlDraft.isNullOrBlank(),
+                                    tooltip = stringResource(R.string.tooltip_edit_tracker_copy_internal_link),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    centeredContent = {
+                                        Icon(
+                                            imageVector = Icons.Filled.ContentCopy,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = stringResource(R.string.trackers_action_copy_internal_share_link),
+                                            style = MaterialTheme.typography.button,
+                                        )
+                                    },
+                                )
+                                if (dialog.worldShareEnabledDraft) {
+                                    GeoVaultToggleHelpCard(
+                                        checked = dialog.shareParamsWithWorldDraft,
+                                        onCheckedChange = onShareParamsWithWorldChanged,
+                                        title = stringResource(R.string.trackers_field_share_params_with_world),
+                                        helpText = stringResource(R.string.trackers_edit_share_params_world_help),
+                                        enabled = !isSaving && !dialog.isWorldShareLinkLoading,
+                                    )
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -740,7 +759,12 @@ private fun TrackerEditFormContent(
                                         GeoVaultSecondaryButton(
                                             text = stringResource(R.string.trackers_action_copy_world_share_link),
                                             onClick = {
-                                                copyWorldShareLink(context, dialog.worldShareUrlDraft)
+                                                copyShareLink(
+                                                    context = context,
+                                                    clipboardHelper = clipboardHelper,
+                                                    shareUrl = dialog.worldShareUrlDraft,
+                                                    label = context.getString(R.string.world_share_link_clip_label),
+                                                )
                                             },
                                             enabled = !isSaving && !dialog.worldShareUrlDraft.isNullOrBlank(),
                                             tooltip = stringResource(R.string.tooltip_edit_tracker_copy_world_link),
@@ -782,9 +806,10 @@ private fun TrackerEditFormContent(
                                     }
                                 }
                             }
+                            TrackerShareVisibility.PRIVATE -> Unit
                         }
-                        TrackerShareVisibility.PRIVATE -> Unit
                     }
+                    SharingSectionSavingOverlay(isSaving = dialog.isWorldShareLinkLoading)
                 }
             }
         }
@@ -863,6 +888,23 @@ private fun TrackerEditFormContent(
 }
 
 @Composable
+private fun BoxScope.SharingSectionSavingOverlay(isSaving: Boolean) {
+    if (!isSaving) return
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .background(MaterialTheme.colors.surface.copy(alpha = 0.72f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {},
+        contentAlignment = Alignment.Center,
+    ) {
+        GeoVaultLoadingSpinner(spinnerSize = 28.dp)
+    }
+}
+
+@Composable
 private fun EditVisibilityPill(
     label: String,
     selected: Boolean,
@@ -888,12 +930,22 @@ private fun EditVisibilityPill(
     }
 }
 
-private fun copyWorldShareLink(context: Context, worldShareUrl: String?) {
-    if (worldShareUrl.isNullOrBlank()) return
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-    clipboard.setPrimaryClip(
-        ClipData.newPlainText(context.getString(R.string.world_share_link_clip_label), worldShareUrl),
-    )
+private fun copyShareLink(
+    context: Context,
+    clipboardHelper: ClipboardCopyHelper,
+    shareUrl: String?,
+    label: String,
+) {
+    if (shareUrl.isNullOrBlank()) return
+    clipboardHelper.copyText(resolveShareUrl(context, shareUrl), label)
+}
+
+private fun resolveShareUrl(context: Context, shareUrl: String): String {
+    val trimmed = shareUrl.trim()
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+    val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+    if (baseUrl.isBlank()) return trimmed
+    return if (trimmed.startsWith("/")) "$baseUrl$trimmed" else "$baseUrl/$trimmed"
 }
 
 private fun shareWorldShareLink(context: Context, worldShareUrl: String?) {

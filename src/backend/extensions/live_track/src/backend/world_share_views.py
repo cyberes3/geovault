@@ -13,7 +13,9 @@ from django.views.decorators.http import require_http_methods
 from api.views.sharing.utils import build_client_share_url
 
 from .helpers import track_to_response
+from .internal_share_links import resolve_internal_share_info
 from .models import LiveTrack, LiveTrackGroupMember, LiveTrackGroupWorldShare, LiveTrackWorldShare
+from .validation import ShareDiscoveryResponse
 
 _SHARE_HASH_PATH = "/#/extensions/live-track/share?id="
 
@@ -34,6 +36,53 @@ def build_live_track_share_url(request, share_id: str) -> str:
 def build_live_track_group_share_url(request, share_id: str) -> str:
     """Return the client-resolved URL for the group world share."""
     return build_client_share_url(f"{_SHARE_HASH_PATH}{share_id}")
+
+
+def resolve_live_track_share_info(share_id: str, user) -> dict | None:
+    """Resolve standalone share metadata across world and internal live-track shares."""
+    if not _validate_share_id(share_id):
+        return None
+
+    track_share = LiveTrackWorldShare.objects.filter(share_id=share_id).select_related("track").first()
+    if track_share:
+        track = track_share.track
+        return {
+            "share_access": "world",
+            "share_type": "live_track",
+            "track_id": str(track.id),
+            "track_name": track.name,
+            "created_at": track_share.created_at.isoformat(),
+        }
+
+    group_share = LiveTrackGroupWorldShare.objects.filter(share_id=share_id).select_related("group").first()
+    if group_share:
+        group = group_share.group
+        return {
+            "share_access": "world",
+            "share_type": "live_track_group",
+            "group_id": str(group.id),
+            "group_name": group.name,
+            "created_at": group_share.created_at.isoformat(),
+        }
+
+    internal_payload = resolve_internal_share_info(share_id, user)
+    if internal_payload:
+        return {
+            **internal_payload,
+            "share_access": "internal",
+        }
+
+    return None
+
+
+@require_http_methods(["GET"])
+def share_info(request, share_id):
+    """GET share/<share_id>/info/ - standalone share discovery for world and internal links."""
+    payload = resolve_live_track_share_info(share_id, request.user)
+    if payload is None:
+        return JsonResponse({"error": "Invalid share link", "code": 404}, status=404)
+    response = ShareDiscoveryResponse.model_validate(payload)
+    return JsonResponse(response.model_dump(exclude_none=True))
 
 
 @require_http_methods(["GET"])

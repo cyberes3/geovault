@@ -1,5 +1,6 @@
 package com.geovault.tracker.ui
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,11 +13,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
@@ -38,6 +43,8 @@ fun SharedTrackerEditScreen(
     onLeaveShare: () -> Unit,
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    val context = LocalContext.current
+    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
         onBack = {
@@ -72,6 +79,24 @@ fun SharedTrackerEditScreen(
                 ),
                 style = MaterialTheme.typography.body2,
             )
+            Text(
+                text = stringResource(R.string.trackers_edit_internal_share_help),
+                style = MaterialTheme.typography.caption,
+            )
+            GeoVaultSecondaryButton(
+                text = stringResource(R.string.trackers_action_copy_internal_share_link),
+                onClick = {
+                    copySharedItemLink(
+                        context = context,
+                        clipboardHelper = clipboardHelper,
+                        shareUrl = tracker.internal_share_url,
+                        label = context.getString(R.string.internal_share_link_clip_label),
+                    )
+                },
+                enabled = !tracker.internal_share_url.isNullOrBlank(),
+                tooltip = stringResource(R.string.tooltip_edit_tracker_copy_internal_link),
+                modifier = Modifier.fillMaxWidth(),
+            )
             if (canUnsubscribe) {
                 SharedDestructiveActionRow(
                     label = stringResource(R.string.trackers_action_unsubscribe),
@@ -100,6 +125,8 @@ fun SharedGroupEditScreen(
     onLeaveGroup: () -> Unit,
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    val context = LocalContext.current
+    val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
         onBack = {
@@ -134,6 +161,24 @@ fun SharedGroupEditScreen(
                 ),
                 style = MaterialTheme.typography.body2,
             )
+            Text(
+                text = stringResource(R.string.groups_edit_internal_share_help),
+                style = MaterialTheme.typography.caption,
+            )
+            GeoVaultSecondaryButton(
+                text = stringResource(R.string.trackers_action_copy_internal_share_link),
+                onClick = {
+                    copySharedItemLink(
+                        context = context,
+                        clipboardHelper = clipboardHelper,
+                        shareUrl = group.internal_share_url,
+                        label = context.getString(R.string.internal_share_link_clip_label),
+                    )
+                },
+                enabled = !group.internal_share_url.isNullOrBlank(),
+                tooltip = stringResource(R.string.tooltip_group_detail_copy_internal_link),
+                modifier = Modifier.fillMaxWidth(),
+            )
             SharedDestructiveActionRow(
                 label = stringResource(R.string.trackers_action_leave_group),
                 isPending = isLeavePending,
@@ -142,6 +187,24 @@ fun SharedGroupEditScreen(
             )
         }
     }
+}
+
+private fun copySharedItemLink(
+    context: Context,
+    clipboardHelper: ClipboardCopyHelper,
+    shareUrl: String?,
+    label: String,
+) {
+    if (shareUrl.isNullOrBlank()) return
+    clipboardHelper.copyText(resolveSharedItemUrl(context, shareUrl), label)
+}
+
+private fun resolveSharedItemUrl(context: Context, shareUrl: String): String {
+    val trimmed = shareUrl.trim()
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+    val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+    if (baseUrl.isBlank()) return trimmed
+    return if (trimmed.startsWith("/")) "$baseUrl$trimmed" else "$baseUrl/$trimmed"
 }
 
 @Composable

@@ -37,6 +37,7 @@
         :loading-users="loadingUsers"
         :world-share-enabled="worldShareEnabled"
         :full-world-share-url="fullWorldShareUrl"
+        :full-internal-share-url="fullInternalShareUrl"
         :share-params-with-recipients="shareParamsWithRecipients"
         :share-params-with-world="shareParamsWithWorld"
         :allow-group-reshare="allowGroupReshare"
@@ -49,6 +50,12 @@
         @update:allow-group-reshare="$emit('update:allowGroupReshare', $event)"
       />
     </template>
+    <SharingSection
+      v-else-if="fullInternalShareUrl"
+      variant="track"
+      read-only
+      :full-internal-share-url="fullInternalShareUrl"
+    />
     <div class="space-y-2">
       <label class="text-sm font-medium text-gray-700">Recent data filter</label>
       <select
@@ -140,6 +147,7 @@ export default {
     trackerSecret: { type: String, default: '' },
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },
+    internalShareUrl: { type: String, default: '' },
     shareParamsWithWorld: { type: Boolean, default: false },
     hidden: { type: Boolean, default: false },
     allowGroupReshare: { type: Boolean, default: false },
@@ -151,6 +159,15 @@ export default {
     const fullWorldShareUrl = computed(() => {
       const path = props.worldShareUrl || '';
       if (!path) return '';
+      if (typeof window !== 'undefined' && window.location && window.location.origin) {
+        return `${window.location.origin}${path}`;
+      }
+      return path;
+    });
+    const fullInternalShareUrl = computed(() => {
+      const path = props.internalShareUrl || '';
+      if (!path) return '';
+      if (/^https?:\/\//i.test(path)) return path;
       if (typeof window !== 'undefined' && window.location && window.location.origin) {
         return `${window.location.origin}${path}`;
       }
@@ -185,7 +202,7 @@ export default {
       { immediate: true }
     );
 
-    return { availableUsersForSelect, sharedWithEmailsForSelect, loadingUsers, fullWorldShareUrl };
+    return { availableUsersForSelect, sharedWithEmailsForSelect, loadingUsers, fullWorldShareUrl, fullInternalShareUrl };
   }
 };
 </script>

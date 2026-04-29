@@ -35,6 +35,7 @@ sealed interface TrackersGroupsDialog {
         val allowGroupReshareDraft: Boolean = false,
         val worldShareEnabledDraft: Boolean = false,
         val shareParamsWithWorldDraft: Boolean = false,
+        val internalShareUrlDraft: String? = null,
         val worldShareUrlDraft: String? = null,
         val isWorldShareLinkLoading: Boolean = false,
     ) : TrackersGroupsDialog
@@ -44,6 +45,7 @@ sealed interface TrackersGroupsDialog {
         val visibilityDraft: GroupShareVisibility = GroupShareVisibility.PRIVATE,
         val sharedEmailsDraft: String = "",
         val worldShareEnabledDraft: Boolean = false,
+        val internalShareUrlDraft: String? = null,
         val worldShareUrlDraft: String? = null,
         val isWorldShareLinkLoading: Boolean = false,
         val hiddenDraft: Boolean = false,

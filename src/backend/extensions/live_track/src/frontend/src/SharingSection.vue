@@ -2,7 +2,7 @@
   <div class="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/50">
     <h3 class="text-sm font-semibold text-gray-800">Sharing</h3>
     <slot />
-    <div class="space-y-2">
+    <div v-if="!readOnly" class="space-y-2">
       <label class="text-sm font-medium text-gray-700">{{ visibilityLabel }}</label>
       <select
         :value="visibility"
@@ -15,7 +15,7 @@
         <option value="public">Public (all authenticated users)</option>
       </select>
     </div>
-    <div v-if="visibility === 'shared'" class="space-y-2">
+    <div v-if="!readOnly && visibility === 'shared'" class="space-y-2">
       <ScrollingSelect
         label="Shared with (click to add or remove)"
         :items="sharedWithSelectItems"
@@ -27,7 +27,7 @@
         @select="onSharedWithSelect"
       />
     </div>
-    <template v-if="variant === 'track'">
+    <template v-if="!readOnly && variant === 'track'">
       <div class="space-y-2">
         <div class="flex items-center gap-3">
           <ToggleButton
@@ -55,7 +55,7 @@
         <p class="text-xs text-gray-500">When on, people you share this tracker with can see extended parameters (e.g. in Latest params). Serial is never shared.</p>
       </div>
     </template>
-    <div class="space-y-2">
+    <div v-if="!readOnly" class="space-y-2">
       <div class="flex items-center gap-3">
         <ToggleButton
           :model-value="worldShareEnabled"
@@ -68,7 +68,17 @@
       </div>
       <p class="text-xs text-gray-500">{{ worldShareDescription }}</p>
     </div>
-    <template v-if="variant === 'track' && worldShareEnabled">
+    <div v-if="fullInternalShareUrl" class="space-y-2">
+      <p class="text-xs text-gray-500">{{ internalShareDescription }}</p>
+      <CopyTextButton
+        :text="fullInternalShareUrl"
+        label="Copy Internal Link"
+        size="wide"
+        appearance="secondary"
+        full-width
+      />
+    </div>
+    <template v-if="!readOnly && variant === 'track' && worldShareEnabled">
       <div class="space-y-2">
         <div class="flex items-center gap-3">
           <ToggleButton
@@ -83,7 +93,7 @@
         <p class="text-xs text-gray-500">When on, anyone with the world share link can see extended parameters. Serial is never shared.</p>
       </div>
     </template>
-    <div v-if="worldShareEnabled && fullWorldShareUrl" class="flex gap-2 items-center">
+    <div v-if="!readOnly && worldShareEnabled && fullWorldShareUrl" class="flex gap-2 items-center">
       <input
         :value="fullWorldShareUrl"
         readonly
@@ -113,6 +123,9 @@ export default {
     worldShareUrl: { type: String, default: '' },
     /** Full URL to show and copy (e.g. origin + worldShareUrl). Parent should pass this. */
     fullWorldShareUrl: { type: String, default: '' },
+    /** Full authenticated share URL available to users who already have access. */
+    fullInternalShareUrl: { type: String, default: '' },
+    readOnly: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false },
     shareParamsWithRecipients: { type: Boolean, default: false },
     shareParamsWithWorld: { type: Boolean, default: false },
@@ -133,6 +146,11 @@ export default {
       return this.variant === 'group'
         ? "When on, anyone with the link can view this group's tracks on a read-only map (no login required)."
         : 'When on, anyone with the link can view this tracker on a read-only map (no login required).';
+    },
+    internalShareDescription() {
+      return this.variant === 'group'
+        ? 'This internal link can be used by GeoVault users who already have access to this group through sharing or public visibility.'
+        : 'This internal link can be used by GeoVault users who already have access to this tracker through sharing or public visibility.';
     },
   },
   methods: {

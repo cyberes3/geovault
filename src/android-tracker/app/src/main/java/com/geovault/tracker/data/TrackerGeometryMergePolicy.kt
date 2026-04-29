@@ -29,6 +29,8 @@ object TrackerGeometryMergePolicy {
             share_params_with_world = incoming.share_params_with_world ?: existing.share_params_with_world,
             owner_email = incoming.owner_email ?: existing.owner_email,
             subscriber_count = incoming.subscriber_count ?: existing.subscriber_count,
+            internal_share_id = incoming.internal_share_id ?: existing.internal_share_id,
+            internal_share_url = incoming.internal_share_url ?: existing.internal_share_url,
             world_share_id = incoming.world_share_id ?: existing.world_share_id,
             world_share_url = incoming.world_share_url ?: existing.world_share_url,
             shared_with_emails = incoming.shared_with_emails ?: existing.shared_with_emails,

@@ -33,6 +33,11 @@ from .helpers import (
     visible_group_track_ids_for_user,
 )
 from .validation import GroupResponse
+from .internal_share_links import (
+    build_live_track_group_internal_share_url,
+    sync_group_internal_share,
+    visible_group_internal_share_for_user,
+)
 from .world_share_views import build_live_track_group_share_url
 
 User = get_user_model()
@@ -87,6 +92,11 @@ def _group_payload(group, request_user, include_track_ids=True, accepted_group_i
     }
     if not is_owner and group.user_id:
         out["owner_email"] = (group.user.email or "") if group.user_id else ""
+    internal_share = visible_group_internal_share_for_user(group, request_user)
+    if internal_share:
+        out["internal_share_id"] = internal_share.share_id
+        if request:
+            out["internal_share_url"] = build_live_track_group_internal_share_url(request, internal_share.share_id)
     if is_owner:
         emails = list(
             LiveTrackGroupShare.objects.filter(group=group)
@@ -300,6 +310,7 @@ def group_get_patch_delete(request, group_id):
                 )
         if len(update_fields) > 1:
             group.save(update_fields=update_fields)
+        sync_group_internal_share(group)
         return JsonResponse(_group_payload(group, request.user, request=request))
     if request.method == "DELETE":
         if not _group_can_edit(group, request.user):

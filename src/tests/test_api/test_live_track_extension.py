@@ -15,13 +15,19 @@ from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
 from extensions.live_track.src.backend.models import (
     LiveTrack,
     LiveTrackGroup,
+    LiveTrackGroupInternalShare,
     LiveTrackGroupMember,
     LiveTrackGroupShare,
     LiveTrackGroupSubscription,
     LiveTrackGroupWorldShare,
+    LiveTrackInternalShare,
     LiveTrackWorldShare,
     LiveTrackShare,
     LiveTrackSubscription,
+)
+from extensions.live_track.src.backend.internal_share_links import (
+    build_live_track_group_internal_share_url,
+    build_live_track_internal_share_url,
 )
 from extensions.live_track.src.backend.validation import get_ingress_body_template
 from extensions.live_track.src.backend.world_share_views import (
@@ -60,21 +66,26 @@ class TestLiveTrackWorldShareUrlBuilder(TestCase):
     """Test Live Track extension world-share URL generation."""
 
     def test_share_urls_are_relative_and_ignore_internal_proxy_host(self):
-        """World-share links must not leak backend/reverse-proxy hosts."""
+        """Share links must not leak backend/reverse-proxy hosts."""
         share_id = "f8a918ab-7f53-4ef3-be11-a957c40ebd02"
         request = RequestFactory().get(
             "/api/extensions/live-track/trackers/example/settings/",
             HTTP_HOST="172.0.2.102",
         )
-        expected_url = f"/#/extensions/live-track/share?id={share_id}"
+        expected_world_url = f"/#/extensions/live-track/share?id={share_id}"
+        expected_internal_url = expected_world_url
 
         track_url = build_live_track_share_url(request, share_id)
         group_url = build_live_track_group_share_url(request, share_id)
+        internal_track_url = build_live_track_internal_share_url(request, share_id)
+        internal_group_url = build_live_track_group_internal_share_url(request, share_id)
 
-        self.assertEqual(track_url, expected_url)
-        self.assertEqual(group_url, expected_url)
-        self.assertNotIn("172.0.2.102", track_url)
-        self.assertNotIn("172.0.2.102", group_url)
+        self.assertEqual(track_url, expected_world_url)
+        self.assertEqual(group_url, expected_world_url)
+        self.assertEqual(internal_track_url, expected_internal_url)
+        self.assertEqual(internal_group_url, expected_internal_url)
+        for url in (track_url, group_url, internal_track_url, internal_group_url):
+            self.assertNotIn("172.0.2.102", url)
 
 
 class TestLiveTrackAPI(TestCase):
@@ -450,6 +461,441 @@ class TestLiveTrackAPI(TestCase):
         self.assertTrue(
             LiveTrackShare.objects.filter(track=track, shared_with=self.other_user).exists()
         )
+        with _patch_live_track_enabled():
+            discovery = self.client.get(f"/api/extensions/live-track/share/{data['world_share_id']}/info/")
+        self.assertEqual(discovery.status_code, 200)
+        self.assertEqual(discovery.json()["share_access"], "world")
+        self.assertEqual(discovery.json()["share_type"], "live_track")
+
+    def test_tracker_internal_share_lifecycle_and_resolution(self):
+        """Shared/public tracker visibility creates a stable authenticated internal share link."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Internal Link Track"}),
+                content_type="application/json",
+            )
+            track_id = create_resp.json()["id"]
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("internal_share_id", data)
+        self.assertIn("internal_share_url", data)
+        self.assertNotIn("world_share_id", data)
+        share_id = data["internal_share_id"]
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertTrue(LiveTrackInternalShare.objects.filter(track=track, share_id=share_id).exists())
+
+        with _patch_live_track_enabled():
+            repeat = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"visibility": "public", "shared_with_emails": []}),
+                content_type="application/json",
+            )
+        self.assertEqual(repeat.status_code, 200)
+        self.assertEqual(repeat.json()["internal_share_id"], share_id)
+
+        self.client.logout()
+        with _patch_live_track_enabled():
+            unauthenticated_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+        self.assertEqual(unauthenticated_discovery.status_code, 404)
+        self.assertEqual(unauthenticated_discovery.json()["error"], "Invalid share link")
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            detail = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+            resolved = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["internal_share_id"], share_id)
+        self.assertNotIn("world_share_id", detail.json())
+        self.assertEqual(resolved.status_code, 200)
+        self.assertEqual(resolved.json()["share_type"], "live_track")
+        self.assertEqual(resolved.json()["track_id"], track_id)
+        with _patch_live_track_enabled():
+            standalone_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            standalone_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(standalone_data.status_code, 200)
+        self.assertEqual(standalone_data.json()["id"], track_id)
+        self.assertNotIn("tracker_secret", standalone_data.json())
+        self.assertEqual(standalone_discovery.status_code, 200)
+        self.assertEqual(standalone_discovery.json()["share_access"], "internal")
+        self.assertEqual(standalone_discovery.json()["share_type"], "live_track")
+        self.assertEqual(standalone_discovery.json()["track_id"], track_id)
+        with _patch_live_track_enabled():
+            standalone_world_info = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/info/")
+            standalone_world_data = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/")
+        self.assertEqual(standalone_world_info.status_code, 404)
+        self.assertEqual(standalone_world_data.status_code, 404)
+
+        User = get_user_model()
+        unrelated_user = User.objects.create_user(
+            email="unrelated@example.com",
+            password="unrelatedpass123",
+            username="unrelateduser",
+        )
+        LiveTrack.objects.filter(id=track_id).update(visibility="shared")
+        self.client.force_login(unrelated_user)
+        with _patch_live_track_enabled():
+            denied = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+        self.assertEqual(denied.status_code, 404)
+        self.assertEqual(denied.json()["error"], "Invalid share link")
+
+        with _patch_live_track_enabled():
+            denied_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(denied_data.status_code, 404)
+        self.assertEqual(denied_data.json()["error"], "Invalid share link")
+        with _patch_live_track_enabled():
+            denied_world_info = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/info/")
+            denied_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+        self.assertEqual(denied_world_info.status_code, 404)
+        self.assertEqual(denied_discovery.status_code, 404)
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            private_response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"visibility": "private", "shared_with_emails": []}),
+                content_type="application/json",
+            )
+        self.assertEqual(private_response.status_code, 200)
+        self.assertNotIn("internal_share_id", private_response.json())
+        self.assertFalse(LiveTrackInternalShare.objects.filter(track=track).exists())
+
+    def test_tracker_internal_share_revoked_user_loses_access(self):
+        """Existing internal links do not grant access after a direct tracker share is revoked."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Revoked Internal Link Track"}),
+                content_type="application/json",
+            )
+            track_id = create_resp.json()["id"]
+            shared_response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(shared_response.status_code, 200)
+        share_id = shared_response.json()["internal_share_id"]
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertTrue(LiveTrackInternalShare.objects.filter(track=track, share_id=share_id).exists())
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            allowed_detail = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+            allowed_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            allowed_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+        self.assertEqual(allowed_detail.status_code, 200)
+        self.assertEqual(allowed_detail.json()["internal_share_id"], share_id)
+        self.assertEqual(allowed_resolve.status_code, 200)
+        self.assertEqual(allowed_discovery.status_code, 200)
+        self.assertEqual(allowed_discovery.json()["share_access"], "internal")
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            revoke_response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(revoke_response.status_code, 200)
+        self.assertEqual(revoke_response.json()["internal_share_id"], share_id)
+        self.assertTrue(LiveTrackInternalShare.objects.filter(track=track, share_id=share_id).exists())
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            denied_detail = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+            denied_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            denied_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            tracker_list = self.client.get("/api/extensions/live-track/trackers/")
+        self.assertEqual(denied_detail.status_code, 404)
+        self.assertEqual(denied_resolve.status_code, 404)
+        self.assertEqual(denied_resolve.json()["error"], "Invalid share link")
+        self.assertEqual(denied_discovery.status_code, 404)
+        self.assertEqual(denied_discovery.json()["error"], "Invalid share link")
+        self.assertNotIn(
+            share_id,
+            [item.get("internal_share_id") for item in tracker_list.json()],
+        )
+
+        with _patch_live_track_enabled():
+            denied_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(denied_data.status_code, 404)
+        self.assertEqual(denied_data.json()["error"], "Invalid share link")
+
+    def test_tracker_internal_share_data_uses_recipient_param_rules(self):
+        """Standalone internal tracker data follows recipient params, not world params."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Internal Params Track"}),
+                content_type="application/json",
+            )
+            track_id = create_resp.json()["id"]
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                    "share_params_with_recipients": True,
+                    "share_params_with_world": False,
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        share_id = response.json()["internal_share_id"]
+        track = LiveTrack.objects.get(id=track_id)
+        track.geometry = {
+            "type": "LineString",
+            "coordinates": [[-105.0, 40.0, 1700000000000]],
+        }
+        track.point_params = [{"speed": 12.34, "ser": "secret-serial"}]
+        track.save(update_fields=["geometry", "point_params"])
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            data_response = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(data_response.status_code, 200)
+        data = data_response.json()
+        self.assertEqual(data["id"], track_id)
+        self.assertNotIn("share_params_with_world", data)
+        self.assertEqual(data["point_params"], [{"speed": 12.34}])
+
+    def test_group_internal_share_lifecycle_and_resolution(self):
+        """Shared/public groups get stable authenticated internal share links."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Internal Link Group"}),
+                content_type="application/json",
+            )
+            group_id = create_resp.json()["id"]
+            response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("internal_share_id", data)
+        self.assertIn("internal_share_url", data)
+        share_id = data["internal_share_id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        self.assertTrue(LiveTrackGroupInternalShare.objects.filter(group=group, share_id=share_id).exists())
+
+        with _patch_live_track_enabled():
+            repeat = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "public", "shared_with_emails": []}),
+                content_type="application/json",
+            )
+        self.assertEqual(repeat.status_code, 200)
+        self.assertEqual(repeat.json()["internal_share_id"], share_id)
+
+        self.client.logout()
+        with _patch_live_track_enabled():
+            unauthenticated_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+        self.assertEqual(unauthenticated_discovery.status_code, 404)
+        self.assertEqual(unauthenticated_discovery.json()["error"], "Invalid share link")
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            detail = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+            resolved = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["internal_share_id"], share_id)
+        self.assertNotIn("world_share_id", detail.json())
+        self.assertEqual(resolved.status_code, 200)
+        self.assertEqual(resolved.json()["share_type"], "live_track_group")
+        self.assertEqual(resolved.json()["group_id"], group_id)
+        with _patch_live_track_enabled():
+            standalone_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            standalone_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(standalone_data.status_code, 200)
+        self.assertEqual(standalone_data.json()["share_type"], "live_track_group")
+        self.assertEqual(standalone_data.json()["group_name"], "Internal Link Group")
+        self.assertEqual(standalone_data.json()["tracks"], [])
+        self.assertEqual(standalone_discovery.status_code, 200)
+        self.assertEqual(standalone_discovery.json()["share_access"], "internal")
+        self.assertEqual(standalone_discovery.json()["share_type"], "live_track_group")
+        self.assertEqual(standalone_discovery.json()["group_id"], group_id)
+        with _patch_live_track_enabled():
+            standalone_world_info = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/info/")
+            standalone_world_data = self.client.get(f"/api/extensions/live-track/world/share/{share_id}/")
+        self.assertEqual(standalone_world_info.status_code, 404)
+        self.assertEqual(standalone_world_data.status_code, 404)
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            private_response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({"visibility": "private", "shared_with_emails": []}),
+                content_type="application/json",
+            )
+        self.assertEqual(private_response.status_code, 200)
+        self.assertNotIn("internal_share_id", private_response.json())
+        self.assertFalse(LiveTrackGroupInternalShare.objects.filter(group=group).exists())
+
+    def test_group_internal_share_revoked_user_loses_access(self):
+        """Existing internal links do not grant access after a group share is revoked."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Revoked Internal Link Group"}),
+                content_type="application/json",
+            )
+            group_id = create_resp.json()["id"]
+            shared_response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(shared_response.status_code, 200)
+        share_id = shared_response.json()["internal_share_id"]
+        group = LiveTrackGroup.objects.get(id=group_id)
+        self.assertTrue(LiveTrackGroupInternalShare.objects.filter(group=group, share_id=share_id).exists())
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            allowed_detail = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+            allowed_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            allowed_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+        self.assertEqual(allowed_detail.status_code, 200)
+        self.assertEqual(allowed_detail.json()["internal_share_id"], share_id)
+        self.assertEqual(allowed_resolve.status_code, 200)
+        self.assertEqual(allowed_discovery.status_code, 200)
+        self.assertEqual(allowed_discovery.json()["share_access"], "internal")
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            revoke_response = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(revoke_response.status_code, 200)
+        self.assertEqual(revoke_response.json()["internal_share_id"], share_id)
+        self.assertTrue(LiveTrackGroupInternalShare.objects.filter(group=group, share_id=share_id).exists())
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            denied_detail = self.client.get(f"/api/extensions/live-track/groups/{group_id}/")
+            denied_resolve = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/info/")
+            denied_discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+            group_list = self.client.get("/api/extensions/live-track/groups/")
+        self.assertEqual(denied_detail.status_code, 404)
+        self.assertEqual(denied_resolve.status_code, 404)
+        self.assertEqual(denied_resolve.json()["error"], "Invalid share link")
+        self.assertEqual(denied_discovery.status_code, 404)
+        self.assertEqual(denied_discovery.json()["error"], "Invalid share link")
+        self.assertNotIn(
+            share_id,
+            [item.get("internal_share_id") for item in group_list.json()],
+        )
+
+        with _patch_live_track_enabled():
+            denied_data = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(denied_data.status_code, 404)
+        self.assertEqual(denied_data.json()["error"], "Invalid share link")
+
+    def test_group_internal_share_data_returns_group_tracks(self):
+        """Standalone internal group data returns the world-view-compatible group payload."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Grouped Internal Track"}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Internal Data Group"}),
+                content_type="application/json",
+            )
+            group_id = group_resp.json()["id"]
+            group_patch = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(group_patch.status_code, 200)
+        share_id = group_patch.json()["internal_share_id"]
+        track = LiveTrack.objects.get(id=track_resp.json()["id"])
+        group = LiveTrackGroup.objects.get(id=group_id)
+        LiveTrackGroupMember.objects.create(group=group, track=track)
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            data_response = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(data_response.status_code, 200)
+        data = data_response.json()
+        self.assertEqual(data["share_type"], "live_track_group")
+        self.assertEqual(data["group_name"], "Internal Data Group")
+        self.assertEqual([item["id"] for item in data["tracks"]], [str(track.id)])
+
+    def test_internal_share_resolver_rejects_bad_or_unauthenticated_links(self):
+        """Internal share resolver keeps invalid-link responses generic."""
+        self.client.logout()
+        with _patch_live_track_enabled():
+            unauthenticated = self.client.get(
+                "/api/extensions/live-track/internal/share/not-a-uuid/info/"
+            )
+            unauthenticated_data = self.client.get(
+                "/api/extensions/live-track/internal/share/not-a-uuid/"
+            )
+            unauthenticated_discovery = self.client.get(
+                "/api/extensions/live-track/share/not-a-uuid/info/"
+            )
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(unauthenticated_data.status_code, 401)
+        self.assertEqual(unauthenticated_discovery.status_code, 404)
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            malformed = self.client.get(
+                "/api/extensions/live-track/internal/share/not-a-uuid/info/"
+            )
+            missing = self.client.get(
+                "/api/extensions/live-track/internal/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/"
+            )
+            missing_data = self.client.get(
+                "/api/extensions/live-track/internal/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/"
+            )
+            missing_discovery = self.client.get(
+                "/api/extensions/live-track/share/f8a918ab-7f53-4ef3-be11-a957c40ebd02/info/"
+            )
+        self.assertEqual(malformed.status_code, 404)
+        self.assertEqual(malformed.json()["error"], "Invalid share link")
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(missing.json()["error"], "Invalid share link")
+        self.assertEqual(missing_data.status_code, 404)
+        self.assertEqual(missing_data.json()["error"], "Invalid share link")
+        self.assertEqual(missing_discovery.status_code, 404)
+        self.assertEqual(missing_discovery.json()["error"], "Invalid share link")
 
     def test_post_settings_private_visibility_overrides_world_share_enabled_true(self):
         """POST settings with visibility=private and world_share_enabled=true never creates/keeps world share."""
@@ -4612,6 +5058,12 @@ class TestLiveTrackGroups(TestCase):
         )
         self.assertTrue(LiveTrackGroupWorldShare.objects.filter(group=group).exists())
         share_id = data["world_share_id"]
+        with _patch_live_track_enabled():
+            discovery = self.client.get(f"/api/extensions/live-track/share/{share_id}/info/")
+        self.assertEqual(discovery.status_code, 200)
+        self.assertEqual(discovery.json()["share_access"], "world")
+        self.assertEqual(discovery.json()["share_type"], "live_track_group")
+        self.assertEqual(discovery.json()["group_id"], group_id)
         with _patch_live_track_enabled():
             response = self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",

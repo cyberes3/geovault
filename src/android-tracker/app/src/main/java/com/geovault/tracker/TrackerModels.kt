@@ -27,6 +27,8 @@ data class Tracker(
     val share_params_with_world: Boolean? = null,
     val owner_email: String? = null,
     val subscriber_count: Int? = null,
+    val internal_share_id: String? = null,
+    val internal_share_url: String? = null,
     val world_share_id: String? = null,
     val world_share_url: String? = null,
     val shared_with_emails: List<String>? = null
@@ -148,6 +150,8 @@ data class Group(
     val hidden: Boolean? = null,
     val visibility: String? = null,
     val shared_with_emails: List<String>? = null,
+    val internal_share_id: String? = null,
+    val internal_share_url: String? = null,
     val world_share_id: String? = null,
     val world_share_url: String? = null,
     val created_at: Long? = null,
@@ -220,6 +224,8 @@ data class TrackerDto(
     @SerialName("share_params_with_world") val share_params_with_world: Boolean? = null,
     @SerialName("owner_email") val owner_email: String? = null,
     @SerialName("subscriber_count") val subscriber_count: Int? = null,
+    @SerialName("internal_share_id") val internal_share_id: String? = null,
+    @SerialName("internal_share_url") val internal_share_url: String? = null,
     @SerialName("world_share_id") val world_share_id: String? = null,
     @SerialName("world_share_url") val world_share_url: String? = null,
     @SerialName("shared_with_emails") val shared_with_emails: List<String>? = null

@@ -2,6 +2,7 @@ from django.urls import path
 
 from . import views
 from . import hauk_views
+from . import internal_share_views
 from . import world_share_views
 
 
@@ -12,8 +13,11 @@ urlpatterns = [
     path("api/adopt.php", hauk_views.hauk_adopt_stub),
     path("api/new-link.php", hauk_views.hauk_new_link_stub),
     path("api/fetch.php", hauk_views.hauk_fetch_stub),
+    path("share/<str:share_id>/info/", world_share_views.share_info, name="share_info"),
     path("world/share/<str:share_id>/info/", world_share_views.world_share_info, name="world_share_info"),
     path("world/share/<str:share_id>/", world_share_views.world_share_data, name="world_share_data"),
+    path("internal/share/<str:share_id>/info/", internal_share_views.internal_share_info, name="internal_share_info"),
+    path("internal/share/<str:share_id>/", internal_share_views.internal_share_data, name="internal_share_data"),
     path("trackers/", views.tracker_list_create),
     path("trackers/available-to-add/", views.tracker_available_to_add),
     path("tracker-check/", views.tracker_check),
