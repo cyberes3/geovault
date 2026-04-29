@@ -281,13 +281,16 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
         }
         when (cameraTarget) {
             is GeoVaultMainMapPreloadCameraTarget.Single -> {
-                map.moveCameraWithPadding(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(cameraTarget.lat, cameraTarget.lon),
-                        MapLibreManager.DEFAULT_POINT_ZOOM,
-                    ),
-                    padding = preloadPaddingPx,
-                )
+                val target = latLngOrNull(cameraTarget.lat, cameraTarget.lon)
+                if (target != null) {
+                    map.moveCameraWithPadding(
+                        CameraUpdateFactory.newLatLngZoom(
+                            target,
+                            MapLibreManager.DEFAULT_POINT_ZOOM,
+                        ),
+                        padding = preloadPaddingPx,
+                    )
+                }
             }
 
             is GeoVaultMainMapPreloadCameraTarget.Bounds -> {

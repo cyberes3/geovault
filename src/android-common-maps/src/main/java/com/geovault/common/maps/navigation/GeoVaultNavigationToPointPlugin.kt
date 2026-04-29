@@ -3,6 +3,7 @@ package com.geovault.common.maps.navigation
 import android.content.Context
 import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.maps.core.GeoVaultMapPlugin
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -258,6 +259,11 @@ class GeoVaultNavigationToPointPlugin(
                 // No line until we have a user fix; the map's own point layer shows the target.
                 return FeatureCollection.fromFeatures(emptyList())
             }
+            if (!isValidMapLibreGeographicLatLng(targetLatitude, targetLongitude) ||
+                !isValidMapLibreGeographicLatLng(userLatitude, userLongitude)
+            ) {
+                return FeatureCollection.fromFeatures(emptyList())
+            }
             val targetPoint = Point.fromLngLat(targetLongitude, targetLatitude)
             val userPoint = Point.fromLngLat(userLongitude, userLatitude)
             val line = Feature.fromGeometry(
@@ -276,6 +282,9 @@ class GeoVaultNavigationToPointPlugin(
             distanceMeters: Double?,
         ): FeatureCollection {
             if (userLatitude == null || userLongitude == null) {
+                return FeatureCollection.fromFeatures(emptyList())
+            }
+            if (!isValidMapLibreGeographicLatLng(userLatitude, userLongitude)) {
                 return FeatureCollection.fromFeatures(emptyList())
             }
             val text = NavigationDistanceFormatter.format(title, distanceMeters)

@@ -161,6 +161,53 @@ class TrackerMapStateTransformsTest {
     }
 
     @Test
+    fun trailBounds_skipsOutOfRangeCoordinates() {
+        val trail = listOf(
+            QueuedLocation(
+                trackerId = "t1",
+                time = 1L,
+                latitude = 150.0,
+                longitude = 40.0,
+                altitude = null,
+                speed = null,
+                bearing = null,
+                accuracy = null,
+            ),
+            QueuedLocation(
+                trackerId = "t1",
+                time = 2L,
+                latitude = 10.0,
+                longitude = 20.0,
+                altitude = null,
+                speed = null,
+                bearing = null,
+                accuracy = null,
+            ),
+        )
+        val b = TrackerMapStateTransforms.trailBounds(trail)
+        assertNotNull(b)
+        assertEquals(10.0, b!!.latitudeNorth, 1e-9)
+        assertEquals(10.0, b.latitudeSouth, 1e-9)
+    }
+
+    @Test
+    fun trailBounds_allInvalid_null() {
+        val trail = listOf(
+            QueuedLocation(
+                trackerId = "t1",
+                time = 1L,
+                latitude = 200.0,
+                longitude = 0.0,
+                altitude = null,
+                speed = null,
+                bearing = null,
+                accuracy = null,
+            ),
+        )
+        assertNull(TrackerMapStateTransforms.trailBounds(trail))
+    }
+
+    @Test
     fun allQueueMode_rendersPerTrackerLinesWithTrackerColors() {
         val render = TrackerMapStateTransforms.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,

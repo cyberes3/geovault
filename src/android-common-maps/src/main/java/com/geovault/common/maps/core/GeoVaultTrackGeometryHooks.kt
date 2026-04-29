@@ -68,7 +68,5 @@ private fun haversineDistanceMeters(
 }
 
 private fun isFiniteLatLon(point: Pair<Double, Double>): Boolean {
-    val lat = point.first
-    val lon = point.second
-    return lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0
+    return isValidMapLibreGeographicLatLng(point.first, point.second)
 }

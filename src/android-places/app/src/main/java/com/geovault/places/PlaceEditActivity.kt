@@ -57,6 +57,7 @@ import androidx.lifecycle.lifecycleScope
 import com.geovault.common.maps.core.GeoVaultStandardMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.MapLibreManager
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.core.rememberGeoVaultStandardMap
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.CommonMapIconIds
@@ -255,7 +256,8 @@ private fun PlaceEditScreen(
     LaunchedEffect(state.selectedLat, state.selectedLon, phase) {
         val lat = state.selectedLat ?: return@LaunchedEffect
         val lon = state.selectedLon ?: return@LaunchedEffect
-        val points = if (state.showSelectedPointMarker) {
+        val coordinateValid = isValidMapLibreGeographicLatLng(lat, lon)
+        val points = if (state.showSelectedPointMarker && coordinateValid) {
             listOf(
                 MapRenderPoint(
                     id = "edit-selected-point",
@@ -275,12 +277,14 @@ private fun PlaceEditScreen(
         )
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (!state.shouldFocusCameraOnSelection()) return@LaunchedEffect
-        map.animateCameraWithPadding(
-            CameraUpdateFactory.newLatLngZoom(
-                LatLng(lat, lon),
-                MapLibreManager.DEFAULT_POINT_ZOOM,
+        if (coordinateValid) {
+            map.animateCameraWithPadding(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(lat, lon),
+                    MapLibreManager.DEFAULT_POINT_ZOOM,
+                )
             )
-        )
+        }
         state.markSelectionCameraFocusHandled()
     }
 

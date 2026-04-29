@@ -1,9 +1,11 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.R
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,7 +27,7 @@ class TrackerMapTopLeftChipMapperTest {
             ),
         )
 
-        val result = mapper.map(state)
+        val result = mapper.map(state, emptyList())
 
         assertTrue(result is TrackerMapTopLeftChipUiModel.Visible)
         val visible = result as TrackerMapTopLeftChipUiModel.Visible
@@ -42,7 +44,7 @@ class TrackerMapTopLeftChipMapperTest {
             runtime = TrackingRuntimeSnapshot(isRunning = true),
         )
 
-        val result = mapper.map(state)
+        val result = mapper.map(state, emptyList())
 
         assertEquals(TrackerMapTopLeftChipUiModel.Hidden, result)
     }
@@ -51,7 +53,7 @@ class TrackerMapTopLeftChipMapperTest {
     fun allTrackersMode_whenNotRunning_returnsAllTrackersChip() {
         val state = baseState(mode = TrackerMapDisplayMode.ALL_QUEUE)
 
-        val result = mapper.map(state)
+        val result = mapper.map(state, emptyList())
 
         assertTrue(result is TrackerMapTopLeftChipUiModel.Visible)
         val visible = result as TrackerMapTopLeftChipUiModel.Visible
@@ -72,7 +74,7 @@ class TrackerMapTopLeftChipMapperTest {
             ),
         )
 
-        val result = mapper.map(state) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
 
         assertEquals(TrackerMapTopLeftChipMode.SINGLE_TRACKER, result.mode)
         assertFalse(result.showReset)
@@ -90,7 +92,7 @@ class TrackerMapTopLeftChipMapperTest {
             ),
         )
 
-        val result = mapper.map(state) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
 
         assertTrue(result.showReset)
         assertEquals(TrackerMapTopLeftChipText.Value("Other"), result.title)
@@ -104,7 +106,7 @@ class TrackerMapTopLeftChipMapperTest {
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = ""),
         )
 
-        val result = mapper.map(state)
+        val result = mapper.map(state, emptyList())
 
         assertEquals(TrackerMapTopLeftChipUiModel.Hidden, result)
     }
@@ -123,9 +125,86 @@ class TrackerMapTopLeftChipMapperTest {
             ),
         )
 
-        val result = mapper.map(state) as TrackerMapTopLeftChipUiModel.Visible
+        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
 
         assertEquals(TrackerMapTopLeftChipText.Resource(R.string.groups_title), result.title)
+    }
+
+    @Test
+    fun singleTracker_viewingSelectedTracker_hidesLastUpdatedSubtitle() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "a",
+            displayedTrackerName = "A",
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "a",
+                selectedTrackerName = "A",
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "a",
+                name = "A",
+                color = null,
+                last_point = listOf(-122.0, 37.0, 1.0),
+                updated_at = 1_700_000_000_000L,
+            )
+        )
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        assertNull(result.subtitle)
+    }
+
+    @Test
+    fun singleTracker_viewingOtherTracker_usesRelativeLastDataSubtitle() {
+        val updatedAt = 1_700_000_000_000L
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "other",
+            displayedTrackerName = "Other",
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "sel",
+                selectedTrackerName = "Sel",
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "other",
+                name = "Other",
+                color = null,
+                last_point = listOf(-122.0, 37.0, 1.0),
+                updated_at = updatedAt,
+            )
+        )
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        val sub = result.subtitle
+        assertTrue(sub is TrackerMapTopLeftChipText.RelativeLastData)
+        val rel = sub as TrackerMapTopLeftChipText.RelativeLastData
+        assertEquals(updatedAt, rel.lastDataEpochMs)
+        assertEquals(updatedAt, rel.serverMetadataUpdatedAtMs)
+    }
+
+    @Test
+    fun singleTracker_viewingOther_withNoPointData_usesWaitingSubtitle() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "other",
+            displayedTrackerName = "Other",
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "sel",
+                selectedTrackerName = "Sel",
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "other",
+                name = "Other",
+                color = null,
+                last_point = null,
+                updated_at = null,
+            )
+        )
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        assertEquals(TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data), result.subtitle)
     }
 
     private fun baseState(

@@ -4,10 +4,10 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.ui.graphics.toArgb
-import com.geovault.common.maps.core.MapMarkerUtils
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.maps.core.GeoVaultMapPlugin
+import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -881,11 +881,12 @@ private class GeoJsonFeatureCollectionEncoder(initialCapacity: Int = 0) {
 }
 
 private fun buildPointsFeatureCollectionJson(points: List<MapRenderPoint>): String {
-    if (points.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
+    val validPoints = filterMapRenderPointsForGeoJson(points)
+    if (validPoints.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
     // Empirical sizing: most NGS station features serialize to ~140-200 chars; a small
     // pad keeps a single allocation for the common case without over-committing.
-    val encoder = GeoJsonFeatureCollectionEncoder(initialCapacity = points.size * 160 + 64)
-    points.forEach { point ->
+    val encoder = GeoJsonFeatureCollectionEncoder(initialCapacity = validPoints.size * 160 + 64)
+    validPoints.forEach { point ->
         encoder.pointFeature(longitude = point.longitude, latitude = point.latitude) {
             string("id", point.id)
             point.title?.let { string("title", it) }
@@ -906,12 +907,16 @@ private fun buildPointsFeatureCollectionJson(points: List<MapRenderPoint>): Stri
 private fun buildLinesFeatureCollectionJson(lines: List<MapRenderLine>): String {
     if (lines.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
     val encoder = GeoJsonFeatureCollectionEncoder()
+    var hasAny = false
     lines.forEach { line ->
-        encoder.lineFeature(coordinates = line.coordinates) {
+        val filtered = mapRenderLineToValidCoordinatesOrNull(line) ?: return@forEach
+        hasAny = true
+        encoder.lineFeature(coordinates = filtered) {
             string("id", line.id)
             string(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, line.lineColorHex)
         }
     }
+    if (!hasAny) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
     return encoder.build()
 }
 
@@ -921,8 +926,11 @@ private fun buildPolygonsFeatureCollectionJson(
 ): String {
     if (polygons.isEmpty()) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
     val encoder = GeoJsonFeatureCollectionEncoder()
+    var hasAny = false
     polygons.forEach { polygon ->
-        encoder.polygonFeature(rings = polygon.rings) {
+        val rings = filterMapRenderPolygonForGeoJson(polygon) ?: return@forEach
+        hasAny = true
+        encoder.polygonFeature(rings = rings) {
             string("id", polygon.id)
             string("fillColor", polygon.fillColorHex)
             string("outlineColor", polygon.outlineColorHex)
@@ -931,5 +939,6 @@ private fun buildPolygonsFeatureCollectionJson(
             }
         }
     }
+    if (!hasAny) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
     return encoder.build()
 }

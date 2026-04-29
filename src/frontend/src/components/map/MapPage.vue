@@ -279,6 +279,7 @@ import { parseBboxResponse } from '@/utils/format/geobuf.js'
 import { setupUserGestureTrackingUnlock } from '@/utils/map/maplibre/trackingLock.js'
 
 import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js'
+import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js'
 
 export default {
   name: 'MapPage',
@@ -3028,17 +3029,13 @@ export default {
       let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
       coords.forEach((coord) => {
         const [lon, lat] = Array.isArray(coord) && coord.length >= 2 ? coord : [null, null]
-        if (lon != null && lat != null && isFinite(lon) && isFinite(lat)) {
-          // Validate coordinates are within valid ranges for MapLibre
-          // Longitude: -180 to 180, Latitude: -90 to 90
-          if (lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
-            minLon = Math.min(minLon, lon)
-            minLat = Math.min(minLat, lat)
-            maxLon = Math.max(maxLon, lon)
-            maxLat = Math.max(maxLat, lat)
-          } else {
-            console.warn('zoomToFeature: Coordinate out of valid range', { lon, lat })
-          }
+        if (lon != null && lat != null && isValidMapLngLatPair(lon, lat)) {
+          minLon = Math.min(minLon, lon)
+          minLat = Math.min(minLat, lat)
+          maxLon = Math.max(maxLon, lon)
+          maxLat = Math.max(maxLat, lat)
+        } else if (lon != null && lat != null) {
+          console.warn('zoomToFeature: Coordinate out of valid range', { lon, lat })
         }
       })
 

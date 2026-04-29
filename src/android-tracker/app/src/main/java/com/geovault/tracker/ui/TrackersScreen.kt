@@ -2,9 +2,6 @@ package com.geovault.tracker.ui
 
 import android.net.Uri
 import android.widget.Toast
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +80,7 @@ import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
+import java.util.Locale
 import com.geovault.tracker.presentation.OwnershipActionPolicy
 import com.geovault.tracker.presentation.GroupShareVisibility
 import com.geovault.tracker.presentation.TrackerLeaveKind
@@ -98,7 +96,9 @@ import com.geovault.tracker.presentation.TrackersGroupsUiState
 import com.geovault.tracker.presentation.TrackersGroupsViewModel
 import kotlinx.coroutines.delay
 
-private val LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
+private fun formatTrackerListTime(timestampMs: Long): String {
+    return TrackerListDateTimeFormat.formatLocal(timestampMs)
+}
 
 @Immutable
 private data class TrackerRowModel(
@@ -1254,10 +1254,6 @@ private fun Tracker.lastPositionOrNull(): Pair<Double, Double>? {
     val coord = last_point ?: return null
     if (coord.size < 2) return null
     return Pair(coord[1], coord[0])
-}
-
-private fun formatTrackerListTime(timestampMs: Long): String {
-    return LIST_DATE_FORMAT.format(Date(timestampMs))
 }
 
 private fun isVisibleOwnerGroup(group: Group): Boolean {

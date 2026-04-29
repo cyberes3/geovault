@@ -23,7 +23,8 @@ export default defineConfig({
     ],
     resolve: {
         alias: {
-            '@': fileURLToPath(new URL('./src', import.meta.url))
+            '@': fileURLToPath(new URL('./src', import.meta.url)),
+            'platform': path.resolve(__dirname, '../../../../../frontend/src')
         }
     },
     build: {

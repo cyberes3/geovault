@@ -1,5 +1,21 @@
 <template>
   <div class="flex-1 min-h-0 flex flex-col p-4 overflow-y-auto">
+    <div class="flex-shrink-0 mb-4 border-b border-gray-200 pb-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="text-sm font-semibold text-gray-900">Stale data highlight</h3>
+          <p class="text-xs text-gray-500 mt-0.5">
+            When enabled, last-updated times use red when the tracker was touched recently but the last point is older than 10 minutes.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          class="mt-1 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          :checked="highlightStaleData"
+          @change="$emit('update:highlightStaleData', $event.target.checked)"
+        />
+      </div>
+    </div>
     <div class="flex-shrink-0 mb-4">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-sm font-semibold text-gray-900">Hidden Trackers</h3>
@@ -86,7 +102,14 @@ export default {
     hiddenGroups: { type: Array, default: () => [] },
     isUnhideAllTrackersLoading: { type: Boolean, default: false },
     isUnhideAllGroupsLoading: { type: Boolean, default: false },
+    highlightStaleData: { type: Boolean, default: false }
   },
-  emits: ['unhide-tracker', 'unhide-all-trackers', 'unhide-group', 'unhide-all-groups'],
+  emits: [
+    'unhide-tracker',
+    'unhide-all-trackers',
+    'unhide-group',
+    'unhide-all-groups',
+    'update:highlightStaleData'
+  ],
 };
 </script>

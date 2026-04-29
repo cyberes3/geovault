@@ -30,6 +30,7 @@
         <TrackerListContent
           ref="listContentDesktopRef"
           v-model:list-tab="listTab"
+          :highlight-stale-data="highlightStaleData"
           :list-tabs="LIST_TABS"
           :visible-trackers-tab="visibleTrackersTab"
           :visible-shared-tab="visibleSharedTab"
@@ -272,7 +273,12 @@
               >
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-medium text-gray-900 truncate">{{ track.name }}</div>
-                  <div class="text-xs text-gray-500">{{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}</div>
+                  <div
+                    :class="[
+                      'text-xs',
+                      highlightStaleData && isActiveButDeadTrack(track) ? 'text-red-600' : 'text-gray-500'
+                    ]"
+                  >{{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}</div>
                 </div>
                 <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
                   <button
@@ -339,6 +345,7 @@
           />
           <LiveTrackSettingsSidebarContent
             v-else-if="showSettingsSidebar"
+            v-model:highlight-stale-data="highlightStaleData"
             :hidden-trackers="hiddenTrackersForSettings"
             :hidden-groups="hiddenGroupsForSettings"
             :is-unhide-all-trackers-loading="isUnhideAllTrackersLoading"
@@ -456,6 +463,7 @@
             <TrackerListContent
               ref="listContentMobileRef"
               v-model:list-tab="listTab"
+              :highlight-stale-data="highlightStaleData"
               :list-tabs="LIST_TABS"
               :visible-trackers-tab="visibleTrackersTab"
               :visible-shared-tab="visibleSharedTab"
@@ -518,6 +526,7 @@ import { trackersLiveSocket } from './trackersLiveSocket.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import LocationIcon from 'platform/components/parts/LocationIcon.vue';
 import { geolocationManager } from 'platform/utils/map/geolocationManager.js';
+import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
 import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from 'platform/utils/map/maplibre/locationMarker.js';
 import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
@@ -562,6 +571,7 @@ import {
   isVisibleOwnedGroup,
   isVisibleOwnedTracker
 } from './sharingSelectors.js';
+import { normalizeTimestampMs, isActiveButDeadTrack } from './activeButDeadTrack.js';
 
 const maplibregl = window.gv_core?.maplibre || window.maplibregl;
 
@@ -602,6 +612,7 @@ export default {
     const api = inject('extensionApi');
     const trackers = ref([]);
     const groups = ref([]);
+    const highlightStaleData = ref(false);
     const sortBy = ref('alphabetical');
     const showDiscoverModal = ref(false);
     const showSharedListModal = ref(false);
@@ -883,18 +894,13 @@ export default {
         ...rest,
         geometry: geom,
         last_position: lastPoint && lastPoint.length >= 2 ? { lon: lastPoint[0], lat: lastPoint[1] } : null,
-        last_timestamp_ms: lastPoint && lastPoint.length >= 3 ? lastPoint[2] : null,
+        last_timestamp_ms: (() => {
+          if (!lastPoint || lastPoint.length < 3) return null;
+          return normalizeTimestampMs(lastPoint[2]);
+        })(),
+        updated_at_ms: normalizeTimestampMs(track.updated_at),
         latestPointParams
       };
-    }
-
-    function normalizeTimestampMs(value) {
-      if (value == null) return null;
-      const n = Number(value);
-      if (!Number.isFinite(n)) return null;
-      const intVal = Math.trunc(n);
-      if (intVal > 0 && intVal < 1e12) return intVal * 1000;
-      return intVal;
     }
 
     function getRecentDataWindow(track) {
@@ -1502,7 +1508,8 @@ export default {
     function centerOnSelectedTrackLastPoint() {
       if (!map) return;
       const center = getSelectedTrackLastPoint();
-      if (!center) return;
+      if (!center || center.length < 2) return;
+      if (!isValidMapLngLatPair(center[0], center[1])) return;
       isAutoMoving.value = true;
       map.easeTo({ center, zoom: map.getZoom(), duration: MAP_SNAP_DURATION, padding: getMapPadding() });
       setTimeout(() => {
@@ -1621,12 +1628,15 @@ export default {
       updateMapFeatures();
       const lastPoint = getLastNCoords(track, 1);
       if (map && lastPoint.length > 0) {
-        isAutoMoving.value = true;
-        const zoom = Math.max(map.getZoom(), 14);
-        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-        setTimeout(() => {
-          isAutoMoving.value = false;
-        }, MAP_SNAP_DURATION + 50);
+        const c = lastPoint[0];
+        if (c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
+          isAutoMoving.value = true;
+          const zoom = Math.max(map.getZoom(), 14);
+          map.easeTo({ center: c, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
+          setTimeout(() => {
+            isAutoMoving.value = false;
+          }, MAP_SNAP_DURATION + 50);
+        }
       }
       if (isMobileView.value) collapseDrawerToPeek();
     }
@@ -1658,13 +1668,16 @@ export default {
     function fitBoundsFromCoords(coords) {
       if (!map || !coords.length) return;
       let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-      for (const [lon, lat] of coords) {
+      for (const c of coords) {
+        const lon = c[0];
+        const lat = c[1];
+        if (!isValidMapLngLatPair(lon, lat)) continue;
         minLon = Math.min(minLon, lon);
         minLat = Math.min(minLat, lat);
         maxLon = Math.max(maxLon, lon);
         maxLat = Math.max(maxLat, lat);
       }
-      if (!Number.isFinite(minLon)) return;
+      if (minLon === Infinity) return;
       const pad = 0.002;
       if (maxLon <= minLon) { minLon -= pad; maxLon += pad; }
       if (maxLat <= minLat) { minLat -= pad; maxLat += pad; }
@@ -2069,12 +2082,15 @@ export default {
       updateMapFeatures();
       const lastPoint = getLastNCoords(track, 1);
       if (map && lastPoint.length > 0) {
-        isAutoMoving.value = true;
-        const zoom = Math.max(map.getZoom(), 14);
-        map.easeTo({ center: lastPoint[0], zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-        setTimeout(() => {
-          isAutoMoving.value = false;
-        }, MAP_SNAP_DURATION + 50);
+        const c = lastPoint[0];
+        if (c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
+          isAutoMoving.value = true;
+          const zoom = Math.max(map.getZoom(), 14);
+          map.easeTo({ center: c, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
+          setTimeout(() => {
+            isAutoMoving.value = false;
+          }, MAP_SNAP_DURATION + 50);
+        }
       }
       if (isMobileView.value) collapseDrawerToPeek();
     }
@@ -2486,7 +2502,20 @@ export default {
       }
     }
 
+    watch(highlightStaleData, (v) => {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('liveTrack.highlightStaleData', v ? '1' : '0');
+        }
+      } catch (_) { /* ignore */ }
+    });
+
     onMounted(async () => {
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('liveTrack.highlightStaleData') === '1') {
+          highlightStaleData.value = true;
+        }
+      } catch (_) { /* ignore */ }
       if (typeof window !== 'undefined' && !resizeListenerAttached) {
         window.addEventListener('resize', updateWindowHeight);
         updateWindowHeight();
@@ -2581,8 +2610,16 @@ export default {
         const last = geom.coordinates[geom.coordinates.length - 1];
         const newPoint = updates[updates.length - 1]?.point;
         const last_position = newPoint && newPoint.length >= 2 ? { lon: newPoint[0], lat: newPoint[1] } : (last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null);
-        const last_timestamp_ms = newPoint && newPoint.length >= 3 ? newPoint[2] : (last && last.length >= 3 ? last[2] : null);
-        const updated = { ...track, geometry: geom, last_position, last_timestamp_ms, latestPointParams };
+        const rawLastTs = newPoint && newPoint.length >= 3 ? newPoint[2] : (last && last.length >= 3 ? last[2] : null);
+        const last_timestamp_ms = rawLastTs != null ? normalizeTimestampMs(rawLastTs) : null;
+        const updated = {
+          ...track,
+          geometry: geom,
+          last_position,
+          last_timestamp_ms,
+          updated_at_ms: normalizeTimestampMs(track.updated_at),
+          latestPointParams
+        };
         trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
         updateMapFeatures();
         if (data.track_id === selectedId.value && followLocked.value && map) {
@@ -2782,6 +2819,8 @@ export default {
       onTrackSidebarUnsubscribed,
       onTrackDeleted,
       isRecentlyUpdated,
+      highlightStaleData,
+      isActiveButDeadTrack,
       rootContainer,
       trackerMaxHeight
     };

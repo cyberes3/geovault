@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.common.maps.core.geoVaultSplitTrackByDistance
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.render.MapRenderLine
 import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
@@ -68,10 +69,8 @@ object TrackerMapStateTransforms {
             val lastQueued = effectiveTrail.lastOrNull()
             val lastLat = lastQueued?.latitude
             val lastLon = lastQueued?.longitude
-            val lastRotation = trackDirectionDegrees(
-                effectiveTrail.map { LatLng(it.latitude, it.longitude) }
-            )
-            if (lastLat != null && lastLon != null) {
+            val lastRotation = trackDirectionDegrees(validLatLngsFromTrail(effectiveTrail))
+            if (lastLat != null && lastLon != null && isValidMapLibreGeographicLatLng(lastLat, lastLon)) {
                 markers.add(
                     MapRenderPoint(
                         id = "last-fix",
@@ -96,7 +95,8 @@ object TrackerMapStateTransforms {
             orderedTrackerIds.forEach { trackerId ->
                 val trackerTrail = allQueueTrailsByTracker[trackerId] ?: return@forEach
                     val lastPoint = trackerTrail.lastOrNull() ?: return@forEach
-                    val rotation = trackDirectionDegrees(trackerTrail.map { LatLng(it.latitude, it.longitude) })
+                    if (!isValidMapLibreGeographicLatLng(lastPoint.latitude, lastPoint.longitude)) return@forEach
+                    val rotation = trackDirectionDegrees(validLatLngsFromTrail(trackerTrail))
                     val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(
                         trackerId = trackerId,
                         trackerColorById = trackerColorById,
@@ -120,6 +120,7 @@ object TrackerMapStateTransforms {
                 .filter { remoteMarkerTrackerIds.isNotEmpty() && it.trackId in remoteMarkerTrackerIds }
                 .filter { it.trackId !in renderedTrackerIds }
                 .forEach { point ->
+                    if (!isValidMapLibreGeographicLatLng(point.lat, point.lon)) return@forEach
                     val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(
                         trackerId = point.trackId,
                         trackerColorById = trackerColorById,
@@ -183,8 +184,9 @@ object TrackerMapStateTransforms {
     }
 
     fun trailBounds(trail: List<QueuedLocation>): LatLngBounds? {
-        if (trail.isEmpty()) return null
-        val latLngs = trail.map { LatLng(it.latitude, it.longitude) }
+        val valid = trail.filter { isValidMapLibreGeographicLatLng(it.latitude, it.longitude) }
+        if (valid.isEmpty()) return null
+        val latLngs = valid.map { LatLng(it.latitude, it.longitude) }
         if (latLngs.size == 1) {
             val p = latLngs.first()
             return LatLngBounds.from(p.latitude, p.longitude, p.latitude, p.longitude)
@@ -192,6 +194,16 @@ object TrackerMapStateTransforms {
         val b = LatLngBounds.Builder()
         latLngs.forEach { b.include(it) }
         return b.build()
+    }
+
+    private fun validLatLngsFromTrail(trail: List<QueuedLocation>): List<LatLng> {
+        return trail.mapNotNull { q ->
+            if (isValidMapLibreGeographicLatLng(q.latitude, q.longitude)) {
+                LatLng(q.latitude, q.longitude)
+            } else {
+                null
+            }
+        }
     }
 
     fun multiTrailBounds(trailsByTracker: Map<String, List<QueuedLocation>>): LatLngBounds? {

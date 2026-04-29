@@ -2,6 +2,7 @@ package com.geovault.places.presentation
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.Properties
@@ -53,6 +54,7 @@ class PlacesMapViewModel(application: Application) : AndroidViewModel(applicatio
             if (coords.size < 2) return@filter false
             val lon = coords[0]
             val lat = coords[1]
+            if (!isValidMapLibreGeographicLatLng(lat, lon)) return@filter false
             val point = projection.toScreenLocation(LatLng(lat, lon))
             val dx = point.x - tapX
             val dy = point.y - tapY

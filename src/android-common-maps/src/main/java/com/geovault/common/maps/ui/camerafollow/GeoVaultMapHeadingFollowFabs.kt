@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
+import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.location.GeoVaultMapLocationPermission
 import com.geovault.common.maps.location.GeoVaultUserLocationCapability
 import com.geovault.common.maps.location.LocationUpdates
@@ -217,17 +218,17 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         if (!cameraShouldFollowHeading || plugin == null) {
             return@DisposableEffect onDispose { }
         }
-        val listener: (Float) -> Unit = { bearingDegrees ->
+        val listener: (Float) -> Unit = listener@ { bearingDegrees ->
             val libre = map.maplibreMap
             val fix = plugin.getLastLocation()
-            if (libre != null && fix != null) {
-                val current = libre.cameraPosition
-                val next = CameraPosition.Builder(current)
-                    .target(LatLng(fix.latitude, fix.longitude))
-                    .bearing(bearingDegrees.toDouble())
-                    .build()
-                libre.moveCamera(CameraUpdateFactory.newCameraPosition(next))
-            }
+            if (libre == null || fix == null) return@listener
+            val target = latLngOrNull(fix.latitude, fix.longitude) ?: return@listener
+            val current = libre.cameraPosition
+            val next = CameraPosition.Builder(current)
+                .target(target)
+                .bearing(bearingDegrees.toDouble())
+                .build()
+            libre.moveCamera(CameraUpdateFactory.newCameraPosition(next))
         }
         plugin.addBearingListener(listener)
         onDispose { plugin.removeBearingListener(listener) }
@@ -239,11 +240,9 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         if (plugin == null) return@LaunchedEffect
         val libre = map.maplibreMap ?: return@LaunchedEffect
         val target: LatLng = plugin.getLastLocation()
-            ?.let { LatLng(it.latitude, it.longitude) }
-            ?: run {
-                val current = LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
-                current ?: return@LaunchedEffect
-            }
+            ?.let { latLngOrNull(it.latitude, it.longitude) }
+            ?: LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
+            ?: return@LaunchedEffect
         val firstTime = !hasZoomedToInitialFollow
         val targetZoom = if (firstTime) INITIAL_FOLLOW_ZOOM else libre.cameraPosition.zoom
         val update = CameraUpdateFactory.newLatLngZoom(target, targetZoom)

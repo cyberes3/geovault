@@ -201,7 +201,9 @@
                 Shared by {{ track.owner_email }}
               </div>
               <div class="flex items-center gap-1.5 mt-0.5">
-                <div class="text-xs font-medium text-gray-500 truncate">
+                <div
+                  :class="['text-xs font-medium truncate', listTimeClass(track)]"
+                >
                   {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
                 </div>
               </div>
@@ -264,7 +266,9 @@
                 />
               </div>
               <div class="flex items-center gap-1.5 mt-0.5">
-                <div class="text-xs font-medium text-gray-500 truncate">
+                <div
+                  :class="['text-xs font-medium truncate', listTimeClass(track)]"
+                >
                   {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
                 </div>
               </div>
@@ -307,6 +311,7 @@ import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry.js';
 import { formatTimestampLocal } from './paramFormatters.js';
 import { filterByQuery } from './sharingSelectors.js';
+import { isActiveButDeadTrack } from './activeButDeadTrack.js';
 
 const LIST_TABS = [
   { id: 'trackers', label: 'Trackers' },
@@ -343,7 +348,8 @@ export default {
       default: 'flex-1 min-h-0 overflow-y-auto space-y-3 px-1 py-1 custom-scrollbar'
     },
     /** Desktop: opacity-0 group-hover:opacity-100. Mobile: opacity-60 for always-visible actions. */
-    actionOpacityClass: { type: String, default: '' }
+    actionOpacityClass: { type: String, default: '' },
+    highlightStaleData: { type: Boolean, default: false }
   },
   emits: [
     'update:listTab',
@@ -366,6 +372,11 @@ export default {
 
     const formatTime = (ms) => formatTimestampLocal(ms);
     const getTrackDirectionAngle = getTrackDirectionAngleUtil;
+
+    function listTimeClass(track) {
+      if (!props.highlightStaleData) return 'text-gray-500';
+      return isActiveButDeadTrack(track) ? 'text-red-600' : 'text-gray-500';
+    }
 
     const filteredTrackersTab = computed(() => filterByQuery(props.visibleTrackersTab || [], searchQuery.value, 'name'));
     const filteredGroupsTab = computed(() => filterByQuery(props.visibleGroupsTab || [], searchQuery.value, 'name'));
@@ -426,7 +437,8 @@ export default {
       getTrackDirectionAngle,
       emptyTitle,
       emptyMessage,
-      trackRowClass
+      trackRowClass,
+      listTimeClass
     };
   }
 };

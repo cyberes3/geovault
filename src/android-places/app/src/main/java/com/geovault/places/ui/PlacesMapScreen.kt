@@ -36,6 +36,7 @@ import com.geovault.common.maps.core.GeoVaultMainMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
+import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.rememberGeoVaultMapBoundsFitPaddingPx
 import com.geovault.common.maps.location.LocationUpdates
@@ -61,7 +62,6 @@ import com.geovault.places.model.Feature
 import com.geovault.places.presentation.PlacesMapViewModel
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.geometry.LatLng
 
 data class PlacesMapLaunchArgs(
     val zoomToLat: Double? = null,
@@ -200,15 +200,18 @@ fun PlacesMapScreen(
             viewModel.selectByDatabaseId(requestedId)
         }
         if (launchArgs.zoomToLat != null && launchArgs.zoomToLon != null) {
-            val camera = CameraPosition.Builder()
-                .target(org.maplibre.android.geometry.LatLng(launchArgs.zoomToLat, launchArgs.zoomToLon))
-                .zoom(com.geovault.common.maps.core.MapLibreManager.DEFAULT_POINT_ZOOM)
-                .build()
-            map.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
-            if (launchArgs.requestToken != 0L) {
-                onLaunchArgsConsumed()
+            val zoomTarget = latLngOrNull(launchArgs.zoomToLat, launchArgs.zoomToLon)
+            if (zoomTarget != null) {
+                val camera = CameraPosition.Builder()
+                    .target(zoomTarget)
+                    .zoom(com.geovault.common.maps.core.MapLibreManager.DEFAULT_POINT_ZOOM)
+                    .build()
+                map.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
+                if (launchArgs.requestToken != 0L) {
+                    onLaunchArgsConsumed()
+                }
+                return@LaunchedEffect
             }
-            return@LaunchedEffect
         }
         val bounds = viewModel.featureBounds()
         if (bounds != null) {
@@ -277,7 +280,7 @@ fun PlacesMapScreen(
                         }
                         val bounds = viewModel.featureBounds()
                         val gpsAnchor = locationPlugin.getLastLocation()?.let { loc ->
-                            LatLng(loc.latitude, loc.longitude)
+                            latLngOrNull(loc.latitude, loc.longitude)
                         }
                         val effectiveBounds = when {
                             bounds != null && gpsAnchor != null ->

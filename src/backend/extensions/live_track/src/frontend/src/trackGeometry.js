@@ -5,9 +5,19 @@
 
 import { getArrowImageId } from './trackArrowMap.js';
 import { resolveSelectedTrackAccuracyMeters } from './mapAccuracyCircle.js';
+import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
+
+export { isValidMapLngLatPair };
 
 /** Do not draw track across jumps larger than this (meters). 5 miles. Same as Android tracker. */
 export const MAX_JUMP_METERS = 5 * 1609.344;
+
+function filterValidLngLats(coordList) {
+  if (!Array.isArray(coordList)) return [];
+  return coordList.filter(
+    (c) => c != null && c.length >= 2 && isValidMapLngLatPair(c[0], c[1])
+  );
+}
 
 export function distanceMeters(lon1, lat1, lon2, lat2) {
   const R = 6371000;
@@ -33,10 +43,11 @@ export function getCoordsSortedByTime(track) {
 
 /** Degrees from north (0 = up), clockwise. Uses two most recent points by time. */
 export function getTrackDirectionAngle(track) {
-  const coords = getCoordsSortedByTime(track);
-  if (coords.length < 2) return 0;
-  const prev = coords[coords.length - 2];
-  const last = coords[coords.length - 1];
+  const sorted = getCoordsSortedByTime(track);
+  const valid = filterValidLngLats(sorted.map((c) => [c[0], c[1]]));
+  if (valid.length < 2) return 0;
+  const prev = valid[valid.length - 2];
+  const last = valid[valid.length - 1];
   const dLon = last[0] - prev[0];
   const dLat = last[1] - prev[1];
   if (dLon === 0 && dLat === 0) return 0;
@@ -44,12 +55,13 @@ export function getTrackDirectionAngle(track) {
 }
 
 export function splitTrackIntoSegments(coords) {
-  if (coords.length < 2) return [];
+  const valid = filterValidLngLats(coords);
+  if (valid.length < 2) return [];
   const segments = [];
-  let current = [coords[0]];
-  for (let i = 1; i < coords.length; i++) {
-    const prev = coords[i - 1];
-    const curr = coords[i];
+  let current = [valid[0]];
+  for (let i = 1; i < valid.length; i++) {
+    const prev = valid[i - 1];
+    const curr = valid[i];
     const dist = distanceMeters(prev[0], prev[1], curr[0], curr[1]);
     if (dist > MAX_JUMP_METERS) {
       if (current.length >= 2) segments.push(current);
@@ -64,7 +76,7 @@ export function splitTrackIntoSegments(coords) {
 
 export function buildLineFeatures(track, selected = false) {
   const coordsSorted = getCoordsSortedByTime(track);
-  const coords = coordsSorted.map((c) => [c[0], c[1]]);
+  const coords = filterValidLngLats(coordsSorted.map((c) => [c[0], c[1]]));
   if (coords.length < 2) return [];
   const segments = splitTrackIntoSegments(coords);
   const color = track.color || '#6C93DE';
@@ -82,8 +94,14 @@ export function buildLineFeatures(track, selected = false) {
 
 export function buildPointFeature(track, selected = false, options = {}) {
   const coordsSorted = getCoordsSortedByTime(track);
-  const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
-  const pos = last && last.length >= 2 ? [last[0], last[1]] : null;
+  let pos = null;
+  for (let i = coordsSorted.length - 1; i >= 0; i--) {
+    const c = coordsSorted[i];
+    if (c != null && c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
+      pos = [c[0], c[1]];
+      break;
+    }
+  }
   if (!pos) return null;
   const color = track.color || '#6C93DE';
   const iconImage = getArrowImageId(color, selected);
@@ -114,12 +132,13 @@ export function fitMapToTracks(map, tracks, options = {}) {
   if (!map || !tracks?.length) return;
   const allCoords = [];
   for (const track of tracks) {
-    const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
-    allCoords.push(...coords);
+    const raw = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+    allCoords.push(...filterValidLngLats(raw));
   }
   const padding = options.padding ?? 40;
   const maxZoom = options.maxZoom ?? 16;
   const duration = options.duration ?? 0;
+  if (allCoords.length === 0) return;
   if (allCoords.length >= 2) {
     const lons = allCoords.map((c) => c[0]);
     const lats = allCoords.map((c) => c[1]);
@@ -142,10 +161,11 @@ export function fitMapToTracks(map, tracks, options = {}) {
  */
 export function fitMapToSingleTrack(map, track, options = {}) {
   if (!map || !track) return;
-  const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c) => [c[0], c[1]]));
   const padding = options.padding ?? 40;
   const maxZoom = options.maxZoom ?? 16;
   const duration = options.duration ?? 0;
+  if (coords.length === 0) return;
   if (coords.length >= 2) {
     const lons = coords.map((c) => c[0]);
     const lats = coords.map((c) => c[1]);
@@ -168,7 +188,7 @@ export function fitMapToSingleTrack(map, track, options = {}) {
  */
 export function centerMapOnTrackLastPoint(map, track, options = {}) {
   if (!map || !track) return;
-  const coords = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c) => [c[0], c[1]]));
   const last = coords.length ? coords[coords.length - 1] : null;
   if (!last) return;
   const duration = options.duration ?? 200;

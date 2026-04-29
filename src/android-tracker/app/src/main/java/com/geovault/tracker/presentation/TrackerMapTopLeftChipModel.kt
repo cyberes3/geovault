@@ -3,10 +3,16 @@ package com.geovault.tracker.presentation
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.geovault.tracker.R
+import com.geovault.tracker.Tracker
+import com.geovault.tracker.ui.TrackerPointTimestamps
 
 sealed interface TrackerMapTopLeftChipText {
     data class Resource(@param:StringRes val resId: Int) : TrackerMapTopLeftChipText
     data class Value(val value: String) : TrackerMapTopLeftChipText
+    data class RelativeLastData(
+        val lastDataEpochMs: Long,
+        val serverMetadataUpdatedAtMs: Long?,
+    ) : TrackerMapTopLeftChipText
 }
 
 sealed interface TrackerMapTopLeftChipUiModel {
@@ -30,7 +36,7 @@ enum class TrackerMapTopLeftChipMode {
 }
 
 class TrackerMapTopLeftChipMapper {
-    fun map(state: TrackerMapUiState): TrackerMapTopLeftChipUiModel {
+    fun map(state: TrackerMapUiState, roster: List<Tracker>): TrackerMapTopLeftChipUiModel {
         val displayedTrackerId = state.displayedTrackerId.trim().ifBlank {
             state.runtime.selectedTrackerId.trim()
         }
@@ -79,11 +85,29 @@ class TrackerMapTopLeftChipMapper {
             ?: TrackerMapTopLeftChipText.Resource(R.string.select_tracker)
 
         val showReset = displayedTrackerId.isNotEmpty() && displayedTrackerId != selectedTrackerId
+        val subtitle: TrackerMapTopLeftChipText? = when {
+            selectedTrackerId.isNotEmpty() &&
+                displayedTrackerId == selectedTrackerId -> null
+            else -> {
+                val eff = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
+                val tracker = roster.firstOrNull { it.id == eff }
+                val lastMs = TrackerMapLastPointResolver.resolve(state, eff, tracker)?.lastUpdatedMs
+                if (lastMs == null) {
+                    TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data)
+                } else {
+                    val serverAt = tracker?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs)
+                    TrackerMapTopLeftChipText.RelativeLastData(
+                        lastDataEpochMs = lastMs,
+                        serverMetadataUpdatedAtMs = serverAt,
+                    )
+                }
+            }
+        }
         return TrackerMapTopLeftChipUiModel.Visible(
             mode = TrackerMapTopLeftChipMode.SINGLE_TRACKER,
             iconResId = R.drawable.ic_chevron_track,
             title = title,
-            subtitle = null,
+            subtitle = subtitle,
             showReset = showReset,
             cardContentDescriptionResId = R.string.map_chip_tracker_card_content_description,
             resetContentDescriptionResId = R.string.show_selected_tracker,

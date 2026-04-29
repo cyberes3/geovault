@@ -21,6 +21,7 @@ import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.ui.TrackerPointTimestamps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -66,6 +67,7 @@ data class TrackerMapSelectionCard(
     val lastUpdatedMs: Long?,
     val accuracyMeters: Float?,
     val isOwned: Boolean,
+    val serverMetadataUpdatedAtMs: Long? = null,
 )
 
 private fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = copy(
@@ -212,6 +214,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _uiState = MutableStateFlow(TrackerMapUiState())
     val uiState: StateFlow<TrackerMapUiState> = _uiState.asStateFlow()
+
+    fun trackerRosterForMapChip(): List<Tracker> = trackerManagementStateStore.trackers.value
 
     private val fitTrailSignal = Channel<Unit>(Channel.CONFLATED)
     private val pointEventChannel = Channel<TrackPointEvent>(Channel.UNLIMITED)
@@ -371,7 +375,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                                 newWindow = newWindow,
                                 mode = state.mode,
                                 selectedTrackerId = state.runtime.selectedTrackerId,
-                                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                                displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
                                 runtimeRunning = state.runtime.isRunning,
                                 activeStreamedTrackerIds = state.activeStreamedTrackerIds,
                                 changedTrackerId = trackerId,
@@ -520,7 +524,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun resolveListNavigationTarget(preferredTrackerIdOverride: String? = null): MapListNavigationTarget {
         val state = _uiState.value
         val preferredTrackerId = preferredTrackerIdOverride?.trim().orEmpty().ifBlank {
-            effectiveDisplayedTrackerId(state)
+            TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         }.ifBlank {
             state.runtime.selectedTrackerId.trim()
         }.ifBlank { "" }
@@ -586,7 +590,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     fun toggleDisplayedTrackerLock() {
         val state = _uiState.value
-        val displayedId = effectiveDisplayedTrackerId(state)
+        val displayedId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         if (displayedId.isEmpty()) return
         toggleTrackerLock(displayedId)
     }
@@ -626,50 +630,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             lastUpdatedMs = point.lastUpdatedMs,
             accuracyMeters = point.accuracyMeters,
             isOwned = tracker?.isOwner() == true,
+            serverMetadataUpdatedAtMs = tracker?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs),
         )
     }
-
-    private data class ResolvedTrackerPoint(
-        val latitude: Double,
-        val longitude: Double,
-        val lastUpdatedMs: Long?,
-        val accuracyMeters: Float?,
-    )
 
     private fun resolveTrackerPointData(
         state: TrackerMapUiState,
         trackerId: String
-    ): ResolvedTrackerPoint? {
+    ): TrackerMapResolvedPoint? {
         val normalizedId = trackerId.trim()
         if (normalizedId.isEmpty()) return null
         val tracker = trackerManagementStateStore.trackers.value.firstOrNull { it.id == normalizedId }
-        val remotePoint = state.remoteLastPoints[normalizedId]
-        val singleTrailPoint = state.trail.lastOrNull()
-            ?.takeIf {
-                normalizedId == effectiveDisplayedTrackerId(state) || normalizedId == state.runtime.selectedTrackerId
-            }
-        val multiTrailPoint = state.allQueueTrailsByTracker[normalizedId]?.lastOrNull()
-        val trackerLastPoint = tracker?.last_point
-        val latitude = when {
-            remotePoint != null -> remotePoint.lat
-            singleTrailPoint != null -> singleTrailPoint.latitude
-            multiTrailPoint != null -> multiTrailPoint.latitude
-            trackerLastPoint != null && trackerLastPoint.size >= 2 -> trackerLastPoint[1]
-            else -> return null
-        }
-        val longitude = when {
-            remotePoint != null -> remotePoint.lon
-            singleTrailPoint != null -> singleTrailPoint.longitude
-            multiTrailPoint != null -> multiTrailPoint.longitude
-            trackerLastPoint != null && trackerLastPoint.size >= 2 -> trackerLastPoint[0]
-            else -> return null
-        }
-        return ResolvedTrackerPoint(
-            latitude = latitude,
-            longitude = longitude,
-            lastUpdatedMs = remotePoint?.timestampMs ?: singleTrailPoint?.time ?: multiTrailPoint?.time ?: tracker?.updated_at,
-            accuracyMeters = remotePoint?.accuracyMeters ?: singleTrailPoint?.accuracy ?: multiTrailPoint?.accuracy,
-        )
+        return TrackerMapLastPointResolver.resolve(state, trackerId, tracker)
     }
 
     private fun stateWithSelectionCard(
@@ -786,7 +758,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     emptySet()
                 },
                 selectedTrackerId = state.runtime.selectedTrackerId,
-                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
                 hasTrailPoints = state.trail.isNotEmpty(),
                 hasPendingInitialTracker = hasPendingInitialTracker,
                 backgroundedDurationMs = backgroundDurationMs
@@ -902,7 +874,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val trackerColors = trackerManagementStateStore.trackers.value.associate { it.id to (it.color ?: "") }
         val trackerDisplayNames = trackerManagementStateStore.trackers.value.associate { it.id to it.name }
         val trackerRenderOrder = trackerManagementStateStore.trackers.value.map { it.id }
-        val effectiveDisplayedId = effectiveDisplayedTrackerId(s)
+        val effectiveDisplayedId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(s)
         val streamedAccuracyByTrackerId = buildStreamedAccuracyByTrackerId(s, effectiveDisplayedId)
         val fallbackAccuracyByTrackerId = buildFallbackAccuracyByTrackerId(s)
         val visibleTrackerIds = resolveVisibleAccuracyTrackerIds(s, effectiveDisplayedId)
@@ -1061,7 +1033,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 mode = state.mode,
                 runtimeRunning = state.runtime.isRunning,
                 selectedTrackerId = state.runtime.selectedTrackerId,
-                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
                 rosterTrackerIds = visibleRosterTrackerIds,
                 groupSelection = groupSelection
             )
@@ -1073,7 +1045,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 mode = state.mode,
                 runtimeRunning = state.runtime.isRunning,
                 selectedTrackerId = state.runtime.selectedTrackerId,
-                displayedTrackerId = effectiveDisplayedTrackerId(state),
+                displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
                 rosterTrackerIds = visibleRosterTrackerIds,
                 groupSelection = groupSelection
             )
@@ -1095,7 +1067,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private suspend fun reloadTrailFromDatabase(force: Boolean = false) {
         val state = _uiState.value
-        val activeTrackerId = effectiveDisplayedTrackerId(state)
+        val activeTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         val guardInput = TrailReloadGuardInput(
             force = force,
             mode = state.mode,
@@ -1308,7 +1280,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val hiddenGroupIds = visibility?.hidden_group_ids.orEmpty().toSet()
         val hiddenTrackIds = visibility?.hidden_track_ids.orEmpty().toSet()
         val hiddenOwnerTrackerIds = HiddenMapItemsPolicy.hiddenOwnerTrackerIds(trackerManagementStateStore.trackers.value)
-        val preferredTrackerId = effectiveDisplayedTrackerId(state).ifBlank { state.runtime.selectedTrackerId }
+        val preferredTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state).ifBlank { state.runtime.selectedTrackerId }
         return TrackerMapGroupModePolicy.resolveSelection(
             groups = trackerManagementStateStore.groups.value,
             hiddenGroupIds = hiddenGroupIds,
@@ -1437,13 +1409,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private fun reconcileStreaming(state: TrackerMapUiState) {
         streamingReconciler.reconcile(
             state,
-            effectiveDisplayedTrackerId(state),
+            TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
             effectiveDisplayedTrackerName(state),
         )
-    }
-
-    private fun effectiveDisplayedTrackerId(state: TrackerMapUiState): String {
-        return state.displayedTrackerId.trim().ifBlank { state.runtime.selectedTrackerId.trim() }
     }
 
     private fun effectiveDisplayedTrackerName(state: TrackerMapUiState): String {
@@ -1455,7 +1423,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             TrackerMapTrailSeedInput(
                 mode = state.mode,
                 runtimeRunning = state.runtime.isRunning,
-                activeTrackerId = effectiveDisplayedTrackerId(state),
+                activeTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
                 sessionVisibleBoundaryId = state.runtime.sessionVisibleBoundaryId,
                 rosterTrackerIds = visibleMapRosterTrackerIds(),
                 groupSelection = resolveGroupModeSelection(state),

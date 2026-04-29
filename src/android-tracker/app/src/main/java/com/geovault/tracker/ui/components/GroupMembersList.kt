@@ -3,6 +3,7 @@ package com.geovault.tracker.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,10 +23,15 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
+import com.geovault.tracker.ui.TrackerListDateTimeFormat
+import com.geovault.tracker.ui.TrackerPointTimestamps
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -92,6 +98,33 @@ private fun GroupMemberCard(
     onViewInList: (() -> Unit)?,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var staleEvalTick by remember(row.trackerId) { mutableStateOf(0) }
+    LaunchedEffect(row.trackerId) {
+        while (true) {
+            delay(20_000L)
+            staleEvalTick++
+        }
+    }
+    val nowMs = System.currentTimeMillis() + (staleEvalTick and 0)
+    val t = row.tracker
+    val lastDataMs = t?.let(TrackerPointTimestamps::lastPointDataMs)
+    val serverUpdatedAtMs = t?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs)
+    val warnStaleData = t != null &&
+        ActiveButDeadTrackerPolicy.isActiveButDead(
+            nowMs = nowMs,
+            updatedAtMs = serverUpdatedAtMs,
+            lastDataMs = lastDataMs,
+        )
+    val lastLineText = if (lastDataMs != null) {
+        TrackerListDateTimeFormat.formatLocal(lastDataMs)
+    } else {
+        stringResource(R.string.waiting_for_data)
+    }
+    val lastLineColor = if (warnStaleData) {
+        GeoVaultColorTokens.Error
+    } else {
+        GeoVaultColorTokens.TextSecondary
+    }
     val chevronTint = remember(row.tracker?.color) {
         TrackerChevronStylePolicy.tintForTrackerColorHex(row.tracker?.color)
     }
@@ -125,17 +158,27 @@ private fun GroupMemberCard(
                     .size(TrackerChevronStylePolicy.TrackerRowChevronSize)
                     .padding(end = 0.dp),
             )
-            Text(
-                text = row.tracker?.name ?: row.trackerId,
-                style = MaterialTheme.typography.body2,
-                fontWeight = FontWeight.Bold,
-                color = GeoVaultColorTokens.TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Column(
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 8.dp),
-            )
+            ) {
+                Text(
+                    text = row.tracker?.name ?: row.trackerId,
+                    style = MaterialTheme.typography.body2,
+                    fontWeight = FontWeight.Bold,
+                    color = GeoVaultColorTokens.TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = lastLineText,
+                    style = MaterialTheme.typography.caption,
+                    color = lastLineColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Box {
                 GeoVaultIconButton(
                     onClick = { menuExpanded = true },

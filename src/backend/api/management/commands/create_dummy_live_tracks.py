@@ -5,6 +5,9 @@ development/testing.
 Creates 10 tracks, 3 groups (2+2+3 track members), world shares (tracks and
 groups), direct shares to other users, public visibility, group visibility
 (public/shared/private), and group direct shares (LiveTrackGroupShare).
+Also creates one extra track, "Stale data test (active but dead)", whose
+last point timestamp is ~20 minutes in the past while the track row is new,
+for testing live_track / Android stale-data highlighting.
 Uses the first available user (or --user email). Rerunning
 (without --delete) deletes existing dummy tracks and groups (by name prefix)
 and recreates them. Use --delete to only remove dummy data.
@@ -25,6 +28,10 @@ User = get_user_model()
 EARTH_RADIUS_METERS = 6_371_000
 DUMMY_NAME_PREFIX = "Dummy: "
 DUMMY_GROUP_PREFIX = "Dummy Group: "
+# Extra track (not counted in NUM_TRACKS) for stale-data UI tests
+STALE_DATA_TEST_TRACK_NAME = f"{DUMMY_NAME_PREFIX}Stale data test (active but dead)"
+# Last point is this many minutes before "now" at create time (must be > 10 for highlight rules)
+STALE_LAST_POINT_AGE_MINUTES = 20
 
 NUM_TRACKS = 10
 NUM_GROUPS = 3
@@ -134,6 +141,48 @@ def _generate_track(style):
         batt = max(1.0, batt - random.uniform(0.01, 0.1))
         point_params.append(params)
 
+    return coords, point_params
+
+
+def _generate_stale_active_dead_track():
+    """
+    Two-point line with timestamps ~STALE_LAST_POINT_AGE_MINUTES in the past.
+    When saved as a new row, live_track's updated_at is current but last
+    data is stale — matches "active but dead" product rules.
+    """
+    lon_min, lon_max, lat_min, lat_max = random.choice(REGIONS)
+    lon0 = round(random.uniform(lon_min, lon_max), 6)
+    lat0 = round(random.uniform(lat_min, lat_max), 6)
+    age_ms = int(STALE_LAST_POINT_AGE_MINUTES * 60 * 1000)
+    now_ms = int(time.time() * 1000)
+    ts0 = now_ms - age_ms - 60_000
+    ts1 = now_ms - age_ms
+    lat1, lon1 = _destination_point(lat0, lon0, random.uniform(0, 360), 30.0)
+
+    coords = [
+        [lon0, lat0, float(ts0)],
+        [round(lon1, 6), round(lat1, 6), float(ts1)],
+    ]
+    point_params = [
+        {
+            "alt": 100.0,
+            "spd_kph": 5.0,
+            "bearing": 0.0,
+            "acc": 10.0,
+            "sat": 8,
+            "prov": "gps",
+            "batt": 80.0,
+        },
+        {
+            "alt": 100.0,
+            "spd_kph": 5.0,
+            "bearing": 0.0,
+            "acc": 10.0,
+            "sat": 8,
+            "prov": "gps",
+            "batt": 80.0,
+        },
+    ]
     return coords, point_params
 
 
@@ -254,6 +303,25 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(
                         f"  [{user.email}] Created: {name} ({visibility}, {len(coords)} pts)"
                     ))
+
+                s_coords, s_params = _generate_stale_active_dead_track()
+                stale = LiveTrack.objects.create(
+                    id=uuid.uuid4(),
+                    tracker_secret=secrets.token_urlsafe(32),
+                    hauk_password=generate_hauk_password(),
+                    name=STALE_DATA_TEST_TRACK_NAME,
+                    user=user,
+                    settings={"color": "#c0392b"},
+                    visibility="private",
+                    share_params_with_recipients=False,
+                    geometry={"type": "LineString", "coordinates": s_coords},
+                    point_params=s_params,
+                )
+                tracks.append(stale)
+                self.stdout.write(self.style.NOTICE(
+                    f"  [{user.email}] Stale-data test: {stale.name} (private, 2 pts, "
+                    f"last point ≈{STALE_LAST_POINT_AGE_MINUTES}m old — enable highlight in Live Track → Settings)"
+                ))
 
                 # Groups: 3 groups, 2 + 2 + 3 track members; visibility: Family=shared, Team=shared, Public=public
                 group_track_assignments = [

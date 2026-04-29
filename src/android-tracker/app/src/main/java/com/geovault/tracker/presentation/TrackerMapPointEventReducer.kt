@@ -20,7 +20,7 @@ object TrackerMapPointEventReducer {
     fun reduce(input: TrackerMapPointReductionInput): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
-        val displayedTrackerId = effectiveDisplayedTrackerId(state)
+        val displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
             event = point,
             input = TrackerMapPointAcceptanceInput(
@@ -169,7 +169,4 @@ object TrackerMapPointEventReducer {
         return (currentTrail + queued).takeLast(trailPointLimit)
     }
 
-    private fun effectiveDisplayedTrackerId(state: TrackerMapUiState): String {
-        return state.displayedTrackerId.trim().ifBlank { state.runtime.selectedTrackerId.trim() }
-    }
 }

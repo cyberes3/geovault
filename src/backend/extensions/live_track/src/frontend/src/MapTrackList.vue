@@ -28,7 +28,9 @@
         <div class="font-bold text-gray-900 tracking-tight break-all truncate" :title="track.name">
           {{ track.name }}
         </div>
-        <div class="text-xs font-medium text-gray-500 truncate mt-0.5">
+        <div
+          :class="['text-xs font-medium truncate mt-0.5', listTimeClass(track)]"
+        >
           {{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'Waiting for data...' }}
         </div>
       </div>
@@ -57,6 +59,7 @@ import { TableCellsIcon } from '@heroicons/vue/24/outline';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import { getTrackDirectionAngle } from './trackGeometry.js';
 import { formatTimestampLocal } from './paramFormatters.js';
+import { isActiveButDeadTrack } from './activeButDeadTrack.js';
 
 function formatTime(ms) {
   return formatTimestampLocal(ms);
@@ -86,13 +89,19 @@ export default {
       }
     },
     /** Leave default for hover-only desktop list. Mobile bottom sheet: pass opacity-60 so Latest Params is visible without hover (matches TrackerListContent). */
-    actionOpacityClass: { type: String, default: '' }
+    actionOpacityClass: { type: String, default: '' },
+    highlightStaleData: { type: Boolean, default: false }
   },
   emits: ['track-click', 'open-params'],
-  setup() {
+  setup(props) {
+    function listTimeClass(track) {
+      if (!props.highlightStaleData) return 'text-gray-500';
+      return isActiveButDeadTrack(track) ? 'text-red-600' : 'text-gray-500';
+    }
     return {
       getTrackDirectionAngle,
-      formatTime
+      formatTime,
+      listTimeClass
     };
   }
 };

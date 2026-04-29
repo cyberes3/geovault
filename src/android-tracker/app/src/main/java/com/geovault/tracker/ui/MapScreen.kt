@@ -63,6 +63,7 @@ import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
 import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
@@ -85,6 +86,7 @@ import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
@@ -175,7 +177,7 @@ private fun TrackerMapAuthenticatedContent(
     val state by viewModel.uiState.collectAsState()
     val mapPaddingPolicy = remember { TrackerMapPaddingPolicy() }
     val topLeftChipMapper = remember { TrackerMapTopLeftChipMapper() }
-    val topLeftChipModel = topLeftChipMapper.map(state)
+    val topLeftChipModel = topLeftChipMapper.map(state, viewModel.trackerRosterForMapChip())
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var locationPermission by remember {
@@ -744,6 +746,7 @@ private data class MapSelectionPanelUiModel(
     val latitude: Double,
     val longitude: Double,
     val lastUpdatedMs: Long?,
+    val serverMetadataUpdatedAtMs: Long?,
     val accuracyMeters: Float?,
     val isLocked: Boolean,
     val showFocusAction: Boolean,
@@ -759,6 +762,7 @@ private fun TrackerMapUiState.toSelectionPanelUiModel(): MapSelectionPanelUiMode
         latitude = selection.latitude,
         longitude = selection.longitude,
         lastUpdatedMs = selection.lastUpdatedMs,
+        serverMetadataUpdatedAtMs = selection.serverMetadataUpdatedAtMs,
         accuracyMeters = selection.accuracyMeters,
         isLocked = selectionLockTrackerId == selection.trackerId,
         showFocusAction = TrackerMapViewModel.resolveFocusActionVisible(mode),
@@ -774,6 +778,7 @@ private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(): TrackerParamsRo
         lastUpdatedMs = lastUpdatedMs,
         accuracyMeters = accuracyMeters,
         isOwned = isOwned,
+        serverMetadataUpdatedAtMs = serverMetadataUpdatedAtMs,
     ).toTrackerParamsRouteArgs()
 }
 
@@ -849,11 +854,30 @@ private fun MapTrackerSelectionPanel(
                     clipboardHelper.copyText(latLon, label = "Coordinates")
                 },
             )
-            val lastUpdatedText = formatLastUpdatedText(lastUpdatedMs = model.lastUpdatedMs)
+            var staleEvalTick by remember(model.trackerId) { mutableStateOf(0) }
+            LaunchedEffect(model.trackerId) {
+                while (true) {
+                    delay(20_000L)
+                    staleEvalTick++
+                }
+            }
+            val nowMs = System.currentTimeMillis() + (staleEvalTick and 0)
+            val lastUpdatedText = MapFormatLastUpdatedTextOrWaiting(model.lastUpdatedMs)
+            val warnStale = model.lastUpdatedMs != null &&
+                ActiveButDeadTrackerPolicy.isActiveButDead(
+                    nowMs = nowMs,
+                    updatedAtMs = model.serverMetadataUpdatedAtMs,
+                    lastDataMs = model.lastUpdatedMs,
+                )
+            val lastUpdatedColor = if (warnStale) {
+                GeoVaultColorTokens.Error
+            } else {
+                GeoVaultColorTokens.TextSecondary
+            }
             Text(
                 text = lastUpdatedText,
                 style = MaterialTheme.typography.caption,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = lastUpdatedColor,
             )
             Spacer(modifier = Modifier.height(4.dp))
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -933,52 +957,6 @@ private fun MapInfoActionIconButton(
     )
 }
 
-@Composable
-private fun formatLastUpdatedText(lastUpdatedMs: Long?): String {
-    if (lastUpdatedMs == null) return stringResource(R.string.waiting_for_data)
-    val diffMs = System.currentTimeMillis() - lastUpdatedMs
-    val diffSec = (diffMs / 1000).coerceAtLeast(0)
-    val (value, unit) = when {
-        diffSec < 60 -> {
-            val n = diffSec.toInt()
-            val unit = if (n == 1) {
-                stringResource(R.string.map_updated_sec)
-            } else {
-                stringResource(R.string.map_updated_secs)
-            }
-            n to unit
-        }
-        diffSec < 3600 -> {
-            val n = (diffSec / 60).toInt()
-            val unit = if (n == 1) {
-                stringResource(R.string.map_updated_min)
-            } else {
-                stringResource(R.string.map_updated_mins)
-            }
-            n to unit
-        }
-        diffSec < 86400 -> {
-            val n = (diffSec / 3600).toInt()
-            val unit = if (n == 1) {
-                stringResource(R.string.map_updated_hr)
-            } else {
-                stringResource(R.string.map_updated_hrs)
-            }
-            n to unit
-        }
-        else -> {
-            val n = (diffSec / 86400).toInt()
-            val unit = if (n == 1) {
-                stringResource(R.string.map_updated_day_short)
-            } else {
-                stringResource(R.string.map_updated_days_short)
-            }
-            n to unit
-        }
-    }
-    return stringResource(R.string.map_updated_ago, value, unit)
-}
-
 private fun selectNearestFeature(
     map: MapLibreMap,
     tapPoint: PointF,
@@ -989,8 +967,11 @@ private fun selectNearestFeature(
     return features.minByOrNull { feature ->
         val geom = feature.geometry()
         if (geom !is org.maplibre.geojson.Point) return@minByOrNull Float.MAX_VALUE
+        val lat = geom.latitude()
+        val lon = geom.longitude()
+        if (!isValidMapLibreGeographicLatLng(lat, lon)) return@minByOrNull Float.MAX_VALUE
         val screen = map.projection.toScreenLocation(
-            org.maplibre.android.geometry.LatLng(geom.latitude(), geom.longitude())
+            org.maplibre.android.geometry.LatLng(lat, lon)
         )
         val dx = screen.x - tapPoint.x
         val dy = screen.y - tapPoint.y

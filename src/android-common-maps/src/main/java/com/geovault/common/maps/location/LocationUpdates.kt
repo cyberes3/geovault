@@ -16,6 +16,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import com.geovault.common.maps.core.latLngOrNull
 import org.maplibre.android.geometry.LatLng
 import kotlin.coroutines.resume
 
@@ -51,7 +52,7 @@ object LocationUpdates {
         fusedClient.lastLocation
             .addOnSuccessListener { location ->
                 if (location != null) {
-                    deliver(LatLng(location.latitude, location.longitude))
+                    deliver(latLngOrNull(location.latitude, location.longitude))
                 } else {
                     requestCurrentLocationWithLocationManager(
                         appContext = appContext,
@@ -87,7 +88,7 @@ object LocationUpdates {
                 ContextCompat.getMainExecutor(appContext),
             ) { location ->
                 if (location != null) {
-                    deliver(LatLng(location.latitude, location.longitude))
+                    deliver(latLngOrNull(location.latitude, location.longitude))
                 } else {
                     deliver(getBestLastKnownLatLng(manager))
                 }
@@ -115,7 +116,8 @@ object LocationUpdates {
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations.forEach { location ->
-                    callback(LatLng(location.latitude, location.longitude), location)
+                    val latLng = latLngOrNull(location.latitude, location.longitude) ?: return@forEach
+                    callback(latLng, location)
                 }
             }
         }
@@ -151,7 +153,7 @@ object LocationUpdates {
         val mainHandler = Handler(Looper.getMainLooper())
         val locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                val latLng = LatLng(location.latitude, location.longitude)
+                val latLng = latLngOrNull(location.latitude, location.longitude) ?: return
                 mainHandler.post { callback(latLng, location) }
             }
         }
@@ -190,7 +192,7 @@ object LocationUpdates {
             }
             .maxByOrNull { it.time }
             ?: return null
-        return LatLng(last.latitude, last.longitude)
+        return latLngOrNull(last.latitude, last.longitude)
     }
 
     interface LocationUpdatesSession {

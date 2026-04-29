@@ -18,6 +18,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,8 +41,10 @@ import com.geovault.common.ui.components.GeoVaultInstallLongPressTooltip
 import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
+import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipText
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun MapTopLeftTrackerChip(
@@ -88,6 +92,9 @@ fun MapTopLeftTrackerChip(
             modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         ) {
             val maxTitleWidth = ((maxWidth * 0.66f) - 90.dp).coerceAtLeast(72.dp)
+            val titleLineHeight = 15.sp
+            val subtitleLineHeight = 12.sp
+            val subtitleTopSpacing = 2.dp
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(
@@ -106,23 +113,76 @@ fun MapTopLeftTrackerChip(
                         .padding(end = if (model.showReset) 0.dp else 4.dp),
                 ) {
                     Text(
-                        text = model.title.resolve(),
+                        text = model.title.resolveTitle(),
                         color = MaterialTheme.colors.onPrimary,
                         fontSize = 14.sp,
+                        lineHeight = titleLineHeight,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     model.subtitle?.let { subtitle ->
-                        Text(
-                            text = subtitle.resolve(),
-                            color = MaterialTheme.colors.onPrimary,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                        )
+                        when (subtitle) {
+                            is TrackerMapTopLeftChipText.RelativeLastData -> {
+                                var staleEvalTick by remember(subtitle.lastDataEpochMs) {
+                                    mutableStateOf(0)
+                                }
+                                LaunchedEffect(subtitle.lastDataEpochMs) {
+                                    while (true) {
+                                        delay(20_000L)
+                                        staleEvalTick++
+                                    }
+                                }
+                                val nowMs = System.currentTimeMillis() + (staleEvalTick and 0)
+                                val warnStale = ActiveButDeadTrackerPolicy.isActiveButDead(
+                                    nowMs = nowMs,
+                                    updatedAtMs = subtitle.serverMetadataUpdatedAtMs,
+                                    lastDataMs = subtitle.lastDataEpochMs,
+                                )
+                                val subtitleColor = if (warnStale) {
+                                    GeoVaultColorTokens.Error
+                                } else {
+                                    MaterialTheme.colors.onPrimary
+                                }
+                                Text(
+                                    text = MapFormatLastUpdatedText(subtitle.lastDataEpochMs),
+                                    color = subtitleColor,
+                                    fontSize = 12.sp,
+                                    lineHeight = subtitleLineHeight,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = subtitleTopSpacing),
+                                )
+                            }
+                            is TrackerMapTopLeftChipText.Resource -> {
+                                Text(
+                                    text = stringResource(subtitle.resId),
+                                    color = MaterialTheme.colors.onPrimary,
+                                    fontSize = 12.sp,
+                                    lineHeight = subtitleLineHeight,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = subtitleTopSpacing),
+                                )
+                            }
+                            is TrackerMapTopLeftChipText.Value -> {
+                                Text(
+                                    text = subtitle.value,
+                                    color = MaterialTheme.colors.onPrimary,
+                                    fontSize = 12.sp,
+                                    lineHeight = subtitleLineHeight,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = subtitleTopSpacing),
+                                )
+                            }
+                        }
                     }
                 }
                 if (model.showReset) {
@@ -147,9 +207,10 @@ fun MapTopLeftTrackerChip(
 }
 
 @Composable
-private fun TrackerMapTopLeftChipText.resolve(): String {
+private fun TrackerMapTopLeftChipText.resolveTitle(): String {
     return when (this) {
         is TrackerMapTopLeftChipText.Resource -> stringResource(resId)
         is TrackerMapTopLeftChipText.Value -> value
+        is TrackerMapTopLeftChipText.RelativeLastData -> ""
     }
 }

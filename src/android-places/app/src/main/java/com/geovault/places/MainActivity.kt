@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapPreloadHost
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
@@ -118,11 +119,23 @@ class MainActivity : ComponentActivity() {
                 val preloadPoints = buildList {
                     state.saved.forEach { feature ->
                         val coords = feature.geometry.coordinates
-                        if (coords.size >= 2) add(LatLng(coords[1], coords[0]))
+                        if (coords.size >= 2) {
+                            val lat = coords[1]
+                            val lon = coords[0]
+                            if (isValidMapLibreGeographicLatLng(lat, lon)) {
+                                add(LatLng(lat, lon))
+                            }
+                        }
                     }
                     state.offlineItems.forEach { offline ->
                         val coords = offline.feature.geometry.coordinates
-                        if (coords.size >= 2) add(LatLng(coords[1], coords[0]))
+                        if (coords.size >= 2) {
+                            val lat = coords[1]
+                            val lon = coords[0]
+                            if (isValidMapLibreGeographicLatLng(lat, lon)) {
+                                add(LatLng(lat, lon))
+                            }
+                        }
                     }
                 }
                 val preloadTarget = resolveGeoVaultMainMapPreloadCameraTarget(preloadPoints)

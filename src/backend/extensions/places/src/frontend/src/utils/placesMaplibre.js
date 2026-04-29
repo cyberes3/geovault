@@ -1,3 +1,4 @@
+import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
 import {
   buildRasterSourceSpec,
   buildRasterStyle,
@@ -239,13 +240,24 @@ export async function createPlacesMap({
     fitMaxZoom = 15
   } = {}) => {
     if (!features || features.length === 0) return;
-    if (features.length === 1) {
-      map.easeTo({center: features[0].geometry.coordinates, zoom: focusZoom, duration: 0});
+    const valid = features.filter((f) => {
+      const c = f?.geometry?.coordinates;
+      return (
+        Array.isArray(c) &&
+        c.length >= 2 &&
+        isValidMapLngLatPair(c[0], c[1])
+      );
+    });
+    if (valid.length === 0) return;
+    if (valid.length === 1) {
+      const c = valid[0].geometry.coordinates;
+      map.easeTo({center: c, zoom: focusZoom, duration: 0});
       return;
     }
-    const bounds = new maplibre.LngLatBounds(features[0].geometry.coordinates, features[0].geometry.coordinates);
-    for (let i = 1; i < features.length; i += 1) {
-      bounds.extend(features[i].geometry.coordinates);
+    const first = valid[0].geometry.coordinates;
+    const bounds = new maplibre.LngLatBounds(first, first);
+    for (let i = 1; i < valid.length; i += 1) {
+      bounds.extend(valid[i].geometry.coordinates);
     }
     map.fitBounds(bounds, {padding: fitPadding, maxZoom: fitMaxZoom, duration: 0});
   };
