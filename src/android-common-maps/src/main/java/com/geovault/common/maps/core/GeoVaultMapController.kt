@@ -20,7 +20,20 @@ enum class GeoVaultMapPhase {
     StyleLoading,
     Ready,
     Recovering,
+    Error,
 }
+
+enum class GeoVaultMapErrorNoticeType {
+    Configuration,
+    StyleLoad,
+}
+
+data class GeoVaultMapErrorNotice(
+    val type: GeoVaultMapErrorNoticeType,
+    val title: String,
+    val message: String,
+    val retryable: Boolean = true,
+)
 
 /**
  * Root map abstraction that owns one active MapLibre session, plugin dispatch, source switching,
@@ -45,19 +58,17 @@ sealed class GeoVaultBaseMap(
     private val _phase = MutableStateFlow(GeoVaultMapPhase.Initializing)
     val phase: StateFlow<GeoVaultMapPhase> = _phase.asStateFlow()
 
+    private val _errorNotice = MutableStateFlow<GeoVaultMapErrorNotice?>(null)
+    val errorNotice: StateFlow<GeoVaultMapErrorNotice?> = _errorNotice.asStateFlow()
+
     var onMapReady: ((MapLibreMap, Style) -> Unit)? = null
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
     /** Fired for [MapView.OnDidFailLoadingMapListener] and recoverable style fetch failures from [MapLibreManager]. */
     var onStyleLoadFailed: ((errorMessage: String) -> Unit)? = null
+    /** Fired when the GeoVault server reports incomplete map/font configuration. */
+    var onMapConfigurationFailed: ((errorMessage: String) -> Unit)? = null
     /** Invoked after the style is loaded and all registered plugins have run [GeoVaultMapPlugin.onStyleLoaded]. */
     var onStyleReady: ((MapLibreMap, Style) -> Unit)? = null
-    var forceOsmOnly: Boolean = false
-        set(value) {
-            field = value
-            if (value) {
-                _mapManager?.sourceManager?.setOsmOnly()
-            }
-        }
 
     var maplibreMap: MapLibreMap? = null
         private set
@@ -78,7 +89,12 @@ sealed class GeoVaultBaseMap(
             manager.defaultPadding = defaultCameraPadding
             manager.onStyleLoadFailed = { message ->
                 if (_mapManager === manager && mapView === view) {
-                    onStyleLoadFailed?.invoke(message)
+                    reportStyleLoadFailed(message)
+                }
+            }
+            manager.onMapConfigurationFailed = { message ->
+                if (_mapManager === manager && mapView === view) {
+                    reportMapConfigurationFailed(message)
                 }
             }
             manager.onStyleLoaded = { map, style ->
@@ -86,15 +102,13 @@ sealed class GeoVaultBaseMap(
                 if (_mapManager === manager && mapView === view) {
                     styleDeliveredForGeneration = true
                     clearStyleLoadWatchdog()
+                    _errorNotice.value = null
                     onStyleLoaded?.invoke(map, style)
                     onMapReady?.invoke(map, style)
                     pluginRegistry.onStyleLoaded(map, style)
                     onStyleReady?.invoke(map, style)
                     _phase.value = GeoVaultMapPhase.Ready
                 }
-            }
-            if (forceOsmOnly) {
-                manager.sourceManager.setOsmOnly()
             }
         }
         _mapManager = attachedManager
@@ -110,16 +124,24 @@ sealed class GeoVaultBaseMap(
             _phase.value = GeoVaultMapPhase.StyleLoading
             attachedManager.setupBaseMapSettings(map)
             pluginRegistry.onMapAttached(map)
-            val applyGeneration = beginStyleLoad(map)
-            if (forceOsmOnly) {
-                attachedManager.applySelectedSource(map)
-            } else {
-                attachedManager.fetchMapSources {
-                    if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
-                    if (styleLoadGeneration != applyGeneration) return@fetchMapSources
-                    if (!attachedManager.isCurrentSourceApplied(map)) {
-                        attachedManager.applySelectedSource(map)
+            attachedManager.fetchMapSources { canRenderMap ->
+                if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
+                if (!canRenderMap) {
+                    clearStyleLoadWatchdog()
+                    _phase.value = GeoVaultMapPhase.Error
+                    return@fetchMapSources
+                }
+                if (!attachedManager.isCurrentSourceApplied(map)) {
+                    beginStyleLoad(map)
+                    if (!attachedManager.applySelectedSource(map)) {
+                        styleDeliveredForGeneration = true
+                        clearStyleLoadWatchdog()
+                        _phase.value = GeoVaultMapPhase.Ready
                     }
+                } else {
+                    styleDeliveredForGeneration = true
+                    clearStyleLoadWatchdog()
+                    _phase.value = GeoVaultMapPhase.Ready
                 }
             }
         }
@@ -162,7 +184,35 @@ sealed class GeoVaultBaseMap(
     }
 
     fun fetchSources(onFetched: () -> Unit = {}) {
-        _mapManager?.fetchMapSources(onFetched)
+        _mapManager?.fetchMapSources { onFetched() }
+    }
+
+    fun dismissMapErrorNotice() {
+        _errorNotice.value = null
+    }
+
+    fun retryMapSourceLoad() {
+        _errorNotice.value = null
+        TileSourceCache.invalidate()
+        MapStyleCache.invalidate()
+        val map = maplibreMap ?: return
+        val manager = _mapManager ?: return
+        _phase.value = GeoVaultMapPhase.StyleLoading
+        manager.fetchMapSources { canRenderMap ->
+            if (_mapManager !== manager || maplibreMap !== map) return@fetchMapSources
+            if (!canRenderMap) {
+                clearStyleLoadWatchdog()
+                _phase.value = GeoVaultMapPhase.Error
+                return@fetchMapSources
+            }
+            pluginRegistry.onStyleWillChange(map, map.style)
+            beginStyleLoad(map)
+            if (!manager.applySelectedSource(map)) {
+                styleDeliveredForGeneration = true
+                clearStyleLoadWatchdog()
+                _phase.value = GeoVaultMapPhase.Ready
+            }
+        }
     }
 
     fun cycleSource() {
@@ -292,7 +342,7 @@ sealed class GeoVaultBaseMap(
         val map = maplibreMap ?: return
         val manager = _mapManager ?: return
         Log.e(TAG, "Map style load failed: $errorMessage")
-        onStyleLoadFailed?.invoke(errorMessage)
+        reportStyleLoadFailed(errorMessage)
         styleDeliveredForGeneration = true
         clearStyleLoadWatchdog()
         _phase.value = GeoVaultMapPhase.Recovering
@@ -328,6 +378,24 @@ sealed class GeoVaultBaseMap(
     private fun clearStyleLoadWatchdog() {
         styleLoadWatchdog?.let { mainHandler.removeCallbacks(it) }
         styleLoadWatchdog = null
+    }
+
+    private fun reportStyleLoadFailed(message: String) {
+        _errorNotice.value = GeoVaultMapErrorNotice(
+            type = GeoVaultMapErrorNoticeType.StyleLoad,
+            title = "Map Unavailable",
+            message = "Map style failed to load: $message",
+        )
+        onStyleLoadFailed?.invoke(message)
+    }
+
+    private fun reportMapConfigurationFailed(message: String) {
+        _errorNotice.value = GeoVaultMapErrorNotice(
+            type = GeoVaultMapErrorNoticeType.Configuration,
+            title = "Map Setup Required",
+            message = message,
+        )
+        onMapConfigurationFailed?.invoke(message)
     }
 
     private companion object {

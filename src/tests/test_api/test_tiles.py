@@ -43,6 +43,67 @@ class TestTilesAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('sources', data)
+        self.assertIn('map_config_errors', data)
+
+    @patch('geo_lib.tiles._font_glyphs_available', return_value=True)
+    @patch('geo_lib.tiles.get_tile_sources_for_client')
+    def test_get_tile_sources_reports_missing_maplibre_configuration(self, mock_sources, mock_fonts):
+        """No visible MapLibre style source is reported as an admin setup error."""
+        mock_sources.return_value = [
+            {
+                'id': 'osm',
+                'name': 'OpenStreetMap',
+                'type': 'xyz',
+                'hidden': False,
+                'client_config': {'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'},
+            },
+        ]
+
+        response = self.client.get('/api/tiles/sources/')
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(['maplibre_not_configured'], [error['code'] for error in data['map_config_errors']])
+
+    @patch('geo_lib.tiles._font_glyphs_available', return_value=False)
+    @patch('geo_lib.tiles.get_tile_sources_for_client')
+    def test_get_tile_sources_reports_missing_font_glyphs(self, mock_sources, mock_fonts):
+        """Missing generated glyphs are reported separately from source configuration."""
+        mock_sources.return_value = [
+            {
+                'id': 'maptiler-streets',
+                'name': 'Streets',
+                'type': 'maptiler',
+                'hidden': False,
+                'client_config': {'style_url': '/api/maps/maptiler/streets/style.json'},
+            },
+        ]
+
+        response = self.client.get('/api/tiles/sources/')
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(['font_glyphs_missing'], [error['code'] for error in data['map_config_errors']])
+
+    @patch('geo_lib.tiles._font_glyphs_available', return_value=True)
+    @patch('geo_lib.tiles.get_tile_sources_for_client')
+    def test_get_tile_sources_has_no_config_errors_when_map_and_fonts_ready(self, mock_sources, mock_fonts):
+        """A visible MapLibre style and generated fonts clear explicit setup errors."""
+        mock_sources.return_value = [
+            {
+                'id': 'maptiler-streets',
+                'name': 'Streets',
+                'type': 'maptiler',
+                'hidden': False,
+                'client_config': {'style_url': '/api/maps/maptiler/streets/style.json'},
+            },
+        ]
+
+        response = self.client.get('/api/tiles/sources/')
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual([], data['map_config_errors'])
 
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_proxied_tile_source_real_request_auth_and_connection(self):
@@ -757,8 +818,91 @@ class TestTilesAPI(TestCase):
                 self.assertIn('tiles', maptiler_source)
                 self.assertEqual(len(maptiler_source['tiles']), 1)
                 self.assertEqual(maptiler_source['tiles'][0], '/api/tiles/maptiler-topo-v4/{z}/{x}/{y}')
+                self.assertNotIn('glyphs', data)
         
         # Reset the registry
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tiles.get_config_loader')
+    def test_style_proxy_adds_glyphs_for_text_layers(self, mock_get_config_loader, mock_requests_get):
+        """Text-bearing proxied styles should use GeoVault's server-side glyph endpoint."""
+        mock_config_loader = MagicMock()
+        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
+        mock_config_loader.get_str.return_value = 'example.com'
+        mock_get_config_loader.return_value = mock_config_loader
+
+        mock_style_response = MagicMock()
+        mock_style_response.status_code = 200
+        mock_style_response.json.return_value = {
+            'version': 8,
+            'sources': {},
+            'layers': [
+                {'id': 'labels', 'type': 'symbol', 'layout': {'text-field': '{name}'}},
+            ],
+        }
+        mock_requests_get.return_value = mock_style_response
+
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+        with patch('geo_lib.tile_sources.maptiler.get_config_loader') as mock_maptiler_config:
+            mock_maptiler_config.return_value.get_with_env_override.return_value = 'test-api-key-12345'
+            mock_maptiler_config.return_value.get_list.return_value = ['topo-v4']
+            mock_maptiler_config.return_value.get_str.return_value = 'example.com'
+            mock_maptiler_config.return_value.get_bool.return_value = True
+
+            topo_source = get_tile_source('maptiler-topo-v4')
+            if topo_source and topo_source.get('requires_proxy'):
+                response = self.client.get('/api/tiles/style/topo-v4')
+                self.assertEqual(response.status_code, 200)
+                data = json.loads(response.content)
+                self.assertEqual(data['glyphs'], '/api/fonts/{fontstack}/{range}.pbf')
+
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tiles.get_config_loader')
+    def test_style_proxy_preserves_existing_glyphs(self, mock_get_config_loader, mock_requests_get):
+        """Valid upstream glyph templates should not be rewritten."""
+        mock_config_loader = MagicMock()
+        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
+        mock_config_loader.get_str.return_value = 'example.com'
+        mock_get_config_loader.return_value = mock_config_loader
+
+        upstream_glyphs = 'https://example.test/fonts/{fontstack}/{range}.pbf'
+        mock_style_response = MagicMock()
+        mock_style_response.status_code = 200
+        mock_style_response.json.return_value = {
+            'version': 8,
+            'glyphs': upstream_glyphs,
+            'sources': {},
+            'layers': [
+                {'id': 'labels', 'type': 'symbol', 'layout': {'text-field': ['get', 'name']}},
+            ],
+        }
+        mock_requests_get.return_value = mock_style_response
+
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+        with patch('geo_lib.tile_sources.maptiler.get_config_loader') as mock_maptiler_config:
+            mock_maptiler_config.return_value.get_with_env_override.return_value = 'test-api-key-12345'
+            mock_maptiler_config.return_value.get_list.return_value = ['topo-v4']
+            mock_maptiler_config.return_value.get_str.return_value = 'example.com'
+            mock_maptiler_config.return_value.get_bool.return_value = True
+
+            topo_source = get_tile_source('maptiler-topo-v4')
+            if topo_source and topo_source.get('requires_proxy'):
+                response = self.client.get('/api/tiles/style/topo-v4')
+                self.assertEqual(response.status_code, 200)
+                data = json.loads(response.content)
+                self.assertEqual(data['glyphs'], upstream_glyphs)
+
         registry_module._tile_sources = {}
         registry_module._registered = False
 

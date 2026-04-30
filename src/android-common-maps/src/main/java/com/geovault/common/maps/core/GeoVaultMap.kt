@@ -1,11 +1,14 @@
 package com.geovault.common.maps.core
 
 import android.os.Bundle
+import androidx.compose.material.AlertDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Button
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -97,6 +100,7 @@ private fun GeoVaultMapHost(
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
     var mapView: MapView? by remember { mutableStateOf(null) }
+    val mapErrorNotice by map.errorNotice.collectAsState()
     val currentMap by rememberUpdatedState(map)
     val mapStateBundle = remember { Bundle() }
 
@@ -142,6 +146,15 @@ private fun GeoVaultMapHost(
                 Text("Layers")
             }
         }
+    }
+
+    val currentMapErrorNotice = mapErrorNotice
+    if (currentMapErrorNotice != null) {
+        GeoVaultMapErrorDialog(
+            notice = currentMapErrorNotice,
+            onDismiss = { currentMap.dismissMapErrorNotice() },
+            onRetry = { currentMap.retryMapSourceLoad() },
+        )
     }
 
     DisposableEffect(lifecycleOwner, currentMap, mode) {
@@ -197,4 +210,37 @@ private fun GeoVaultMapHost(
         }
     }
 
+}
+
+@Composable
+private fun GeoVaultMapErrorDialog(
+    notice: GeoVaultMapErrorNotice,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(notice.title) },
+        text = { Text(notice.message) },
+        confirmButton = {
+            if (notice.retryable) {
+                TextButton(onClick = onRetry) {
+                    Text("Retry")
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Close")
+                }
+            }
+        },
+        dismissButton = if (notice.retryable) {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text("Close")
+                }
+            }
+        } else {
+            null
+        },
+    )
 }

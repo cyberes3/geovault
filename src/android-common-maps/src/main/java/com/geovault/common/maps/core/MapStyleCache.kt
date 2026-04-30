@@ -72,8 +72,8 @@ internal object MapStyleCache {
     }
 
     fun preloadMapTilerStyles(context: Context) {
-        TileSourceCache.getTileSources(context) { sources ->
-            if (sources == null) return@getTileSources
+        TileSourceCache.getTileSources(context) { result ->
+            val sources = (result as? TileSourceFetchResult.Success)?.sources ?: return@getTileSources
             val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
             for (source in sources) {
                 if (source.id != SOURCE_MAPTILER_STREETS && source.id != SOURCE_MAPTILER_HYBRID) continue
@@ -94,26 +94,32 @@ internal object MapStyleCache {
         return try {
             client.newCall(Request.Builder().url(styleUrl).get().build()).execute().use { response ->
                 val body = response.body.string()
+                val normalizedBody = if (isOurServer) {
+                    MapStyleJsonNormalizer.normalizeServerStyle(body)
+                } else {
+                    body
+                }
                 when {
                     !response.isSuccessful -> {
                         logHttpFailure(context, styleUrl, isOurServer, response.code, response.message, body)
                         null
                     }
-                    body.isBlank() -> {
+                    normalizedBody.isBlank() -> {
                         logEmptyBody(context, styleUrl, isOurServer)
                         null
                     }
-                    MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(body) -> {
+                    MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(normalizedBody) -> {
                         Log.e(
                             TAG,
-                            "Style JSON contains empty or invalid resource URL(s); refusing to apply. " +
+                            "Style JSON contains empty or invalid resource URL(s), or text layers " +
+                                "without a glyphs URL; refusing to apply. " +
                                 "styleUrl=$styleUrl isOurServer=$isOurServer",
                         )
                         null
                     }
                     else -> {
-                        cache[styleUrl] = body
-                        body
+                        cache[styleUrl] = normalizedBody
+                        normalizedBody
                     }
                 }
             }

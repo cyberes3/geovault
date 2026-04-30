@@ -31,6 +31,65 @@ def _etag_for_json(obj):
     return 'W/"' + hashlib.md5(payload.encode('utf-8')).hexdigest() + '"'
 
 
+def _style_has_text_layers(style_data):
+    layers = style_data.get('layers', [])
+    if not isinstance(layers, list):
+        return False
+    for layer in layers:
+        if not isinstance(layer, dict) or layer.get('type') != 'symbol':
+            continue
+        layout = layer.get('layout')
+        if not isinstance(layout, dict) or 'text-field' not in layout:
+            continue
+        text_field = layout.get('text-field')
+        if isinstance(text_field, str) and not text_field.strip():
+            continue
+        return True
+    return False
+
+
+def _ensure_style_glyphs(style_data):
+    if _style_has_text_layers(style_data) and not str(style_data.get('glyphs') or '').strip():
+        style_data['glyphs'] = '/api/fonts/{fontstack}/{range}.pbf'
+
+
+def _font_glyphs_available():
+    assets_fonts_dir = Path(get_required_setting('BASE_DIR')) / 'assets' / 'fonts'
+    if not assets_fonts_dir.is_dir():
+        return False
+    for font_stack in assets_fonts_dir.iterdir():
+        if font_stack.is_dir() and any(font_stack.glob('*.pbf')):
+            return True
+    return False
+
+
+def _client_map_config_errors(sources):
+    errors = []
+    has_visible_maplibre_style = any(
+        source.get('type') == 'maptiler' and
+        not source.get('hidden', False) and
+        source.get('client_config', {}).get('style_url')
+        for source in sources
+    )
+    if not has_visible_maplibre_style:
+        errors.append({
+            'code': 'maplibre_not_configured',
+            'message': (
+                'MapLibre basemaps are not configured on this GeoVault server. '
+                'Ask an administrator to configure maptiler.api_key and maptiler.maps.'
+            ),
+        })
+    if not _font_glyphs_available():
+        errors.append({
+            'code': 'font_glyphs_missing',
+            'message': (
+                'Map font glyphs have not been generated on this GeoVault server. '
+                'Ask an administrator to run src/backend/generate-map-fonts.sh.'
+            ),
+        })
+    return errors
+
+
 def _matches_if_none_match(request, etag):
     """Return True if request has If-None-Match header matching the given ETag."""
     raw = request.META.get('HTTP_IF_NONE_MATCH', '').strip()
@@ -212,7 +271,10 @@ def get_tile_sources(request):
     Not cached so clients always get current server config.
     """
     sources = get_tile_sources_for_client()
-    payload = {'sources': sources}
+    payload = {
+        'sources': sources,
+        'map_config_errors': _client_map_config_errors(sources),
+    }
     response = JsonResponse(payload)
     _apply_cache_headers(response, 'no-store, no-cache, must-revalidate, max-age=0')
     return response
@@ -279,6 +341,8 @@ def style_proxy(request, map_id):
                         proxy_url = f'/api/tiles/{source_id}/{{z}}/{{x}}/{{y}}'
                         new_tiles.append(proxy_url)
                     source_config['tiles'] = new_tiles
+
+        _ensure_style_glyphs(style_data)
         
         # Return the modified style.json (ETag and optional 304)
         etag = _etag_for_json(style_data)

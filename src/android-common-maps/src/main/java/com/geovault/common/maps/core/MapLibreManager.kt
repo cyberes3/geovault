@@ -45,6 +45,9 @@ class MapLibreManager(
         get() = applier.onStyleLoadFailed
         set(value) { applier.onStyleLoadFailed = value }
 
+    /** Invoked for deterministic server-side map setup problems, not transient network failures. */
+    var onMapConfigurationFailed: ((String) -> Unit)? = null
+
     var defaultPadding: DoubleArray? = null
         set(value) {
             field = value
@@ -71,13 +74,26 @@ class MapLibreManager(
         applyViewportPadding(defaultPadding)
     }
 
-    fun fetchMapSources(onFetched: () -> Unit = {}) {
-        TileSourceCache.getTileSources(context) { sources ->
-            if (sources != null) {
-                sourceManager.setSources(sources)
+    fun fetchMapSources(onFetched: (Boolean) -> Unit = {}) {
+        TileSourceCache.getTileSources(context) { result ->
+            val canRenderMap = when (result) {
+                is TileSourceFetchResult.Success -> {
+                    sourceManager.setSources(result.sources)
+                    true
+                }
+                is TileSourceFetchResult.ConfigurationError -> {
+                    sourceManager.setSources(emptyList())
+                    onMapConfigurationFailed?.invoke(result.message)
+                    false
+                }
+                is TileSourceFetchResult.TransientFailure -> {
+                    sourceManager.setSources(emptyList())
+                    onStyleLoadFailed?.invoke(result.message)
+                    false
+                }
             }
             sourcesFetched = true
-            onFetched()
+            onFetched(canRenderMap)
         }
     }
 

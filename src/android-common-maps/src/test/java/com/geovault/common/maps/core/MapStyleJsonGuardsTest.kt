@@ -1,5 +1,7 @@
 package com.geovault.common.maps.core
 
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -53,7 +55,7 @@ class MapStyleJsonGuardsTest {
 
     @Test
     fun malformedGlyphsUrl_rejected() {
-        // Relative path, no scheme — MapLibre's HttpUrl.parse rejects this.
+        // Relative path, no scheme and no leading slash — MapLibre's HttpUrl.parse rejects this.
         val json = """
             {
               "version": 8,
@@ -63,6 +65,67 @@ class MapStyleJsonGuardsTest {
             }
         """.trimIndent()
         assertTrue(MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(json))
+    }
+
+    @Test
+    fun serverRelativeGlyphs_ok() {
+        val json = """
+            {
+              "version": 8,
+              "glyphs": "/api/fonts/{fontstack}/{range}.pbf",
+              "sources": {},
+              "layers": [
+                { "id": "labels", "type": "symbol", "layout": { "text-field": ["get", "name"] } }
+              ]
+            }
+        """.trimIndent()
+        assertFalse(MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(json))
+    }
+
+    @Test
+    fun missingGlyphsWithTextLayer_rejected() {
+        val json = """
+            {
+              "version": 8,
+              "sources": {},
+              "layers": [
+                { "id": "labels", "type": "symbol", "layout": { "text-field": "{name}" } }
+              ]
+            }
+        """.trimIndent()
+        assertTrue(MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(json))
+    }
+
+    @Test
+    fun missingGlyphsWithoutTextLayer_ok() {
+        val json = """
+            {
+              "version": 8,
+              "sources": {},
+              "layers": [
+                { "id": "icons", "type": "symbol", "layout": { "icon-image": "marker" } }
+              ]
+            }
+        """.trimIndent()
+        assertFalse(MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(json))
+    }
+
+    @Test
+    fun serverStyleNormalizer_addsServerRelativeGlyphsForTextLayers() {
+        val normalized = MapStyleJsonNormalizer.normalizeServerStyle(
+            """
+                {
+                  "version": 8,
+                  "sources": {},
+                  "layers": [
+                    { "id": "labels", "type": "symbol", "layout": { "text-field": "{name}" } }
+                  ]
+                }
+            """.trimIndent(),
+        )
+
+        assertEquals("/api/fonts/{fontstack}/{range}.pbf", JSONObject(normalized).getString("glyphs"))
+        assertFalse(MapStyleJsonGuards.hasEmptyOrUnparseableResourceUrl(normalized))
     }
 
     @Test

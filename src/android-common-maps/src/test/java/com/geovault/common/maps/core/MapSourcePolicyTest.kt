@@ -25,29 +25,29 @@ class MapSourcePolicyTest {
     }
 
     @Test
-    fun availableSelections_matchesAuthAndSourceAvailability() {
-        assertEquals(
-            listOf(OPTION_STREET),
-            MapSourcePolicy.availableSelections(
-                isAuthenticated = false,
-                hasMapTilerStreetDark = true,
-                hasMapTilerTopo = true,
-            ),
-        )
+    fun availableSelections_matchesServerSourceAvailability() {
         assertEquals(
             listOf(OPTION_STREET, OPTION_STREET_DARK, OPTION_SATELLITE, OPTION_TOPO),
             MapSourcePolicy.availableSelections(
-                isAuthenticated = true,
                 hasMapTilerStreetDark = true,
                 hasMapTilerTopo = true,
+                hasSatellite = true,
             ),
         )
         assertEquals(
             listOf(OPTION_STREET, OPTION_SATELLITE),
             MapSourcePolicy.availableSelections(
-                isAuthenticated = true,
                 hasMapTilerStreetDark = false,
                 hasMapTilerTopo = false,
+                hasSatellite = true,
+            ),
+        )
+        assertEquals(
+            listOf(OPTION_STREET),
+            MapSourcePolicy.availableSelections(
+                hasMapTilerStreetDark = false,
+                hasMapTilerTopo = false,
+                hasSatellite = false,
             ),
         )
     }
@@ -61,26 +61,26 @@ class MapSourcePolicyTest {
     }
 
     @Test
-    fun effectiveStreetSource_prefersMaptilerWhenAuthenticated() {
+    fun effectiveStreetSource_prefersMaptilerWhenAvailable() {
         assertEquals(
             SOURCE_MAPTILER_STREETS,
             MapSourcePolicy.effectiveStreetSource(
-                isAuthenticated = true,
                 hasMapTilerStreets = true,
+                hasOsm = true,
             ),
         )
         assertEquals(
             SOURCE_OSM,
             MapSourcePolicy.effectiveStreetSource(
-                isAuthenticated = true,
                 hasMapTilerStreets = false,
+                hasOsm = true,
             ),
         )
         assertEquals(
-            SOURCE_OSM,
+            SOURCE_MAPTILER_STREETS,
             MapSourcePolicy.effectiveStreetSource(
-                isAuthenticated = false,
-                hasMapTilerStreets = true,
+                hasMapTilerStreets = false,
+                hasOsm = false,
             ),
         )
     }
@@ -95,7 +95,6 @@ class MapSourcePolicyTest {
                 availableSelections = available,
                 streetSourceId = SOURCE_MAPTILER_STREETS,
                 hasMapTilerStreetDark = true,
-                isAuthenticated = true,
                 hasMapTilerHybrid = true,
                 hasMapTilerTopo = true,
             ),
@@ -107,7 +106,6 @@ class MapSourcePolicyTest {
                 availableSelections = available,
                 streetSourceId = SOURCE_MAPTILER_STREETS,
                 hasMapTilerStreetDark = true,
-                isAuthenticated = true,
                 hasMapTilerHybrid = true,
                 hasMapTilerTopo = true,
             ),
@@ -119,7 +117,6 @@ class MapSourcePolicyTest {
                 availableSelections = listOf(OPTION_STREET, OPTION_SATELLITE),
                 streetSourceId = SOURCE_MAPTILER_STREETS,
                 hasMapTilerStreetDark = false,
-                isAuthenticated = true,
                 hasMapTilerHybrid = false,
                 hasMapTilerTopo = false,
             ),
@@ -131,7 +128,6 @@ class MapSourcePolicyTest {
                 availableSelections = available,
                 streetSourceId = SOURCE_MAPTILER_STREETS,
                 hasMapTilerStreetDark = true,
-                isAuthenticated = true,
                 hasMapTilerHybrid = false,
                 hasMapTilerTopo = true,
             ),
@@ -143,7 +139,6 @@ class MapSourcePolicyTest {
                 availableSelections = listOf(OPTION_STREET, OPTION_SATELLITE),
                 streetSourceId = SOURCE_MAPTILER_STREETS,
                 hasMapTilerStreetDark = false,
-                isAuthenticated = true,
                 hasMapTilerHybrid = false,
                 hasMapTilerTopo = false,
             ),

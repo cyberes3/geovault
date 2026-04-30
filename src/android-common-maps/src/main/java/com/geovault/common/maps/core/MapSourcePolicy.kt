@@ -10,13 +10,12 @@ import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.SOURCE_OSM
-import com.geovault.common.maps.model.SOURCE_OSM_DARK
 
 internal object MapSourcePolicy {
     fun normalizeSelection(raw: String): String {
         return when (raw) {
             SOURCE_OSM, SOURCE_MAPTILER_STREETS, OPTION_STREET -> OPTION_STREET
-            SOURCE_MAPTILER_STREETS_DARK, SOURCE_OSM_DARK, OPTION_STREET_DARK -> OPTION_STREET_DARK
+            SOURCE_MAPTILER_STREETS_DARK, OPTION_STREET_DARK -> OPTION_STREET_DARK
             SOURCE_MAPTILER_HYBRID, OPTION_SATELLITE -> OPTION_SATELLITE
             SOURCE_MAPTILER_TOPO, OPTION_TOPO -> OPTION_TOPO
             else -> OPTION_STREET
@@ -24,20 +23,16 @@ internal object MapSourcePolicy {
     }
 
     fun availableSelections(
-        isAuthenticated: Boolean,
         hasMapTilerStreetDark: Boolean,
         hasMapTilerTopo: Boolean,
-        hasOsmDarkFallback: Boolean = false,
+        hasSatellite: Boolean,
     ): List<String> {
         val options = mutableListOf(OPTION_STREET)
-        // Dark street is selectable either when the server exposes MapTiler's vector dark
-        // style (authenticated) OR when the guest-mode OSM-Dark raster fallback is available,
-        // so signed-out users can still pick dark.
-        if ((isAuthenticated && hasMapTilerStreetDark) || hasOsmDarkFallback) {
+        if (hasMapTilerStreetDark) {
             options.add(OPTION_STREET_DARK)
         }
-        if (isAuthenticated) options.add(OPTION_SATELLITE)
-        if (isAuthenticated && hasMapTilerTopo) options.add(OPTION_TOPO)
+        if (hasSatellite) options.add(OPTION_SATELLITE)
+        if (hasMapTilerTopo) options.add(OPTION_TOPO)
         return options
     }
 
@@ -55,10 +50,14 @@ internal object MapSourcePolicy {
     }
 
     fun effectiveStreetSource(
-        isAuthenticated: Boolean,
         hasMapTilerStreets: Boolean,
+        hasOsm: Boolean,
     ): String {
-        return if (isAuthenticated && hasMapTilerStreets) SOURCE_MAPTILER_STREETS else SOURCE_OSM
+        return when {
+            hasMapTilerStreets -> SOURCE_MAPTILER_STREETS
+            hasOsm -> SOURCE_OSM
+            else -> SOURCE_MAPTILER_STREETS
+        }
     }
 
     fun effectiveSource(
@@ -66,30 +65,20 @@ internal object MapSourcePolicy {
         availableSelections: List<String>,
         streetSourceId: String,
         hasMapTilerStreetDark: Boolean,
-        isAuthenticated: Boolean,
         hasMapTilerHybrid: Boolean,
         hasMapTilerTopo: Boolean,
-        hasOsmDarkFallback: Boolean = false,
     ): String {
         return when (sanitizeSelection(selectedOption, availableSelections)) {
             OPTION_STREET -> streetSourceId
-            // Dark preference order: authenticated MapTiler dark style -> guest OSM-Dark raster ->
-            // plain street (no dark option available at all).
-            OPTION_STREET_DARK -> when {
-                isAuthenticated && hasMapTilerStreetDark -> SOURCE_MAPTILER_STREETS_DARK
-                hasOsmDarkFallback -> SOURCE_OSM_DARK
-                else -> streetSourceId
-            }
+            OPTION_STREET_DARK -> if (hasMapTilerStreetDark) SOURCE_MAPTILER_STREETS_DARK else streetSourceId
             OPTION_SATELLITE -> {
-                if (!isAuthenticated) {
-                    streetSourceId
-                } else if (hasMapTilerHybrid) {
+                if (hasMapTilerHybrid) {
                     SOURCE_MAPTILER_HYBRID
                 } else {
                     SOURCE_GOOGLE_HYBRID_FALLBACK
                 }
             }
-            OPTION_TOPO -> if (isAuthenticated && hasMapTilerTopo) SOURCE_MAPTILER_TOPO else streetSourceId
+            OPTION_TOPO -> if (hasMapTilerTopo) SOURCE_MAPTILER_TOPO else streetSourceId
             else -> streetSourceId
         }
     }

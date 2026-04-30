@@ -1,3 +1,10 @@
+import java.io.RandomAccessFile
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
+import org.gradle.api.file.RegularFileProperty
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
@@ -6,6 +13,45 @@ plugins {
 
 if (rootProject != project) {
     layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("shared-modules/${project.name}"))
+}
+
+abstract class GeoVaultSharedModuleCompileLockService :
+    BuildService<GeoVaultSharedModuleCompileLockService.Parameters>,
+    AutoCloseable {
+
+    interface Parameters : BuildServiceParameters {
+        val lockFile: RegularFileProperty
+    }
+
+    private val channel: FileChannel
+    private val lock: FileLock
+
+    init {
+        val file = parameters.lockFile.asFile.get()
+        file.parentFile.mkdirs()
+        channel = RandomAccessFile(file, "rw").channel
+        lock = channel.lock()
+    }
+
+    override fun close() {
+        lock.release()
+        channel.close()
+    }
+}
+
+val geoVaultSharedModuleCompileLock = gradle.sharedServices.registerIfAbsent(
+    "geoVaultSharedModuleCompileLock",
+    GeoVaultSharedModuleCompileLockService::class,
+) {
+    parameters.lockFile.set(
+        project.layout.projectDirectory.file("../.gradle/geovault-shared-module-compile.lock"),
+    )
+}
+
+tasks.matching {
+    it.name.matches(Regex("compile.*(Kotlin|JavaWithJavac)$"))
+}.configureEach {
+    usesService(geoVaultSharedModuleCompileLock)
 }
 
 android {

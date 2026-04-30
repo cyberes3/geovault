@@ -14,7 +14,7 @@ import org.json.JSONObject
  * indefinitely for a completion that never comes. Empty strings are the
  * common case in the wild (e.g. `"glyphs": ""`), but **whitespace-only**
  * and **malformed** URLs (e.g. `"glyphs": "fonts/{fontstack}.pbf"` without a
- * scheme) hit the same path.
+ * scheme or server-relative slash) hit the same path.
  *
  * This guard runs upstream of the engine, but [MapResourceUrlTransform] is
  * the final safety net.
@@ -39,7 +39,7 @@ internal object MapStyleJsonGuards {
     }
 
     private fun validateRoot(root: JSONObject): Boolean {
-        if (!validateTopLevelUrlString(root, "glyphs")) return false
+        if (!validateGlyphs(root)) return false
         if (!validateSprite(root)) return false
         val sources = root.optJSONObject("sources") ?: return true
         val ids = sources.keys()
@@ -51,11 +51,19 @@ internal object MapStyleJsonGuards {
         return true
     }
 
+    private fun validateGlyphs(root: JSONObject): Boolean {
+        if (!root.has("glyphs")) {
+            return !hasTextBearingSymbolLayer(root)
+        }
+        val value = root.opt("glyphs") as? String ?: return false
+        return isValidResourceUrlTemplate(value)
+    }
+
     /** Returns true if the field is absent, or present and a valid URL string. */
     private fun validateTopLevelUrlString(root: JSONObject, key: String): Boolean {
         if (!root.has(key)) return true
         val value = root.opt(key) as? String ?: return false
-        return isValidHttpUrlTemplate(value)
+        return isValidResourceUrlTemplate(value)
     }
 
     /**
@@ -66,12 +74,12 @@ internal object MapStyleJsonGuards {
     private fun validateSprite(root: JSONObject): Boolean {
         if (!root.has("sprite")) return true
         return when (val sprite = root.get("sprite")) {
-            is String -> isValidHttpUrlTemplate(sprite)
+            is String -> isValidResourceUrlTemplate(sprite)
             is JSONArray -> {
                 for (i in 0 until sprite.length()) {
                     val item = sprite.opt(i) as? JSONObject ?: return false
                     val url = item.opt("url") as? String ?: return false
-                    if (!isValidHttpUrlTemplate(url)) return false
+                    if (!isValidResourceUrlTemplate(url)) return false
                 }
                 true
             }
@@ -82,20 +90,33 @@ internal object MapStyleJsonGuards {
     private fun validateSourceUrls(source: JSONObject): Boolean {
         if (source.has("url")) {
             val url = source.opt("url") as? String ?: return false
-            if (!isValidHttpUrlTemplate(url)) return false
+            if (!isValidResourceUrlTemplate(url)) return false
         }
         if (source.has("data")) {
             val data = source.opt("data")
-            if (data is String && !isValidHttpUrlTemplate(data)) return false
+            if (data is String && !isValidResourceUrlTemplate(data)) return false
         }
         val tiles = source.optJSONArray("tiles")
         if (tiles != null) {
             for (i in 0 until tiles.length()) {
                 val tile = tiles.opt(i) as? String ?: return false
-                if (!isValidHttpUrlTemplate(tile)) return false
+                if (!isValidResourceUrlTemplate(tile)) return false
             }
         }
         return true
+    }
+
+    private fun hasTextBearingSymbolLayer(root: JSONObject): Boolean {
+        val layers = root.optJSONArray("layers") ?: return false
+        for (i in 0 until layers.length()) {
+            val layer = layers.optJSONObject(i) ?: continue
+            if (layer.optString("type") != "symbol") continue
+            val layout = layer.optJSONObject("layout") ?: continue
+            val textField = layout.opt("text-field") ?: continue
+            if (textField is String && textField.isBlank()) continue
+            return true
+        }
+        return false
     }
 
     /**
@@ -109,9 +130,10 @@ internal object MapStyleJsonGuards {
      * URL OkHttp's `HttpUrl.parse` accepts. Anything that still fails to
      * parse is malformed.
      */
-    private fun isValidHttpUrlTemplate(value: String): Boolean {
+    private fun isValidResourceUrlTemplate(value: String): Boolean {
         val trimmed = value.trim()
         if (trimmed.isEmpty()) return false
+        if (trimmed.startsWith("/")) return true
         val substituted = TEMPLATE_TOKEN_REGEX.replace(trimmed) { match ->
             TEMPLATE_TOKEN_PLACEHOLDERS[match.groupValues[1]] ?: "x"
         }

@@ -9,7 +9,6 @@ import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.SOURCE_OSM
-import com.geovault.common.maps.model.SOURCE_OSM_DARK
 import com.geovault.common.maps.model.TileClientConfig
 import com.geovault.common.maps.model.TileSource
 import com.geovault.common.settings.GeoVaultPrefsStore
@@ -27,9 +26,7 @@ class MapSourceManager(private val context: Context) {
         migrateSelectedSourceFromSharedPrefsIfNeeded()
     }
 
-    private var availableSources: List<TileSource> = listOf(
-        defaultOsmSource(),
-    )
+    private var availableSources: List<TileSource> = emptyList()
 
     /**
      * One-shot import of the user's previously selected map source from the older
@@ -61,17 +58,13 @@ class MapSourceManager(private val context: Context) {
             SOURCE_MAPTILER_TOPO,
         )
         val filtered = sources.filter { it.id in allowedIds && !it.hidden }
-        if (!isAuthenticated()) {
-            setOsmOnly()
-            return
-        }
         val baseSources = mutableListOf<TileSource>()
-        baseSources.add(filtered.find { it.id == SOURCE_OSM } ?: defaultOsmSource())
+        filtered.find { it.id == SOURCE_OSM }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_STREETS_DARK }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_HYBRID }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_TOPO }?.let { baseSources.add(it) }
-        if (baseSources.none { it.id == SOURCE_MAPTILER_HYBRID }) {
+        if (baseSources.isNotEmpty() && baseSources.none { it.id == SOURCE_MAPTILER_HYBRID }) {
             baseSources.add(defaultGoogleHybridFallbackSource())
         }
         availableSources = baseSources
@@ -79,13 +72,6 @@ class MapSourceManager(private val context: Context) {
         if (sanitized != getSelectedSourceId()) {
             setSelectedSourceId(sanitized)
         }
-    }
-
-    fun setOsmOnly() {
-        // Guest mode exposes both the light OSM raster and a CartoCDN-hosted dark OSM raster
-        // so night-mode users still get a legible basemap even without a GeoVault server to
-        // serve the MapTiler vector dark style.
-        availableSources = listOf(defaultOsmSource(), defaultOsmDarkSource())
     }
 
     fun getSources(): List<TileSource> = availableSources
@@ -110,8 +96,8 @@ class MapSourceManager(private val context: Context) {
 
     fun getEffectiveStreetSourceId(): String {
         return MapSourcePolicy.effectiveStreetSource(
-            isAuthenticated = isAuthenticated(),
             hasMapTilerStreets = availableSources.any { it.id == SOURCE_MAPTILER_STREETS },
+            hasOsm = availableSources.any { it.id == SOURCE_OSM },
         )
     }
 
@@ -121,24 +107,23 @@ class MapSourceManager(private val context: Context) {
             availableSelections = getAvailableSelections(),
             streetSourceId = getEffectiveStreetSourceId(),
             hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
-            isAuthenticated = isAuthenticated(),
             hasMapTilerHybrid = availableSources.any { it.id == SOURCE_MAPTILER_HYBRID },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
-            hasOsmDarkFallback = availableSources.any { it.id == SOURCE_OSM_DARK },
         )
         return if (availableSources.any { it.id == resolved }) {
             resolved
         } else {
-            SOURCE_OSM
+            availableSources.firstOrNull()?.id ?: SOURCE_MAPTILER_STREETS
         }
     }
 
     fun getAvailableSelections(): List<String> {
         return MapSourcePolicy.availableSelections(
-            isAuthenticated = isAuthenticated(),
             hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
-            hasOsmDarkFallback = availableSources.any { it.id == SOURCE_OSM_DARK },
+            hasSatellite = availableSources.any {
+                it.id == SOURCE_MAPTILER_HYBRID || it.id == SOURCE_GOOGLE_HYBRID_FALLBACK
+            },
         )
     }
 
@@ -148,7 +133,7 @@ class MapSourceManager(private val context: Context) {
      * Resolves the configured tile-source [id] into a typed [ResolvedBasemap]
      * with a non-blank URL guaranteed at the type level. Vector sources whose
      * `style_url` is missing/blank/unparseable, or raster sources whose `url`
-     * is missing/blank, return `null` so callers can drop to OSM fallback
+     * is missing/blank, return `null` so callers can surface a style failure
      * explicitly instead of silently passing empty strings to MapLibre.
      */
     fun resolveBasemap(id: String): ResolvedBasemap? {
@@ -164,7 +149,7 @@ class MapSourceManager(private val context: Context) {
         }
     }
 
-    /** OSM-as-Raster fallback. Always present (the default OSM source is hard-coded). */
+    /** OSM-as-raster fallback when the server exposes an OSM tile source. */
     fun resolveStreetFallbackBasemap(): ResolvedBasemap.Raster? {
         return resolveBasemap(SOURCE_OSM) as? ResolvedBasemap.Raster
     }
@@ -177,20 +162,6 @@ class MapSourceManager(private val context: Context) {
         return if (baseUrl.isBlank()) null else "$baseUrl$trimmed"
     }
 
-    private fun defaultOsmSource(): TileSource = TileSource(
-        id = SOURCE_OSM,
-        name = "OpenStreetMap",
-        type = "xyz",
-        client_config = TileClientConfig(url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
-    )
-
-    private fun defaultOsmDarkSource(): TileSource = TileSource(
-        id = SOURCE_OSM_DARK,
-        name = "OpenStreetMap Dark",
-        type = "xyz",
-        client_config = TileClientConfig(url = "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"),
-    )
-
     private fun defaultGoogleHybridFallbackSource(): TileSource = TileSource(
         id = SOURCE_GOOGLE_HYBRID_FALLBACK,
         name = "Google Hybrid Fallback",
@@ -199,8 +170,6 @@ class MapSourceManager(private val context: Context) {
             url = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         ),
     )
-
-    private fun isAuthenticated(): Boolean = GeovaultAuthManager.isLoggedIn(context)
 
     companion object {
         private const val PREFS_NAME = "geovault_map_source"
