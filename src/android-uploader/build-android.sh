@@ -100,7 +100,12 @@ if [ "$OLD_VERSION" = true ]; then
 fi
 
 echo "Building Android app ($BUILD_TYPE)..."
-./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"
+if ! ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"; then
+    echo "Removing Gradle build outputs after failed build..."
+    ./gradlew clean --quiet 2>/dev/null || true
+    rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" "$SCRIPT_DIR/../android-common/build"
+    exit 1
+fi
 
 APK_PATH="app/build/outputs/apk/$BUILD_TYPE/app-$BUILD_TYPE.apk"
 if [ ! -f "$APK_PATH" ]; then
@@ -109,6 +114,8 @@ fi
 
 if [ -z "${APK_PATH:-}" ] || [ ! -f "$APK_PATH" ]; then
     echo "Error: APK not found after build"
+    ./gradlew clean --quiet 2>/dev/null || true
+    rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" "$SCRIPT_DIR/../android-common/build"
     exit 1
 fi
 
@@ -137,4 +144,9 @@ if [ "$INSTALL" = true ]; then
     echo "Installing APK..."
     adb install -r "$SCRIPT_DIR/$APK_PATH"
 fi
+
+# Drop Gradle outputs under Nextcloud (large trees); release APK was copied above if applicable.
+echo "Removing Gradle build outputs..."
+./gradlew clean --quiet 2>/dev/null || true
+rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" "$SCRIPT_DIR/../android-common/build"
 
