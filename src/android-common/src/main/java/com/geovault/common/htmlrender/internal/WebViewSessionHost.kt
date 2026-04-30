@@ -34,7 +34,7 @@ internal class WebViewSessionHost(
         wv.settings.apply {
             javaScriptEnabled = config.enableJavaScript
             blockNetworkLoads = config.blockNetworkLoads
-            domStorageEnabled = true
+            domStorageEnabled = config.enableJavaScript
             loadWithOverviewMode = false
             useWideViewPort = true
             builtInZoomControls = false
