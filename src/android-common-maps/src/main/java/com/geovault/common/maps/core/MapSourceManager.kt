@@ -3,13 +3,11 @@ package com.geovault.common.maps.core
 import android.content.Context
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.model.OPTION_STREET
-import com.geovault.common.maps.model.SOURCE_GOOGLE_HYBRID_FALLBACK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.SOURCE_OSM
-import com.geovault.common.maps.model.TileClientConfig
 import com.geovault.common.maps.model.TileSource
 import com.geovault.common.settings.GeoVaultPrefsStore
 import com.geovault.common.settings.PrefKey
@@ -22,32 +20,7 @@ class MapSourceManager(private val context: Context) {
         registeredKeys = ALL_KEYS
     )
 
-    init {
-        migrateSelectedSourceFromSharedPrefsIfNeeded()
-    }
-
     private var availableSources: List<TileSource> = emptyList()
-
-    /**
-     * One-shot import of the user's previously selected map source from the older
-     * `geovault_prefs` SharedPreferences bucket into the DataStore-backed
-     * [GeoVaultPrefsStore]. Runs on every [MapSourceManager] construction but is idempotent:
-     *  - If the new store already has a value, we leave it alone (user already touched the
-     *    new setting, so we never clobber a newer choice with a stale value).
-     *  - If the older bucket has no `selected_map_source`, we also do nothing (fresh install
-     *    or already-wiped prefs).
-     *  - Otherwise we copy the value across and delete it from the old bucket so
-     *    subsequent launches are a true no-op.
-     */
-    private fun migrateSelectedSourceFromSharedPrefsIfNeeded() {
-        val existing = store.getBlocking(KEY_SELECTED_SOURCE)
-        if (existing.isNotBlank()) return
-        val oldPrefs = context.getSharedPreferences(OLD_PREFS_NAME, Context.MODE_PRIVATE)
-        val oldValue = oldPrefs.getString(OLD_KEY_SELECTED_SOURCE, null)
-        if (oldValue.isNullOrBlank()) return
-        store.putBlocking(KEY_SELECTED_SOURCE, MapSourcePolicy.normalizeSelection(oldValue))
-        oldPrefs.edit().remove(OLD_KEY_SELECTED_SOURCE).apply()
-    }
 
     fun setSources(sources: List<TileSource>) {
         val allowedIds = setOf(
@@ -64,9 +37,6 @@ class MapSourceManager(private val context: Context) {
         filtered.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_HYBRID }?.let { baseSources.add(it) }
         filtered.find { it.id == SOURCE_MAPTILER_TOPO }?.let { baseSources.add(it) }
-        if (baseSources.isNotEmpty() && baseSources.none { it.id == SOURCE_MAPTILER_HYBRID }) {
-            baseSources.add(defaultGoogleHybridFallbackSource())
-        }
         availableSources = baseSources
         val sanitized = MapSourcePolicy.sanitizeSelection(getSelectedSourceId(), getAvailableSelections())
         if (sanitized != getSelectedSourceId()) {
@@ -121,9 +91,7 @@ class MapSourceManager(private val context: Context) {
         return MapSourcePolicy.availableSelections(
             hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
-            hasSatellite = availableSources.any {
-                it.id == SOURCE_MAPTILER_HYBRID || it.id == SOURCE_GOOGLE_HYBRID_FALLBACK
-            },
+            hasSatellite = availableSources.any { it.id == SOURCE_MAPTILER_HYBRID },
         )
     }
 
@@ -157,23 +125,9 @@ class MapSourceManager(private val context: Context) {
         return if (baseUrl.isBlank()) null else "$baseUrl$trimmed"
     }
 
-    private fun defaultGoogleHybridFallbackSource(): TileSource = TileSource(
-        id = SOURCE_GOOGLE_HYBRID_FALLBACK,
-        name = "Google Hybrid Fallback",
-        type = "xyz",
-        client_config = TileClientConfig(
-            url = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-        ),
-    )
-
     companion object {
         private const val PREFS_NAME = "geovault_map_source"
         private const val SCHEMA_VERSION = 1
-
-        // Older SharedPreferences bucket + key used before this module moved to DataStore.
-        // Retained only as migration sources — do NOT read these paths for runtime state.
-        private const val OLD_PREFS_NAME = "geovault_prefs"
-        private const val OLD_KEY_SELECTED_SOURCE = "selected_map_source"
 
         private val KEY_SELECTED_SOURCE = PrefKey.StringKey("selected_map_source")
 

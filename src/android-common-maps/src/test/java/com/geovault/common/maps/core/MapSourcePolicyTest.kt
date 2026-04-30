@@ -4,7 +4,6 @@ import com.geovault.common.maps.model.OPTION_SATELLITE
 import com.geovault.common.maps.model.OPTION_STREET
 import com.geovault.common.maps.model.OPTION_STREET_DARK
 import com.geovault.common.maps.model.OPTION_TOPO
-import com.geovault.common.maps.model.SOURCE_GOOGLE_HYBRID_FALLBACK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
@@ -111,7 +110,7 @@ class MapSourcePolicyTest {
             ),
         )
         assertEquals(
-            SOURCE_GOOGLE_HYBRID_FALLBACK,
+            SOURCE_MAPTILER_STREETS,
             MapSourcePolicy.effectiveSource(
                 selectedOption = OPTION_SATELLITE,
                 availableSelections = listOf(OPTION_STREET, OPTION_SATELLITE),

@@ -4,7 +4,6 @@ import com.geovault.common.maps.model.OPTION_SATELLITE
 import com.geovault.common.maps.model.OPTION_STREET
 import com.geovault.common.maps.model.OPTION_STREET_DARK
 import com.geovault.common.maps.model.OPTION_TOPO
-import com.geovault.common.maps.model.SOURCE_GOOGLE_HYBRID_FALLBACK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
@@ -71,13 +70,8 @@ internal object MapSourcePolicy {
         return when (sanitizeSelection(selectedOption, availableSelections)) {
             OPTION_STREET -> streetSourceId
             OPTION_STREET_DARK -> if (hasMapTilerStreetDark) SOURCE_MAPTILER_STREETS_DARK else streetSourceId
-            OPTION_SATELLITE -> {
-                if (hasMapTilerHybrid) {
-                    SOURCE_MAPTILER_HYBRID
-                } else {
-                    SOURCE_GOOGLE_HYBRID_FALLBACK
-                }
-            }
+            OPTION_SATELLITE ->
+                if (hasMapTilerHybrid) SOURCE_MAPTILER_HYBRID else streetSourceId
             OPTION_TOPO -> if (hasMapTilerTopo) SOURCE_MAPTILER_TOPO else streetSourceId
             else -> streetSourceId
         }
