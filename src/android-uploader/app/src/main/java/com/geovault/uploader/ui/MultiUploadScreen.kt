@@ -65,6 +65,8 @@ fun MultiUploadScreen(
     state: QueueUploadState,
     invalidFilesDialogNames: List<String>?,
     onDismissInvalidFiles: () -> Unit,
+    /** When true, the shell settings overlay is visible — hide the redundant overflow menu. */
+    isSettingsOverlayVisible: Boolean,
     onOpenSettings: () -> Unit,
     onRename: (index: Int, String) -> Unit,
     onRemoveItem: (index: Int) -> Unit,
@@ -76,7 +78,9 @@ fun MultiUploadScreen(
             GeoVaultTopTitleBar(
                 title = state.fileCountLabel,
                 actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(onOpenSettings = onOpenSettings)
+                    if (!isSettingsOverlayVisible) {
+                        GeoVaultTopBarSettingsMenuAction(onOpenSettings = onOpenSettings)
+                    }
                 }
             )
         }

@@ -66,6 +66,7 @@ class MultiUploadActivity : ComponentActivity() {
                         state = state,
                         invalidFilesDialogNames = invalidFilesDialogNames,
                         onDismissInvalidFiles = { invalidFilesDialogNames = null },
+                        isSettingsOverlayVisible = isSettingsOpen,
                         onOpenSettings = { isSettingsOpen = true },
                         onRename = viewModel::rename,
                         onRemoveItem = viewModel::removeItemAt,

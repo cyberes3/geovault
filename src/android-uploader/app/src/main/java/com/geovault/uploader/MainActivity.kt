@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         state = state,
                         invalidFilesDialogNames = invalidFilesDialogNamesState.value,
+                        isSettingsOverlayVisible = isSettingsOpen,
                         onOpenSettings = { isSettingsOpen = true },
                         onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                         onAuthConnect = viewModel::connectAuth,

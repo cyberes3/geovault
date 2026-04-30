@@ -206,6 +206,7 @@ class MainActivity : ComponentActivity() {
                                         onSearchChanged = viewModel::onSearchChanged,
                                         onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                                         onAuthConnect = viewModel::connectAuth,
+                                        isSettingsOverlayVisible = isSettingsOpen,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onRefresh = viewModel::refreshNow,
                                         onAddPlace = {
@@ -290,6 +291,7 @@ class MainActivity : ComponentActivity() {
                                         map = mainMap,
                                         viewModel = mapViewModel,
                                         launchArgs = mapLaunchArgs,
+                                        isSettingsOverlayVisible = isSettingsOpen,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onOpenEdit = { feature ->
                                             val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
