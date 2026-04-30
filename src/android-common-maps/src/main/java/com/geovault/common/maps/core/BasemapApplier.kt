@@ -17,9 +17,7 @@ import org.maplibre.android.style.sources.TileSet
  *
  * Centralizes:
  *  - the apply-plan dispatch (no-op vs in-place raster swap vs full reload)
- *  - the typed [ResolvedBasemap] -> MapLibre call surface, with one
- *    canonical raster apply path used by both the normal and OSM-fallback
- *    flows
+ *  - the typed [ResolvedBasemap] -> MapLibre call surface
  *  - book-keeping of `lastAppliedSourceKey` / `pendingSourceKey` so
  *    [isCurrentBasemapApplied] can answer reliably
  *
@@ -97,19 +95,6 @@ internal class BasemapApplier(
         }
     }
 
-    /** Forces an OSM raster basemap regardless of selection. */
-    fun applyOsmFallback(map: MapLibreMap, defaultPadding: DoubleArray?) {
-        val savedCamera = map.cameraPosition
-        val restoreCamera = restoreCameraOf(map, savedCamera, defaultPadding)
-        val osm = sourceManager.resolveStreetFallbackBasemap()
-        val generation = nextStyleRequestGeneration()
-        if (osm == null) {
-            applyEmptyStyle(map, EMPTY_STYLE_KEY, generation, restoreCamera)
-            return
-        }
-        applyRaster(map, osm, osm.cacheKey, generation, restoreCamera)
-    }
-
     fun isCurrentBasemapApplied(map: MapLibreMap): Boolean {
         val key = sourceManager.resolveBasemap(sourceManager.getEffectiveSourceId())?.cacheKey
             ?: EMPTY_STYLE_KEY
@@ -180,11 +165,11 @@ internal class BasemapApplier(
                 pendingSourceKey = null
                 Log.w(
                     TAG,
-                    "Vector style JSON unavailable; loading OSM raster fallback. " +
+                    "Vector style JSON unavailable; applying empty style. " +
                         "styleUrl=$styleUrlString isOurServer=$isOurServer",
                 )
                 onStyleLoadFailed?.invoke("Map style unavailable for $styleUrlString")
-                applyOsmFallback(map, defaultPadding = null)
+                applyEmptyStyle(map, sourceKey, generation, restoreCamera)
             }
         }
     }

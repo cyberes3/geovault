@@ -149,11 +149,6 @@ class MapSourceManager(private val context: Context) {
         }
     }
 
-    /** OSM-as-raster fallback when the server exposes an OSM tile source. */
-    fun resolveStreetFallbackBasemap(): ResolvedBasemap.Raster? {
-        return resolveBasemap(SOURCE_OSM) as? ResolvedBasemap.Raster
-    }
-
     private fun resolveServerRelative(raw: String?): String? {
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isEmpty()) return null

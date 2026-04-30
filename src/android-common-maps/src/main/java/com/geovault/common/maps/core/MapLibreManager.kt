@@ -19,8 +19,8 @@ import org.maplibre.android.maps.Style
  *  - A small marker-icon helper used by plugins.
  *
  * Public API is intentionally thin and stable: [setupBaseMapSettings],
- * [fetchMapSources], [applySelectedSource], [loadOsmFallback],
- * [isCurrentSourceApplied], camera helpers, [defaultPadding], [addMarkerIcon].
+ * [fetchMapSources], [applySelectedSource], [isCurrentSourceApplied], camera
+ * helpers, [defaultPadding], [addMarkerIcon].
  */
 class MapLibreManager(
     private val context: Context,
@@ -108,10 +108,6 @@ class MapLibreManager(
 
     fun isCurrentSourceApplied(map: MapLibreMap = requireNotNull(maplibreMap)): Boolean =
         applier.isCurrentBasemapApplied(map)
-
-    fun loadOsmFallback(map: MapLibreMap = requireNotNull(maplibreMap)) {
-        applier.applyOsmFallback(map, defaultPadding)
-    }
 
     fun reapplyZoomPreferences(map: MapLibreMap) = applier.reapplyZoomPreferences(map)
 

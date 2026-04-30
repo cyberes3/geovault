@@ -19,7 +19,6 @@ enum class GeoVaultMapPhase {
     Initializing,
     StyleLoading,
     Ready,
-    Recovering,
     Error,
 }
 
@@ -132,7 +131,7 @@ sealed class GeoVaultBaseMap(
                     return@fetchMapSources
                 }
                 if (!attachedManager.isCurrentSourceApplied(map)) {
-                    beginStyleLoad(map)
+                    beginStyleLoad()
                     if (!attachedManager.applySelectedSource(map)) {
                         styleDeliveredForGeneration = true
                         clearStyleLoadWatchdog()
@@ -206,7 +205,7 @@ sealed class GeoVaultBaseMap(
                 return@fetchMapSources
             }
             pluginRegistry.onStyleWillChange(map, map.style)
-            beginStyleLoad(map)
+            beginStyleLoad()
             if (!manager.applySelectedSource(map)) {
                 styleDeliveredForGeneration = true
                 clearStyleLoadWatchdog()
@@ -221,7 +220,7 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(manager.sourceManager.getNextSourceId())
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
-        beginStyleLoad(map)
+        beginStyleLoad()
         if (!manager.applySelectedSource(map)) {
             styleDeliveredForGeneration = true
             clearStyleLoadWatchdog()
@@ -235,7 +234,7 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(optionId)
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
-        beginStyleLoad(map)
+        beginStyleLoad()
         if (!manager.applySelectedSource(map)) {
             styleDeliveredForGeneration = true
             clearStyleLoadWatchdog()
@@ -339,38 +338,29 @@ sealed class GeoVaultBaseMap(
     }
 
     override fun onDidFailLoadingMap(errorMessage: String) {
-        val map = maplibreMap ?: return
-        val manager = _mapManager ?: return
         Log.e(TAG, "Map style load failed: $errorMessage")
         reportStyleLoadFailed(errorMessage)
         styleDeliveredForGeneration = true
         clearStyleLoadWatchdog()
-        _phase.value = GeoVaultMapPhase.Recovering
-        // Only fall back when the configured basemap is a vector style — a raster-source
-        // failure usually means the OSM fallback would hit the same network problem and
-        // looping into it wastes work.
-        val effectiveId = manager.sourceManager.getEffectiveSourceId()
-        if (manager.sourceManager.resolveBasemap(effectiveId) is ResolvedBasemap.Vector) {
-            beginStyleLoad(map)
-            manager.loadOsmFallback(map)
-        }
+        _phase.value = GeoVaultMapPhase.Error
     }
 
-    private fun beginStyleLoad(map: MapLibreMap): Long {
+    private fun beginStyleLoad(): Long {
         styleLoadGeneration += 1L
         styleDeliveredForGeneration = false
-        scheduleStyleLoadWatchdog(map, styleLoadGeneration)
+        scheduleStyleLoadWatchdog(styleLoadGeneration)
         return styleLoadGeneration
     }
 
-    private fun scheduleStyleLoadWatchdog(map: MapLibreMap, generation: Long) {
+    private fun scheduleStyleLoadWatchdog(generation: Long) {
         clearStyleLoadWatchdog()
         styleLoadWatchdog = Runnable {
             if (generation != styleLoadGeneration) return@Runnable
             if (styleDeliveredForGeneration) return@Runnable
-            _phase.value = GeoVaultMapPhase.Recovering
-            beginStyleLoad(map)
-            _mapManager?.loadOsmFallback(map)
+            reportStyleLoadFailed("Map style load timed out.")
+            styleDeliveredForGeneration = true
+            clearStyleLoadWatchdog()
+            _phase.value = GeoVaultMapPhase.Error
         }
         mainHandler.postDelayed(styleLoadWatchdog!!, STYLE_LOAD_TIMEOUT_MS)
     }

@@ -163,7 +163,7 @@ internal object MapStyleCache {
         } else {
             Log.w(
                 TAG,
-                "External map style fetch failed (OSM fallback may be used): code=$code message=$message " +
+                "External map style fetch failed: code=$code message=$message " +
                     "url=$styleUrl bodyPreview=$preview",
             )
         }
@@ -180,7 +180,7 @@ internal object MapStyleCache {
         } else {
             Log.w(
                 TAG,
-                "Map style fetch returned empty body (OSM fallback may be used): url=$styleUrl",
+                "Map style fetch returned empty body: url=$styleUrl",
             )
         }
     }
@@ -196,7 +196,7 @@ internal object MapStyleCache {
         } else {
             Log.e(
                 TAG,
-                "Map style fetch threw (OSM fallback may be used): url=$styleUrl isOurServer=false",
+                "Map style fetch threw: url=$styleUrl isOurServer=false",
                 e,
             )
         }

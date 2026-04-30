@@ -53,39 +53,17 @@ def _ensure_style_glyphs(style_data):
         style_data['glyphs'] = '/api/fonts/{fontstack}/{range}.pbf'
 
 
-def _font_glyphs_available():
-    assets_fonts_dir = Path(get_required_setting('BASE_DIR')) / 'assets' / 'fonts'
-    if not assets_fonts_dir.is_dir():
-        return False
-    for font_stack in assets_fonts_dir.iterdir():
-        if font_stack.is_dir() and any(font_stack.glob('*.pbf')):
-            return True
-    return False
-
-
 def _client_map_config_errors(sources):
     errors = []
-    has_visible_maplibre_style = any(
+    has_maplibre_style = any(
         source.get('type') == 'maptiler' and
-        not source.get('hidden', False) and
         source.get('client_config', {}).get('style_url')
         for source in sources
     )
-    if not has_visible_maplibre_style:
+    if not has_maplibre_style:
         errors.append({
             'code': 'maplibre_not_configured',
-            'message': (
-                'MapLibre basemaps are not configured on this GeoVault server. '
-                'Ask an administrator to configure maptiler.api_key and maptiler.maps.'
-            ),
-        })
-    if not _font_glyphs_available():
-        errors.append({
-            'code': 'font_glyphs_missing',
-            'message': (
-                'Map font glyphs have not been generated on this GeoVault server. '
-                'Ask an administrator to run src/backend/generate-map-fonts.sh.'
-            ),
+            'message': 'Map setup is incomplete. Code: maplibre_not_configured.',
         })
     return errors
 

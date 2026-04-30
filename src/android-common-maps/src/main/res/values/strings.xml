@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="gv_common_map_style_unavailable_fallback_osm">Map style unavailable, using OpenStreetMap</string>
     <string name="gv_common_map_toggle_content_description">Toggle map source</string>
     <string name="gv_common_geocode_search_dialog_title">Search location</string>
     <string name="gv_common_geocode_search_placeholder">Search address or place</string>

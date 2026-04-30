@@ -45,10 +45,9 @@ class TestTilesAPI(TestCase):
         self.assertIn('sources', data)
         self.assertIn('map_config_errors', data)
 
-    @patch('geo_lib.tiles._font_glyphs_available', return_value=True)
     @patch('geo_lib.tiles.get_tile_sources_for_client')
-    def test_get_tile_sources_reports_missing_maplibre_configuration(self, mock_sources, mock_fonts):
-        """No visible MapLibre style source is reported as an admin setup error."""
+    def test_get_tile_sources_reports_missing_maplibre_configuration(self, mock_sources):
+        """No MapLibre style source is reported as an admin setup error."""
         mock_sources.return_value = [
             {
                 'id': 'osm',
@@ -64,17 +63,18 @@ class TestTilesAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(['maplibre_not_configured'], [error['code'] for error in data['map_config_errors']])
+        self.assertIn('Code: maplibre_not_configured', data['map_config_errors'][0]['message'])
+        self.assertNotIn('maptiler.api_key', data['map_config_errors'][0]['message'])
 
-    @patch('geo_lib.tiles._font_glyphs_available', return_value=False)
     @patch('geo_lib.tiles.get_tile_sources_for_client')
-    def test_get_tile_sources_reports_missing_font_glyphs(self, mock_sources, mock_fonts):
-        """Missing generated glyphs are reported separately from source configuration."""
+    def test_get_tile_sources_hidden_maplibre_source_counts_as_configured(self, mock_sources):
+        """Hidden MapTiler utility styles still prove MapLibre is configured."""
         mock_sources.return_value = [
             {
                 'id': 'maptiler-streets',
                 'name': 'Streets',
                 'type': 'maptiler',
-                'hidden': False,
+                'hidden': True,
                 'client_config': {'style_url': '/api/maps/maptiler/streets/style.json'},
             },
         ]
@@ -83,12 +83,11 @@ class TestTilesAPI(TestCase):
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(['font_glyphs_missing'], [error['code'] for error in data['map_config_errors']])
+        self.assertEqual([], data['map_config_errors'])
 
-    @patch('geo_lib.tiles._font_glyphs_available', return_value=True)
     @patch('geo_lib.tiles.get_tile_sources_for_client')
-    def test_get_tile_sources_has_no_config_errors_when_map_and_fonts_ready(self, mock_sources, mock_fonts):
-        """A visible MapLibre style and generated fonts clear explicit setup errors."""
+    def test_get_tile_sources_has_no_config_errors_when_map_ready(self, mock_sources):
+        """A visible MapLibre style clears explicit setup errors."""
         mock_sources.return_value = [
             {
                 'id': 'maptiler-streets',

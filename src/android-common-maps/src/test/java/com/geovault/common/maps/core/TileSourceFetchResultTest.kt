@@ -20,15 +20,15 @@ class TileSourceFetchResultTest {
             sources = listOf(streetsSource()),
             map_config_errors = listOf(
                 MapConfigError(
-                    code = "font_glyphs_missing",
-                    message = "Map font glyphs have not been generated.",
+                    code = "maplibre_not_configured",
+                    message = "Map setup is incomplete. Code: maplibre_not_configured.",
                 ),
             ),
         ).toTileSourceFetchResult()
 
         assertTrue(result is TileSourceFetchResult.ConfigurationError)
         val message = (result as TileSourceFetchResult.ConfigurationError).message
-        assertTrue(message.contains("Map font glyphs have not been generated."))
+        assertTrue(message.contains("Code: maplibre_not_configured"))
     }
 
     @Test
@@ -39,9 +39,23 @@ class TileSourceFetchResultTest {
 
         assertTrue(result is TileSourceFetchResult.ConfigurationError)
         val message = (result as TileSourceFetchResult.ConfigurationError).message
-        assertTrue(message.contains("missing required MapLibre basemaps"))
+        assertTrue(message.contains("Code: required_maplibre_basemaps_missing"))
         assertTrue(message.contains(SOURCE_MAPTILER_HYBRID))
         assertTrue(message.contains(SOURCE_MAPTILER_TOPO))
+    }
+
+    @Test
+    fun hiddenExpectedMapsSatisfyRequiredMapValidation() {
+        val sources = listOf(
+            streetsSource(hidden = true),
+            maptilerSource(SOURCE_MAPTILER_HYBRID, "Satellite Hybrid", hidden = true),
+            maptilerSource(SOURCE_MAPTILER_TOPO, "Topographic", hidden = true),
+        )
+
+        val result = TileSourceResponse(sources = sources).toTileSourceFetchResult()
+
+        assertTrue(result is TileSourceFetchResult.Success)
+        assertEquals(sources, (result as TileSourceFetchResult.Success).sources)
     }
 
     @Test
@@ -65,17 +79,19 @@ class TileSourceFetchResultTest {
         assertFalse(TileSourceFetchResult.TransientFailure("Network unavailable.").isCacheable())
     }
 
-    private fun streetsSource() = TileSource(
+    private fun streetsSource(hidden: Boolean = false) = TileSource(
         id = SOURCE_MAPTILER_STREETS,
         name = "Streets",
         type = "maptiler",
+        hidden = hidden,
         client_config = TileClientConfig(style_url = "/api/maps/maptiler/streets/style.json"),
     )
 
-    private fun maptilerSource(id: String, name: String) = TileSource(
+    private fun maptilerSource(id: String, name: String, hidden: Boolean = false) = TileSource(
         id = id,
         name = name,
         type = "maptiler",
+        hidden = hidden,
         client_config = TileClientConfig(style_url = "/api/maps/$id/style.json"),
     )
 }

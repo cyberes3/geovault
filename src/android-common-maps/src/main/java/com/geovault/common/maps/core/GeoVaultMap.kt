@@ -218,6 +218,9 @@ private fun GeoVaultMapErrorDialog(
     onDismiss: () -> Unit,
     onRetry: () -> Unit,
 ) {
+    // Keep this as a dialog-backed surface. Host apps commonly compose map FABs,
+    // loading scrims, and full-screen overlays above the map subtree; inline map
+    // error UI can be covered by those app-owned layers.
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(notice.title) },

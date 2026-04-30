@@ -140,16 +140,16 @@ internal fun TileSourceResponse.toTileSourceFetchResult(): TileSourceFetchResult
 }
 
 private fun TileSourceResponse.missingExpectedMapMessage(): List<String> {
-    val visibleSourceIds = sources
-        .filter { !it.hidden && !it.client_config.style_url.isNullOrBlank() }
+    val mapLibreSourceIds = sources
+        .filter { !it.client_config.style_url.isNullOrBlank() }
         .map { it.id }
         .toSet()
-    val missing = EXPECTED_MAPLIBRE_SOURCES.filter { it.id !in visibleSourceIds }
+    val missing = EXPECTED_MAPLIBRE_SOURCES.filter { it.id !in mapLibreSourceIds }
     if (missing.isEmpty()) return emptyList()
     return listOf(
-        "GeoVault server is missing required MapLibre basemaps: " +
+        "Map setup is missing required basemaps: " +
             missing.joinToString { "${it.label} (${it.id})" } +
-            ". Ask an administrator to add these map IDs to maptiler.maps.",
+            ". Code: required_maplibre_basemaps_missing.",
     )
 }
 
