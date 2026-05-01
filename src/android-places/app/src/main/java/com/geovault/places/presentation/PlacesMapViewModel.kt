@@ -2,11 +2,9 @@ package com.geovault.places.presentation
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.Properties
-import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 
 data class PlacesMapState(
@@ -37,29 +35,19 @@ class PlacesMapViewModel(application: Application) : AndroidViewModel(applicatio
         _state.value = _state.value.copy(selectedFeature = selected)
     }
 
-    fun setSelectedFeature(feature: Feature?) {
-        _state.value = _state.value.copy(selectedFeature = feature)
+    fun selectByRenderId(renderId: String): Boolean {
+        val selected = _state.value.features
+            .withIndex()
+            .firstOrNull { (index, feature) ->
+                PlacesMapStateTransforms.renderIdForFeature(index, feature) == renderId
+            }
+            ?.value
+        _state.value = _state.value.copy(selectedFeature = selected)
+        return selected != null
     }
 
-    fun findFeaturesNearTap(
-        tapLatLng: LatLng,
-        projection: org.maplibre.android.maps.Projection,
-        hitRadiusPx: Float,
-    ): List<Feature> {
-        val tapPoint = projection.toScreenLocation(tapLatLng)
-        val tapX = tapPoint.x
-        val tapY = tapPoint.y
-        return _state.value.features.filter { feature ->
-            val coords = feature.geometry.coordinates
-            if (coords.size < 2) return@filter false
-            val lon = coords[0]
-            val lat = coords[1]
-            if (!isValidMapLibreGeographicLatLng(lat, lon)) return@filter false
-            val point = projection.toScreenLocation(LatLng(lat, lon))
-            val dx = point.x - tapX
-            val dy = point.y - tapY
-            (dx * dx + dy * dy) <= hitRadiusPx * hitRadiusPx
-        }
+    fun setSelectedFeature(feature: Feature?) {
+        _state.value = _state.value.copy(selectedFeature = feature)
     }
 
     fun featureBounds(): LatLngBounds? {

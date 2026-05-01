@@ -1,7 +1,6 @@
 package com.geovault.tracker.ui
 
 import android.app.Activity
-import android.graphics.PointF
 import android.view.WindowManager
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
@@ -64,12 +63,12 @@ import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
 import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
-import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
+import com.geovault.common.maps.render.GeoVaultRenderedMapHitKind
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
@@ -106,7 +105,6 @@ import com.geovault.tracker.presentation.TrackerMapUserLocationInput
 import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
 import java.util.Locale
 
 private const val RENDER_COALESCE_MS = 120L
@@ -254,6 +252,23 @@ private fun TrackerMapAuthenticatedContent(
             context = context,
         )
     }
+    renderPlugin.renderedMapTapHitKinds = setOf(GeoVaultRenderedMapHitKind.Point)
+    renderPlugin.onRenderedMapHitSelected = { hit ->
+        val trackerId = trackerIdFromRenderedHit(
+            id = hit.id,
+            displayedTrackerId = state.displayedTrackerId,
+            selectedTrackerId = state.runtime.selectedTrackerId,
+        )
+        if (trackerId != null) {
+            viewModel.onTrackerMarkerTapped(trackerId)
+            true
+        } else {
+            false
+        }
+    }
+    renderPlugin.onRenderedMapBackgroundTapped = {
+        viewModel.onMapBackgroundTapped()
+    }
     val markerIconPlugin = remember(context) {
         TrackerMapMarkerIconPlugin(context.applicationContext)
     }
@@ -300,6 +315,8 @@ private fun TrackerMapAuthenticatedContent(
         map.registerPlugin(markerIconPlugin)
         map.registerPlugin(locationPlugin)
         onDispose {
+            renderPlugin.onRenderedMapHitSelected = null
+            renderPlugin.onRenderedMapBackgroundTapped = null
             map.unregisterPlugin(renderPlugin)
             map.unregisterPlugin(markerIconPlugin)
             map.unregisterPlugin(locationPlugin)
@@ -403,42 +420,6 @@ private fun TrackerMapAuthenticatedContent(
             map.removeOnCameraMoveStartedListener(listener)
         }
     }
-    DisposableEffect(
-        map,
-        state.displayedTrackerId,
-        state.runtime.selectedTrackerId,
-    ) {
-        val clickListener = MapLibreMap.OnMapClickListener { latLng ->
-            val maplibreMap = map.maplibreMap ?: return@OnMapClickListener false
-            val screenPoint: PointF = maplibreMap.projection.toScreenLocation(latLng)
-            val features = runCatching {
-                maplibreMap.queryRenderedFeatures(
-                    screenPoint,
-                    TrackerMapRenderContract.pointsMarkerHitTestLayerId(),
-                )
-            }.getOrElse { emptyList() }
-            val nearest = selectNearestFeature(maplibreMap, screenPoint, features)
-            val trackId = nearest?.let { feature ->
-                val id = feature.getStringProperty("id") ?: return@let null
-                when {
-                    id == "last-fix" -> {
-                        state.displayedTrackerId.ifBlank { state.runtime.selectedTrackerId }
-                    }
-                    id.startsWith("remote-") -> id.removePrefix("remote-")
-                    else -> null
-                }?.trim()?.takeIf { it.isNotEmpty() }
-            }
-            if (trackId != null) {
-                viewModel.onTrackerMarkerTapped(trackId)
-                true
-            } else {
-                viewModel.onMapBackgroundTapped()
-            }
-        }
-        map.addOnMapClickListener(clickListener)
-        onDispose { map.removeOnMapClickListener(clickListener) }
-    }
-
     LaunchedEffect(
         phase,
         state.trail,
@@ -962,25 +943,15 @@ private fun MapInfoActionIconButton(
     )
 }
 
-private fun selectNearestFeature(
-    map: MapLibreMap,
-    tapPoint: PointF,
-    features: List<org.maplibre.geojson.Feature>,
-): org.maplibre.geojson.Feature? {
-    if (features.isEmpty()) return null
-    if (features.size == 1) return features[0]
-    return features.minByOrNull { feature ->
-        val geom = feature.geometry()
-        if (geom !is org.maplibre.geojson.Point) return@minByOrNull Float.MAX_VALUE
-        val lat = geom.latitude()
-        val lon = geom.longitude()
-        if (!isValidMapLibreGeographicLatLng(lat, lon)) return@minByOrNull Float.MAX_VALUE
-        val screen = map.projection.toScreenLocation(
-            org.maplibre.android.geometry.LatLng(lat, lon)
-        )
-        val dx = screen.x - tapPoint.x
-        val dy = screen.y - tapPoint.y
-        kotlin.math.sqrt(dx * dx + dy * dy)
-    } ?: features[0]
+private fun trackerIdFromRenderedHit(
+    id: String,
+    displayedTrackerId: String,
+    selectedTrackerId: String,
+): String? {
+    return when {
+        id == "last-fix" -> displayedTrackerId.ifBlank { selectedTrackerId }
+        id.startsWith("remote-") -> id.removePrefix("remote-")
+        else -> null
+    }?.trim()?.takeIf { it.isNotEmpty() }
 }
 

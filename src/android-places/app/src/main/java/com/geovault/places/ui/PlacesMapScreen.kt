@@ -27,8 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.core.GeoVaultMainMap
@@ -44,6 +42,7 @@ import com.geovault.common.maps.location.rememberGeoVaultMapLocationPermissionSt
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
+import com.geovault.common.maps.render.GeoVaultRenderedMapHitKind
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
@@ -86,8 +85,6 @@ fun PlacesMapScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
-    val rootView = LocalView.current
-    val density = LocalDensity.current
     val boundsFitPaddingPx = rememberGeoVaultMapBoundsFitPaddingPx()
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
@@ -142,48 +139,23 @@ fun PlacesMapScreen(
         viewModel.loadFromCache()
     }
 
+    renderPlugin.renderedMapTapHitKinds = setOf(GeoVaultRenderedMapHitKind.Point)
+    renderPlugin.onRenderedMapHitSelected = { hit ->
+        viewModel.selectByRenderId(hit.id)
+    }
+    renderPlugin.onRenderedMapBackgroundTapped = {
+        viewModel.setSelectedFeature(null)
+        false
+    }
+
     DisposableEffect(map) {
         map.registerPlugin(renderPlugin)
         map.registerPlugin(locationPlugin)
         onDispose {
+            renderPlugin.onRenderedMapHitSelected = null
+            renderPlugin.onRenderedMapBackgroundTapped = null
             map.unregisterPlugin(renderPlugin)
             map.unregisterPlugin(locationPlugin)
-        }
-    }
-
-    DisposableEffect(map, density, state.features) {
-        val tapListener = org.maplibre.android.maps.MapLibreMap.OnMapClickListener { tapLatLng ->
-            val mapLibreMap = map.maplibreMap ?: return@OnMapClickListener false
-            val hitRadiusPx = with(density) { 20.dp.toPx() }
-            val near = viewModel.findFeaturesNearTap(tapLatLng, mapLibreMap.projection, hitRadiusPx)
-            when {
-                near.isEmpty() -> {
-                    viewModel.setSelectedFeature(null)
-                    false
-                }
-                near.size == 1 -> {
-                    viewModel.setSelectedFeature(near.first())
-                    true
-                }
-                else -> {
-                    val point = mapLibreMap.projection.toScreenLocation(tapLatLng)
-                    val popupAnchor = map.getMapViewOrNull() ?: rootView
-                    com.geovault.common.maps.ui.OverlappingPointsPopup(
-                        context = context,
-                        anchor = popupAnchor,
-                        pointNames = near.map { it.properties.name.orEmpty() },
-                        tapX = point.x.toInt(),
-                        tapY = point.y.toInt(),
-                    ) { index ->
-                        viewModel.setSelectedFeature(near.getOrNull(index))
-                    }.show()
-                    true
-                }
-            }
-        }
-        map.addOnMapClickListener(tapListener)
-        onDispose {
-            map.removeOnMapClickListener(tapListener)
         }
     }
 

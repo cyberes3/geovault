@@ -15,7 +15,9 @@ import android.widget.ImageView
 import android.widget.ListView
 import android.widget.PopupWindow
 import android.widget.TextView
+import androidx.appcompat.view.ContextThemeWrapper
 import com.geovault.common.maps.R
+import com.google.android.material.R as MaterialR
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -43,7 +45,8 @@ class OverlappingPointsPopup(
     private val cardView: View
 
     init {
-        val inflater = LayoutInflater.from(context)
+        val themedContext = ContextThemeWrapper(context, MaterialR.style.Theme_MaterialComponents_DayNight_NoActionBar)
+        val inflater = LayoutInflater.from(themedContext)
         contentView = inflater.inflate(R.layout.gv_common_popup_overlapping_points, null)
         listView = contentView.findViewById(R.id.gv_common_popup_list)
         chevronView = contentView.findViewById(R.id.gv_common_popup_chevron)
@@ -51,7 +54,7 @@ class OverlappingPointsPopup(
         bottomNotchView = contentView.findViewById(R.id.gv_common_popup_notch_bottom)
         cardView = contentView.findViewById(R.id.gv_common_popup_card)
         val adapter = object : ArrayAdapter<String>(
-            context,
+            themedContext,
             R.layout.gv_common_item_overlapping_point,
             R.id.gv_common_overlapping_point_text,
             pointNames,
@@ -68,8 +71,8 @@ class OverlappingPointsPopup(
             onSelect(position)
             popupWindow.dismiss()
         }
-        val itemHeightPx = context.resources.getDimensionPixelSize(R.dimen.gv_common_overlapping_popup_item_height)
-        val dividerHeightPx = (1 * context.resources.displayMetrics.density).toInt().coerceAtLeast(0)
+        val itemHeightPx = themedContext.resources.getDimensionPixelSize(R.dimen.gv_common_overlapping_popup_item_height)
+        val dividerHeightPx = (1 * themedContext.resources.displayMetrics.density).toInt().coerceAtLeast(0)
         val canScroll = pointNames.size > MAX_VISIBLE_ITEMS
         val visibleRows = pointNames.size.coerceAtMost(MAX_VISIBLE_ITEMS)
         val listHeightPx = if (pointNames.isEmpty()) 0 else visibleRows * itemHeightPx + (visibleRows - 1) * dividerHeightPx
@@ -112,13 +115,19 @@ class OverlappingPointsPopup(
         val screenY = anchorLocation[1] + tapY
         val rect = Rect()
         anchor.getWindowVisibleDisplayFrame(rect)
+        rect.intersect(anchorScreenBounds(anchorLocation))
+        popupAvoidanceInsets()?.let { insets ->
+            rect.left += insets.left
+            rect.top += insets.top
+            rect.right -= insets.right
+            rect.bottom -= insets.bottom
+        }
         val density = anchor.resources.displayMetrics.density
         val paddingPx = (12 * density).toInt()
         val gapPx = ((TAP_PROTECTION_DP + POPUP_GAP_DP) * density).toInt()
         val placement = choosePosition(screenX, screenY, contentWidth, contentHeight, rect, paddingPx, gapPx)
-        applyNotchPlacement(placement.placement, placement.x, screenX)
-        val (x, y) = placement.x to placement.y
-        popupWindow.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y)
+        applyNotchPlacement(placement.notchPlacement, placement.x, screenX)
+        popupWindow.showAtLocation(anchor, Gravity.NO_GRAVITY, placement.x, placement.y)
     }
 
     fun dismiss() {
@@ -126,6 +135,19 @@ class OverlappingPointsPopup(
     }
 
     fun isShowing(): Boolean = popupWindow.isShowing
+
+    private fun anchorScreenBounds(anchorLocation: IntArray): Rect {
+        return Rect(
+            anchorLocation[0],
+            anchorLocation[1],
+            anchorLocation[0] + anchor.width,
+            anchorLocation[1] + anchor.height,
+        )
+    }
+
+    private fun popupAvoidanceInsets(): Rect? {
+        return anchor.getTag(R.id.gv_common_map_popup_avoidance_insets) as? Rect
+    }
 
     private fun choosePosition(
         screenX: Int,
@@ -146,11 +168,11 @@ class OverlappingPointsPopup(
         val safeMaxY = maxOf(minY, maxY)
         val yAbove = screenY - gapPx - contentHeight
         val xCentered = (screenX - contentWidth / 2).coerceIn(safeMinX, safeMaxX)
-        if (yAbove >= minY) {
+        if (yAbove >= minY && yAbove + contentHeight <= rect.bottom - paddingPx) {
             return PopupPlacement(
                 x = xCentered,
                 y = yAbove,
-                placement = NotchPlacement.Bottom,
+                notchPlacement = NotchPlacement.Bottom,
             )
         }
         val yBelow = screenY + gapPx
@@ -158,7 +180,35 @@ class OverlappingPointsPopup(
             return PopupPlacement(
                 x = xCentered,
                 y = yBelow,
-                placement = NotchPlacement.Top,
+                notchPlacement = NotchPlacement.Top,
+            )
+        }
+        val xLeft = screenX - gapPx - contentWidth
+        if (xLeft >= minX && xLeft + contentWidth <= rect.right - paddingPx) {
+            val y = (screenY - contentHeight / 2).coerceIn(safeMinY, safeMaxY)
+            val notchPlacement = if (screenY >= y + contentHeight / 2) {
+                NotchPlacement.Bottom
+            } else {
+                NotchPlacement.Top
+            }
+            return PopupPlacement(
+                x = xLeft,
+                y = y,
+                notchPlacement = notchPlacement,
+            )
+        }
+        val xRight = screenX + gapPx
+        if (xRight >= minX && xRight + contentWidth <= rect.right - paddingPx) {
+            val y = (screenY - contentHeight / 2).coerceIn(safeMinY, safeMaxY)
+            val notchPlacement = if (screenY >= y + contentHeight / 2) {
+                NotchPlacement.Bottom
+            } else {
+                NotchPlacement.Top
+            }
+            return PopupPlacement(
+                x = xRight,
+                y = y,
+                notchPlacement = notchPlacement,
             )
         }
 
@@ -168,13 +218,13 @@ class OverlappingPointsPopup(
             PopupPlacement(
                 x = xCentered,
                 y = yAboveClamped,
-                placement = NotchPlacement.Bottom,
+                notchPlacement = NotchPlacement.Bottom,
             )
         } else {
             PopupPlacement(
                 x = xCentered,
                 y = yBelowClamped,
-                placement = NotchPlacement.Top,
+                notchPlacement = NotchPlacement.Top,
             )
         }
     }
@@ -186,7 +236,6 @@ class OverlappingPointsPopup(
         topNotchView.translationX = 0f
         bottomNotchView.translationX = 0f
 
-        // Slide visible notch so its center tracks the tapped point when popup is edge-clamped.
         val notchView = if (topVisible) topNotchView else bottomNotchView
         notchView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val notchWidth = max(1, notchView.measuredWidth)
@@ -232,6 +281,7 @@ class OverlappingPointsPopup(
     private data class PopupPlacement(
         val x: Int,
         val y: Int,
-        val placement: NotchPlacement,
+        val notchPlacement: NotchPlacement,
     )
+
 }

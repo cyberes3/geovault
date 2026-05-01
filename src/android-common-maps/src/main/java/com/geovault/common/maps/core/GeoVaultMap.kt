@@ -1,5 +1,6 @@
 package com.geovault.common.maps.core
 
+import android.graphics.Rect
 import android.os.Bundle
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +42,13 @@ data class GeoVaultMapPaddingDp(
     val bottom: Dp = Dp.Unspecified,
 )
 
+data class GeoVaultMapPopupAvoidanceInsetsPx(
+    val left: Int = 0,
+    val top: Int = 0,
+    val right: Int = 0,
+    val bottom: Int = 0,
+)
+
 @Composable
 fun rememberGeoVaultStandardMap(): GeoVaultStandardMap {
     val context = LocalContext.current
@@ -56,6 +64,7 @@ fun GeoVaultStandardMapView(
     showDefaultSourceToggle: Boolean = false,
     includeDefaultFabColumnPadding: Boolean = false,
     mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+    popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx = GeoVaultMapPopupAvoidanceInsetsPx(),
     showScaleBar: Boolean = false,
 ) {
     GeoVaultMapHost(
@@ -65,6 +74,7 @@ fun GeoVaultStandardMapView(
         showDefaultSourceToggle = showDefaultSourceToggle,
         includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
         mapPaddingDp = mapPaddingDp,
+        popupAvoidanceInsetsPx = popupAvoidanceInsetsPx,
         showScaleBar = showScaleBar,
     )
 }
@@ -76,6 +86,7 @@ fun GeoVaultMainMapView(
     showDefaultSourceToggle: Boolean = false,
     includeDefaultFabColumnPadding: Boolean = false,
     mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+    popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx = GeoVaultMapPopupAvoidanceInsetsPx(),
     showScaleBar: Boolean = false,
 ) {
     GeoVaultMapHost(
@@ -85,6 +96,7 @@ fun GeoVaultMainMapView(
         showDefaultSourceToggle = showDefaultSourceToggle,
         includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
         mapPaddingDp = mapPaddingDp,
+        popupAvoidanceInsetsPx = popupAvoidanceInsetsPx,
         showScaleBar = showScaleBar,
     )
 }
@@ -102,6 +114,7 @@ private fun GeoVaultMapHost(
     showDefaultSourceToggle: Boolean,
     includeDefaultFabColumnPadding: Boolean,
     mapPaddingDp: GeoVaultMapPaddingDp,
+    popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx,
     showScaleBar: Boolean,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -133,11 +146,13 @@ private fun GeoVaultMapHost(
                 //    between attach and first-tile render, which is jarring on white UIs.
                 acquiredMapView.overScrollMode = android.view.View.OVER_SCROLL_NEVER
                 acquiredMapView.setBackgroundColor(MAP_UNDERLAY_COLOR)
+                acquiredMapView.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
                 mapView = acquiredMapView
                 currentMap.attachMapView(acquiredMapView)
                 acquiredMapView
             },
             update = {
+                it.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
                 if (mapView !== it) {
                     mapView = it
                     currentMap.attachMapView(it)
@@ -247,4 +262,11 @@ private fun GeoVaultMapErrorDialog(
     ) {
         Text(notice.message)
     }
+}
+
+private fun MapView.setMapPopupAvoidanceInsets(insets: GeoVaultMapPopupAvoidanceInsetsPx) {
+    setTag(
+        com.geovault.common.maps.R.id.gv_common_map_popup_avoidance_insets,
+        Rect(insets.left, insets.top, insets.right, insets.bottom),
+    )
 }

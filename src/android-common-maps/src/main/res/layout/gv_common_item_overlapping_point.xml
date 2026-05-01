@@ -3,7 +3,7 @@
     android:id="@+id/gv_common_overlapping_point_text"
     android:layout_width="match_parent"
     android:layout_height="@dimen/gv_common_overlapping_popup_item_height"
-    android:background="?android:attr/selectableItemBackground"
+    android:background="?attr/selectableItemBackground"
     android:ellipsize="end"
     android:gravity="center"
     android:maxLines="1"

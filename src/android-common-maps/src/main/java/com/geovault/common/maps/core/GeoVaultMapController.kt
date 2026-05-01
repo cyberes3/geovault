@@ -126,7 +126,7 @@ sealed class GeoVaultBaseMap(
             cameraMoveStartedListeners.forEach { map.addOnCameraMoveStartedListener(it) }
             _phase.value = GeoVaultMapPhase.StyleLoading
             attachedManager.setupBaseMapSettings(map)
-            pluginRegistry.onMapAttached(map)
+            pluginRegistry.onMapAttached(map, view)
             attachedManager.fetchMapSources { canRenderMap ->
                 if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
                 if (!canRenderMap) {

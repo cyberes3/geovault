@@ -23,6 +23,7 @@ data class MapRenderLine(
     val id: String,
     val coordinates: List<Pair<Double, Double>>,
     val lineColorHex: String,
+    val title: String? = null,
 )
 
 data class MapRenderPolygon(
@@ -30,6 +31,7 @@ data class MapRenderPolygon(
     val rings: List<List<Pair<Double, Double>>>,
     val fillColorHex: String = GeoVaultColorTokens.Hex.ScrimMedium,
     val outlineColorHex: String = GeoVaultColorTokens.Hex.MapLineworkBorder,
+    val title: String? = null,
 )
 
 data class MapRenderState(

@@ -1,17 +1,22 @@
 package com.geovault.common.maps.render
 
 import android.content.Context
+import android.graphics.PointF
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.ui.graphics.toArgb
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.core.OutlinedGeoJsonLineLayers
+import com.geovault.common.maps.ui.OverlappingPointsPopup
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
@@ -25,6 +30,14 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.TransitionOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.GeoJsonOptions
+import org.maplibre.geojson.Feature
+import org.maplibre.geojson.Geometry
+import org.maplibre.geojson.LineString
+import org.maplibre.geojson.MultiLineString
+import org.maplibre.geojson.MultiPoint
+import org.maplibre.geojson.MultiPolygon
+import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
 
 /**
  * Prepared GeoJSON payloads for the three sources owned by [GeoJsonRenderPlugin].
@@ -47,6 +60,11 @@ private data class PreparedGeoJsonRenderState(
     val polygonsJson: String,
 )
 
+private const val PROPERTY_ID: String = "id"
+private const val PROPERTY_TITLE: String = "title"
+private const val POINT_HIT_HALF_DP: Float = 24f
+private const val OVERLAY_HIT_HALF_DP: Float = 36f
+
 /**
  * Renders [MapRenderState] as MapLibre GeoJSON sources and layers.
  *
@@ -65,7 +83,11 @@ class GeoJsonRenderPlugin(
     @Volatile
     private var renderState: MapRenderState = MapRenderState()
     private var map: MapLibreMap? = null
+    private var mapView: MapView? = null
+    private var tapListenerAttached = false
+    private var activePopup: OverlappingPointsPopup? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val renderedHitClickListener = MapLibreMap.OnMapClickListener(::handleRenderedMapClick)
     private var marshaledApply: Runnable? = null
     private val renderGeneration = AtomicLong(0L)
     private val destroyed = AtomicBoolean(false)
@@ -74,6 +96,17 @@ class GeoJsonRenderPlugin(
             isDaemon = true
         }
     }
+
+    var onRenderedMapHitSelected: ((GeoVaultRenderedMapHit) -> Boolean)? = null
+        set(value) {
+            field = value
+            updateTapListenerRegistration()
+        }
+
+    var onRenderedMapBackgroundTapped: (() -> Boolean)? = null
+
+    var renderedMapTapHitKinds: Set<GeoVaultRenderedMapHitKind> =
+        setOf(GeoVaultRenderedMapHitKind.Point, GeoVaultRenderedMapHitKind.Overlay)
 
     override fun setRenderState(newState: MapRenderState) {
         renderState = newState
@@ -90,10 +123,21 @@ class GeoJsonRenderPlugin(
 
     override fun onMapAttached(map: MapLibreMap) {
         this.map = map
+        updateTapListenerRegistration()
+    }
+
+    override fun onMapViewAttached(map: MapLibreMap, mapView: MapView) {
+        this.map = map
+        this.mapView = mapView
+        updateTapListenerRegistration()
     }
 
     override fun onMapDetached() {
+        detachTapListener()
+        activePopup?.dismiss()
+        activePopup = null
         map = null
+        mapView = null
     }
 
     override fun onPluginDestroyed() {
@@ -102,6 +146,8 @@ class GeoJsonRenderPlugin(
         destroyed.set(true)
         renderGeneration.incrementAndGet()
         renderExecutor.shutdownNow()
+        onRenderedMapHitSelected = null
+        onRenderedMapBackgroundTapped = null
     }
 
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
@@ -114,6 +160,165 @@ class GeoJsonRenderPlugin(
         ensureLayers(style)
         setRenderState(renderState)
     }
+
+    override fun onStyleWillChange(map: MapLibreMap, currentStyle: Style?) {
+        activePopup?.dismiss()
+        activePopup = null
+    }
+
+    private fun updateTapListenerRegistration() {
+        val attachedMap = map ?: return
+        if (onRenderedMapHitSelected == null) {
+            detachTapListener()
+            return
+        }
+        if (!tapListenerAttached) {
+            attachedMap.addOnMapClickListener(renderedHitClickListener)
+            tapListenerAttached = true
+        }
+    }
+
+    private fun detachTapListener() {
+        val attachedMap = map
+        if (tapListenerAttached && attachedMap != null) {
+            attachedMap.removeOnMapClickListener(renderedHitClickListener)
+        }
+        tapListenerAttached = false
+    }
+
+    private fun handleRenderedMapClick(latLng: LatLng): Boolean {
+        val hitSelected = onRenderedMapHitSelected ?: return false
+        val attachedMap = map ?: return false
+        val anchor = mapView ?: return false
+        val screenPoint = attachedMap.projection.toScreenLocation(latLng)
+        val density = anchor.resources.displayMetrics.density
+
+        if (GeoVaultRenderedMapHitKind.Point in renderedMapTapHitKinds) {
+            val pointResolution = GeoVaultRenderedMapHitResolver.resolve(
+                queryRenderedHits(
+                    map = attachedMap,
+                    bounds = rectAround(screenPoint, POINT_HIT_HALF_DP * density),
+                    layerIds = pointHitLayerIds(),
+                    kind = GeoVaultRenderedMapHitKind.Point,
+                ),
+            )
+            if (pointResolution !is GeoVaultRenderedMapHitResolution.None) {
+                return dispatchRenderedHitResolution(pointResolution, screenPoint, hitSelected)
+            }
+        }
+
+        if (GeoVaultRenderedMapHitKind.Overlay in renderedMapTapHitKinds) {
+            val overlayResolution = GeoVaultRenderedMapHitResolver.resolve(
+                queryRenderedHits(
+                    map = attachedMap,
+                    bounds = rectAround(screenPoint, OVERLAY_HIT_HALF_DP * density),
+                    layerIds = overlayHitLayerIds(),
+                    kind = GeoVaultRenderedMapHitKind.Overlay,
+                ),
+            )
+            if (overlayResolution !is GeoVaultRenderedMapHitResolution.None) {
+                return dispatchRenderedHitResolution(overlayResolution, screenPoint, hitSelected)
+            }
+        }
+
+        activePopup?.dismiss()
+        activePopup = null
+        return onRenderedMapBackgroundTapped?.invoke() ?: false
+    }
+
+    private fun dispatchRenderedHitResolution(
+        resolution: GeoVaultRenderedMapHitResolution,
+        screenPoint: PointF,
+        hitSelected: (GeoVaultRenderedMapHit) -> Boolean,
+    ): Boolean {
+        return when (resolution) {
+            GeoVaultRenderedMapHitResolution.None -> false
+            is GeoVaultRenderedMapHitResolution.Single -> {
+                activePopup?.dismiss()
+                activePopup = null
+                hitSelected(resolution.hit)
+            }
+            is GeoVaultRenderedMapHitResolution.Multiple -> {
+                val anchor = mapView ?: return false
+                activePopup?.dismiss()
+                activePopup = OverlappingPointsPopup(
+                    context = anchor.context,
+                    anchor = anchor,
+                    pointNames = resolution.hits.map { it.title.ifBlank { it.id } },
+                    tapX = screenPoint.x.toInt(),
+                    tapY = screenPoint.y.toInt(),
+                    onSelect = { index ->
+                        val hit = resolution.hits.getOrNull(index) ?: return@OverlappingPointsPopup
+                        hitSelected(hit)
+                    },
+                ).also { it.show() }
+                true
+            }
+        }
+    }
+
+    private fun queryRenderedHits(
+        map: MapLibreMap,
+        bounds: RectF,
+        layerIds: List<String>,
+        kind: GeoVaultRenderedMapHitKind,
+    ): List<GeoVaultRenderedMapHitCandidate> {
+        val style = map.style ?: return emptyList()
+        val existingLayerIds = layerIds.filter { style.getLayer(it) != null }
+        if (existingLayerIds.isEmpty()) return emptyList()
+        val raw = runCatching {
+            map.queryRenderedFeatures(bounds, *existingLayerIds.toTypedArray())
+        }.getOrElse { emptyList() }
+        return raw.mapNotNull { feature -> feature.toRenderedMapHitCandidate(kind) }
+    }
+
+    private fun Feature.toRenderedMapHitCandidate(
+        kind: GeoVaultRenderedMapHitKind,
+    ): GeoVaultRenderedMapHitCandidate? {
+        val id = getStringProperty(PROPERTY_ID) ?: return null
+        val title = getStringProperty(PROPERTY_TITLE)?.takeIf { it.isNotBlank() } ?: id
+        val coordinate = representativeCoordinate(geometry())
+        return GeoVaultRenderedMapHitCandidate(
+            hit = GeoVaultRenderedMapHit(
+                id = id,
+                title = title,
+                kind = kind,
+                latitude = coordinate?.first,
+                longitude = coordinate?.second,
+            ),
+            dedupeKey = id,
+        )
+    }
+
+    private fun representativeCoordinate(geometry: Geometry?): Pair<Double, Double>? = when (geometry) {
+        is Point -> geometry.latitude() to geometry.longitude()
+        is MultiPoint -> geometry.coordinates().firstOrNull()?.let { it.latitude() to it.longitude() }
+        is LineString -> geometry.coordinates().firstOrNull()?.let { it.latitude() to it.longitude() }
+        is MultiLineString -> geometry.coordinates().firstOrNull()?.firstOrNull()?.let { it.latitude() to it.longitude() }
+        is Polygon -> geometry.coordinates().firstOrNull()?.firstOrNull()?.let { it.latitude() to it.longitude() }
+        is MultiPolygon -> geometry.coordinates().firstOrNull()?.firstOrNull()?.firstOrNull()?.let { it.latitude() to it.longitude() }
+        else -> null
+    }
+
+    private fun pointHitLayerIds(): List<String> = listOf(
+        pointsOverlayIconLayerId,
+        pointsIconLayerId,
+        pointsOverlayLabelLayerId,
+        pointsLabelLayerId,
+        pointsOverlayCircleLayerId,
+        pointsCircleLayerId,
+    )
+
+    private fun overlayHitLayerIds(): List<String> = listOf(
+        lineOuterLayerId,
+        lineBorderLayerId,
+        lineFillLayerId,
+        polygonsFillLayerId,
+        polygonsOutlineLayerId,
+    )
+
+    private fun rectAround(point: PointF, halfPx: Float): RectF =
+        RectF(point.x - halfPx, point.y - halfPx, point.x + halfPx, point.y + halfPx)
 
     /**
      * Sets point-name label halo for the current style. Use [haloWidthPx] `0f` to disable the halo.
@@ -693,6 +898,43 @@ class GeoJsonRenderPlugin(
         fun pointsOverlayLabelLayerId(sourceIdPrefix: String): String =
             "$sourceIdPrefix-points-overlay-label-layer"
 
+        fun pointsCircleLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-points-circle-layer"
+
+        fun pointsOverlayCircleLayerId(sourceIdPrefix: String): String =
+            "$sourceIdPrefix-points-overlay-circle-layer"
+
+        fun linesSourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-lines-source"
+
+        fun polygonsSourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-polygons-source"
+
+        fun lineOuterLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-lines-outer-layer"
+
+        fun lineBorderLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-lines-border-layer"
+
+        fun lineFillLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-lines-fill-layer"
+
+        fun polygonsFillLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-polygons-fill-layer"
+
+        fun polygonsOutlineLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-polygons-outline-layer"
+
+        fun pointHitLayerIds(sourceIdPrefix: String): List<String> = listOf(
+            pointsOverlayIconLayerId(sourceIdPrefix),
+            pointsIconLayerId(sourceIdPrefix),
+            pointsOverlayLabelLayerId(sourceIdPrefix),
+            pointsLabelLayerId(sourceIdPrefix),
+            pointsOverlayCircleLayerId(sourceIdPrefix),
+            pointsCircleLayerId(sourceIdPrefix),
+        )
+
+        fun overlayHitLayerIds(sourceIdPrefix: String): List<String> = listOf(
+            lineOuterLayerId(sourceIdPrefix),
+            lineBorderLayerId(sourceIdPrefix),
+            lineFillLayerId(sourceIdPrefix),
+            polygonsFillLayerId(sourceIdPrefix),
+            polygonsOutlineLayerId(sourceIdPrefix),
+        )
+
         fun pointClusterCircleLayerId(sourceIdPrefix: String, index: Int): String =
             "$sourceIdPrefix-points-cluster-$index-layer"
 
@@ -888,8 +1130,8 @@ private fun buildPointsFeatureCollectionJson(points: List<MapRenderPoint>): Stri
     val encoder = GeoJsonFeatureCollectionEncoder(initialCapacity = validPoints.size * 160 + 64)
     validPoints.forEach { point ->
         encoder.pointFeature(longitude = point.longitude, latitude = point.latitude) {
-            string("id", point.id)
-            point.title?.let { string("title", it) }
+            string(PROPERTY_ID, point.id)
+            point.title?.let { string(PROPERTY_TITLE, it) }
             point.iconImageId?.let { string("iconImageId", it) }
             point.pointRadius?.let { number("pointRadius", it) }
             point.pointFillColorHex?.let { string("pointFillColorHex", it) }
@@ -912,7 +1154,8 @@ private fun buildLinesFeatureCollectionJson(lines: List<MapRenderLine>): String 
         val filtered = mapRenderLineToValidCoordinatesOrNull(line) ?: return@forEach
         hasAny = true
         encoder.lineFeature(coordinates = filtered) {
-            string("id", line.id)
+            string(PROPERTY_ID, line.id)
+            line.title?.let { string(PROPERTY_TITLE, it) }
             string(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, line.lineColorHex)
         }
     }
@@ -931,7 +1174,8 @@ private fun buildPolygonsFeatureCollectionJson(
         val rings = filterMapRenderPolygonForGeoJson(polygon) ?: return@forEach
         hasAny = true
         encoder.polygonFeature(rings = rings) {
-            string("id", polygon.id)
+            string(PROPERTY_ID, polygon.id)
+            polygon.title?.let { string(PROPERTY_TITLE, it) }
             string("fillColor", polygon.fillColorHex)
             string("outlineColor", polygon.outlineColorHex)
             if (emitLineColorProperty) {

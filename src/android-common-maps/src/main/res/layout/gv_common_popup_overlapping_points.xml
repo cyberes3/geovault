@@ -1,25 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:gravity="center_horizontal"
     android:orientation="vertical">
 
-    <View
+    <ImageView
         android:id="@+id/gv_common_popup_notch_top"
         android:layout_width="16dp"
         android:layout_height="8dp"
-        android:layout_marginTop="3dp"
         android:layout_marginBottom="-1dp"
-        android:background="@drawable/gv_common_popup_notch_up"
-        android:visibility="gone" />
+        android:contentDescription="@null"
+        android:elevation="1dp"
+        android:src="@drawable/gv_common_popup_notch_up" />
 
-    <FrameLayout
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/gv_common_popup_card"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@drawable/gv_common_popup_card_bg"
-        android:clipToOutline="true">
+        app:cardBackgroundColor="@color/gv_common_surface"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/gv_common_border_light"
+        app:strokeWidth="1dp">
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -48,13 +54,15 @@
                 android:src="@drawable/gv_common_ic_chevron_down"
                 android:visibility="gone" />
         </LinearLayout>
-    </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-    <View
+    <ImageView
         android:id="@+id/gv_common_popup_notch_bottom"
         android:layout_width="16dp"
         android:layout_height="8dp"
-        android:layout_marginTop="-1dp"
-        android:layout_marginBottom="3dp"
-        android:background="@drawable/gv_common_popup_notch_down" />
+        android:layout_marginTop="-2dp"
+        android:contentDescription="@null"
+        android:elevation="1dp"
+        android:src="@drawable/gv_common_popup_notch_down"
+        android:visibility="gone" />
 </LinearLayout>

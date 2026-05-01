@@ -6,7 +6,13 @@
     android:viewportHeight="8">
     <path
         android:fillColor="@color/gv_common_surface"
-        android:pathData="M0,8 L8,0 L16,8 Z"
+        android:pathData="M0,8 L8,0 L16,8 Z" />
+    <path
+        android:fillColor="@color/gv_common_surface"
+        android:pathData="M0,7 L16,7 L16,8 L0,8 Z" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M0,8 L8,0 L16,8"
         android:strokeColor="@color/gv_common_border_light"
         android:strokeWidth="1" />
 </vector>

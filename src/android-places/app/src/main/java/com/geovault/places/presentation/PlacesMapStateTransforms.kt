@@ -50,7 +50,7 @@ object PlacesMapStateTransforms {
             val dbId = feature.properties.database_id
             val isSelected = selectedId != null && dbId == selectedId
             MapRenderPoint(
-                id = dbId?.toString() ?: "temp-$index-${feature.properties.name.orEmpty()}",
+                id = renderIdForFeature(index, feature),
                 latitude = lat,
                 longitude = lon,
                 title = feature.properties.name,
@@ -63,4 +63,7 @@ object PlacesMapStateTransforms {
 
     private fun markerIconId(isSelected: Boolean): String =
         if (isSelected) CommonMapIconIds.MARKER_SELECTED else CommonMapIconIds.MARKER_DEFAULT
+
+    fun renderIdForFeature(index: Int, feature: Feature): String =
+        feature.properties.database_id?.toString() ?: "temp-$index-${feature.properties.name.orEmpty()}"
 }
