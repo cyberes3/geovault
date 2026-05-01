@@ -71,17 +71,16 @@ object GeoVaultMapCameraFollowMachine {
         current.copy(positionFollowDesired = true)
 
     /**
-     * User panned or zoomed the map: drop **position** follow but keep heading follow engaged
-     * in the FAB state. Heading-only state does not move the camera until position follow is
-     * re-enabled.
+     * User panned or zoomed the map: drop **position** and **heading** follow so camera updates
+     * do not fight the gesture.
      */
     fun afterUserGesture(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
-        current.copy(positionFollowDesired = false)
+        GeoVaultMapCameraFollowState.NONE
 
     /**
-     * Heading follow is on but position follow was cleared (e.g. user panned): re-engage position
-     * so the map stays centered on the user while rotating. Hosts may use this when resuming
-     * follow after a one-shot action; **navigation start** in Survey/NGS uses
+     * Heading follow is on but position follow was cleared (e.g. GPS follow was toggled off):
+     * re-engage position so the map stays centered on the user while rotating. Hosts may use
+     * this when resuming follow after a one-shot action; **navigation start** in Survey/NGS uses
      * [afterProgrammaticCamera] / [GeoVaultMapHeadingFollowFabBundle.clearForProgrammaticCameraMove]
      * instead so framing animations are not fighting MapLibre tracking.
      */

@@ -81,7 +81,7 @@ private const val GPS_FOLLOW_MIN_ZOOM: Double = 10.0
  * For a one-shot recenter (no continuous follow), use
  * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
  *
- * - A user pan/zoom clears **position** follow only; heading follow can stay (compass lock).
+ * - A user pan/zoom clears **position** and **heading** follow so camera updates do not fight the gesture.
  * - Map bearing is driven manually only when **both** position and heading follow are on.
  * - [allowFollowCamera] lets the host suppress camera tracking (e.g. map not ready) while
  *   keeping FAB toggle state.

@@ -61,6 +61,7 @@ class GeoVaultMapLocationSessionPolicy {
 
 data class GeoVaultMapLocationSession(
     val gpsFabAction: GeoVaultMapFabAction,
+    val headingFabAction: GeoVaultMapFabAction,
     val decision: GeoVaultMapLocationSessionDecision,
     val userLocationRequested: Boolean,
 )
@@ -68,9 +69,10 @@ data class GeoVaultMapLocationSession(
 /**
  * Wraps the shared heading-follow bundle with persistent location-session intent.
  *
- * The GPS FAB requests/refreshes the location session and recenters the camera; it does not
- * toggle GPS off. Navigation also requests the location session, so stopping navigation removes
- * only the navigation overlay and leaves the user-location puck available.
+ * The GPS and heading FABs request the location session before changing camera follow state.
+ * Once requested, later camera-follow changes (for example, panning the map) do not hide the
+ * user-location puck. Navigation also requests the location session, so stopping navigation
+ * removes only the navigation overlay and leaves the puck available.
  */
 @Composable
 fun rememberGeoVaultMapLocationSession(
@@ -82,16 +84,35 @@ fun rememberGeoVaultMapLocationSession(
     policy: GeoVaultMapLocationSessionPolicy = remember { GeoVaultMapLocationSessionPolicy() },
 ): GeoVaultMapLocationSession {
     var userLocationRequested by rememberSaveable { mutableStateOf(false) }
+    fun requestUserLocation() {
+        userLocationRequested = true
+    }
     LaunchedEffect(navigationActive) {
         if (navigationActive) {
-            userLocationRequested = true
+            requestUserLocation()
+        }
+    }
+    LaunchedEffect(
+        headingFollowFabs.positionFollowDesired,
+        headingFollowFabs.headingFollowDesired,
+    ) {
+        if (headingFollowFabs.positionFollowDesired || headingFollowFabs.headingFollowDesired) {
+            requestUserLocation()
         }
     }
     val gpsFabAction = remember(headingFollowFabs.gpsPositionFollowFab) {
         headingFollowFabs.gpsPositionFollowFab.copy(
             onTap = {
-                userLocationRequested = true
+                requestUserLocation()
                 headingFollowFabs.gpsPositionFollowFab.onTap?.invoke()
+            },
+        )
+    }
+    val headingFabAction = remember(headingFollowFabs.headingFollowFab) {
+        headingFollowFabs.headingFollowFab.copy(
+            onTap = {
+                requestUserLocation()
+                headingFollowFabs.headingFollowFab.onTap?.invoke()
             },
         )
     }
@@ -108,6 +129,7 @@ fun rememberGeoVaultMapLocationSession(
     )
     return GeoVaultMapLocationSession(
         gpsFabAction = gpsFabAction,
+        headingFabAction = headingFabAction,
         decision = decision,
         userLocationRequested = userLocationRequested,
     )

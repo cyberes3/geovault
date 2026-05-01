@@ -114,7 +114,7 @@ fun PlacesMapScreen(
         isMapReady = phase == GeoVaultMapPhase.Ready,
     )
     val gpsFabAction = locationSession.gpsFabAction
-    val orientationFabAction = headingFollowFabs.headingFollowFab
+    val orientationFabAction = locationSession.headingFabAction
     val shouldStreamGps = locationSession.decision.shouldStreamGps
     DisposableEffect(locationPlugin, shouldStreamGps) {
         if (shouldStreamGps) {

@@ -43,6 +43,32 @@ class GeoVaultMapLocationSessionPolicyTest {
     }
 
     @Test
+    fun decide_whenCameraFollowIsActive_enablesLocation() {
+        val expected = GeoVaultMapLocationSessionDecision(
+            shouldStreamGps = true,
+            shouldEnablePuck = true,
+        )
+        assertEquals(
+            expected,
+            policy.decide(
+                baseInput(
+                    positionFollowDesired = true,
+                    headingFollowDesired = false,
+                ),
+            ),
+        )
+        assertEquals(
+            expected,
+            policy.decide(
+                baseInput(
+                    positionFollowDesired = false,
+                    headingFollowDesired = true,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun decide_whenNoLocationIntent_disablesLocation() {
         assertEquals(
             GeoVaultMapLocationSessionDecision.Disabled,

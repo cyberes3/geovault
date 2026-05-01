@@ -50,23 +50,29 @@ class GeoVaultMapCameraFollowMachineTest {
     }
 
     @Test
-    fun afterUserGesture_clearsPositionOnly() {
+    fun afterUserGesture_clearsPositionAndHeading() {
         val prev = GeoVaultMapCameraFollowState(
             positionFollowDesired = true,
             headingFollowDesired = true,
         )
         val next = GeoVaultMapCameraFollowMachine.afterUserGesture(prev)
-        assertEquals(GeoVaultMapCameraFollowState(false, true), next)
+        assertEquals(GeoVaultMapCameraFollowState.NONE, next)
     }
 
     @Test
-    fun afterUserGesture_whenPositionAlreadyOff_noOp() {
+    fun afterUserGesture_whenOnlyHeadingOn_clearsHeading() {
         val prev = GeoVaultMapCameraFollowState(
             positionFollowDesired = false,
             headingFollowDesired = true,
         )
         val next = GeoVaultMapCameraFollowMachine.afterUserGesture(prev)
-        assertEquals(prev, next)
+        assertEquals(GeoVaultMapCameraFollowState.NONE, next)
+    }
+
+    @Test
+    fun afterUserGesture_whenNoFollow_noOp() {
+        val next = GeoVaultMapCameraFollowMachine.afterUserGesture(GeoVaultMapCameraFollowState.NONE)
+        assertEquals(GeoVaultMapCameraFollowState.NONE, next)
     }
 
     @Test
@@ -131,6 +137,14 @@ class GeoVaultMapCameraFollowMachineTest {
             GeoVaultMapCameraFollowMachine.shouldResetNorthToUp(
                 GeoVaultMapCameraFollowState(true, true),
                 GeoVaultMapCameraFollowState(false, true),
+            ),
+        )
+        assertTrue(
+            GeoVaultMapCameraFollowMachine.shouldResetNorthToUp(
+                GeoVaultMapCameraFollowState(true, true),
+                GeoVaultMapCameraFollowMachine.afterUserGesture(
+                    GeoVaultMapCameraFollowState(true, true),
+                ),
             ),
         )
     }
