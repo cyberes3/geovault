@@ -24,9 +24,10 @@ fun dismissKeyboardClearingFocus(
 }
 
 /**
- * Clears focus and hides the soft keyboard on each new pointer gesture that reaches this
- * composable, using [PointerEventPass.Initial] so ancestors run before descendants consume
- * the event (for example [androidx.compose.material.Button]).
+ * Clears focus and hides the soft keyboard after a tap gesture that reaches this composable,
+ * using [PointerEventPass.Initial] so ancestors run before descendants consume the event (for
+ * example [androidx.compose.material.Button]). Drag gestures are ignored so focused inputs can
+ * stay active while their surrounding form scrolls above the keyboard.
  *
  * Apply on a full-screen root (see [com.geovault.common.ui.theme.GeoVaultTheme]) or on
  * scrollable form containers; see [com.geovault.common.ui.components.GeoVaultInput].
@@ -37,11 +38,24 @@ fun Modifier.dismissKeyboardOnOutsideTap(enabled: Boolean = true): Modifier = co
     val keyboardController = LocalSoftwareKeyboardController.current
     Modifier.pointerInput(Unit) {
         awaitEachGesture {
-            awaitFirstDown(
+            val down = awaitFirstDown(
                 requireUnconsumed = false,
                 pass = PointerEventPass.Initial,
             )
-            dismissKeyboardClearingFocus(focusManager, keyboardController)
+            var movedPastTouchSlop = false
+            do {
+                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                event.changes.forEach { change ->
+                    val movedPastSlop =
+                        (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                    if (change.pressed && movedPastSlop) {
+                        movedPastTouchSlop = true
+                    }
+                }
+            } while (event.changes.any { it.pressed })
+            if (!movedPastTouchSlop) {
+                dismissKeyboardClearingFocus(focusManager, keyboardController)
+            }
         }
     }
 }

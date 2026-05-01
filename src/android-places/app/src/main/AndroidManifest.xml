@@ -35,6 +35,7 @@
         <activity
             android:name=".PlaceEditActivity"
             android:exported="false"
+            android:windowSoftInputMode="adjustNothing"
             android:theme="@style/Theme.Places"
             android:parentActivityName=".MainActivity" />
         <activity

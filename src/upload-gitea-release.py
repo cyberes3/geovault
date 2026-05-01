@@ -101,12 +101,24 @@ def find_release_apk(app_dir: Path, asset_title_name: str, date_short: str, shor
         if apk_path.is_file():
             return apk_path
 
+    copied_patterns = [
+        f"{asset_title_name.replace(' ', '-')}-*.apk",
+        f"{asset_title_name} *.apk",
+    ]
+    copied_apks = sorted(
+        (apk for pattern in copied_patterns for apk in app_dir.glob(pattern)),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if copied_apks:
+        return copied_apks[0]
+
     apks = sorted(apk_dir.glob("*.apk"), key=lambda p: p.stat().st_mtime, reverse=True)
     if apks:
         return apks[0]
 
     checked = ", ".join(str(app_dir / name) for name in expected_names)
-    die(f"No release APK found. Checked copied APKs ({checked}) and Gradle output ({apk_dir}).")
+    die(f"No release APK found. Checked copied APKs ({checked}), copied patterns ({copied_patterns}), and Gradle output ({apk_dir}).")
 
 
 def main() -> None:
