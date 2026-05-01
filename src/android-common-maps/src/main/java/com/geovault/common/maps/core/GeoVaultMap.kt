@@ -1,12 +1,11 @@
 package com.geovault.common.maps.core
 
 import android.os.Bundle
-import androidx.compose.material.AlertDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
@@ -27,6 +26,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBar
+import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
+import com.geovault.common.ui.components.GeoVaultFormDialog
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.maplibre.android.maps.MapView
 
@@ -54,6 +56,7 @@ fun GeoVaultStandardMapView(
     showDefaultSourceToggle: Boolean = false,
     includeDefaultFabColumnPadding: Boolean = false,
     mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+    showScaleBar: Boolean = false,
 ) {
     GeoVaultMapHost(
         modifier = modifier,
@@ -62,6 +65,7 @@ fun GeoVaultStandardMapView(
         showDefaultSourceToggle = showDefaultSourceToggle,
         includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
         mapPaddingDp = mapPaddingDp,
+        showScaleBar = showScaleBar,
     )
 }
 
@@ -72,6 +76,7 @@ fun GeoVaultMainMapView(
     showDefaultSourceToggle: Boolean = false,
     includeDefaultFabColumnPadding: Boolean = false,
     mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
+    showScaleBar: Boolean = false,
 ) {
     GeoVaultMapHost(
         modifier = modifier,
@@ -80,6 +85,7 @@ fun GeoVaultMainMapView(
         showDefaultSourceToggle = showDefaultSourceToggle,
         includeDefaultFabColumnPadding = includeDefaultFabColumnPadding,
         mapPaddingDp = mapPaddingDp,
+        showScaleBar = showScaleBar,
     )
 }
 
@@ -96,6 +102,7 @@ private fun GeoVaultMapHost(
     showDefaultSourceToggle: Boolean,
     includeDefaultFabColumnPadding: Boolean,
     mapPaddingDp: GeoVaultMapPaddingDp,
+    showScaleBar: Boolean,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
@@ -145,6 +152,15 @@ private fun GeoVaultMapHost(
             ) {
                 Text("Layers")
             }
+        }
+
+        if (showScaleBar) {
+            GeoVaultMapScaleBar(
+                map = currentMap,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(GeoVaultMapScaleBarDefaults.EdgePadding),
+            )
         }
     }
 
@@ -221,29 +237,14 @@ private fun GeoVaultMapErrorDialog(
     // Keep this as a dialog-backed surface. Host apps commonly compose map FABs,
     // loading scrims, and full-screen overlays above the map subtree; inline map
     // error UI can be covered by those app-owned layers.
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(notice.title) },
-        text = { Text(notice.message) },
-        confirmButton = {
-            if (notice.retryable) {
-                TextButton(onClick = onRetry) {
-                    Text("Retry")
-                }
-            } else {
-                TextButton(onClick = onDismiss) {
-                    Text("Close")
-                }
-            }
-        },
-        dismissButton = if (notice.retryable) {
-            {
-                TextButton(onClick = onDismiss) {
-                    Text("Close")
-                }
-            }
-        } else {
-            null
-        },
-    )
+    GeoVaultFormDialog(
+        title = notice.title,
+        onConfirm = if (notice.retryable) onRetry else onDismiss,
+        onDismiss = onDismiss,
+        confirmText = if (notice.retryable) "Retry" else "Close",
+        cancelText = "Close",
+        showDismissButton = notice.retryable,
+    ) {
+        Text(notice.message)
+    }
 }

@@ -74,6 +74,8 @@ class GeoVaultAuthStore private constructor(context: Context) {
             KEY_EXPIRES_AT to null,
             KEY_PKCE_VERIFIER to null,
             KEY_PKCE_STATE to null,
+            KEY_LAST_CONSUMED_PKCE_STATE to null,
+            KEY_LAST_CONSUMED_PKCE_AT to null,
             KEY_USER_EMAIL to null
         ))
     }
@@ -86,7 +88,9 @@ class GeoVaultAuthStore private constructor(context: Context) {
         Log.d(TAG, "savePkceState: state=$state encrypted verifier=${encVerifier.length} chars, state=${encState.length} chars")
         store.putBatchBlocking(mapOf(
             KEY_PKCE_VERIFIER to encVerifier,
-            KEY_PKCE_STATE to encState
+            KEY_PKCE_STATE to encState,
+            KEY_LAST_CONSUMED_PKCE_STATE to null,
+            KEY_LAST_CONSUMED_PKCE_AT to null,
         ))
         Log.i(TAG, "savePkceState: written to store")
     }
@@ -108,10 +112,19 @@ class GeoVaultAuthStore private constructor(context: Context) {
         }
         store.putBatchBlocking(mapOf(
             KEY_PKCE_VERIFIER to null,
-            KEY_PKCE_STATE to null
+            KEY_PKCE_STATE to null,
+            KEY_LAST_CONSUMED_PKCE_STATE to state,
+            KEY_LAST_CONSUMED_PKCE_AT to System.currentTimeMillis(),
         ))
         Log.i(TAG, "getAndClearPkceState: cleared stored PKCE, returning state=$state")
         return verifier to state
+    }
+
+    fun wasRecentlyConsumedPkceState(state: String): Boolean {
+        val consumedState = store.getBlocking(KEY_LAST_CONSUMED_PKCE_STATE)
+        val consumedAt = store.getBlocking(KEY_LAST_CONSUMED_PKCE_AT)
+        if (state.isBlank() || consumedState != state || consumedAt <= 0L) return false
+        return System.currentTimeMillis() - consumedAt <= RECENT_PKCE_STATE_WINDOW_MS
     }
 
     // ── Cached user email (encrypted) ──────────────────────────────────
@@ -155,7 +168,10 @@ class GeoVaultAuthStore private constructor(context: Context) {
         private val KEY_EXPIRES_AT = PrefKey.LongKey("expires_at")
         private val KEY_PKCE_VERIFIER = PrefKey.StringKey("pkce_code_verifier")
         private val KEY_PKCE_STATE = PrefKey.StringKey("pkce_state")
+        private val KEY_LAST_CONSUMED_PKCE_STATE = PrefKey.StringKey("last_consumed_pkce_state")
+        private val KEY_LAST_CONSUMED_PKCE_AT = PrefKey.LongKey("last_consumed_pkce_at")
         private val KEY_USER_EMAIL = PrefKey.StringKey("cached_user_email")
+        private const val RECENT_PKCE_STATE_WINDOW_MS = 10 * 60 * 1000L
 
         private val ALL_KEYS: Set<PrefKey<*>> = setOf(
             KEY_SERVER_URL,
@@ -164,6 +180,8 @@ class GeoVaultAuthStore private constructor(context: Context) {
             KEY_EXPIRES_AT,
             KEY_PKCE_VERIFIER,
             KEY_PKCE_STATE,
+            KEY_LAST_CONSUMED_PKCE_STATE,
+            KEY_LAST_CONSUMED_PKCE_AT,
             KEY_USER_EMAIL
         )
 

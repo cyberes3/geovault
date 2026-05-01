@@ -79,14 +79,21 @@ class MapLibreManager(
             val canRenderMap = when (result) {
                 is TileSourceFetchResult.Success -> {
                     sourceManager.setSources(result.sources)
+                    Log.i(
+                        TAG,
+                        "Fetched ${result.sources.size} map sources. " +
+                            "effectiveSource=${sourceManager.getEffectiveSourceId()}",
+                    )
                     true
                 }
                 is TileSourceFetchResult.ConfigurationError -> {
+                    Log.e(TAG, "Map source configuration failure: ${result.message}")
                     sourceManager.setSources(emptyList())
                     onMapConfigurationFailed?.invoke(result.message)
                     false
                 }
                 is TileSourceFetchResult.TransientFailure -> {
+                    Log.e(TAG, "Map source transient failure: ${result.message}")
                     sourceManager.setSources(emptyList())
                     onStyleLoadFailed?.invoke(result.message)
                     false

@@ -3,6 +3,7 @@ package com.geovault.common.maps.core
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.common.maps.model.MapConfigError
@@ -18,6 +19,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 internal object TileSourceCache {
+    private const val TAG = "TileSourceCache"
+
     @Volatile
     private var cachedResult: TileSourceFetchResult? = null
 
@@ -74,6 +77,15 @@ internal object TileSourceCache {
         api.getTileSources().enqueue(object : Callback<TileSourceResponse> {
             override fun onResponse(call: Call<TileSourceResponse>, response: Response<TileSourceResponse>) {
                 val body = response.body()
+                if (!response.isSuccessful) {
+                    Log.e(
+                        TAG,
+                        "Tile source fetch failed: code=${response.code()} message=${response.message()} " +
+                            "url=${call.request().url}",
+                    )
+                } else if (body == null) {
+                    Log.e(TAG, "Tile source fetch returned an empty body: url=${call.request().url}")
+                }
                 val result = when {
                     !response.isSuccessful -> TileSourceFetchResult.TransientFailure(
                         "Could not load map sources from the GeoVault server (HTTP ${response.code()}).",
@@ -97,6 +109,7 @@ internal object TileSourceCache {
             }
 
             override fun onFailure(call: Call<TileSourceResponse>, t: Throwable) {
+                Log.e(TAG, "Tile source fetch threw: url=${call.request().url}", t)
                 val callbacks: List<(TileSourceFetchResult) -> Unit>
                 val result = TileSourceFetchResult.TransientFailure(
                     "Could not load map sources from the GeoVault server. Check your connection and try again.",

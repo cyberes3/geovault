@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /**
@@ -97,6 +98,7 @@ fun GeoVaultMapScaffold(
     topEnd: (@Composable BoxScope.() -> Unit)? = null,
     bottomStart: (@Composable BoxScope.() -> Unit)? = null,
     bottomEnd: (@Composable BoxScope.() -> Unit)? = null,
+    scaleBar: (@Composable () -> Unit)? = null,
     mapContent: @Composable BoxScope.() -> Unit,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -130,6 +132,23 @@ fun GeoVaultMapScaffold(
                     .clipToBounds()
                     .onSizeChanged { size -> drawerState.updateAnchors(size.height) },
             ) {
+                if (scaleBar != null) {
+                    val density = LocalDensity.current
+                    val bottomPadding = with(density) {
+                        drawerState.peekHeightPx.toDp() + GeoVaultMapScaleBarDefaults.DrawerGap
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(
+                                start = GeoVaultMapScaleBarDefaults.EdgePadding,
+                                bottom = bottomPadding,
+                            ),
+                    ) {
+                        scaleBar()
+                    }
+                }
+
                 DrawerLayer(
                     drawerState = drawerState,
                     drawerDragEnabled = drawerDragEnabled,

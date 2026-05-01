@@ -17,7 +17,7 @@ object RetrofitClient {
     private val networkGsonOmitNulls = GsonBuilder()
         .create()
     private fun authTokenInterceptor(appContext: Context): Interceptor = Interceptor { chain ->
-        val token = GeovaultAuthManager.getAccessToken(appContext)
+        val token = GeovaultAuthManager.getValidAccessToken(appContext)
         val request = if (!token.isNullOrBlank()) {
             chain.request().newBuilder().header("Authorization", "Bearer $token").build()
         } else {

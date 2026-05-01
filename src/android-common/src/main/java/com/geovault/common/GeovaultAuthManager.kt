@@ -249,6 +249,14 @@ object GeovaultAuthManager {
         return result
     }
 
+    fun wasRecentlyConsumedPkceState(context: Context, state: String): Boolean {
+        val wasConsumed = store(context).wasRecentlyConsumedPkceState(state)
+        if (wasConsumed) {
+            Log.i(TAG, "wasRecentlyConsumedPkceState: duplicate callback state=$state")
+        }
+        return wasConsumed
+    }
+
     fun buildAuthorizeUrl(serverUrl: String, codeChallenge: String, state: String): String {
         val uri = requireInitialized()
         val base = serverUrl.trimEnd('/')

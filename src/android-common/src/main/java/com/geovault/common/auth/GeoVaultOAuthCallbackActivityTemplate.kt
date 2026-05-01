@@ -96,6 +96,10 @@ abstract class GeoVaultOAuthCallbackActivityTemplate : ComponentActivity() {
                 logTag?.let { Log.e(it, "handleRedirect: OAuth failed - $message") }
                 onOAuthError(message)
             },
+            onDuplicate = {
+                logTag?.let { Log.i(it, "handleRedirect: duplicate OAuth callback ignored") }
+                finish()
+            },
         )
     }
 }

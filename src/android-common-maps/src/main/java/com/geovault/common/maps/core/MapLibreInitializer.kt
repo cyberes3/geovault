@@ -97,7 +97,7 @@ internal class GeoVaultAuthInterceptor(
         val isOurServer = serverUrl.isNotEmpty() &&
             (urlString == serverUrl || urlString.startsWith("$serverUrl/"))
         if (!isOurServer) return chain.proceed(request)
-        val token = GeovaultAuthManager.getAccessToken(appContext)
+        val token = GeovaultAuthManager.getValidAccessToken(appContext)
         val outgoing = if (!token.isNullOrBlank()) {
             request.newBuilder().header("Authorization", "Bearer $token").build()
         } else {

@@ -106,6 +106,7 @@ class OAuthCallbackHandler(
         intent: Intent?,
         onSuccess: () -> Unit,
         onError: (String) -> Unit,
+        onDuplicate: () -> Unit,
     ) {
         Log.i(TAG, "handleIntent: intent action=${intent?.action} data=${intent?.data}")
         val uri: Uri = intent?.data ?: run {
@@ -118,6 +119,14 @@ class OAuthCallbackHandler(
         val (code, state, oauthError) = parseOAuthRedirectParams(uri)
         val pkceState = GeovaultAuthManager.getAndClearPkceState(context)
         val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        if (pkceState == null &&
+            !state.isNullOrBlank() &&
+            GeovaultAuthManager.wasRecentlyConsumedPkceState(context, state)
+        ) {
+            Log.i(TAG, "handleIntent: ignoring duplicate callback for already-consumed state=$state")
+            onDuplicate()
+            return
+        }
         Log.d(TAG, "handleIntent: parsed code=${if (code.isNullOrBlank()) "MISSING" else "present"}" +
             " state=${if (state.isNullOrBlank()) "MISSING" else "present"}" +
             " retrieved pkceState=${if (pkceState == null) "NULL" else "present"}" +

@@ -57,6 +57,9 @@ sealed class GeoVaultBaseMap(
     private val _phase = MutableStateFlow(GeoVaultMapPhase.Initializing)
     val phase: StateFlow<GeoVaultMapPhase> = _phase.asStateFlow()
 
+    private val _mapAttachmentVersion = MutableStateFlow(0)
+    val mapAttachmentVersion: StateFlow<Int> = _mapAttachmentVersion.asStateFlow()
+
     private val _errorNotice = MutableStateFlow<GeoVaultMapErrorNotice?>(null)
     val errorNotice: StateFlow<GeoVaultMapErrorNotice?> = _errorNotice.asStateFlow()
 
@@ -117,6 +120,7 @@ sealed class GeoVaultBaseMap(
             // getMapAsync can return after detach/re-attach; ignore stale callbacks.
             if (_mapManager !== attachedManager || mapView !== view) return@getMapAsync
             maplibreMap = map
+            _mapAttachmentVersion.value += 1
             mapClickListeners.forEach { map.addOnMapClickListener(it) }
             mapLongClickListeners.forEach { map.addOnMapLongClickListener(it) }
             cameraMoveStartedListeners.forEach { map.addOnCameraMoveStartedListener(it) }
@@ -168,6 +172,7 @@ sealed class GeoVaultBaseMap(
             cameraMoveStartedListeners.forEach { map.removeOnCameraMoveStartedListener(it) }
         }
         maplibreMap = null
+        _mapAttachmentVersion.value += 1
         _mapManager = null
     }
 
@@ -196,6 +201,7 @@ sealed class GeoVaultBaseMap(
         MapStyleCache.invalidate()
         val map = maplibreMap ?: return
         val manager = _mapManager ?: return
+        Log.i(TAG, "Retrying map source/style load.")
         _phase.value = GeoVaultMapPhase.StyleLoading
         manager.fetchMapSources { canRenderMap ->
             if (_mapManager !== manager || maplibreMap !== map) return@fetchMapSources
@@ -357,6 +363,7 @@ sealed class GeoVaultBaseMap(
         styleLoadWatchdog = Runnable {
             if (generation != styleLoadGeneration) return@Runnable
             if (styleDeliveredForGeneration) return@Runnable
+            Log.e(TAG, "Map style load timed out. generation=$generation")
             reportStyleLoadFailed("Map style load timed out.")
             styleDeliveredForGeneration = true
             clearStyleLoadWatchdog()
@@ -371,6 +378,7 @@ sealed class GeoVaultBaseMap(
     }
 
     private fun reportStyleLoadFailed(message: String) {
+        Log.e(TAG, "Reporting map style load failure: $message")
         _errorNotice.value = GeoVaultMapErrorNotice(
             type = GeoVaultMapErrorNoticeType.StyleLoad,
             title = "Map Unavailable",
@@ -380,6 +388,7 @@ sealed class GeoVaultBaseMap(
     }
 
     private fun reportMapConfigurationFailed(message: String) {
+        Log.e(TAG, "Reporting map configuration failure: $message")
         _errorNotice.value = GeoVaultMapErrorNotice(
             type = GeoVaultMapErrorNoticeType.Configuration,
             title = "Map Setup Required",
