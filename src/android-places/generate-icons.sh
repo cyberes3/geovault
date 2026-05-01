@@ -1,7 +1,8 @@
 #!/bin/bash
-# Generate Android launcher icons from the app icon image
+# icon.jpg → mipmaps + adaptive icons. Optional icon-monochrome.png → <monochrome> (same 285→432² layout as round foreground).
+# PNG output is deterministic (SOURCE_DATE_EPOCH, single-thread IM, fixed zlib + no date/time chunks).
 
-set -euo pipefail
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGO_PATH="$SCRIPT_DIR/icon.jpg"
@@ -9,7 +10,11 @@ RES_DIR="$SCRIPT_DIR/app/src/main/res"
 ADAPTIVE_ICON_DIR="$RES_DIR/mipmap-anydpi-v26"
 COLORS_FILE="$SCRIPT_DIR/../android-common/src/main/res/values/colors.xml"
 
-# Pull primary blue from shared android-common colors.xml (single source of truth).
+if [ ! -f "$LOGO_PATH" ]; then
+    echo "Error: Logo not found at $LOGO_PATH"
+    exit 1
+fi
+
 BG_COLOR="#163D8A"
 if [ -f "$COLORS_FILE" ]; then
     TOKEN_HEX="$(rg -o '<color name="gv_common_main_blue">#[0-9A-Fa-f]{6}</color>' "$COLORS_FILE" | sed -E 's/.*>#([0-9A-Fa-f]{6})<.*/\1/' | sed -n '1p' || true)"
@@ -18,27 +23,26 @@ if [ -f "$COLORS_FILE" ]; then
     fi
 fi
 
-if [ ! -f "$LOGO_PATH" ]; then
-    echo "Error: Logo not found at $LOGO_PATH"
-    exit 1
-fi
-
-IM_CMD=""
 if command -v magick >/dev/null 2>&1; then
-    IM_CMD="magick"
+    im() { magick "$@"; }
 elif command -v convert >/dev/null 2>&1; then
-    IM_CMD="convert"
-fi
-if [ -z "$IM_CMD" ]; then
-    echo "Error: ImageMagick not found. Install ImageMagick (magick/convert)."
+    im() { convert "$@"; }
+else
+    echo "Error: ImageMagick not found (magick or convert)."
     exit 1
 fi
 
-echo "Generating Android launcher icons from logo..."
+# Deterministic PNG bytes (same inputs → identical files; respects SOURCE_DATE_EPOCH if set).
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-946684800}"
+export MAGICK_THREAD_LIMIT="${MAGICK_THREAD_LIMIT:-1}"
+IM_PNG="-strip -define png:compression-level=9 -define png:exclude-chunks=date,time"
 
-# Ensure required directories exist
+echo "Generating launcher icons from $LOGO_PATH..."
+
 mkdir -p \
     "$RES_DIR/drawable" \
+    "$RES_DIR/drawable-nodpi" \
+    "$RES_DIR/raw" \
     "$RES_DIR/mipmap-mdpi" \
     "$RES_DIR/mipmap-hdpi" \
     "$RES_DIR/mipmap-xhdpi" \
@@ -46,36 +50,37 @@ mkdir -p \
     "$RES_DIR/mipmap-xxxhdpi" \
     "$ADAPTIVE_ICON_DIR"
 
-# Remove stale WebP launcher assets; having both .png and .webp with the same
-# resource name causes Android resource merge duplicate errors.
 for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-    rm -f \
-        "$RES_DIR/mipmap-${density}/ic_launcher.webp" \
-        "$RES_DIR/mipmap-${density}/ic_launcher_round.webp"
+    rm -f "$RES_DIR/mipmap-${density}/ic_launcher.webp" "$RES_DIR/mipmap-${density}/ic_launcher_round.webp"
 done
 
-# Generate standard launcher icons for different densities
-echo "Generating standard launcher icons..."
 for spec in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
     density="${spec%%:*}"
     size="${spec##*:}"
-    "$IM_CMD" "$LOGO_PATH" -resize "${size}x${size}" -background "$BG_COLOR" -gravity center -extent "${size}x${size}" "$RES_DIR/mipmap-${density}/ic_launcher.png"
-    "$IM_CMD" "$LOGO_PATH" -resize "${size}x${size}" -background "$BG_COLOR" -gravity center -extent "${size}x${size}" "$RES_DIR/mipmap-${density}/ic_launcher_round.png"
+    im "$LOGO_PATH" -resize "${size}x${size}" -background "$BG_COLOR" -gravity center -extent "${size}x${size}" $IM_PNG \
+        "$RES_DIR/mipmap-${density}/ic_launcher.png"
+    im "$LOGO_PATH" -resize "${size}x${size}" -background "$BG_COLOR" -gravity center -extent "${size}x${size}" $IM_PNG \
+        "$RES_DIR/mipmap-${density}/ic_launcher_round.png"
 done
 
-# Generate adaptive icon foreground (108x108 dp = 432x432 px for xxxhdpi)
-# Full-bleed foreground for squircle/rounded-square masks
-echo "Generating adaptive icon foreground..."
-"$IM_CMD" "$LOGO_PATH" -resize 432x432 -background transparent -gravity center -extent 432x432 "$RES_DIR/drawable/ic_launcher_foreground.png"
+im "$LOGO_PATH" -resize 432x432 -background transparent -gravity center -extent 432x432 $IM_PNG \
+    "$RES_DIR/drawable/ic_launcher_foreground.png"
 
-# Round-only foreground for Pixel and other 100% circular launchers:
-# scale to 66% (safe zone) so the full icon fits inside the circle with no cropping
-echo "Generating round (circular) adaptive icon foreground..."
 ROUND_SIZE=285
-"$IM_CMD" "$LOGO_PATH" -resize "${ROUND_SIZE}x${ROUND_SIZE}" -background transparent -gravity center -extent 432x432 "$RES_DIR/drawable/ic_launcher_foreground_round.png"
+im "$LOGO_PATH" -resize "${ROUND_SIZE}x${ROUND_SIZE}" -background transparent -gravity center -extent 432x432 $IM_PNG \
+    "$RES_DIR/drawable/ic_launcher_foreground_round.png"
 
-# Generate adaptive icon background XML (vector drawable for solid color)
-echo "Generating adaptive icon background..."
+MONO_SRC="$SCRIPT_DIR/icon-monochrome.png"
+MONO_LINE=""
+if [ -f "$MONO_SRC" ]; then
+    mkdir -p "$RES_DIR/drawable-nodpi"
+    im "$MONO_SRC" -resize "${ROUND_SIZE}x${ROUND_SIZE}" -background transparent -gravity center -extent 432x432 \
+        -type TrueColorAlpha $IM_PNG "PNG32:$RES_DIR/drawable-nodpi/ic_launcher_monochrome.png"
+    MONO_LINE='    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />'
+else
+    rm -f "$RES_DIR/drawable-nodpi/ic_launcher_monochrome.png" 2>/dev/null || true
+fi
+
 cat > "$RES_DIR/drawable/ic_launcher_background.xml" << EOF
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -89,44 +94,26 @@ cat > "$RES_DIR/drawable/ic_launcher_background.xml" << EOF
 </vector>
 EOF
 
-# Verify adaptive icon XML files exist and reference correct drawables
-echo "Verifying adaptive icon XML files..."
-# Main adaptive icon: use round-safe foreground to avoid clipping.
-cat > "$ADAPTIVE_ICON_DIR/ic_launcher.xml" << 'EOF'
+for adaptive_name in ic_launcher.xml ic_launcher_round.xml; do
+    cat > "$ADAPTIVE_ICON_DIR/$adaptive_name" << EOF
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground_round" />
-    <monochrome android:drawable="@drawable/ic_launcher_foreground_round" />
+${MONO_LINE}
 </adaptive-icon>
 EOF
+done
 
-# Round icon config.
-cat > "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml" << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@drawable/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground_round" />
-    <monochrome android:drawable="@drawable/ic_launcher_foreground_round" />
-</adaptive-icon>
-EOF
-
-# Clean up stale outputs we do not use.
-echo "Cleaning up stale icon artifacts..."
 rm -f \
     "$RES_DIR/drawable/ic_launcher_foreground.xml" \
     "$RES_DIR/drawable/ic_launcher_foreground_png.png" \
     "$RES_DIR/drawable/ic_launcher_background_png.png" \
+    "$RES_DIR/drawable-nodpi/ic_launcher_monochrome_mask.png" \
+    "$RES_DIR/raw/ic_launcher_monochrome.svg" \
     "$RES_DIR/mipmap-xxxhdpi/ic_launcher_foreground.png" \
     "$RES_DIR/mipmap-anydpi/ic_launcher.xml" \
     "$RES_DIR/mipmap-anydpi/ic_launcher_round.xml" \
     2>/dev/null || true
 
-echo ""
-echo "Icons generated successfully!"
-echo "  - Standard icons: mipmap-*/ic_launcher.png and ic_launcher_round.png"
-echo "  - Adaptive icon foreground: drawable/ic_launcher_foreground.png"
-echo "  - Round (circular) foreground: drawable/ic_launcher_foreground_round.png"
-echo "  - Adaptive icon background: drawable/ic_launcher_background.xml"
-echo "  - Adaptive icon configs: mipmap-anydpi-v26/ic_launcher.xml and ic_launcher_round.xml"
-
+echo "Done."
