@@ -81,8 +81,8 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
         }
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             if (requestId != activeRequestId) return@post
-            LocationUpdates.getCurrentLocation(context) { latLng ->
-                if (requestId != activeRequestId) return@getCurrentLocation
+            LocationUpdates.getFreshCurrentLocation(context) { latLng ->
+                if (requestId != activeRequestId) return@getFreshCurrentLocation
                 if (showSpinner) {
                     waitingForFix = false
                 }
@@ -91,9 +91,9 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
                         userLocation.setEnabled(false)
                         userLocation.setAccuracyCircleVisible(false)
                     }
-                    return@getCurrentLocation
+                    return@getFreshCurrentLocation
                 }
-                if (map.phase.value != GeoVaultMapPhase.Ready) return@getCurrentLocation
+                if (map.phase.value != GeoVaultMapPhase.Ready) return@getFreshCurrentLocation
                 hadSuccessfulJump = true
                 onLocationResolved?.invoke(latLng)
                 if (showUserLocationPuck) {
@@ -104,7 +104,7 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
                         time = System.currentTimeMillis()
                     }
                     userLocation.renderLocation(syntheticLocation)
-                    val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
+                    val mapLibreMap = map.maplibreMap ?: return@getFreshCurrentLocation
                     map.animateCameraWithPadding(
                         CameraUpdateFactory.newCameraPosition(
                             geoVaultRetargetCameraPositionWithMinimumZoom(

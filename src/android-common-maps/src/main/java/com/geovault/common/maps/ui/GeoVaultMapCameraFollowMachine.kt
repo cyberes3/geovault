@@ -5,17 +5,15 @@ import org.maplibre.android.location.modes.CameraMode
 /**
  * Desired **position** follow and **heading** follow flags for a single MapLibre location camera.
  *
- * "Position follow" keeps the MapLibre location component in [CameraMode.NONE] so the host can
- * drive the camera without fighting built-in tracking (see [toCameraMode]). Toggling position
- * follow is the GPS FAB on
+ * "Position follow" keeps the MapLibre location component in [CameraMode.NONE] so
+ * [com.geovault.common.maps.ui.camerafollow.GeoVaultMapCameraFollowController] can drive the
+ * camera without fighting built-in tracking. Toggling position follow is the GPS FAB on
  * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle]. One-shot
  * “jump to my location once” (no continuous follow) is
  * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
  *
- * MapLibre exposes one [CameraMode] at a time. Map bearing while "heading follow" is on is
- * driven manually (same pipeline as
- * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle]) like
- * other GeoVault map hosts, not [CameraMode.TRACKING_COMPASS], which tends to feel choppy.
+ * MapLibre exposes one [CameraMode] at a time. Position and heading follow are both driven
+ * manually, not by [CameraMode.TRACKING] / [CameraMode.TRACKING_COMPASS].
  */
 data class GeoVaultMapCameraFollowState(
     val positionFollowDesired: Boolean,
@@ -73,8 +71,9 @@ object GeoVaultMapCameraFollowMachine {
         current.copy(positionFollowDesired = true)
 
     /**
-     * User panned or zoomed the map: drop **position** follow but keep heading follow so the
-     * map can stay compass-locked.
+     * User panned or zoomed the map: drop **position** follow but keep heading follow engaged
+     * in the FAB state. Heading-only state does not move the camera until position follow is
+     * re-enabled.
      */
     fun afterUserGesture(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
         current.copy(positionFollowDesired = false)

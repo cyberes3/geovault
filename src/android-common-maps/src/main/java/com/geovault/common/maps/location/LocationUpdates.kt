@@ -8,15 +8,16 @@ import android.location.LocationManager
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
+import com.geovault.common.maps.core.latLngOrNull
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import com.geovault.common.maps.core.latLngOrNull
 import org.maplibre.android.geometry.LatLng
 import kotlin.coroutines.resume
 
@@ -39,6 +40,56 @@ object LocationUpdates {
                 }
             }
         }
+
+    /**
+     * Resolves a fresh current fix, never a cached / last-known location.
+     *
+     * Use this for explicit GPS-focus actions where jumping to an old stored location is worse
+     * than waiting briefly for a real lock.
+     */
+    suspend fun getFreshCurrentLatLngOnce(context: Context, timeoutMs: Long = 4000L): LatLng? =
+        withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine<LatLng?> { cont ->
+                getFreshCurrentLocation(context) { latLng ->
+                    if (cont.isActive) cont.resume(latLng)
+                }
+            }
+        }
+
+    @SuppressLint("MissingPermission")
+    fun getFreshCurrentLocation(context: Context, callback: (LatLng?) -> Unit) {
+        val appContext = context.applicationContext
+        val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val fusedClient = LocationServices.getFusedLocationProviderClient(appContext)
+        val mainHandler = Handler(Looper.getMainLooper())
+        val cancellation = CancellationTokenSource()
+        fun deliver(result: LatLng?) {
+            mainHandler.post { callback(result) }
+        }
+        val request = CurrentLocationRequest.Builder()
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+            .setMaxUpdateAgeMillis(0L)
+            .build()
+        fusedClient.getCurrentLocation(request, cancellation.token)
+            .addOnSuccessListener { location ->
+                if (location != null) {
+                    deliver(latLngOrNull(location.latitude, location.longitude))
+                } else {
+                    requestFreshCurrentLocationWithLocationManager(
+                        appContext = appContext,
+                        manager = manager,
+                        deliver = ::deliver,
+                    )
+                }
+            }
+            .addOnFailureListener {
+                requestFreshCurrentLocationWithLocationManager(
+                    appContext = appContext,
+                    manager = manager,
+                    deliver = ::deliver,
+                )
+            }
+    }
 
     @SuppressLint("MissingPermission")
     fun getCurrentLocation(context: Context, callback: (LatLng?) -> Unit) {
@@ -95,6 +146,30 @@ object LocationUpdates {
             }
         }.onFailure {
             deliver(getBestLastKnownLatLng(manager))
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestFreshCurrentLocationWithLocationManager(
+        appContext: Context,
+        manager: LocationManager,
+        deliver: (LatLng?) -> Unit,
+    ) {
+        val provider = pickBestProvider(manager)
+        if (provider == null) {
+            deliver(null)
+            return
+        }
+        runCatching {
+            manager.getCurrentLocation(
+                provider,
+                null,
+                ContextCompat.getMainExecutor(appContext),
+            ) { location ->
+                deliver(location?.let { latLngOrNull(it.latitude, it.longitude) })
+            }
+        }.onFailure {
+            deliver(null)
         }
     }
 
