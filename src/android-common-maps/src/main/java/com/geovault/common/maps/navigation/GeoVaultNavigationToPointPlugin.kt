@@ -349,7 +349,7 @@ class GeoVaultNavigationToPointPlugin(
         internal const val TEXT_PROPERTY: String = "text"
 
         private const val LINE_WIDTH_PX = 4f
-        private const val LINE_OPACITY = 0.85f
+        private const val LINE_OPACITY = 1f
         private const val LABEL_TEXT_SIZE_SP = 13f
         private const val LABEL_HALO_WIDTH_PX = 1.5f
         /** Ems below the [Property.TEXT_ANCHOR_TOP] anchor (sits just under the location puck). */

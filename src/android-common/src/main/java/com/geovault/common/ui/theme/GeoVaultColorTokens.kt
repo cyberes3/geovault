@@ -150,7 +150,7 @@ object GeoVaultColorTokens {
     val MapPointDefault = MainBlue
 
     /** Default text color for map labels (KML titles, tracker names, etc.). */
-    val MapLabelText = Gray900
+    val MapLabelText = MainBlue
 
     /** North accent on the map heading / rotation FAB (compass tip). */
     val MapHeadingNorth = Red500

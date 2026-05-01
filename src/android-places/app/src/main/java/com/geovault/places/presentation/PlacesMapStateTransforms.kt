@@ -2,9 +2,9 @@ package com.geovault.places.presentation
 
 import com.geovault.common.maps.core.geoVaultLatLngBoundsForPoints
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
+import com.geovault.common.maps.render.CommonMapIconIds
 import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
-import com.geovault.common.maps.render.CommonMapIconIds
 import com.geovault.places.model.Feature
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -54,10 +54,13 @@ object PlacesMapStateTransforms {
                 latitude = lat,
                 longitude = lon,
                 title = feature.properties.name,
-                iconImageId = if (isSelected) CommonMapIconIds.MARKER_SELECTED else CommonMapIconIds.MARKER_DEFAULT,
+                iconImageId = markerIconId(isSelected),
                 iconSize = if (isSelected) 1.08f else 1f,
             )
         }
         return MapRenderState(points = points)
     }
+
+    private fun markerIconId(isSelected: Boolean): String =
+        if (isSelected) CommonMapIconIds.MARKER_SELECTED else CommonMapIconIds.MARKER_DEFAULT
 }

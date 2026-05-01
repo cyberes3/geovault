@@ -60,8 +60,7 @@ class GeoJsonRenderPlugin(
     private val context: Context? = null,
 ) : GeoVaultMapPlugin, GeoVaultRenderCapability {
 
-    private val useUnclusteredPointOverlay: Boolean =
-        config.pointClustering != null && config.iconImageIdsExcludedFromClustering.isNotEmpty()
+    private val usePointOverlay: Boolean = config.overlayPointIconImageIds.isNotEmpty()
 
     @Volatile
     private var renderState: MapRenderState = MapRenderState()
@@ -127,7 +126,7 @@ class GeoJsonRenderPlugin(
             PropertyFactory.textHaloWidth(haloWidthPx),
             PropertyFactory.textHaloColor(haloColorArgb),
         )
-        if (useUnclusteredPointOverlay) {
+        if (usePointOverlay) {
             (style.getLayer(pointsOverlayLabelLayerId) as? SymbolLayer)?.setProperties(
                 PropertyFactory.textHaloWidth(haloWidthPx),
                 PropertyFactory.textHaloColor(haloColorArgb),
@@ -156,7 +155,7 @@ class GeoJsonRenderPlugin(
 
     private fun ensureLayers(style: Style) {
         ensureSource(style, pointsSourceId, buildGeoJsonOptions(config.pointClustering))
-        if (useUnclusteredPointOverlay) {
+        if (usePointOverlay) {
             ensureSource(style, pointsOverlaySourceId, null)
         }
         ensureSource(style, linesSourceId)
@@ -297,7 +296,7 @@ class GeoJsonRenderPlugin(
             }
             attachPointSymbolLayers()
         }
-        if (useUnclusteredPointOverlay) {
+        if (usePointOverlay) {
             if (config.showPointCircles && style.getLayer(pointsOverlayCircleLayerId) == null) {
                 addPointPresentationLayer(
                     CircleLayer(pointsOverlayCircleLayerId, pointsOverlaySourceId).withProperties(
@@ -514,17 +513,17 @@ class GeoJsonRenderPlugin(
     }
 
     private fun prepareState(state: MapRenderState): PreparedGeoJsonRenderState {
-        val excluded = config.iconImageIdsExcludedFromClustering
-        val (mainPoints, overlayPoints) = if (useUnclusteredPointOverlay) {
-            val over = state.points.filter { p -> p.iconImageId in excluded }
-            val main = state.points.filter { p -> p.iconImageId !in excluded }
+        val overlayIconIds = config.overlayPointIconImageIds
+        val (mainPoints, overlayPoints) = if (usePointOverlay) {
+            val over = state.points.filter { p -> p.iconImageId in overlayIconIds }
+            val main = state.points.filter { p -> p.iconImageId !in overlayIconIds }
             main to over
         } else {
             state.points to emptyList()
         }
         return PreparedGeoJsonRenderState(
             pointsJson = buildPointsFeatureCollectionJson(mainPoints),
-            overlayPointsJson = if (useUnclusteredPointOverlay) {
+            overlayPointsJson = if (usePointOverlay) {
                 buildPointsFeatureCollectionJson(overlayPoints)
             } else {
                 GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON
@@ -540,7 +539,7 @@ class GeoJsonRenderPlugin(
     private fun applyPreparedState(prepared: PreparedGeoJsonRenderState) {
         val style = map?.style ?: return
         updateSource(style, pointsSourceId, prepared.pointsJson)
-        if (useUnclusteredPointOverlay) {
+        if (usePointOverlay) {
             updateSource(style, pointsOverlaySourceId, prepared.overlayPointsJson)
         }
         updateSource(style, linesSourceId, prepared.linesJson)
@@ -604,6 +603,7 @@ class GeoJsonRenderPlugin(
         return mapOf(
             CommonMapIconIds.MARKER_DEFAULT to CommonMapMarkerStyles.default(),
             CommonMapIconIds.MARKER_SELECTED to CommonMapMarkerStyles.selected(),
+            CommonMapIconIds.MARKER_NAV_TARGET to CommonMapMarkerStyles.navTarget(),
         ) + config.markerStyles
     }
 
@@ -659,7 +659,7 @@ class GeoJsonRenderPlugin(
     private val linesSourceId = "$sourceIdPrefix-lines-source"
     private val polygonsSourceId = "$sourceIdPrefix-polygons-source"
     private val pointsCircleLayerId = "$sourceIdPrefix-points-circle-layer"
-    /** Points that must never participate in clustering (e.g. navigation target), non-clustered source. */
+    /** Points promoted above the main point layers (e.g. navigation targets), non-clustered source. */
     private val pointsOverlaySourceId = pointsOverlaySourceId(sourceIdPrefix)
     private val pointsOverlayCircleLayerId = "$sourceIdPrefix-points-overlay-circle-layer"
     /** Visible markers; painted above [pointsLabelLayerId] and above linework when [GeoJsonRenderConfig.renderPointSymbolsAboveLines]. */
@@ -680,7 +680,7 @@ class GeoJsonRenderPlugin(
 
         fun pointsSourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-source"
 
-        /** Non-clustered point source for [GeoJsonRenderConfig.iconImageIdsExcludedFromClustering]. */
+        /** Non-clustered point source for [GeoJsonRenderConfig.overlayPointIconImageIds]. */
         fun pointsOverlaySourceId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-overlay-source"
 
         fun pointsIconLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-points-icon-layer"

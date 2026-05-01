@@ -8,6 +8,65 @@ import org.junit.Test
 class CommonMapSymbolIconStylesTest {
 
     @Test
+    fun defaultMarker_usesMainBlueWithLightFrame() {
+        val style = CommonMapMarkerStyles.default()
+        val frame = CommonMapMarkerStyles.frame(MapMarkerBorderStyle.LIGHT)
+
+        assertEquals(GeoVaultColorTokens.MainBlue.toArgb(), style.centerColorInt)
+        assertEquals(frame.outerBorderColorInt, style.outerBorderColorInt)
+        assertEquals(frame.innerBorderColorInt, style.innerBorderColorInt)
+    }
+
+    @Test
+    fun selectedMarker_usesMainYellowWithDarkFrame() {
+        val style = CommonMapMarkerStyles.selected()
+        val frame = CommonMapMarkerStyles.frame(MapMarkerBorderStyle.DARK)
+
+        assertEquals(GeoVaultColorTokens.MainYellow.toArgb(), style.centerColorInt)
+        assertEquals(frame.outerBorderColorInt, style.outerBorderColorInt)
+        assertEquals(frame.innerBorderColorInt, style.innerBorderColorInt)
+    }
+
+    @Test
+    fun navTargetMarker_usesMainPurpleWithLightFrame() {
+        val style = CommonMapMarkerStyles.navTarget()
+        val frame = CommonMapMarkerStyles.frame(MapMarkerBorderStyle.LIGHT)
+
+        assertEquals(GeoVaultColorTokens.MainPurple.toArgb(), style.centerColorInt)
+        assertEquals(frame.outerBorderColorInt, style.outerBorderColorInt)
+        assertEquals(frame.innerBorderColorInt, style.innerBorderColorInt)
+    }
+
+    @Test
+    fun generatedPointMarkerId_includesFillAndFrame() {
+        assertEquals(
+            "gv-common-marker-dark-ff3e41",
+            CommonMapPointIcons.iconImageId("#FF3E41", MapMarkerBorderStyle.DARK),
+        )
+    }
+
+    @Test
+    fun generatedPointMarkerStyles_registersEveryFillAndFrameCombination() {
+        val styles = CommonMapPointIcons.styles(
+            centerColorsByHex = mapOf(
+                "#FFFFFF" to GeoVaultColorTokens.White.toArgb(),
+                "#FF3E41" to GeoVaultColorTokens.MainRed.toArgb(),
+            ),
+            borderStyles = listOf(MapMarkerBorderStyle.LIGHT, MapMarkerBorderStyle.DARK),
+        )
+
+        assertEquals(4, styles.size)
+        assertEquals(
+            GeoVaultColorTokens.White.toArgb(),
+            styles.getValue("gv-common-marker-light-ffffff").centerColorInt,
+        )
+        assertEquals(
+            CommonMapMarkerStyles.frame(MapMarkerBorderStyle.DARK).outerBorderColorInt,
+            styles.getValue("gv-common-marker-dark-ff3e41").outerBorderColorInt,
+        )
+    }
+
+    @Test
     fun station_usesMainGreen() {
         assertEquals(
             GeoVaultColorTokens.MainGreen.toArgb(),
