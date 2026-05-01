@@ -357,9 +357,7 @@ private fun TrackerMapAuthenticatedContent(
             locationPlugin.startRenderingGpsLocation(intervalMs = 2000L)
         }
         onDispose {
-            if (userLocationDecision.shouldStreamGps) {
-                locationPlugin.stopRenderingGpsLocation()
-            }
+            locationPlugin.stopRenderingGpsLocation()
         }
     }
 
@@ -557,7 +555,7 @@ private fun TrackerMapAuthenticatedContent(
                         icon = gpsFabAction.icon,
                         contentDescription = gpsFabAction.contentDescription,
                         onTap = {
-                            disarmFollowSessionAndClearMapLocks()
+                            viewModel.disableAllMapLocks()
                             gpsFabAction.onTap?.invoke()
                         },
                     )

@@ -75,6 +75,13 @@ object GeoVaultMapCameraFollowMachine {
         current.copy(positionFollowDesired = !current.positionFollowDesired)
 
     /**
+     * User tapped the GPS / my-location FAB in recenter mode: ensure position follow is on.
+     * Hosts use the tap itself to recenter even if this state is already active.
+     */
+    fun enablePositionFollowOnGpsTap(current: GeoVaultMapCameraFollowState): GeoVaultMapCameraFollowState =
+        current.copy(positionFollowDesired = true)
+
+    /**
      * User panned or zoomed the map: drop **position** follow but keep heading follow so the
      * map can stay compass-locked.
      */

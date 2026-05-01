@@ -66,6 +66,25 @@ class TrackerMapUserLocationPolicyTest {
     }
 
     @Test
+    fun evaluate_whenFollowLockDisabledAfterGesture_keepsGpsAndPuckButStopsCameraFollow() {
+        val decision = policy.evaluate(
+            TrackerMapUserLocationInput(
+                isMapActive = true,
+                hasLocationPermission = true,
+                isMapReady = true,
+                userFollowLockArmedThisSession = true,
+                followLockEnabled = false,
+                runtimeRunning = false
+            )
+        )
+
+        assertTrue(decision.shouldStreamGps)
+        assertTrue(decision.shouldEnablePuck)
+        assertFalse(decision.shouldEnableFollowCamera)
+        assertTrue(decision.blockers.isEmpty())
+    }
+
+    @Test
     fun evaluate_collectsAllExpectedBlockers() {
         val decision = policy.evaluate(
             TrackerMapUserLocationInput(
@@ -84,7 +103,6 @@ class TrackerMapUserLocationPolicyTest {
                 TrackerMapUserLocationBlocker.MissingPermission,
                 TrackerMapUserLocationBlocker.MapNotReady,
                 TrackerMapUserLocationBlocker.FollowLockNotArmedThisSession,
-                TrackerMapUserLocationBlocker.FollowLockDisabled,
                 TrackerMapUserLocationBlocker.RuntimeTrackingActive,
             ),
             decision.blockers

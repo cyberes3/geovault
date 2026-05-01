@@ -223,4 +223,30 @@ class GeoVaultMapCameraFollowMachineTest {
             ),
         )
     }
+
+    @Test
+    fun enablePositionFollowOnGpsTap_turnsPositionOnWithoutClearingHeading() {
+        assertEquals(
+            GeoVaultMapCameraFollowState(true, false),
+            GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(GeoVaultMapCameraFollowState.NONE),
+        )
+        assertEquals(
+            GeoVaultMapCameraFollowState(true, true),
+            GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(
+                GeoVaultMapCameraFollowState(
+                    positionFollowDesired = false,
+                    headingFollowDesired = true,
+                ),
+            ),
+        )
+        assertEquals(
+            GeoVaultMapCameraFollowState(true, true),
+            GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(
+                GeoVaultMapCameraFollowState(
+                    positionFollowDesired = true,
+                    headingFollowDesired = true,
+                ),
+            ),
+        )
+    }
 }

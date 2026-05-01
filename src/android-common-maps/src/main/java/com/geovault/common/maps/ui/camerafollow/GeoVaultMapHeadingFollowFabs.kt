@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,6 +109,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     val context = LocalContext.current
     var positionFollowDesired by rememberSaveable { mutableStateOf(false) }
     var headingFollowDesired by rememberSaveable { mutableStateOf(false) }
+    var gpsRecenterRequestId by rememberSaveable { mutableIntStateOf(0) }
     fun followState(): GeoVaultMapCameraFollowState =
         GeoVaultMapCameraFollowState(positionFollowDesired, headingFollowDesired)
     val lastLogicalRef = remember {
@@ -148,9 +150,10 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
                     headingFollowDesired = next.headingFollowDesired
                 }
                 GeoVaultMapHeadingFollowPendingGrant.GpsPositionFollow -> {
-                    val next = GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(followState())
+                    val next = GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(followState())
                     positionFollowDesired = next.positionFollowDesired
                     headingFollowDesired = next.headingFollowDesired
+                    gpsRecenterRequestId += 1
                 }
                 null -> Unit
             }
@@ -194,7 +197,6 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         val mode = effectiveLogical.toCameraMode()
         if (mode != CameraMode.NONE) {
             map.ensureInteractiveGestures()
-            userLocation.setEnabled(true)
         }
         userLocation.setCameraMode(mode)
         lastLogicalRef.last = nextLogical
@@ -235,7 +237,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     }
 
     var hasZoomedToInitialFollow by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(positionFollowDesired, allowFollowCamera) {
+    LaunchedEffect(positionFollowDesired, allowFollowCamera, gpsRecenterRequestId) {
         if (!positionFollowDesired || !allowFollowCamera) return@LaunchedEffect
         if (plugin == null) return@LaunchedEffect
         val libre = map.maplibreMap ?: return@LaunchedEffect
@@ -272,9 +274,10 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
 
     val onGpsPositionFollowTap: () -> Unit = {
         if (context.geoVaultMapHasFineOrCoarseLocation()) {
-            val next = GeoVaultMapCameraFollowMachine.togglePositionFollowOnTap(followState())
+            val next = GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(followState())
             positionFollowDesired = next.positionFollowDesired
             headingFollowDesired = next.headingFollowDesired
+            gpsRecenterRequestId += 1
         } else {
             pendingGrant = GeoVaultMapHeadingFollowPendingGrant.GpsPositionFollow
             permissionLauncher.launch(GeoVaultMapLocationPermission.FINE_AND_COARSE)

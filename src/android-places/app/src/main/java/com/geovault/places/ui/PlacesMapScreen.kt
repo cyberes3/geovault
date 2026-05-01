@@ -51,6 +51,7 @@ import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle
 import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
+import com.geovault.common.maps.ui.location.rememberGeoVaultMapLocationSession
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility
@@ -107,11 +108,14 @@ fun PlacesMapScreen(
         userLocation = locationPlugin,
         allowFollowCamera = phase == GeoVaultMapPhase.Ready,
     )
-    val gpsFabAction = headingFollowFabs.gpsPositionFollowFab
+    val locationSession = rememberGeoVaultMapLocationSession(
+        headingFollowFabs = headingFollowFabs,
+        hasLocationPermission = hasLocationPermission,
+        isMapReady = phase == GeoVaultMapPhase.Ready,
+    )
+    val gpsFabAction = locationSession.gpsFabAction
     val orientationFabAction = headingFollowFabs.headingFollowFab
-    val shouldStreamGps = hasLocationPermission &&
-        phase == GeoVaultMapPhase.Ready &&
-        (headingFollowFabs.positionFollowDesired || headingFollowFabs.headingFollowDesired)
+    val shouldStreamGps = locationSession.decision.shouldStreamGps
     DisposableEffect(locationPlugin, shouldStreamGps) {
         if (shouldStreamGps) {
             locationPlugin.startRenderingGpsLocation(intervalMs = PLACES_GPS_STREAM_INTERVAL_MS)

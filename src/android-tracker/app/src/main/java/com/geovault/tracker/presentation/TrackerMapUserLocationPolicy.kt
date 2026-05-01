@@ -1,5 +1,8 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionInput
+import com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionPolicy
+
 data class TrackerMapUserLocationInput(
     val isMapActive: Boolean,
     val hasLocationPermission: Boolean,
@@ -14,7 +17,6 @@ enum class TrackerMapUserLocationBlocker {
     MissingPermission,
     MapNotReady,
     FollowLockNotArmedThisSession,
-    FollowLockDisabled,
     RuntimeTrackingActive,
 }
 
@@ -31,7 +33,9 @@ data class TrackerMapUserLocationDecision(
  * Design goal: location streaming must be impossible unless the user has explicitly
  * armed follow-lock in this session. This prevents launch-time auto activation.
  */
-class TrackerMapUserLocationPolicy {
+class TrackerMapUserLocationPolicy(
+    private val commonPolicy: GeoVaultMapLocationSessionPolicy = GeoVaultMapLocationSessionPolicy(),
+) {
     fun evaluate(input: TrackerMapUserLocationInput): TrackerMapUserLocationDecision {
         val blockers = linkedSetOf<TrackerMapUserLocationBlocker>()
         if (!input.isMapActive) blockers += TrackerMapUserLocationBlocker.MapInactive
@@ -40,15 +44,25 @@ class TrackerMapUserLocationPolicy {
         if (!input.userFollowLockArmedThisSession) {
             blockers += TrackerMapUserLocationBlocker.FollowLockNotArmedThisSession
         }
-        if (!input.followLockEnabled) blockers += TrackerMapUserLocationBlocker.FollowLockDisabled
         if (!TrackerMapCameraLockPolicy.shouldRenderUserLocation(input.runtimeRunning)) {
             blockers += TrackerMapUserLocationBlocker.RuntimeTrackingActive
         }
-        val allowPuck = blockers.isEmpty()
+        val commonDecision = commonPolicy.decide(
+            GeoVaultMapLocationSessionInput(
+                isActive = input.isMapActive,
+                hasLocationPermission = input.hasLocationPermission,
+                isMapReady = input.isMapReady,
+                userLocationRequested = input.userFollowLockArmedThisSession,
+                positionFollowDesired = false,
+                headingFollowDesired = false,
+            ),
+        )
+        val allowPuck = blockers.isEmpty() && commonDecision.shouldEnablePuck
         return TrackerMapUserLocationDecision(
             shouldStreamGps = allowPuck,
             shouldEnablePuck = allowPuck,
             shouldEnableFollowCamera = allowPuck &&
+                input.followLockEnabled &&
                 TrackerMapCameraLockPolicy.shouldEnableFollowCamera(
                     runtimeRunning = input.runtimeRunning,
                     followLockEnabled = input.followLockEnabled
