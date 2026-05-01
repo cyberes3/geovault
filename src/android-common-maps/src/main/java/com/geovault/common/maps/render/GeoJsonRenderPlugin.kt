@@ -390,7 +390,7 @@ class GeoJsonRenderPlugin(
                         }
                         add(PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP))
                         add(PropertyFactory.textOffset(arrayOf(0f, config.pointLabelTextOffsetYEm)))
-                        add(PropertyFactory.textAllowOverlap(false))
+                        add(PropertyFactory.textAllowOverlap(config.overlayPointLabelsAllowOverlap))
                         add(PropertyFactory.textIgnorePlacement(false))
                     }.toTypedArray()
                     SymbolLayer(pointsOverlayLabelLayerId, pointsOverlaySourceId).withProperties(

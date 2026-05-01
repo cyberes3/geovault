@@ -172,7 +172,7 @@ class GeoVaultNavigationToPointPlugin(
                 PropertyFactory.textOffset(arrayOf(0f, LABEL_OFFSET_EM)),
                 PropertyFactory.textJustify(Property.TEXT_JUSTIFY_CENTER),
                 PropertyFactory.textAllowOverlap(true),
-                PropertyFactory.textIgnorePlacement(true),
+                PropertyFactory.textIgnorePlacement(false),
             )
         if (style.getLayer(LocationComponentConstants.FOREGROUND_LAYER) != null) {
             style.addLayerAbove(textLayer, LocationComponentConstants.FOREGROUND_LAYER)

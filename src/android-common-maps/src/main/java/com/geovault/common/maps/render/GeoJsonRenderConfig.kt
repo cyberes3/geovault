@@ -39,6 +39,11 @@ data class GeoJsonRenderConfig(
      * route/selection overlays.
      */
     val overlayPointIconImageIds: Set<String> = emptySet(),
+    /**
+     * When true, overlay point labels render even if they collide with lower-priority labels,
+     * while still reserving placement space so later text can yield to them.
+     */
+    val overlayPointLabelsAllowOverlap: Boolean = false,
     val useSynchronousSourceUpdates: Boolean = false,
     /**
      * When true (the default), point symbol icon and text use zero-duration opacity transitions

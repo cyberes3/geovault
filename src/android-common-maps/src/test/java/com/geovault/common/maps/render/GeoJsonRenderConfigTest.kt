@@ -2,6 +2,7 @@ package com.geovault.common.maps.render
 
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class GeoJsonRenderConfigTest {
@@ -16,5 +17,10 @@ class GeoJsonRenderConfigTest {
             GeoVaultColorTokens.Hex.MapLabelText,
             GeoJsonRenderConfig().defaultLabelTextColorHex,
         )
+    }
+
+    @Test
+    fun overlayPointLabels_defaultToNormalCollisionBehavior() {
+        assertFalse(GeoJsonRenderConfig().overlayPointLabelsAllowOverlap)
     }
 }
