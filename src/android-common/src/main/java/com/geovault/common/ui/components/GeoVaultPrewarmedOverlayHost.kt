@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
@@ -45,15 +46,36 @@ fun GeoVaultPrewarmedOverlayHost(
         prewarmed = true
     }
 
-    if (visible || prewarmed) {
+    if (visible) {
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .alpha(if (visible) 1f else 0f)
-                .zIndex(if (visible) visibleZIndex else hiddenZIndex)
-                .then(if (visible) Modifier else Modifier.clearAndSetSemantics { }),
+                .zIndex(visibleZIndex),
         ) {
             content()
+        }
+    } else if (prewarmed) {
+        // Hidden prewarm content may be composed, but must never be interactable: descendants can
+        // open platform Dialog windows outside this invisible parent.
+        Box(
+            modifier = modifier
+                .alpha(0f)
+                .zIndex(hiddenZIndex)
+                .clearAndSetSemantics { },
+        ) {
+            HiddenPrewarmLayout(content = content)
+        }
+    }
+}
+
+@Composable
+private fun HiddenPrewarmLayout(content: @Composable () -> Unit) {
+    Layout(
+        content = content,
+    ) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints) }
+        layout(0, 0) {
+            placeables.forEach { it.place(0, 0) }
         }
     }
 }
