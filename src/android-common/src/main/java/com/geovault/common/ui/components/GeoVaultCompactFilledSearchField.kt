@@ -3,70 +3,59 @@ package com.geovault.common.ui.components
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 /**
- * Compact search field styled with [GeoVaultCompactInput]. Renders a leading search icon, no label,
- * and a trailing clear button that appears when [value] is non-empty.
+ * Compact search field using the filled drawer-input style.
  *
- * Collapses four copies of per-screen search-row boilerplate into one call.
+ * Matches the old NGS/Survey drawer search rows: no leading icon, body2 text, filled Material
+ * field treatment, optional loading spinner, and a trailing clear affordance.
  */
 @Composable
-fun GeoVaultSearchField(
+fun GeoVaultCompactFilledSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search\u2026",
+    placeholder: String = "Search",
     enabled: Boolean = true,
     isLoading: Boolean = false,
     showClearAction: Boolean = value.isNotEmpty(),
     onClear: (() -> Unit)? = null,
-    clearContentDescription: String = "Clear",
-    clearTooltip: String? = clearContentDescription,
+    clearContentDescription: String = "Clear search",
 ) {
     val clearAction = onClear ?: { onValueChange("") }
-    GeoVaultCompactInput(
+    GeoVaultCompactFilledInput(
         value = value,
         onValueChange = onValueChange,
         placeholder = placeholder,
         modifier = modifier,
         enabled = enabled,
+        readOnly = !enabled,
         singleLine = true,
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = null,
-                tint = GeoVaultColorTokens.TextSecondary,
-                modifier = Modifier.size(18.dp),
-            )
-        },
         trailingIcon = if (isLoading || showClearAction) {
             {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isLoading) {
                         GeoVaultLoadingSpinner(
-                            spinnerSize = 16.dp,
+                            spinnerSize = 18.dp,
                             strokeWidth = 2.dp,
                         )
                     }
                     if (showClearAction) {
-                        GeoVaultIconButton(
+                        IconButton(
                             onClick = clearAction,
                             enabled = enabled,
-                            tooltip = clearTooltip,
                             modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Clear,
                                 contentDescription = clearContentDescription,
-                                tint = GeoVaultColorTokens.TextSecondary,
                                 modifier = Modifier.size(18.dp),
                             )
                         }

@@ -207,6 +207,53 @@ class SharedScreenTransformsTest {
     }
 
     @Test
+    fun deriveSharedFilteredSections_filtersSharedSurfaceBySharedListQuery() {
+        val sharedItems = listOf(
+            SharedSurfaceItem.TrackerItem(
+                Tracker(
+                    id = "t1",
+                    name = "Alpha tracker",
+                    color = null,
+                    is_owner = false,
+                    visibility = "shared",
+                    owner_email = "alpha@example.com",
+                )
+            ),
+            SharedSurfaceItem.GroupItem(
+                Group(
+                    id = "g1",
+                    name = "Bravo group",
+                    is_owner = false,
+                    visibility = "shared",
+                    is_accepted = true,
+                    owner_email = "group-owner@example.com",
+                )
+            ),
+        )
+
+        val filtered = deriveSharedFilteredSections(
+            sharedItems = sharedItems,
+            discoverOnMyMapTrackers = emptyList(),
+            discoverOnMyMapGroups = emptyList(),
+            incomingTrackers = emptyList(),
+            incomingGroups = emptyList(),
+            publicTrackers = emptyList(),
+            publicGroups = emptyList(),
+            discoverOnMapQuery = "",
+            discoverIncomingQuery = "",
+            publicQuery = "",
+            sharedListQuery = "group-owner",
+        )
+
+        assertEquals(listOf("g1"), filtered.sharedItems.map {
+            when (it) {
+                is SharedSurfaceItem.TrackerItem -> it.tracker.id
+                is SharedSurfaceItem.GroupItem -> it.group.id
+            }
+        })
+    }
+
+    @Test
     fun deriveSharedFilteredSections_appliesOptimisticTrackerAddAndRemove() {
         val sharedItems = listOf(
             SharedSurfaceItem.TrackerItem(

@@ -25,13 +25,11 @@ import androidx.compose.material.Card
 import androidx.compose.material.Divider
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.runtime.Composable
@@ -48,10 +46,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultAuthGate
-import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
+import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
@@ -210,30 +208,13 @@ private fun SearchBlock(
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            GeoVaultInput(
-                value = query,
-                onValueChange = onSearchChanged,
-                label = null,
-                placeholder = "Search places...",
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (query.isNotBlank()) {
-                IconButton(
-                    onClick = { onSearchChanged("") },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear search",
-                        tint = GeoVaultColorTokens.TextSecondary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
+        GeoVaultSearchField(
+            value = query,
+            onValueChange = onSearchChanged,
+            placeholder = "Search places...",
+            modifier = Modifier.fillMaxWidth(),
+            clearContentDescription = "Clear search",
+        )
     }
 }
 

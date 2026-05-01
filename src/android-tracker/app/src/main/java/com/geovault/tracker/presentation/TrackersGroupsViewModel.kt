@@ -119,6 +119,22 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         _uiState.update { it.copy(subTab = tab) }
     }
 
+    fun updateTrackerSearchQuery(value: String) {
+        _uiState.update { it.copy(trackerSearchQuery = value) }
+    }
+
+    fun updateGroupSearchQuery(value: String) {
+        _uiState.update { it.copy(groupSearchQuery = value) }
+    }
+
+    fun clearTrackerSearchQuery() {
+        _uiState.update { it.copy(trackerSearchQuery = "") }
+    }
+
+    fun clearGroupSearchQuery() {
+        _uiState.update { it.copy(groupSearchQuery = "") }
+    }
+
     fun clearUserMessage() {
         _uiState.update { it.copy(userMessage = null) }
     }

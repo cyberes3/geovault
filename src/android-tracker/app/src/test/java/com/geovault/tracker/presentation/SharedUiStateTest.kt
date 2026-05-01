@@ -46,6 +46,37 @@ class SharedUiStateTest {
     }
 
     @Test
+    fun filteredSections_filtersSharedRowsBySharedListQueryOnly() {
+        val state = SharedUiState(
+            trackers = listOf(
+                Tracker(id = "t1", name = "Alpha tracker", color = null, is_owner = false, visibility = "shared"),
+            ),
+            groups = listOf(
+                Group(
+                    id = "g1",
+                    name = "Beta group",
+                    is_owner = false,
+                    visibility = "shared",
+                    is_accepted = true,
+                    owner_email = "group-owner@example.com",
+                ),
+            ),
+            availableToAdd = AvailableToAddResponse(
+                public = listOf(AvailableToAddItem(id = "p1", name = "Public tracker")),
+            ),
+            sharedListQuery = "group-owner",
+        )
+
+        assertEquals(listOf("g1"), state.filteredSections.sharedItems.map {
+            when (it) {
+                is SharedSurfaceItem.GroupItem -> it.group.id
+                is SharedSurfaceItem.TrackerItem -> it.tracker.id
+            }
+        })
+        assertEquals(listOf("p1"), state.filteredSections.publicTrackers.map { it.id })
+    }
+
+    @Test
     fun pendingActionKeys_areSplitByMutationPhase() {
         val state = SharedUiState(
             pendingOps = mapOf(

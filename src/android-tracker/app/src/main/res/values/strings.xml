@@ -241,6 +241,7 @@
     <string name="trackers_placeholder_signed_out">Sign in to manage trackers and groups.</string>
     <string name="trackers_empty_trackers">No trackers found.</string>
     <string name="trackers_empty_groups">No groups found.</string>
+    <string name="trackers_search_hint">Search by name or owner</string>
     <string name="trackers_subtab_trackers">Trackers</string>
     <string name="trackers_subtab_groups">Groups</string>
     <string name="trackers_action_refresh">Refresh list</string>

@@ -73,6 +73,7 @@ import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.components.GeoVaultTab
@@ -101,6 +102,8 @@ import com.geovault.tracker.presentation.TrackersGroupsDialog
 import com.geovault.tracker.presentation.TrackersGroupsSubTab
 import com.geovault.tracker.presentation.TrackersGroupsUiState
 import com.geovault.tracker.presentation.TrackersGroupsViewModel
+import com.geovault.tracker.presentation.filterVisibleOwnerGroupsForSearch
+import com.geovault.tracker.presentation.filterVisibleOwnerTrackersForSearch
 import kotlinx.coroutines.delay
 
 private fun formatTrackerListTime(timestampMs: Long): String {
@@ -294,6 +297,10 @@ fun TrackersScreen(
     LaunchedEffect(navigationRequest) {
         val request = navigationRequest ?: return@LaunchedEffect
         vm.setSubTab(request.subTab)
+        when (request.subTab) {
+            TrackersGroupsSubTab.TRACKERS -> vm.clearTrackerSearchQuery()
+            TrackersGroupsSubTab.GROUPS -> vm.clearGroupSearchQuery()
+        }
         pendingNavigationRequest = request
         onNavigationTargetConsumed()
     }
@@ -392,6 +399,8 @@ fun TrackersScreen(
                 isServerAccessible = isServerAccessible,
                 isConnecting = isConnecting,
                 onSubTabSelected = vm::setSubTab,
+                onTrackerSearchQueryChanged = vm::updateTrackerSearchQuery,
+                onGroupSearchQueryChanged = vm::updateGroupSearchQuery,
                 onPullRefresh = { vm.refreshAll(asPullRefresh = true) },
                 onToggleTrackerMapHidden = vm::toggleTrackerHiddenOnMap,
                 onToggleGroupMapHidden = vm::toggleGroupHiddenOnMap,
@@ -741,6 +750,8 @@ private fun TrackersGroupsAuthenticatedBody(
     isServerAccessible: Boolean,
     isConnecting: Boolean,
     onSubTabSelected: (TrackersGroupsSubTab) -> Unit,
+    onTrackerSearchQueryChanged: (String) -> Unit,
+    onGroupSearchQueryChanged: (String) -> Unit,
     onPullRefresh: () -> Unit,
     onToggleTrackerMapHidden: (String) -> Unit,
     onToggleGroupMapHidden: (String) -> Unit,
@@ -767,8 +778,12 @@ private fun TrackersGroupsAuthenticatedBody(
     // Selection only changes through dialog flows; do not re-read SharedPreferences on every
     // tracker upsert from live data.
     val selectedTrackerId = remember(state.dialog) { SelectedTrackerPrefs.selectedTrackerId(context) }
-    val visibleTrackers = remember(state.trackers) { state.trackers.filter(::isVisibleOwnerTracker) }
-    val visibleGroups = remember(state.groups) { state.groups.filter(::isVisibleOwnerGroup) }
+    val visibleTrackers = remember(state.trackers, state.trackerSearchQuery) {
+        filterVisibleOwnerTrackersForSearch(state.trackers, state.trackerSearchQuery)
+    }
+    val visibleGroups = remember(state.groups, state.groupSearchQuery) {
+        filterVisibleOwnerGroupsForSearch(state.groups, state.groupSearchQuery)
+    }
     val orderedVisibleTrackers = visibleTrackers
     // Stable (structurally-compared) membership keys so that effects keyed on these lists do
     // not cancel/relaunch when only a tracker's last_point updated (list reference changes,
@@ -972,6 +987,25 @@ private fun TrackersGroupsAuthenticatedBody(
                 loadingTextForTab = { tab -> if (tab == TrackersGroupsSubTab.TRACKERS) loadingTrackersText else loadingGroupsText },
                 onRefreshTab = { onPullRefresh() },
             ),
+            headerForTab = { tab ->
+                GeoVaultSearchField(
+                    value = if (tab == TrackersGroupsSubTab.TRACKERS) {
+                        state.trackerSearchQuery
+                    } else {
+                        state.groupSearchQuery
+                    },
+                    onValueChange = if (tab == TrackersGroupsSubTab.TRACKERS) {
+                        onTrackerSearchQueryChanged
+                    } else {
+                        onGroupSearchQueryChanged
+                    },
+                    placeholder = stringResource(R.string.trackers_search_hint),
+                    enabled = !state.isLoading && !state.isPullRefreshing,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            },
             contentForTab = { tab ->
                 when (tab) {
                     TrackersGroupsSubTab.TRACKERS -> TrackersListPage(

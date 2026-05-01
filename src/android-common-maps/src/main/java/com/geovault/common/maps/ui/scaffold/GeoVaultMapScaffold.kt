@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
+import com.geovault.common.ui.components.GeoVaultCompactFilledSearchField
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /**
@@ -80,6 +81,7 @@ import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
  * actions. Prefer this over app-local title text so drawer title styling remains centralized.
  * @param drawerTitleChip Optional leading title chip rendered instead of [drawerTitle].
  * @param onDrawerClose Optional first-party close/X action rendered before the title.
+ * @param drawerSearch Controlled search configuration for the built-in drawer list search row.
  */
 @Composable
 fun GeoVaultMapScaffold(
@@ -92,6 +94,7 @@ fun GeoVaultMapScaffold(
     onDrawerClose: (() -> Unit)? = null,
     drawerCloseContentDescription: String = "Close",
     drawerCloseTooltip: String? = "Close",
+    drawerSearch: GeoVaultMapDrawerSearchState,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
     topStart: (@Composable BoxScope.() -> Unit)? = null,
@@ -158,6 +161,7 @@ fun GeoVaultMapScaffold(
                     onDrawerClose = onDrawerClose,
                     drawerCloseContentDescription = drawerCloseContentDescription,
                     drawerCloseTooltip = drawerCloseTooltip,
+                    drawerSearch = drawerSearch,
                     drawerHeader = drawerHeader,
                     drawerBody = drawerBody,
                 )
@@ -191,6 +195,7 @@ private fun BoxScope.DrawerLayer(
     onDrawerClose: (() -> Unit)?,
     drawerCloseContentDescription: String,
     drawerCloseTooltip: String?,
+    drawerSearch: GeoVaultMapDrawerSearchState,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
 ) {
@@ -285,9 +290,33 @@ private fun BoxScope.DrawerLayer(
                     .height(GeoVaultMapScaffoldDefaults.HeaderDividerThickness)
                     .background(headerDividerColor),
             )
+            GeoVaultMapDrawerSearchBar(
+                search = drawerSearch,
+                drawerInteractionsEnabled = drawerDragEnabled,
+            )
             drawerBody()
         }
     }
+}
+
+@Composable
+private fun GeoVaultMapDrawerSearchBar(
+    search: GeoVaultMapDrawerSearchState,
+    drawerInteractionsEnabled: Boolean,
+) {
+    GeoVaultCompactFilledSearchField(
+        value = search.query,
+        onValueChange = search.onQueryChange,
+        placeholder = search.placeholder,
+        enabled = drawerInteractionsEnabled && search.enabled,
+        isLoading = search.isLoading,
+        showClearAction = search.showClearAction,
+        onClear = search.onClear,
+        clearContentDescription = search.clearContentDescription,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
 }
 
 /**

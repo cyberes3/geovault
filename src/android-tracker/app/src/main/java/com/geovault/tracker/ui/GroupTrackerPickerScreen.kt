@@ -48,11 +48,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.NaturalSort
-import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
@@ -313,15 +313,13 @@ private fun PickerTabContent(
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            GeoVaultInput(
+                            GeoVaultSearchField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                label = stringResource(R.string.trackers_edit_share_user_picker_filter_label),
                                 placeholder = stringResource(R.string.groups_tracker_picker_filter_hint),
-                                singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
                             )
 
                             Divider(

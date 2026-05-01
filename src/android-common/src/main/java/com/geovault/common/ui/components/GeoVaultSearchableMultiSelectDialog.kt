@@ -123,12 +123,10 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
                         color = GeoVaultColorTokens.TextSecondary,
                     )
                 }
-                GeoVaultInput(
+                GeoVaultSearchField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
-                    label = searchLabel,
-                    placeholder = searchPlaceholder,
-                    singleLine = true,
+                    placeholder = searchPlaceholder ?: searchLabel ?: "Search...",
                     enabled = enabled,
                     modifier = Modifier.fillMaxWidth(),
                 )

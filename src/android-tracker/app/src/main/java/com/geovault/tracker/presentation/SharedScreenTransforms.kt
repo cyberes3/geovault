@@ -108,6 +108,7 @@ fun deriveSharedFilteredSections(
     discoverOnMapQuery: String,
     discoverIncomingQuery: String,
     publicQuery: String,
+    sharedListQuery: String = "",
     optimisticTrackerAdds: Map<String, Tracker> = emptyMap(),
     optimisticTrackerRemovals: Set<String> = emptySet(),
     optimisticDiscoverOnMapRemovals: Set<String> = emptySet(),
@@ -121,7 +122,7 @@ fun deriveSharedFilteredSections(
         optimisticTrackerAdds = optimisticTrackerAdds,
         optimisticTrackerRemovals = optimisticTrackerRemovals,
     )
-    val filteredSharedItems = sharedItemsWithOptimistic
+    val filteredSharedItems = filterSharedSurfaceItemsForSearch(sharedItemsWithOptimistic, sharedListQuery)
     val mergedIncomingTrackers = mergeRetainedTrackerItems(incomingTrackers, retainedIncomingTrackers)
     val mergedIncomingGroups = mergeRetainedGroupItems(incomingGroups, retainedIncomingGroups)
     val mergedPublicTrackers = mergeRetainedTrackerItems(publicTrackers, retainedPublicTrackers)
@@ -153,6 +154,26 @@ fun deriveSharedFilteredSections(
         publicTrackers = filteredPublicTrackers,
         publicGroups = filteredPublicGroups,
     )
+}
+
+fun filterSharedSurfaceItemsForSearch(
+    items: List<SharedSurfaceItem>,
+    query: String,
+): List<SharedSurfaceItem> {
+    return items.filter { item ->
+        when (item) {
+            is SharedSurfaceItem.TrackerItem -> matchesSharedSearch(
+                query,
+                item.tracker.name,
+                item.tracker.owner_email,
+            )
+            is SharedSurfaceItem.GroupItem -> matchesSharedSearch(
+                query,
+                item.group.name,
+                item.group.owner_email,
+            )
+        }
+    }
 }
 
 private fun applyOptimisticSharedItems(

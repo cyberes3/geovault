@@ -55,11 +55,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
-import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
+import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
@@ -82,6 +82,7 @@ import com.geovault.tracker.presentation.DiscoverOverlayMode
 import com.geovault.tracker.presentation.SharedEditActionPolicy
 import com.geovault.tracker.presentation.SharedAddRemoveOperation
 import com.geovault.tracker.presentation.SharedListRowModel
+import com.geovault.tracker.presentation.SharedSubTab
 import com.geovault.tracker.presentation.SharedViewMode
 import com.geovault.tracker.presentation.SharedUiState
 import com.geovault.tracker.presentation.SharedViewModel
@@ -124,6 +125,9 @@ fun SharedScreen(
 
     LaunchedEffect(navigationRequest) {
         val request = navigationRequest ?: return@LaunchedEffect
+        if (request.subTab == SharedSubTab.SHARED) {
+            vm.clearSharedListQuery()
+        }
         vm.openFromNavigationSubTab(request.subTab)
         pendingNavigationRequest = request
         onNavigationTargetConsumed()
@@ -189,6 +193,7 @@ fun SharedScreen(
                 onDiscoverModeChanged = vm::setDiscoverOverlayMode,
                 onDiscoverOnMapQueryChanged = vm::updateDiscoverOnMapQuery,
                 onDiscoverIncomingQueryChanged = vm::updateDiscoverIncomingQuery,
+                onSharedListQueryChanged = vm::updateSharedListQuery,
                 onPublicQueryChanged = vm::updatePublicQuery,
                 onRefresh = vm::refreshAll,
                 onLeaveTracker = { tracker ->
@@ -354,6 +359,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
     onDiscoverModeChanged: (DiscoverOverlayMode) -> Unit,
     onDiscoverOnMapQueryChanged: (String) -> Unit,
     onDiscoverIncomingQueryChanged: (String) -> Unit,
+    onSharedListQueryChanged: (String) -> Unit,
     onPublicQueryChanged: (String) -> Unit,
     onRefresh: () -> Unit,
     onLeaveTracker: (Tracker) -> Unit,
@@ -481,6 +487,7 @@ private fun ColumnScope.SharedAuthenticatedBody(
                     highlightedItemKey = highlightedItemKey,
                     listState = sharedListState,
                     onRefresh = onRefresh,
+                    onSharedListQueryChanged = onSharedListQueryChanged,
                     onEditSharedTracker = onEditSharedTracker,
                     onEditSharedGroup = onEditSharedGroup,
                     onOpenTrackerOnMap = onOpenTrackerOnMap,
@@ -594,6 +601,7 @@ private fun SharedMainListSurface(
     highlightedItemKey: String?,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onRefresh: () -> Unit,
+    onSharedListQueryChanged: (String) -> Unit,
     onEditSharedTracker: (Tracker) -> Unit,
     onEditSharedGroup: (Group) -> Unit,
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit,
@@ -610,65 +618,78 @@ private fun SharedMainListSurface(
         loadingText = stringResource(R.string.loading_trackers),
         modifier = Modifier.fillMaxSize(),
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (sharedListRows.isEmpty()) {
-                item {
-                    SharedEmptyState()
-                }
-            } else {
-                items(
-                    items = sharedListRows,
-                    key = { it.key },
-                ) { row ->
-                    when (row) {
-                        is SharedListRowModel.TrackerRow -> {
-                            val tracker = row.tracker
-                            TrackerItemCard(
-                                model = TrackerItemCardModel(
-                                    title = tracker.name,
-                                    chevronColorHex = tracker.color,
-                                    lastUpdateText = row.lastUpdateMs?.let(::formatSharedListDate)
-                                        ?: stringResource(R.string.waiting_for_data),
-                                    coordinatesText = if (row.latitude != null && row.longitude != null) {
-                                        String.format(Locale.getDefault(), "%.4f, %.4f", row.latitude, row.longitude)
-                                    } else {
-                                        null
-                                    },
-                                    ownerEmail = row.ownerEmail,
-                                    isHighlighted = highlightedItemKey == row.key,
-                                    isSelected = row.isSelected,
-                                    canOpenMap = row.canOpenMap,
-                                    canEdit = row.canEdit,
-                                ),
-                                onOpenMap = { onOpenTrackerOnMap(tracker.id, tracker.name) },
-                                onViewParams = { onViewTrackerParams(tracker) },
-                                onEdit = { onEditSharedTracker(tracker) },
-                                enabled = enabled,
-                            )
-                        }
-                        is SharedListRowModel.GroupRow -> {
-                            val group = row.group
-                            GroupItemCard(
-                                model = GroupItemCardModel(
-                                    title = group.name,
-                                    ownerEmail = row.ownerEmail,
-                                    trackerCount = row.trackerCount,
-                                    isPending = false,
-                                    isHighlighted = highlightedItemKey == row.key,
-                                    canOpenMap = true,
-                                    canEdit = row.canEdit,
-                                    canOpenActions = true,
-                                ),
-                                onOpenActions = { onOpenGroupActions(group, null) },
-                                onOpenMap = { onOpenGroupOnMap(group.id) },
-                                onEdit = { onEditSharedGroup(group) },
-                                enabled = enabled,
-                            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            GeoVaultSearchField(
+                value = state.sharedListQuery,
+                onValueChange = onSharedListQueryChanged,
+                placeholder = stringResource(R.string.shared_search_hint),
+                enabled = enabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                state = listState,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (sharedListRows.isEmpty()) {
+                    item {
+                        SharedEmptyState()
+                    }
+                } else {
+                    items(
+                        items = sharedListRows,
+                        key = { it.key },
+                    ) { row ->
+                        when (row) {
+                            is SharedListRowModel.TrackerRow -> {
+                                val tracker = row.tracker
+                                TrackerItemCard(
+                                    model = TrackerItemCardModel(
+                                        title = tracker.name,
+                                        chevronColorHex = tracker.color,
+                                        lastUpdateText = row.lastUpdateMs?.let(::formatSharedListDate)
+                                            ?: stringResource(R.string.waiting_for_data),
+                                        coordinatesText = if (row.latitude != null && row.longitude != null) {
+                                            String.format(Locale.getDefault(), "%.4f, %.4f", row.latitude, row.longitude)
+                                        } else {
+                                            null
+                                        },
+                                        ownerEmail = row.ownerEmail,
+                                        isHighlighted = highlightedItemKey == row.key,
+                                        isSelected = row.isSelected,
+                                        canOpenMap = row.canOpenMap,
+                                        canEdit = row.canEdit,
+                                    ),
+                                    onOpenMap = { onOpenTrackerOnMap(tracker.id, tracker.name) },
+                                    onViewParams = { onViewTrackerParams(tracker) },
+                                    onEdit = { onEditSharedTracker(tracker) },
+                                    enabled = enabled,
+                                )
+                            }
+                            is SharedListRowModel.GroupRow -> {
+                                val group = row.group
+                                GroupItemCard(
+                                    model = GroupItemCardModel(
+                                        title = group.name,
+                                        ownerEmail = row.ownerEmail,
+                                        trackerCount = row.trackerCount,
+                                        isPending = false,
+                                        isHighlighted = highlightedItemKey == row.key,
+                                        canOpenMap = true,
+                                        canEdit = row.canEdit,
+                                        canOpenActions = true,
+                                    ),
+                                    onOpenActions = { onOpenGroupActions(group, null) },
+                                    onOpenMap = { onOpenGroupOnMap(group.id) },
+                                    onEdit = { onEditSharedGroup(group) },
+                                    enabled = enabled,
+                                )
+                            }
                         }
                     }
                 }
@@ -782,18 +803,16 @@ private fun DiscoverOverlaySurface(
             } else {
                 state.discoverIncomingQuery
             }
-            GeoVaultInput(
+            GeoVaultSearchField(
                 value = activeQuery,
                 onValueChange = { next ->
                     if (tab == DiscoverOverlayMode.ON_MY_MAP) onOnMyMapQueryChanged(next)
                     else onIncomingQueryChanged(next)
                 },
-                label = stringResource(R.string.shared_search_label),
                 placeholder = stringResource(R.string.shared_search_hint),
-                singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
                 enabled = !overlayLoading,
             )
         },
@@ -916,15 +935,13 @@ private fun PublicOverlaySurface(
         closeContentDescription = stringResource(R.string.close),
         headerExtras = {
             Divider()
-            GeoVaultInput(
+            GeoVaultSearchField(
                 value = state.publicQuery,
                 onValueChange = onQueryChanged,
-                label = stringResource(R.string.shared_search_label),
                 placeholder = stringResource(R.string.shared_search_hint),
-                singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
                 enabled = !overlayLoading,
             )
         },

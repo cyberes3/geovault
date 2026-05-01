@@ -86,6 +86,14 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(viewMode = SharedViewMode.SHARED_LIST) }
     }
 
+    fun updateSharedListQuery(value: String) {
+        _uiState.update { it.copy(sharedListQuery = value) }
+    }
+
+    fun clearSharedListQuery() {
+        _uiState.update { it.copy(sharedListQuery = "") }
+    }
+
     fun showDiscoverOverlay() {
         ensureSharedBootstrapIfNotLoadedYet()
         _uiState.update { current ->
