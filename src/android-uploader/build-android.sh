@@ -119,6 +119,8 @@ if [ -z "${APK_PATH:-}" ] || [ ! -f "$APK_PATH" ]; then
     exit 1
 fi
 
+INSTALL_APK_PATH="$APK_PATH"
+
 echo ""
 echo "Build successful!"
 echo "APK location: $SCRIPT_DIR/$APK_PATH"
@@ -134,15 +136,16 @@ if [ "$BUILD_TYPE" = "release" ]; then
     DEST_NAME="GeoVault-Uploader-${BUILD_DATE}-${COMMIT_HASH}.apk"
     cp "$APK_PATH" "$SCRIPT_DIR/$DEST_NAME"
     echo "Copied release APK to: $SCRIPT_DIR/$DEST_NAME"
+    INSTALL_APK_PATH="$DEST_NAME"
 fi
 
 echo ""
 echo "To install on a connected device:"
-echo "  adb install -r $SCRIPT_DIR/$APK_PATH"
+echo "  adb install -r $SCRIPT_DIR/$INSTALL_APK_PATH"
 
 if [ "$INSTALL" = true ]; then
     echo "Installing APK..."
-    adb install -r "$SCRIPT_DIR/$APK_PATH"
+    adb install -r "$SCRIPT_DIR/$INSTALL_APK_PATH"
 fi
 
 # Drop Gradle outputs under Nextcloud (large trees); release APK was copied above if applicable.

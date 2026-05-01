@@ -89,6 +89,26 @@ def request_json(method: str, url: str, token: str, payload: dict | None = None,
         die(f"HTTP request failed for {url}: {e}")
 
 
+def find_release_apk(app_dir: Path, asset_title_name: str, date_short: str, short_hash: str) -> Path:
+    apk_dir = app_dir / "app" / "build" / "outputs" / "apk" / "release"
+    expected_names = [
+        f"{asset_title_name.replace(' ', '-')}-{date_short}-{short_hash}.apk",
+        f"{asset_title_name} {date_short} {short_hash}.apk",
+    ]
+
+    for name in expected_names:
+        apk_path = app_dir / name
+        if apk_path.is_file():
+            return apk_path
+
+    apks = sorted(apk_dir.glob("*.apk"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if apks:
+        return apks[0]
+
+    checked = ", ".join(str(app_dir / name) for name in expected_names)
+    die(f"No release APK found. Checked copied APKs ({checked}) and Gradle output ({apk_dir}).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build and upload Android draft release to Gitea")
     parser.add_argument("app_folder", help="App folder path (e.g. android-tracker)")
@@ -141,11 +161,7 @@ def main() -> None:
     run(["chmod", "+x", str(build_script)], cwd=app_dir)
     run([str(build_script), "release"], cwd=app_dir, stream=True)
 
-    apk_dir = app_dir / "app" / "build" / "outputs" / "apk" / "release"
-    apks = sorted(apk_dir.glob("*.apk"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not apks:
-        die(f"No release APK found in {apk_dir}")
-    apk_path = apks[0]
+    apk_path = find_release_apk(app_dir, asset_title_name, date_short, short_hash)
 
     print(f"Creating draft release: {tag}")
     create_url = f"{GITEA_BASE_URL}/api/v1/repos/{GITEA_OWNER}/{release_repo}/releases"
