@@ -1,6 +1,8 @@
 package com.geovault.common.maps.core
 
+import kotlin.math.max
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 
 fun geoVaultCreateGestureMoveStartedListener(onGestureMoveStarted: () -> Unit): MapLibreMap.OnCameraMoveStartedListener {
@@ -21,12 +23,31 @@ fun geoVaultResetCameraBearingAndTilt(map: GeoVaultBaseMap) {
     )
 }
 
+fun geoVaultRetargetCameraPositionPreserveViewport(
+    current: CameraPosition,
+    target: LatLng,
+): CameraPosition =
+    CameraPosition.Builder(current)
+        .target(target)
+        .build()
+
+fun geoVaultRetargetCameraPositionWithMinimumZoom(
+    current: CameraPosition,
+    target: LatLng,
+    minimumZoom: Double,
+): CameraPosition =
+    CameraPosition.Builder(current)
+        .target(target)
+        .zoom(max(current.zoom, minimumZoom))
+        .build()
+
 fun geoVaultCenterCameraPreserveZoom(map: GeoVaultBaseMap, latitude: Double, longitude: Double) {
     val target = latLngOrNull(latitude, longitude) ?: return
     val mapLibreMap = map.maplibreMap ?: return
     mapLibreMap.setCameraPosition(
-        CameraPosition.Builder(mapLibreMap.cameraPosition)
-            .target(target)
-            .build()
+        geoVaultRetargetCameraPositionPreserveViewport(
+            current = mapLibreMap.cameraPosition,
+            target = target,
+        )
     )
 }

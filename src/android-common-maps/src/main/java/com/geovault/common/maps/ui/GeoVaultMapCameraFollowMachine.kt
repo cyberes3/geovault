@@ -5,8 +5,9 @@ import org.maplibre.android.location.modes.CameraMode
 /**
  * Desired **position** follow and **heading** follow flags for a single MapLibre location camera.
  *
- * "Position follow" is MapLibre [CameraMode.TRACKING] (or [CameraMode.NONE] when both flags are on;
- * see [toCameraMode]). Toggling position follow is the GPS FAB on
+ * "Position follow" keeps the MapLibre location component in [CameraMode.NONE] so the host can
+ * drive the camera without fighting built-in tracking (see [toCameraMode]). Toggling position
+ * follow is the GPS FAB on
  * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle]. One-shot
  * “jump to my location once” (no continuous follow) is
  * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
@@ -23,20 +24,10 @@ data class GeoVaultMapCameraFollowState(
     /**
      * Camera mode the MapLibre [org.maplibre.android.location.LocationComponent] should be in.
      *
-     * When **both** position and heading follow are on we drive `target` + `bearing` manually from
-     * the smoothed heading sensor at ~60 Hz, so we put the location component in
-     * [CameraMode.NONE]; otherwise the component animates to each new GPS fix on its own
-     * schedule and fights the 60 Hz manual updates, which feels choppy.
-     *
-     * When only position follow is on (no heading), [CameraMode.TRACKING] is exactly what we
-     * want — let the location component re-center on each fix without bearing changes.
+     * Always [CameraMode.NONE]: GeoVault drives the camera programmatically (GPS/compass follow and
+     * recenter) so MapLibre’s tracking modes never fight host animations.
      */
-    fun toCameraMode(): Int =
-        when {
-            positionFollowDesired && headingFollowDesired -> CameraMode.NONE
-            positionFollowDesired -> CameraMode.TRACKING
-            else -> CameraMode.NONE
-        }
+    fun toCameraMode(): Int = CameraMode.NONE
 
     companion object {
         val NONE = GeoVaultMapCameraFollowState(

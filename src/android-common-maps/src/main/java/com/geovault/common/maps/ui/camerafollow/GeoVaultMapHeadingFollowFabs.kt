@@ -1,5 +1,6 @@
 package com.geovault.common.maps.ui.camerafollow
 
+import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
@@ -18,9 +19,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
+import com.geovault.common.maps.core.geoVaultRetargetCameraPositionWithMinimumZoom
 import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.location.GeoVaultMapLocationPermission
 import com.geovault.common.maps.location.GeoVaultUserLocationCapability
@@ -47,8 +50,8 @@ import org.maplibre.android.maps.MapLibreMap
 data class GeoVaultMapHeadingFollowFabBundle(
     val headingFollowFab: GeoVaultMapFabAction,
     /**
-     * Toggles continuous position follow ([CameraMode.TRACKING] when heading is off). Icon
-     * reflects [positionFollowDesired].
+     * Toggles continuous position follow (camera follows fixes / recenter without MapLibre
+     * [CameraMode.TRACKING]). Icon reflects [positionFollowDesired].
      */
     val gpsPositionFollowFab: GeoVaultMapFabAction,
     /**
@@ -58,8 +61,8 @@ data class GeoVaultMapHeadingFollowFabBundle(
      */
     val clearForProgrammaticCameraMove: () -> Unit,
     /**
-     * True while position / camera follow is active ([CameraMode.TRACKING] or the dual-mode
-     * manual path when heading is also on).
+     * True while position / camera follow is active (manual camera follow in the heading-follow
+     * bundle; no MapLibre [CameraMode.TRACKING]).
      */
     val positionFollowDesired: Boolean,
     /** True while the heading / compass follow FAB is engaged. */
@@ -71,19 +74,14 @@ private enum class GeoVaultMapHeadingFollowPendingGrant {
     GpsPositionFollow,
 }
 
-/**
- * Zoom the first time **position** follow is engaged in a session (typically via the heading
- * FAB), so the user is not at country scale. `rememberSaveable` keeps the flag across config
- * changes.
- */
-private const val INITIAL_FOLLOW_ZOOM: Double = 10.0
-
 /** If no bearing arrives (e.g. missing rotation sensor), stop showing the heading FAB spinner. */
 private const val HEADING_FAB_BEARING_WAIT_TIMEOUT_MS: Long = 2_500L
 
+/** Minimum zoom used when GPS follow starts from a broad map; never zoom out to this value. */
+private const val GPS_FOLLOW_MIN_ZOOM: Double = 10.0
+
 /**
- * Coordinates the **heading** follow FAB, **GPS position-follow** FAB, MapLibre [CameraMode], and
- * optional first-follow zoom.
+ * Coordinates the **heading** follow FAB, **GPS position-follow** FAB, and MapLibre [CameraMode].
  *
  * For a one-shot recenter (no continuous follow), use
  * [com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction].
@@ -122,6 +120,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     var headingFabBearingDeg by remember { mutableFloatStateOf(0f) }
     /** True after first smoothed bearing while heading follow is on (compass may rotate). */
     var headingFabBearingReady by remember { mutableStateOf(false) }
+    val suppressPositionOnlyFollowDuringRecenter = remember { AtomicBoolean(false) }
 
     LaunchedEffect(headingFollowDesired) {
         if (!headingFollowDesired) {
@@ -193,12 +192,10 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         if (GeoVaultMapCameraFollowMachine.shouldResetNorthToUp(lastLogicalRef.last, nextLogical)) {
             geoVaultResetCameraBearingAndTilt(map)
         }
-        val effectiveLogical = if (allowFollowCamera) nextLogical else GeoVaultMapCameraFollowState.NONE
-        val mode = effectiveLogical.toCameraMode()
-        if (mode != CameraMode.NONE) {
+        if (allowFollowCamera && (positionFollowDesired || headingFollowDesired)) {
             map.ensureInteractiveGestures()
         }
-        userLocation.setCameraMode(mode)
+        userLocation.setCameraMode(CameraMode.NONE)
         lastLogicalRef.last = nextLogical
         onDispose { }
     }
@@ -236,24 +233,72 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         onDispose { plugin.removeBearingListener(listener) }
     }
 
-    var hasZoomedToInitialFollow by rememberSaveable { mutableStateOf(false) }
+    DisposableEffect(map, plugin, positionFollowDesired, headingFollowDesired, allowFollowCamera) {
+        val positionOnlyFollow =
+            positionFollowDesired && !headingFollowDesired && allowFollowCamera
+        if (!positionOnlyFollow || plugin == null) {
+            return@DisposableEffect onDispose { }
+        }
+        val listener: (Location) -> Unit = listener@{ loc ->
+            if (suppressPositionOnlyFollowDuringRecenter.get()) return@listener
+            val libre = map.maplibreMap ?: return@listener
+            val latLng = latLngOrNull(loc.latitude, loc.longitude) ?: return@listener
+            val current = libre.cameraPosition
+            libre.moveCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder(current)
+                        .target(latLng)
+                        .build(),
+                ),
+            )
+        }
+        plugin.addLocationListener(listener)
+        onDispose { plugin.removeLocationListener(listener) }
+    }
+
     LaunchedEffect(positionFollowDesired, allowFollowCamera, gpsRecenterRequestId) {
         if (!positionFollowDesired || !allowFollowCamera) return@LaunchedEffect
         if (plugin == null) return@LaunchedEffect
         val libre = map.maplibreMap ?: return@LaunchedEffect
-        val target: LatLng = plugin.getLastLocation()
-            ?.let { latLngOrNull(it.latitude, it.longitude) }
-            ?: LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
-            ?: return@LaunchedEffect
-        val firstTime = !hasZoomedToInitialFollow
-        val targetZoom = if (firstTime) INITIAL_FOLLOW_ZOOM else libre.cameraPosition.zoom
-        val update = CameraUpdateFactory.newLatLngZoom(target, targetZoom)
+        val target: LatLng = if (headingFollowDesired) {
+            plugin.getLastLocation()
+                ?.let { latLngOrNull(it.latitude, it.longitude) }
+                ?: LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
+                ?: return@LaunchedEffect
+        } else {
+            suppressPositionOnlyFollowDuringRecenter.set(true)
+            val t = plugin.getLastLocation()
+                ?.let { latLngOrNull(it.latitude, it.longitude) }
+                ?: LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
+            if (t == null) {
+                suppressPositionOnlyFollowDuringRecenter.set(false)
+                return@LaunchedEffect
+            }
+            t
+        }
+        val update = CameraUpdateFactory.newCameraPosition(
+            geoVaultRetargetCameraPositionWithMinimumZoom(
+                current = libre.cameraPosition,
+                target = target,
+                minimumZoom = GPS_FOLLOW_MIN_ZOOM,
+            ),
+        )
         if (headingFollowDesired) {
             map.moveCameraWithPadding(update)
         } else {
-            map.animateCameraWithPadding(update)
+            map.animateCameraWithPadding(
+                update = update,
+                callback = object : MapLibreMap.CancelableCallback {
+                    override fun onCancel() {
+                        suppressPositionOnlyFollowDuringRecenter.set(false)
+                    }
+
+                    override fun onFinish() {
+                        suppressPositionOnlyFollowDuringRecenter.set(false)
+                    }
+                },
+            )
         }
-        hasZoomedToInitialFollow = true
     }
 
     val clearForProgrammaticCameraMove: () -> Unit = {

@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.maps.core.GeoVaultMapPhase
+import com.geovault.common.maps.core.geoVaultRetargetCameraPositionWithMinimumZoom
 import com.geovault.common.maps.location.GeoVaultMapLocationPermission
 import com.geovault.common.maps.location.GeoVaultUserLocationCapability
 import com.geovault.common.maps.location.LocationUpdates
@@ -24,8 +25,8 @@ import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 
-/** Map zoom used for the camera animation after a one-shot “my location” jump. */
-private const val GPS_ONE_SHOT_ZOOM: Double = 12.0
+/** Minimum zoom used when one-shot GPS starts from a broad map; never zoom out to this value. */
+private const val GPS_ONE_SHOT_MIN_ZOOM: Double = 12.0
 
 /**
  * Controller for a single map jump to the device location (spinner, icon). Does **not** enable
@@ -105,7 +106,13 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
                     userLocation.renderLocation(syntheticLocation)
                     val mapLibreMap = map.maplibreMap ?: return@getCurrentLocation
                     map.animateCameraWithPadding(
-                        CameraUpdateFactory.newLatLngZoom(latLng, GPS_ONE_SHOT_ZOOM),
+                        CameraUpdateFactory.newCameraPosition(
+                            geoVaultRetargetCameraPositionWithMinimumZoom(
+                                current = mapLibreMap.cameraPosition,
+                                target = latLng,
+                                minimumZoom = GPS_ONE_SHOT_MIN_ZOOM,
+                            ),
+                        ),
                         callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
                             override fun onCancel() {
                                 map.ensureInteractiveGestures()

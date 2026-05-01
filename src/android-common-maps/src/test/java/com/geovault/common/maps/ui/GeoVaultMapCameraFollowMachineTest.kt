@@ -33,7 +33,7 @@ class GeoVaultMapCameraFollowMachineTest {
     @Test
     fun toCameraMode_positionOnly() {
         assertEquals(
-            CameraMode.TRACKING,
+            CameraMode.NONE,
             GeoVaultMapCameraFollowState(
                 positionFollowDesired = true,
                 headingFollowDesired = false,
