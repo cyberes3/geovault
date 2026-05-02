@@ -1,19 +1,27 @@
 #!/bin/bash
-# icon.jpg → mipmaps + adaptive icons. Optional icon-monochrome.png → <monochrome> (same 285→432² layout as round foreground).
+# icon.jpg or icon.png → mipmaps + adaptive icons. icon-monochrome.png → <monochrome> (same 285→432² layout as round foreground).
 # PNG output is deterministic (SOURCE_DATE_EPOCH, single-thread IM, fixed zlib + no date/time chunks).
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOGO_PATH="$SCRIPT_DIR/icon.jpg"
+LOGO_PATH=""
+if [ -f "$SCRIPT_DIR/icon.jpg" ]; then
+    LOGO_PATH="$SCRIPT_DIR/icon.jpg"
+elif [ -f "$SCRIPT_DIR/icon.png" ]; then
+    LOGO_PATH="$SCRIPT_DIR/icon.png"
+else
+    echo "Error: need icon.jpg or icon.png in $SCRIPT_DIR"
+    exit 1
+fi
+MONO_SRC="$SCRIPT_DIR/icon-monochrome.png"
+if [ ! -f "$MONO_SRC" ]; then
+    echo "Error: Monochrome icon not found at $MONO_SRC"
+    exit 1
+fi
 RES_DIR="$SCRIPT_DIR/app/src/main/res"
 ADAPTIVE_ICON_DIR="$RES_DIR/mipmap-anydpi-v26"
 COLORS_FILE="$SCRIPT_DIR/../android-common/src/main/res/values/colors.xml"
-
-if [ ! -f "$LOGO_PATH" ]; then
-    echo "Error: Logo not found at $LOGO_PATH"
-    exit 1
-fi
 
 BG_COLOR="#163D8A"
 if [ -f "$COLORS_FILE" ]; then
@@ -70,16 +78,9 @@ ROUND_SIZE=285
 im "$LOGO_PATH" -resize "${ROUND_SIZE}x${ROUND_SIZE}" -background transparent -gravity center -extent 432x432 $IM_PNG \
     "$RES_DIR/drawable/ic_launcher_foreground_round.png"
 
-MONO_SRC="$SCRIPT_DIR/icon-monochrome.png"
-MONO_LINE=""
-if [ -f "$MONO_SRC" ]; then
-    mkdir -p "$RES_DIR/drawable-nodpi"
-    im "$MONO_SRC" -resize "${ROUND_SIZE}x${ROUND_SIZE}" -background transparent -gravity center -extent 432x432 \
-        -type TrueColorAlpha $IM_PNG "PNG32:$RES_DIR/drawable-nodpi/ic_launcher_monochrome.png"
-    MONO_LINE='    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />'
-else
-    rm -f "$RES_DIR/drawable-nodpi/ic_launcher_monochrome.png" 2>/dev/null || true
-fi
+MONO_LINE='    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />'
+im "$MONO_SRC" -resize "${ROUND_SIZE}x${ROUND_SIZE}" -background transparent -gravity center -extent 432x432 \
+    -type TrueColorAlpha $IM_PNG "PNG32:$RES_DIR/drawable-nodpi/ic_launcher_monochrome.png"
 
 cat > "$RES_DIR/drawable/ic_launcher_background.xml" << EOF
 <?xml version="1.0" encoding="utf-8"?>
