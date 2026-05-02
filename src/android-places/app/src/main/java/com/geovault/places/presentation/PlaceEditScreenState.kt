@@ -12,6 +12,8 @@ import com.geovault.places.model.Properties
 class PlaceEditScreenState(
     private val initial: Feature?,
     val isOfflineEdit: Boolean,
+    private val nowMillis: () -> Long = { System.nanoTime() / NANOSECONDS_PER_MILLISECOND },
+    private val initialMapTapSuppressionMillis: Long = INITIAL_MAP_TAP_SUPPRESSION_MILLIS,
 ) {
     private enum class CameraMotionRequest {
         None,
@@ -36,6 +38,7 @@ class PlaceEditScreenState(
     private var pendingCameraMotion by mutableStateOf(
         if (initial != null) CameraMotionRequest.FocusSelection else CameraMotionRequest.None
     )
+    private val createdAtMillis = nowMillis()
 
     private val initialName = initial?.properties?.name.orEmpty().trim()
     private val initialDescription = initial?.properties?.description.orEmpty().trim()
@@ -58,7 +61,8 @@ class PlaceEditScreenState(
             description.trim() != initialDescription ||
             coordinatesInput.trim() != initialCoordinates
 
-    fun setFromMapPoint(latitude: Double, longitude: Double) {
+    fun setFromMapPoint(latitude: Double, longitude: Double): Boolean {
+        if (shouldSuppressInitialMapTap()) return false
         selectedLat = latitude
         selectedLon = longitude
         selectedAddress = null
@@ -66,6 +70,7 @@ class PlaceEditScreenState(
         coordinatesError = null
         showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.None
+        return true
     }
 
     /** Sets coordinates from a device location fix: show the edit marker and pan/zoom the map to it. */
@@ -85,7 +90,7 @@ class PlaceEditScreenState(
         selectedLon = coords[0]
         selectedLat = coords[1]
         selectedAddress = result.place_name ?: result.text
-        coordinatesInput = selectedAddress ?: String.format("%.6f, %.6f", coords[1], coords[0])
+        coordinatesInput = String.format("%.6f, %.6f", coords[1], coords[0])
         coordinatesError = null
         showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.FocusSelection
@@ -159,5 +164,16 @@ class PlaceEditScreenState(
 
     fun markSelectionCameraFocusHandled() {
         pendingCameraMotion = CameraMotionRequest.None
+    }
+
+    private fun shouldSuppressInitialMapTap(): Boolean {
+        if (initial != null || initialMapTapSuppressionMillis <= 0) return false
+        if (coordinatesInput.isNotBlank() || selectedLat != null || selectedLon != null) return false
+        return nowMillis() - createdAtMillis < initialMapTapSuppressionMillis
+    }
+
+    companion object {
+        private const val INITIAL_MAP_TAP_SUPPRESSION_MILLIS = 350L
+        private const val NANOSECONDS_PER_MILLISECOND = 1_000_000L
     }
 }

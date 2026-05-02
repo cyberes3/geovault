@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -235,8 +237,9 @@ private fun PlaceEditScreen(
         map.registerPlugin(renderPlugin)
         map.registerPlugin(locationPlugin)
         val listener = MapLibreMap.OnMapClickListener { clicked ->
-            dismissInputFocus()
-            state.setFromMapPoint(clicked.latitude, clicked.longitude)
+            if (state.setFromMapPoint(clicked.latitude, clicked.longitude)) {
+                dismissInputFocus()
+            }
             true
         }
         map.addOnMapClickListener(listener)
@@ -341,7 +344,7 @@ private fun PlaceEditScreen(
                                 id = "search",
                                 order = 0,
                                 icon = GeoVaultMapFabIcon.Vector(Icons.Default.Search),
-                                contentDescription = "Search location",
+                                contentDescription = "Search for coordinates",
                                 onTap = {
                                     dismissInputFocus()
                                     showGeocodeSearchDialog = true
@@ -416,7 +419,7 @@ private fun PlaceEditScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    "Coordinates or Address *",
+                                    "Coordinates *",
                                     modifier = Modifier.weight(1f),
                                     color = GeoVaultColorTokens.TextSecondary,
                                     fontSize = 12.sp,
@@ -427,22 +430,27 @@ private fun PlaceEditScreen(
                                 }
                             }
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 GeoVaultInput(
                                     value = state.coordinatesInput,
                                     onValueChange = state::onCoordinatesEdited,
                                     label = null,
-                                    placeholder = "37.7749, -122.4194",
-                                    modifier = Modifier.weight(1f),
+                                    placeholder = "latitude, longitude",
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 GeoVaultSecondaryButton(
                                     text = "{ }",
                                     onClick = { state.parseCoordinatesFromInput() },
-                                    tooltip = "Parse coordinates",
+                                    tooltip = "Normalize coordinates",
                                     fitToContent = true,
+                                    modifier = Modifier.fillMaxHeight(),
                                 )
                             }
 

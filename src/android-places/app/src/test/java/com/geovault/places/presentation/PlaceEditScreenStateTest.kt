@@ -14,6 +14,16 @@ import org.junit.Test
 class PlaceEditScreenStateTest {
 
     @Test
+    fun newPlace_initializesWithEmptyCoordinates() {
+        val state = PlaceEditScreenState(initial = null, isOfflineEdit = false)
+
+        assertEquals("", state.coordinatesInput)
+        assertNull(state.selectedLat)
+        assertNull(state.selectedLon)
+        assertFalse(state.hasUnsavedChanges)
+    }
+
+    @Test
     fun hasUnsavedChanges_isFalse_whenInitializedWithSameValues() {
         val initial = sampleFeature()
 
@@ -24,17 +34,66 @@ class PlaceEditScreenStateTest {
 
     @Test
     fun setFromMapPoint_updatesCoordinatesAndClearsError() {
-        val state = PlaceEditScreenState(initial = null, isOfflineEdit = false)
+        val state = PlaceEditScreenState(
+            initial = null,
+            isOfflineEdit = false,
+            initialMapTapSuppressionMillis = 0L,
+        )
         state.coordinatesError = "Invalid"
 
-        state.setFromMapPoint(latitude = 12.34, longitude = 56.78)
+        val accepted = state.setFromMapPoint(latitude = 12.34, longitude = 56.78)
 
+        assertTrue(accepted)
         assertEquals(12.34, state.selectedLat!!, 0.0)
         assertEquals(56.78, state.selectedLon!!, 0.0)
         assertEquals("12.340000, 56.780000", state.coordinatesInput)
         assertNull(state.coordinatesError)
         assertTrue(state.showSelectedPointMarker)
         assertFalse(state.shouldFocusCameraOnSelection())
+    }
+
+    @Test
+    fun setFromMapPoint_ignoresInitialTapForNewPlaceOnlyDuringStartupWindow() {
+        var nowMillis = 1_000L
+        val state = PlaceEditScreenState(
+            initial = null,
+            isOfflineEdit = false,
+            nowMillis = { nowMillis },
+            initialMapTapSuppressionMillis = 350L,
+        )
+
+        val ignored = state.setFromMapPoint(latitude = 12.34, longitude = 56.78)
+
+        assertFalse(ignored)
+        assertEquals("", state.coordinatesInput)
+        assertNull(state.selectedLat)
+        assertNull(state.selectedLon)
+
+        nowMillis += 350L
+        val accepted = state.setFromMapPoint(latitude = 12.34, longitude = 56.78)
+
+        assertTrue(accepted)
+        assertEquals(12.34, state.selectedLat!!, 0.0)
+        assertEquals(56.78, state.selectedLon!!, 0.0)
+        assertEquals("12.340000, 56.780000", state.coordinatesInput)
+    }
+
+    @Test
+    fun setFromMapPoint_acceptsInitialTapForExistingPlace() {
+        val nowMillis = 1_000L
+        val state = PlaceEditScreenState(
+            initial = sampleFeature(),
+            isOfflineEdit = false,
+            nowMillis = { nowMillis },
+            initialMapTapSuppressionMillis = 350L,
+        )
+
+        val accepted = state.setFromMapPoint(latitude = 12.34, longitude = 56.78)
+
+        assertTrue(accepted)
+        assertEquals(12.34, state.selectedLat!!, 0.0)
+        assertEquals(56.78, state.selectedLon!!, 0.0)
+        assertEquals("12.340000, 56.780000", state.coordinatesInput)
     }
 
     @Test
@@ -66,7 +125,8 @@ class PlaceEditScreenStateTest {
 
         assertEquals(37.7749, state.selectedLat!!, 0.0)
         assertEquals(-122.4194, state.selectedLon!!, 0.0)
-        assertEquals("San Francisco, CA", state.coordinatesInput)
+        assertEquals("San Francisco, CA", state.selectedAddress)
+        assertEquals("37.774900, -122.419400", state.coordinatesInput)
         assertTrue(state.showSelectedPointMarker)
         assertTrue(state.shouldFocusCameraOnSelection())
     }
