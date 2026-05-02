@@ -48,8 +48,13 @@ val geoVaultSharedModuleCompileLock = gradle.sharedServices.registerIfAbsent(
     )
 }
 
+// Serialize compilation *and* compile-jar packaging for this included project.
+// Downstream :app KSP/JavaCompile can start as soon as compile*Kotlin finishes unless
+// bundleLibCompileToJar* is also guarded; without it, parallel workers can read a
+// missing `classes.jar` (NoSuchFileException) while the jar task is still running.
 tasks.matching {
-    it.name.matches(Regex("compile.*(Kotlin|JavaWithJavac)$"))
+    it.name.matches(Regex("compile.*(Kotlin|JavaWithJavac)$")) ||
+        it.name.startsWith("bundleLibCompileToJar")
 }.configureEach {
     usesService(geoVaultSharedModuleCompileLock)
 }
@@ -105,6 +110,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material)
     implementation(libs.androidx.compose.material.icons)
+    implementation("com.google.android.material:material:1.13.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     api("org.maplibre.gl:android-sdk:12.3.1")

@@ -28,15 +28,22 @@ fun gitCommitFullForBuild(): String {
     return gitCommitShaOverride() ?: runGit("rev-parse", "HEAD")
 }
 
-fun versionNameForBuild(): String {
-    val sha = gitCommitShaOverride()
-    return if (sha != null) {
-        val date = runGit("show", "-s", "--format=%cd", "--date=short", sha)
-        val short = runGit("rev-parse", "--short=10", sha).ifBlank { sha.take(10) }
-        "$date-$short"
-    } else {
-        "${runGit("log", "-1", "--format=%cd", "--date=short")}-${runGit("rev-parse", "--short=10", "HEAD")}"
+private fun commitFragmentFromFullHex(full: String): String =
+    when {
+        full == "unknown" || full.isBlank() -> "unknown"
+        full.length <= 10 -> full
+        else -> full.take(10)
     }
+
+fun versionNameForBuild(): String {
+    val full = gitCommitFullForBuild()
+    val date =
+        if (gitCommitShaOverride() != null) {
+            runGit("show", "-s", "--format=%cd", "--date=short", full)
+        } else {
+            runGit("log", "-1", "--format=%cd", "--date=short")
+        }
+    return "$date-${commitFragmentFromFullHex(full)}"
 }
 
 fun epochVersionCode(): Int {

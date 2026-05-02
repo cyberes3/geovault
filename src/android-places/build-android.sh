@@ -1,22 +1,48 @@
 #!/bin/bash
 # Build script for Android Places app
 
-set -euo pipefail
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Load src/new-apps/.env if present
-if [ -f "$SCRIPT_DIR/../.env" ]; then
-    set -a
-    source "$SCRIPT_DIR/../.env"
-    set +a
-fi
+commit_fragment_from_git() {
+    local git_dir="$1"
+    local full
+    full=$(git -C "$git_dir" rev-parse HEAD 2>/dev/null) || full=""
+    if [ -z "$full" ]; then echo "norepo"; return; fi
+    if [ ${#full} -le 10 ]; then echo "$full"; else echo "${full:0:10}"; fi
+}
 
-if [ ! -x "./gradlew" ]; then
-    echo "Error: ./gradlew is missing or not executable"
-    exit 1
+GIT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+APP_TEMP_SLUG="geovault-places"
+
+# Load env files if present (new-apps first, then repo root)
+for ENV_FILE in "$SCRIPT_DIR/../.env" "$SCRIPT_DIR/../../.env"; do
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$ENV_FILE"
+        set +a
+    fi
+done
+
+if [ ! -f "./gradlew" ]; then
+    echo "Gradle wrapper not found. Attempting to generate wrapper..."
+    GRADLE_CMD=""
+    if command -v gradle &> /dev/null; then
+        GRADLE_CMD="gradle"
+    elif [ -d "$HOME/.local/share/Google/AndroidStudio" ]; then
+        GRADLE_CMD=$(find "$HOME/.local/share/Google/AndroidStudio" -name "gradle" -type f 2>/dev/null | head -n 1)
+    fi
+    if [ -n "$GRADLE_CMD" ] && [ -x "$GRADLE_CMD" ]; then
+        "$GRADLE_CMD" wrapper
+    else
+        echo "Error: could not locate Gradle to generate wrapper."
+        exit 1
+    fi
 fi
+chmod +x "./gradlew"
 
 BUILD_TYPE="debug"
 SKIP_MINIFY=false
@@ -57,6 +83,9 @@ if [ "$SKIP_MINIFY" = true ]; then
 fi
 
 if [ "$BUILD_TYPE" = "release" ]; then
+    RELEASE_STORE_PASSWORD="${RELEASE_STORE_PASSWORD:-${ANDROID_KEYSTORE_PASSWORD:-}}"
+    RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-${ANDROID_KEY_PASSWORD:-}}"
+
     if [ -n "${ANDROID_KEY_PASSWORD_FILE:-}" ] && [ -f "$ANDROID_KEY_PASSWORD_FILE" ]; then
         RELEASE_STORE_PASSWORD="$(sed -n '1p' "$ANDROID_KEY_PASSWORD_FILE" | tr -d '\r\n')"
         RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-$RELEASE_STORE_PASSWORD}"
@@ -70,11 +99,16 @@ if [ "$BUILD_TYPE" = "release" ]; then
     fi
 
     if [ -z "${RELEASE_STORE_PASSWORD:-}" ]; then
-        echo -n "Enter keystore password (used for both keystore and key): "
-        read -rs RELEASE_STORE_PASSWORD
-        echo
+        echo "Error: RELEASE_STORE_PASSWORD is not set for release builds."
+        echo "Set it in env (or set ANDROID_KEYSTORE_PASSWORD), or provide ANDROID_KEY_PASSWORD_FILE."
+        exit 1
     fi
     RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-$RELEASE_STORE_PASSWORD}"
+
+    if [ -z "${RELEASE_STORE_FILE:-}" ]; then
+        echo "Error: RELEASE_STORE_FILE is not set for release builds."
+        exit 1
+    fi
 
     GRADLE_ARGS+=("-PRELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD")
     GRADLE_ARGS+=("-PRELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD")
@@ -83,7 +117,7 @@ fi
 OLD_VERSION_SHA=""
 OLD_VERSION_DATE=""
 if [ "$OLD_VERSION" = true ]; then
-    LOOKBACK_DAYS=30
+    LOOKBACK_DAYS="${OLD_VERSION_LOOKBACK_DAYS:-30}"
     REPO_DIR="$SCRIPT_DIR/.."
     OLD_VERSION_SHA=$(git -C "$REPO_DIR" log --before="$LOOKBACK_DAYS days ago" --format=%H -n 1 2>/dev/null || true)
     if [ -z "$OLD_VERSION_SHA" ]; then
@@ -99,12 +133,34 @@ if [ "$OLD_VERSION" = true ]; then
     GRADLE_ARGS+=("-PGIT_COMMIT_SHA_OVERRIDE=$OLD_VERSION_SHA")
 fi
 
-echo "Building Android app ($BUILD_TYPE)..."
-if ! ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"; then
-    echo "Removing Gradle build outputs after failed build..."
+remove_android_build_outputs() {
     ./gradlew clean --quiet 2>/dev/null || true
     rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" \
         "$SCRIPT_DIR/../android-common/build" "$SCRIPT_DIR/../android-common-maps/build"
+}
+
+stage_built_apk() {
+    local apk_path="$1"
+    STAGED_APK_TMP=$(mktemp "${TMPDIR:-/tmp}/${APP_TEMP_SLUG}-${BUILD_TYPE}-apk-XXXXXX.apk")
+    cp "$apk_path" "$STAGED_APK_TMP"
+    case "$apk_path" in
+        /*) STAGED_APK_DEST="$apk_path" ;;
+        *) STAGED_APK_DEST="$SCRIPT_DIR/$apk_path" ;;
+    esac
+}
+
+restore_staged_apk() {
+    if [ -f "${STAGED_APK_TMP:-}" ]; then
+        mkdir -p "$(dirname "$STAGED_APK_DEST")"
+        mv "$STAGED_APK_TMP" "$STAGED_APK_DEST"
+        echo "Restored APK to: $STAGED_APK_DEST"
+    fi
+}
+
+echo "Building Android app ($BUILD_TYPE)..."
+if ! ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"; then
+    echo "Removing Gradle build outputs after failed build..."
+    remove_android_build_outputs
     exit 1
 fi
 
@@ -115,9 +171,7 @@ fi
 
 if [ -z "${APK_PATH:-}" ] || [ ! -f "$APK_PATH" ]; then
     echo "Error: APK not found after build"
-    ./gradlew clean --quiet 2>/dev/null || true
-    rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" \
-        "$SCRIPT_DIR/../android-common/build" "$SCRIPT_DIR/../android-common-maps/build"
+    remove_android_build_outputs
     exit 1
 fi
 
@@ -129,17 +183,23 @@ echo "APK location: $SCRIPT_DIR/$APK_PATH"
 
 if [ "$BUILD_TYPE" = "release" ]; then
     if [ "$OLD_VERSION" = true ] && [ -n "$OLD_VERSION_SHA" ]; then
-        BUILD_DATE=${OLD_VERSION_DATE:-$(date +%Y-%m-%d)}
-        COMMIT_HASH=$(printf "%s" "$OLD_VERSION_SHA" | cut -c1-10)
+        BUILD_DATE="${OLD_VERSION_DATE:-$(git -C "$REPO_DIR" show -s --format=%cd --date=short "$OLD_VERSION_SHA" 2>/dev/null || date +%Y-%m-%d)}"
+        if [ ${#OLD_VERSION_SHA} -le 10 ]; then
+            COMMIT_FRAGMENT="$OLD_VERSION_SHA"
+        else
+            COMMIT_FRAGMENT="${OLD_VERSION_SHA:0:10}"
+        fi
     else
-        BUILD_DATE="$(git -C "$SCRIPT_DIR/.." log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)"
-        COMMIT_HASH="$(git -C "$SCRIPT_DIR/.." rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")"
+        BUILD_DATE="$(git -C "$GIT_ROOT" log -1 --format=%cd --date=short 2>/dev/null || date +%Y-%m-%d)"
+        COMMIT_FRAGMENT=$(commit_fragment_from_git "$GIT_ROOT")
     fi
-    DEST_NAME="GeoVault-Places-${BUILD_DATE}-${COMMIT_HASH}.apk"
+    DEST_NAME="GeoVault-Places-${BUILD_DATE}-${COMMIT_FRAGMENT}.apk"
     cp "$APK_PATH" "$SCRIPT_DIR/$DEST_NAME"
     echo "Copied release APK to: $SCRIPT_DIR/$DEST_NAME"
     INSTALL_APK_PATH="$DEST_NAME"
 fi
+
+stage_built_apk "$APK_PATH"
 
 echo ""
 echo "To install on a connected device:"
@@ -151,7 +211,5 @@ if [ "$INSTALL" = true ]; then
 fi
 
 echo "Removing Gradle build outputs..."
-./gradlew clean --quiet 2>/dev/null || true
-rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" \
-    "$SCRIPT_DIR/../android-common/build" "$SCRIPT_DIR/../android-common-maps/build"
-
+remove_android_build_outputs
+restore_staged_apk
