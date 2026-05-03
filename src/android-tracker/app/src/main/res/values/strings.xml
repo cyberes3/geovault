@@ -402,6 +402,7 @@
     <string name="groups_tracker_add_title">Add Trackers</string>
     <string name="groups_tracker_picker_empty">No trackers available.</string>
     <string name="groups_tracker_picker_filter_hint">Filter by name or owner</string>
+    <string name="groups_tracker_picker_reshare_not_allowed">%1$s: the owner has not allowed adding this tracker to groups.</string>
 
     <string name="shared_screen_title">Shared</string>
     <string name="shared_placeholder_signed_out">Sign in to see shared trackers, invites, and public discovery.</string>

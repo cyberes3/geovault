@@ -6,7 +6,6 @@ import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
-import com.geovault.tracker.TrackerAddToGroupCandidate
 import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
@@ -61,9 +60,3 @@ interface GroupManagementRepository {
     suspend fun acceptGroupShare(groupId: String): RepositoryResult<Group>
 }
 
-interface GroupTrackerEligibilityUseCase {
-    fun addableTrackers(
-        trackers: List<Tracker>,
-        group: Group
-    ): List<TrackerAddToGroupCandidate>
-}

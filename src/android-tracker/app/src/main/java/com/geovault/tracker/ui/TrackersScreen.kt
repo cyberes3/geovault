@@ -623,6 +623,7 @@ fun TrackersScreen(
                                 }
                             }
                         },
+                        onIneligibleTrackerTap = vm::notifyReshareNotAllowed,
                         onDone = {
                             vm.syncGroupTrackMembership(
                                 groupId = dialogState.group.id,
@@ -678,6 +679,7 @@ fun TrackersScreen(
                                 vm.recordImmediateTrackerAdd(trackerId)
                             }
                         },
+                        onIneligibleTrackerTap = vm::notifyReshareNotAllowed,
                         onDeleteGroup = { vm.deleteGroup(activeGroupEditDialog.group.id) },
                         onLeaveGroup = { vm.leaveGroupFromEditor(activeGroupEditDialog.group.id) },
                         onSave = vm::submitEditGroup,

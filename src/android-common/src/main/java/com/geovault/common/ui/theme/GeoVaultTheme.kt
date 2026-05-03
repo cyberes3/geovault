@@ -91,6 +91,29 @@ fun geoVaultDialogSurfaceColor(): Color =
         GeoVaultColorTokens.Dark.BlueLight
     }
 
+/** Dialog title text: muted light grey on [geoVaultDialogSurfaceColor] in both themes. */
+@Composable
+@ReadOnlyComposable
+fun geoVaultDialogTitleColor(): Color =
+    if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.Gray600
+    } else {
+        GeoVaultColorTokens.Gray300
+    }
+
+/**
+ * Non-destructive dialog actions (Cancel, Close, Save, Apply). Light theme uses brand blue;
+ * dark theme uses a lighter blue for contrast on the grey dialog panel.
+ */
+@Composable
+@ReadOnlyComposable
+fun geoVaultDialogAccentButtonColor(): Color =
+    if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.MainBlue
+    } else {
+        GeoVaultColorTokens.Blue300
+    }
+
 private fun darkScheme(): Colors = darkColors(
     primary = GeoVaultColorTokens.MainBlue,
     primaryVariant = GeoVaultColorTokens.Blue600,

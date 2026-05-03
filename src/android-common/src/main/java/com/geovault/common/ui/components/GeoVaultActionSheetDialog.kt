@@ -16,6 +16,7 @@ import androidx.compose.ui.window.Dialog
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 
 /**
  * One tappable row inside a [GeoVaultActionSheetDialog]. Set [destructive] to `true` to tint
@@ -50,7 +51,7 @@ fun GeoVaultActionSheetDialog(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colors.onSurface,
+                    color = geoVaultDialogTitleColor(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 12.dp),

@@ -37,7 +37,9 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 import kotlinx.coroutines.delay
 
 /**
@@ -100,7 +102,7 @@ fun GeoVaultMapGeocodeSearchDialog(
             Text(
                 text = stringResource(R.string.gv_common_geocode_search_dialog_title),
                 style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colors.onSurface,
+                color = geoVaultDialogTitleColor(),
             )
         },
         text = {
@@ -176,7 +178,7 @@ fun GeoVaultMapGeocodeSearchDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     text = stringResource(R.string.gv_common_geocode_search_done),
-                    color = GeoVaultColorTokens.MainBlue,
+                    color = geoVaultDialogAccentButtonColor(),
                 )
             }
         },

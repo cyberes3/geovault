@@ -186,12 +186,6 @@ data class GroupPatchRequest(
 @Serializable
 data class GroupAddTrackRequest(@SerialName("track_id") val track_id: String)
 
-data class TrackerAddToGroupCandidate(
-    val tracker: Tracker,
-    val canAdd: Boolean,
-    val reason: String? = null
-)
-
 /** GET /api/users/ — list users for share recipient picker. */
 @Serializable
 data class UsersResponse(val users: List<UserItem> = emptyList())

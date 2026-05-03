@@ -40,6 +40,7 @@
         v-model="groupTrackIdsSafe"
         :get-item-id="(t) => t.id"
         :get-item-label="(t) => t.name"
+        :get-item-add-blocked-reason="trackerAddBlockedReason"
         search-placeholder="Search trackers..."
         empty-message="No trackers available"
         selected-count-label="Selected"
@@ -116,6 +117,7 @@
             v-model="groupTrackIdsSafe"
             :get-item-id="(t) => t.id"
             :get-item-label="(t) => t.name"
+            :get-item-add-blocked-reason="trackerAddBlockedReason"
             search-placeholder="Search trackers..."
             empty-message="No trackers available"
             selected-count-label="Selected"
@@ -188,6 +190,7 @@ import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import ToggleButton from 'platform/components/parts/ToggleButton.vue';
 import SharingSection from './SharingSection.vue';
 import { buildGroupPreservingPatchPayload } from './settingsPayloadBuilders.js';
+import { getTrackerAddToGroupBlockedReason, isTrackerAddableToGroup } from './groupReshareAddability.js';
 
 export default {
   name: 'GroupModal',
@@ -267,6 +270,10 @@ export default {
 
     const allTrackers = computed(() => props.trackers ?? []);
 
+    function trackerAddBlockedReason(track) {
+      return getTrackerAddToGroupBlockedReason(track);
+    }
+
     async function create() {
       nameError.value = '';
       if (!name.value.trim()) return;
@@ -310,6 +317,8 @@ export default {
           await props.api.delete(`/groups/${props.group.id}/tracks/${trackId}/`);
         }
         for (const trackId of toAdd) {
+          const tr = (props.trackers || []).find((t) => String(t.id) === String(trackId));
+          if (!tr || !isTrackerAddableToGroup(tr)) continue;
           await props.api.post(`/groups/${props.group.id}/tracks/`, { track_id: trackId });
         }
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group updated');
@@ -350,6 +359,7 @@ export default {
       fullInternalShareUrl,
       groupTrackIdsSafe,
       allTrackers,
+      trackerAddBlockedReason,
       create,
       save,
       allUsers,

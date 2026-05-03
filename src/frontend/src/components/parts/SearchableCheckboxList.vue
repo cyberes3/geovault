@@ -37,14 +37,20 @@
           :id="`item-${uid}-${String(getItemId(item))}`"
           class="checkbox-custom"
           :checked="isSelected(item)"
+          @click="onCheckboxClick(item, $event)"
           @change="onCheckboxChange(item, $event.target.checked)"
         />
         <label
           :for="`item-${uid}-${String(getItemId(item))}`"
-          class="text-sm text-gray-700 truncate cursor-pointer"
+          class="text-sm text-gray-700 truncate flex-1 min-w-0 cursor-pointer"
         >
           {{ getItemLabel(item) }}
         </label>
+        <NoSymbolIcon
+          v-if="addBlockedReason(item) && !isSelected(item)"
+          class="h-5 w-5 flex-shrink-0 text-blue-600"
+          :title="addBlockedReason(item)"
+        />
       </div>
     </div>
 
@@ -56,14 +62,14 @@
 
 <script>
 import { ref, computed, watch } from 'vue';
-import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+import { MagnifyingGlassIcon, NoSymbolIcon } from '@heroicons/vue/24/outline';
 import Loader from './Loader.vue';
 
 let uidCounter = 0;
 
 export default {
   name: 'SearchableCheckboxList',
-  components: { Loader, MagnifyingGlassIcon },
+  components: { Loader, MagnifyingGlassIcon, NoSymbolIcon },
   props: {
     items: { type: Array, default: () => [] },
     modelValue: { type: Array, default: () => [] },
@@ -80,6 +86,11 @@ export default {
     selectedCountLabel: { type: String, default: 'Selected' },
     /** Optional: filter items by search query. Receives (query, item), return true to include. Default uses getItemLabel. */
     filterFn: { type: Function, default: null },
+    /**
+     * Optional: when this returns a non-empty string, the row cannot be newly checked
+     * (checkbox disabled while unchecked). Unchecking an already-selected item still works.
+     */
+    getItemAddBlockedReason: { type: Function, default: null },
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
@@ -106,11 +117,31 @@ export default {
       return selectedIds.value.some((s) => String(s) === String(id));
     }
 
+    function addBlockedReason(item) {
+      const fn = props.getItemAddBlockedReason;
+      if (typeof fn !== 'function') return '';
+      const r = fn(item);
+      return typeof r === 'string' && r.trim() ? r.trim() : '';
+    }
+
+    function isAddBlockedAndUnchecked(item) {
+      return Boolean(addBlockedReason(item)) && !isSelected(item);
+    }
+
+    /** Block toggling on when add is not allowed, without using the native disabled checkbox look. */
+    function onCheckboxClick(item, evt) {
+      if (!isAddBlockedAndUnchecked(item)) return;
+      evt.preventDefault();
+    }
+
     function onCheckboxChange(item, checked) {
       const id = props.getItemId(item);
       const next = [...selectedIds.value];
       const idx = next.findIndex((s) => String(s) === String(id));
       if (checked && idx === -1) {
+        if (addBlockedReason(item)) {
+          return;
+        }
         next.push(id);
       } else if (!checked && idx !== -1) {
         next.splice(idx, 1);
@@ -124,6 +155,8 @@ export default {
       selectedIds,
       filteredItems,
       isSelected,
+      addBlockedReason,
+      onCheckboxClick,
       onCheckboxChange,
     };
   },

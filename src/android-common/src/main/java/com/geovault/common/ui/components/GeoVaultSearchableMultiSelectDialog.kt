@@ -33,6 +33,7 @@ import androidx.compose.ui.window.Dialog
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
@@ -118,6 +119,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
                     text = title,
                     style = MaterialTheme.typography.subtitle1,
                     fontWeight = FontWeight.SemiBold,
+                    color = geoVaultDialogTitleColor(),
                 )
                 if (hint != null) {
                     Text(

@@ -28,7 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
@@ -163,12 +165,12 @@ fun <T> GeoVaultMultiSelectDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(selection) }) {
-                Text(text = confirmText, color = GeoVaultColorTokens.MainBlue)
+                Text(text = confirmText, color = geoVaultDialogAccentButtonColor())
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = cancelText, color = GeoVaultColorTokens.MainBlue)
+                Text(text = cancelText, color = geoVaultDialogAccentButtonColor())
             }
         },
     )

@@ -16,14 +16,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 
 object GeoVaultInfoDialogDefaults {
     @Composable
     fun titleTextStyle() =
         MaterialTheme.typography.subtitle1.copy(
-            color = GeoVaultColorTokens.MainBlue,
+            color = geoVaultDialogTitleColor(),
             fontWeight = FontWeight.Bold,
         )
 
@@ -39,12 +40,7 @@ object GeoVaultInfoDialogDefaults {
         )
 
     @Composable
-    fun closeButtonColor() =
-        if (MaterialTheme.colors.isLight) {
-            GeoVaultColorTokens.MainBlue
-        } else {
-            GeoVaultColorTokens.Gray300
-        }
+    fun closeButtonColor() = geoVaultDialogAccentButtonColor()
 }
 
 @Composable

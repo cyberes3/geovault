@@ -32,7 +32,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
@@ -90,7 +92,7 @@ fun <T> GeoVaultSingleSelectDialog(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colors.onSurface,
+                    color = geoVaultDialogTitleColor(),
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
                 if (searchable) {
@@ -141,7 +143,7 @@ fun <T> GeoVaultSingleSelectDialog(
                     TextButton(onClick = onDismiss) {
                         Text(
                             text = cancelText,
-                            color = GeoVaultColorTokens.MainBlue,
+                            color = geoVaultDialogAccentButtonColor(),
                             fontWeight = FontWeight.SemiBold,
                         )
                     }

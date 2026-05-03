@@ -22,6 +22,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
@@ -43,6 +44,7 @@ enum class GeoVaultAddRemoveRowActionState {
     ADDING,
     REMOVING,
     ADDED_DELETE,
+    DISABLED,
 }
 
 @Composable
@@ -130,6 +132,16 @@ fun GeoVaultAddRemoveRowCard(
                     GeoVaultIconButton(onClick = onAdd, enabled = enabled, tooltip = addIconTooltip) {
                         Icon(
                             imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            tint = GeoVaultColorTokens.MainBlue,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                GeoVaultAddRemoveRowActionState.DISABLED -> {
+                    GeoVaultIconButton(onClick = onAdd, enabled = true, tooltip = addIconTooltip) {
+                        Icon(
+                            imageVector = Icons.Filled.Block,
                             contentDescription = null,
                             tint = GeoVaultColorTokens.MainBlue,
                             modifier = Modifier.size(22.dp),

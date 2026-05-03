@@ -1014,6 +1014,13 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
+    fun notifyReshareNotAllowed(tracker: Tracker) {
+        val app = getApplication<Application>()
+        _toastEvents.tryEmit(
+            app.getString(R.string.groups_tracker_picker_reshare_not_allowed, tracker.name)
+        )
+    }
+
     fun addTrackerToGroup(groupId: String, trackerId: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             var shouldRunMutation = false

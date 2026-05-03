@@ -16,6 +16,7 @@ enum class TrackerAddRowActionState {
     ADDING,
     REMOVING,
     ADDED_DELETE,
+    DISABLED,
 }
 
 @Composable
@@ -41,6 +42,7 @@ fun TrackerAddRowCard(
             TrackerAddRowActionState.ADDING -> GeoVaultAddRemoveRowActionState.ADDING
             TrackerAddRowActionState.REMOVING -> GeoVaultAddRemoveRowActionState.REMOVING
             TrackerAddRowActionState.ADDED_DELETE -> GeoVaultAddRemoveRowActionState.ADDED_DELETE
+            TrackerAddRowActionState.DISABLED -> GeoVaultAddRemoveRowActionState.DISABLED
         },
         borderColor = borderColor,
         enabled = enabled,

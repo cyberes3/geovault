@@ -92,6 +92,7 @@ fun GroupEditScreen(
     onHiddenChanged: (Boolean) -> Unit,
     onUpdateDraftTrackers: (Set<String>) -> Unit,
     onAddTracker: (String) -> Unit = {},
+    onIneligibleTrackerTap: (Tracker) -> Unit = {},
     onDeleteGroup: () -> Unit,
     onLeaveGroup: () -> Unit,
     onSave: () -> Unit,
@@ -183,6 +184,7 @@ fun GroupEditScreen(
                     onRefreshTrackers = onRefreshTrackers,
                     onSelectionChanged = { onUpdateDraftTrackers(it) },
                     onAddTracker = onAddTracker,
+                    onIneligibleTrackerTap = onIneligibleTrackerTap,
                     onDone = { showMembershipPicker = false },
                     onDismiss = { showMembershipPicker = false },
                     // Swapped away when returning to group edit — must not call outer

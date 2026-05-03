@@ -1,6 +1,7 @@
 package com.geovault.tracker.ui
 
 import android.Manifest
+import android.graphics.Rect
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -34,16 +35,20 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -361,20 +366,24 @@ private fun TrackingContainer(
     val accuracy = formatAccuracyPresentation(state, useImperial)
     val isRunningOrPreparing = state.isTracking || isPreparingToTrack
     val density = LocalDensity.current
+    val view = LocalView.current
     var layoutMode by remember { mutableStateOf(HomeLayoutMode.NORMAL) }
+    var inlineRowVisibleFrameOverlapPx by remember { mutableIntStateOf(0) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val availableHeightPx = with(density) { maxHeight.roundToPx() }
-        val occlusionPx = maxOf(
+        val windowInsetOcclusionPx = maxOf(
             WindowInsets.ime.getBottom(density),
-            WindowInsets.navigationBars.getBottom(density)
+            WindowInsets.navigationBars.getBottom(density),
         )
-        LaunchedEffect(availableHeightPx, occlusionPx) {
+        val occlusionPx = maxOf(windowInsetOcclusionPx, inlineRowVisibleFrameOverlapPx)
+        LaunchedEffect(availableHeightPx, occlusionPx, density.density, density.fontScale) {
             layoutMode = HomeLayoutSizingPolicy.resolveMode(
                 HomeLayoutSizingInput(
+                    density = density,
                     previousMode = layoutMode,
                     availableHeightPx = availableHeightPx,
                     occlusionPx = occlusionPx,
-                )
+                ),
             )
         }
         val compactLayout = layoutMode != HomeLayoutMode.NORMAL
@@ -433,7 +442,7 @@ private fun TrackingContainer(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(if (compactLayout) 16.dp else 24.dp))
             GeoVaultPrimaryButton(
                 text = if (isRunningOrPreparing) stringResource(R.string.stop_tracking) else stringResource(R.string.start_tracking),
                 onClick = onStartStop,
@@ -441,7 +450,18 @@ private fun TrackingContainer(
                 modifier = Modifier.width(200.dp).height(64.dp),
             )
             Spacer(modifier = Modifier.height(inlineTop))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.onGloballyPositioned { coords ->
+                    if (!coords.isAttached) return@onGloballyPositioned
+                    val pos = coords.positionInWindow()
+                    val rowBottom = (pos.y + coords.size.height).toInt()
+                    val visible = Rect()
+                    view.rootView.getWindowVisibleDisplayFrame(visible)
+                    inlineRowVisibleFrameOverlapPx = (rowBottom - visible.bottom).coerceAtLeast(0)
+                },
+            ) {
                 SmallIconActionButton(
                     iconRes = R.drawable.ic_params,
                     contentDescription = stringResource(R.string.map_tracker_info_view_params_content_description),

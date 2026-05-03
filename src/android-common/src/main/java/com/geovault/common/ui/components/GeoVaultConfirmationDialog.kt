@@ -7,13 +7,15 @@ import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.font.FontWeight
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 
 object GeoVaultDialogDefaults {
     val NegativeButtonColor = GeoVaultColorTokens.Error
 
     @Composable
-    fun cancelButtonColor() = GeoVaultColorTokens.MainBlue
+    fun cancelButtonColor() = geoVaultDialogAccentButtonColor()
 }
 
 @Composable
@@ -31,7 +33,8 @@ fun GeoVaultConfirmationDialog(
         title = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold)
+                style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
+                color = geoVaultDialogTitleColor(),
             )
         },
         text = {

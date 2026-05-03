@@ -62,6 +62,7 @@ import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.presentation.GroupReshareAddabilityPolicy
 import kotlinx.coroutines.launch
 
 private enum class PickerPhase { LIST, ADD }
@@ -87,6 +88,7 @@ fun GroupTrackerPickerScreen(
     onRefreshTrackers: () -> Unit = {},
     onSelectionChanged: (Set<String>) -> Unit,
     onAddTracker: (String) -> Unit = {},
+    onIneligibleTrackerTap: (Tracker) -> Unit = {},
     onDone: () -> Unit,
     onDismiss: () -> Unit,
     onLeaveComposition: (() -> Unit)? = null,
@@ -119,6 +121,7 @@ fun GroupTrackerPickerScreen(
         doneButtonLabel = doneButtonLabel,
         onRemoveTracker = { id -> onSelectionChanged(selectedTrackerIds - id) },
         onAddTracker = onAddTracker,
+        onIneligibleTrackerTap = onIneligibleTrackerTap,
         onRefresh = onRefreshTrackers,
         onDone = onDone,
         onDismiss = onDismiss,
@@ -136,6 +139,7 @@ private fun PickerTabContent(
     isLoading: Boolean,
     addingTrackerIds: Set<String>,
     onAddTracker: (String) -> Unit,
+    onIneligibleTrackerTap: (Tracker) -> Unit,
     onRefresh: () -> Unit,
     onDone: () -> Unit,
     onDismiss: () -> Unit,
@@ -353,11 +357,18 @@ private fun PickerTabContent(
                                 ) {
                                     items(filteredItems, key = { it.trackerId }) { item ->
                                         val isAdding = item.trackerId in addingTrackerIds
+                                        val isAddable = item.tracker?.let(
+                                            GroupReshareAddabilityPolicy::isAddableToGroup
+                                        ) ?: true
                                         AddableTrackerCard(
                                             item = item,
                                             isAdding = isAdding,
+                                            isAddable = isAddable,
                                             borderColor = cardBorderColor,
                                             onAdd = { onAddTracker(item.trackerId) },
+                                            onIneligibleTap = {
+                                                item.tracker?.let(onIneligibleTrackerTap)
+                                            },
                                         )
                                     }
                                 }
@@ -447,16 +458,27 @@ private fun MemberTrackerCard(
 private fun AddableTrackerCard(
     item: TrackerRowItem,
     isAdding: Boolean,
+    isAddable: Boolean,
     borderColor: Color,
     onAdd: () -> Unit,
+    onIneligibleTap: () -> Unit,
 ) {
+    val state = when {
+        isAdding -> TrackerAddRowActionState.ADDING
+        !isAddable -> TrackerAddRowActionState.DISABLED
+        else -> TrackerAddRowActionState.IDLE
+    }
     TrackerAddRowCard(
         name = item.displayName,
         ownerEmail = item.ownerEmail.takeIf { !item.isOwned },
-        state = if (isAdding) TrackerAddRowActionState.ADDING else TrackerAddRowActionState.IDLE,
+        state = state,
         borderColor = borderColor,
-        onAdd = onAdd,
+        onAdd = if (state == TrackerAddRowActionState.DISABLED) onIneligibleTap else onAdd,
         onRemove = {},
-        addIconTooltip = stringResource(R.string.tooltip_add_group_row_add),
+        addIconTooltip = if (state == TrackerAddRowActionState.DISABLED) {
+            null
+        } else {
+            stringResource(R.string.tooltip_add_group_row_add)
+        },
     )
 }
