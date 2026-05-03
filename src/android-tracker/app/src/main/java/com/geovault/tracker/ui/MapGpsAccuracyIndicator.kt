@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -28,7 +29,7 @@ fun MapGpsAccuracyIndicator(
             modifier = Modifier
                 .size(56.dp)
                 .background(
-                    color = GeoVaultColorTokens.ListBackground.copy(alpha = 0.85f),
+                    color = MaterialTheme.colors.background.copy(alpha = 0.85f),
                     shape = CircleShape,
                 )
                 .border(

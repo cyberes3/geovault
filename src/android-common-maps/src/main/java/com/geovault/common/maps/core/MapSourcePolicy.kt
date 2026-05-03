@@ -14,22 +14,22 @@ internal object MapSourcePolicy {
     fun normalizeSelection(raw: String): String {
         return when (raw) {
             SOURCE_OSM, SOURCE_MAPTILER_STREETS, OPTION_STREET -> OPTION_STREET
-            SOURCE_MAPTILER_STREETS_DARK, OPTION_STREET_DARK -> OPTION_STREET_DARK
+            SOURCE_MAPTILER_STREETS_DARK, OPTION_STREET_DARK -> OPTION_STREET
             SOURCE_MAPTILER_HYBRID, OPTION_SATELLITE -> OPTION_SATELLITE
             SOURCE_MAPTILER_TOPO, OPTION_TOPO -> OPTION_TOPO
             else -> OPTION_STREET
         }
     }
 
+    /**
+     * User-visible basemap cycle: Street / Satellite / Topo. MapTiler dark is applied at night
+     * via [effectiveStreetSource], not as a separate picker option.
+     */
     fun availableSelections(
-        hasMapTilerStreetDark: Boolean,
         hasMapTilerTopo: Boolean,
         hasSatellite: Boolean,
     ): List<String> {
         val options = mutableListOf(OPTION_STREET)
-        if (hasMapTilerStreetDark) {
-            options.add(OPTION_STREET_DARK)
-        }
         if (hasSatellite) options.add(OPTION_SATELLITE)
         if (hasMapTilerTopo) options.add(OPTION_TOPO)
         return options
@@ -48,12 +48,20 @@ internal object MapSourcePolicy {
         return if (normalized in availableSelections) normalized else OPTION_STREET
     }
 
+    /**
+     * Resolves the tile source id for the Street slot. At night, MapTiler dark replaces MapTiler
+     * streets when the server provides it; otherwise MapTiler light (never OSM as a “dark” substitute).
+     */
     fun effectiveStreetSource(
+        isNight: Boolean,
         hasMapTilerStreets: Boolean,
+        hasMapTilerStreetDark: Boolean,
         hasOsm: Boolean,
     ): String {
         return when {
-            hasMapTilerStreets -> SOURCE_MAPTILER_STREETS
+            isNight && hasMapTilerStreetDark -> SOURCE_MAPTILER_STREETS_DARK
+            isNight && hasMapTilerStreets -> SOURCE_MAPTILER_STREETS
+            !isNight && hasMapTilerStreets -> SOURCE_MAPTILER_STREETS
             hasOsm -> SOURCE_OSM
             else -> SOURCE_MAPTILER_STREETS
         }
@@ -63,13 +71,11 @@ internal object MapSourcePolicy {
         selectedOption: String,
         availableSelections: List<String>,
         streetSourceId: String,
-        hasMapTilerStreetDark: Boolean,
         hasMapTilerHybrid: Boolean,
         hasMapTilerTopo: Boolean,
     ): String {
         return when (sanitizeSelection(selectedOption, availableSelections)) {
             OPTION_STREET -> streetSourceId
-            OPTION_STREET_DARK -> if (hasMapTilerStreetDark) SOURCE_MAPTILER_STREETS_DARK else streetSourceId
             OPTION_SATELLITE ->
                 if (hasMapTilerHybrid) SOURCE_MAPTILER_HYBRID else streetSourceId
             OPTION_TOPO -> if (hasMapTilerTopo) SOURCE_MAPTILER_TOPO else streetSourceId

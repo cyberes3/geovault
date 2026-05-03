@@ -9,7 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 /**
  * Read-only "overline label + body value" detail-screen primitive. Use on point-detail,
@@ -30,7 +30,7 @@ fun GeoVaultLabeledValue(
             text = label.uppercase(),
             style = MaterialTheme.typography.overline.copy(
                 fontWeight = FontWeight.Bold,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
             ),
         )
         Spacer(modifier = Modifier.height(4.dp))
@@ -40,7 +40,7 @@ fun GeoVaultLabeledValue(
             Text(
                 text = value.orEmpty(),
                 style = MaterialTheme.typography.body1,
-                color = GeoVaultColorTokens.TextPrimary,
+                color = MaterialTheme.colors.onSurface,
             )
         }
     }

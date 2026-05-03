@@ -1,13 +1,16 @@
 package com.geovault.common.maps.core
 
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Button
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -19,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -30,10 +34,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBar
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
 import com.geovault.common.ui.components.GeoVaultFormDialog
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 import org.maplibre.android.maps.MapView
-
-private val MAP_UNDERLAY_COLOR: Int = GeoVaultColorTokens.MapUnderlay.toArgb()
 
 data class GeoVaultMapPaddingDp(
     val left: Dp = Dp.Unspecified,
@@ -119,10 +120,18 @@ private fun GeoVaultMapHost(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val configurationNight =
+        (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+    val materialDark = !MaterialTheme.colors.isLight
+    val streetNightForBasemap = configurationNight || materialDark
     var mapView: MapView? by remember { mutableStateOf(null) }
     val mapErrorNotice by map.errorNotice.collectAsState()
+    val phase by map.phase.collectAsState()
     val currentMap by rememberUpdatedState(map)
     val mapStateBundle = remember { Bundle() }
+    val baselineStreetNight = remember { mutableStateOf<Boolean?>(null) }
 
     val effectivePaddingPx = remember(density, includeDefaultFabColumnPadding, mapPaddingDp) {
         GeoVaultMapPaddingPolicy(
@@ -131,8 +140,31 @@ private fun GeoVaultMapHost(
         ).computeViewportPaddingPx(density)
     }
 
+    val mapUnderlayArgb = MaterialTheme.colors.background.toArgb()
+
     SideEffect {
         currentMap.setDefaultCameraPadding(effectivePaddingPx)
+    }
+
+    SideEffect {
+        try {
+            currentMap.manager.sourceManager.setStreetNightUiHintFromHost(streetNightForBasemap)
+        } catch (_: IllegalStateException) {
+            // Map manager not attached yet; hint will be set on the next frame.
+        }
+    }
+
+    LaunchedEffect(streetNightForBasemap, phase) {
+        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
+        val previous = baselineStreetNight.value
+        if (previous == null) {
+            baselineStreetNight.value = streetNightForBasemap
+            return@LaunchedEffect
+        }
+        if (previous != streetNightForBasemap) {
+            baselineStreetNight.value = streetNightForBasemap
+            currentMap.reapplyBasemapAfterUiModeChange()
+        }
     }
 
     Box(modifier = modifier) {
@@ -145,13 +177,14 @@ private fun GeoVaultMapHost(
                 //  - Painting an underlay background colour hides the empty black surface
                 //    between attach and first-tile render, which is jarring on white UIs.
                 acquiredMapView.overScrollMode = android.view.View.OVER_SCROLL_NEVER
-                acquiredMapView.setBackgroundColor(MAP_UNDERLAY_COLOR)
+                acquiredMapView.setBackgroundColor(mapUnderlayArgb)
                 acquiredMapView.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
                 mapView = acquiredMapView
                 currentMap.attachMapView(acquiredMapView)
                 acquiredMapView
             },
             update = {
+                it.setBackgroundColor(mapUnderlayArgb)
                 it.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
                 if (mapView !== it) {
                     mapView = it
@@ -198,6 +231,7 @@ private fun GeoVaultMapHost(
             override fun onResume(owner: LifecycleOwner) {
                 mapView?.onResume()
                 currentMap.ensureInteractiveGestures()
+                currentMap.ensureBasemapMatchesEffectiveSelection()
             }
 
             override fun onPause(owner: LifecycleOwner) {

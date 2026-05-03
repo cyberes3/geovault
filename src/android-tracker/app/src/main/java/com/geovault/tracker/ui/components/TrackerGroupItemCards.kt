@@ -43,6 +43,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.ui.TrackerChevronIcon
 import com.geovault.tracker.ui.TrackerChevronStylePolicy
@@ -77,7 +78,11 @@ fun TrackerItemCard(
             .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = 0.dp,
-        backgroundColor = if (model.isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
+        backgroundColor = when {
+            model.isHighlighted && MaterialTheme.colors.isLight -> GeoVaultColorTokens.Purple100
+            model.isHighlighted -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
+            else -> MaterialTheme.colors.surface
+        },
         border = BorderStroke(2.dp, GeoVaultColorTokens.MainBlue),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
@@ -93,7 +98,7 @@ fun TrackerItemCard(
                 Text(
                     text = model.title,
                     modifier = Modifier.weight(1f),
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -116,18 +121,18 @@ fun TrackerItemCard(
             ) {
                 Text(
                     text = model.lastUpdateText,
-                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
+                    color = geoVaultContentSecondaryColor().copy(alpha = 0.8f),
                     fontSize = 12.sp,
                 )
                 model.coordinatesText?.let { coordinates ->
                     Text(
                         text = " \u2022 ",
-                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.5f),
+                        color = geoVaultContentSecondaryColor().copy(alpha = 0.5f),
                         fontSize = 12.sp,
                     )
                     Text(
                         text = coordinates,
-                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
+                        color = geoVaultContentSecondaryColor().copy(alpha = 0.8f),
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -138,7 +143,7 @@ fun TrackerItemCard(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = owner,
-                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f),
+                    color = geoVaultContentSecondaryColor().copy(alpha = 0.8f),
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -215,7 +220,11 @@ fun GroupItemCard(
             .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = 0.dp,
-        backgroundColor = if (model.isHighlighted) GeoVaultColorTokens.Purple100 else GeoVaultColorTokens.Surface,
+        backgroundColor = when {
+            model.isHighlighted && MaterialTheme.colors.isLight -> GeoVaultColorTokens.Purple100
+            model.isHighlighted -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
+            else -> MaterialTheme.colors.surface
+        },
         border = BorderStroke(
             2.dp,
             if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.MainBlue
@@ -253,7 +262,7 @@ fun GroupItemCard(
             ) {
                 Text(
                     text = model.title,
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -262,7 +271,7 @@ fun GroupItemCard(
                 model.ownerEmail?.let {
                     Text(
                         text = it,
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                         fontSize = 12.sp,
                         lineHeight = 14.sp,
                         maxLines = 1,
@@ -275,7 +284,7 @@ fun GroupItemCard(
                     } else {
                         trackCountText
                     },
-                    color = if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.TextSecondary,
+                    color = if (model.isPending) GeoVaultColorTokens.MainYellow else geoVaultContentSecondaryColor(),
                     fontSize = 12.sp,
                     lineHeight = 14.sp,
                     maxLines = 1,

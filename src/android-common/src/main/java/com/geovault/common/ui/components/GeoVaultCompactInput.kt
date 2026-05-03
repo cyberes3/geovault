@@ -2,7 +2,9 @@ package com.geovault.common.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -14,12 +16,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
  * Compact text input style for dense rows such as drawer filters and list search headers.
@@ -45,19 +50,14 @@ fun GeoVaultCompactInput(
     trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val fieldBackground =
-        if (MaterialTheme.colors.isLight) {
-            GeoVaultColorTokens.Surface
-        } else {
-            MaterialTheme.colors.surface
-        }
+    val fieldBackground = geoVaultTextFieldFillColor()
     val colors = TextFieldDefaults.outlinedTextFieldColors(
-        backgroundColor = fieldBackground,
+        backgroundColor = Color.Transparent,
         focusedBorderColor = GeoVaultColorTokens.MainBlue,
         unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
         focusedLabelColor = GeoVaultColorTokens.MainBlue,
         unfocusedLabelColor = GeoVaultColorTokens.MainBlue,
-        placeholderColor = GeoVaultColorTokens.TextSecondary,
+        placeholderColor = geoVaultContentSecondaryColor(),
     )
     val textColor by colors.textColor(enabled)
     val cursorColor by colors.cursorColor(isError = false)
@@ -65,59 +65,63 @@ fun GeoVaultCompactInput(
         TextStyle(color = textStyle.color.takeOrElse { textColor })
     )
 
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        readOnly = readOnly,
+    Box(
         modifier = modifier
             .height(44.dp)
             .background(fieldBackground, MaterialTheme.shapes.small),
-        enabled = enabled,
-        textStyle = mergedTextStyle,
-        cursorBrush = SolidColor(cursorColor),
-        keyboardOptions = keyboardOptions,
-        visualTransformation = visualTransformation,
-        singleLine = singleLine,
-        interactionSource = interactionSource,
-        decorationBox = { innerTextField ->
-            TextFieldDefaults.OutlinedTextFieldDecorationBox(
-                value = value,
-                visualTransformation = visualTransformation,
-                innerTextField = innerTextField,
-                label = label?.let { labelText ->
-                    {
-                        Text(
-                            text = labelText,
-                            color = GeoVaultColorTokens.MainBlue,
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            readOnly = readOnly,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            textStyle = mergedTextStyle,
+            cursorBrush = SolidColor(cursorColor),
+            keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation,
+            singleLine = singleLine,
+            interactionSource = interactionSource,
+            decorationBox = { innerTextField ->
+                TextFieldDefaults.OutlinedTextFieldDecorationBox(
+                    value = value,
+                    visualTransformation = visualTransformation,
+                    innerTextField = innerTextField,
+                    label = label?.let { labelText ->
+                        {
+                            Text(
+                                text = labelText,
+                                color = GeoVaultColorTokens.MainBlue,
+                            )
+                        }
+                    },
+                    placeholder = placeholder?.let { placeholderText ->
+                        {
+                            Text(
+                                text = placeholderText,
+                                style = textStyle,
+                                color = geoVaultContentSecondaryColor(),
+                            )
+                        }
+                    },
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon,
+                    singleLine = singleLine,
+                    enabled = enabled,
+                    isError = false,
+                    interactionSource = interactionSource,
+                    colors = colors,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    border = {
+                        TextFieldDefaults.BorderBox(
+                            enabled = enabled,
+                            isError = false,
+                            interactionSource = interactionSource,
+                            colors = colors,
                         )
-                    }
-                },
-                placeholder = placeholder?.let { placeholderText ->
-                    {
-                        Text(
-                            text = placeholderText,
-                            style = textStyle,
-                            color = GeoVaultColorTokens.TextSecondary,
-                        )
-                    }
-                },
-                leadingIcon = leadingIcon,
-                trailingIcon = trailingIcon,
-                singleLine = singleLine,
-                enabled = enabled,
-                isError = false,
-                interactionSource = interactionSource,
-                colors = colors,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                border = {
-                    TextFieldDefaults.BorderBox(
-                        enabled = enabled,
-                        isError = false,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                    )
-                },
-            )
-        },
-    )
+                    },
+                )
+            },
+        )
+    }
 }

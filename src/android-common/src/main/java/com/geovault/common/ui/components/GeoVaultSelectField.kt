@@ -1,5 +1,6 @@
 package com.geovault.common.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
  * Form-row selector that opens a [GeoVaultSingleSelectDialog] when tapped.
@@ -94,10 +97,12 @@ private fun SelectTrigger(
         GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f)
     }
     val valueColor = when {
-        !enabled -> GeoVaultColorTokens.TextSecondary
-        valueText.isEmpty() -> GeoVaultColorTokens.TextSecondary
-        else -> GeoVaultColorTokens.TextPrimary
+        !enabled -> geoVaultContentSecondaryColor()
+        valueText.isEmpty() -> geoVaultContentSecondaryColor()
+        else -> MaterialTheme.colors.onSurface
     }
+    val triggerShape = RoundedCornerShape(8.dp)
+    val fieldFill = geoVaultTextFieldFillColor()
     Column(modifier = modifier.fillMaxWidth()) {
         if (!label.isNullOrEmpty()) {
             Text(
@@ -112,8 +117,9 @@ private fun SelectTrigger(
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = 56.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(8.dp))
+                .clip(triggerShape)
+                .background(fieldFill, triggerShape)
+                .border(width = 1.dp, color = borderColor, shape = triggerShape)
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(horizontal = 12.dp),
         ) {

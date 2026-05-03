@@ -16,7 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 
 @Composable
 fun GeoVaultServerConfigBlock(
@@ -32,7 +32,7 @@ fun GeoVaultServerConfigBlock(
 
     Column(modifier = modifier.fillMaxWidth()) {
         Divider(
-            color = GeoVaultColorTokens.BorderLight,
+            color = geoVaultHairlineDividerColor(),
             thickness = 1.dp
         )
         Spacer(modifier = Modifier.height(16.dp))

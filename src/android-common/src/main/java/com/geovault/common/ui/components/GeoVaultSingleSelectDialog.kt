@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
  * Case-insensitive label filter used by [GeoVaultSingleSelectDialog] when [GeoVaultSingleSelectDialog]
@@ -80,14 +83,14 @@ fun <T> GeoVaultSingleSelectDialog(
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            color = GeoVaultColorTokens.Surface,
+            color = geoVaultDialogSurfaceColor(),
             elevation = 0.dp,
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
                 if (searchable) {
@@ -103,7 +106,7 @@ fun <T> GeoVaultSingleSelectDialog(
                     Text(
                         text = emptyLabel,
                         style = MaterialTheme.typography.body2,
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 24.dp),
@@ -154,8 +157,13 @@ private fun <T> OptionRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val rowBackground = if (selected) GeoVaultColorTokens.Blue100 else GeoVaultColorTokens.Surface
-    val textColor = if (selected) GeoVaultColorTokens.MainBlue else GeoVaultColorTokens.TextPrimary
+    val isLight = MaterialTheme.colors.isLight
+    val rowBackground = when {
+        !selected -> geoVaultTextFieldFillColor()
+        isLight -> GeoVaultColorTokens.Blue100
+        else -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
+    }
+    val textColor = if (selected) GeoVaultColorTokens.MainBlue else MaterialTheme.colors.onSurface
     val rowShape = RoundedCornerShape(8.dp)
     Box(
         modifier = Modifier

@@ -67,7 +67,7 @@ fun MapStreamingIndicator(
     Row(
         modifier = modifier
             .background(
-                color = GeoVaultColorTokens.ListBackground.copy(alpha = 0.85f),
+                color = MaterialTheme.colors.background.copy(alpha = 0.85f),
                 shape = RoundedCornerShape(16.dp),
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -83,7 +83,7 @@ fun MapStreamingIndicator(
             style = MaterialTheme.typography.caption,
             fontWeight = FontWeight.Medium,
             fontSize = 11.sp,
-            color = GeoVaultColorTokens.TextPrimary,
+            color = MaterialTheme.colors.onSurface,
         )
     }
 }

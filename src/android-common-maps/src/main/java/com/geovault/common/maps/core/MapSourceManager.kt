@@ -1,6 +1,7 @@
 package com.geovault.common.maps.core
 
 import android.content.Context
+import android.content.res.Configuration
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.model.OPTION_STREET
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
@@ -12,7 +13,35 @@ import com.geovault.common.maps.model.TileSource
 import com.geovault.common.settings.GeoVaultPrefsStore
 import com.geovault.common.settings.PrefKey
 
+/**
+ * Resolves which tile source id to load for the user’s basemap selection.
+ *
+ * **Tracker app behaviour:** the map uses an activity-scoped [Context] and reads
+ * `context.resources.configuration.uiMode` whenever the effective street source id is resolved.
+ * On **onResume**, if sources are loaded but the current style no longer matches the effective id
+ * (`!isCurrentSourceApplied`), the basemap is reapplied so a night/dark change that updated
+ * configuration while the screen was paused still loads the correct street tiles.
+ *
+ * The [Context] passed here must be the **map or activity** context (not
+ * [android.content.Context.getApplicationContext]) so `uiMode` matches the window.
+ * [GeoVaultMapHost] also pushes a night hint from Compose and can reapply explicitly; see
+ * [setStreetNightUiHintFromHost].
+ */
 class MapSourceManager(private val context: Context) {
+
+    /**
+     * When non-null, [getEffectiveStreetSourceId] treats night as this value instead of reading
+     * [Configuration.UI_MODE_NIGHT_MASK] from [context] alone. [GeoVaultMapHost] sets this from
+     * configuration night **or** dark [androidx.compose.material.MaterialTheme] so street vector
+     * tracks the same signal as the rest of the UI.
+     */
+    @Volatile
+    private var streetNightUiHint: Boolean? = null
+
+    fun setStreetNightUiHintFromHost(isNight: Boolean?) {
+        streetNightUiHint = isNight
+    }
+
     private val store = GeoVaultPrefsStore(
         context = context,
         prefsName = PREFS_NAME,
@@ -65,8 +94,15 @@ class MapSourceManager(private val context: Context) {
     }
 
     fun getEffectiveStreetSourceId(): String {
+        val isNight = streetNightUiHint
+            ?: run {
+                (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                    Configuration.UI_MODE_NIGHT_YES
+            }
         return MapSourcePolicy.effectiveStreetSource(
+            isNight = isNight,
             hasMapTilerStreets = availableSources.any { it.id == SOURCE_MAPTILER_STREETS },
+            hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
             hasOsm = availableSources.any { it.id == SOURCE_OSM },
         )
     }
@@ -76,7 +112,6 @@ class MapSourceManager(private val context: Context) {
             selectedOption = getSelectedSourceId(),
             availableSelections = getAvailableSelections(),
             streetSourceId = getEffectiveStreetSourceId(),
-            hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
             hasMapTilerHybrid = availableSources.any { it.id == SOURCE_MAPTILER_HYBRID },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
         )
@@ -89,7 +124,6 @@ class MapSourceManager(private val context: Context) {
 
     fun getAvailableSelections(): List<String> {
         return MapSourcePolicy.availableSelections(
-            hasMapTilerStreetDark = availableSources.any { it.id == SOURCE_MAPTILER_STREETS_DARK },
             hasMapTilerTopo = availableSources.any { it.id == SOURCE_MAPTILER_TOPO },
             hasSatellite = availableSources.any { it.id == SOURCE_MAPTILER_HYBRID },
         )

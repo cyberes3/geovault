@@ -6,11 +6,12 @@ import androidx.compose.material.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 /**
  * Compact search field styled with [GeoVaultCompactInput]. Renders a leading search icon, no label,
@@ -43,7 +44,7 @@ fun GeoVaultSearchField(
             Icon(
                 imageVector = Icons.Filled.Search,
                 contentDescription = null,
-                tint = GeoVaultColorTokens.TextSecondary,
+                tint = geoVaultContentSecondaryColor(),
                 modifier = Modifier.size(18.dp),
             )
         },
@@ -66,7 +67,7 @@ fun GeoVaultSearchField(
                             Icon(
                                 imageVector = Icons.Filled.Clear,
                                 contentDescription = clearContentDescription,
-                                tint = GeoVaultColorTokens.TextSecondary,
+                                tint = geoVaultContentSecondaryColor(),
                                 modifier = Modifier.size(18.dp),
                             )
                         }

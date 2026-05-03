@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Divider
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.Scaffold
@@ -81,6 +82,7 @@ import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.GeoVaultTheme
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
@@ -287,7 +289,7 @@ private fun PlaceEditScreen(
     }
 
     Scaffold(
-        backgroundColor = GeoVaultColorTokens.ListBackground,
+        backgroundColor = MaterialTheme.colors.background,
         topBar = {
             GeoVaultTopTitleBar(
                 title = state.title,
@@ -321,7 +323,7 @@ private fun PlaceEditScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(GeoVaultColorTokens.ListBackground),
+                .background(MaterialTheme.colors.background),
         ) {
             val mapMinHeight = maxHeight * 0.30f
             val formMinHeight = maxHeight * 0.56f
@@ -373,7 +375,7 @@ private fun PlaceEditScreen(
                         .heightIn(min = formMinHeight)
                         .heightIn(max = formMaxHeight),
                     shape = androidx.compose.ui.graphics.RectangleShape,
-                    color = GeoVaultColorTokens.Surface,
+                    color = MaterialTheme.colors.surface,
                     elevation = 0.dp,
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -390,7 +392,7 @@ private fun PlaceEditScreen(
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("Name *", color = GeoVaultColorTokens.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Name *", color = geoVaultContentSecondaryColor(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             GeoVaultInput(
                                 value = state.name,
                                 onValueChange = { state.name = it },
@@ -403,7 +405,7 @@ private fun PlaceEditScreen(
                             )
 
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Description", color = GeoVaultColorTokens.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Description", color = geoVaultContentSecondaryColor(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             GeoVaultInput(
                                 value = state.description,
                                 onValueChange = { state.description = it },
@@ -421,7 +423,7 @@ private fun PlaceEditScreen(
                                 Text(
                                     "Coordinates *",
                                     modifier = Modifier.weight(1f),
-                                    color = GeoVaultColorTokens.TextSecondary,
+                                    color = geoVaultContentSecondaryColor(),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                 )

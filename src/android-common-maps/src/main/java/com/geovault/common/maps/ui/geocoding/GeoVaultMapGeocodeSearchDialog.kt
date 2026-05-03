@@ -36,6 +36,8 @@ import com.geovault.common.maps.geocoding.GeocodingRepository
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
 import kotlinx.coroutines.delay
 
 /**
@@ -93,11 +95,12 @@ fun GeoVaultMapGeocodeSearchDialog(
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
+        backgroundColor = geoVaultDialogSurfaceColor(),
         title = {
             Text(
                 text = stringResource(R.string.gv_common_geocode_search_dialog_title),
                 style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                color = GeoVaultColorTokens.TextPrimary,
+                color = MaterialTheme.colors.onSurface,
             )
         },
         text = {
@@ -133,7 +136,7 @@ fun GeoVaultMapGeocodeSearchDialog(
                             Text(
                                 text = stringResource(R.string.gv_common_geocode_search_empty_no_results),
                                 style = MaterialTheme.typography.body2,
-                                color = GeoVaultColorTokens.TextSecondary,
+                                color = geoVaultContentSecondaryColor(),
                                 modifier = Modifier.padding(top = 12.dp),
                             )
                         }
@@ -155,7 +158,13 @@ fun GeoVaultMapGeocodeSearchDialog(
                                             onDismiss()
                                         },
                                     )
-                                    Divider(color = GeoVaultColorTokens.BorderLight)
+                                    Divider(
+                                        color = if (MaterialTheme.colors.isLight) {
+                                            GeoVaultColorTokens.BorderLight
+                                        } else {
+                                            GeoVaultColorTokens.Dark.BorderLight
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -191,7 +200,7 @@ fun GeoVaultGeocodeSearchResultRow(
         Text(
             text = title,
             style = MaterialTheme.typography.body1.copy(fontWeight = FontWeight.SemiBold),
-            color = GeoVaultColorTokens.TextPrimary,
+            color = MaterialTheme.colors.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -199,7 +208,7 @@ fun GeoVaultGeocodeSearchResultRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.body2,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
                 modifier = Modifier.padding(top = 2.dp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

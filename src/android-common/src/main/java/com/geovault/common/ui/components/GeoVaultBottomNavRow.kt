@@ -147,6 +147,7 @@ fun GeoVaultBottomNavScaffold(
     }
     val areTabsHidden = hiddenRequests > 0
     val areTabsDisabled = disableRequests > 0
+    val navBarBlendSurfaceArgb = MaterialTheme.colors.surface.toArgb()
 
     CompositionLocalProvider(
         LocalGeoVaultBottomNavVisibilityController provides visibilityController,
@@ -192,7 +193,7 @@ fun GeoVaultBottomNavScaffold(
         if (activity != null && !areTabsHidden) {
             val lighterNavBarBlue = ColorUtils.blendARGB(
                 GeoVaultColorTokens.MainBlue.toArgb(),
-                GeoVaultColorTokens.Surface.toArgb(),
+                navBarBlendSurfaceArgb,
                 0.12f,
             )
             // Keep the Android system navigation bar blue when a bottom nav row is present.

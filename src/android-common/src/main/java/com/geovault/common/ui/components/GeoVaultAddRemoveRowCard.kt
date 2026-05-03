@@ -34,6 +34,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultCardBorderColor
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import kotlinx.coroutines.launch
 
 enum class GeoVaultAddRemoveRowActionState {
@@ -97,7 +99,7 @@ fun GeoVaultAddRemoveRowCard(
                     Text(
                         text = it,
                         style = MaterialTheme.typography.caption,
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -219,9 +221,4 @@ fun <T> GeoVaultAsyncAddRemoveCardList(
 }
 
 @Composable
-private fun defaultGeoVaultAddRemoveBorderColor(): Color =
-    if (MaterialTheme.colors.isLight) {
-        GeoVaultColorTokens.BorderLight
-    } else {
-        GeoVaultColorTokens.Dark.BorderLight
-    }
+private fun defaultGeoVaultAddRemoveBorderColor(): Color = geoVaultCardBorderColor()

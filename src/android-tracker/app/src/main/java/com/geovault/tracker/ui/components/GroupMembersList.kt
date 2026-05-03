@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultIconButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.ui.TrackerChevronIcon
@@ -123,7 +124,7 @@ private fun GroupMemberCard(
     val lastLineColor = if (warnStaleData) {
         GeoVaultColorTokens.Error
     } else {
-        GeoVaultColorTokens.TextSecondary
+        geoVaultContentSecondaryColor()
     }
     val chevronTint = remember(row.tracker?.color) {
         TrackerChevronStylePolicy.tintForTrackerColorHex(row.tracker?.color)
@@ -167,7 +168,7 @@ private fun GroupMemberCard(
                     text = row.tracker?.name ?: row.trackerId,
                     style = MaterialTheme.typography.body2,
                     fontWeight = FontWeight.Bold,
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

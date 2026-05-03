@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +57,9 @@ import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultCardBorderColor
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import kotlinx.coroutines.launch
@@ -179,11 +181,8 @@ private fun PickerTabContent(
         },
     )
 
-    val borderColor = if (isSystemInDarkTheme()) {
-        GeoVaultColorTokens.Dark.BorderLight
-    } else {
-        GeoVaultColorTokens.BorderLight
-    }
+    val dividerColor = geoVaultHairlineDividerColor()
+    val cardBorderColor = geoVaultCardBorderColor()
 
     val memberItems = remember(allTrackers, selectedTrackerIds) {
         val knownById = allTrackers.associateBy { it.id }
@@ -221,7 +220,7 @@ private fun PickerTabContent(
                 indicatorOffsetFraction = pagerState.currentPageOffsetFraction,
             )
             Divider(
-                color = borderColor,
+                color = dividerColor,
                 thickness = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -232,7 +231,7 @@ private fun PickerTabContent(
                     .fillMaxWidth()
                     .drawBehind {
                         drawLine(
-                            color = borderColor,
+                            color = dividerColor,
                             start = Offset.Zero,
                             end = Offset(size.width, 0f),
                             strokeWidth = 1.dp.toPx(),
@@ -275,7 +274,7 @@ private fun PickerTabContent(
                             Text(
                                 text = stringResource(R.string.groups_tracker_list_empty),
                                 style = MaterialTheme.typography.body2,
-                                color = GeoVaultColorTokens.TextSecondary,
+                                color = geoVaultContentSecondaryColor(),
                             )
                         }
                     } else {
@@ -293,7 +292,7 @@ private fun PickerTabContent(
                                 MemberTrackerCard(
                                     item = item,
                                     context = context,
-                                    borderColor = borderColor,
+                                    borderColor = cardBorderColor,
                                     onRemove = { onRemoveTracker(item.trackerId) },
                                 )
                             }
@@ -323,7 +322,7 @@ private fun PickerTabContent(
                             )
 
                             Divider(
-                                color = borderColor,
+                                color = dividerColor,
                                 thickness = 1.dp,
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -338,7 +337,7 @@ private fun PickerTabContent(
                                     Text(
                                         text = stringResource(R.string.groups_tracker_picker_empty),
                                         style = MaterialTheme.typography.body2,
-                                        color = GeoVaultColorTokens.TextSecondary,
+                                        color = geoVaultContentSecondaryColor(),
                                     )
                                 }
                             } else {
@@ -357,7 +356,7 @@ private fun PickerTabContent(
                                         AddableTrackerCard(
                                             item = item,
                                             isAdding = isAdding,
-                                            borderColor = borderColor,
+                                            borderColor = cardBorderColor,
                                             onAdd = { onAddTracker(item.trackerId) },
                                         )
                                     }
@@ -423,7 +422,7 @@ private fun MemberTrackerCard(
                     Text(
                         text = item.ownerEmail,
                         style = MaterialTheme.typography.caption,
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

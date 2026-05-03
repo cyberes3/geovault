@@ -1089,7 +1089,7 @@ private fun TrackersListPage(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.ListBackground),
+            .background(MaterialTheme.colors.background),
         state = listState,
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 88.dp),
     ) {
@@ -1129,7 +1129,7 @@ private fun GroupsListPage(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.ListBackground),
+            .background(MaterialTheme.colors.background),
         state = listState,
         contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 88.dp),
     ) {

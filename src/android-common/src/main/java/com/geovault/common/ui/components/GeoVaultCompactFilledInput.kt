@@ -2,6 +2,8 @@ package com.geovault.common.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.text.BasicTextField
@@ -11,9 +13,11 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.TextFieldDefaults.indicatorLine
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.Modifier
@@ -46,56 +50,63 @@ fun GeoVaultCompactFilledInput(
     trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val colors = TextFieldDefaults.textFieldColors()
+    val fill = geoVaultTextFieldFillColor()
+    val colors = TextFieldDefaults.textFieldColors(
+        backgroundColor = Color.Transparent,
+    )
     val textColor by colors.textColor(enabled)
     val cursorColor by colors.cursorColor(isError = false)
-    val backgroundColor by colors.backgroundColor(enabled)
     val mergedTextStyle = textStyle.merge(
         TextStyle(color = textStyle.color.takeOrElse { textColor })
     )
 
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        readOnly = readOnly,
+    Box(
         modifier = modifier
             .height(44.dp)
-            .background(backgroundColor, MaterialTheme.shapes.small)
-            .indicatorLine(
-                enabled = enabled,
-                isError = false,
-                interactionSource = interactionSource,
-                colors = colors,
-            ),
-        enabled = enabled,
-        textStyle = mergedTextStyle,
-        cursorBrush = SolidColor(cursorColor),
-        keyboardOptions = keyboardOptions,
-        visualTransformation = visualTransformation,
-        singleLine = singleLine,
-        interactionSource = interactionSource,
-        decorationBox = { innerTextField ->
-            TextFieldDefaults.TextFieldDecorationBox(
-                value = value,
-                visualTransformation = visualTransformation,
-                innerTextField = innerTextField,
-                placeholder = placeholder?.let { placeholderText ->
-                    {
-                        Text(
-                            text = placeholderText,
-                            style = textStyle,
-                        )
-                    }
-                },
-                leadingIcon = leadingIcon,
-                trailingIcon = trailingIcon,
-                singleLine = singleLine,
-                enabled = enabled,
-                isError = false,
-                interactionSource = interactionSource,
-                colors = colors,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-            )
-        },
-    )
+            .background(fill, MaterialTheme.shapes.small),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            readOnly = readOnly,
+            modifier = Modifier
+                .fillMaxWidth()
+                .indicatorLine(
+                    enabled = enabled,
+                    isError = false,
+                    interactionSource = interactionSource,
+                    colors = colors,
+                ),
+            enabled = enabled,
+            textStyle = mergedTextStyle,
+            cursorBrush = SolidColor(cursorColor),
+            keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation,
+            singleLine = singleLine,
+            interactionSource = interactionSource,
+            decorationBox = { innerTextField ->
+                TextFieldDefaults.TextFieldDecorationBox(
+                    value = value,
+                    visualTransformation = visualTransformation,
+                    innerTextField = innerTextField,
+                    placeholder = placeholder?.let { placeholderText ->
+                        {
+                            Text(
+                                text = placeholderText,
+                                style = textStyle,
+                            )
+                        }
+                    },
+                    leadingIcon = leadingIcon,
+                    trailingIcon = trailingIcon,
+                    singleLine = singleLine,
+                    enabled = enabled,
+                    isError = false,
+                    interactionSource = interactionSource,
+                    colors = colors,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                )
+            },
+        )
+    }
 }

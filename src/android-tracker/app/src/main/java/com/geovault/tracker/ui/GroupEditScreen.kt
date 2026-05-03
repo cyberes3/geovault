@@ -56,6 +56,7 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
@@ -311,7 +312,7 @@ private fun GroupEditOwnerContent(
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = null,
-                            tint = GeoVaultColorTokens.TextSecondary,
+                            tint = geoVaultContentSecondaryColor(),
                             modifier = Modifier.size(24.dp),
                         )
                     },
@@ -323,7 +324,7 @@ private fun GroupEditOwnerContent(
                     text = stringResource(R.string.trackers_edit_sharing_section),
                     style = MaterialTheme.typography.caption,
                     fontWeight = FontWeight.SemiBold,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                 )
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -373,7 +374,7 @@ private fun GroupEditOwnerContent(
                                             stringResource(R.string.groups_edit_visibility_help_public)
                                     },
                                     style = MaterialTheme.typography.caption,
-                                    color = GeoVaultColorTokens.TextSecondary,
+                                    color = geoVaultContentSecondaryColor(),
                                 )
                             }
                             when (dialog.visibilityDraft) {
@@ -398,7 +399,7 @@ private fun GroupEditOwnerContent(
                                                 sharedRecipientCount,
                                             ),
                                             style = MaterialTheme.typography.caption,
-                                            color = GeoVaultColorTokens.TextSecondary,
+                                            color = geoVaultContentSecondaryColor(),
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
@@ -413,7 +414,7 @@ private fun GroupEditOwnerContent(
                                     Text(
                                         text = stringResource(R.string.groups_edit_internal_share_help),
                                         style = MaterialTheme.typography.caption,
-                                        color = GeoVaultColorTokens.TextSecondary,
+                                        color = geoVaultContentSecondaryColor(),
                                     )
                                     GeoVaultSecondaryButton(
                                         text = stringResource(R.string.trackers_action_copy_internal_share_link),
@@ -579,21 +580,21 @@ private fun GroupEditNonOwnerContent(
                 text = dialog.group.name,
                 style = MaterialTheme.typography.h6,
                 fontWeight = FontWeight.Bold,
-                color = GeoVaultColorTokens.TextPrimary,
+                color = MaterialTheme.colors.onSurface,
             )
             val ownerEmail = dialog.group.owner_email?.takeIf { it.isNotBlank() }
             if (ownerEmail != null) {
                 Text(
                     text = stringResource(R.string.groups_edit_owner_label, ownerEmail),
                     style = MaterialTheme.typography.body2,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.groups_edit_internal_share_help),
                 style = MaterialTheme.typography.caption,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
             )
             GeoVaultSecondaryButton(
                 text = stringResource(R.string.trackers_action_copy_internal_share_link),

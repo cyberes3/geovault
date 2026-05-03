@@ -160,21 +160,18 @@ object GeoVaultColorTokens {
 
     // ── Dark-mode overrides (alias-only) ─────────────────────────────────
     object Dark {
-        val Surface = Gray900
-        val ListBackground = Blue900
+        /** Card / elevated chrome: OLED black (same as [ListBackground]). */
+        val Surface = Black
+        val ListBackground = Black
         val TextPrimary = Gray200
-
-        /** Off-scale tint with no exact tailwind equivalent. Kept as a literal. */
-        val TextSecondary = Color(0xFFBFC8D6u.toInt())
+        val TextSecondary = Gray400
         val BorderLight = Gray700
         val BlueLight = Gray800
         val Error = Red300
         val SnackbarSurface = Gray700
         val ToggleTitle = Gray200
         val ToggleHelpText = Gray400
-
-        /** Off-scale tint with no exact tailwind equivalent. Kept as a literal. */
-        val ToggleThumbOff = Color(0xFFBFC8D6u.toInt())
+        val ToggleThumbOff = Gray400
         val ToggleTrackOff = Gray500
     }
 

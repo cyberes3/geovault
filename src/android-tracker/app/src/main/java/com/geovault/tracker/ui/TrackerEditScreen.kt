@@ -68,6 +68,7 @@ import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.NaturalSort
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.TrackerRecentDataWindowOptions
@@ -404,7 +405,7 @@ private fun TrackerCreateFormContent(
             text = stringResource(R.string.trackers_field_color_optional),
             style = MaterialTheme.typography.caption,
             fontWeight = FontWeight.SemiBold,
-            color = GeoVaultColorTokens.TextPrimary,
+            color = MaterialTheme.colors.onSurface,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -523,7 +524,7 @@ private fun TrackerEditFormContent(
             text = stringResource(R.string.trackers_field_color_optional),
             style = MaterialTheme.typography.caption,
             fontWeight = FontWeight.SemiBold,
-            color = GeoVaultColorTokens.TextPrimary,
+            color = MaterialTheme.colors.onSurface,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -602,7 +603,7 @@ private fun TrackerEditFormContent(
         Text(
             text = stringResource(R.string.trackers_edit_recent_data_help),
             style = MaterialTheme.typography.caption,
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
         )
     }
 
@@ -612,7 +613,7 @@ private fun TrackerEditFormContent(
                 text = stringResource(R.string.trackers_edit_sharing_section),
                 style = MaterialTheme.typography.caption,
                 fontWeight = FontWeight.SemiBold,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
             )
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -662,7 +663,7 @@ private fun TrackerEditFormContent(
                                         stringResource(R.string.trackers_edit_visibility_help_public)
                                 },
                                 style = MaterialTheme.typography.caption,
-                                color = GeoVaultColorTokens.TextSecondary,
+                                color = geoVaultContentSecondaryColor(),
                             )
                         }
                         when (dialog.visibilityDraft) {
@@ -687,7 +688,7 @@ private fun TrackerEditFormContent(
                                             sharedRecipientCount,
                                         ),
                                         style = MaterialTheme.typography.caption,
-                                        color = GeoVaultColorTokens.TextSecondary,
+                                        color = geoVaultContentSecondaryColor(),
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.fillMaxWidth(),
                                     )

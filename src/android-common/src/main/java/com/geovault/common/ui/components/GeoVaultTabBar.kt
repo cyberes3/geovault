@@ -84,8 +84,8 @@ fun <T> GeoVaultTabBar(
             Tab(
                 selected = tab.value == selectedTab,
                 onClick = { onTabSelected(tab.value) },
-                selectedContentColor = GeoVaultColorTokens.TextPrimary,
-                unselectedContentColor = GeoVaultColorTokens.TextPrimary,
+                selectedContentColor = MaterialTheme.colors.onSurface,
+                unselectedContentColor = MaterialTheme.colors.onSurface,
                 text = { GeoVaultTabLabel(tab) },
             )
         }
@@ -100,7 +100,7 @@ private fun <T> GeoVaultTabLabel(tab: GeoVaultTab<T>) {
         if (countBadge != null && countBadge > 0) {
             Surface(
                 color = GeoVaultColorTokens.MainYellow,
-                contentColor = GeoVaultColorTokens.TextPrimary,
+                contentColor = GeoVaultColorTokens.MainBlue,
                 shape = RoundedCornerShape(percent = 50),
                 modifier = Modifier
                     .padding(start = 6.dp),

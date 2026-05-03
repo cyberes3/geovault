@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,10 +90,15 @@ private fun GeoVaultLeadingIconTileImpl(
     tileClickEnabled: Boolean,
     icon: @Composable () -> Unit,
 ) {
+    val diskFill = if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.Blue100
+    } else {
+        GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
+    }
     val base = modifier
         .size(TileSize)
         .clip(CircleShape)
-        .background(color = GeoVaultColorTokens.Blue100, shape = CircleShape)
+        .background(color = diskFill, shape = CircleShape)
     val tile = if (onClick != null) {
         base.clickable(enabled = tileClickEnabled, onClick = onClick)
     } else {

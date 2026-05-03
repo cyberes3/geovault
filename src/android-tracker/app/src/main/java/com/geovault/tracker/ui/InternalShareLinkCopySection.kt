@@ -20,6 +20,7 @@ import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 
 @Composable
@@ -35,7 +36,7 @@ fun InternalShareLinkCopySection(
     Text(
         text = helpText,
         style = MaterialTheme.typography.caption,
-        color = GeoVaultColorTokens.TextSecondary,
+        color = geoVaultContentSecondaryColor(),
     )
     GeoVaultSecondaryButton(
         text = stringResource(R.string.trackers_action_copy_internal_share_link),

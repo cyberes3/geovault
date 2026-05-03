@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
  * Searchable, live-toggle multi-select dialog with bordered card rows.
@@ -105,7 +108,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
         Card(
             modifier = Modifier.width(pickerWidth),
             elevation = 0.dp,
-            backgroundColor = MaterialTheme.colors.surface,
+            backgroundColor = geoVaultDialogSurfaceColor(),
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -120,7 +123,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
                     Text(
                         text = hint,
                         style = MaterialTheme.typography.caption,
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                     )
                 }
                 GeoVaultSearchField(
@@ -145,7 +148,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
                         Text(
                             text = emptyLabel,
                             style = MaterialTheme.typography.body2,
-                            color = GeoVaultColorTokens.TextSecondary,
+                            color = geoVaultContentSecondaryColor(),
                         )
                     }
                     else -> {
@@ -183,7 +186,7 @@ private fun GeoVaultSearchableMultiSelectRow(
 ) {
     val isDark = !MaterialTheme.colors.isLight
     val rowBackground = when {
-        !selected -> MaterialTheme.colors.surface
+        !selected -> geoVaultTextFieldFillColor()
         isDark -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
         else -> GeoVaultColorTokens.Blue100
     }

@@ -14,14 +14,12 @@ import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
 
 object GeoVaultInfoDialogDefaults {
-    val TextColor = Color.Black
-
     @Composable
     fun titleTextStyle() =
         MaterialTheme.typography.subtitle1.copy(
@@ -31,12 +29,12 @@ object GeoVaultInfoDialogDefaults {
 
     @Composable
     fun bodyTextStyle() =
-        MaterialTheme.typography.body2.copy(color = TextColor)
+        MaterialTheme.typography.body2.copy(color = MaterialTheme.colors.onSurface)
 
     @Composable
     fun sectionHeadingTextStyle() =
         MaterialTheme.typography.subtitle2.copy(
-            color = TextColor,
+            color = MaterialTheme.colors.onSurface,
             fontWeight = FontWeight.Bold,
         )
 
@@ -62,6 +60,7 @@ fun GeoVaultInfoDialog(
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismissRequest,
+        backgroundColor = geoVaultDialogSurfaceColor(),
         title = {
             Text(
                 text = title,
@@ -75,7 +74,7 @@ fun GeoVaultInfoDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 CompositionLocalProvider(
-                    LocalContentColor provides GeoVaultInfoDialogDefaults.TextColor,
+                    LocalContentColor provides MaterialTheme.colors.onSurface,
                     LocalTextStyle provides bodyTextStyle,
                 ) {
                     content()

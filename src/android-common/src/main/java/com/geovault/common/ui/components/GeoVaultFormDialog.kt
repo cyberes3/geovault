@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
 
 /**
  * Dialog primitive for custom form bodies with standard confirm/cancel buttons. Pairs well
@@ -35,6 +36,7 @@ fun GeoVaultFormDialog(
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
+        backgroundColor = geoVaultDialogSurfaceColor(),
         title = {
             Text(
                 text = title,

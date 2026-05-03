@@ -87,7 +87,9 @@ sealed class GeoVaultBaseMap(
         MapLibreInitializer.init(appContext)
         detachMapView()
         mapView = view
-        val attachedManager = MapLibreManager(appContext, view).also { manager ->
+        // Use the MapView/Activity context so [Configuration.UI_MODE_NIGHT_MASK] matches the
+        // visible UI; [applicationContext] often keeps a stale/non-night configuration.
+        val attachedManager = MapLibreManager(view.context, view).also { manager ->
             manager.defaultPadding = defaultCameraPadding
             manager.onStyleLoadFailed = { message ->
                 if (_mapManager === manager && mapView === view) {
@@ -224,6 +226,45 @@ sealed class GeoVaultBaseMap(
         val map = maplibreMap ?: return
         val manager = _mapManager ?: return
         manager.sourceManager.setSelectedSourceId(manager.sourceManager.getNextSourceId())
+        pluginRegistry.onStyleWillChange(map, map.style)
+        _phase.value = GeoVaultMapPhase.StyleLoading
+        beginStyleLoad()
+        if (!manager.applySelectedSource(map)) {
+            styleDeliveredForGeneration = true
+            clearStyleLoadWatchdog()
+            _phase.value = GeoVaultMapPhase.Ready
+        }
+    }
+
+    /**
+     * Re-applies the current basemap without changing stored prefs, so the effective street source
+     * can follow [android.content.res.Configuration.UI_MODE_NIGHT_MASK] (e.g. MapTiler dark vs light).
+     * Intended for [GeoVaultMapHost] after sources are fetched and phase is [GeoVaultMapPhase.Ready].
+     */
+    fun reapplyBasemapAfterUiModeChange() {
+        val map = maplibreMap ?: return
+        val manager = _mapManager ?: return
+        if (_phase.value != GeoVaultMapPhase.Ready || !manager.sourcesFetched) return
+        pluginRegistry.onStyleWillChange(map, map.style)
+        _phase.value = GeoVaultMapPhase.StyleLoading
+        beginStyleLoad()
+        if (!manager.applySelectedSource(map)) {
+            styleDeliveredForGeneration = true
+            clearStyleLoadWatchdog()
+            _phase.value = GeoVaultMapPhase.Ready
+        }
+    }
+
+    /**
+     * Same `onResume` guard as the tracker map: if tile sources are known but the loaded style’s
+     * key no longer matches [MapSourceManager.getEffectiveSourceId] (e.g. night mode changed while
+     * paused), reload the basemap without changing prefs.
+     */
+    fun ensureBasemapMatchesEffectiveSelection() {
+        val map = maplibreMap ?: return
+        val manager = _mapManager ?: return
+        if (_phase.value != GeoVaultMapPhase.Ready || !manager.sourcesFetched) return
+        if (manager.isCurrentSourceApplied(map)) return
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
         beginStyleLoad()

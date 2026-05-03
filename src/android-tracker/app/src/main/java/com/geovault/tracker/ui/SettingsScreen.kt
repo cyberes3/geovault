@@ -64,6 +64,8 @@ import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.tracker.R
 import com.geovault.tracker.presentation.HiddenTrackerItem
 import com.geovault.tracker.presentation.HiddenTrackerItemType
@@ -420,7 +422,7 @@ fun SettingsScreen(
         )
 
         Divider(
-            color = GeoVaultColorTokens.BorderLight,
+            color = geoVaultHairlineDividerColor(),
             thickness = 1.dp,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
@@ -508,7 +510,7 @@ fun SettingsScreen(
         }
         Text(
             text = stringResource(R.string.tracking_profile_help_text),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             style = MaterialTheme.typography.body2,
             modifier = Modifier.padding(bottom = 8.dp),
         )
@@ -554,7 +556,7 @@ fun SettingsScreen(
         )
         Text(
             text = stringResource(R.string.logging_interval_help_text),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             style = MaterialTheme.typography.body2,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
@@ -582,7 +584,7 @@ fun SettingsScreen(
         )
         Text(
             text = stringResource(R.string.distance_filter_help_text),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             style = MaterialTheme.typography.body2,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
@@ -610,20 +612,20 @@ fun SettingsScreen(
         )
         Text(
             text = stringResource(R.string.accuracy_filter_help_text),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             style = MaterialTheme.typography.body2,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
 
         Text(
             text = stringResource(R.string.tracking_settings_apply_after_restart),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             style = MaterialTheme.typography.body2,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
 
         Divider(
-            color = GeoVaultColorTokens.BorderLight,
+            color = geoVaultHairlineDividerColor(),
             thickness = 1.dp,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
@@ -657,14 +659,14 @@ fun SettingsScreen(
         )
         Text(
             text = stringResource(R.string.low_accuracy_fallback_timeout_help_text),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             style = MaterialTheme.typography.body2,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
 
         if (!state.isLoggedIn) {
             Divider(
-                color = GeoVaultColorTokens.BorderLight,
+                color = geoVaultHairlineDividerColor(),
                 thickness = 1.dp,
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
             )
@@ -699,7 +701,7 @@ fun SettingsScreen(
             if (!state.infoMessage.isNullOrBlank() && !connectState.isEffectivelyConnecting) {
                 Text(
                     text = state.infoMessage,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                     style = MaterialTheme.typography.body2,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
@@ -757,11 +759,7 @@ private fun SettingsNumericInput(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fieldBackground = if (MaterialTheme.colors.isLight) {
-        GeoVaultColorTokens.Surface
-    } else {
-        MaterialTheme.colors.surface
-    }
+    val fieldBackground = MaterialTheme.colors.surface
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -782,7 +780,7 @@ private fun SettingsNumericInput(
             disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
             disabledBorderColor = GeoVaultColorTokens.MainBlue,
             disabledLabelColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.6f),
-            disabledPlaceholderColor = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.6f),
+            disabledPlaceholderColor = geoVaultContentSecondaryColor().copy(alpha = 0.6f),
             disabledTrailingIconColor = Color.Unspecified,
             disabledLeadingIconColor = Color.Unspecified,
         ),
@@ -848,7 +846,7 @@ private fun HiddenTrackersSubView(
                 if (items.isEmpty()) {
                     Text(
                         text = stringResource(R.string.hidden_trackers_empty),
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                         style = MaterialTheme.typography.body2,
                         modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
                     )
@@ -858,7 +856,7 @@ private fun HiddenTrackersSubView(
                     if (trackers.isNotEmpty() && groups.isNotEmpty()) {
                         Text(
                             text = stringResource(R.string.hidden_list_section_trackers),
-                            color = GeoVaultColorTokens.TextSecondary,
+                            color = geoVaultContentSecondaryColor(),
                             style = MaterialTheme.typography.caption,
                             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                         )
@@ -870,7 +868,7 @@ private fun HiddenTrackersSubView(
                         if (trackers.isNotEmpty()) {
                             Text(
                                 text = stringResource(R.string.hidden_groups),
-                                color = GeoVaultColorTokens.TextSecondary,
+                                color = geoVaultContentSecondaryColor(),
                                 style = MaterialTheme.typography.caption,
                                 modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                             )
@@ -938,7 +936,7 @@ private fun HiddenTrackerRow(
         Text(
             text = item.name,
             style = MaterialTheme.typography.body1.copy(fontSize = 16.sp),
-            color = GeoVaultColorTokens.TextPrimary,
+            color = MaterialTheme.colors.onSurface,
             modifier = Modifier
                 .weight(1f)
                 .padding(start = 12.dp),

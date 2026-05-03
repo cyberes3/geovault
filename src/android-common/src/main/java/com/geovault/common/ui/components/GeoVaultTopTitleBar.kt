@@ -330,6 +330,11 @@ internal fun GeoVaultCompactDismissTitleBar(
     } else {
         MaterialTheme.colors.onSurface.copy(alpha = 0.10f)
     }
+    val bottomHairline = if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.BorderLight
+    } else {
+        GeoVaultColorTokens.Dark.BorderLight
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -337,7 +342,7 @@ internal fun GeoVaultCompactDismissTitleBar(
             .drawBehind {
                 val strokeWidth = 1.dp.toPx()
                 drawLine(
-                    color = GeoVaultColorTokens.BorderLight.copy(alpha = 0.9f),
+                    color = bottomHairline.copy(alpha = 0.9f),
                     start = androidx.compose.ui.geometry.Offset(0f, size.height - strokeWidth / 2f),
                     end = androidx.compose.ui.geometry.Offset(size.width, size.height - strokeWidth / 2f),
                     strokeWidth = strokeWidth,

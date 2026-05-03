@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 
 /**
@@ -58,7 +58,7 @@ fun GeoVaultEmptyState(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = GeoVaultColorTokens.TextSecondary,
+                tint = geoVaultContentSecondaryColor(),
                 modifier = Modifier.size(48.dp),
             )
             Spacer(modifier = Modifier.height(GeoVaultLayoutTokens.StatusIconGap))
@@ -68,14 +68,14 @@ fun GeoVaultEmptyState(
             Text(
                 text = heading,
                 style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                color = GeoVaultColorTokens.TextPrimary,
+                color = MaterialTheme.colors.onSurface,
             )
             Spacer(modifier = Modifier.height(GeoVaultLayoutTokens.StatusTitleGap))
         }
         Text(
             text = message,
             style = MaterialTheme.typography.body2,
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )

@@ -40,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +65,7 @@ import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.TrackerParamsSeed
 import com.geovault.tracker.R
@@ -265,13 +267,13 @@ private fun PermissionsContainer(
             text = stringResource(R.string.permissions_required_title),
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = GeoVaultColorTokens.TextPrimary,
+            color = MaterialTheme.colors.onSurface,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.permissions_required_message),
             fontSize = 14.sp,
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -353,7 +355,7 @@ private fun TrackingContainer(
     val trackerTextColor = if (state.selectedTrackerDisplayName.isBlank() && state.selectedTrackerId.isBlank()) {
         GeoVaultColorTokens.Error
     } else {
-        GeoVaultColorTokens.TextSecondary
+        geoVaultContentSecondaryColor()
     }
     val useImperial = UnitUtils.usesImperialUnitsDefault(androidx.compose.ui.platform.LocalContext.current)
     val accuracy = formatAccuracyPresentation(state, useImperial)
@@ -427,7 +429,7 @@ private fun TrackingContainer(
                         Modifier.weight(1f),
                         stringResource(R.string.stat_label_accuracy),
                         accuracy.text,
-                        if (accuracy.isError) GeoVaultColorTokens.Error else GeoVaultColorTokens.TextPrimary,
+                        if (accuracy.isError) GeoVaultColorTokens.Error else null,
                     )
                 }
             }
@@ -466,8 +468,9 @@ private fun StatCard(
     modifier: Modifier,
     label: String,
     value: String,
-    valueColor: androidx.compose.ui.graphics.Color = GeoVaultColorTokens.TextPrimary,
+    valueColor: Color? = null,
 ) {
+    val resolvedValueColor = valueColor ?: MaterialTheme.colors.onSurface
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.small,
@@ -485,13 +488,13 @@ private fun StatCard(
                 text = label,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = value,
                 fontSize = 16.sp,
-                color = valueColor,
+                color = resolvedValueColor,
                 maxLines = 1,
             )
         }
@@ -576,7 +579,7 @@ private fun ServerFailureOverlay(modifier: Modifier = Modifier) {
                 Text(
                     text = stringResource(R.string.server_connection_error_message),
                     fontSize = 14.sp,
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )

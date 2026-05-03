@@ -10,15 +10,12 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultInfoDialog
-import com.geovault.common.ui.theme.GeoVaultColorTokens
-
 @Composable
 fun UnsupportedFilesDialog(
     fileNames: List<String>,
     onDismissRequest: () -> Unit
 ) {
-    val bodyColor =
-        if (MaterialTheme.colors.isLight) GeoVaultColorTokens.TextPrimary else GeoVaultColorTokens.Dark.TextPrimary
+    val bodyColor = MaterialTheme.colors.onSurface
     GeoVaultInfoDialog(
         title = "Unsupported files",
         onDismissRequest = onDismissRequest

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.Card
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 @Composable
 fun GeoVaultLoadingOverlay(
@@ -64,7 +66,7 @@ fun GeoVaultLoadingOverlay(
             shape = RoundedCornerShape(8.dp),
             elevation = 0.dp,
             border = BorderStroke(2.dp, GeoVaultColorTokens.MainBlue),
-            backgroundColor = GeoVaultColorTokens.Surface
+            backgroundColor = MaterialTheme.colors.surface
         ) {
             Column(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 14.dp),
@@ -75,7 +77,7 @@ fun GeoVaultLoadingOverlay(
                     Text(
                         text = title,
                         modifier = Modifier.padding(top = 10.dp),
-                        color = GeoVaultColorTokens.TextSecondary,
+                        color = geoVaultContentSecondaryColor(),
                         fontSize = 16.sp
                     )
                 }
@@ -83,7 +85,7 @@ fun GeoVaultLoadingOverlay(
                     Text(
                         text = subtext,
                         modifier = Modifier.padding(top = 4.dp),
-                        color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.7f),
+                        color = geoVaultContentSecondaryColor().copy(alpha = 0.7f),
                         fontSize = 12.sp
                     )
                 }

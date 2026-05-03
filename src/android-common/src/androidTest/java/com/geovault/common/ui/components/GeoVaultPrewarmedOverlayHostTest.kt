@@ -21,6 +21,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.theme.GeoVaultTheme
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -38,6 +40,7 @@ class GeoVaultPrewarmedOverlayHostTest {
         var backgroundClicks = 0
 
         composeRule.setContent {
+            GeoVaultTheme {
             var showHiddenDialog by remember { mutableStateOf(false) }
 
             Box(
@@ -61,6 +64,7 @@ class GeoVaultPrewarmedOverlayHostTest {
                     }
                 }
             }
+            }
         }
 
         composeRule.onNodeWithTag(TapTargetTag).performTouchInput { click(center) }
@@ -74,6 +78,7 @@ class GeoVaultPrewarmedOverlayHostTest {
     @Test
     fun visiblePrewarmedContentHandlesClicks() {
         composeRule.setContent {
+            GeoVaultTheme {
             var showVisibleDialog by remember { mutableStateOf(false) }
 
             Box(
@@ -96,6 +101,7 @@ class GeoVaultPrewarmedOverlayHostTest {
                     }
                 }
             }
+            }
         }
 
         composeRule.onNodeWithTag(TapTargetTag).performTouchInput { click(center) }
@@ -108,6 +114,7 @@ class GeoVaultPrewarmedOverlayHostTest {
 private fun DisconnectDialog() {
     AlertDialog(
         onDismissRequest = {},
+        backgroundColor = geoVaultDialogSurfaceColor(),
         title = { Text(DisconnectDialogTitle) },
         confirmButton = {
             Button(onClick = {}) {

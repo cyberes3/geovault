@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 /**
  * Rounded, primary-blue-outlined "titled card" for clustering related controls in a form.
@@ -57,7 +58,7 @@ fun GeoVaultOutlinedSectionCard(
                 text = title.uppercase(),
                 style = MaterialTheme.typography.overline.copy(
                     fontWeight = FontWeight.Bold,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                 ),
                 modifier = Modifier.weight(1f),
             )

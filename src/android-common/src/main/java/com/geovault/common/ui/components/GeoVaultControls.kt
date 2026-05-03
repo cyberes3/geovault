@@ -39,6 +39,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 import androidx.compose.foundation.interaction.MutableInteractionSource
 
 data class GeoVaultButtonStyle(
@@ -481,12 +483,7 @@ fun GeoVaultInput(
     leadingIcon: (@Composable (() -> Unit))? = null,
     trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
-    val fieldBackground =
-        if (MaterialTheme.colors.isLight) {
-            GeoVaultColorTokens.Surface
-        } else {
-            MaterialTheme.colors.surface
-        }
+    val fieldBackground = geoVaultTextFieldFillColor()
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -494,7 +491,7 @@ fun GeoVaultInput(
             { Text(it, color = GeoVaultColorTokens.MainBlue) }
         },
         placeholder = placeholder?.let {
-            { Text(it, color = GeoVaultColorTokens.TextSecondary) }
+            { Text(it, color = geoVaultContentSecondaryColor()) }
         },
         modifier = modifier,
         enabled = enabled,
@@ -509,7 +506,7 @@ fun GeoVaultInput(
             focusedBorderColor = GeoVaultColorTokens.MainBlue,
             unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
             focusedLabelColor = GeoVaultColorTokens.MainBlue,
-            unfocusedLabelColor = GeoVaultColorTokens.MainBlue
+            unfocusedLabelColor = GeoVaultColorTokens.MainBlue,
         )
     )
 }

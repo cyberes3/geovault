@@ -15,7 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 /**
  * Generic clickable list row: optional leading slot, title, optional subtitle, optional
@@ -56,14 +56,14 @@ fun GeoVaultListRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.SemiBold),
-                color = GeoVaultColorTokens.TextPrimary,
+                color = MaterialTheme.colors.onSurface,
             )
             val subtitleText = subtitle?.takeIf { it.isNotBlank() }
             if (subtitleText != null) {
                 Text(
                     text = subtitleText,
                     style = MaterialTheme.typography.body2,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                 )
             }
         }

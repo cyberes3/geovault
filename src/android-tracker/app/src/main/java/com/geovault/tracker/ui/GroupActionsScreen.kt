@@ -28,6 +28,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
@@ -122,7 +123,7 @@ fun GroupActionsScreen(
                 Text(
                     text = stringResource(R.string.trackers_group_actions_empty),
                     style = MaterialTheme.typography.body2,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                 )
             }
         } else {

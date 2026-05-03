@@ -27,6 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
  * Case-insensitive search filter for [GeoVaultMultiSelectDialog] with `searchable = true`.
@@ -85,6 +88,7 @@ fun <T> GeoVaultMultiSelectDialog(
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
+        backgroundColor = geoVaultDialogSurfaceColor(),
         title = {
             Text(
                 text = title,
@@ -96,7 +100,7 @@ fun <T> GeoVaultMultiSelectDialog(
                 Text(
                     text = emptyLabel,
                     style = MaterialTheme.typography.body2,
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                 )
             } else {
                 Column {
@@ -113,7 +117,7 @@ fun <T> GeoVaultMultiSelectDialog(
                         Text(
                             text = searchNoResultsLabel,
                             style = MaterialTheme.typography.body2,
-                            color = GeoVaultColorTokens.TextSecondary,
+                            color = geoVaultContentSecondaryColor(),
                         )
                     } else {
                         LazyColumn(
@@ -148,7 +152,7 @@ fun <T> GeoVaultMultiSelectDialog(
                                     Text(
                                         text = labelFor(item),
                                         style = MaterialTheme.typography.body1,
-                                        color = GeoVaultColorTokens.TextPrimary,
+                                        color = MaterialTheme.colors.onSurface,
                                     )
                                 }
                             }

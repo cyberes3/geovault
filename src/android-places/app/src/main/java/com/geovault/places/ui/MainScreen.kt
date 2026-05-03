@@ -25,6 +25,7 @@ import androidx.compose.material.Card
 import androidx.compose.material.Divider
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -55,6 +56,8 @@ import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
@@ -129,7 +132,7 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(scaffoldPadding)
-                    .background(GeoVaultColorTokens.ListBackground)
+                    .background(MaterialTheme.colors.background)
             ) {
                 GeoVaultAuthGate(
                     isAuthenticated = state.isAuthenticated,
@@ -147,7 +150,7 @@ fun MainScreen(
                         if (showSearchDivider) {
                             Divider(
                                 modifier = Modifier.fillMaxWidth(),
-                                color = GeoVaultColorTokens.BorderLight,
+                                color = geoVaultHairlineDividerColor(),
                                 thickness = 1.dp
                             )
                         }
@@ -204,7 +207,7 @@ private fun SearchBlock(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(GeoVaultColorTokens.ListBackground)
+            .background(MaterialTheme.colors.background)
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -284,7 +287,7 @@ private fun PlacesBody(
         canRefresh = !state.isRefreshing,
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.ListBackground),
+            .background(MaterialTheme.colors.background),
     ) {
         if (state.saved.isEmpty() && state.offlineItems.isEmpty()) {
             EmptyState()
@@ -328,7 +331,7 @@ private fun SectionHeader(text: String, placement: ListSectionHeaderPlacement) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 4.dp, top = topPadding, end = 4.dp, bottom = 8.dp),
-        color = GeoVaultColorTokens.TextSecondary,
+        color = geoVaultContentSecondaryColor(),
         fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
     )
@@ -364,7 +367,7 @@ private fun PlaceRow(
             .fillMaxWidth()
             .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
         shape = RoundedCornerShape(12.dp),
-        backgroundColor = GeoVaultColorTokens.Surface,
+        backgroundColor = MaterialTheme.colors.surface,
         elevation = 0.dp,
         border = BorderStroke(
             width = 2.dp,
@@ -380,7 +383,8 @@ private fun PlaceRow(
                 .fillMaxWidth()
                 .background(
                     when {
-                        isSelected -> GeoVaultColorTokens.Purple100
+                        isSelected && MaterialTheme.colors.isLight -> GeoVaultColorTokens.Purple100
+                        isSelected -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
                         else -> Color.Transparent
                     }
                 )
@@ -407,7 +411,7 @@ private fun PlaceRow(
                 Spacer(modifier = Modifier.size(12.dp))
                 Text(
                     text = feature.properties.name ?: "Unnamed Place",
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -424,13 +428,13 @@ private fun PlaceRow(
                     color = if (item.isOffline) {
                         GeoVaultColorTokens.MainYellow
                     } else {
-                        GeoVaultColorTokens.TextSecondary.copy(alpha = 0.8f)
+                        geoVaultContentSecondaryColor().copy(alpha = 0.8f)
                     },
                     fontSize = 12.sp
                 )
                 Text(
                     text = " • ",
-                    color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.5f),
+                    color = geoVaultContentSecondaryColor().copy(alpha = 0.5f),
                     fontSize = 12.sp
                 )
                 Text(
@@ -441,7 +445,7 @@ private fun PlaceRow(
                             onCopyCoordinates(addressOrCoordinates)
                         }
                         .padding(2.dp),
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -455,7 +459,7 @@ private fun PlaceRow(
                         .fillMaxWidth()
                         .padding(bottom = 20.dp)
                         .clickable { onViewDescription(feature) },
-                    color = GeoVaultColorTokens.TextSecondary,
+                    color = geoVaultContentSecondaryColor(),
                     fontSize = 14.sp,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
@@ -505,20 +509,20 @@ private fun EmptyState() {
         Icon(
             imageVector = Icons.Default.Map,
             contentDescription = null,
-            tint = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.2f),
+            tint = geoVaultContentSecondaryColor().copy(alpha = 0.2f),
             modifier = Modifier.size(64.dp)
         )
         Text(
             text = "No places",
             modifier = Modifier.padding(top = 16.dp),
-            color = GeoVaultColorTokens.TextSecondary,
+            color = geoVaultContentSecondaryColor(),
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = "Tap the + button to add your first place",
             modifier = Modifier.padding(top = 8.dp),
-            color = GeoVaultColorTokens.TextSecondary.copy(alpha = 0.7f),
+            color = geoVaultContentSecondaryColor().copy(alpha = 0.7f),
             fontSize = 14.sp
         )
     }

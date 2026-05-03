@@ -3,7 +3,7 @@ package com.geovault.common.maps.ui.scaffold
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
@@ -88,15 +88,15 @@ object GeoVaultMapScaffoldDefaults {
     /**
      * Drawer container color. Matches the old survey-app `bottom_sheet_background`
      * (`blue_extra_light` = #F3F6FA) in light mode; uses [GeoVaultColorTokens.Dark.Surface]
-     * in dark mode for consistency with the rest of the GeoVault palette (not pure black).
+     * in dark mode so the sheet reads as an elevated surface over the OLED black canvas.
      */
     val DrawerContainerColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) {
-            GeoVaultColorTokens.Dark.Surface
+        get() = if (MaterialTheme.colors.isLight) {
+            MaterialTheme.colors.background
         } else {
-            GeoVaultColorTokens.ListBackground
+            GeoVaultColorTokens.Dark.Surface
         }
 
     /**
@@ -106,10 +106,10 @@ object GeoVaultMapScaffoldDefaults {
     val DragHandleColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) {
-            GeoVaultColorTokens.Dark.BorderLight
-        } else {
+        get() = if (MaterialTheme.colors.isLight) {
             GeoVaultColorTokens.BorderLight
+        } else {
+            GeoVaultColorTokens.Dark.BorderLight
         }
 
     /**
@@ -119,10 +119,10 @@ object GeoVaultMapScaffoldDefaults {
     val HeaderDividerColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) {
-            GeoVaultColorTokens.Dark.BorderLight
-        } else {
+        get() = if (MaterialTheme.colors.isLight) {
             GeoVaultColorTokens.Gray200
+        } else {
+            GeoVaultColorTokens.Dark.BorderLight
         }
 
     /** Title text color for drawer headers. */

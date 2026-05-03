@@ -34,6 +34,7 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.params.TrackerParamsBodyKind
 import com.geovault.tracker.params.TrackerParamsRouteArgs
@@ -209,7 +210,7 @@ private fun TrackerParamsScrollContent(
             Text(
                 text = motion,
                 modifier = Modifier.padding(top = 24.dp),
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
                 fontSize = 12.sp,
             )
         }

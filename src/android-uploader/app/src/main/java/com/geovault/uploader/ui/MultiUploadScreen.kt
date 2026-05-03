@@ -27,7 +27,6 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -47,6 +46,8 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultCardBorderColor
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.uploader.R
 import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.model.FileQueueItem
@@ -113,7 +114,7 @@ fun MultiUploadScreen(
             }
             Column(modifier = Modifier.fillMaxWidth()) {
                 Divider(
-                    color = GeoVaultColorTokens.BorderLight,
+                    color = geoVaultHairlineDividerColor(),
                     thickness = 1.dp
                 )
                 Column(
@@ -180,8 +181,8 @@ private fun FileQueueRow(
         modifier = Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(bringIntoViewRequester),
-        backgroundColor = Color.White,
-        border = BorderStroke(1.dp, GeoVaultColorTokens.BorderLight),
+        backgroundColor = MaterialTheme.colors.surface,
+        border = BorderStroke(1.dp, geoVaultCardBorderColor()),
         elevation = 0.dp
     ) {
         Column(

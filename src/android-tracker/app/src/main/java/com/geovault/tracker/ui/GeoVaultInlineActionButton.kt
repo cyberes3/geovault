@@ -5,6 +5,7 @@ import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 @Composable
 internal fun GeoVaultInlineActionButton(
@@ -23,7 +24,7 @@ internal fun GeoVaultInlineActionButton(
             color = if (enabled) {
                 GeoVaultColorTokens.MainBlue
             } else {
-                GeoVaultColorTokens.TextSecondary
+                geoVaultContentSecondaryColor()
             }
         )
     }

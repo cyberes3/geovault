@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 /**
  * Canonical bold section label placed above a cluster of fields or a grouped list section.
@@ -29,7 +28,7 @@ fun GeoVaultFormSectionHeader(
     Text(
         text = text,
         style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-        color = GeoVaultColorTokens.TextPrimary,
+        color = MaterialTheme.colors.onSurface,
         modifier = modifier,
     )
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material.Card
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,8 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.isSystemInDarkTheme
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultCardBorderColor
 
 @Composable
 fun GeoVaultToggleHelpCard(
@@ -28,13 +29,13 @@ fun GeoVaultToggleHelpCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val isDark = isSystemInDarkTheme()
-    val borderColor = if (isDark) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
-    val titleColor = if (isDark) GeoVaultColorTokens.Dark.ToggleTitle else GeoVaultColorTokens.ToggleTitle
-    val helpColor = if (isDark) GeoVaultColorTokens.Dark.ToggleHelpText else GeoVaultColorTokens.ToggleHelpText
+    val isLight = MaterialTheme.colors.isLight
+    val borderColor = geoVaultCardBorderColor()
+    val titleColor = if (isLight) GeoVaultColorTokens.ToggleTitle else GeoVaultColorTokens.Dark.ToggleTitle
+    val helpColor = if (isLight) GeoVaultColorTokens.ToggleHelpText else GeoVaultColorTokens.Dark.ToggleHelpText
     Card(
         modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f),
-        backgroundColor = GeoVaultColorTokens.Surface,
+        backgroundColor = MaterialTheme.colors.surface,
         border = BorderStroke(1.dp, borderColor),
         elevation = 0.dp
     ) {

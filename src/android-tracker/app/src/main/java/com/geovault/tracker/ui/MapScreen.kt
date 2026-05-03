@@ -85,6 +85,8 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
 import com.geovault.tracker.params.TrackerParamsRouteArgs
@@ -142,7 +144,7 @@ fun MapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(GeoVaultColorTokens.ListBackground),
+                .background(MaterialTheme.colors.background),
         ) {
             GeoVaultAuthGate(
                 isAuthenticated = isAuthenticated,
@@ -467,7 +469,7 @@ private fun TrackerMapAuthenticatedContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(GeoVaultColorTokens.ListBackground),
+            .background(MaterialTheme.colors.background),
     ) {
         Box(
             modifier = Modifier
@@ -691,13 +693,13 @@ private fun TrackerMapAuthenticatedContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .background(GeoVaultColorTokens.BorderLight),
+                            .background(geoVaultHairlineDividerColor()),
                     )
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = androidx.compose.ui.graphics.RectangleShape,
-                        backgroundColor = GeoVaultColorTokens.ListBackground,
+                        backgroundColor = MaterialTheme.colors.background,
                         elevation = 0.dp,
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -781,7 +783,7 @@ private fun MapTrackerSelectionPanel(
     val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = GeoVaultColorTokens.ListBackground,
+        color = MaterialTheme.colors.background,
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             Row(
@@ -793,7 +795,7 @@ private fun MapTrackerSelectionPanel(
                     text = nameText,
                     style = MaterialTheme.typography.subtitle2,
                     fontWeight = FontWeight.Bold,
-                    color = GeoVaultColorTokens.TextPrimary,
+                    color = MaterialTheme.colors.onSurface,
                     modifier = Modifier.weight(1f),
                 )
                 GeoVaultIconButton(
@@ -818,7 +820,11 @@ private fun MapTrackerSelectionPanel(
                     modifier = Modifier
                         .size(28.dp)
                         .background(
-                            color = GeoVaultColorTokens.BorderLight,
+                            color = if (MaterialTheme.colors.isLight) {
+                                GeoVaultColorTokens.BorderLight
+                            } else {
+                                GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
+                            },
                             shape = CircleShape,
                         ),
                     tooltip = stringResource(R.string.tooltip_map_selection_close),
@@ -835,7 +841,7 @@ private fun MapTrackerSelectionPanel(
             Text(
                 text = latLon,
                 style = MaterialTheme.typography.body2,
-                color = GeoVaultColorTokens.TextSecondary,
+                color = geoVaultContentSecondaryColor(),
                 modifier = Modifier.clickable {
                     clipboardHelper.copyText(latLon, label = "Coordinates")
                 },
@@ -858,7 +864,7 @@ private fun MapTrackerSelectionPanel(
             val lastUpdatedColor = if (warnStale) {
                 GeoVaultColorTokens.Error
             } else {
-                GeoVaultColorTokens.TextSecondary
+                geoVaultContentSecondaryColor()
             }
             Text(
                 text = lastUpdatedText,

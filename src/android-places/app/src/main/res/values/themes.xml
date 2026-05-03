@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Places" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Platform has no android:Theme.Material.DayNight.*; AppCompat provides DayNight + NoActionBar. -->
+    <style name="Theme.Places" parent="Theme.AppCompat.DayNight.NoActionBar" />
 </resources>

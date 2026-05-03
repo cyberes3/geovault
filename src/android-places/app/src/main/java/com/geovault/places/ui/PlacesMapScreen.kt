@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Card
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -223,7 +224,7 @@ fun PlacesMapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .background(GeoVaultColorTokens.ListBackground),
+                .background(MaterialTheme.colors.background),
         ) {
             Box(
                 modifier = Modifier
@@ -324,7 +325,7 @@ fun PlacesMapScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = androidx.compose.ui.graphics.RectangleShape,
-                backgroundColor = GeoVaultColorTokens.ListBackground,
+                backgroundColor = MaterialTheme.colors.background,
                 elevation = 0.dp,
             ) {
                 Column {
@@ -337,7 +338,7 @@ fun PlacesMapScreen(
                     Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = viewModel.selectedFeatureLabel(selectedFeature?.properties),
-                        color = GeoVaultColorTokens.TextPrimary,
+                        color = MaterialTheme.colors.onSurface,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.height(6.dp))
