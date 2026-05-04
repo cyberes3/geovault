@@ -39,7 +39,7 @@ class GeoVaultMapsBootstrap(
             key = HOOK_RELEASE_MAIN_MAP,
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
         ) {
-            GeoVaultMainMapControllerStore.forceReleaseKeyForReset(mainMapKey)
+            GeoVaultMainMapControllerStore.releaseKey(mainMapKey)
         }
     }
 

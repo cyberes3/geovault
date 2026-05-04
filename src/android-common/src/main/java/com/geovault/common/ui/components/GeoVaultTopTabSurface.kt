@@ -13,7 +13,6 @@ import androidx.compose.material.Divider
 import androidx.compose.material.Scaffold
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
@@ -72,12 +71,12 @@ fun <T> GeoVaultTopTabSurface(
 ) {
     if (tabs.isEmpty()) return
 
-    val dismissLeave = onDismissLeaveComposition
-    if (dismissTitle != null && onDismiss != null && dismissLeave != null) {
-        DisposableEffect(dismissLeave) {
-            onDispose { dismissLeave() }
-        }
+    val dismissLeave = if (dismissTitle != null && onDismiss != null) {
+        onDismissLeaveComposition
+    } else {
+        null
     }
+    GeoVaultOnPermanentLeaveComposition(dismissLeave)
 
     val selectedIndex = tabs.indexOfFirst { it.value == selectedTab }.let { if (it >= 0) it else 0 }
     val pagerState = rememberPagerState(

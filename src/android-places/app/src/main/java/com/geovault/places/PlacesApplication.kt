@@ -45,7 +45,7 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
             key = HOOK_CLEAR_LOCAL,
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
         ) { hookContext ->
-            GeoVaultMainMapControllerStore.forceReleaseKeyForReset(PLACES_MAIN_MAP_KEY)
+            GeoVaultMainMapControllerStore.releaseKey(PLACES_MAIN_MAP_KEY)
             PlacesAppServices.from(this).cacheStore().clear()
             PlacesAppServices.from(this).navigationRepository().clearPending()
         }

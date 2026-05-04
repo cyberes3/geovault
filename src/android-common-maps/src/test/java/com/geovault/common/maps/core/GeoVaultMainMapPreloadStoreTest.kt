@@ -2,123 +2,128 @@ package com.geovault.common.maps.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeoVaultMainMapPreloadStoreTest {
     @Test
-    fun acquireForTest_reusesControllerRefForSameKey() {
+    fun acquire_returnsSameControllerForSameKey() {
         GeoVaultMainMapControllerStore.resetForTest()
         var factoryCalls = 0
         val firstRef = FakeRef()
         val secondRef = FakeRef()
 
-        GeoVaultMainMapControllerStore.acquireForTest("main") {
+        val first = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") {
             factoryCalls += 1
             firstRef
         }
-        GeoVaultMainMapControllerStore.acquireForTest("main") {
+        val second = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") {
             factoryCalls += 1
             secondRef
         }
 
+        assertSame(firstRef, first)
+        assertSame(firstRef, second)
         assertEquals(1, factoryCalls)
-        assertEquals(2, GeoVaultMainMapControllerStore.currentRefCountForTest("main"))
+        assertEquals(1, GeoVaultMainMapControllerStore.currentKeyCountForTest())
         assertFalse(firstRef.destroyed)
         assertFalse(secondRef.destroyed)
     }
 
     @Test
-    fun release_partialSharedOwnership_doesNotDestroy() {
-        GeoVaultMainMapControllerStore.resetForTest()
-        val ref = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-
-        GeoVaultMainMapControllerStore.release("main")
-
-        assertEquals(1, GeoVaultMainMapControllerStore.currentRefCountForTest("main"))
-        assertFalse(ref.destroyed)
-    }
-
-    @Test
-    fun release_finalSharedOwner_destroys() {
-        GeoVaultMainMapControllerStore.resetForTest()
-        val ref = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-
-        GeoVaultMainMapControllerStore.release("main")
-        GeoVaultMainMapControllerStore.release("main")
-
-        assertTrue(ref.destroyed)
-        assertEquals(0, GeoVaultMainMapControllerStore.currentRefCountForTest("main"))
-    }
-
-    @Test
-    fun release_destroysOnlyRequestedKey() {
+    fun acquire_returnsDifferentControllerPerKey() {
         GeoVaultMainMapControllerStore.resetForTest()
         val firstRef = FakeRef()
         val secondRef = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { firstRef }
-        GeoVaultMainMapControllerStore.acquireForTest("other") { secondRef }
 
-        GeoVaultMainMapControllerStore.release("main")
+        val first = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") { firstRef }
+        val second = GeoVaultMainMapControllerStore.getOrCreateRefForTest("other") { secondRef }
+
+        assertSame(firstRef, first)
+        assertSame(secondRef, second)
+        assertNotSame(first, second)
+        assertEquals(2, GeoVaultMainMapControllerStore.currentKeyCountForTest())
+    }
+
+    @Test
+    fun acquire_keepsEntryUntilExplicitReleaseKey_thenRecreates() {
+        GeoVaultMainMapControllerStore.resetForTest()
+        var factoryCalls = 0
+        val firstRef = FakeRef()
+        val secondRef = FakeRef()
+
+        val first = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") {
+            factoryCalls += 1
+            firstRef
+        }
+        val stillFirst = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") {
+            factoryCalls += 1
+            secondRef
+        }
+
+        assertSame(first, stillFirst)
+        assertEquals(1, factoryCalls)
+        assertFalse(firstRef.destroyed)
+
+        GeoVaultMainMapControllerStore.releaseKey("main")
+        val recreated = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") {
+            factoryCalls += 1
+            secondRef
+        }
+
+        assertTrue(firstRef.destroyed)
+        assertSame(secondRef, recreated)
+        assertEquals(2, factoryCalls)
+        assertEquals(1, GeoVaultMainMapControllerStore.currentKeyCountForTest())
+    }
+
+    @Test
+    fun releaseKey_destroysOnlyThatKey() {
+        GeoVaultMainMapControllerStore.resetForTest()
+        val firstRef = FakeRef()
+        val secondRef = FakeRef()
+        GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") { firstRef }
+        GeoVaultMainMapControllerStore.getOrCreateRefForTest("other") { secondRef }
+
+        GeoVaultMainMapControllerStore.releaseKey("main")
 
         assertTrue(firstRef.destroyed)
         assertFalse(secondRef.destroyed)
+        assertEquals(1, GeoVaultMainMapControllerStore.currentKeyCountForTest())
     }
 
     @Test
-    fun preloadAndRelease_remainsDeterministic() {
-        GeoVaultMainMapControllerStore.resetForTest()
-        val ref = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-
-        GeoVaultMainMapControllerStore.preloadForTest("main")
-        GeoVaultMainMapControllerStore.release("main")
-
-        assertEquals(1, ref.preloadCalls)
-        assertTrue(ref.destroyed)
-    }
-
-    @Test
-    fun forceReleaseKeyForReset_destroysRegardlessOfRefCount() {
-        GeoVaultMainMapControllerStore.resetForTest()
-        val ref = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-
-        GeoVaultMainMapControllerStore.forceReleaseKeyForReset("main")
-
-        assertTrue(ref.destroyed)
-        assertEquals(0, GeoVaultMainMapControllerStore.currentRefCountForTest("main"))
-    }
-
-    @Test
-    fun release_afterForceRelease_isNoOp() {
-        GeoVaultMainMapControllerStore.resetForTest()
-        val ref = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { ref }
-
-        GeoVaultMainMapControllerStore.forceReleaseKeyForReset("main")
-        GeoVaultMainMapControllerStore.release("main")
-
-        assertTrue(ref.destroyed)
-    }
-
-    @Test
-    fun releaseAll_destroysEveryControllerRef() {
+    fun releaseAll_destroysEveryController() {
         GeoVaultMainMapControllerStore.resetForTest()
         val firstRef = FakeRef()
         val secondRef = FakeRef()
-        GeoVaultMainMapControllerStore.acquireForTest("main") { firstRef }
-        GeoVaultMainMapControllerStore.acquireForTest("other") { secondRef }
+        GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") { firstRef }
+        GeoVaultMainMapControllerStore.getOrCreateRefForTest("other") { secondRef }
 
         GeoVaultMainMapControllerStore.releaseAll()
 
         assertTrue(firstRef.destroyed)
         assertTrue(secondRef.destroyed)
+        assertEquals(0, GeoVaultMainMapControllerStore.currentKeyCountForTest())
+    }
+
+    @Test
+    fun preload_initializesEntry_andEntryPersistsAcrossNoConsumers() {
+        GeoVaultMainMapControllerStore.resetForTest()
+        val ref = FakeRef()
+
+        GeoVaultMainMapControllerStore.preloadForTest("main") { ref }
+
+        assertEquals(1, ref.preloadCalls)
+        assertFalse(ref.destroyed)
+        assertEquals(1, GeoVaultMainMapControllerStore.currentKeyCountForTest())
+
+        val acquired = GeoVaultMainMapControllerStore.getOrCreateRefForTest("main") { FakeRef() }
+
+        assertSame(ref, acquired)
+        assertFalse(ref.destroyed)
     }
 
     private class FakeRef : MainMapControllerRef {

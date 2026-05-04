@@ -42,7 +42,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
         ) { hookContext ->
             SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(hookContext)
-            GeoVaultMainMapControllerStore.forceReleaseKeyForReset(TRACKER_MAIN_MAP_KEY)
+            GeoVaultMainMapControllerStore.releaseKey(TRACKER_MAIN_MAP_KEY)
         }
 
         TrackingNotificationChannels.ensureTrackingChannel(this)

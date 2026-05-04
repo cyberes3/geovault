@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
@@ -52,12 +50,7 @@ fun GeoVaultSubViewScaffold(
     backgroundColor: Color = MaterialTheme.colors.background,
     content: @Composable (PaddingValues) -> Unit,
 ) {
-    val leaveState = rememberUpdatedState(onLeaveComposition)
-    DisposableEffect(Unit) {
-        onDispose {
-            leaveState.value?.invoke()
-        }
-    }
+    GeoVaultOnPermanentLeaveComposition(onLeaveComposition)
     Scaffold(
         // Sub-views own nav-bar safe-area for their content/bottomBar so settings, edit forms,
         // station detail, etc. never bleed underneath the system navigation bar even when the

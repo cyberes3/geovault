@@ -10,10 +10,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -23,18 +23,6 @@ sealed interface GeoVaultMainMapPreloadCameraTarget {
     data object None : GeoVaultMainMapPreloadCameraTarget
     data class Single(val lat: Double, val lon: Double) : GeoVaultMainMapPreloadCameraTarget
     data class Bounds(val bounds: LatLngBounds) : GeoVaultMainMapPreloadCameraTarget
-}
-
-class GeoVaultMainMapHandle internal constructor(
-    val key: String,
-    private val ref: MainMapControllerRef,
-) {
-    val map: GeoVaultMainMap
-        get() = ref.map
-
-    internal fun release() {
-        GeoVaultMainMapControllerStore.release(key)
-    }
 }
 
 internal interface MainMapControllerRef {
@@ -59,46 +47,19 @@ private class DefaultMainMapControllerRef(
 
 object GeoVaultMainMapControllerStore {
     private val lock = Any()
-    private data class Entry(
-        val ref: MainMapControllerRef,
-        var refCount: Int,
-    )
+    private val controllers = linkedMapOf<String, MainMapControllerRef>()
 
-    private val controllers = linkedMapOf<String, Entry>()
-
-    fun acquire(context: Context, key: String): GeoVaultMainMapHandle {
-        synchronized(lock) {
-            val entry = controllers.getOrPut(key) {
-                Entry(
-                    ref = DefaultMainMapControllerRef(context.applicationContext),
-                    refCount = 0,
-                )
-            }
-            entry.refCount += 1
-            return GeoVaultMainMapHandle(key = key, ref = entry.ref)
-        }
-    }
-
-    fun release(key: String) {
-        var refToDestroy: MainMapControllerRef? = null
-        synchronized(lock) {
-            val entry = controllers[key] ?: return
-            if (entry.refCount > 1) {
-                entry.refCount -= 1
-            } else {
-                refToDestroy = controllers.remove(key)?.ref
-            }
-        }
-        refToDestroy?.destroy()
+    fun acquire(context: Context, key: String): GeoVaultMainMap {
+        return getOrCreateRef(context.applicationContext, key).map
     }
 
     /**
      * Deterministic teardown for reset/auth-flush flows.
-     * This removes and destroys the key regardless of current ref-count.
+     * Main maps are app-scoped registry entries and are not released by Compose consumers.
      */
-    fun forceReleaseKeyForReset(key: String) {
+    fun releaseKey(key: String) {
         val refToDestroy = synchronized(lock) {
-            controllers.remove(key)?.ref
+            controllers.remove(key)
         }
         refToDestroy?.destroy()
     }
@@ -106,7 +67,7 @@ object GeoVaultMainMapControllerStore {
     fun releaseAll() {
         val refsToDestroy = mutableListOf<MainMapControllerRef>()
         synchronized(lock) {
-            refsToDestroy.addAll(controllers.values.map { it.ref })
+            refsToDestroy.addAll(controllers.values)
             controllers.clear()
         }
         refsToDestroy.forEach { ref ->
@@ -121,83 +82,60 @@ object GeoVaultMainMapControllerStore {
      * thread while composition is running — the snapshot is taken under the store lock.
      */
     fun forEachActiveMap(block: (GeoVaultMainMap) -> Unit) {
-        val snapshot = synchronized(lock) { controllers.values.map { it.ref.map } }
+        val snapshot = synchronized(lock) { controllers.values.map { it.map } }
         snapshot.forEach(block)
     }
 
     fun preload(context: Context, key: String) {
-        val ref = synchronized(lock) {
-            val entry = controllers.getOrPut(key) {
-                Entry(
-                    ref = DefaultMainMapControllerRef(context.applicationContext),
-                    refCount = 0,
-                )
-            }
-            entry.ref
-        }
+        val ref = getOrCreateRef(context.applicationContext, key)
         ref.preload()
     }
 
     @VisibleForTesting
-    internal fun currentRefCountForTest(key: String): Int {
-        synchronized(lock) {
-            return controllers[key]?.refCount ?: 0
-        }
+    internal fun currentKeyCountForTest(): Int {
+        return synchronized(lock) { controllers.size }
     }
 
     @VisibleForTesting
-    internal fun acquireForTest(
+    internal fun preloadForTest(
         key: String,
         factory: () -> MainMapControllerRef,
-    ): GeoVaultMainMapHandle {
-        synchronized(lock) {
-            val entry = controllers.getOrPut(key) {
-                Entry(
-                    ref = factory(),
-                    refCount = 0,
-                )
-            }
-            entry.refCount += 1
-            return GeoVaultMainMapHandle(key = key, ref = entry.ref)
-        }
-    }
-
-    @VisibleForTesting
-    internal fun preloadForTest(key: String) {
-        val ref = synchronized(lock) {
-            controllers[key]?.ref
-        }
-        ref?.preload()
+    ) {
+        getOrCreateRefForTest(key, factory).preload()
     }
 
     @VisibleForTesting
     internal fun resetForTest() {
         releaseAll()
     }
-}
 
-@Composable
-fun rememberGeoVaultMainMapHandle(
-    key: String,
-): GeoVaultMainMapHandle {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val handle = remember(context, key) {
-        GeoVaultMainMapControllerStore.acquire(context.applicationContext, key)
-    }
-    DisposableEffect(handle) {
-        onDispose {
-            handle.release()
+    private fun getOrCreateRef(context: Context, key: String): MainMapControllerRef {
+        return synchronized(lock) {
+            controllers.getOrPut(key) {
+                DefaultMainMapControllerRef(context.applicationContext)
+            }
         }
     }
-    return handle
+
+    @VisibleForTesting
+    internal fun getOrCreateRefForTest(
+        key: String,
+        factory: () -> MainMapControllerRef,
+    ): MainMapControllerRef {
+        return synchronized(lock) {
+            controllers.getOrPut(key) { factory() }
+        }
+    }
 }
 
 @Composable
 fun rememberGeoVaultMainMap(
     key: String,
 ): GeoVaultMainMap {
-    val handle = rememberGeoVaultMainMapHandle(key)
-    return handle.map
+    val context = LocalContext.current
+    return remember(context, key) {
+        GeoVaultMainMapControllerStore.acquire(context.applicationContext, key)
+    }
 }
 
 fun preloadGeoVaultMainMapOnAppLaunch(
@@ -254,8 +192,7 @@ private fun GeoVaultMainMapPreloadHostAuthenticatedBody(
     modifier: Modifier,
     surfaceMapInHost: Boolean,
 ) {
-    val handle = rememberGeoVaultMainMapHandle(mainMapKey)
-    val map = handle.map
+    val map = rememberGeoVaultMainMap(mainMapKey)
     val phase by map.phase.collectAsState()
     val density = LocalDensity.current
     val preloadPaddingPolicy = remember {
