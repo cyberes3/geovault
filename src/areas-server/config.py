@@ -3,10 +3,18 @@ Configuration for the areas server.
 Load from environment; no Django or main backend dependency.
 """
 import os
+import re
 from typing import Optional
 
-# PostgreSQL connection: conninfo string or database name
-DATABASE_URL: Optional[str] = os.environ.get("AREAS_SERVER_DATABASE")
+
+def _database_url_from_env() -> Optional[str]:
+    """Current AREAS_SERVER_DATABASE value (read each time so env changes are visible)."""
+    raw = os.environ.get("AREAS_SERVER_DATABASE")
+    if raw is None:
+        return None
+    s = raw.strip()
+    return s or None
+
 
 # Schema where admin_areas, protected_areas, and water_bodies tables live (hard-coded)
 SCHEMA: str = "is_in"
@@ -29,8 +37,27 @@ REDIS_URL: str = os.environ.get("AREAS_SERVER_REDIS_URL", "redis://127.0.0.1:637
 # Session work_mem for PostGIS queries (sorts, distance ops). Default 128MB; increase if queries are slow.
 WORK_MEM: str = os.environ.get("AREAS_SERVER_WORK_MEM", "128MB")
 
+# work_mem must be a literal in SET (PostgreSQL does not accept bound params for SET); only allow safe tokens.
+WORK_MEM_SAFE_RE = re.compile(r"^\d+(MB|GB|kB)?$", re.IGNORECASE)
+
 
 def get_conninfo() -> str:
-    if not DATABASE_URL or not DATABASE_URL.strip():
-        raise ValueError("AREAS_SERVER_DATABASE must be set")
-    return DATABASE_URL.strip()
+    url = _database_url_from_env()
+    if not url:
+        raise ValueError(
+            "AREAS_SERVER_DATABASE must be set to a non-empty PostgreSQL URI or libpq conninfo string "
+            "(export it or set it in the service EnvironmentFile before starting the areas server)."
+        )
+    return url
+
+
+def validate_required_environment() -> None:
+    """
+    Fail fast at process startup if required settings are missing or invalid.
+    Call once when loading the Flask app (e.g. gunicorn worker import).
+    """
+    get_conninfo()
+    if not WORK_MEM_SAFE_RE.match(WORK_MEM):
+        raise ValueError(
+            f"Invalid AREAS_SERVER_WORK_MEM: {WORK_MEM!r}; use a size token such as 128MB, 256MB, or 1GB."
+        )

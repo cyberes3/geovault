@@ -7,6 +7,7 @@ Uses urllib for HTTP so real-server tests are not affected by conftest's request
 """
 import inspect
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -19,6 +20,11 @@ import pytest
 _areas_server_dir = Path(__file__).resolve().parent.parent / "areas-server"
 if str(_areas_server_dir) not in sys.path:
     sys.path.insert(0, str(_areas_server_dir))
+
+# Dummy DSN so `import app` succeeds in client tests that mock the pool (must not be used without mocks).
+_AREAS_SERVER_TEST_CLIENT_PLACEHOLDER_DB = (
+    "postgresql://127.0.0.1:65535/__areas_server_test_client_placeholder__"
+)
 
 from areas_lib import lookup_admin, lookup_common, lookup_places, lookup_protected_areas, lookup_water, lookup_waterway
 
@@ -106,8 +112,11 @@ def require_areas_server(areas_server_url):
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     """In-process test client (used only for tests that mock server internals)."""
+    # app validates AREAS_SERVER_DATABASE at import; these tests mock the pool.
+    if not (os.environ.get("AREAS_SERVER_DATABASE") or "").strip():
+        monkeypatch.setenv("AREAS_SERVER_DATABASE", _AREAS_SERVER_TEST_CLIENT_PLACEHOLDER_DB)
     from app import app as is_in_app
     is_in_app.config["TESTING"] = True
     return is_in_app.test_client()
@@ -1356,11 +1365,13 @@ class TestWaterwaysTableNoUnnamed:
     @pytest.fixture
     def areas_db_conn(self):
         """Connection to areas server DB; skip if not configured or table missing."""
-        from config import DATABASE_URL
-        if not DATABASE_URL or not DATABASE_URL.strip():
+        from config import get_conninfo
+        try:
+            db_url = get_conninfo()
+        except ValueError:
             pytest.skip("AREAS_SERVER_DATABASE not set (copy tests/.env.example to tests/.env)")
         import psycopg
-        conn = psycopg.connect(DATABASE_URL.strip())
+        conn = psycopg.connect(db_url)
         try:
             conn.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
             if not lookup_waterway.table_exists(conn):

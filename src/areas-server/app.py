@@ -4,7 +4,6 @@ GET /query?lat=&lon= (single), POST /query (batch), GET /health, GET /stats (DB 
 """
 import json
 import logging
-import re
 import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
@@ -30,23 +29,23 @@ from config import (
     MAX_BATCH_SIZE,
     POOL_MAX_SIZE,
     REDIS_URL,
+    validate_required_environment,
     WORK_MEM,
+    WORK_MEM_SAFE_RE,
 )
 
 app = Flask(__name__)
+
+validate_required_environment()
 
 _pool: Optional[ConnectionPool] = None
 _cache: Optional[Any] = None
 
 
-# work_mem must be literal in SET (PostgreSQL does not accept bound params for SET). Only allow safe tokens.
-_WORK_MEM_RE = re.compile(r"^\d+(MB|GB|kB)?$", re.IGNORECASE)
-
-
 def _configure_read_only(conn):
     """Set session to read-only and tune for PostGIS (work_mem for sorts/distance)."""
     conn.execute("SET default_transaction_read_only = on")
-    if not _WORK_MEM_RE.match(WORK_MEM):
+    if not WORK_MEM_SAFE_RE.match(WORK_MEM):
         raise ValueError(f"Invalid AREAS_SERVER_WORK_MEM: {WORK_MEM!r}")
     conn.execute(f"SET work_mem = '{WORK_MEM}'")
     conn.rollback()
