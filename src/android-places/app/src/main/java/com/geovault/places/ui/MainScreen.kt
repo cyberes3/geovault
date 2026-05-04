@@ -90,8 +90,6 @@ fun MainScreen(
     onSearchChanged: (String) -> Unit,
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
-    /** When true, the shell settings overlay is visible — hide the redundant overflow menu. */
-    isSettingsOverlayVisible: Boolean,
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
     onAddPlace: () -> Unit,
@@ -119,11 +117,9 @@ fun MainScreen(
                     title = stringResource(R.string.app_title_bar),
                     subtitle = state.lastSyncLabel,
                     actionsContent = {
-                        if (!isSettingsOverlayVisible) {
-                            GeoVaultTopBarSettingsMenuAction(
-                                onOpenSettings = onOpenSettings,
-                            )
-                        }
+                        GeoVaultTopBarSettingsMenuAction(
+                            onOpenSettings = onOpenSettings,
+                        )
                     }
                 )
             }

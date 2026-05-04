@@ -39,8 +39,6 @@ import com.geovault.uploader.presentation.MainScreenState
 fun MainScreen(
     state: MainScreenState,
     invalidFilesDialogNames: List<String>?,
-    /** When true, the shell settings overlay is visible — hide the redundant overflow menu. */
-    isSettingsOverlayVisible: Boolean,
     onOpenSettings: () -> Unit,
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
@@ -57,12 +55,10 @@ fun MainScreen(
             GeoVaultTopTitleBar(
                 title = "GeoVault Uploader",
                 actionsContent = {
-                    if (!isSettingsOverlayVisible) {
-                        GeoVaultTopBarSettingsMenuAction(
-                            onOpenSettings = onOpenSettings,
-                            visibility = GeoVaultTopBarMenuVisibility.Always,
-                        )
-                    }
+                    GeoVaultTopBarSettingsMenuAction(
+                        onOpenSettings = onOpenSettings,
+                        visibility = GeoVaultTopBarMenuVisibility.Always,
+                    )
                 }
             )
         }

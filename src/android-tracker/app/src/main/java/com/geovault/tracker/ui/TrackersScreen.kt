@@ -314,9 +314,8 @@ fun TrackersScreen(
         }
     }
 
-    // Tracks whether any sub-view is rendered in [tabOverlay] right now. Drives the FAB
-    // visibility and disables the outer Settings overflow while a sub-view owns the
-    // body, so the user can't navigate out mid-edit.
+    // Tracks whether any sub-view is rendered in [tabOverlay] right now. Drives FAB visibility;
+    // Settings remains available and uses the common host-inactive path to dismiss sub-views.
     val isIntegratedSubViewOpen =
         activeTrackerEditLoadingDialog != null ||
             activeTrackerEditDialog != null ||
@@ -359,7 +358,7 @@ fun TrackersScreen(
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
-        settingsMenuEnabled = !isIntegratedSubViewOpen,
+        settingsMenuEnabled = true,
         authenticatedFloatingAction = {
             if (!isIntegratedSubViewOpen) {
                 GeoVaultFloatingActionButtonWithTooltip(
@@ -1361,6 +1360,7 @@ private fun TrackerEditLoadingShell(
         // and is replaced by [TrackerEditorScreen]. `onLeaveComposition = onDismiss` would
         // treat that swap as a tab-leave and close the entire edit flow (see scaffold KDoc).
         onLeaveComposition = null,
+        onHostInactive = onDismiss,
         closeContentDescription = stringResource(R.string.trackers_dialog_cancel),
         bottomBar = {
             Box(

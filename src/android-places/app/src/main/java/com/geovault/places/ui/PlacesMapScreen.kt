@@ -76,8 +76,6 @@ fun PlacesMapScreen(
     map: GeoVaultMainMap,
     viewModel: PlacesMapViewModel,
     launchArgs: PlacesMapLaunchArgs,
-    /** When true, the shell settings overlay is visible — hide the redundant overflow menu. */
-    isSettingsOverlayVisible: Boolean,
     onOpenSettings: () -> Unit,
     onOpenEdit: (Feature) -> Unit,
     onViewInList: (Feature) -> Unit,
@@ -208,12 +206,10 @@ fun PlacesMapScreen(
                 title = stringResource(R.string.app_title_bar),
                 subtitle = stringResource(R.string.map_screen_subtitle),
                 actionsContent = {
-                    if (!isSettingsOverlayVisible) {
-                        GeoVaultTopBarSettingsMenuAction(
-                            onOpenSettings = onOpenSettings,
-                            visibility = GeoVaultTopBarMenuVisibility.Always,
-                        )
-                    }
+                    GeoVaultTopBarSettingsMenuAction(
+                        onOpenSettings = onOpenSettings,
+                        visibility = GeoVaultTopBarMenuVisibility.Always,
+                    )
                 },
             )
         },

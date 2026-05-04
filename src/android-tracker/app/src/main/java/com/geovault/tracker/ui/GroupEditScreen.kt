@@ -191,6 +191,9 @@ fun GroupEditScreen(
                     // [onDismiss] or the whole editor would close (same issue as edit-tracker
                     // loading → editor transition).
                     onLeaveComposition = null,
+                    // This picker is an internal child phase of group edit, not a separate
+                    // shell destination. The parent group-edit sub-view owns tab-leave cleanup.
+                    dismissOnHostInactive = false,
                 )
             }
         }

@@ -161,11 +161,7 @@ fun SharedScreen(
     // Editor sub-views (SharedTracker/Group/GroupActions) sit on top of the body in
     // [tabOverlay]. Each renders through [GeoVaultSubViewScaffold] (compact "<-Title  X"
     // dismiss strip), so the outer NavTabShell title bar stays in place across open/close.
-    // Same in-body sub-view model as the survey shell and the params overlay.
-    val isEditorSubViewOpen =
-        groupActionsDialog != null ||
-            editSharedGroup != null ||
-            editSharedTracker != null
+    // Settings remains available and uses the common host-inactive path to dismiss sub-views.
     GeoVaultNavTabShell(
         title = stringResource(R.string.shared_screen_title),
         placeholderText = stringResource(R.string.shared_placeholder_signed_out),
@@ -180,7 +176,7 @@ fun SharedScreen(
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
-        settingsMenuEnabled = !isEditorSubViewOpen,
+        settingsMenuEnabled = true,
         authenticatedMainContent = {
             // Discover/Public overlays render *inside* the body — they wrap themselves in
             // [GeoVaultSubViewScaffold] (compact dismiss strip), so the outer NavTabShell

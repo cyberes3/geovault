@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,7 +34,7 @@ import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
-import com.geovault.common.ui.components.GeoVaultPrewarmedOverlayHost
+import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
@@ -161,9 +160,6 @@ class MainActivity : ComponentActivity() {
                         intent?.removeExtra(EXTRA_OAUTH_ERROR)
                     }
                 }
-                BackHandler(enabled = isSettingsOpen) {
-                    isSettingsOpen = false
-                }
                 Box(modifier = Modifier.fillMaxSize()) {
                     GeoVaultMainMapPreloadHost(
                         mainMapKey = PLACES_MAIN_MAP_KEY,
@@ -206,7 +202,6 @@ class MainActivity : ComponentActivity() {
                                         onSearchChanged = viewModel::onSearchChanged,
                                         onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                                         onAuthConnect = viewModel::connectAuth,
-                                        isSettingsOverlayVisible = isSettingsOpen,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onRefresh = viewModel::refreshNow,
                                         onAddPlace = {
@@ -291,7 +286,6 @@ class MainActivity : ComponentActivity() {
                                         map = mainMap,
                                         viewModel = mapViewModel,
                                         launchArgs = mapLaunchArgs,
-                                        isSettingsOverlayVisible = isSettingsOpen,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onOpenEdit = { feature ->
                                             val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
@@ -323,7 +317,10 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    GeoVaultPrewarmedOverlayHost(visible = isSettingsOpen) {
+                    GeoVaultShellSettingsOverlayHost(
+                        visible = isSettingsOpen,
+                        onDismissRequest = { isSettingsOpen = false },
+                    ) {
                         SettingsScreen(
                             state = settingsState,
                             onServerUrlChanged = settingsViewModel::onServerUrlChanged,

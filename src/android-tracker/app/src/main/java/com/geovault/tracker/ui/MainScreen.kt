@@ -9,7 +9,6 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -28,7 +27,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
-import com.geovault.common.ui.components.GeoVaultPrewarmedOverlayDefaults
+import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
+import com.geovault.common.ui.components.GeoVaultSubViewHostActiveProvider
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
@@ -90,6 +90,7 @@ fun MainScreen(
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
     var lastSelectedTab by rememberSaveable { mutableStateOf("") }
     var tabBackStack by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
     var isHandlingTabBack by remember { mutableStateOf(false) }
     var pendingTrackersRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var pendingSharedRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
@@ -106,6 +107,7 @@ fun MainScreen(
         if (selectedTab != TrackerTab.SHARED.name) {
             pendingSharedRequest = null
         }
+        trackerParamsArgs = null
     }
 
     LaunchedEffect(state.isAuthenticated) {
@@ -179,6 +181,7 @@ fun MainScreen(
         }
         pendingMapReturnContext = null
         mapViewModel.setMode(TrackerMapDisplayMode.ALL_QUEUE)
+        isSettingsOpen = false
         selectedTab = TrackerTab.MAP.name
     }
     LaunchedEffect(pendingOpenAllTrackersOnMap) {
@@ -195,6 +198,7 @@ fun MainScreen(
             pendingMapReturnContext = null
             pendingTrackersRequest = context.trackersRequest
             pendingSharedRequest = context.sharedRequest
+            isSettingsOpen = false
             selectedTab = context.tab.name
             true
         },
@@ -212,22 +216,13 @@ fun MainScreen(
             isHandlingTabBack = true
             tabBackStack = tabBackStack.dropLast(1)
             pendingMapReturnContext = null
+            isSettingsOpen = false
             selectedTab = previous
             isHandlingTabBack = false
             true
         },
     )
-    val openSettingsTab = remember {
-        {
-            if (!isHandlingTabBack &&
-                selectedTab.isNotBlank() &&
-                selectedTab != TrackerTab.SETTINGS.name
-            ) {
-                tabBackStack = (tabBackStack + selectedTab).takeLast(16)
-            }
-            selectedTab = TrackerTab.SETTINGS.name
-        }
-    }
+    val openSettingsOverlay: () -> Unit = { isSettingsOpen = true }
     val onMapHostNavigationRequested = remember {
         { request: MapHostNavigationRequest ->
             if (!isHandlingTabBack && selectedTab.isNotBlank()) {
@@ -235,6 +230,7 @@ fun MainScreen(
             }
             // Leaving map via host navigation is an explicit context switch.
             pendingMapReturnContext = null
+            isSettingsOpen = false
             when (request.target) {
                 MapHostNavigationTarget.TRACKERS -> {
                     selectedTab = TrackerTab.TRACKERS.name
@@ -253,6 +249,7 @@ fun MainScreen(
     }
     LaunchedEffect(state.isServerAccessible) {
         if (!state.isServerAccessible && selectedTab != TrackerTab.HOME.name) {
+            isSettingsOpen = false
             selectedTab = TrackerTab.HOME.name
         }
     }
@@ -317,6 +314,7 @@ fun MainScreen(
                         if (destination.id != TrackerTab.MAP.name) {
                             pendingMapReturnContext = null
                         }
+                        isSettingsOpen = false
                         selectedTab = destination.id
                     }
                 },
@@ -334,14 +332,6 @@ fun MainScreen(
                     }
                 }
                 val composedTabs = visitedTabs + selectedTab
-                // Settings is reachable from every tab, so compose it shortly after startup
-                // instead of paying its first-composition cost during the settings tap.
-                LaunchedEffect(Unit) {
-                    kotlinx.coroutines.delay(GeoVaultPrewarmedOverlayDefaults.PrewarmDelayMillis)
-                    if (TrackerTab.SETTINGS.name !in visitedTabs) {
-                        visitedTabs = visitedTabs + TrackerTab.SETTINGS.name
-                    }
-                }
                 // Pre-warm the Trackers and Shared tabs after the initial frame so that the
                 // first tap on them is also instantaneous. We wait a bit so the visible tab's
                 // first frame can land before we pay extra composition cost.
@@ -355,7 +345,8 @@ fun MainScreen(
                     }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
-                    val mapActive = selectedTab == TrackerTab.MAP.name
+                    val mapActive = selectedTab == TrackerTab.MAP.name && !isSettingsOpen
+                    GeoVaultSubViewHostActiveProvider(isActive = mapActive) {
                     CompositionLocalProvider(LocalTrackerTabIsActive provides mapActive) {
                         MapScreen(
                             map = trackerMainMap,
@@ -370,13 +361,15 @@ fun MainScreen(
                             onAuthServerUrlChanged = onAuthServerUrlChanged,
                             onAuthConnect = onAuthConnect,
                             isConnecting = state.isConnecting,
-                            onOpenSettings = openSettingsTab,
+                            onOpenSettings = openSettingsOverlay,
                             onHostNavigationRequested = onMapHostNavigationRequested,
                             onRequestTrackerParams = { args -> trackerParamsArgs = args },
                         )
                     }
+                    }
                     if (TrackerTab.HOME.name in composedTabs) {
-                        val homeActive = selectedTab == TrackerTab.HOME.name
+                        val homeActive = selectedTab == TrackerTab.HOME.name && !isSettingsOpen
+                        GeoVaultSubViewHostActiveProvider(isActive = homeActive) {
                         CompositionLocalProvider(LocalTrackerTabIsActive provides homeActive) {
                         Box(
                             modifier = Modifier
@@ -392,7 +385,7 @@ fun MainScreen(
                                 onAuthServerUrlChanged = onAuthServerUrlChanged,
                                 onAuthConnect = onAuthConnect,
                                 isConnecting = state.isConnecting,
-                                onOpenSettings = openSettingsTab,
+                                onOpenSettings = openSettingsOverlay,
                                 infoMessage = state.infoMessage,
                                 onClearInfoMessage = onClearInfoMessage,
                                 onRequestStartTracking = onRequestStartTracking,
@@ -402,9 +395,11 @@ fun MainScreen(
                             )
                         }
                         }
+                        }
                     }
                     if (TrackerTab.TRACKERS.name in composedTabs) {
-                        val trackersActive = selectedTab == TrackerTab.TRACKERS.name
+                        val trackersActive = selectedTab == TrackerTab.TRACKERS.name && !isSettingsOpen
+                        GeoVaultSubViewHostActiveProvider(isActive = trackersActive) {
                         CompositionLocalProvider(LocalTrackerTabIsActive provides trackersActive) {
                         Box(
                             modifier = Modifier
@@ -420,7 +415,7 @@ fun MainScreen(
                                 onAuthConnect = onAuthConnect,
                                 isConnecting = state.isConnecting,
                                 isServerAccessible = state.isServerAccessible,
-                                onOpenSettings = openSettingsTab,
+                                onOpenSettings = openSettingsOverlay,
                                 navigationRequest = pendingTrackersRequest,
                                 onNavigationTargetConsumed = { pendingTrackersRequest = null },
                                 onOpenTrackerOnMap = { trackerId, trackerName ->
@@ -433,9 +428,11 @@ fun MainScreen(
                             )
                         }
                         }
+                        }
                     }
                     if (TrackerTab.SHARED.name in composedTabs) {
-                        val sharedActive = selectedTab == TrackerTab.SHARED.name
+                        val sharedActive = selectedTab == TrackerTab.SHARED.name && !isSettingsOpen
+                        GeoVaultSubViewHostActiveProvider(isActive = sharedActive) {
                         CompositionLocalProvider(LocalTrackerTabIsActive provides sharedActive) {
                         Box(
                             modifier = Modifier
@@ -450,7 +447,7 @@ fun MainScreen(
                                 onAuthServerUrlChanged = onAuthServerUrlChanged,
                                 onAuthConnect = onAuthConnect,
                                 isConnecting = state.isConnecting,
-                                onOpenSettings = openSettingsTab,
+                                onOpenSettings = openSettingsOverlay,
                                 navigationRequest = pendingSharedRequest,
                                 onNavigationTargetConsumed = { pendingSharedRequest = null },
                                 onOpenTrackerOnMap = { trackerId, trackerName ->
@@ -463,54 +460,49 @@ fun MainScreen(
                             )
                         }
                         }
-                    }
-                    if (TrackerTab.SETTINGS.name in composedTabs) {
-                        val settingsActive = selectedTab == TrackerTab.SETTINGS.name
-                        CompositionLocalProvider(LocalTrackerTabIsActive provides settingsActive) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .alpha(if (settingsActive) 1f else 0f)
-                                .zIndex(if (settingsActive) 1f else 0f),
-                        ) {
-                            Scaffold(
-                                topBar = {
-                                    GeoVaultTopTitleBar(
-                                        title = stringResource(R.string.home_title),
-                                    )
-                                },
-                            ) { padding ->
-                                SettingsScreen(
-                                    state = settingsState,
-                                    onServerUrlChanged = onSettingsServerUrlChanged,
-                                    onConnect = onSettingsConnect,
-                                    onDisconnect = onSettingsDisconnect,
-                                    onTrackingProfileSelected = onSettingsTrackingProfileSelected,
-                                    onLoggingIntervalInput = onSettingsLoggingIntervalInput,
-                                    onDistanceFilterInput = onSettingsDistanceFilterInput,
-                                    onAccuracyFilterInput = onSettingsAccuracyFilterInput,
-                                    onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
-                                    onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
-                                    onStartOnBoot = onSettingsStartOnBoot,
-                                    onStartOnLaunch = onSettingsStartOnLaunch,
-                                    onSendExtendedData = onSettingsSendExtendedData,
-                                    onSignificantMotionOnly = onSettingsSignificantMotionOnly,
-                                    onAutoTrackingMode = onSettingsAutoTrackingMode,
-                                    onKeepScreenOnMap = onSettingsKeepScreenOnMap,
-                                    onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
-                                    onUnhideTrackerItem = onSettingsUnhideTrackerItem,
-                                    onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
-                                    onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
-                                    onClose = { selectedTab = TrackerTab.HOME.name },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(padding),
-                                )
-                            }
-                        }
                         }
                     }
                 }
+            }
+        }
+        GeoVaultShellSettingsOverlayHost(
+            visible = isSettingsOpen,
+            onDismissRequest = { isSettingsOpen = false },
+            backPriority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
+        ) {
+            Scaffold(
+                topBar = {
+                    GeoVaultTopTitleBar(
+                        title = stringResource(R.string.home_title),
+                    )
+                },
+            ) { padding ->
+                SettingsScreen(
+                    state = settingsState,
+                    onServerUrlChanged = onSettingsServerUrlChanged,
+                    onConnect = onSettingsConnect,
+                    onDisconnect = onSettingsDisconnect,
+                    onTrackingProfileSelected = onSettingsTrackingProfileSelected,
+                    onLoggingIntervalInput = onSettingsLoggingIntervalInput,
+                    onDistanceFilterInput = onSettingsDistanceFilterInput,
+                    onAccuracyFilterInput = onSettingsAccuracyFilterInput,
+                    onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
+                    onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
+                    onStartOnBoot = onSettingsStartOnBoot,
+                    onStartOnLaunch = onSettingsStartOnLaunch,
+                    onSendExtendedData = onSettingsSendExtendedData,
+                    onSignificantMotionOnly = onSettingsSignificantMotionOnly,
+                    onAutoTrackingMode = onSettingsAutoTrackingMode,
+                    onKeepScreenOnMap = onSettingsKeepScreenOnMap,
+                    onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,
+                    onUnhideTrackerItem = onSettingsUnhideTrackerItem,
+                    onUnhideAllTrackerItems = onSettingsUnhideAllTrackerItems,
+                    onOpenAllTrackersOnMap = navigateToAllTrackersOnMap,
+                    onClose = { isSettingsOpen = false },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                )
             }
         }
         val globalInfoModel = state.infoMessage
@@ -553,5 +545,4 @@ private enum class TrackerTab {
     MAP,
     TRACKERS,
     SHARED,
-    SETTINGS,
 }

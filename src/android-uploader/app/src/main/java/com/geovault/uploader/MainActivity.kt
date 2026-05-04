@@ -3,7 +3,6 @@ package com.geovault.uploader
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.compose.BackHandler
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
@@ -20,7 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.auth.GeoVaultAuthExtras
-import com.geovault.common.ui.components.GeoVaultPrewarmedOverlayHost
+import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.uploader.data.FileMetadataRepository
@@ -71,14 +70,10 @@ class MainActivity : ComponentActivity() {
                         GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, oauthUrl)
                     }
                 }
-                BackHandler(enabled = isSettingsOpen) {
-                    isSettingsOpen = false
-                }
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainScreen(
                         state = state,
                         invalidFilesDialogNames = invalidFilesDialogNamesState.value,
-                        isSettingsOverlayVisible = isSettingsOpen,
                         onOpenSettings = { isSettingsOpen = true },
                         onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                         onAuthConnect = viewModel::connectAuth,
@@ -94,7 +89,10 @@ class MainActivity : ComponentActivity() {
                         onDismissInvalidFiles = { invalidFilesDialogNamesState.value = null },
                         onDismissUpdatePrompt = viewModel::clearUpdatePrompt
                     )
-                    GeoVaultPrewarmedOverlayHost(visible = isSettingsOpen) {
+                    GeoVaultShellSettingsOverlayHost(
+                        visible = isSettingsOpen,
+                        onDismissRequest = { isSettingsOpen = false },
+                    ) {
                         SettingsScreen(
                             state = settingsState,
                             onServerUrlChanged = settingsViewModel::onServerUrlChanged,

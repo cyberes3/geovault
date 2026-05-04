@@ -7,9 +7,34 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
+
+private val LocalGeoVaultSubViewHostIsActive = staticCompositionLocalOf { true }
+
+/**
+ * Marks whether retained sub-view hosts, such as cached bottom-nav tabs, are currently visible.
+ *
+ * Retained hosts keep inactive tabs in composition for performance, so disposal-based
+ * leave handling never runs when the user switches tabs. Wrap each retained host with this
+ * provider so [GeoVaultSubViewScaffold] can treat host inactivity as the same kind of navigation
+ * boundary as leaving composition.
+ */
+@Composable
+fun GeoVaultSubViewHostActiveProvider(
+    isActive: Boolean,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalGeoVaultSubViewHostIsActive provides isActive,
+        content = content,
+    )
+}
 
 /**
  * Standard chrome for a dismissible sub-view that is presented below the host's branded
@@ -29,6 +54,11 @@ import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
  *   `null` when this composable is only **swapped** for another phase of the same flow so
  *   leaving composition must not dismiss (for example switching internal overlay modes).
  *   Do not default this to [onClose]: guarded close flows should pass a force-dismiss here.
+ * @param onHostInactive Invoked when a retained host marks this sub-view's host inactive. Defaults
+ *   to [onLeaveComposition], which is the common "force dismiss this sub-view" callback.
+ * @param dismissOnHostInactive Set false only for a sub-view that intentionally survives host
+ *   inactivity; internal child phases should usually keep [onLeaveComposition] / [onHostInactive]
+ *   null instead.
  * @param modifier Applied to the outer [Scaffold]; use this for [statusBarsPadding] when
  *   presenting the scaffold as a root overlay.
  * @param headerExtras Optional extra chrome placed directly under the compact bar (e.g. a
@@ -43,6 +73,8 @@ fun GeoVaultSubViewScaffold(
     title: String,
     onClose: () -> Unit,
     onLeaveComposition: (() -> Unit)? = null,
+    onHostInactive: (() -> Unit)? = onLeaveComposition,
+    dismissOnHostInactive: Boolean = true,
     modifier: Modifier = Modifier,
     closeContentDescription: String = "Close",
     headerExtras: (@Composable ColumnScope.() -> Unit)? = null,
@@ -51,6 +83,10 @@ fun GeoVaultSubViewScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     GeoVaultOnPermanentLeaveComposition(onLeaveComposition)
+    GeoVaultDismissOnHostInactive(
+        onDismiss = onHostInactive,
+        enabled = dismissOnHostInactive,
+    )
     Scaffold(
         // Sub-views own nav-bar safe-area for their content/bottomBar so settings, edit forms,
         // station detail, etc. never bleed underneath the system navigation bar even when the
@@ -70,4 +106,18 @@ fun GeoVaultSubViewScaffold(
         bottomBar = bottomBar,
         content = content,
     )
+}
+
+@Composable
+private fun GeoVaultDismissOnHostInactive(
+    onDismiss: (() -> Unit)?,
+    enabled: Boolean,
+) {
+    val hostIsActive = LocalGeoVaultSubViewHostIsActive.current
+    val dismissState = rememberUpdatedState(onDismiss)
+    LaunchedEffect(hostIsActive, enabled) {
+        if (enabled && !hostIsActive) {
+            dismissState.value?.invoke()
+        }
+    }
 }

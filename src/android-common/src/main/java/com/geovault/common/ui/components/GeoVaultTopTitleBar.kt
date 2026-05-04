@@ -134,6 +134,7 @@ fun RowScope.GeoVaultTopBarSettingsMenuAction(
     overflowTooltip: String? = null,
     enabled: Boolean = true,
 ) {
+    if (LocalGeoVaultShellSettingsOverlayActive.current) return
     if (visibility == GeoVaultTopBarMenuVisibility.AuthenticatedOnly) {
         val context = LocalContext.current
         if (!GeovaultAuthManager.isLoggedIn(context)) {

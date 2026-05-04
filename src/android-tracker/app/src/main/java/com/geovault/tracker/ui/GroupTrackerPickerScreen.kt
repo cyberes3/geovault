@@ -92,6 +92,7 @@ fun GroupTrackerPickerScreen(
     onDone: () -> Unit,
     onDismiss: () -> Unit,
     onLeaveComposition: (() -> Unit)? = null,
+    dismissOnHostInactive: Boolean = true,
     doneButtonLabel: String = stringResource(R.string.trackers_edit_pick_users_done),
 ) {
     GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
@@ -126,6 +127,7 @@ fun GroupTrackerPickerScreen(
         onDone = onDone,
         onDismiss = onDismiss,
         onLeaveComposition = onLeaveComposition,
+        dismissOnHostInactive = dismissOnHostInactive,
     )
 }
 
@@ -144,6 +146,7 @@ private fun PickerTabContent(
     onDone: () -> Unit,
     onDismiss: () -> Unit,
     onLeaveComposition: (() -> Unit)?,
+    dismissOnHostInactive: Boolean,
     doneButtonLabel: String,
 ) {
     val context = LocalContext.current
@@ -214,6 +217,7 @@ private fun PickerTabContent(
         title = stringResource(R.string.groups_tracker_title),
         onClose = onDismiss,
         onLeaveComposition = onLeaveComposition,
+        dismissOnHostInactive = dismissOnHostInactive,
         modifier = modifier,
         headerExtras = {
             GeoVaultTabBar(
