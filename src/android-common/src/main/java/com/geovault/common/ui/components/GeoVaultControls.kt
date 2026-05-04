@@ -1,7 +1,6 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -490,44 +489,40 @@ fun GeoVaultInput(
 ) {
     val fieldBackground = geoVaultTextFieldFillColor()
     val labelColor = geoVaultInputLabelColor()
-    Box(
-        modifier = modifier.background(fieldBackground, MaterialTheme.shapes.small),
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = label?.let {
-                { Text(it, color = labelColor) }
-            },
-            placeholder = placeholder?.let { ph ->
-                {
-                    val hintColor = geoVaultInputPlaceholderColor()
-                    CompositionLocalProvider(LocalContentColor provides hintColor) {
-                        Text(ph, color = hintColor)
-                    }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label?.let {
+            { Text(it, color = labelColor) }
+        },
+        placeholder = placeholder?.let { ph ->
+            {
+                val hintColor = geoVaultInputPlaceholderColor()
+                CompositionLocalProvider(LocalContentColor provides hintColor) {
+                    Text(ph, color = hintColor)
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = enabled,
-            readOnly = readOnly,
-            singleLine = singleLine,
-            keyboardOptions = keyboardOptions,
-            visualTransformation = visualTransformation,
-            leadingIcon = leadingIcon,
-            trailingIcon = trailingIcon,
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                backgroundColor = Color.Transparent,
-                focusedBorderColor = GeoVaultColorTokens.MainBlue,
-                unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
-                disabledBorderColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f),
-                focusedLabelColor = labelColor,
-                unfocusedLabelColor = labelColor,
-                disabledLabelColor = labelColor,
-                placeholderColor = geoVaultInputPlaceholderColor(),
-                disabledPlaceholderColor = geoVaultInputPlaceholderColor().copy(alpha = 0.5f),
-            )
+            }
+        },
+        modifier = modifier.fillMaxWidth(),
+        enabled = enabled,
+        readOnly = readOnly,
+        singleLine = singleLine,
+        keyboardOptions = keyboardOptions,
+        visualTransformation = visualTransformation,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        colors = TextFieldDefaults.outlinedTextFieldColors(
+            backgroundColor = fieldBackground,
+            focusedBorderColor = GeoVaultColorTokens.MainBlue,
+            unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
+            disabledBorderColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f),
+            focusedLabelColor = labelColor,
+            unfocusedLabelColor = labelColor,
+            disabledLabelColor = labelColor,
+            placeholderColor = geoVaultInputPlaceholderColor(),
+            disabledPlaceholderColor = geoVaultInputPlaceholderColor().copy(alpha = 0.5f),
         )
-    }
+    )
 }
 
 /**
