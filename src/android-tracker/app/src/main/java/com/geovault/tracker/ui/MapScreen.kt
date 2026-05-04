@@ -76,6 +76,8 @@ import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction
+import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBar
+import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
 import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
@@ -683,12 +685,24 @@ private fun TrackerMapAuthenticatedContent(
                 )
             }
             val selectionModel = state.toSelectionPanelUiModel()
-            if (selectionModel != null) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth(),
-                ) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                GeoVaultMapScaleBar(
+                    map = map,
+                    modifier = Modifier.padding(
+                        start = GeoVaultMapScaleBarDefaults.EdgePadding,
+                        bottom = if (selectionModel != null) {
+                            GeoVaultMapScaleBarDefaults.DrawerGap
+                        } else {
+                            GeoVaultMapScaleBarDefaults.EdgePadding
+                        },
+                    ),
+                )
+                if (selectionModel != null) {
                     Spacer(
                         modifier = Modifier
                             .fillMaxWidth()

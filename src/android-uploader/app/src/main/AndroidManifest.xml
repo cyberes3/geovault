@@ -54,6 +54,7 @@
         </activity>
         <activity
             android:name=".MultiUploadActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection|fontScale|navigation|density"
             android:exported="false" />
         <provider
             android:name="com.geovault.common.ServerUrlProvider"

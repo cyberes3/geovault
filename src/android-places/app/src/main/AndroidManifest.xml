@@ -35,12 +35,14 @@
         </activity>
         <activity
             android:name=".PlaceEditActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection|fontScale|navigation|density"
             android:exported="false"
             android:windowSoftInputMode="adjustNothing"
             android:theme="@style/Theme.Places"
             android:parentActivityName=".MainActivity" />
         <activity
             android:name=".DescriptionViewActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection|fontScale|navigation|density"
             android:exported="false"
             android:theme="@style/Theme.Places"
             android:parentActivityName=".MainActivity" />
