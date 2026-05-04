@@ -29,6 +29,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultInputLabelColor
+import com.geovault.common.ui.theme.geoVaultInputPlaceholderColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
@@ -98,7 +100,7 @@ private fun SelectTrigger(
     }
     val valueColor = when {
         !enabled -> geoVaultContentSecondaryColor()
-        valueText.isEmpty() -> geoVaultContentSecondaryColor()
+        valueText.isEmpty() -> geoVaultInputPlaceholderColor()
         else -> MaterialTheme.colors.onSurface
     }
     val triggerShape = RoundedCornerShape(8.dp)
@@ -108,7 +110,7 @@ private fun SelectTrigger(
             Text(
                 text = label,
                 style = MaterialTheme.typography.caption,
-                color = borderColor,
+                color = geoVaultInputLabelColor(),
                 modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
             )
         }

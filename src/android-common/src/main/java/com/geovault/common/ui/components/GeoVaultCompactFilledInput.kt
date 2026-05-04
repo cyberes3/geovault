@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.TextFieldDefaults.indicatorLine
+import com.geovault.common.ui.theme.geoVaultInputPlaceholderColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
@@ -53,6 +56,8 @@ fun GeoVaultCompactFilledInput(
     val fill = geoVaultTextFieldFillColor()
     val colors = TextFieldDefaults.textFieldColors(
         backgroundColor = Color.Transparent,
+        placeholderColor = geoVaultInputPlaceholderColor(),
+        disabledPlaceholderColor = geoVaultInputPlaceholderColor().copy(alpha = 0.5f),
     )
     val textColor by colors.textColor(enabled)
     val cursorColor by colors.cursorColor(isError = false)
@@ -91,10 +96,14 @@ fun GeoVaultCompactFilledInput(
                     innerTextField = innerTextField,
                     placeholder = placeholder?.let { placeholderText ->
                         {
-                            Text(
-                                text = placeholderText,
-                                style = textStyle,
-                            )
+                            val hintColor = geoVaultInputPlaceholderColor()
+                            CompositionLocalProvider(LocalContentColor provides hintColor) {
+                                Text(
+                                    text = placeholderText,
+                                    style = textStyle,
+                                    color = hintColor,
+                                )
+                            }
                         }
                     },
                     leadingIcon = leadingIcon,

@@ -10,19 +10,17 @@ The server did not advertise any MapLibre style source.
 To fix it:
 
 - Configure `maptiler.api_key` or the `MAPTILER_API_KEY` environment variable.
-- Add MapTiler map IDs to `maptiler.maps` for selectable basemaps.
-- Add utility-only MapTiler map IDs to `maptiler.hidden_maps` when they should be registered but hidden from the basemap selector.
+- Add MapTiler map IDs to `maptiler.maps` / `maptiler.hidden_maps` so `/api/tiles/sources/` advertises the required Android basemaps.
 - Restart or reload the backend so `/api/tiles/sources/` returns the updated source list.
 
 ## `required_maplibre_basemaps_missing`
 
 The Android common map library did not receive every basemap ID it expects.
-Hidden utility sources count as present, but they remain hidden from the map
-selector.
 
 Required IDs:
 
 - `maptiler-streets`
+- `maptiler-openstreetmap-dark`
 - `maptiler-hybrid-v4`
 - `maptiler-topo-v4`
 

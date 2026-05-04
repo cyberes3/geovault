@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -209,9 +210,12 @@ private fun TrackerParamsScrollContent(
         if (motion != null) {
             Text(
                 text = motion,
-                modifier = Modifier.padding(top = 24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
                 color = geoVaultContentSecondaryColor(),
                 fontSize = 12.sp,
+                textAlign = TextAlign.Center,
             )
         }
     }

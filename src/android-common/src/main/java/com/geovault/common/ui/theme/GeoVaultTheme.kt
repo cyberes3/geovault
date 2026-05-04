@@ -114,6 +114,32 @@ fun geoVaultDialogAccentButtonColor(): Color =
         GeoVaultColorTokens.Blue300
     }
 
+/**
+ * Placeholder / hint text inside text fields and empty select triggers.
+ *
+ * Light theme uses [GeoVaultColorTokens.Gray400] (lighter than [geoVaultContentSecondaryColor]’s Gray600).
+ * Dark theme uses [GeoVaultColorTokens.Gray300] so placeholders read clearly lighter than body secondary
+ * (Gray400); using Gray400 in dark matched secondary and looked unchanged.
+ */
+@Composable
+@ReadOnlyComposable
+fun geoVaultInputPlaceholderColor(): Color =
+    if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.Gray400
+    } else {
+        GeoVaultColorTokens.Gray300
+    }
+
+/** Text field label/title color: brand blue in light mode, light grey on dark input fills. */
+@Composable
+@ReadOnlyComposable
+fun geoVaultInputLabelColor(): Color =
+    if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.MainBlue
+    } else {
+        GeoVaultColorTokens.Gray300
+    }
+
 private fun darkScheme(): Colors = darkColors(
     primary = GeoVaultColorTokens.MainBlue,
     primaryVariant = GeoVaultColorTokens.Blue600,

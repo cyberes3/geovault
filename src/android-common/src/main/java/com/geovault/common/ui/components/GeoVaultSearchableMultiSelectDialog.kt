@@ -192,11 +192,8 @@ private fun GeoVaultSearchableMultiSelectRow(
         isDark -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
         else -> GeoVaultColorTokens.Blue100
     }
-    val labelColor = if (selected) {
-        GeoVaultColorTokens.MainBlue
-    } else {
-        MaterialTheme.colors.onSurface
-    }
+    val labelColor =
+        if (selected) geoVaultDialogTitleColor() else MaterialTheme.colors.onSurface
     Card(
         modifier = Modifier
             .fillMaxWidth()

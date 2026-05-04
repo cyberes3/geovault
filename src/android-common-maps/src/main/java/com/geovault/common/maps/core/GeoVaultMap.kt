@@ -186,6 +186,14 @@ private fun GeoVaultMapHost(
             update = {
                 it.setBackgroundColor(mapUnderlayArgb)
                 it.setMapPopupAvoidanceInsets(popupAvoidanceInsetsPx)
+                // Keep night/dark hint in sync on every recomposition (Material dark without
+                // UI_MODE_NIGHT_YES, theme toggles) — SideEffect alone can run after the first
+                // tile-source fetch reads a stale null hint and sticks on light streets.
+                try {
+                    currentMap.manager.sourceManager.setStreetNightUiHintFromHost(streetNightForBasemap)
+                } catch (_: IllegalStateException) {
+                    // Manager not attached yet; [SideEffect] sets the hint on the next frame.
+                }
                 if (mapView !== it) {
                     mapView = it
                     currentMap.attachMapView(it)

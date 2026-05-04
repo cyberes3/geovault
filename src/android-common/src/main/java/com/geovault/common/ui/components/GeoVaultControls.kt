@@ -1,6 +1,7 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.ButtonColors
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
@@ -26,6 +28,7 @@ import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +43,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultInputLabelColor
+import com.geovault.common.ui.theme.geoVaultInputPlaceholderColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 import androidx.compose.foundation.interaction.MutableInteractionSource
 
@@ -484,31 +489,45 @@ fun GeoVaultInput(
     trailingIcon: (@Composable (() -> Unit))? = null,
 ) {
     val fieldBackground = geoVaultTextFieldFillColor()
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = label?.let {
-            { Text(it, color = GeoVaultColorTokens.MainBlue) }
-        },
-        placeholder = placeholder?.let {
-            { Text(it, color = geoVaultContentSecondaryColor()) }
-        },
-        modifier = modifier,
-        enabled = enabled,
-        readOnly = readOnly,
-        singleLine = singleLine,
-        keyboardOptions = keyboardOptions,
-        visualTransformation = visualTransformation,
-        leadingIcon = leadingIcon,
-        trailingIcon = trailingIcon,
-        colors = TextFieldDefaults.outlinedTextFieldColors(
-            backgroundColor = fieldBackground,
-            focusedBorderColor = GeoVaultColorTokens.MainBlue,
-            unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
-            focusedLabelColor = GeoVaultColorTokens.MainBlue,
-            unfocusedLabelColor = GeoVaultColorTokens.MainBlue,
+    val labelColor = geoVaultInputLabelColor()
+    Box(
+        modifier = modifier.background(fieldBackground, MaterialTheme.shapes.small),
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = label?.let {
+                { Text(it, color = labelColor) }
+            },
+            placeholder = placeholder?.let { ph ->
+                {
+                    val hintColor = geoVaultInputPlaceholderColor()
+                    CompositionLocalProvider(LocalContentColor provides hintColor) {
+                        Text(ph, color = hintColor)
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            readOnly = readOnly,
+            singleLine = singleLine,
+            keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingIcon,
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                backgroundColor = Color.Transparent,
+                focusedBorderColor = GeoVaultColorTokens.MainBlue,
+                unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
+                disabledBorderColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f),
+                focusedLabelColor = labelColor,
+                unfocusedLabelColor = labelColor,
+                disabledLabelColor = labelColor,
+                placeholderColor = geoVaultInputPlaceholderColor(),
+                disabledPlaceholderColor = geoVaultInputPlaceholderColor().copy(alpha = 0.5f),
+            )
         )
-    )
+    }
 }
 
 /**

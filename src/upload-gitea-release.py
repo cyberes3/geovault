@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 BUILD_SCRIPT_NAME = "build-android.sh"
 ENV_FILE_NAME = ".env"
 GENERATE_ICONS_SCRIPT_NAME = "generate-icons.sh"
-TARGET_COMMITISH = "master"
+RELEASE_BRANCH = "master"
 APK_METADATA_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2})([- ])([0-9A-Za-z]+)")
 
 
@@ -206,10 +206,72 @@ def request_json(
         die(f"HTTP request failed for {url}: {e}")
 
 
+def git_toplevel(path: Path) -> Path:
+    return Path(run(["git", "rev-parse", "--show-toplevel"], cwd=path))
+
+
+def assert_full_clone(repo_dir: Path) -> None:
+    shallow = run(["git", "rev-parse", "--is-shallow-repository"], cwd=repo_dir)
+    if shallow.strip().lower() == "true":
+        die(
+            "Refusing to release from a shallow clone because git-derived "
+            "release metadata can be wrong. Run: git fetch --unshallow origin"
+        )
+
+
+def assert_release_source_is_ready(source_dir: Path, release_repo: str) -> tuple[Path, str]:
+    repo_dir = git_toplevel(source_dir)
+    assert_full_clone(repo_dir)
+
+    branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_dir)
+    if branch != RELEASE_BRANCH:
+        die(f"Refusing to release from {branch!r}; expected {RELEASE_BRANCH!r}.")
+
+    dirty = run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=repo_dir)
+    if dirty:
+        die(
+            "Refusing to release with tracked working-tree changes. "
+            "Commit or stash them first."
+        )
+
+    head = run(["git", "rev-parse", "HEAD"], cwd=repo_dir)
+    remote_ref = run(["git", "ls-remote", "origin", f"refs/heads/{RELEASE_BRANCH}"], cwd=repo_dir)
+    remote_head = remote_ref.split()[0] if remote_ref else ""
+    if remote_head != head:
+        die(
+            f"Refusing to release because origin/{RELEASE_BRANCH} is not this commit.\n"
+            f"local HEAD:        {head}\n"
+            f"origin/{RELEASE_BRANCH}: {remote_head or 'missing'}\n"
+            f"Run: git push origin {RELEASE_BRANCH}"
+        )
+
+    _, source_repo = load_gitea_remote_config(repo_dir)
+    if source_repo != release_repo:
+        print(
+            f"Release repo {release_repo!r} differs from source repo {source_repo!r}; "
+            f"using {RELEASE_BRANCH!r} as Gitea target_commitish."
+        )
+        return repo_dir, RELEASE_BRANCH
+    return repo_dir, head
+
+
+def assert_apk_matches_source(repo_dir: Path, date_short: str, commit_fragment: str) -> None:
+    expected_date = run(["git", "log", "-1", "--format=%cd", "--date=short"], cwd=repo_dir)
+    expected_hash = run(["git", "rev-parse", "--short=10", "HEAD"], cwd=repo_dir)
+    mismatches = []
+    if date_short != expected_date:
+        mismatches.append(f"date {date_short!r} != source date {expected_date!r}")
+    if commit_fragment != expected_hash:
+        mismatches.append(f"hash {commit_fragment!r} != source hash {expected_hash!r}")
+    if mismatches:
+        die("Refusing to tag an APK that does not match the source commit:\n- " + "\n- ".join(mismatches))
+
+
 def create_draft_release(
     config: ReleaseConfig,
     tag: str,
     title: str,
+    target_commitish: str,
 ) -> int:
     response = request_json(
         "POST",
@@ -217,7 +279,7 @@ def create_draft_release(
         config,
         payload={
             "tag_name": tag,
-            "target_commitish": TARGET_COMMITISH,
+            "target_commitish": target_commitish,
             "name": title,
             "body": "",
             "draft": True,
@@ -344,17 +406,19 @@ def main() -> None:
 
     app_config_key, app_dir = resolve_app_dir(script_dir, args.app_folder)
     config = load_config(env_path, APP_CONFIGS[app_config_key], script_dir)
+    source_repo_dir, target_commitish = assert_release_source_is_ready(app_dir, config.gitea_repo)
 
     generate_icons(app_dir)
     build_release_apk(app_dir)
 
     apk_path = find_release_apk(app_dir, config)
     date_short, commit_fragment = parse_release_apk_name(apk_path, config)
+    assert_apk_matches_source(source_repo_dir, date_short, commit_fragment)
     tag = f"{config.tag_prefix}-{date_short}-{commit_fragment}"
     title = f"{config.release_title} {date_short} {commit_fragment}"
 
     print(f"Creating draft release: {tag}")
-    release_id = create_draft_release(config, tag, title)
+    release_id = create_draft_release(config, tag, title, target_commitish)
 
     print(f"Uploading asset: {apk_path.name}")
     asset_url = upload_release_asset(config, release_id, apk_path)

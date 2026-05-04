@@ -49,8 +49,8 @@ internal object MapSourcePolicy {
     }
 
     /**
-     * Resolves the tile source id for the Street slot. At night, MapTiler dark replaces MapTiler
-     * streets when the server provides it; otherwise MapTiler light (never OSM as a “dark” substitute).
+     * Resolves the tile source id for the Street slot. At night, MapTiler OpenStreetMap Dark
+     * replaces MapTiler Streets when the server provides it; otherwise MapTiler Streets stays active.
      */
     fun effectiveStreetSource(
         isNight: Boolean,

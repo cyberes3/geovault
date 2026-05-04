@@ -59,13 +59,13 @@ class MapSourceManager(private val context: Context) {
             SOURCE_MAPTILER_HYBRID,
             SOURCE_MAPTILER_TOPO,
         )
-        val filtered = sources.filter { it.id in allowedIds && !it.hidden }
+        val supportedSources = sources.filter { it.id in allowedIds }
         val baseSources = mutableListOf<TileSource>()
-        filtered.find { it.id == SOURCE_OSM }?.let { baseSources.add(it) }
-        filtered.find { it.id == SOURCE_MAPTILER_STREETS_DARK }?.let { baseSources.add(it) }
-        filtered.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
-        filtered.find { it.id == SOURCE_MAPTILER_HYBRID }?.let { baseSources.add(it) }
-        filtered.find { it.id == SOURCE_MAPTILER_TOPO }?.let { baseSources.add(it) }
+        supportedSources.find { it.id == SOURCE_OSM }?.let { baseSources.add(it) }
+        supportedSources.find { it.id == SOURCE_MAPTILER_STREETS_DARK }?.let { baseSources.add(it) }
+        supportedSources.find { it.id == SOURCE_MAPTILER_STREETS }?.let { baseSources.add(it) }
+        supportedSources.find { it.id == SOURCE_MAPTILER_HYBRID }?.let { baseSources.add(it) }
+        supportedSources.find { it.id == SOURCE_MAPTILER_TOPO }?.let { baseSources.add(it) }
         availableSources = baseSources
         val sanitized = MapSourcePolicy.sanitizeSelection(getSelectedSourceId(), getAvailableSelections())
         if (sanitized != getSelectedSourceId()) {

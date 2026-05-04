@@ -9,7 +9,6 @@ data class TileSource(
     val type: String,
     val requires_proxy: Boolean = false,
     val needs_hillshade: Boolean = false,
-    val hidden: Boolean = false,
     val client_config: TileClientConfig = TileClientConfig(),
 )
 

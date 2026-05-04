@@ -6,6 +6,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
+import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +77,7 @@ internal object MapStyleCache {
             val sources = (result as? TileSourceFetchResult.Success)?.sources ?: return@getTileSources
             val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
             for (source in sources) {
-                if (source.id != SOURCE_MAPTILER_STREETS && source.id != SOURCE_MAPTILER_HYBRID) continue
+                if (source.id !in PRELOADED_STYLE_SOURCE_IDS) continue
                 val styleUrl = source.client_config.style_url ?: continue
                 val resolved = if (styleUrl.startsWith("/")) "$serverUrl$styleUrl" else styleUrl
                 val isOurServer = resolved == serverUrl || resolved.startsWith("$serverUrl/")
@@ -201,4 +202,10 @@ internal object MapStyleCache {
             )
         }
     }
+
+    private val PRELOADED_STYLE_SOURCE_IDS = setOf(
+        SOURCE_MAPTILER_STREETS,
+        SOURCE_MAPTILER_STREETS_DARK,
+        SOURCE_MAPTILER_HYBRID,
+    )
 }

@@ -165,7 +165,8 @@ private fun <T> OptionRow(
         isLight -> GeoVaultColorTokens.Blue100
         else -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
     }
-    val textColor = if (selected) GeoVaultColorTokens.MainBlue else MaterialTheme.colors.onSurface
+    val textColor =
+        if (selected) geoVaultDialogTitleColor() else MaterialTheme.colors.onSurface
     val rowShape = RoundedCornerShape(8.dp)
     Box(
         modifier = Modifier

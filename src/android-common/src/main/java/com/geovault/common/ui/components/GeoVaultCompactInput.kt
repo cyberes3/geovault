@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -23,7 +25,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
-import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultInputLabelColor
+import com.geovault.common.ui.theme.geoVaultInputPlaceholderColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
@@ -51,13 +54,17 @@ fun GeoVaultCompactInput(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val fieldBackground = geoVaultTextFieldFillColor()
+    val labelColor = geoVaultInputLabelColor()
     val colors = TextFieldDefaults.outlinedTextFieldColors(
         backgroundColor = Color.Transparent,
         focusedBorderColor = GeoVaultColorTokens.MainBlue,
         unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
-        focusedLabelColor = GeoVaultColorTokens.MainBlue,
-        unfocusedLabelColor = GeoVaultColorTokens.MainBlue,
-        placeholderColor = geoVaultContentSecondaryColor(),
+        disabledBorderColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f),
+        focusedLabelColor = labelColor,
+        unfocusedLabelColor = labelColor,
+        disabledLabelColor = labelColor,
+        placeholderColor = geoVaultInputPlaceholderColor(),
+        disabledPlaceholderColor = geoVaultInputPlaceholderColor().copy(alpha = 0.5f),
     )
     val textColor by colors.textColor(enabled)
     val cursorColor by colors.cursorColor(isError = false)
@@ -91,17 +98,20 @@ fun GeoVaultCompactInput(
                         {
                             Text(
                                 text = labelText,
-                                color = GeoVaultColorTokens.MainBlue,
+                                color = labelColor,
                             )
                         }
                     },
                     placeholder = placeholder?.let { placeholderText ->
                         {
-                            Text(
-                                text = placeholderText,
-                                style = textStyle,
-                                color = geoVaultContentSecondaryColor(),
-                            )
+                            val hintColor = geoVaultInputPlaceholderColor()
+                            CompositionLocalProvider(LocalContentColor provides hintColor) {
+                                Text(
+                                    text = placeholderText,
+                                    style = textStyle,
+                                    color = hintColor,
+                                )
+                            }
                         }
                     },
                     leadingIcon = leadingIcon,

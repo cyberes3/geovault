@@ -154,7 +154,11 @@ fun <T> GeoVaultMultiSelectDialog(
                                     Text(
                                         text = labelFor(item),
                                         style = MaterialTheme.typography.body1,
-                                        color = MaterialTheme.colors.onSurface,
+                                        color = if (checked) {
+                                            geoVaultDialogTitleColor()
+                                        } else {
+                                            MaterialTheme.colors.onSurface
+                                        },
                                     )
                                 }
                             }

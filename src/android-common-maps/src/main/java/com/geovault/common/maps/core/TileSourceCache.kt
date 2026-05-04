@@ -9,6 +9,7 @@ import com.geovault.common.RetrofitClient
 import com.geovault.common.maps.model.MapConfigError
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
+import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.TileSource
 import com.geovault.common.maps.model.TileSourceResponse
@@ -177,6 +178,7 @@ private data class ExpectedMapLibreSource(
 
 private val EXPECTED_MAPLIBRE_SOURCES = listOf(
     ExpectedMapLibreSource(SOURCE_MAPTILER_STREETS, "Streets"),
+    ExpectedMapLibreSource(SOURCE_MAPTILER_STREETS_DARK, "Dark streets"),
     ExpectedMapLibreSource(SOURCE_MAPTILER_HYBRID, "Satellite hybrid"),
     ExpectedMapLibreSource(SOURCE_MAPTILER_TOPO, "Topographic"),
 )
