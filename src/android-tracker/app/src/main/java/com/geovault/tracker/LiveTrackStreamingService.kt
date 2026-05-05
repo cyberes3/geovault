@@ -23,6 +23,7 @@ import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.RemoteStreamIngressPolicy
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -78,51 +79,21 @@ class LiveTrackStreamingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
-            Log.w(TAG, "Null intent received; stopping streaming service")
-            stopSelf()
-            return START_NOT_STICKY
+            val (restoredTrackerIds, restoredTrackerName) = MapStreamingServiceHelper.persistedTargets(this)
+            if (restoredTrackerIds.isEmpty()) {
+                Log.w(TAG, "Null intent received with no persisted stream targets; stopping streaming service")
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            Log.i(TAG, "Null intent restored live streaming targets count=${restoredTrackerIds.size}")
+            startStreamingTargets(restoredTrackerIds, restoredTrackerName)
+            return START_STICKY
         }
         when (intent.action) {
             ACTION_START -> {
                 val trackerIds = extractTrackerIds(intent)
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
-                ensureStreamingChannel()
-                startForegroundForStreaming(
-                    createNotification(trackerName, trackerIds.size),
-                )
-                if (trackerIds.isEmpty()) {
-                    applyLifecycleEvent(
-                        event = StreamingLifecycleEvent.PermanentFailure,
-                        activeTrackerIds = emptySet(),
-                        failureReason = getString(R.string.no_tracker_selected_go_to_settings)
-                    )
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    return START_STICKY
-                }
-
-                val assessment = synchronized(stateLock) {
-                    sessionGuard.assess(
-                        requestedTrackerIds = trackerIds,
-                        currentTrackerIds = currentTrackerIds,
-                        hasSocket = webSocket != null,
-                        lifecycleState = lifecycle.lifecycleState
-                    )
-                }
-                if (assessment.decision == StreamingSessionReuseDecision.REUSE) {
-                    applyLifecycleEvent(StreamingLifecycleEvent.Connected, trackerIds)
-                    return START_STICKY
-                }
-
-                applyLifecycleEvent(StreamingLifecycleEvent.StartRequested, trackerIds)
-                disconnectWebSocket()
-                synchronized(stateLock) {
-                    currentTrackerIds = trackerIds
-                    currentTrackerName = trackerName
-                }
-                val sessionId = connectionSessionId.incrementAndGet()
-                connectJob?.cancel()
-                connectJob = serviceScope.launch { connect(sessionId) }
+                startStreamingTargets(trackerIds, trackerName)
             }
 
             ACTION_STOP -> {
@@ -153,6 +124,58 @@ class LiveTrackStreamingService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    private fun startStreamingTargets(trackerIds: Set<String>, trackerName: String?) {
+        val effectiveTrackerIds = removeLocallyRecordedTracker(trackerIds)
+        ensureStreamingChannel()
+        startForegroundForStreaming(
+            createNotification(trackerName, effectiveTrackerIds.size),
+        )
+        if (effectiveTrackerIds.isEmpty()) {
+            if (trackerIds.isEmpty()) {
+                applyLifecycleEvent(
+                    event = StreamingLifecycleEvent.PermanentFailure,
+                    activeTrackerIds = emptySet(),
+                    failureReason = getString(R.string.no_tracker_selected_go_to_settings)
+                )
+            } else {
+                applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        val assessment = synchronized(stateLock) {
+            sessionGuard.assess(
+                requestedTrackerIds = effectiveTrackerIds,
+                currentTrackerIds = currentTrackerIds,
+                hasSocket = webSocket != null,
+                lifecycleState = lifecycle.lifecycleState
+            )
+        }
+        if (assessment.decision == StreamingSessionReuseDecision.REUSE) {
+            applyLifecycleEvent(StreamingLifecycleEvent.Connected, effectiveTrackerIds)
+            return
+        }
+
+        applyLifecycleEvent(StreamingLifecycleEvent.StartRequested, effectiveTrackerIds)
+        disconnectWebSocket()
+        synchronized(stateLock) {
+            currentTrackerIds = effectiveTrackerIds
+            currentTrackerName = trackerName
+        }
+        val sessionId = connectionSessionId.incrementAndGet()
+        connectJob?.cancel()
+        connectJob = serviceScope.launch { connect(sessionId) }
+    }
+
+    private fun removeLocallyRecordedTracker(trackerIds: Set<String>): Set<String> {
+        val runtime = TrackingRuntimeStateStore.state.value
+        val selectedTrackerId = runtime.selectedTrackerId.trim()
+        if (!runtime.isRunning || selectedTrackerId.isEmpty()) return trackerIds
+        return trackerIds.filterNot { it.trim() == selectedTrackerId }.toSet()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -324,7 +347,7 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun publishRemotePoint(point: StreamingTrackPoint) {
-        val canonical = RemoteStreamIngressPolicy.process(
+        TrackPointBus.publish(
             TrackPointEvent(
                 source = TrackPointSource.REMOTE_STREAM,
                 trackId = point.trackId,
@@ -334,12 +357,8 @@ class LiveTrackStreamingService : Service() {
                 accuracyMeters = point.accuracyMeters,
                 propsJson = point.propsJson,
                 quality = TrackPointQuality.HIGH_CONFIDENCE
-            ),
-            nowMs = System.currentTimeMillis()
+            )
         )
-        if (canonical != null) {
-            TrackPointBus.publish(canonical)
-        }
     }
 
     private fun extractTrackerIds(intent: Intent): Set<String> {

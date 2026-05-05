@@ -157,6 +157,7 @@ class TrackingService : Service() {
     private var watchdogJob: Job? = null
     private var significantMotionBridge: SignificantMotionResumeBridge? = null
     private var consecutiveStationaryPoints: Int = 0
+    private var stationaryAnchorLocation: Location? = null
     private var consecutivePushFailures = 0
     private var lastSyncFailureClass: SyncFailureClass = SyncFailureClass.NONE
     @Volatile
@@ -598,6 +599,7 @@ class TrackingService : Service() {
         resetElasticDistanceOverride(reason = "start_tracking", reapplyRequest = false)
         autoTrackingMotionEngine.reset(System.currentTimeMillis())
         consecutiveStationaryPoints = 0
+        stationaryAnchorLocation = null
         updateRuntimeSnapshot {
             sessionCoordinator.transitionToRunning(
                 previous = it,
@@ -791,6 +793,16 @@ class TrackingService : Service() {
                 sessionTotalDistanceMeters = if (result.accepted) nextSessionDistance else it.sessionTotalDistanceMeters
             )
         }
+        result.policyMetrics?.let { metrics ->
+            runtimeTelemetry.decision(
+                name = "location_filter",
+                details = "raw=${metrics.rawDistanceMeters} effective=${metrics.effectiveDistanceMeters} " +
+                    "dt=${metrics.elapsedSeconds} impliedSpeed=${metrics.impliedSpeedMps} " +
+                    "accuracy=${metrics.accuracyMeters ?: -1f} rollingAverage=${metrics.rollingAverageStepMeters} " +
+                    "capCandidate=${metrics.capCandidateMeters} decision=${metrics.decision} " +
+                    "reason=${metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"}"
+            )
+        }
         withContext(Dispatchers.Main) { syncRuntimeStateStore() }
         if (!result.accepted) {
             val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
@@ -866,15 +878,24 @@ class TrackingService : Service() {
             cancelLowAccuracyFallbackTimer(clearCandidate = true)
         }
         if (!skipAdaptiveTrackingEffects) {
-            val (_, distanceFilter, _) = resolveCurrentProfileParams()
+            val stationaryRadius = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS
+            val autoMotionSnapshot = autoTrackingMotionEngine.snapshot()
+            val activeMotionHint = settings.autoTrackingMode &&
+                ((observedSpeedMps ?: 0f) > 0.75f || autoMotionSnapshot.smoothedSpeedMps > 0.75f)
             val stationaryResult = TrackingLocationPolicy.stationaryUpdate(
-                lastLocation = previousAcceptedLocation,
+                lastLocation = stationaryAnchorLocation,
                 location = result.lastFilteredLocation ?: location,
-                distanceFilter = distanceFilter,
+                stationaryRadiusMeters = stationaryRadius,
                 currentConsecutive = consecutiveStationaryPoints,
-                significantMotionOnly = settings.significantDataOnly
+                significantMotionOnly = settings.significantDataOnly,
+                activeMotionHint = activeMotionHint,
             )
             consecutiveStationaryPoints = stationaryResult.first
+            stationaryAnchorLocation = when (consecutiveStationaryPoints) {
+                0 -> null
+                1 -> Location(result.lastFilteredLocation ?: location)
+                else -> stationaryAnchorLocation
+            }
             if (stationaryResult.second) {
                 pauseGps()
             }
@@ -1788,6 +1809,7 @@ class TrackingService : Service() {
         stopFastGpsLockWindow(reason = "gps_resumed")
         cancelLowAccuracyFallbackTimer(clearCandidate = false)
         consecutiveStationaryPoints = 0
+        stationaryAnchorLocation = null
         if (settingsRepository.getSettings().autoTrackingMode) {
             autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
         }
@@ -2229,7 +2251,7 @@ class TrackingService : Service() {
 
     private fun computeElasticitySpeedBucket(speedMps: Float?): Int {
         if (speedMps == null || !speedMps.isFinite() || speedMps <= 0f) return 0
-        val bucket = kotlin.math.floor(speedMps / ELASTICITY_SPEED_BUCKET_SIZE_MPS).toInt()
+        val bucket = kotlin.math.round(speedMps / ELASTICITY_SPEED_BUCKET_SIZE_MPS).toInt()
         return bucket.coerceIn(0, ELASTICITY_MAX_SPEED_BUCKET)
     }
 

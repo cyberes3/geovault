@@ -18,10 +18,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Divider
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.ExposedDropdownMenuBox
-import androidx.compose.material.ExposedDropdownMenuDefaults
 import androidx.compose.material.Icon
 import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
@@ -54,6 +50,8 @@ import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.common.ui.components.GeoVaultInfoDialog
 import com.geovault.common.ui.components.GeoVaultInitialAuthView
 import com.geovault.common.ui.components.GeoVaultInput
+import com.geovault.common.ui.components.GeoVaultSelectField
+import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -74,7 +72,6 @@ import com.geovault.tracker.presentation.SettingsState
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerTrackingProfile
 
-@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun SettingsScreen(
     state: SettingsState,
@@ -109,8 +106,6 @@ fun SettingsScreen(
     var isUpdatingFromProfile by remember { mutableStateOf(false) }
 
     var selectedProfile by remember { mutableStateOf(TrackerTrackingProfile.BIKING) }
-    var profileDropdownExpanded by remember { mutableStateOf(false) }
-
     var intervalText by remember { mutableStateOf("") }
     var distanceText by remember { mutableStateOf("") }
     var accuracyText by remember { mutableStateOf("") }
@@ -327,6 +322,16 @@ fun SettingsScreen(
             TrackerTrackingProfile.CUSTOM -> stringResource(R.string.profile_custom)
         }
     }
+    val profileOptions = if (state.trackerSettings.autoTrackingMode) {
+        listOf(GeoVaultSelectOption(selectedProfile, profileDisplay))
+    } else {
+        listOf(
+            GeoVaultSelectOption(TrackerTrackingProfile.WALKING, stringResource(R.string.profile_walking)),
+            GeoVaultSelectOption(TrackerTrackingProfile.BIKING, stringResource(R.string.profile_biking)),
+            GeoVaultSelectOption(TrackerTrackingProfile.DRIVING, stringResource(R.string.profile_driving)),
+            GeoVaultSelectOption(TrackerTrackingProfile.CUSTOM, stringResource(R.string.profile_custom)),
+        )
+    }
     val distanceUnit = stringResource(if (state.usesImperialUnits) R.string.unit_ft else R.string.unit_m)
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -450,64 +455,33 @@ fun SettingsScreen(
             style = MaterialTheme.typography.subtitle2,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
         )
-        ExposedDropdownMenuBox(
-            expanded = profileDropdownExpanded,
-            onExpandedChange = {
-                if (!trackerSettings.autoTrackingMode) profileDropdownExpanded = it
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            GeoVaultInput(
-                value = profileDisplay,
-                onValueChange = {},
-                label = stringResource(R.string.tracking_profile_label),
-                modifier = Modifier.fillMaxWidth(),
-                readOnly = true,
-                enabled = !trackerSettings.autoTrackingMode,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(profileDropdownExpanded) },
-            )
-            ExposedDropdownMenu(
-                expanded = profileDropdownExpanded,
-                onDismissRequest = { profileDropdownExpanded = false },
-            ) {
-                listOf(
-                    TrackerTrackingProfile.WALKING,
-                    TrackerTrackingProfile.BIKING,
-                    TrackerTrackingProfile.DRIVING,
-                    TrackerTrackingProfile.CUSTOM
-                ).forEach { profile ->
-                    val label = when (profile) {
-                        TrackerTrackingProfile.WALKING -> stringResource(R.string.profile_walking)
-                        TrackerTrackingProfile.BIKING -> stringResource(R.string.profile_biking)
-                        TrackerTrackingProfile.DRIVING -> stringResource(R.string.profile_driving)
-                        TrackerTrackingProfile.CUSTOM -> stringResource(R.string.profile_custom)
-                    }
-                    DropdownMenuItem(
-                        onClick = {
-                            profileDropdownExpanded = false
-                            selectedProfile = profile
-                            if (profile != TrackerTrackingProfile.CUSTOM) {
-                                val params = TrackingLocationPolicy.getProfileParams(profile.index)
-                                isUpdatingFromProfile = true
-                                intervalText = params.first.toString()
-                                distanceText = SettingsMeasurementPolicy.metersToDisplayText(
-                                    meters = params.second,
-                                    usesImperial = state.usesImperialUnits
-                                )
-                                accuracyText = SettingsMeasurementPolicy.metersToDisplayText(
-                                    meters = params.third,
-                                    usesImperial = state.usesImperialUnits
-                                )
-                                isUpdatingFromProfile = false
-                            }
-                            onTrackingProfileSelected(profile)
-                        },
-                    ) {
-                        Text(label)
-                    }
+        GeoVaultSelectField(
+            selectedValue = selectedProfile,
+            options = profileOptions,
+            onValueSelected = { profile ->
+                selectedProfile = profile
+                if (profile != TrackerTrackingProfile.CUSTOM) {
+                    val params = TrackingLocationPolicy.getProfileParams(profile.index)
+                    isUpdatingFromProfile = true
+                    intervalText = params.first.toString()
+                    distanceText = SettingsMeasurementPolicy.metersToDisplayText(
+                        meters = params.second,
+                        usesImperial = state.usesImperialUnits
+                    )
+                    accuracyText = SettingsMeasurementPolicy.metersToDisplayText(
+                        meters = params.third,
+                        usesImperial = state.usesImperialUnits
+                    )
+                    isUpdatingFromProfile = false
                 }
-            }
-        }
+                onTrackingProfileSelected(profile)
+            },
+            dialogTitle = stringResource(R.string.tracking_profile_label),
+            label = null,
+            enabled = !trackerSettings.autoTrackingMode,
+            placeholder = profileDisplay,
+            modifier = Modifier.fillMaxWidth(),
+        )
         Text(
             text = stringResource(R.string.tracking_profile_help_text),
             color = geoVaultContentSecondaryColor(),

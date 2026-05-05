@@ -200,4 +200,59 @@ class TrackerMapPointEventReducerTest {
         assertTrue(result.shouldUpdateUiState)
         assertEquals(1, result.nextState.allQueueTrailsByTracker["tracker-1"]?.size)
     }
+
+    @Test
+    fun localGps_multiMode_appendsSelectedTrackerTrailMap() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                selectedTrackerId = "tracker-1",
+            ),
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            activeStreamedTrackerIds = setOf("tracker-2"),
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "tracker-1",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 1000L,
+                ),
+                trailPointLimit = 4000,
+            )
+        )
+        assertTrue(result.acceptedBySourcePolicy)
+        assertTrue(result.shouldUpdateUiState)
+        assertEquals(1, result.nextState.allQueueTrailsByTracker["tracker-1"]?.size)
+        assertEquals(0, result.nextState.trail.size)
+    }
+
+    @Test
+    fun localGps_usesEventTrackerIdForOverlay() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                selectedTrackerId = "tracker-1",
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "tracker-1",
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "tracker-1",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 1000L,
+                ),
+                trailPointLimit = 4000,
+            )
+        )
+        assertEquals("tracker-1", result.nextState.trail.first().trackerId)
+    }
 }

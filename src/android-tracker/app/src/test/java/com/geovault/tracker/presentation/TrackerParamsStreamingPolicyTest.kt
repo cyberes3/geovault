@@ -1,8 +1,6 @@
 package com.geovault.tracker.presentation
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrackerParamsStreamingPolicyTest {
@@ -54,7 +52,7 @@ class TrackerParamsStreamingPolicyTest {
     }
 
     @Test
-    fun resolveStart_alreadyStreamingTracker_doesNotTakeOwnership() {
+    fun resolveStart_alreadyStreamingTracker_takesParamsOwnership() {
         val resolution = TrackerParamsStreamingPolicy.resolveStart(
             startInput(
                 trackerId = "remote",
@@ -63,8 +61,9 @@ class TrackerParamsStreamingPolicyTest {
             )
         )
 
-        assertEquals(TrackerParamsStreamingCommand.NoOp, resolution.command)
-        assertEquals(TrackerParamsStreamingOwnership.AlreadyActive, resolution.session?.ownership)
+        val command = resolution.command as TrackerParamsStreamingCommand.Start
+        assertEquals(setOf("remote"), command.trackerIds)
+        assertEquals(TrackerParamsStreamingOwnership.StartedFromIdle, resolution.session?.ownership)
         val stopCommand = TrackerParamsStreamingPolicy.resolveStop(
             TrackerParamsStreamingStopInput(
                 session = requireNotNull(resolution.session),
@@ -72,11 +71,11 @@ class TrackerParamsStreamingPolicyTest {
                 activeTrackerIds = setOf("remote"),
             )
         )
-        assertEquals(TrackerParamsStreamingCommand.NoOp, stopCommand)
+        assertEquals(TrackerParamsStreamingCommand.Stop, stopCommand)
     }
 
     @Test
-    fun resolveStart_existingDifferentStream_expandsActiveIds() {
+    fun resolveStart_existingDifferentStream_startsOnlyParamsTarget() {
         val resolution = TrackerParamsStreamingPolicy.resolveStart(
             startInput(
                 trackerId = "params",
@@ -86,12 +85,12 @@ class TrackerParamsStreamingPolicyTest {
         )
 
         val command = resolution.command as TrackerParamsStreamingCommand.Start
-        assertEquals(setOf("map", "params"), command.trackerIds)
-        assertEquals(TrackerParamsStreamingOwnership.ExpandedExistingStream, resolution.session?.ownership)
+        assertEquals(setOf("params"), command.trackerIds)
+        assertEquals(TrackerParamsStreamingOwnership.StartedFromIdle, resolution.session?.ownership)
     }
 
     @Test
-    fun resolveStop_expandedExistingStream_restoresBaseline() {
+    fun resolveStop_expandedExistingStream_clearsParamsRequest() {
         val session = TrackerParamsStreamingSession(
             trackerId = "params",
             requestedTrackerIds = setOf("map", "params"),
@@ -107,14 +106,11 @@ class TrackerParamsStreamingPolicyTest {
             )
         )
 
-        assertTrue(command is TrackerParamsStreamingCommand.Start)
-        command as TrackerParamsStreamingCommand.Start
-        assertEquals(setOf("map"), command.trackerIds)
-        assertNull(command.trackerName)
+        assertEquals(TrackerParamsStreamingCommand.Stop, command)
     }
 
     @Test
-    fun resolveStop_externalStreamChange_leavesCurrentStreamAlone() {
+    fun resolveStop_externalStreamChange_stillClearsParamsRequest() {
         val session = TrackerParamsStreamingSession(
             trackerId = "params",
             requestedTrackerIds = setOf("map", "params"),
@@ -130,7 +126,7 @@ class TrackerParamsStreamingPolicyTest {
             )
         )
 
-        assertEquals(TrackerParamsStreamingCommand.NoOp, command)
+        assertEquals(TrackerParamsStreamingCommand.Stop, command)
     }
 
     private fun startInput(

@@ -1,11 +1,10 @@
 package com.geovault.tracker.presentation
 
 import android.content.Context
-import com.geovault.tracker.MapStreamingServiceHelper
 
 /**
- * Single owner of [MapStreamingServiceHelper] start/stop for map live streaming.
- * Deduplicates identical logical states; delegates decisions to [TrackerMapStreamingCoordinator].
+ * Owns the map streaming request and delegates service ownership to [LiveTrackStreamingTargetCoordinator].
+ * Deduplicates identical logical states; delegates map decisions to [TrackerMapStreamingCoordinator].
  */
 class LiveTrackStreamingReconciler(
     private val appContext: Context,
@@ -18,7 +17,11 @@ class LiveTrackStreamingReconciler(
 
     /** Unconditional stop (e.g. map context reset); clears dedupe so the next reconcile can start fresh. */
     fun stopForegroundStreaming() {
-        MapStreamingServiceHelper.stopStreaming(appContext)
+        LiveTrackStreamingTargetCoordinator.replaceRequest(
+            context = appContext,
+            owner = LiveTrackStreamingOwner.Map,
+            request = null,
+        )
         lastStreamingServiceSeed = null
     }
 
@@ -41,14 +44,24 @@ class LiveTrackStreamingReconciler(
         )
         when (command) {
             is TrackerMapStreamingCommand.Start -> {
-                MapStreamingServiceHelper.startStreaming(
+                val locallyRecordedTrackerId = state.runtime.selectedTrackerId
+                    .takeIf { state.runtime.isRunning }
+                LiveTrackStreamingTargetCoordinator.replaceRequest(
                     context = appContext,
-                    trackerIds = command.trackerIds,
-                    trackerName = command.trackerName,
+                    owner = LiveTrackStreamingOwner.Map,
+                    request = LiveTrackStreamingTargetRequest(
+                        trackerIds = command.trackerIds,
+                        trackerName = command.trackerName,
+                        locallyRecordedTrackerId = locallyRecordedTrackerId,
+                    ),
                 )
             }
             TrackerMapStreamingCommand.Stop -> {
-                MapStreamingServiceHelper.stopStreaming(appContext)
+                LiveTrackStreamingTargetCoordinator.replaceRequest(
+                    context = appContext,
+                    owner = LiveTrackStreamingOwner.Map,
+                    request = null,
+                )
             }
             TrackerMapStreamingCommand.NoOp -> Unit
         }

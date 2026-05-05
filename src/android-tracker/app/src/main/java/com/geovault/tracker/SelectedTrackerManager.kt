@@ -72,8 +72,13 @@ object SelectedTrackerManager {
         }
         val appContext = context.applicationContext
         cancelPendingRestart()
+        val stopGenerationAtRestart = TrackingCommandFacade.stopGeneration()
         TrackingCommandFacade.requestStop(appContext, reason = "selected_tracker_restart_stop")
         val runnable = Runnable {
+            if (TrackingCommandFacade.stopGeneration() != stopGenerationAtRestart) {
+                pendingRestart = null
+                return@Runnable
+            }
             TrackingCommandFacade.requestStart(
                 context = appContext,
                 trigger = RuntimeTrigger.EXPLICIT_START,

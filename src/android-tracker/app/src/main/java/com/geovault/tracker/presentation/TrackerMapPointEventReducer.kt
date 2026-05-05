@@ -94,7 +94,7 @@ object TrackerMapPointEventReducer {
     ): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
-        val overlayTrackerId = displayedTrackerId.ifBlank { state.runtime.selectedTrackerId.trim() }
+        val overlayTrackerId = point.trackId.trim()
         if (overlayTrackerId.isBlank()) {
             return TrackerMapPointReductionResult(
                 acceptedBySourcePolicy = true,
@@ -116,25 +116,65 @@ object TrackerMapPointEventReducer {
             prov = "local_gps",
             dist = null
         )
-        val trail = state.trail
-        val last = trail.lastOrNull()
-        val isDuplicateTail = last != null &&
-            last.time == localOverlayPoint.time &&
-            last.latitude == localOverlayPoint.latitude &&
-            last.longitude == localOverlayPoint.longitude
-        if (isDuplicateTail) {
+        val nextTrail = if (shouldUpdateSingleTrail(state, displayedTrackerId, overlayTrackerId)) {
+            appendQueuedPoint(state.trail, localOverlayPoint, input.trailPointLimit)
+        } else {
+            state.trail
+        }
+        val nextAllQueueTrails = if (
+            state.mode == TrackerMapDisplayMode.ALL_QUEUE ||
+            state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
+        ) {
+            val updated = state.allQueueTrailsByTracker.toMutableMap()
+            val base = updated[overlayTrackerId].orEmpty()
+            updated[overlayTrackerId] = appendQueuedPoint(base, localOverlayPoint, input.trailPointLimit)
+            updated
+        } else {
+            state.allQueueTrailsByTracker
+        }
+
+        if (nextTrail === state.trail && nextAllQueueTrails === state.allQueueTrailsByTracker) {
             return TrackerMapPointReductionResult(
                 acceptedBySourcePolicy = true,
                 shouldUpdateUiState = false,
                 nextState = state,
             )
         }
-        val nextTrail = (trail + localOverlayPoint).takeLast(input.trailPointLimit)
         return TrackerMapPointReductionResult(
             acceptedBySourcePolicy = true,
             shouldUpdateUiState = true,
-            nextState = state.copy(trail = nextTrail),
+            nextState = state.copy(
+                trail = nextTrail,
+                allQueueTrailsByTracker = nextAllQueueTrails,
+            ),
         )
+    }
+
+    private fun shouldUpdateSingleTrail(
+        state: TrackerMapUiState,
+        displayedTrackerId: String,
+        localTrackerId: String,
+    ): Boolean {
+        if (state.mode != TrackerMapDisplayMode.SINGLE_SESSION) return false
+        val selectedTrackerId = state.runtime.selectedTrackerId.trim()
+        return displayedTrackerId.isBlank() ||
+            selectedTrackerId.isBlank() ||
+            displayedTrackerId == localTrackerId
+    }
+
+    private fun appendQueuedPoint(
+        currentTrail: List<QueuedLocation>,
+        point: QueuedLocation,
+        trailPointLimit: Int,
+    ): List<QueuedLocation> {
+        val last = currentTrail.lastOrNull()
+        if (last != null) {
+            val duplicate = last.time == point.time &&
+                last.latitude == point.latitude &&
+                last.longitude == point.longitude
+            if (duplicate || point.time < last.time) return currentTrail
+        }
+        return (currentTrail + point).takeLast(trailPointLimit)
     }
 
     private fun appendRemotePoint(

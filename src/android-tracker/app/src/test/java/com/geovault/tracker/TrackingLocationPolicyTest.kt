@@ -47,22 +47,14 @@ class TrackingLocationPolicyTest {
             time = t0 + 2000
         }
         val (c1, p1) = TrackingLocationPolicy.stationaryUpdate(null, loc1, filter, 0, true)
-        assertEquals(0, c1)
+        assertEquals(1, c1)
         assertFalse(p1)
         val (c2, p2) = TrackingLocationPolicy.stationaryUpdate(loc1, loc2, filter, c1, true)
-        assertEquals(1, c2)
+        assertEquals(2, c2)
         assertFalse(p2)
         val (c3, p3) = TrackingLocationPolicy.stationaryUpdate(loc2, loc3, filter, c2, true)
-        assertEquals(2, c3)
-        assertFalse(p3)
-        val loc4 = Location("test").apply {
-            latitude = 0.0
-            longitude = 0.00003
-            time = t0 + 3000
-        }
-        val (c4, p4) = TrackingLocationPolicy.stationaryUpdate(loc3, loc4, filter, c3, true)
-        assertEquals(3, c4)
-        assertTrue(p4)
+        assertEquals(3, c3)
+        assertTrue(p3)
     }
 
     @Test
@@ -77,5 +69,31 @@ class TrackingLocationPolicyTest {
         val (c, p) = TrackingLocationPolicy.stationaryUpdate(null, base, filter, 2, true)
         assertEquals(0, c)
         assertFalse(p)
+    }
+
+    @Test
+    fun stationaryUpdate_activeMotionHint_resetsAndNoPause() {
+        val base = Location("test").apply {
+            latitude = 1.0
+            longitude = 1.0
+            time = 5_000L
+        }
+        val next = Location("test").apply {
+            latitude = 1.0
+            longitude = 1.00001
+            time = 6_000L
+        }
+
+        val (count, shouldPause) = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = base,
+            location = next,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+            activeMotionHint = true,
+        )
+
+        assertEquals(0, count)
+        assertFalse(shouldPause)
     }
 }

@@ -17,6 +17,7 @@ import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointCrossSourceState
+import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointPolicyConfig
 import com.geovault.tracker.policy.TrackPointPolicyEngine
@@ -89,7 +90,8 @@ data class LocationIngestResult(
     val lastTrackedLatitude: Double?,
     val lastTrackedLongitude: Double?,
     val lastTrackedTimestampMs: Long,
-    val lastTrackedPropsJson: String?
+    val lastTrackedPropsJson: String?,
+    val policyMetrics: TrackPointDecisionMetrics? = null,
 )
 
 class LocationIngestCoordinator(private val locationDao: LocationDao) {
@@ -121,6 +123,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         require(queuedTrackerId.isNotBlank()) { "queuedTrackerId must not be blank" }
         val accuracy = if (location.hasAccuracy()) location.accuracy else null
         var resolvedQuality: TrackPointQuality? = null
+        var policyMetrics: TrackPointDecisionMetrics? = null
         if (!bypassFilters) {
             val decision = evaluatePolicyDecision(
                 trackId = trackId,
@@ -138,10 +141,12 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                     accuracy = accuracy,
                     propsJson = propsJson,
                     rejectReason = decision.rejectReason,
-                    currentSessionDistanceMeters = totalDistanceMeters
+                    currentSessionDistanceMeters = totalDistanceMeters,
+                    policyMetrics = decision.metrics,
                 )
             }
             val canonical = decision.canonicalEvent
+            policyMetrics = decision.metrics
             resolvedQuality = canonical.quality
             location.latitude = canonical.lat
             location.longitude = canonical.lon
@@ -173,7 +178,42 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                     lastTrackedLatitude = location.latitude,
                     lastTrackedLongitude = location.longitude,
                     lastTrackedTimestampMs = location.time,
-                    lastTrackedPropsJson = propsJson
+                    lastTrackedPropsJson = propsJson,
+                    policyMetrics = decision.metrics,
+                )
+            }
+        }
+
+        val bypassCanonical = if (bypassFilters) {
+            trackPointEventForPolicy(
+                trackId = trackId,
+                location = location,
+                isMockLocation = isMockLocation,
+                nowMs = nowMs
+            )
+        } else {
+            null
+        }
+        if (bypassCanonical != null) {
+            val previousByTrack = TrackPointCrossSourceState.withLock {
+                TrackPointCrossSourceState.previous(trackId)
+            }
+            if (isDuplicateAgainstTrack(previousByTrack, bypassCanonical)) {
+                return ignored(
+                    previousAcceptedLocation = previousAcceptedLocation,
+                    accuracy = accuracy,
+                    propsJson = propsJson,
+                    rejectReason = TrackPointRejectReason.DUPLICATE,
+                    currentSessionDistanceMeters = totalDistanceMeters
+                )
+            }
+            if (isOutOfOrderAgainstTrack(previousByTrack, bypassCanonical)) {
+                return ignored(
+                    previousAcceptedLocation = previousAcceptedLocation,
+                    accuracy = accuracy,
+                    propsJson = propsJson,
+                    rejectReason = TrackPointRejectReason.OUT_OF_ORDER,
+                    currentSessionDistanceMeters = totalDistanceMeters
                 )
             }
         }
@@ -189,14 +229,8 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             totalDistanceMeters = nextSessionDistanceMeters,
         )
         val insertedId = locationDao.insert(queued)
-        if (bypassFilters) {
-            val canonical = trackPointEventForPolicy(
-                trackId = trackId,
-                location = location,
-                isMockLocation = isMockLocation,
-                nowMs = nowMs
-            )
-            updateAcceptedStateForLocalStream(trackId = trackId, canonical = canonical, historyWindowSize = 5)
+        if (bypassCanonical != null) {
+            updateAcceptedStateForLocalStream(trackId = trackId, canonical = bypassCanonical, historyWindowSize = 5)
         }
         val visible = locationDao.getCurrentSessionCountForTracker(
             trackerId = queuedTrackerId,
@@ -216,7 +250,8 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             lastTrackedLatitude = location.latitude,
             lastTrackedLongitude = location.longitude,
             lastTrackedTimestampMs = location.time,
-            lastTrackedPropsJson = propsJson
+            lastTrackedPropsJson = propsJson,
+            policyMetrics = policyMetrics,
         )
     }
 
@@ -418,7 +453,8 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         accuracy: Float?,
         propsJson: String?,
         rejectReason: TrackPointRejectReason?,
-        currentSessionDistanceMeters: Float
+        currentSessionDistanceMeters: Float,
+        policyMetrics: TrackPointDecisionMetrics? = null,
     ): LocationIngestResult {
         return LocationIngestResult(
             accepted = false,
@@ -432,7 +468,8 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             lastTrackedLatitude = null,
             lastTrackedLongitude = null,
             lastTrackedTimestampMs = 0L,
-            lastTrackedPropsJson = propsJson
+            lastTrackedPropsJson = propsJson,
+            policyMetrics = policyMetrics,
         )
     }
 

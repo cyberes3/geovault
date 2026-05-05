@@ -926,7 +926,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 )
                 if (activeBounds != null) return activeBounds
             }
-            return TrackerMapStateTransforms.multiTrailBounds(s.allQueueTrailsByTracker)
+            val multiBounds = TrackerMapStateTransforms.multiTrailBounds(s.allQueueTrailsByTracker)
+            val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(s.remoteLastPoints)
+            return TrackerMapStateTransforms.mergeBounds(multiBounds, remoteBounds)
                 ?: TrackerMapStateTransforms.trailBounds(s.trail)
                 ?: singlePointBoundsFromRuntime(s.runtime)
         }
@@ -1125,13 +1127,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             TrackerMapTrailSource.MULTI_SERVER -> {
                 val multiTrails = loadTrailsForTrackerIds(plan.trackerIds, existingMultiMinTimes).toMutableMap()
                 plan.overlayTrackerId?.let { overlayTrackerId ->
-                    multiTrails[overlayTrackerId] = loadQueueTrailWithOverlay()
+                    multiTrails[overlayTrackerId] = loadQueueTrailWithOverlay(overlayTrackerId)
                 }
                 val fallbackTrail = multiTrails[plan.activeTrackerId].orEmpty()
                 fallbackTrail to multiTrails.toMap()
             }
             TrackerMapTrailSource.SINGLE_QUEUE -> {
-                loadQueueTrailWithOverlay() to emptyMap()
+                loadQueueTrailWithOverlay(plan.activeTrackerId) to emptyMap()
             }
         }
         if (trailSeedForState(_uiState.value) != seed) {
@@ -1200,9 +1202,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     ): Map<String, List<QueuedLocation>> {
         if (currentTrails.isEmpty()) return reloadedTrails
         if (reloadedTrails.isEmpty()) return currentTrails
-        return reloadedTrails.keys.associateWith { trackerId ->
+        val trackerIds = reloadedTrails.keys + currentTrails.keys
+        return trackerIds.associateWith { trackerId ->
             mergeStreamingOverlayIntoReloadedTrail(
-                reloadedTrail = reloadedTrails.getValue(trackerId),
+                reloadedTrail = reloadedTrails[trackerId].orEmpty(),
                 currentTrail = currentTrails[trackerId].orEmpty(),
             )
         }
@@ -1225,11 +1228,22 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return merged.sortedBy { it.time }
     }
 
-    private suspend fun loadQueueTrailWithOverlay(): List<QueuedLocation> {
+    private suspend fun loadQueueTrailWithOverlay(trackerId: String): List<QueuedLocation> {
+        val normalizedTrackerId = trackerId.trim()
+        if (normalizedTrackerId.isEmpty()) return emptyList()
         val databaseTrail = withContext(Dispatchers.IO) {
-            dao.getRecentChronological(TRAIL_POINT_LIMIT)
+            dao.getRecentChronologicalForTracker(normalizedTrackerId, TRAIL_POINT_LIMIT)
         }
-        val currentOverlay = _uiState.value.trail.filter { it.id <= 0L }
+        val currentState = _uiState.value
+        val currentOverlay = buildList {
+            currentState.trail
+                .filter { it.id <= 0L && it.trackerId.trim() == normalizedTrackerId }
+                .forEach(::add)
+            currentState.allQueueTrailsByTracker[normalizedTrackerId]
+                .orEmpty()
+                .filter { it.id <= 0L }
+                .forEach(::add)
+        }
         return mergeOverlayPoints(databaseTrail, currentOverlay).takeLast(TRAIL_POINT_LIMIT)
     }
 
@@ -1245,7 +1259,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     geometryLoadingTracker.track { trackerManagementRepository.loadTrackerGeometry(id) }
                 }
             },
-            loadQueueTrailWithOverlay = { loadQueueTrailWithOverlay() },
+            loadQueueTrailWithOverlay = { loadQueueTrailWithOverlay(trackerId) },
             mapCoordinatesToTrail = { id, merged, pointParams, minTime ->
                 mapCoordinatesToTrail(id, merged, pointParams, minTime)
             }

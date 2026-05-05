@@ -44,7 +44,6 @@ fun GeoVaultServerConfigBlock(
         GeoVaultInput(
             value = serverUrl,
             onValueChange = {},
-            label = "Server URL",
             enabled = true,
             readOnly = true,
             modifier = Modifier

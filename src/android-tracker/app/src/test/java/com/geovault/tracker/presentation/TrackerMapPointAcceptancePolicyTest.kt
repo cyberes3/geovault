@@ -25,7 +25,7 @@ class TrackerMapPointAcceptancePolicyTest {
     }
 
     @Test
-    fun trackingSingle_rejectsRemoteStream() {
+    fun trackingAll_acceptsRemoteStreamForActiveOtherTracker() {
         val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
             event = event(source = TrackPointSource.REMOTE_STREAM, trackId = "other"),
             input = input(
@@ -34,6 +34,51 @@ class TrackerMapPointAcceptancePolicyTest {
                 selectedTrackerId = "selected",
                 displayedTrackerId = "selected",
                 activeStreamedTrackerIds = setOf("other")
+            )
+        )
+        assertTrue(accepted)
+    }
+
+    @Test
+    fun trackingAll_rejectsRemoteStreamForSelectedTracker() {
+        val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.REMOTE_STREAM, trackId = "selected"),
+            input = input(
+                trackingRunning = true,
+                mode = TrackerMapDisplayMode.ALL_QUEUE,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "selected",
+                activeStreamedTrackerIds = setOf("selected", "other")
+            )
+        )
+        assertFalse(accepted)
+    }
+
+    @Test
+    fun trackingSingleOtherTracker_acceptsDisplayedRemoteStream() {
+        val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.REMOTE_STREAM, trackId = "remote"),
+            input = input(
+                trackingRunning = true,
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "remote",
+                activeStreamedTrackerIds = setOf("remote")
+            )
+        )
+        assertTrue(accepted)
+    }
+
+    @Test
+    fun trackingSingleOtherTracker_rejectsLocalGpsForSingleRemoteView() {
+        val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
+            event = event(source = TrackPointSource.LOCAL_GPS, trackId = "selected"),
+            input = input(
+                trackingRunning = true,
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "remote",
+                activeStreamedTrackerIds = setOf("remote")
             )
         )
         assertFalse(accepted)

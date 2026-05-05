@@ -7,6 +7,8 @@ import android.location.Location
  * Extracted so it can be unit tested without Service/Context.
  */
 object TrackingLocationPolicy {
+    const val MIN_STATIONARY_RADIUS_METERS = 25f
+    const val DEFAULT_STATIONARY_RADIUS_METERS = 50f
     const val AUTO_START_PROFILE_INDEX = 0
     const val WALKING_INTERVAL_SEC = 20L
     const val WALKING_DISTANCE_FILTER_METERS = 7f
@@ -71,19 +73,25 @@ object TrackingLocationPolicy {
     fun stationaryUpdate(
         lastLocation: Location?,
         location: Location,
-        distanceFilter: Float,
+        stationaryRadiusMeters: Float,
         currentConsecutive: Int,
-        significantMotionOnly: Boolean
+        significantMotionOnly: Boolean,
+        activeMotionHint: Boolean = false
     ): Pair<Int, Boolean> {
         if (!significantMotionOnly) return 0 to false
+        if (activeMotionHint) return 0 to false
 
-        // If hardware already detects speed > 1.5 m/s (~3.3 mph), we are not stationary
-        if (location.hasSpeed() && location.speed > 1.5f) {
+        // If hardware already detects walking-or-faster motion, we are not stationary.
+        if (location.hasSpeed() && location.speed > 0.75f) {
             return 0 to false
         }
 
-        val dist = lastLocation?.distanceTo(location) ?: Float.MAX_VALUE
-        val newConsecutive = if (dist < distanceFilter) currentConsecutive + 1 else 0
+        val anchor = lastLocation ?: return 1 to false
+        val radius = stationaryRadiusMeters
+            .coerceAtLeast(MIN_STATIONARY_RADIUS_METERS)
+            .coerceAtLeast(location.accuracy.takeIf { location.hasAccuracy() } ?: 0f)
+        val dist = anchor.distanceTo(location)
+        val newConsecutive = if (dist <= radius) currentConsecutive + 1 else 1
         val shouldPause = newConsecutive >= 3
         return newConsecutive to shouldPause
     }

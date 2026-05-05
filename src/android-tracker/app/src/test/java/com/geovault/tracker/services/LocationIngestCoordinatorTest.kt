@@ -120,6 +120,63 @@ class LocationIngestCoordinatorTest {
     }
 
     @Test
+    fun ingest_manualBypass_rejectsOutOfOrderAgainstAcceptedState() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val nowMs = System.currentTimeMillis()
+        val first = Location("manual_send:fused").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = nowMs
+        }
+        val older = Location("manual_send:fused").apply {
+            latitude = 10.0
+            longitude = 20.0001
+            accuracy = 5f
+            time = nowMs - 1_000L
+        }
+
+        val firstResult = coordinator.ingest(
+            trackId = "tracker-1",
+            location = first,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = true,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+        val olderResult = coordinator.ingest(
+            trackId = "tracker-1",
+            location = older,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = true,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = "tracker-1",
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+
+        assertTrue(firstResult.accepted)
+        assertFalse(olderResult.accepted)
+        assertEquals(TrackPointRejectReason.OUT_OF_ORDER, olderResult.rejectReason)
+        assertEquals(1, dao.getCount())
+    }
+
+
+    @Test
     fun ingest_withoutBypass_rejectsLowAccuracy() {
         val dao = FakeLocationDao()
         val coordinator = LocationIngestCoordinator(dao)
@@ -279,6 +336,10 @@ private class FakeLocationDao : LocationDao {
 
     override fun getRecentChronological(limit: Int): List<QueuedLocation> {
         return rows.sortedByDescending { it.time }.take(limit).reversed()
+    }
+
+    override fun getRecentChronologicalForTracker(trackerId: String, limit: Int): List<QueuedLocation> {
+        return rows.filter { it.trackerId == trackerId }.sortedByDescending { it.time }.take(limit).reversed()
     }
 
     override fun getOldestForTracker(trackerId: String, limit: Int): List<QueuedLocation> {

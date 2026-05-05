@@ -1,7 +1,6 @@
 package com.geovault.tracker.presentation
 
 import android.content.Context
-import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import kotlinx.coroutines.flow.StateFlow
@@ -68,78 +67,28 @@ object TrackerParamsStreamingPolicy {
             )
         }
 
-        val baselineIds = if (input.liveStreamRunning) {
-            cleanIds(input.activeTrackerIds)
-        } else {
-            emptySet()
-        }
-        if (trackerId in baselineIds) {
-            return TrackerParamsStreamingResolution(
-                session = TrackerParamsStreamingSession(
-                    trackerId = trackerId,
-                    requestedTrackerIds = baselineIds,
-                    baselineTrackerIds = baselineIds,
-                    ownership = TrackerParamsStreamingOwnership.AlreadyActive,
-                ),
-                command = TrackerParamsStreamingCommand.NoOp,
-            )
-        }
-
-        val requestedIds = baselineIds + trackerId
-        val ownership = if (baselineIds.isEmpty()) {
-            TrackerParamsStreamingOwnership.StartedFromIdle
-        } else {
-            TrackerParamsStreamingOwnership.ExpandedExistingStream
-        }
         return TrackerParamsStreamingResolution(
             session = TrackerParamsStreamingSession(
                 trackerId = trackerId,
-                requestedTrackerIds = requestedIds,
-                baselineTrackerIds = baselineIds,
-                ownership = ownership,
+                requestedTrackerIds = setOf(trackerId),
+                baselineTrackerIds = emptySet(),
+                ownership = TrackerParamsStreamingOwnership.StartedFromIdle,
             ),
             command = TrackerParamsStreamingCommand.Start(
-                trackerIds = requestedIds,
+                trackerIds = setOf(trackerId),
                 trackerName = input.trackerName?.trim()?.ifBlank { null },
             ),
         )
     }
 
     fun resolveStop(input: TrackerParamsStreamingStopInput): TrackerParamsStreamingCommand {
-        val currentIds = if (input.liveStreamRunning) {
-            cleanIds(input.activeTrackerIds)
-        } else {
-            emptySet()
-        }
         return when (input.session.ownership) {
             TrackerParamsStreamingOwnership.NoOp,
             TrackerParamsStreamingOwnership.AlreadyActive -> TrackerParamsStreamingCommand.NoOp
 
-            TrackerParamsStreamingOwnership.StartedFromIdle -> {
-                if (currentIds.isEmpty() || currentIds == input.session.requestedTrackerIds) {
-                    TrackerParamsStreamingCommand.Stop
-                } else {
-                    TrackerParamsStreamingCommand.NoOp
-                }
-            }
-
-            TrackerParamsStreamingOwnership.ExpandedExistingStream -> {
-                if (currentIds != input.session.requestedTrackerIds) {
-                    TrackerParamsStreamingCommand.NoOp
-                } else if (input.session.baselineTrackerIds.isEmpty()) {
-                    TrackerParamsStreamingCommand.Stop
-                } else {
-                    TrackerParamsStreamingCommand.Start(
-                        trackerIds = input.session.baselineTrackerIds,
-                        trackerName = null,
-                    )
-                }
-            }
+            TrackerParamsStreamingOwnership.StartedFromIdle,
+            TrackerParamsStreamingOwnership.ExpandedExistingStream -> TrackerParamsStreamingCommand.Stop
         }
-    }
-
-    private fun cleanIds(ids: Set<String>): Set<String> {
-        return ids.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
     }
 }
 
@@ -173,7 +122,7 @@ class TrackerParamsStreamingController(
         )
         session = resolution.session
         sessionKey = nextSessionKey
-        execute(resolution.command)
+        replaceRequest(resolution.command, selectedTrackerId, trackingRunning)
     }
 
     fun onScreenStopped() {
@@ -189,20 +138,33 @@ class TrackerParamsStreamingController(
                 activeTrackerIds = snapshot.activeTrackerIds,
             )
         )
-        execute(command)
+        replaceRequest(command, activeSession.trackerId, false)
     }
 
-    private fun execute(command: TrackerParamsStreamingCommand) {
+    private fun replaceRequest(
+        command: TrackerParamsStreamingCommand,
+        selectedTrackerId: String,
+        trackingRunning: Boolean,
+    ) {
         when (command) {
             is TrackerParamsStreamingCommand.Start -> {
-                MapStreamingServiceHelper.startStreaming(
+                val locallyRecordedTrackerId = selectedTrackerId.takeIf { trackingRunning }
+                LiveTrackStreamingTargetCoordinator.replaceRequest(
                     context = appContext,
-                    trackerIds = command.trackerIds,
-                    trackerName = command.trackerName,
+                    owner = LiveTrackStreamingOwner.Params,
+                    request = LiveTrackStreamingTargetRequest(
+                        trackerIds = command.trackerIds,
+                        trackerName = command.trackerName,
+                        locallyRecordedTrackerId = locallyRecordedTrackerId,
+                    ),
                 )
             }
             TrackerParamsStreamingCommand.Stop -> {
-                MapStreamingServiceHelper.stopStreaming(appContext)
+                LiveTrackStreamingTargetCoordinator.replaceRequest(
+                    context = appContext,
+                    owner = LiveTrackStreamingOwner.Params,
+                    request = null,
+                )
             }
             TrackerParamsStreamingCommand.NoOp -> Unit
         }

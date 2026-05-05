@@ -27,6 +27,13 @@ interface LocationDao {
     fun getRecentChronological(limit: Int): List<QueuedLocation>
 
     @Query(
+        "SELECT * FROM (" +
+            "SELECT * FROM queued_locations WHERE tracker_id = :trackerId ORDER BY time DESC LIMIT :limit" +
+            ") ORDER BY time ASC",
+    )
+    fun getRecentChronologicalForTracker(trackerId: String, limit: Int): List<QueuedLocation>
+
+    @Query(
         "SELECT * FROM queued_locations WHERE tracker_id = :trackerId ORDER BY id ASC LIMIT :limit",
     )
     fun getOldestForTracker(trackerId: String, limit: Int): List<QueuedLocation>

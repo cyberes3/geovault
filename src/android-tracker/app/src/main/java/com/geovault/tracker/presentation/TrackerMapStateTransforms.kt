@@ -212,6 +212,31 @@ object TrackerMapStateTransforms {
         return trailBounds(allPoints)
     }
 
+    fun remoteLastPointBounds(remoteLastPoints: Map<String, TrackPointEvent>): LatLngBounds? {
+        val valid = remoteLastPoints.values
+            .filter { isValidMapLibreGeographicLatLng(it.lat, it.lon) }
+            .map { LatLng(it.lat, it.lon) }
+        if (valid.isEmpty()) return null
+        if (valid.size == 1) {
+            val point = valid.first()
+            return LatLngBounds.from(point.latitude, point.longitude, point.latitude, point.longitude)
+        }
+        val bounds = LatLngBounds.Builder()
+        valid.forEach { bounds.include(it) }
+        return bounds.build()
+    }
+
+    fun mergeBounds(first: LatLngBounds?, second: LatLngBounds?): LatLngBounds? {
+        if (first == null) return second
+        if (second == null) return first
+        val bounds = LatLngBounds.Builder()
+        bounds.include(first.northEast)
+        bounds.include(first.southWest)
+        bounds.include(second.northEast)
+        bounds.include(second.southWest)
+        return bounds.build()
+    }
+
     private fun buildTrailLines(
         mode: TrackerMapDisplayMode,
         effectiveTrail: List<QueuedLocation>,

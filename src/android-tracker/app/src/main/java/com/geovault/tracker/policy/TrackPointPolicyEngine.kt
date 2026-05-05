@@ -49,7 +49,23 @@ data class TrackPointDecision(
     val quality: TrackPointQuality = TrackPointQuality.HIGH_CONFIDENCE,
     val rejectReason: TrackPointRejectReason? = null,
     val adjusted: Boolean = false,
-    val adjustmentReason: String? = null
+    val adjustmentReason: String? = null,
+    val metrics: TrackPointDecisionMetrics? = null,
+)
+
+data class TrackPointDecisionMetrics(
+    val rawDistanceMeters: Double,
+    val effectiveDistanceMeters: Double,
+    val elapsedSeconds: Double,
+    val impliedSpeedMps: Double,
+    val accuracyMeters: Float?,
+    val rollingAverageStepMeters: Double,
+    val capCandidateMeters: Double,
+    val speedSpike: Boolean,
+    val burstSpike: Boolean,
+    val capSpike: Boolean,
+    val decision: String,
+    val reason: String?,
 )
 
 object TrackPointPolicyEngine {
@@ -70,7 +86,16 @@ object TrackPointPolicyEngine {
     ): TrackPointDecision {
         val config = TrackPointPolicyCoercion.sanitize(rawConfig)
         if (event.lat !in -90.0..90.0 || event.lon !in -180.0..180.0) {
-            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.INVALID_COORDINATES)
+            return TrackPointDecision(
+                false,
+                null,
+                rejectReason = TrackPointRejectReason.INVALID_COORDINATES,
+                metrics = baseMetrics(
+                    accuracyMeters = event.accuracyMeters,
+                    decision = "rejected",
+                    reason = "invalid-coordinates",
+                ),
+            )
         }
 
         val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(
@@ -79,7 +104,16 @@ object TrackPointPolicyEngine {
             normalizeSeconds = config.normalizeSecondsTimestamps
         )
         if (normalizedTimestampMs - nowMs > config.maxFutureSkewMs) {
-            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.TOO_FAR_FUTURE)
+            return TrackPointDecision(
+                false,
+                null,
+                rejectReason = TrackPointRejectReason.TOO_FAR_FUTURE,
+                metrics = baseMetrics(
+                    accuracyMeters = event.accuracyMeters,
+                    decision = "rejected",
+                    reason = "too-far-future",
+                ),
+            )
         }
         if (config.freshnessTtlMs != null && config.freshnessTtlMs > 0L) {
             val ageMs = CanonicalTimeNormalizer.ageMs(
@@ -89,35 +123,89 @@ object TrackPointPolicyEngine {
                 eventElapsedRealtimeNanos = event.elapsedRealtimeNanos
             )
             if (ageMs < 0L || ageMs > config.freshnessTtlMs) {
-                return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.STALE)
+                return TrackPointDecision(
+                    false,
+                    null,
+                    rejectReason = TrackPointRejectReason.STALE,
+                    metrics = baseMetrics(
+                        accuracyMeters = event.accuracyMeters,
+                        decision = "rejected",
+                        reason = "stale",
+                    ),
+                )
             }
         }
 
         val accuracyMeters = event.accuracyMeters
         if (config.maxAccuracyMeters != null) {
             if (accuracyMeters == null && config.requireAccuracyForAcceptance) {
-                return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+                return TrackPointDecision(
+                    false,
+                    null,
+                    rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                    metrics = baseMetrics(
+                        accuracyMeters = accuracyMeters,
+                        decision = "rejected",
+                        reason = "low-accuracy",
+                    ),
+                )
             }
             if (accuracyMeters != null) {
                 if (!config.allowDegradedAccuracy && accuracyMeters > config.maxAccuracyMeters) {
-                    return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+                    return TrackPointDecision(
+                        false,
+                        null,
+                        rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                        metrics = baseMetrics(
+                            accuracyMeters = accuracyMeters,
+                            decision = "rejected",
+                            reason = "low-accuracy",
+                        ),
+                    )
                 }
                 if (accuracyMeters > config.maxAccuracyMeters * config.degradedAccuracyMultiplier.coerceAtLeast(1f)) {
-                    return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.BAD_ACCURACY)
+                    return TrackPointDecision(
+                        false,
+                        null,
+                        rejectReason = TrackPointRejectReason.BAD_ACCURACY,
+                        metrics = baseMetrics(
+                            accuracyMeters = accuracyMeters,
+                            decision = "rejected",
+                            reason = "low-accuracy",
+                        ),
+                    )
                 }
             }
         }
 
         val previousTs = previous?.timestampMs
         if (previousTs != null && normalizedTimestampMs < previousTs) {
-            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.OUT_OF_ORDER)
+            return TrackPointDecision(
+                false,
+                null,
+                rejectReason = TrackPointRejectReason.OUT_OF_ORDER,
+                metrics = baseMetrics(
+                    accuracyMeters = accuracyMeters,
+                    decision = "rejected",
+                    reason = "out-of-order",
+                ),
+            )
         }
         if (previous != null &&
             normalizedTimestampMs == previous.timestampMs &&
             abs(event.lon - previous.lon) < 1e-9 &&
             abs(event.lat - previous.lat) < 1e-9
         ) {
-            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.DUPLICATE)
+            return TrackPointDecision(
+                false,
+                null,
+                rejectReason = TrackPointRejectReason.DUPLICATE,
+                metrics = baseMetrics(
+                    accuracyMeters = accuracyMeters,
+                    decision = "rejected",
+                    reason = "duplicate",
+                ),
+            )
         }
 
         if (previous != null) {
@@ -152,6 +240,25 @@ object TrackPointPolicyEngine {
             )
             val compositeCapMeters = kinematicCapMeters
             val allowLongGapReanchor = dtSeconds >= LONG_GAP_REANCHOR_SECONDS
+            val speedSpike = config.maxJumpSpeedMps != null && impliedEffectiveSpeedMps > config.maxJumpSpeedMps
+            val burstSpike = effectiveDistanceMeters > config.maxBurstDistanceMeters &&
+                dtSeconds <= config.burstWindowSeconds.coerceAtLeast(0.2)
+            val capSpike =
+                effectiveDistanceMeters > (compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0))
+            val metrics = TrackPointDecisionMetrics(
+                rawDistanceMeters = distanceMeters,
+                effectiveDistanceMeters = effectiveDistanceMeters,
+                elapsedSeconds = dtSeconds,
+                impliedSpeedMps = impliedEffectiveSpeedMps,
+                accuracyMeters = accuracyMeters,
+                rollingAverageStepMeters = rollingAverageStepMeters,
+                capCandidateMeters = compositeCapMeters,
+                speedSpike = speedSpike,
+                burstSpike = burstSpike,
+                capSpike = capSpike,
+                decision = "pending",
+                reason = null,
+            )
             if (!allowLongGapReanchor && distanceMeters > 0.0 && effectiveDistanceMeters <= 0.0) {
                 val quality = when {
                     accuracyMeters == null -> TrackPointQuality.DEGRADED
@@ -169,24 +276,33 @@ object TrackPointPolicyEngine {
                     ),
                     quality = quality,
                     adjusted = true,
-                    adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
+                    adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED,
+                    metrics = metrics.copy(
+                        decision = "accepted",
+                        reason = "uncertainty-suppressed",
+                    ),
                 )
             }
-            val speedSpike = config.maxJumpSpeedMps != null && impliedEffectiveSpeedMps > config.maxJumpSpeedMps
-            val burstSpike = effectiveDistanceMeters > config.maxBurstDistanceMeters &&
-                dtSeconds <= config.burstWindowSeconds.coerceAtLeast(0.2)
-            val capSpike =
-                effectiveDistanceMeters > (compositeCapMeters * config.outlierDistanceMultiplier.coerceAtLeast(1.0))
             val isOutlier = speedSpike || burstSpike || capSpike
             if (!allowLongGapReanchor && isOutlier) {
                 when (config.outlierPolicy) {
                     TrackPointOutlierPolicy.OFF -> Unit
                     TrackPointOutlierPolicy.STRICT -> {
-                        return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                        return TrackPointDecision(
+                            false,
+                            null,
+                            rejectReason = TrackPointRejectReason.JUMP,
+                            metrics = metrics.copy(decision = "rejected", reason = "jump"),
+                        )
                     }
                     TrackPointOutlierPolicy.ADJUST -> {
                         if (dtSeconds <= 0.0 || distanceMeters <= 0.0 || effectiveDistanceMeters <= 0.0) {
-                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                            return TrackPointDecision(
+                                false,
+                                null,
+                                rejectReason = TrackPointRejectReason.JUMP,
+                                metrics = metrics.copy(decision = "rejected", reason = "jump"),
+                            )
                         }
                         val speedCapMeters = if (config.maxJumpSpeedMps != null) {
                             (config.maxJumpSpeedMps * dtSeconds).coerceAtLeast(0.0)
@@ -203,15 +319,30 @@ object TrackPointPolicyEngine {
                             ).coerceAtLeast(0.0)
                         val hardCapMeters = minOf(speedCapMeters, burstCapMeters, kinematicCapForAdjust)
                         if (!hardCapMeters.isFinite() || hardCapMeters <= 0.0) {
-                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                            return TrackPointDecision(
+                                false,
+                                null,
+                                rejectReason = TrackPointRejectReason.JUMP,
+                                metrics = metrics.copy(decision = "rejected", reason = "jump"),
+                            )
                         }
                         val hardCapRawMeters = hardCapMeters + uncertaintyAllowanceMeters
                         if (distanceMeters > hardCapRawMeters * MAX_ADJUST_DISTANCE_RATIO) {
-                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                            return TrackPointDecision(
+                                false,
+                                null,
+                                rejectReason = TrackPointRejectReason.JUMP,
+                                metrics = metrics.copy(decision = "rejected", reason = "jump"),
+                            )
                         }
                         val scale = (hardCapRawMeters / distanceMeters).coerceIn(0.0, 1.0)
                         if (scale <= 0.0 || scale >= 1.0) {
-                            return TrackPointDecision(false, null, rejectReason = TrackPointRejectReason.JUMP)
+                            return TrackPointDecision(
+                                false,
+                                null,
+                                rejectReason = TrackPointRejectReason.JUMP,
+                                metrics = metrics.copy(decision = "rejected", reason = "jump"),
+                            )
                         }
                         val adjustedLat = previous.lat + ((event.lat - previous.lat) * scale)
                         val adjustedLon = previous.lon + ((event.lon - previous.lon) * scale)
@@ -231,11 +362,28 @@ object TrackPointPolicyEngine {
                             ),
                             quality = quality,
                             adjusted = true,
-                            adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_AWARE_OUTLIER_CAPPED
+                            adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_AWARE_OUTLIER_CAPPED,
+                            metrics = metrics.copy(
+                                capCandidateMeters = hardCapMeters,
+                                decision = "accepted",
+                                reason = "outlier-capped",
+                            ),
                         )
                     }
                 }
             }
+            val quality = when {
+                accuracyMeters == null -> TrackPointQuality.DEGRADED
+                config.maxAccuracyMeters != null && accuracyMeters > config.maxAccuracyMeters -> TrackPointQuality.DEGRADED
+                else -> TrackPointQuality.HIGH_CONFIDENCE
+            }
+            val canonical = event.copy(timestampMs = normalizedTimestampMs, quality = quality)
+            return TrackPointDecision(
+                accepted = true,
+                canonicalEvent = canonical,
+                quality = quality,
+                metrics = metrics.copy(decision = "accepted", reason = null),
+            )
         }
 
         val quality = when {
@@ -244,7 +392,37 @@ object TrackPointPolicyEngine {
             else -> TrackPointQuality.HIGH_CONFIDENCE
         }
         val canonical = event.copy(timestampMs = normalizedTimestampMs, quality = quality)
-        return TrackPointDecision(accepted = true, canonicalEvent = canonical, quality = quality)
+        return TrackPointDecision(
+            accepted = true,
+            canonicalEvent = canonical,
+            quality = quality,
+            metrics = baseMetrics(
+                accuracyMeters = accuracyMeters,
+                decision = "accepted",
+                reason = null,
+            ),
+        )
+    }
+
+    private fun baseMetrics(
+        accuracyMeters: Float?,
+        decision: String,
+        reason: String?,
+    ): TrackPointDecisionMetrics {
+        return TrackPointDecisionMetrics(
+            rawDistanceMeters = 0.0,
+            effectiveDistanceMeters = 0.0,
+            elapsedSeconds = 0.0,
+            impliedSpeedMps = 0.0,
+            accuracyMeters = accuracyMeters,
+            rollingAverageStepMeters = 0.0,
+            capCandidateMeters = 0.0,
+            speedSpike = false,
+            burstSpike = false,
+            capSpike = false,
+            decision = decision,
+            reason = reason,
+        )
     }
 
     private fun averageStepDistanceMeters(

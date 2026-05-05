@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -55,10 +56,8 @@ object TrackPointBus {
 
     fun publish(event: TrackPointEvent) {
         val sanitizedEvent = sanitize(event) ?: return
-        val policyValidatedEvent = if (
-            sanitizedEvent.source == TrackPointSource.REMOTE_STREAM &&
-            sanitizedEvent.orderingKey <= 0L
-        ) {
+        val policyValidatedEvent = if (sanitizedEvent.source == TrackPointSource.REMOTE_STREAM) {
+            if (isLocallyRecordedTrack(sanitizedEvent.trackId)) return
             RemoteStreamIngressPolicy.process(
                 event = sanitizedEvent,
                 nowMs = System.currentTimeMillis()
@@ -133,5 +132,12 @@ object TrackPointBus {
         if (event.timestampMs <= 0L) return null
         if (event.orderingKey > 0L) return event
         return event.copy(orderingKey = event.timestampMs)
+    }
+
+    private fun isLocallyRecordedTrack(trackId: String): Boolean {
+        val normalizedTrackId = trackId.trim()
+        if (normalizedTrackId.isEmpty()) return false
+        val runtime = TrackingRuntimeStateStore.state.value
+        return runtime.isRunning && runtime.selectedTrackerId.trim() == normalizedTrackId
     }
 }
