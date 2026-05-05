@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -72,14 +74,13 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
+import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.components.GeoVaultTab
-import com.geovault.common.ui.components.GeoVaultTopTabBehavior
-import com.geovault.common.ui.components.GeoVaultTopTabSurface
-import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
+import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.components.GeoVaultToggle
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.Group
@@ -213,6 +214,7 @@ private fun Group.toRowModel(
 @Composable
 fun TrackersScreen(
     vm: TrackersGroupsViewModel,
+    trackersTabBottomNavStamp: Int = 0,
     isAuthenticated: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
@@ -289,6 +291,11 @@ fun TrackersScreen(
     var localNavigationRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var groupActionsDialog by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
     var groupEditReturnOverlay by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
+    LaunchedEffect(trackersTabBottomNavStamp) {
+        if (trackersTabBottomNavStamp == 0) return@LaunchedEffect
+        groupActionsDialog = null
+        groupEditReturnOverlay = null
+    }
     val activeTrackerEditLoadingDialog = state.dialog as? TrackersGroupsDialog.EditTrackerLoading
     val activeTrackerEditDialog = state.dialog as? TrackersGroupsDialog.EditTracker
     val activeCreateTrackerDialog = state.dialog as? TrackersGroupsDialog.CreateTracker
@@ -974,58 +981,109 @@ private fun TrackersGroupsAuthenticatedBody(
         highlightedTrackerId = null
         highlightedGroupId = null
     }
+    val selectedIndex = tabs.indexOfFirst { it.value == state.subTab }.let { if (it >= 0) it else 0 }
+    val pagerState = rememberPagerState(
+        initialPage = selectedIndex,
+        pageCount = { tabs.size },
+    )
+    LaunchedEffect(selectedIndex, tabs) {
+        if (pagerState.currentPage != selectedIndex && selectedIndex in tabs.indices) {
+            pagerState.animateScrollToPage(selectedIndex)
+        }
+    }
+    LaunchedEffect(pagerState.settledPage, tabs) {
+        val nextTab = tabs.getOrNull(pagerState.settledPage)?.value ?: return@LaunchedEffect
+        if (nextTab != state.subTab) {
+            onSubTabSelected(nextTab)
+        }
+    }
+    val activeTab = tabs.getOrNull(pagerState.settledPage)?.value ?: state.subTab
+    val activeLoadingText = if (activeTab == TrackersGroupsSubTab.TRACKERS) {
+        loadingTrackersText
+    } else {
+        loadingGroupsText
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        GeoVaultTopTabSurface(
-            tabs = tabs,
-            selectedTab = state.subTab,
-            onTabSelected = onSubTabSelected,
-            behavior = GeoVaultTopTabBehavior(
-                swipeMode = GeoVaultTopTabSwipeMode.ALWAYS,
-                isTabRefreshing = { state.isPullRefreshing },
-                isTabBlocking = { state.isLoading || state.isPullRefreshing },
-                canRefreshTab = { !state.isLoading && !state.isPullRefreshing },
-                isPullRefreshEnabled = { true },
-                loadingTextForTab = { tab -> if (tab == TrackersGroupsSubTab.TRACKERS) loadingTrackersText else loadingGroupsText },
-                onRefreshTab = { onPullRefresh() },
-            ),
-            headerForTab = { tab ->
-                GeoVaultSearchField(
-                    value = if (tab == TrackersGroupsSubTab.TRACKERS) {
-                        state.trackerSearchQuery
-                    } else {
-                        state.groupSearchQuery
-                    },
-                    onValueChange = if (tab == TrackersGroupsSubTab.TRACKERS) {
-                        onTrackerSearchQueryChanged
-                    } else {
-                        onGroupSearchQueryChanged
-                    },
-                    placeholder = stringResource(R.string.trackers_search_hint),
-                    enabled = !state.isLoading && !state.isPullRefreshing,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            },
-            contentForTab = { tab ->
-                when (tab) {
-                    TrackersGroupsSubTab.TRACKERS -> TrackersListPage(
-                        models = trackerModels,
-                        listState = trackersListState,
-                        isEmpty = orderedVisibleTrackers.isEmpty() && !state.isLoading,
-                        onAction = onTrackerAction,
-                        enabled = !state.isLoading,
-                    )
-                    TrackersGroupsSubTab.GROUPS -> GroupsListPage(
-                        models = groupModels,
-                        listState = groupsListState,
-                        isEmpty = visibleGroups.isEmpty() && !state.isLoading,
-                        onAction = onGroupAction,
-                        enabled = !state.isLoading,
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            GeoVaultTabBar(
+                tabs = tabs,
+                selectedTab = state.subTab,
+                onTabSelected = onSubTabSelected,
+                indicatorPage = pagerState.currentPage,
+                indicatorOffsetFraction = pagerState.currentPageOffsetFraction,
+            )
+            GeoVaultSearchField(
+                value = if (activeTab == TrackersGroupsSubTab.TRACKERS) {
+                    state.trackerSearchQuery
+                } else {
+                    state.groupSearchQuery
+                },
+                onValueChange = if (activeTab == TrackersGroupsSubTab.TRACKERS) {
+                    onTrackerSearchQueryChanged
+                } else {
+                    onGroupSearchQueryChanged
+                },
+                placeholder = stringResource(R.string.trackers_search_hint),
+                enabled = !state.isLoading && !state.isPullRefreshing,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+            GeoVaultPullRefreshLoadingContainer(
+                refreshing = state.isPullRefreshing,
+                showBlockingLoader = false,
+                onRefresh = onPullRefresh,
+                pullRefreshEnabled = true,
+                showPullRefreshIndicator = !state.isLoading && !state.isPullRefreshing,
+                canRefresh = !state.isLoading && !state.isPullRefreshing,
+                loadingText = activeLoadingText,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    userScrollEnabled = true,
+                    beyondViewportPageCount = 0,
+                ) { page ->
+                    val tab = tabs.getOrNull(page)?.value ?: return@HorizontalPager
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        when (tab) {
+                            TrackersGroupsSubTab.TRACKERS -> TrackersListPage(
+                                models = trackerModels,
+                                listState = trackersListState,
+                                isEmpty = orderedVisibleTrackers.isEmpty() && !state.isLoading,
+                                onAction = onTrackerAction,
+                                enabled = !state.isLoading,
+                            )
+                            TrackersGroupsSubTab.GROUPS -> GroupsListPage(
+                                models = groupModels,
+                                listState = groupsListState,
+                                isEmpty = visibleGroups.isEmpty() && !state.isLoading,
+                                onAction = onGroupAction,
+                                enabled = !state.isLoading,
+                            )
+                        }
+                        if (state.isLoading || state.isPullRefreshing) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colors.background),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                GeoVaultLoadingSpinner(
+                                    bottomText = if (tab == TrackersGroupsSubTab.TRACKERS) {
+                                        loadingTrackersText
+                                    } else {
+                                        loadingGroupsText
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
-            },
-        )
+            }
+        }
         if (!isServerAccessible && !isConnecting) {
             TrackersServerFailureOverlay(modifier = Modifier.fillMaxSize())
         }

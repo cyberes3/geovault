@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -94,6 +95,8 @@ fun MainScreen(
     var isHandlingTabBack by remember { mutableStateOf(false) }
     var pendingTrackersRequest by remember { mutableStateOf<TrackersHostNavigationRequest?>(null) }
     var pendingSharedRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
+    var trackersTabBottomNavStamp by remember { mutableIntStateOf(0) }
+    var sharedTabBottomNavStamp by remember { mutableIntStateOf(0) }
     var pendingMapReturnContext by remember { mutableStateOf<MapReturnContext?>(null) }
     var trackerParamsArgs by remember { mutableStateOf<TrackerParamsRouteArgs?>(null) }
 
@@ -316,6 +319,28 @@ fun MainScreen(
                         }
                         isSettingsOpen = false
                         selectedTab = destination.id
+                        if (destination.id == TrackerTab.TRACKERS.name) {
+                            pendingTrackersRequest = TrackersHostNavigationRequest(
+                                subTab = TrackersGroupsSubTab.TRACKERS,
+                            )
+                            trackersTabBottomNavStamp++
+                        }
+                        if (destination.id == TrackerTab.SHARED.name) {
+                            sharedViewModel.showSharedList()
+                            sharedTabBottomNavStamp++
+                        }
+                    } else if (destination.id == TrackerTab.TRACKERS.name) {
+                        pendingMapReturnContext = null
+                        isSettingsOpen = false
+                        pendingTrackersRequest = TrackersHostNavigationRequest(
+                            subTab = TrackersGroupsSubTab.TRACKERS,
+                        )
+                        trackersTabBottomNavStamp++
+                    } else if (destination.id == TrackerTab.SHARED.name) {
+                        pendingMapReturnContext = null
+                        isSettingsOpen = false
+                        sharedViewModel.showSharedList()
+                        sharedTabBottomNavStamp++
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -409,6 +434,7 @@ fun MainScreen(
                         ) {
                             TrackersScreen(
                                 vm = trackersGroupsViewModel,
+                                trackersTabBottomNavStamp = trackersTabBottomNavStamp,
                                 isAuthenticated = state.isAuthenticated,
                                 serverUrl = state.serverUrl,
                                 onAuthServerUrlChanged = onAuthServerUrlChanged,
@@ -442,6 +468,7 @@ fun MainScreen(
                         ) {
                             SharedScreen(
                                 vm = sharedViewModel,
+                                sharedTabBottomNavStamp = sharedTabBottomNavStamp,
                                 isAuthenticated = state.isAuthenticated,
                                 serverUrl = state.serverUrl,
                                 onAuthServerUrlChanged = onAuthServerUrlChanged,

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -63,9 +65,7 @@ import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
-import com.geovault.common.ui.components.GeoVaultTopTabBehavior
-import com.geovault.common.ui.components.GeoVaultTopTabSurface
-import com.geovault.common.ui.components.GeoVaultTopTabSwipeMode
+import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
@@ -100,6 +100,7 @@ import java.util.Locale
 @Composable
 fun SharedScreen(
     vm: SharedViewModel,
+    sharedTabBottomNavStamp: Int = 0,
     isAuthenticated: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
@@ -119,6 +120,10 @@ fun SharedScreen(
     var pendingConfirmAction by remember { mutableStateOf<SharedConfirmAction?>(null) }
     var pendingNavigationRequest by remember { mutableStateOf<SharedHostNavigationRequest?>(null) }
     var groupActionsDialog by remember { mutableStateOf<GroupMembersOverlayState?>(null) }
+    LaunchedEffect(sharedTabBottomNavStamp) {
+        if (sharedTabBottomNavStamp == 0) return@LaunchedEffect
+        groupActionsDialog = null
+    }
     var snackbarModel by remember { mutableStateOf<GeoVaultSnackbarModel?>(null) }
     var editSharedTracker by remember { mutableStateOf<Tracker?>(null) }
     var editSharedGroup by remember { mutableStateOf<Group?>(null) }
@@ -777,24 +782,38 @@ private fun DiscoverOverlaySurface(
         ),
     )
     val loadingTrackersText = stringResource(R.string.loading_trackers)
-    GeoVaultTopTabSurface(
-        tabs = tabs,
-        selectedTab = state.discoverMode,
-        onTabSelected = onModeChanged,
-        behavior = GeoVaultTopTabBehavior(
-            swipeMode = GeoVaultTopTabSwipeMode.ALWAYS,
-            isTabRefreshing = { overlayLoading },
-            isTabBlocking = { overlayLoading },
-            canRefreshTab = { !overlayLoading },
-            isPullRefreshEnabled = { true },
-            loadingTextForTab = { loadingTrackersText },
-            onRefreshTab = { onRefresh() },
-        ),
-        dismissTitle = stringResource(R.string.shared_discover_overlay_title),
-        onDismiss = onClose,
-        dismissContentDescription = stringResource(R.string.close),
-        headerForTab = { tab ->
-            val activeQuery = if (tab == DiscoverOverlayMode.ON_MY_MAP) {
+    val selectedIndex = tabs.indexOfFirst { it.value == state.discoverMode }.let { if (it >= 0) it else 0 }
+    val pagerState = rememberPagerState(
+        initialPage = selectedIndex,
+        pageCount = { tabs.size },
+    )
+    LaunchedEffect(selectedIndex, tabs) {
+        if (pagerState.currentPage != selectedIndex && selectedIndex in tabs.indices) {
+            pagerState.animateScrollToPage(selectedIndex)
+        }
+    }
+    LaunchedEffect(pagerState.settledPage, tabs) {
+        val nextTab = tabs.getOrNull(pagerState.settledPage)?.value ?: return@LaunchedEffect
+        if (nextTab != state.discoverMode) {
+            onModeChanged(nextTab)
+        }
+    }
+    val activeTab = tabs.getOrNull(pagerState.settledPage)?.value ?: state.discoverMode
+
+    GeoVaultSubViewScaffold(
+        title = stringResource(R.string.shared_discover_overlay_title),
+        onClose = onClose,
+        onLeaveComposition = onClose,
+        closeContentDescription = stringResource(R.string.close),
+        headerExtras = {
+            GeoVaultTabBar(
+                tabs = tabs,
+                selectedTab = state.discoverMode,
+                onTabSelected = onModeChanged,
+                indicatorPage = pagerState.currentPage,
+                indicatorOffsetFraction = pagerState.currentPageOffsetFraction,
+            )
+            val activeQuery = if (activeTab == DiscoverOverlayMode.ON_MY_MAP) {
                 state.discoverOnMapQuery
             } else {
                 state.discoverIncomingQuery
@@ -802,7 +821,7 @@ private fun DiscoverOverlaySurface(
             GeoVaultSearchField(
                 value = activeQuery,
                 onValueChange = { next ->
-                    if (tab == DiscoverOverlayMode.ON_MY_MAP) onOnMyMapQueryChanged(next)
+                    if (activeTab == DiscoverOverlayMode.ON_MY_MAP) onOnMyMapQueryChanged(next)
                     else onIncomingQueryChanged(next)
                 },
                 placeholder = stringResource(R.string.shared_search_hint),
@@ -811,98 +830,165 @@ private fun DiscoverOverlaySurface(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 enabled = !overlayLoading,
             )
+            Divider()
         },
-        contentForTab = { tab ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) { innerPadding ->
+        GeoVaultPullRefreshLoadingContainer(
+            refreshing = overlayLoading,
+            showBlockingLoader = false,
+            onRefresh = onRefresh,
+            canRefresh = !overlayLoading,
+            loadingText = loadingTrackersText,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            if (tab == DiscoverOverlayMode.ON_MY_MAP) {
-                if (filteredOnMyMapTrackers.isEmpty() && filteredOnMyMapGroups.isEmpty()) {
-                    item { EmptyLine(stringResource(R.string.shared_empty_discover_on_my_map)) }
-                }
-                items(filteredOnMyMapTrackers, key = { "m-t-${it.id}" }) { item ->
-                    val isPendingRemove = pendingRemoveActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
-                            SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
-                        )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                val tab = tabs.getOrNull(page)?.value ?: return@HorizontalPager
+                Box(modifier = Modifier.fillMaxSize()) {
+                    DiscoverOverlayTabContent(
+                        tab = tab,
+                        state = state,
+                        listState = listState,
+                        filteredOnMyMapTrackers = filteredOnMyMapTrackers,
+                        filteredOnMyMapGroups = filteredOnMyMapGroups,
+                        filteredIncomingTrackers = filteredIncomingTrackers,
+                        filteredIncomingGroups = filteredIncomingGroups,
+                        pendingAddActionKeys = pendingAddActionKeys,
+                        pendingRemoveActionKeys = pendingRemoveActionKeys,
+                        overlayLoading = overlayLoading,
+                        onAddIncomingTracker = onAddIncomingTracker,
+                        onLeaveIncomingGroup = onLeaveIncomingGroup,
+                        onAcceptIncomingGroup = onAcceptIncomingGroup,
+                        onRemoveOnMapTracker = onRemoveOnMapTracker,
+                        onRemoveOnMapGroup = onRemoveOnMapGroup,
                     )
-                    DiscoverOnMapTrackerCard(
-                        item = item,
-                        onRemove = { onRemoveOnMapTracker(item.id, item.name) },
-                        isPendingRemove = isPendingRemove,
-                        enabled = !overlayLoading && !isPendingRemove,
-                    )
-                }
-                items(filteredOnMyMapGroups, key = { "m-g-${it.id}" }) { group ->
-                    val isPendingRemove = pendingRemoveActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
-                            SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
-                        )
-                    )
-                    DiscoverOnMapGroupCard(
-                        group = group,
-                        onRemove = { onRemoveOnMapGroup(group.id) },
-                        isPendingRemove = isPendingRemove,
-                        enabled = !overlayLoading && !isPendingRemove,
-                    )
-                }
-            } else {
-                if (filteredIncomingTrackers.isEmpty() && filteredIncomingGroups.isEmpty()) {
-                    item { EmptyLine(stringResource(R.string.shared_empty_discover_incoming)) }
-                }
-                items(filteredIncomingTrackers, key = { "d-t-${it.id}" }) { item ->
-                    val isAdded = state.isIncomingTrackerAdded(item.id)
-                    val isPending = pendingAddActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
-                            SharedAddRemoveOperation.IncomingTrackerAdd(item.id)
-                        )
-                    )
-                    val isPendingRemove = pendingRemoveActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
-                            SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
-                        )
-                    )
-                    DiscoverIncomingTrackerCard(
-                        item = item,
-                        onAdd = { onAddIncomingTracker(item.id) },
-                        onRemove = { onRemoveOnMapTracker(item.id, item.name) },
-                        isAdded = isAdded,
-                        isPendingAdd = isPending,
-                        isPendingRemove = isPendingRemove,
-                        isHighlighted = false,
-                        enabled = !overlayLoading && !isPending && !isPendingRemove,
-                    )
-                }
-                items(filteredIncomingGroups, key = { "d-g-${it.id}" }) { group ->
-                    val isAdded = state.isIncomingGroupAdded(group.id)
-                    val isPending = pendingAddActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
-                            SharedAddRemoveOperation.IncomingGroupAccept(group.id)
-                        )
-                    )
-                    val isPendingRemove = pendingRemoveActionKeys.contains(
-                        TrackerAddRemoveKeyPolicy.sharedMutationKey(
-                            SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
-                        )
-                    )
-                    DiscoverIncomingGroupCard(
-                        group = group,
-                        onAccept = { onAcceptIncomingGroup(group.id) },
-                        onLeave = { onLeaveIncomingGroup(group.id, group.name) },
-                        onRemove = { onRemoveOnMapGroup(group.id) },
-                        isAdded = isAdded,
-                        isPendingAccept = isPending,
-                        isPendingRemove = isPendingRemove,
-                        isHighlighted = false,
-                        enabled = !overlayLoading && !isPending && !isPendingRemove,
-                    )
+                    if (overlayLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colors.background),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            GeoVaultLoadingSpinner(bottomText = loadingTrackersText)
+                        }
+                    }
                 }
             }
         }
-    })
+    }
+}
+
+@Composable
+private fun DiscoverOverlayTabContent(
+    tab: DiscoverOverlayMode,
+    state: SharedUiState,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    filteredOnMyMapTrackers: List<AvailableToAddItem>,
+    filteredOnMyMapGroups: List<AvailableToAddGroup>,
+    filteredIncomingTrackers: List<AvailableToAddItem>,
+    filteredIncomingGroups: List<AvailableToAddGroup>,
+    pendingAddActionKeys: Set<String>,
+    pendingRemoveActionKeys: Set<String>,
+    overlayLoading: Boolean,
+    onAddIncomingTracker: (String) -> Unit,
+    onLeaveIncomingGroup: (String, String) -> Unit,
+    onAcceptIncomingGroup: (String) -> Unit,
+    onRemoveOnMapTracker: (String, String) -> Unit,
+    onRemoveOnMapGroup: (String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (tab == DiscoverOverlayMode.ON_MY_MAP) {
+            if (filteredOnMyMapTrackers.isEmpty() && filteredOnMyMapGroups.isEmpty()) {
+                item { EmptyLine(stringResource(R.string.shared_empty_discover_on_my_map)) }
+            }
+            items(filteredOnMyMapTrackers, key = { "m-t-${it.id}" }) { item ->
+                val isPendingRemove = pendingRemoveActionKeys.contains(
+                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
+                    )
+                )
+                DiscoverOnMapTrackerCard(
+                    item = item,
+                    onRemove = { onRemoveOnMapTracker(item.id, item.name) },
+                    isPendingRemove = isPendingRemove,
+                    enabled = !overlayLoading && !isPendingRemove,
+                )
+            }
+            items(filteredOnMyMapGroups, key = { "m-g-${it.id}" }) { group ->
+                val isPendingRemove = pendingRemoveActionKeys.contains(
+                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
+                    )
+                )
+                DiscoverOnMapGroupCard(
+                    group = group,
+                    onRemove = { onRemoveOnMapGroup(group.id) },
+                    isPendingRemove = isPendingRemove,
+                    enabled = !overlayLoading && !isPendingRemove,
+                )
+            }
+        } else {
+            if (filteredIncomingTrackers.isEmpty() && filteredIncomingGroups.isEmpty()) {
+                item { EmptyLine(stringResource(R.string.shared_empty_discover_incoming)) }
+            }
+            items(filteredIncomingTrackers, key = { "d-t-${it.id}" }) { item ->
+                val isAdded = state.isIncomingTrackerAdded(item.id)
+                val isPending = pendingAddActionKeys.contains(
+                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        SharedAddRemoveOperation.IncomingTrackerAdd(item.id)
+                    )
+                )
+                val isPendingRemove = pendingRemoveActionKeys.contains(
+                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        SharedAddRemoveOperation.DiscoverOnMapTrackerRemove(item.id)
+                    )
+                )
+                DiscoverIncomingTrackerCard(
+                    item = item,
+                    onAdd = { onAddIncomingTracker(item.id) },
+                    onRemove = { onRemoveOnMapTracker(item.id, item.name) },
+                    isAdded = isAdded,
+                    isPendingAdd = isPending,
+                    isPendingRemove = isPendingRemove,
+                    isHighlighted = false,
+                    enabled = !overlayLoading && !isPending && !isPendingRemove,
+                )
+            }
+            items(filteredIncomingGroups, key = { "d-g-${it.id}" }) { group ->
+                val isAdded = state.isIncomingGroupAdded(group.id)
+                val isPending = pendingAddActionKeys.contains(
+                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        SharedAddRemoveOperation.IncomingGroupAccept(group.id)
+                    )
+                )
+                val isPendingRemove = pendingRemoveActionKeys.contains(
+                    TrackerAddRemoveKeyPolicy.sharedMutationKey(
+                        SharedAddRemoveOperation.DiscoverOnMapGroupRemove(group.id)
+                    )
+                )
+                DiscoverIncomingGroupCard(
+                    group = group,
+                    onAccept = { onAcceptIncomingGroup(group.id) },
+                    onLeave = { onLeaveIncomingGroup(group.id, group.name) },
+                    onRemove = { onRemoveOnMapGroup(group.id) },
+                    isAdded = isAdded,
+                    isPendingAccept = isPending,
+                    isPendingRemove = isPendingRemove,
+                    isHighlighted = false,
+                    enabled = !overlayLoading && !isPending && !isPendingRemove,
+                )
+            }
+        }
+    }
 }
 
 @Composable
