@@ -960,8 +960,8 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 if (SelectedTrackerPrefs.selectedTrackerId(app) == trackerId) {
                     SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
                 }
-            }
-            ,
+                dismissDialog()
+            },
             successMessage = getApplication<Application>().getString(R.string.trackers_deleted)
         )
     }
@@ -969,6 +969,9 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     fun deleteGroup(groupId: String) {
         runMutationAndRefresh(
             mutation = { groupRepository.deleteGroup(groupId) },
+            onSuccess = {
+                dismissDialog()
+            },
             successMessage = getApplication<Application>().getString(R.string.groups_deleted)
         )
     }

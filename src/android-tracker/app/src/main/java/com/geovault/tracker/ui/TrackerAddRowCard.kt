@@ -7,17 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.components.GeoVaultAddRemoveRowActionState
 import com.geovault.common.ui.components.GeoVaultAddRemoveRowCard
+import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
+import com.geovault.common.ui.components.GeoVaultAddRemoveRowStatePolicy
 import com.geovault.tracker.R
-
-enum class TrackerAddRowActionState {
-    IDLE,
-    ADDING,
-    REMOVING,
-    ADDED_DELETE,
-    DISABLED,
-}
 
 @Composable
 fun TrackerAddRowCard(
@@ -25,7 +18,7 @@ fun TrackerAddRowCard(
     ownerEmail: String?,
     iconRes: Int = R.drawable.ic_chevron_track,
     iconTint: Color = TrackerChevronStylePolicy.DefaultAddRowTint,
-    state: TrackerAddRowActionState,
+    flags: GeoVaultAddRemoveRowFlags,
     borderColor: Color,
     enabled: Boolean = true,
     onAdd: () -> Unit,
@@ -34,16 +27,11 @@ fun TrackerAddRowCard(
     addIconTooltip: String? = null,
     removeIconTooltip: String? = null,
 ) {
+    val state = GeoVaultAddRemoveRowStatePolicy.resolve(flags)
     GeoVaultAddRemoveRowCard(
         name = name,
         subtitle = ownerEmail,
-        state = when (state) {
-            TrackerAddRowActionState.IDLE -> GeoVaultAddRemoveRowActionState.IDLE
-            TrackerAddRowActionState.ADDING -> GeoVaultAddRemoveRowActionState.ADDING
-            TrackerAddRowActionState.REMOVING -> GeoVaultAddRemoveRowActionState.REMOVING
-            TrackerAddRowActionState.ADDED_DELETE -> GeoVaultAddRemoveRowActionState.ADDED_DELETE
-            TrackerAddRowActionState.DISABLED -> GeoVaultAddRemoveRowActionState.DISABLED
-        },
+        state = state,
         borderColor = borderColor,
         enabled = enabled,
         onAdd = onAdd,

@@ -604,6 +604,7 @@ fun TrackersScreen(
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                     GroupTrackerPickerScreen(
+                        groupId = dialogState.group.id,
                         groupName = dialogState.group.name,
                         allTrackers = state.trackers,
                         selectedTrackerIds = dialogState.selectedTrackerIds,

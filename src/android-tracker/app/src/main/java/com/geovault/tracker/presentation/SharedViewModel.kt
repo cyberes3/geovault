@@ -44,6 +44,14 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _snackbarEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val snackbarEvents: SharedFlow<String> = _snackbarEvents
+
+    /** Successful remove/leave from Shared tracker edit — shell should close that sub-view. */
+    private val _dismissSharedTrackerEditId = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val dismissSharedTrackerEditId: SharedFlow<String> = _dismissSharedTrackerEditId
+
+    /** Successful leave from Shared group edit — shell should close that sub-view. */
+    private val _dismissSharedGroupEditId = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val dismissSharedGroupEditId: SharedFlow<String> = _dismissSharedGroupEditId
     private var refreshInFlightJob: Job? = null
     private var refreshPending: Boolean = false
     private var refreshPendingFeedbackMessage: String? = null
@@ -313,7 +321,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             ) {
                 // No forced refresh: repository mutation updates the state store immediately,
                 // and Shared UI collects that stream for in-place list updates.
-                is RepositoryResult.Success -> Unit
+                is RepositoryResult.Success -> {
+                    _dismissSharedTrackerEditId.tryEmit(trackerId)
+                }
                 is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
             clearPendingMutation(key)
@@ -334,7 +344,9 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             ) {
                 // No forced refresh: repository mutation updates the state store immediately,
                 // and Shared UI collects that stream for in-place list updates.
-                is RepositoryResult.Success -> Unit
+                is RepositoryResult.Success -> {
+                    _dismissSharedTrackerEditId.tryEmit(trackerId)
+                }
                 is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
             clearPendingMutation(key)
@@ -346,7 +358,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
             when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))) {
-                is RepositoryResult.Success -> refreshStateFromServerSerialized(feedbackMessage = null)
+                is RepositoryResult.Success -> {
+                    _dismissSharedGroupEditId.tryEmit(groupId)
+                    refreshStateFromServerSerialized(feedbackMessage = null)
+                }
                 is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
             }
             clearPendingMutation(key)

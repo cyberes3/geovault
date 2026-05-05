@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -92,7 +93,9 @@ import com.geovault.tracker.ui.components.GroupItemCard
 import com.geovault.tracker.ui.components.GroupItemCardModel
 import com.geovault.tracker.ui.components.TrackerItemCard
 import com.geovault.tracker.ui.components.TrackerItemCardModel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -138,11 +141,29 @@ fun SharedScreen(
         onNavigationTargetConsumed()
     }
     LaunchedEffect(vm) {
-        vm.snackbarEvents.collect { message ->
-            snackbarModel = GeoVaultSnackbarModel(
-                id = "shared-${message.hashCode()}-${System.currentTimeMillis()}",
-                message = message,
-            )
+        coroutineScope {
+            launch {
+                vm.snackbarEvents.collect { message ->
+                    snackbarModel = GeoVaultSnackbarModel(
+                        id = "shared-${message.hashCode()}-${System.currentTimeMillis()}",
+                        message = message,
+                    )
+                }
+            }
+            launch {
+                vm.dismissSharedTrackerEditId.collect { id ->
+                    if (editSharedTracker?.id == id) {
+                        editSharedTracker = null
+                    }
+                }
+            }
+            launch {
+                vm.dismissSharedGroupEditId.collect { id ->
+                    if (editSharedGroup?.id == id) {
+                        editSharedGroup = null
+                    }
+                }
+            }
         }
     }
     LaunchedEffect(editSharedTracker, state.trackers, state.pendingRemoveActionKeys) {
@@ -1108,7 +1129,10 @@ private fun DiscoverOnMapTrackerCard(
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
         iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
-        state = if (isPendingRemove) TrackerAddRowActionState.REMOVING else TrackerAddRowActionState.ADDED_DELETE,
+        flags = GeoVaultAddRemoveRowFlags(
+            isPendingRemove = isPendingRemove,
+            isAdded = !isPendingRemove,
+        ),
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = {},
@@ -1129,7 +1153,10 @@ private fun DiscoverOnMapGroupCard(
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
         iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-        state = if (isPendingRemove) TrackerAddRowActionState.REMOVING else TrackerAddRowActionState.ADDED_DELETE,
+        flags = GeoVaultAddRemoveRowFlags(
+            isPendingRemove = isPendingRemove,
+            isAdded = !isPendingRemove,
+        ),
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = {},
@@ -1272,12 +1299,11 @@ private fun DiscoverIncomingTrackerCard(
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
         iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
-        state = when {
-            isPendingAdd -> TrackerAddRowActionState.ADDING
-            isPendingRemove -> TrackerAddRowActionState.REMOVING
-            isAdded -> TrackerAddRowActionState.ADDED_DELETE
-            else -> TrackerAddRowActionState.IDLE
-        },
+        flags = GeoVaultAddRemoveRowFlags(
+            isPendingAdd = isPendingAdd,
+            isPendingRemove = isPendingRemove,
+            isAdded = isAdded,
+        ),
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = if (isAdded) { { } } else onAdd,
@@ -1304,12 +1330,11 @@ private fun DiscoverIncomingGroupCard(
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
         iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-        state = when {
-            isPendingAccept -> TrackerAddRowActionState.ADDING
-            isPendingRemove -> TrackerAddRowActionState.REMOVING
-            isAdded -> TrackerAddRowActionState.ADDED_DELETE
-            else -> TrackerAddRowActionState.IDLE
-        },
+        flags = GeoVaultAddRemoveRowFlags(
+            isPendingAdd = isPendingAccept,
+            isPendingRemove = isPendingRemove,
+            isAdded = isAdded,
+        ),
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = if (isAdded) { { } } else onAccept,
@@ -1339,12 +1364,11 @@ private fun PublicAddTrackerCard(
         ownerEmail = item.owner_email,
         iconRes = R.drawable.ic_chevron_track,
         iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
-        state = when {
-            isPendingAdd -> TrackerAddRowActionState.ADDING
-            isPendingRemove -> TrackerAddRowActionState.REMOVING
-            isAdded -> TrackerAddRowActionState.ADDED_DELETE
-            else -> TrackerAddRowActionState.IDLE
-        },
+        flags = GeoVaultAddRemoveRowFlags(
+            isPendingAdd = isPendingAdd,
+            isPendingRemove = isPendingRemove,
+            isAdded = isAdded,
+        ),
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = onAdd,
@@ -1370,12 +1394,11 @@ private fun PublicAddGroupCard(
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
         iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-        state = when {
-            isPendingAdd -> TrackerAddRowActionState.ADDING
-            isPendingRemove -> TrackerAddRowActionState.REMOVING
-            isAdded -> TrackerAddRowActionState.ADDED_DELETE
-            else -> TrackerAddRowActionState.IDLE
-        },
+        flags = GeoVaultAddRemoveRowFlags(
+            isPendingAdd = isPendingAdd,
+            isPendingRemove = isPendingRemove,
+            isAdded = isAdded,
+        ),
         borderColor = MaterialTheme.colors.onSurface.copy(alpha = 0.16f),
         enabled = enabled,
         onAdd = onAddGroup,

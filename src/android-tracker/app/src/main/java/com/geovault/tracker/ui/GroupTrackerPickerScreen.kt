@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.NaturalSort
+import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -79,6 +80,7 @@ private data class TrackerRowItem(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GroupTrackerPickerScreen(
+    groupId: String,
     groupName: String,
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
@@ -113,6 +115,7 @@ fun GroupTrackerPickerScreen(
     }
 
     PickerTabContent(
+        groupId = groupId,
         modifier = modifier,
         allTrackers = allTrackers,
         selectedTrackerIds = selectedTrackerIds,
@@ -133,6 +136,7 @@ fun GroupTrackerPickerScreen(
 
 @Composable
 private fun PickerTabContent(
+    groupId: String,
     modifier: Modifier = Modifier,
     allTrackers: List<Tracker>,
     selectedTrackerIds: Set<String>,
@@ -191,22 +195,38 @@ private fun PickerTabContent(
     val dividerColor = geoVaultHairlineDividerColor()
     val cardBorderColor = geoVaultCardBorderColor()
 
+    var addTabRecentlyAddedIds by remember(groupId) { mutableStateOf(emptySet<String>()) }
+    var prevAddingTrackerIds by remember(groupId) { mutableStateOf(emptySet<String>()) }
+
+    LaunchedEffect(addingTrackerIds, selectedTrackerIds) {
+        val completed = prevAddingTrackerIds - addingTrackerIds
+        val newlySuccessful = completed.filter { it in selectedTrackerIds }.toSet()
+        if (newlySuccessful.isNotEmpty()) {
+            addTabRecentlyAddedIds = addTabRecentlyAddedIds + newlySuccessful
+        }
+        prevAddingTrackerIds = addingTrackerIds
+    }
+
+    LaunchedEffect(selectedTrackerIds) {
+        addTabRecentlyAddedIds = addTabRecentlyAddedIds intersect selectedTrackerIds
+    }
+
     val memberItems = remember(allTrackers, selectedTrackerIds) {
         val knownById = allTrackers.associateBy { it.id }
         selectedTrackerIds.map { id ->
             TrackerRowItem(trackerId = id, tracker = knownById[id])
         }.sortedWith(NaturalSort.naturalOrderBy { it.displayName.lowercase() })
     }
-    val addableItems = remember(allTrackers, selectedTrackerIds) {
+    val addTabDisplayItems = remember(allTrackers, selectedTrackerIds, addTabRecentlyAddedIds) {
         allTrackers
-            .filter { it.id !in selectedTrackerIds }
+            .filter { it.id !in selectedTrackerIds || it.id in addTabRecentlyAddedIds }
             .map { TrackerRowItem(trackerId = it.id, tracker = it) }
             .sortedWith(NaturalSort.naturalOrderBy { it.displayName.lowercase() })
     }
-    val filteredItems = remember(addableItems, searchQuery) {
+    val filteredItems = remember(addTabDisplayItems, searchQuery) {
         val q = searchQuery.trim().lowercase()
-        if (q.isEmpty()) addableItems
-        else addableItems.filter {
+        if (q.isEmpty()) addTabDisplayItems
+        else addTabDisplayItems.filter {
             it.displayName.lowercase().contains(q) ||
                 it.ownerEmail.lowercase().contains(q)
         }
@@ -361,17 +381,26 @@ private fun PickerTabContent(
                                 ) {
                                     items(filteredItems, key = { it.trackerId }) { item ->
                                         val isAdding = item.trackerId in addingTrackerIds
+                                        val showAsAddedWithTrash =
+                                            item.trackerId in addTabRecentlyAddedIds &&
+                                                item.trackerId in selectedTrackerIds
                                         val isAddable = item.tracker?.let(
                                             GroupReshareAddabilityPolicy::isAddableToGroup
                                         ) ?: true
                                         AddableTrackerCard(
                                             item = item,
                                             isAdding = isAdding,
+                                            showAsAddedWithTrash = showAsAddedWithTrash,
                                             isAddable = isAddable,
                                             borderColor = cardBorderColor,
                                             onAdd = { onAddTracker(item.trackerId) },
                                             onIneligibleTap = {
                                                 item.tracker?.let(onIneligibleTrackerTap)
+                                            },
+                                            onUndoRecentAdd = {
+                                                addTabRecentlyAddedIds =
+                                                    addTabRecentlyAddedIds - item.trackerId
+                                                onRemoveTracker(item.trackerId)
                                             },
                                         )
                                     }
@@ -462,27 +491,39 @@ private fun MemberTrackerCard(
 private fun AddableTrackerCard(
     item: TrackerRowItem,
     isAdding: Boolean,
+    showAsAddedWithTrash: Boolean,
     isAddable: Boolean,
     borderColor: Color,
     onAdd: () -> Unit,
     onIneligibleTap: () -> Unit,
+    onUndoRecentAdd: () -> Unit,
 ) {
-    val state = when {
-        isAdding -> TrackerAddRowActionState.ADDING
-        !isAddable -> TrackerAddRowActionState.DISABLED
-        else -> TrackerAddRowActionState.IDLE
-    }
+    val flags = GeoVaultAddRemoveRowFlags(
+        isPendingAdd = isAdding,
+        isAdded = showAsAddedWithTrash,
+        isDisabled = !isAddable && !showAsAddedWithTrash,
+    )
+    val noOpClick: () -> Unit = { }
     TrackerAddRowCard(
         name = item.displayName,
         ownerEmail = item.ownerEmail.takeIf { !item.isOwned },
-        state = state,
+        flags = flags,
         borderColor = borderColor,
-        onAdd = if (state == TrackerAddRowActionState.DISABLED) onIneligibleTap else onAdd,
-        onRemove = {},
-        addIconTooltip = if (state == TrackerAddRowActionState.DISABLED) {
+        onAdd = when {
+            flags.isDisabled -> onIneligibleTap
+            showAsAddedWithTrash -> noOpClick
+            else -> onAdd
+        },
+        onRemove = if (showAsAddedWithTrash) onUndoRecentAdd else noOpClick,
+        addIconTooltip = if (flags.isDisabled) {
             null
         } else {
             stringResource(R.string.tooltip_add_group_row_add)
+        },
+        removeIconTooltip = if (showAsAddedWithTrash) {
+            stringResource(R.string.tooltip_group_tracker_remove)
+        } else {
+            null
         },
     )
 }

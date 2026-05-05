@@ -185,11 +185,9 @@ fun <T> GeoVaultAsyncAddRemoveCardList(
         items(items, key = { keyOf(it) }) { item ->
             val key = keyOf(item)
             val pendingState = pendingStates[key]
-            val state = pendingState ?: if (isAdded(item)) {
-                GeoVaultAddRemoveRowActionState.ADDED_DELETE
-            } else {
-                GeoVaultAddRemoveRowActionState.IDLE
-            }
+            val state = pendingState ?: GeoVaultAddRemoveRowStatePolicy.resolve(
+                GeoVaultAddRemoveRowFlags(isAdded = isAdded(item)),
+            )
             GeoVaultAddRemoveRowCard(
                 name = nameFor(item),
                 subtitle = subtitleFor(item),

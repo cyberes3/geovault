@@ -176,6 +176,7 @@ fun GroupEditScreen(
             if (showMembershipPicker) {
                 GroupTrackerPickerScreen(
                     modifier = Modifier.fillMaxSize(),
+                    groupId = dialog.group.id,
                     groupName = dialog.group.name,
                     allTrackers = allTrackers,
                     selectedTrackerIds = dialog.memberTrackIds,
