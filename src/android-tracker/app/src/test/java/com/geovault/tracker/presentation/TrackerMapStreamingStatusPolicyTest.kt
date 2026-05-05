@@ -82,6 +82,51 @@ class TrackerMapStreamingStatusPolicyTest {
     }
 
     @Test
+    fun resolve_running_partialActiveIds_returnsReconnecting() {
+        val result = TrackerMapStreamingStatusPolicy.resolve(
+            snapshot = LiveStreamRuntimeSnapshot(
+                isRunning = true,
+                lifecycleState = TrackingLifecycleState.RUNNING,
+                activeTrackerIds = setOf("t1"),
+            ),
+            streamTargetIds = setOf("t1", "t2"),
+        )
+
+        assertEquals(TrackerMapStreamingStatus.RECONNECTING, result.status)
+        assertEquals(1, result.activeCount)
+    }
+
+    @Test
+    fun resolve_running_extraActiveIds_returnsReconnecting() {
+        val result = TrackerMapStreamingStatusPolicy.resolve(
+            snapshot = LiveStreamRuntimeSnapshot(
+                isRunning = true,
+                lifecycleState = TrackingLifecycleState.RUNNING,
+                activeTrackerIds = setOf("t1", "t2"),
+            ),
+            streamTargetIds = setOf("t1"),
+        )
+
+        assertEquals(TrackerMapStreamingStatus.RECONNECTING, result.status)
+        assertEquals(2, result.activeCount)
+    }
+
+    @Test
+    fun resolve_running_noActiveIdsForDesiredTargets_returnsConnecting() {
+        val result = TrackerMapStreamingStatusPolicy.resolve(
+            snapshot = LiveStreamRuntimeSnapshot(
+                isRunning = true,
+                lifecycleState = TrackingLifecycleState.RUNNING,
+                activeTrackerIds = emptySet(),
+            ),
+            streamTargetIds = setOf("t1"),
+        )
+
+        assertEquals(TrackerMapStreamingStatus.CONNECTING, result.status)
+        assertEquals(0, result.activeCount)
+    }
+
+    @Test
     fun resolve_failed_returnsFailedWithReason() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
             snapshot = LiveStreamRuntimeSnapshot(
@@ -115,7 +160,7 @@ class TrackerMapStreamingStatusPolicyTest {
     }
 
     @Test
-    fun resolve_stopped_withTargetsAndRunning_returnsConnecting() {
+    fun resolve_stopped_withTargetsAndRunning_returnsInactive() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
             snapshot = LiveStreamRuntimeSnapshot(
                 isRunning = true,
@@ -125,7 +170,7 @@ class TrackerMapStreamingStatusPolicyTest {
             streamTargetIds = setOf("t1"),
         )
 
-        assertEquals(TrackerMapStreamingStatus.CONNECTING, result.status)
+        assertEquals(TrackerMapStreamingStatus.INACTIVE, result.status)
     }
 
     @Test

@@ -37,7 +37,11 @@ enum class TrackerMapTopLeftChipMode {
 }
 
 class TrackerMapTopLeftChipMapper {
-    fun map(state: TrackerMapUiState, roster: List<Tracker>): TrackerMapTopLeftChipUiModel {
+    fun map(
+        state: TrackerMapUiState,
+        roster: List<Tracker>,
+        acceptedRemoteTrackerIds: Set<String>,
+    ): TrackerMapTopLeftChipUiModel {
         val displayedTrackerId = state.displayedTrackerId.trim().ifBlank {
             state.runtime.selectedTrackerId.trim()
         }
@@ -46,9 +50,6 @@ class TrackerMapTopLeftChipMapper {
         val showingSingleTracker = isSingleTrackerMode && displayedTrackerId.isNotEmpty()
 
         if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-            if (state.runtime.isRunning) {
-                return TrackerMapTopLeftChipUiModel.Hidden
-            }
             return TrackerMapTopLeftChipUiModel.Visible(
                 mode = TrackerMapTopLeftChipMode.GROUP,
                 iconResId = R.drawable.ic_groups,
@@ -61,9 +62,6 @@ class TrackerMapTopLeftChipMapper {
         }
 
         if (state.mode == TrackerMapDisplayMode.ALL_QUEUE) {
-            if (state.runtime.isRunning) {
-                return TrackerMapTopLeftChipUiModel.Hidden
-            }
             return TrackerMapTopLeftChipUiModel.Visible(
                 mode = TrackerMapTopLeftChipMode.ALL_TRACKERS,
                 iconResId = R.drawable.ic_chevron_track,
@@ -104,6 +102,7 @@ class TrackerMapTopLeftChipMapper {
                     state,
                     effectiveDisplayedTrackerId,
                     tracker,
+                    acceptedRemoteTrackerIds,
                 )?.lastUpdatedMs
                 if (lastMs == null) {
                     TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data)

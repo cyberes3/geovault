@@ -13,6 +13,11 @@ class TrackerMapTrailReloadGuardPolicyTest {
         runtimeRunning: Boolean = false,
         activeStreamedTrackerIds: Set<String> = emptySet(),
         displayedTrackerId: String = "tracker1",
+        trailReloadPlan: TrackerMapTrailReloadPlan = TrackerMapTrailReloadPlan(
+            source = TrackerMapTrailSource.SINGLE_SERVER,
+            singleTrackerId = displayedTrackerId.trim(),
+            activeTrackerId = displayedTrackerId.trim(),
+        ),
     ) = TrailReloadGuardInput(
         force = force,
         mode = mode,
@@ -20,6 +25,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
         runtimeRunning = runtimeRunning,
         activeStreamedTrackerIds = activeStreamedTrackerIds,
         displayedTrackerId = displayedTrackerId,
+        trailReloadPlan = trailReloadPlan,
     )
 
     @Test
@@ -65,10 +71,35 @@ class TrackerMapTrailReloadGuardPolicyTest {
     }
 
     @Test
-    fun runtimeRunningSuppressesReload() {
+    fun runtimeRunningSingleQueueSuppressesReload() {
         assertFalse(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(runtimeRunning = true, trailSize = 10)
+                input(
+                    runtimeRunning = true,
+                    trailSize = 10,
+                    trailReloadPlan = TrackerMapTrailReloadPlan(
+                        source = TrackerMapTrailSource.SINGLE_QUEUE,
+                        activeTrackerId = "tracker1",
+                    )
+                )
+            )
+        )
+    }
+
+    @Test
+    fun runtimeRunningMultiServerProceeds() {
+        assertTrue(
+            TrackerMapTrailReloadGuardPolicy.shouldProceed(
+                input(
+                    mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                    runtimeRunning = true,
+                    trailSize = 10,
+                    trailReloadPlan = TrackerMapTrailReloadPlan(
+                        source = TrackerMapTrailSource.MULTI_SERVER,
+                        trackerIds = setOf("tracker1", "tracker2"),
+                        activeTrackerId = "tracker1",
+                    )
+                )
             )
         )
     }
@@ -118,14 +149,19 @@ class TrackerMapTrailReloadGuardPolicyTest {
     }
 
     @Test
-    fun groupModeStreamingSuppressesReload() {
-        assertFalse(
+    fun groupModeStreamingProceedsForMultiServerReload() {
+        assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
                 input(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                     displayedTrackerId = "tracker1",
                     activeStreamedTrackerIds = setOf("tracker1"),
                     trailSize = 10,
+                    trailReloadPlan = TrackerMapTrailReloadPlan(
+                        source = TrackerMapTrailSource.MULTI_SERVER,
+                        trackerIds = setOf("tracker1", "tracker2"),
+                        activeTrackerId = "tracker1",
+                    )
                 )
             )
         )

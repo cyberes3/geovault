@@ -2,6 +2,9 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,15 +41,29 @@ class TrackerMapTopLeftChipMapperTest {
     }
 
     @Test
-    fun groupMode_whenRunning_hidesChip() {
+    fun groupMode_whenRunning_returnsGroupChip() {
         val state = baseState(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-            runtime = TrackingRuntimeSnapshot(isRunning = true),
+            currentGroupId = "g1",
+            groupModeOptions = listOf(
+                TrackerMapGroupModeOption(
+                    groupId = "g1",
+                    groupName = "Streaming Group",
+                    trackerIds = setOf("local", "remote"),
+                )
+            ),
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true),
+            ),
         )
 
         val result = mapper.map(state, emptyList())
 
-        assertEquals(TrackerMapTopLeftChipUiModel.Hidden, result)
+        assertTrue(result is TrackerMapTopLeftChipUiModel.Visible)
+        val visible = result as TrackerMapTopLeftChipUiModel.Visible
+        assertEquals(TrackerMapTopLeftChipMode.GROUP, visible.mode)
+        assertEquals(TrackerMapTopLeftChipText.Value("Streaming Group"), visible.title)
     }
 
     @Test
@@ -60,6 +77,24 @@ class TrackerMapTopLeftChipMapperTest {
         assertEquals(TrackerMapTopLeftChipMode.ALL_TRACKERS, visible.mode)
         assertEquals(TrackerMapTopLeftChipText.Resource(R.string.all_trackers), visible.title)
         assertTrue(visible.showReset)
+    }
+
+    @Test
+    fun allTrackersMode_whenRunning_returnsAllTrackersChip() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true),
+            ),
+        )
+
+        val result = mapper.map(state, emptyList())
+
+        assertTrue(result is TrackerMapTopLeftChipUiModel.Visible)
+        val visible = result as TrackerMapTopLeftChipUiModel.Visible
+        assertEquals(TrackerMapTopLeftChipMode.ALL_TRACKERS, visible.mode)
+        assertEquals(TrackerMapTopLeftChipText.Resource(R.string.all_trackers), visible.title)
     }
 
     @Test
@@ -290,6 +325,46 @@ class TrackerMapTopLeftChipMapperTest {
         assertEquals(TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data), result.subtitle)
     }
 
+    @Test
+    fun singleTracker_unacceptedRemoteHead_doesNotDriveSubtitle() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "other",
+            displayedTrackerName = "Other",
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "sel",
+                selectedTrackerName = "Sel",
+            ),
+        ).copy(
+            remoteLastPoints = mapOf(
+                "other" to TrackPointEvent(
+                    source = TrackPointSource.REMOTE_STREAM,
+                    trackId = "other",
+                    lon = -122.0,
+                    lat = 37.0,
+                    timestampMs = 1_700_000_000_000L,
+                )
+            )
+        )
+        val roster = listOf(
+            Tracker(
+                id = "other",
+                name = "Other",
+                color = null,
+                last_point = null,
+                updated_at = null,
+            )
+        )
+
+        val result = mapper.map(
+            state = state,
+            roster = roster,
+            acceptedRemoteTrackerIds = emptySet(),
+        ) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertEquals(TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data), result.subtitle)
+    }
+
     private fun baseState(
         mode: TrackerMapDisplayMode,
         displayedTrackerId: String = "",
@@ -311,4 +386,15 @@ class TrackerMapTopLeftChipMapperTest {
             streamTargetIds = streamTargetIds,
         )
     }
+}
+
+private fun TrackerMapTopLeftChipMapper.map(
+    state: TrackerMapUiState,
+    roster: List<Tracker>
+): TrackerMapTopLeftChipUiModel {
+    return map(
+        state = state,
+        roster = roster,
+        acceptedRemoteTrackerIds = state.streamTargetIds + state.activeStreamedTrackerIds,
+    )
 }

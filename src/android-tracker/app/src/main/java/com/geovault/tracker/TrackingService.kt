@@ -52,6 +52,7 @@ import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
 import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
@@ -63,6 +64,7 @@ import com.geovault.tracker.services.GpsRuntimeStateMachine
 import com.geovault.tracker.services.QueueUploadConfig
 import com.geovault.tracker.services.QueueUploadEngine
 import com.geovault.tracker.services.QueueUploadScope
+import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeEventPublisher
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
@@ -163,6 +165,7 @@ class TrackingService : Service() {
     @Volatile
     private var gpsRuntimeState: GpsRuntimeState = GpsRuntimeState.INACTIVE
     private var trackingGeneration: Int = 0
+    private val runtimeSnapshotLock = Any()
     private var runtimeSnapshot: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot()
     private val startupStateLock = Any()
     private val pushDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -220,42 +223,6 @@ class TrackingService : Service() {
         const val NOTIFICATION_ID = 101
         const val CHANNEL_ID = "tracker_service"
         const val SESSION_STATS_UPDATE = "com.geovault.tracker.SESSION_STATS_UPDATE"
-
-        @Volatile
-        var isRunning: Boolean = false
-
-        @Volatile
-        var isStartupInProgress: Boolean = false
-
-        @Volatile
-        var sessionStartTimeMs: Long = 0
-
-        @Volatile
-        var pointsSentThisSession: Int = 0
-
-        @Volatile
-        var lastPointSentAtMs: Long = 0
-
-        @Volatile
-        var queuedPointsVisible: Int = 0
-
-        @Volatile
-        var sessionTotalDistanceMeters: Float = 0f
-
-        @Volatile
-        var lastAccuracyMeters: Float? = null
-
-        @Volatile
-        var lastTrackedLatitude: Double? = null
-
-        @Volatile
-        var lastTrackedLongitude: Double? = null
-
-        @Volatile
-        var lastTrackedTimestampMs: Long = 0L
-
-        @Volatile
-        var lastTrackedPropsJson: String? = null
 
         private const val MAX_QUEUE_SIZE = 5000
         private const val MAX_QUEUE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
@@ -361,28 +328,35 @@ class TrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "onCreate")
-        settingsRepository = settingsRepositoryLazy
-        database = AppDatabase.getDatabase(this)
-        locationSessionCoordinator = LocationSessionCoordinator(this)
-        sessionCoordinator = TrackingSessionCoordinator()
-        locationIngestCoordinator = LocationIngestCoordinator(database.locationDao())
-        notificationPresenter = TrackingNotificationPresenter(this)
-        runtimeEventPublisher = RuntimeEventPublisher(applicationContext)
-        runtimeTelemetry = RuntimeTelemetry(applicationContext)
-        queueUploadEngine = QueueUploadEngine(
-            context = applicationContext,
-            locationDao = database.locationDao(),
-            pushContext = pushDispatcher,
-            authenticatedClientProvider = { getAuthenticatedHttpClient() }
-        )
-        significantMotionBridge = SignificantMotionResumeBridge(
-            trigger = SensorManagerSignificantMotionTrigger(applicationContext),
-            onResume = { resumeGps() }
-        )
-        SelectedTrackerManager.syncRuntimeSelectedTracker(this)
-        TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
-        syncRuntimeStateStore()
+        TrackingServiceLifecycleGate.markStarting()
+        try {
+            Log.d(TAG, "onCreate")
+            settingsRepository = settingsRepositoryLazy
+            database = AppDatabase.getDatabase(this)
+            locationSessionCoordinator = LocationSessionCoordinator(this)
+            sessionCoordinator = TrackingSessionCoordinator()
+            locationIngestCoordinator = LocationIngestCoordinator(database.locationDao())
+            notificationPresenter = TrackingNotificationPresenter(this)
+            runtimeEventPublisher = RuntimeEventPublisher(applicationContext)
+            runtimeTelemetry = RuntimeTelemetry(applicationContext)
+            queueUploadEngine = QueueUploadEngine(
+                context = applicationContext,
+                locationDao = database.locationDao(),
+                pushContext = pushDispatcher,
+                authenticatedClientProvider = { getAuthenticatedHttpClient() }
+            )
+            significantMotionBridge = SignificantMotionResumeBridge(
+                trigger = SensorManagerSignificantMotionTrigger(applicationContext),
+                onResume = { resumeGps() }
+            )
+            SelectedTrackerManager.syncRuntimeSelectedTracker(this)
+            TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
+            syncRuntimeStateStore()
+            TrackingServiceLifecycleGate.markUsable()
+        } catch (t: Throwable) {
+            TrackingServiceLifecycleGate.markDestroyed()
+            throw t
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -486,6 +460,7 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy isTracking=$isTracking")
+        TrackingServiceLifecycleGate.markDestroying()
         if (isTracking) {
             TrackingRecoveryCoordinator.markUnexpectedDestroy(applicationContext, wasTracking = true)
             transitionToStoppedState(failureReason = "unexpected_destroy")
@@ -494,6 +469,7 @@ class TrackingService : Service() {
         significantMotionBridge?.cancel()
         significantMotionBridge = null
         serviceJob.cancel()
+        TrackingServiceLifecycleGate.markDestroyed()
         super.onDestroy()
     }
 
@@ -630,12 +606,12 @@ class TrackingService : Service() {
                 pushQueuedLocations(scope = QueueUploadScope.ALL, updateFailureCounters = false)
             }
             updateNotificationFromDb(broadcastStats = true)
-            TrackPointBus.resumeLocalDelivery()
             Log.i(TAG, "Tracking session started boundary=$sessionVisibleBoundaryId")
         } catch (e: SecurityException) {
-            TrackPointBus.resumeLocalDelivery()
             Log.e(TAG, "Location updates security failure", e)
             failActiveTrackingAndStop(getString(R.string.unable_to_start_location_updates))
+        } finally {
+            TrackPointBus.resumeLocalDelivery()
         }
     }
 
@@ -669,7 +645,10 @@ class TrackingService : Service() {
                 failureReason = failureReason
             )
         }
-        syncRuntimeStateStore()
+        syncRuntimeStateStore(
+            lifecycleStateOverride = TrackingLifecycleState.STOPPED,
+            failureReasonOverride = failureReason,
+        )
     }
 
     private fun cleanupServiceResources(reason: String) {
@@ -801,6 +780,13 @@ class TrackingService : Service() {
                     "accuracy=${metrics.accuracyMeters ?: -1f} rollingAverage=${metrics.rollingAverageStepMeters} " +
                     "capCandidate=${metrics.capCandidateMeters} decision=${metrics.decision} " +
                     "reason=${metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"}"
+            )
+        }
+        if (!result.accepted && result.policyMetrics == null) {
+            runtimeTelemetry.decision(
+                name = "location_filter",
+                details = "accepted=false reason=${result.rejectReason ?: result.adjustmentReason ?: "none"} " +
+                    "accuracy=${result.lastAccuracyMeters ?: -1f}"
             )
         }
         withContext(Dispatchers.Main) { syncRuntimeStateStore() }
@@ -1076,7 +1062,6 @@ class TrackingService : Service() {
 
     private fun setStartupInProgress(value: Boolean) {
         startupInProgress = value
-        isStartupInProgress = value
     }
 
     private fun isTrackingActiveOrStarting(): Boolean {
@@ -1111,26 +1096,31 @@ class TrackingService : Service() {
         sendBroadcast(Intent(SESSION_STATS_UPDATE).apply { setPackage(packageName) })
     }
 
-    private inline fun updateRuntimeSnapshot(
+    private fun updateRuntimeSnapshot(
         transform: (TrackingRuntimeSnapshot) -> TrackingRuntimeSnapshot
     ): TrackingRuntimeSnapshot {
-        runtimeSnapshot = transform(runtimeSnapshot)
-        return runtimeSnapshot
+        return synchronized(runtimeSnapshotLock) {
+            runtimeSnapshot = transform(runtimeSnapshot)
+            runtimeSnapshot
+        }
     }
 
-    private fun syncRuntimeStateStore() {
+    private fun syncRuntimeStateStore(
+        lifecycleStateOverride: TrackingLifecycleState? = null,
+        failureReasonOverride: String? = null,
+    ) {
         val gpsOk = isGpsProviderEnabled()
         val settings = settingsRepository.getSettings()
         val effectiveAccuracyThreshold = resolveCurrentAccuracyFilter()
         validateRuntimeInvariant(gpsProviderEnabled = gpsOk)
         val effectiveRunning = isTrackingActiveOrStarting()
-        val gpsPaused = gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION ||
-            gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        val lastAccuracyMeters = synchronized(runtimeSnapshotLock) { runtimeSnapshot.lastAccuracyMeters }
         val uiStatus = TrackingUiStatusResolver.resolveForGpsState(
             isRunning = effectiveRunning,
             gpsProviderEnabled = gpsOk,
             gpsState = gpsRuntimeState,
-            lastAccuracyMeters = runtimeSnapshot.lastAccuracyMeters,
+            lastAccuracyMeters = lastAccuracyMeters,
             effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold
         )
         val activeMotionMode = if (settings.autoTrackingMode) {
@@ -1138,26 +1128,36 @@ class TrackingService : Service() {
         } else {
             TrackingMotionMode.fromProfileIndex(settings.trackingProfile.index)
         }
-        val next = RuntimeSnapshotProjector.project(
-            previous = runtimeSnapshot,
-            input = RuntimeSnapshotProjectionInput(
-                isRunning = effectiveRunning,
-                lifecycleState = controlState.lifecycleState,
-                failureReason = controlState.failureReason,
-                selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this),
-                selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this),
+        val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
+        val next = synchronized(runtimeSnapshotLock) {
+            val recordingRuntime = RecordingRuntimeReducer.fromInputs(
+                previous = runtimeSnapshot.recordingRuntime,
+                sessionActive = isTracking,
+                startupActive = startupInProgress,
+                gpsState = gpsRuntimeState,
                 gpsProviderEnabled = gpsOk,
-                autoTrackingEnabled = settings.autoTrackingMode,
-                activeMotionMode = activeMotionMode,
-                uiStatus = uiStatus,
-                gpsPaused = gpsPaused,
-                effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
-                sessionVisibleBoundaryId = sessionVisibleBoundaryId
+                selectedTrackerId = selectedTrackerId,
             )
-        )
-        updateRuntimeSnapshot { next }
+            RuntimeSnapshotProjector.project(
+                previous = runtimeSnapshot,
+                input = RuntimeSnapshotProjectionInput(
+                    isRunning = effectiveRunning,
+                    recordingRuntime = recordingRuntime,
+                    lifecycleState = lifecycleStateOverride ?: controlState.lifecycleState,
+                    failureReason = failureReasonOverride ?: controlState.failureReason,
+                    selectedTrackerId = selectedTrackerId,
+                    selectedTrackerName = selectedTrackerName,
+                    gpsProviderEnabled = gpsOk,
+                    autoTrackingEnabled = settings.autoTrackingMode,
+                    activeMotionMode = activeMotionMode,
+                    uiStatus = uiStatus,
+                    gpsPaused = recordingRuntime.pausedForMotion,
+                    effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
+                    sessionVisibleBoundaryId = sessionVisibleBoundaryId
+                )
+            ).also { runtimeSnapshot = it }
+        }
         TrackingRuntimeStateStore.update { next }
-        syncCompanionSnapshotState(next)
         if (startupForegroundPromoted && startupInProgress) {
             serviceScope.launch(Dispatchers.Main) {
                 notificationPresenter.updateForegroundNotification(runtimeSnapshot)
@@ -1761,6 +1761,10 @@ class TrackingService : Service() {
         ) {
             return
         }
+        if (significantMotionBridge?.isAvailable() != true) {
+            runtimeTelemetry.event("gps_pause_skipped", "reason=significant_motion_unavailable")
+            return
+        }
         transitionGpsState(GpsRuntimeEvent.PAUSE_FOR_MOTION, "pause_for_motion")
         transitionControlState(TrackingControlEvent.PauseRequested)
         resetElasticDistanceOverride(reason = "gps_paused", reapplyRequest = false)
@@ -2318,20 +2322,6 @@ class TrackingService : Service() {
             )
         }
         gpsRuntimeState = next
-    }
-
-    private fun syncCompanionSnapshotState(snapshot: TrackingRuntimeSnapshot) {
-        isRunning = snapshot.isRunning
-        sessionStartTimeMs = snapshot.sessionStartTimeMs
-        pointsSentThisSession = snapshot.pointsSentThisSession
-        lastPointSentAtMs = snapshot.lastPointSentAtMs
-        queuedPointsVisible = snapshot.queuedPointsVisible
-        sessionTotalDistanceMeters = snapshot.sessionTotalDistanceMeters
-        lastAccuracyMeters = snapshot.lastAccuracyMeters
-        lastTrackedLatitude = snapshot.lastTrackedLatitude
-        lastTrackedLongitude = snapshot.lastTrackedLongitude
-        lastTrackedTimestampMs = snapshot.lastTrackedTimestampMs
-        lastTrackedPropsJson = snapshot.lastTrackedPropsJson
     }
 
     private fun publishTrackPoint(

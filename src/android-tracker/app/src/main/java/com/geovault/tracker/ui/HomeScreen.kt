@@ -660,6 +660,7 @@ private fun homeStatusLabelRes(status: TrackingUiStatus): Int {
         TrackingUiStatus.NOT_TRACKING -> R.string.not_tracking
         TrackingUiStatus.WAITING_FOR_GPS -> R.string.waiting_for_gps_reenabled
         TrackingUiStatus.LOCKING -> R.string.locking
+        TrackingUiStatus.PAUSED_FOR_MOTION -> R.string.tracking_active
         TrackingUiStatus.TRACKING_ACTIVE -> R.string.tracking_active
     }
 }
@@ -670,6 +671,7 @@ private fun homeStatusColor(status: TrackingUiStatus, isPreparingToTrack: Boolea
         TrackingUiStatus.NOT_TRACKING -> GeoVaultColorTokens.MainBlue
         TrackingUiStatus.WAITING_FOR_GPS -> GeoVaultColorTokens.Error
         TrackingUiStatus.LOCKING -> GeoVaultColorTokens.MainYellow
+        TrackingUiStatus.PAUSED_FOR_MOTION -> GeoVaultColorTokens.MainYellow
         TrackingUiStatus.TRACKING_ACTIVE -> GeoVaultColorTokens.MainYellow
     }
 }

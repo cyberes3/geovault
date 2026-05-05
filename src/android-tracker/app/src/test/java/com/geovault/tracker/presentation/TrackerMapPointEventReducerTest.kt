@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -16,6 +17,7 @@ class TrackerMapPointEventReducerTest {
         val state = TrackerMapUiState(
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
                 selectedTrackerId = "tracker-1",
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -32,6 +34,7 @@ class TrackerMapPointEventReducerTest {
                     accuracyMeters = 4f,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
@@ -59,6 +62,7 @@ class TrackerMapPointEventReducerTest {
         val state = TrackerMapUiState(
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
                 selectedTrackerId = "tracker-1",
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -76,6 +80,7 @@ class TrackerMapPointEventReducerTest {
                     accuracyMeters = 4f,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
@@ -119,6 +124,7 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = 1000L,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
@@ -127,6 +133,38 @@ class TrackerMapPointEventReducerTest {
         assertEquals("server_geometry", result.nextState.trail[0].prov)
         assertEquals("remote_stream", result.nextState.trail[1].prov)
         assertTrue(result.nextState.remoteLastPoints.containsKey("tracker-1"))
+    }
+
+    @Test
+    fun remoteStream_singleRemoteWhileTracking_appendsDisplayedTrail() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "remote",
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.REMOTE_STREAM,
+                    trackId = "remote",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 1000L,
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+
+        assertTrue(result.acceptedBySourcePolicy)
+        assertTrue(result.shouldUpdateUiState)
+        assertEquals(1, result.nextState.trail.size)
+        assertEquals("remote_stream", result.nextState.trail.first().prov)
     }
 
     @Test
@@ -166,6 +204,7 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = tsMs,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
@@ -194,6 +233,7 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = 1000L,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
@@ -206,10 +246,12 @@ class TrackerMapPointEventReducerTest {
         val state = TrackerMapUiState(
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
                 selectedTrackerId = "tracker-1",
             ),
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             activeStreamedTrackerIds = setOf("tracker-2"),
+            streamTargetIds = setOf("tracker-2"),
         )
         val result = TrackerMapPointEventReducer.reduce(
             TrackerMapPointReductionInput(
@@ -222,6 +264,17 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = 1000L,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = TrackerMapSessionProjector.project(
+                    TrackerMapSessionIntent(
+                        mode = state.mode,
+                        runtime = state.runtime,
+                        displayedTrackerId = state.displayedTrackerId,
+                        displayedTrackerName = state.displayedTrackerName,
+                        rosterTrackerIds = emptySet(),
+                        groupSelection = TrackerMapGroupModeSelection(groupId = "g1", trackerIds = setOf("tracker-1", "tracker-2")),
+                        activeStreamedTrackerIds = state.activeStreamedTrackerIds,
+                    )
+                ),
             )
         )
         assertTrue(result.acceptedBySourcePolicy)
@@ -235,6 +288,7 @@ class TrackerMapPointEventReducerTest {
         val state = TrackerMapUiState(
             runtime = TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
                 selectedTrackerId = "tracker-1",
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -251,8 +305,34 @@ class TrackerMapPointEventReducerTest {
                     timestampMs = 1000L,
                 ),
                 trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
             )
         )
         assertEquals("tracker-1", result.nextState.trail.first().trackerId)
+    }
+
+    private fun sessionPlanFor(state: TrackerMapUiState): TrackerMapStreamingPlan {
+        val visibleIds = buildSet {
+            state.runtime.selectedTrackerId.trim().takeIf { it.isNotEmpty() }?.let(::add)
+            state.displayedTrackerId.trim().takeIf { it.isNotEmpty() }?.let(::add)
+            addAll(state.streamTargetIds)
+            addAll(state.activeStreamedTrackerIds)
+            addAll(state.remoteLastPoints.keys)
+            addAll(state.allQueueTrailsByTracker.keys)
+        }
+        return TrackerMapSessionProjector.project(
+            TrackerMapSessionIntent(
+                mode = state.mode,
+                runtime = state.runtime,
+                displayedTrackerId = state.displayedTrackerId,
+                displayedTrackerName = state.displayedTrackerName,
+                rosterTrackerIds = visibleIds,
+                groupSelection = TrackerMapGroupModeSelection(
+                    groupId = state.currentGroupId.ifBlank { null },
+                    trackerIds = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) visibleIds else emptySet(),
+                ),
+                activeStreamedTrackerIds = state.activeStreamedTrackerIds,
+            )
+        )
     }
 }

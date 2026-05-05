@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -9,6 +10,65 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrackerMapStateTransformsTest {
+
+    @Test
+    fun buildRenderState_fromSessionSnapshot_usesAcceptedGeometryOnly() {
+        val acceptedPoint = com.geovault.tracker.policy.TrackPointEvent(
+            source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+            trackId = "accepted",
+            lon = 2.0,
+            lat = 1.0,
+            timestampMs = 10L,
+        )
+        val rejectedPoint = com.geovault.tracker.policy.TrackPointEvent(
+            source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+            trackId = "rejected",
+            lon = 4.0,
+            lat = 3.0,
+            timestampMs = 10L,
+        )
+        val session = TrackerMapSessionSnapshot(
+            uiState = TrackerMapUiState(
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                activeStreamedTrackerIds = setOf("accepted", "rejected"),
+                streamTargetIds = setOf("accepted", "rejected"),
+            ),
+            plan = TrackerMapStreamingPlan(
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                selectedTrackerId = "",
+                displayedTrackerId = "",
+                displayedTrackerName = "",
+                resolvedGroupId = "group",
+                groupTrackerIds = setOf("accepted"),
+                visibleRosterTrackerIds = setOf("accepted", "rejected"),
+                locallyRecordedTrackerIds = emptySet(),
+                remoteSubscriptionIds = setOf("accepted"),
+                acceptedRemoteTrackerIds = setOf("accepted"),
+                localOverlayTrackerIds = emptySet(),
+                trailReloadPlan = TrackerMapTrailReloadPlan(
+                    source = TrackerMapTrailSource.MULTI_SERVER,
+                    trackerIds = setOf("accepted"),
+                    resolvedGroupId = "group",
+                ),
+            ),
+            runtime = TrackingRuntimeSnapshot(),
+            singleTrail = emptyList(),
+            tracks = emptyMap(),
+            acceptedRemoteLastPoints = mapOf(
+                "accepted" to acceptedPoint,
+                "rejected" to rejectedPoint,
+            ).filterKeys { it == "accepted" },
+        )
+
+        val renderState = TrackerMapStateTransforms.buildRenderState(
+            session = session,
+            cosmetics = TrackerMapRenderCosmetics(
+                trackerDisplayNameById = mapOf("accepted" to "Accepted"),
+            ),
+        )
+
+        assertEquals(listOf("remote-accepted"), renderState.points.map { it.id })
+    }
 
     @Test
     fun groupPlaceholderMode_rendersRemoteMarkersAndGroupLines() {
@@ -267,6 +327,50 @@ class TrackerMapStateTransformsTest {
         val marker = render.points.first { it.id == "last-fix" }
         assertEquals(TrackerMapIconIds.selectedForColor("#AA33CC"), marker.iconImageId)
         assertEquals("#AA33CC", render.lines.first().lineColorHex)
+    }
+
+    @Test
+    fun singleSession_whileTrackingRendersDisplayedRemoteTrail() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    trackerId = "remote",
+                    time = 1L,
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                ),
+                QueuedLocation(
+                    trackerId = "remote",
+                    time = 2L,
+                    latitude = 1.001,
+                    longitude = 2.001,
+                    altitude = null,
+                    speed = null,
+                    bearing = 90f,
+                    accuracy = null,
+                )
+            ),
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+                selectedTrackerName = "Local Tracker",
+            ),
+            displayedTrackerId = "remote",
+            displayedTrackerName = "Remote Tracker",
+            trackerColorById = mapOf("remote" to "#123456"),
+        )
+
+        assertEquals(1, render.lines.size)
+        assertEquals(1, render.points.size)
+        assertEquals("last-fix", render.points.first().id)
+        assertEquals("Remote Tracker", render.points.first().title)
+        assertEquals(TrackerMapIconIds.selectedForColor("#123456"), render.points.first().iconImageId)
     }
 
     @Test

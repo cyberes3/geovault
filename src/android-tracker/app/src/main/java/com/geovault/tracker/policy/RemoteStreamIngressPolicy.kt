@@ -13,6 +13,7 @@ object RemoteStreamIngressPolicy {
     private val lastAcceptedByStream = ConcurrentHashMap<String, TrackPointEvent>()
     private val acceptedHistoryByStream = ConcurrentHashMap<String, ConcurrentLinkedDeque<TrackPointEvent>>()
     private val orderingCounter = AtomicLong(0L)
+    private var subscribedTrackIds: Set<String> = emptySet()
 
     private val profile = TrackPointPolicyConfig(
         maxAccuracyMeters = 200f,
@@ -24,7 +25,7 @@ object RemoteStreamIngressPolicy {
         rollingWindowSize = 5,
         outlierPolicy = TrackPointOutlierPolicy.OFF,
         freshnessTtlMs = REMOTE_FRESHNESS_TTL_MS,
-        normalizeSecondsTimestamps = true
+        normalizeSecondsTimestamps = false
     )
 
     fun process(event: TrackPointEvent, nowMs: Long): TrackPointEvent? {
@@ -74,10 +75,35 @@ object RemoteStreamIngressPolicy {
             .forEach(::resetTrack)
     }
 
+    fun updateSubscribedTracks(trackIds: Collection<String>) {
+        val normalized = trackIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        TrackPointCrossSourceState.withLock {
+            val removed = subscribedTrackIds - normalized
+            subscribedTrackIds = normalized
+            removed.forEach(::resetTrack)
+        }
+    }
+
+    fun startSubscriptionSession(trackIds: Collection<String>) {
+        val normalized = trackIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        TrackPointCrossSourceState.withLock {
+            val removed = subscribedTrackIds - normalized
+            subscribedTrackIds = normalized
+            (normalized + removed).forEach(::resetTrack)
+        }
+    }
+
     fun resetForTests() {
         lastAcceptedByStream.clear()
         acceptedHistoryByStream.clear()
         orderingCounter.set(0L)
+        subscribedTrackIds = emptySet()
         TrackPointCrossSourceState.resetForTests()
     }
 

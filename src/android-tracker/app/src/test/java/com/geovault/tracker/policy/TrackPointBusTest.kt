@@ -10,31 +10,33 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 
 class TrackPointBusTest {
 
     @Before
     fun setUp() {
         TrackPointBus.resetForTests()
-        RemoteStreamIngressPolicy.resetForTests()
         TrackingRuntimeStateStore.update { it.copy(isRunning = false, selectedTrackerId = "") }
     }
 
     @Test
-    fun publish_invalidCoordinates_isDropped() {
+    fun publish_withoutOrderingKey_appliesTimestampOrderingKey() = runBlocking {
+        val awaitEvent = async {
+            withTimeout(2_000L) {
+                TrackPointBus.localGpsEvents.first()
+            }
+        }
         TrackPointBus.publish(
             TrackPointEvent(
                 source = TrackPointSource.LOCAL_GPS,
                 trackId = "t",
-                lon = 500.0,
-                lat = 0.0,
+                lon = 10.0,
+                lat = 10.0,
                 timestampMs = 1_000L
             )
         )
-        val diagnostics = TrackPointBus.diagnostics()
-        assertEquals(0, diagnostics.pausedBufferSize)
-        assertFalse(diagnostics.isLocalDeliveryPaused)
+        val event = awaitEvent.await()
+        assertEquals(1_000L, event.orderingKey)
     }
 
     @Test
@@ -74,7 +76,7 @@ class TrackPointBusTest {
     }
 
     @Test
-    fun publish_remoteWithoutOrderingKey_appliesIngressOrdering() = runBlocking {
+    fun publish_remoteWithoutOrderingKey_usesDeliveryOrderingOnly() = runBlocking {
         val awaitEvent = async {
             withTimeout(2_000L) {
                 TrackPointBus.remoteStreamEvents.first()
@@ -91,26 +93,6 @@ class TrackPointBusTest {
             )
         )
         val event = awaitEvent.await()
-        assertTrue(event.orderingKey > 0L)
-    }
-
-    @Test
-    fun publish_remoteForLocallyRecordedSelectedTracker_isDropped() = runBlocking {
-        TrackingRuntimeStateStore.update { it.copy(isRunning = true, selectedTrackerId = "selected") }
-
-        TrackPointBus.publish(
-            TrackPointEvent(
-                source = TrackPointSource.REMOTE_STREAM,
-                trackId = "selected",
-                lon = 20.0,
-                lat = 10.0,
-                timestampMs = System.currentTimeMillis(),
-            )
-        )
-
-        val event = withTimeoutOrNull(100L) {
-            TrackPointBus.remoteStreamEvents.first()
-        }
-        assertEquals(null, event)
+        assertEquals(event.timestampMs, event.orderingKey)
     }
 }

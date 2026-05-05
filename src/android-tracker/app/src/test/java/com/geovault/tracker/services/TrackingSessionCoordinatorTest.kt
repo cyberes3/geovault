@@ -38,6 +38,7 @@ class TrackingSessionCoordinatorTest {
         )
 
         assertTrue(next.isRunning)
+        assertTrue(next.sessionActive)
         assertEquals(TrackingLifecycleState.RUNNING, next.lifecycleState)
         assertNull(next.failureReason)
         assertEquals(444L, next.sessionVisibleBoundaryId)
@@ -51,6 +52,7 @@ class TrackingSessionCoordinatorTest {
     fun transitionToStopped_keepsFailureReason_andResetsRuntimeMetrics() {
         val previous = TrackingRuntimeSnapshot(
             isRunning = true,
+            recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
             lifecycleState = TrackingLifecycleState.RUNNING,
             selectedTrackerId = "tracker-1",
             selectedTrackerName = "Tracker 1",
@@ -68,6 +70,7 @@ class TrackingSessionCoordinatorTest {
         )
 
         assertFalse(next.isRunning)
+        assertFalse(next.sessionActive)
         assertEquals(TrackingLifecycleState.STOPPED, next.lifecycleState)
         assertEquals("fatal_failure", next.failureReason)
         assertEquals(0L, next.sessionVisibleBoundaryId)

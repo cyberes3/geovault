@@ -7,22 +7,24 @@ import org.junit.Test
 class RuntimeServiceStateProbeTest {
 
     @Test
-    fun runningWhenRuntimeStoreReportsRunning() {
+    fun runningWhenSessionActive() {
         val probe = RuntimeServiceStateProbe(
             provider = StubRuntimeServiceStateProvider(
-                runtimeStoreRunning = true,
-                startupInProgress = false
+                serviceStartingOrUsable = false,
+                sessionActive = true,
+                startupActive = false
             )
         )
         assertTrue(probe.isServiceRunningOrStarting())
     }
 
     @Test
-    fun runningWhenStartupInProgressEvenWithoutRuntimeStoreRunning() {
+    fun runningWhenStartupActiveEvenWithoutSessionActive() {
         val probe = RuntimeServiceStateProbe(
             provider = StubRuntimeServiceStateProvider(
-                runtimeStoreRunning = false,
-                startupInProgress = true
+                serviceStartingOrUsable = false,
+                sessionActive = false,
+                startupActive = true
             )
         )
         assertTrue(probe.isServiceRunningOrStarting())
@@ -32,19 +34,53 @@ class RuntimeServiceStateProbeTest {
     fun notRunningWhenNeitherSignalPresent() {
         val probe = RuntimeServiceStateProbe(
             provider = StubRuntimeServiceStateProvider(
-                runtimeStoreRunning = false,
-                startupInProgress = false
+                serviceStartingOrUsable = false,
+                sessionActive = false,
+                startupActive = false
             )
         )
         assertFalse(probe.isServiceRunningOrStarting())
     }
+
+    @Test
+    fun runningWhenServiceIsStartingBeforeRuntimeSnapshotSyncs() {
+        val probe = RuntimeServiceStateProbe(
+            provider = StubRuntimeServiceStateProvider(
+                serviceStartingOrUsable = true,
+                sessionActive = false,
+                startupActive = false
+            )
+        )
+        assertTrue(probe.isServiceRunningOrStarting())
+    }
+
+    @Test
+    fun lifecycleGateCountsStartingAndUsableButNotDestroying() {
+        TrackingServiceLifecycleGate.resetForTests()
+        assertFalse(TrackingServiceLifecycleGate.isServiceStartingOrUsable())
+
+        TrackingServiceLifecycleGate.markStarting()
+        assertTrue(TrackingServiceLifecycleGate.isServiceStartingOrUsable())
+
+        TrackingServiceLifecycleGate.markUsable()
+        assertTrue(TrackingServiceLifecycleGate.isServiceStartingOrUsable())
+
+        TrackingServiceLifecycleGate.markDestroying()
+        assertFalse(TrackingServiceLifecycleGate.isServiceStartingOrUsable())
+
+        TrackingServiceLifecycleGate.markDestroyed()
+        assertFalse(TrackingServiceLifecycleGate.isServiceStartingOrUsable())
+    }
 }
 
 private data class StubRuntimeServiceStateProvider(
-    private val runtimeStoreRunning: Boolean,
-    private val startupInProgress: Boolean
+    private val serviceStartingOrUsable: Boolean,
+    private val sessionActive: Boolean,
+    private val startupActive: Boolean
 ) : RuntimeServiceStateProvider {
-    override fun isRuntimeStoreRunning(): Boolean = runtimeStoreRunning
+    override fun isServiceStartingOrUsable(): Boolean = serviceStartingOrUsable
 
-    override fun isStartupInProgress(): Boolean = startupInProgress
+    override fun isSessionActive(): Boolean = sessionActive
+
+    override fun isStartupActive(): Boolean = startupActive
 }

@@ -190,9 +190,7 @@ class MainActivity : ComponentActivity() {
                 startService(Intent(this, LiveTrackStreamingService::class.java).apply {
                     this.action = action
                 })
-                if (!TrackingRuntimeStateStore.state.value.isRunning) {
-                    viewModel.requestMapRecoveryAfterStreamingStop()
-                }
+                viewModel.requestMapRecoveryAfterStreamingStop()
             }
             ACTION_DUMP_RECOVERY_TELEMETRY -> {
                 TrackingRecoveryCoordinator.dumpTelemetryToLogcat(
@@ -208,7 +206,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isTrackingServiceActiveOrStarting(): Boolean {
-        return TrackingRuntimeStateStore.state.value.isRunning || TrackingService.isStartupInProgress
+        val runtime = TrackingRuntimeStateStore.state.value
+        return runtime.sessionActive || runtime.startupActive
     }
 
     override fun onStop() {
@@ -223,18 +222,5 @@ class MainActivity : ComponentActivity() {
         }
         viewModel.onOauthUrlConsumed()
         settingsViewModel.onOauthUrlConsumed()
-    }
-
-    override fun onDestroy() {
-        if (isFinishing && !isChangingConfigurations &&
-            com.geovault.tracker.services.LiveStreamRuntimeStateStore.state.value.isRunning
-        ) {
-            startService(
-                Intent(this, LiveTrackStreamingService::class.java).apply {
-                    action = LiveTrackStreamingService.ACTION_STOP
-                }
-            )
-        }
-        super.onDestroy()
     }
 }

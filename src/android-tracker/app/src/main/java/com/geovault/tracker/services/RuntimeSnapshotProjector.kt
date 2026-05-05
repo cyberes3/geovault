@@ -4,6 +4,7 @@ import com.geovault.tracker.location.TrackingLifecycleState
 
 data class RuntimeSnapshotProjectionInput(
     val isRunning: Boolean,
+    val recordingRuntime: RecordingRuntime,
     val lifecycleState: TrackingLifecycleState,
     val failureReason: String?,
     val selectedTrackerId: String,
@@ -25,6 +26,7 @@ object RuntimeSnapshotProjector {
     ): TrackingRuntimeSnapshot {
         return previous.copy(
             isRunning = input.isRunning,
+            recordingRuntime = input.recordingRuntime,
             lifecycleState = input.lifecycleState,
             failureReason = input.failureReason,
             selectedTrackerId = input.selectedTrackerId,

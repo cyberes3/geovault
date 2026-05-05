@@ -143,14 +143,8 @@ fun GroupActionsScreen(
                 onRowClick = { row -> onViewTrackerOnMap(row.trackerId) },
                 onViewOnMap = { row -> onViewTrackerOnMap(row.trackerId) },
                 onViewParams = { row -> row.tracker?.let(onViewTrackerParams) },
-                onViewInList = if (onViewTrackerInList != null) {
-                    { row ->
-                        if (row.tracker?.isOwner() == true) {
-                            onViewTrackerInList(row.trackerId)
-                        }
-                    }
-                } else {
-                    null
+                onViewInList = onViewTrackerInList?.let { handler ->
+                    { row -> handler(row.trackerId) }
                 },
             )
         }

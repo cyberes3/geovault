@@ -34,7 +34,7 @@ class TrackerMapTrailDataCoordinatorTest {
             loadTrackerGeometry = {
                 RepositoryResult.Success(Tracker(id = "t1", name = "T1", color = null))
             },
-            loadQueueTrailWithOverlay = { fallback },
+            loadQueueTrail = { fallback },
             mapCoordinatesToTrail = { _, _, _, _ -> emptyList() }
         )
 

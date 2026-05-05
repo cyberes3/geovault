@@ -1,0 +1,92 @@
+package com.geovault.tracker.presentation
+
+import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.TrackPointEvent
+
+data class TrackerMapSessionBuildInput(
+    val state: TrackerMapUiState,
+    val plan: TrackerMapStreamingPlan,
+    val localRuntimeOverlayTrails: Map<String, List<QueuedLocation>> = emptyMap(),
+)
+
+data class TrackerMapSessionPointInput(
+    val snapshot: TrackerMapSessionSnapshot,
+    val point: TrackPointEvent,
+    val trailPointLimit: Int,
+)
+
+data class TrackerMapSessionPointResult(
+    val acceptedBySourcePolicy: Boolean,
+    val shouldUpdate: Boolean,
+    val nextSnapshot: TrackerMapSessionSnapshot,
+)
+
+object TrackerMapSessionEngine {
+    fun build(input: TrackerMapSessionBuildInput): TrackerMapSessionSnapshot {
+        val state = input.state
+        val plan = input.plan
+        val acceptedRemoteLastPoints = state.remoteLastPoints.filterKeys { it in plan.acceptedRemoteTrackerIds }
+        val normalizedTrails = input.localRuntimeOverlayTrails.mapKeys { it.key.trim() }
+            .filterKeys { it.isNotEmpty() }
+        val tracks = (normalizedTrails.keys + acceptedRemoteLastPoints.keys).associateWith { trackerId ->
+            val split = splitTrail(normalizedTrails[trackerId].orEmpty())
+            TrackerTrackModel(
+                trackerId = trackerId,
+                historicalTrail = split.historicalTrail,
+                liveTrail = split.liveTrail,
+                remoteHead = acceptedRemoteLastPoints[trackerId],
+            )
+        }
+        val singleSplit = splitTrail(state.trail)
+        return TrackerMapSessionSnapshot(
+            uiState = state,
+            plan = plan,
+            runtime = state.runtime,
+            singleTrail = singleSplit.historicalTrail + singleSplit.liveTrail,
+            tracks = tracks,
+            acceptedRemoteLastPoints = acceptedRemoteLastPoints,
+        )
+    }
+
+    fun reducePoint(input: TrackerMapSessionPointInput): TrackerMapSessionPointResult {
+        val reduction = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = input.snapshot.uiState,
+                point = input.point,
+                trailPointLimit = input.trailPointLimit,
+                sessionPlan = input.snapshot.plan,
+            )
+        )
+        if (!reduction.shouldUpdateUiState) {
+            return TrackerMapSessionPointResult(
+                acceptedBySourcePolicy = reduction.acceptedBySourcePolicy,
+                shouldUpdate = false,
+                nextSnapshot = input.snapshot,
+            )
+        }
+        val nextSnapshot = build(
+            TrackerMapSessionBuildInput(
+                state = reduction.nextState,
+                plan = input.snapshot.plan.copy(
+                    acceptedRemoteTrackerIds = input.snapshot.plan.acceptedRemoteTrackerIds,
+                ),
+                localRuntimeOverlayTrails = reduction.nextState.allQueueTrailsByTracker,
+            )
+        )
+        return TrackerMapSessionPointResult(
+            acceptedBySourcePolicy = reduction.acceptedBySourcePolicy,
+            shouldUpdate = true,
+            nextSnapshot = nextSnapshot,
+        )
+    }
+
+    private fun splitTrail(trail: List<QueuedLocation>): TrackerTrackModel {
+        val live = trail.filter(TrackerMapPointProvenancePolicy::isLiveOverlay)
+        val historical = trail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay)
+        return TrackerTrackModel(
+            trackerId = trail.firstOrNull()?.trackerId.orEmpty(),
+            historicalTrail = historical,
+            liveTrail = live,
+        )
+    }
+}

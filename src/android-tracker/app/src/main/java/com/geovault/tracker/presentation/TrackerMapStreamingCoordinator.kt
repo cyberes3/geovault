@@ -31,7 +31,7 @@ object TrackerMapStreamingCoordinator {
             // Keep no-op behavior while single-track context is still resolving.
             return TrackerMapStreamingCommand.NoOp
         }
-        if (id == input.selectedTrackerId.trim() && input.selectedTrackerId.isNotBlank()) {
+        if (input.trackingRunning && id == input.selectedTrackerId.trim() && input.selectedTrackerId.isNotBlank()) {
             return TrackerMapStreamingCommand.Stop
         }
         return TrackerMapStreamingCommand.Start(
@@ -41,14 +41,12 @@ object TrackerMapStreamingCoordinator {
     }
 
     private fun resolveMultiContext(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
-        val normalizedSelected = input.selectedTrackerId.trim()
-        var ids = input.streamTargetIds
+        val localTrackerId = input.selectedTrackerId.trim().takeIf { input.trackingRunning && it.isNotEmpty() }
+        val ids = input.streamTargetIds
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .toMutableSet()
-        if (input.trackingRunning && normalizedSelected.isNotEmpty()) {
-            ids.remove(normalizedSelected)
-        }
+            .filterNot { it == localTrackerId }
+            .toSet()
         if (ids.isEmpty()) return TrackerMapStreamingCommand.Stop
         val trackerName = if (ids.size == 1) {
             input.displayedTrackerName.trim().ifBlank { null }

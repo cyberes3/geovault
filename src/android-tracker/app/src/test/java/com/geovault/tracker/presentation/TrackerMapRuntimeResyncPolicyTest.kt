@@ -36,7 +36,7 @@ class TrackerMapRuntimeResyncPolicyTest {
     }
 
     @Test
-    fun decide_started_groupContext_doesNotRestartDisplayedStreaming() {
+    fun decide_started_groupContext_restartsDisplayedStreamingWhenMapReady() {
         val decision = policy.decide(
             previousIsRunning = false,
             currentIsRunning = true,
@@ -45,7 +45,7 @@ class TrackerMapRuntimeResyncPolicyTest {
         )
         assertEquals(TrackerMapRuntimeTransition.STARTED, decision.transition)
         assertTrue(decision.restartTrackPointStream)
-        assertFalse(decision.restartDisplayedStreaming)
+        assertTrue(decision.restartDisplayedStreaming)
     }
 
     @Test

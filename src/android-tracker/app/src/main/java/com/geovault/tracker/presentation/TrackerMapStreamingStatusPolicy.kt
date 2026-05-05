@@ -22,11 +22,14 @@ object TrackerMapStreamingStatusPolicy {
         snapshot: LiveStreamRuntimeSnapshot,
         streamTargetIds: Set<String>,
     ): TrackerMapStreamingStatusUiModel {
-        if (!snapshot.isRunning && streamTargetIds.isEmpty()) {
+        val desiredIds = normalizeIds(streamTargetIds)
+        if (!snapshot.isRunning && desiredIds.isEmpty()) {
             return TrackerMapStreamingStatusUiModel()
         }
 
-        val activeCount = snapshot.activeTrackerIds.size
+        val activeIds = normalizeIds(snapshot.activeTrackerIds)
+        val activeCount = activeIds.size
+        val desiredMatched = desiredIds.isNotEmpty() && activeIds == desiredIds
 
         return when (snapshot.lifecycleState) {
             TrackingLifecycleState.STARTING -> TrackerMapStreamingStatusUiModel(
@@ -38,7 +41,13 @@ object TrackerMapStreamingStatusPolicy {
                 activeCount = activeCount,
             )
             TrackingLifecycleState.RUNNING -> TrackerMapStreamingStatusUiModel(
-                status = TrackerMapStreamingStatus.LIVE,
+                status = if (desiredMatched) {
+                    TrackerMapStreamingStatus.LIVE
+                } else if (activeCount > 0) {
+                    TrackerMapStreamingStatus.RECONNECTING
+                } else {
+                    TrackerMapStreamingStatus.CONNECTING
+                },
                 activeCount = activeCount,
             )
             TrackingLifecycleState.FAILED -> TrackerMapStreamingStatusUiModel(
@@ -47,16 +56,13 @@ object TrackerMapStreamingStatusPolicy {
                 failureReason = snapshot.failureReason,
             )
             TrackingLifecycleState.STOPPED -> {
-                if (streamTargetIds.isNotEmpty() && snapshot.isRunning) {
-                    TrackerMapStreamingStatusUiModel(
-                        status = TrackerMapStreamingStatus.CONNECTING,
-                        activeCount = 0,
-                    )
-                } else {
-                    TrackerMapStreamingStatusUiModel()
-                }
+                TrackerMapStreamingStatusUiModel()
             }
             else -> TrackerMapStreamingStatusUiModel()
         }
+    }
+
+    private fun normalizeIds(ids: Set<String>): Set<String> {
+        return ids.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
     }
 }

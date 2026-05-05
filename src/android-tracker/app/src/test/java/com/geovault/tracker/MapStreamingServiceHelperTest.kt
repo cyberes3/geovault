@@ -1,103 +1,46 @@
 package com.geovault.tracker
 
-import com.geovault.tracker.presentation.TrackerMapDisplayMode
-import org.junit.Assert.assertEquals
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], manifest = Config.NONE)
 class MapStreamingServiceHelperTest {
 
     @Test
-    fun updateStreamingForDisplayedTracker_stopsWhenDisplayedMatchesSelected() {
-        var starts = 0
-        var stops = 0
+    fun clearPersistedStreamingTargets_removesSavedIds() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val prefs = context.getSharedPreferences("live_track_streaming_targets", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putStringSet("tracker_ids", setOf("t1"))
+            .putString("tracker_name", "N")
+            .apply()
 
-        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
-            displayedTrackerId = "tracker-a",
-            displayedTrackerName = "Tracker A",
-            selectedTrackerId = "tracker-a",
-            mapMode = TrackerMapDisplayMode.SINGLE_SESSION,
-            startStreaming = { _, _ -> starts += 1 },
-            stopStreaming = { stops += 1 }
-        )
+        MapStreamingServiceHelper.clearPersistedStreamingTargets(context)
 
-        assertEquals(0, starts)
-        assertEquals(1, stops)
+        assertTrue(prefs.getStringSet("tracker_ids", null).orEmpty().isEmpty())
+        assertFalse(prefs.contains("tracker_name"))
     }
 
     @Test
-    fun updateStreamingForDisplayedTracker_startsWhenDisplayedDiffersFromSelected() {
-        var starts = 0
-        var stops = 0
-        var lastIds: Set<String>? = null
+    fun stopStreaming_clearsSavedIdsBeforeDispatchingStopCommand() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val prefs = context.getSharedPreferences("live_track_streaming_targets", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putStringSet("tracker_ids", setOf("t1"))
+            .putString("tracker_name", "N")
+            .apply()
 
-        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
-            displayedTrackerId = "tracker-b",
-            displayedTrackerName = "Tracker B",
-            selectedTrackerId = "tracker-a",
-            mapMode = TrackerMapDisplayMode.SINGLE_SESSION,
-            startStreaming = { ids, _ ->
-                starts += 1
-                lastIds = ids
-            },
-            stopStreaming = { stops += 1 }
-        )
+        val result = MapStreamingServiceHelper.stopStreaming(context)
 
-        assertEquals(1, starts)
-        assertEquals(setOf("tracker-b"), lastIds)
-        assertEquals(0, stops)
-    }
-
-    @Test
-    fun updateStreamingForDisplayedTracker_startsWhenDisplayedDiffersEvenIfTrackingRunning() {
-        var starts = 0
-        var stops = 0
-
-        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
-            displayedTrackerId = "tracker-b",
-            displayedTrackerName = "Tracker B",
-            selectedTrackerId = "tracker-a",
-            mapMode = TrackerMapDisplayMode.SINGLE_SESSION,
-            startStreaming = { _, _ -> starts += 1 },
-            stopStreaming = { stops += 1 }
-        )
-
-        assertEquals(1, starts)
-        assertEquals(0, stops)
-    }
-
-    @Test
-    fun updateStreamingForDisplayedTracker_noopWhenDisplayedIsMissing() {
-        var starts = 0
-        var stops = 0
-
-        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
-            displayedTrackerId = null,
-            displayedTrackerName = null,
-            selectedTrackerId = "tracker-a",
-            mapMode = TrackerMapDisplayMode.SINGLE_SESSION,
-            startStreaming = { _, _ -> starts += 1 },
-            stopStreaming = { stops += 1 }
-        )
-
-        assertEquals(0, starts)
-        assertEquals(0, stops)
-    }
-
-    @Test
-    fun updateStreamingForDisplayedTracker_groupPlaceholder_stopsStreaming() {
-        var starts = 0
-        var stops = 0
-
-        MapStreamingServiceHelper.updateStreamingForDisplayedTracker(
-            displayedTrackerId = "tracker-b",
-            displayedTrackerName = "Tracker B",
-            selectedTrackerId = "tracker-a",
-            mapMode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-            startStreaming = { _, _ -> starts += 1 },
-            stopStreaming = { stops += 1 }
-        )
-
-        assertEquals(0, starts)
-        assertEquals(1, stops)
+        assertTrue(result is MapStreamingStopResult.Stopped)
+        assertTrue(prefs.getStringSet("tracker_ids", null).orEmpty().isEmpty())
+        assertFalse(prefs.contains("tracker_name"))
     }
 }

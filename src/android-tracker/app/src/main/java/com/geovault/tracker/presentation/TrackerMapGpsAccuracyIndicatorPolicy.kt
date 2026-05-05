@@ -8,7 +8,7 @@ data class TrackerMapGpsAccuracyIndicatorUiModel(
 
 object TrackerMapGpsAccuracyIndicatorPolicy {
     fun resolve(runtime: TrackingRuntimeSnapshot): TrackerMapGpsAccuracyIndicatorUiModel {
-        if (!runtime.isRunning) {
+        if (!runtime.gpsCollecting) {
             return TrackerMapGpsAccuracyIndicatorUiModel(isVisible = false)
         }
         val noGoodFix = runtime.lastAccuracyMeters == null ||

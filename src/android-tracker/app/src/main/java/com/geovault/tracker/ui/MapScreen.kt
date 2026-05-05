@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -179,9 +180,15 @@ private fun TrackerMapAuthenticatedContent(
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    val renderPackage by viewModel.renderPackage.collectAsState()
+    val latestRenderPackage by rememberUpdatedState(renderPackage)
     val mapPaddingPolicy = remember { TrackerMapPaddingPolicy() }
     val topLeftChipMapper = remember { TrackerMapTopLeftChipMapper() }
-    val topLeftChipModel = topLeftChipMapper.map(state, viewModel.trackerRosterForMapChip())
+    val topLeftChipModel = topLeftChipMapper.map(
+        state = state,
+        roster = viewModel.trackerRosterForMapChip(),
+        acceptedRemoteTrackerIds = viewModel.acceptedRemoteTrackerIdsForCurrentSession(),
+    )
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var locationPermission by remember {
@@ -359,7 +366,7 @@ private fun TrackerMapAuthenticatedContent(
         phase,
         followLockArmedThisSession,
         state.followLockEnabled,
-        state.runtime.isRunning
+        state.runtime.gpsCollecting
     ) {
         userLocationPolicy.evaluate(
             TrackerMapUserLocationInput(
@@ -368,7 +375,7 @@ private fun TrackerMapAuthenticatedContent(
                 isMapReady = phase == GeoVaultMapPhase.Ready,
                 userFollowLockArmedThisSession = followLockArmedThisSession,
                 followLockEnabled = state.followLockEnabled,
-                runtimeRunning = state.runtime.isRunning
+                runtimeRunning = state.runtime.gpsCollecting
             )
         )
     }
@@ -391,27 +398,24 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(
         phase,
         state.followLockEnabled,
-        state.runtime.isRunning,
+        state.runtime.gpsCollecting,
         state.runtime.lastTrackedLatitude,
         state.runtime.lastTrackedLongitude,
         state.trail
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        if (!state.followLockEnabled || !state.runtime.isRunning) return@LaunchedEffect
+        if (!state.followLockEnabled || !state.runtime.gpsCollecting) return@LaunchedEffect
         val targetLat = state.runtime.lastTrackedLatitude ?: state.trail.lastOrNull()?.latitude ?: return@LaunchedEffect
         val targetLon = state.runtime.lastTrackedLongitude ?: state.trail.lastOrNull()?.longitude ?: return@LaunchedEffect
         geoVaultCenterCameraPreserveZoom(map, targetLat, targetLon)
     }
     LaunchedEffect(
         phase,
+        renderPackage.revision,
         state.selectionLockTrackerId,
-        state.remoteLastPoints,
-        state.trail,
-        state.displayedTrackerId,
-        state.runtime.selectedTrackerId,
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        val lockPoint = viewModel.selectionLockPointOrNull() ?: return@LaunchedEffect
+        val lockPoint = renderPackage.selectionLockPoint ?: return@LaunchedEffect
         geoVaultCenterCameraPreserveZoom(map, lockPoint.first, lockPoint.second)
     }
 
@@ -426,27 +430,21 @@ private fun TrackerMapAuthenticatedContent(
     }
     LaunchedEffect(
         phase,
-        state.trail,
-        state.allQueueTrailsByTracker,
-        state.runtime,
-        state.mode,
-        state.remoteLastPoints,
-        state.activeStreamedTrackerIds,
-        state.streamTargetIds,
-        state.selectedMapTracker,
-        state.renderMetadataSignature,
+        renderPackage.revision,
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         delay(RENDER_COALESCE_MS)
-        val renderState = viewModel.buildMapRenderState()
-        val resolvedState = markerIconPlugin.resolveRenderStateWithFallback(renderState)
+        val resolvedState = markerIconPlugin.resolveRenderStateWithFallback(renderPackage.renderState)
         renderPlugin.setRenderState(resolvedState)
     }
 
-    LaunchedEffect(phase, state.mode, state.currentGroupId, state.trail, state.allQueueTrailsByTracker, state.runtime) {
+    LaunchedEffect(
+        phase,
+        renderPackage.revision,
+    ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         if (didInitialBounds) return@LaunchedEffect
-        val bounds = viewModel.trailBoundsOrNull()
+        val bounds = renderPackage.bounds
         if (bounds != null) {
             map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
             didInitialBounds = true
@@ -456,7 +454,7 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(Unit) {
         viewModel.fitTrailEvents.collect {
             if (map.phase.value != GeoVaultMapPhase.Ready) return@collect
-            val bounds = viewModel.trailBoundsOrNull()
+            val bounds = latestRenderPackage.bounds
             val anchor = gpsHomeAnchor
             val effective = when {
                 bounds != null && anchor != null -> geoVaultLatLngBoundsUnion(bounds, listOf(anchor))
@@ -573,11 +571,16 @@ private fun TrackerMapAuthenticatedContent(
                 )
                 val isSelectedDefaultTracker = singleTrackerMapView &&
                     effectiveDisplayedTrackerId == state.runtime.selectedTrackerId.trim()
+                val liveActiveFitLockArmed = TrackerMapLiveActiveFitPolicy.resolveLockArmed(
+                    singleTrackerMapView = singleTrackerMapView,
+                    singleTrackerLocked = lockSelected,
+                    multiFollowLockArmed = followLockArmedThisSession,
+                )
                 val liveActiveFitVisibility = TrackerMapLiveActiveFitPolicy.resolveVisibility(
                     LiveActiveFitInput(
                         mode = state.mode,
-                        runtimeRunning = state.runtime.isRunning,
-                        followLockArmed = followLockArmedThisSession,
+                        runtimeRunning = state.runtime.localRecordingActive,
+                        followLockArmed = liveActiveFitLockArmed,
                         liveActiveFitEnabled = state.liveActiveFitEnabled,
                         hasTrailPoints = state.trail.isNotEmpty(),
                         isSelectedDefaultTracker = isSelectedDefaultTracker,

@@ -227,6 +227,7 @@ fun TrackersScreen(
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit = { _, _ -> },
     onOpenGroupOnMap: (groupId: String) -> Unit = {},
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit = {},
+    onOpenSharedListToTracker: (String) -> Unit = {},
 ) {
     val state by vm.uiState.collectAsState()
     DisposableEffect(vm) {
@@ -310,6 +311,15 @@ fun TrackersScreen(
         }
         pendingNavigationRequest = request
         onNavigationTargetConsumed()
+    }
+
+    LaunchedEffect(localNavigationRequest) {
+        val request = localNavigationRequest ?: return@LaunchedEffect
+        vm.setSubTab(request.subTab)
+        when (request.subTab) {
+            TrackersGroupsSubTab.TRACKERS -> vm.clearTrackerSearchQuery()
+            TrackersGroupsSubTab.GROUPS -> vm.clearGroupSearchQuery()
+        }
     }
 
     LaunchedEffect(state.dialog) {
@@ -500,11 +510,16 @@ fun TrackersScreen(
                         },
                         onViewTrackerInList = { trackerId ->
                             groupActionsDialog = null
-                            localNavigationRequest = TrackersHostNavigationRequest(
-                                subTab = TrackersGroupsSubTab.TRACKERS,
-                                trackerId = trackerId,
-                                focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
-                            )
+                            val tracker = state.trackers.firstOrNull { it.id == trackerId }
+                            if (tracker?.isOwner() == true) {
+                                localNavigationRequest = TrackersHostNavigationRequest(
+                                    subTab = TrackersGroupsSubTab.TRACKERS,
+                                    trackerId = trackerId,
+                                    focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+                                )
+                            } else {
+                                onOpenSharedListToTracker(trackerId)
+                            }
                         },
                         onEditGroup = { group ->
                             groupEditReturnOverlay = dialog.copy(group = group)

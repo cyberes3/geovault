@@ -105,7 +105,7 @@ class TrackerMapLiveActiveFitPolicyTest {
     }
 
     @Test
-    fun visibility_runtimeRunning_hidden() {
+    fun visibility_allQueueRuntimeRunningWithFollowArmed_shown() {
         val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
@@ -116,7 +116,37 @@ class TrackerMapLiveActiveFitPolicyTest {
                 isSelectedDefaultTracker = false,
             )
         )
-        assertFalse(result.showButton)
+        assertTrue(result.showButton)
+        assertTrue(result.buttonEnabled)
+    }
+
+    @Test
+    fun resolveLockArmed_singleSessionUsesSelectionLock() {
+        assertTrue(
+            TrackerMapLiveActiveFitPolicy.resolveLockArmed(
+                singleTrackerMapView = true,
+                singleTrackerLocked = true,
+                multiFollowLockArmed = false,
+            )
+        )
+        assertFalse(
+            TrackerMapLiveActiveFitPolicy.resolveLockArmed(
+                singleTrackerMapView = true,
+                singleTrackerLocked = false,
+                multiFollowLockArmed = true,
+            )
+        )
+    }
+
+    @Test
+    fun resolveLockArmed_multiModeUsesFollowLock() {
+        assertTrue(
+            TrackerMapLiveActiveFitPolicy.resolveLockArmed(
+                singleTrackerMapView = false,
+                singleTrackerLocked = false,
+                multiFollowLockArmed = true,
+            )
+        )
     }
 
     @Test
@@ -165,7 +195,88 @@ class TrackerMapLiveActiveFitPolicyTest {
     }
 
     @Test
-    fun filterActiveTrails_fallsBackToAllWhenNoActiveFound() {
+    fun activeTrailBoundsResult_includesActiveRemoteOnlyHead() {
+        val nowMs = System.currentTimeMillis()
+        val remotePoints = mapOf(
+            "remote" to TrackPointEvent(
+                trackId = "remote",
+                lat = 12.0,
+                lon = 34.0,
+                timestampMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                source = TrackPointSource.REMOTE_STREAM,
+            )
+        )
+
+        val result = TrackerMapLiveActiveFitPolicy.activeTrailBoundsResult(
+            allQueueTrailsByTracker = emptyMap(),
+            remoteLastPoints = remotePoints,
+            acceptedRemoteTrackerIds = setOf("remote"),
+            trackers = emptyList(),
+            nowMs = nowMs,
+        )
+
+        val active = result as LiveActiveTrailBoundsResult.Active
+        assertEquals(12.0, active.bounds.latitudeNorth, 0.0)
+        assertEquals(12.0, active.bounds.latitudeSouth, 0.0)
+        assertEquals(34.0, active.bounds.longitudeEast, 0.0)
+        assertEquals(34.0, active.bounds.longitudeWest, 0.0)
+    }
+
+    @Test
+    fun filterActiveTrails_ignoresUnacceptedRemotePointTimestamp() {
+        val nowMs = System.currentTimeMillis()
+        val staleTrail = listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))
+        val trails = mapOf("t1" to staleTrail)
+        val remotePoints = mapOf(
+            "t1" to TrackPointEvent(
+                trackId = "t1",
+                lat = 0.0,
+                lon = 0.0,
+                timestampMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                source = TrackPointSource.REMOTE_STREAM,
+            )
+        )
+
+        val filtered = TrackerMapLiveActiveFitPolicy.filterActiveTrails(
+            allQueueTrailsByTracker = trails,
+            remoteLastPoints = remotePoints,
+            acceptedRemoteTrackerIds = emptySet(),
+            trackers = emptyList(),
+            nowMs = nowMs,
+        )
+
+        assertEquals(emptyMap<String, List<QueuedLocation>>(), filtered)
+    }
+
+    @Test
+    fun filterActiveTrails_normalizesTrackerUpdatedAtSecondsFallback() {
+        val nowMs = System.currentTimeMillis()
+        val trails = mapOf("t1" to listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L)))
+        val trackers = listOf(
+            Tracker(
+                id = "t1",
+                name = "T1",
+                color = null,
+                updated_at = (nowMs - 30_000L) / 1000L,
+            )
+        )
+
+        val filtered = TrackerMapLiveActiveFitPolicy.filterActiveTrails(
+            allQueueTrailsByTracker = trails,
+            remoteLastPoints = emptyMap(),
+            trackers = trackers,
+            nowMs = nowMs,
+        )
+
+        assertTrue(filtered.containsKey("t1"))
+    }
+
+    @Test
+    fun filterActiveTrails_returnsEmptyWhenNoActiveFound() {
         val nowMs = System.currentTimeMillis()
         val staleTrail1 = listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))
         val staleTrail2 = listOf(makeQueuedLocation(nowMs - 25 * 60 * 1000L))
@@ -178,7 +289,22 @@ class TrackerMapLiveActiveFitPolicyTest {
             nowMs = nowMs,
         )
 
-        assertEquals(trails, filtered)
+        assertEquals(emptyMap<String, List<QueuedLocation>>(), filtered)
+    }
+
+    @Test
+    fun activeTrailBoundsResult_returnsNoActiveWhenNoActiveFound() {
+        val nowMs = System.currentTimeMillis()
+        val staleTrail = listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))
+
+        val result = TrackerMapLiveActiveFitPolicy.activeTrailBoundsResult(
+            allQueueTrailsByTracker = mapOf("t1" to staleTrail),
+            remoteLastPoints = emptyMap(),
+            trackers = emptyList(),
+            nowMs = nowMs,
+        )
+
+        assertEquals(LiveActiveTrailBoundsResult.NoActiveTrackers, result)
     }
 
     private fun makeQueuedLocation(timeMs: Long): QueuedLocation {

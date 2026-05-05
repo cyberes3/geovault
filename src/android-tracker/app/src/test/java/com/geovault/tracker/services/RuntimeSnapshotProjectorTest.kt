@@ -20,6 +20,13 @@ class RuntimeSnapshotProjectorTest {
             previous = previous,
             input = RuntimeSnapshotProjectionInput(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(
+                    sessionActive = true,
+                    startupActive = false,
+                    gpsCollecting = true,
+                    pausedForMotion = false,
+                    selectedTrackerId = "tracker",
+                ),
                 lifecycleState = TrackingLifecycleState.RUNNING,
                 failureReason = null,
                 selectedTrackerId = "tracker",
@@ -34,6 +41,9 @@ class RuntimeSnapshotProjectorTest {
             )
         )
         assertTrue(next.isRunning)
+        assertTrue(next.sessionActive)
+        assertTrue(next.gpsCollecting)
+        assertTrue(next.localRecordingActive)
         assertEquals(TrackingLifecycleState.RUNNING, next.lifecycleState)
         assertEquals(123L, next.sessionStartTimeMs)
         assertEquals(7, next.pointsSentThisSession)

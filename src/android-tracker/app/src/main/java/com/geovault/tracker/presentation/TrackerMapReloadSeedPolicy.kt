@@ -16,6 +16,7 @@ data class TrackerMapTrailSeedInput(
     val sessionVisibleBoundaryId: Long,
     val rosterTrackerIds: Collection<String>,
     val groupSelection: TrackerMapGroupModeSelection,
+    val renderMetadataSignature: String = "",
 )
 
 object TrackerMapReloadSeedPolicy {
@@ -28,7 +29,7 @@ object TrackerMapReloadSeedPolicy {
     fun trailSeed(input: TrackerMapTrailSeedInput): String {
         val rosterSignature = normalizedIdsSignature(input.rosterTrackerIds)
         val groupModeSignature = groupSelectionSignature(input.groupSelection)
-        return "${input.mode}|${input.runtimeRunning}|${input.activeTrackerId}|${input.sessionVisibleBoundaryId}|$rosterSignature|$groupModeSignature"
+        return "${input.mode}|${input.runtimeRunning}|${input.activeTrackerId}|${input.sessionVisibleBoundaryId}|$rosterSignature|$groupModeSignature|${input.renderMetadataSignature}"
     }
 
     private fun normalizedIdsSignature(ids: Collection<String>): String {

@@ -22,18 +22,37 @@ class TrackerMapStreamingCoordinatorTest {
     }
 
     @Test
-    fun resolve_singleSession_displayedEqualsSelected_returnsStop() {
+    fun resolve_singleSession_displayedEqualsSelectedAndRecording_returnsStop() {
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 streamTargetIds = emptySet(),
                 displayedTrackerId = "t1",
                 displayedTrackerName = "Name",
-                selectedTrackerId = "t1"
+                selectedTrackerId = "t1",
+                trackingRunning = true,
             )
         )
 
         assertEquals(TrackerMapStreamingCommand.Stop, command)
+    }
+
+    @Test
+    fun resolve_singleSession_displayedEqualsSelectedButNotRecording_returnsStart() {
+        val command = TrackerMapStreamingCoordinator.resolve(
+            TrackerMapStreamingDecisionInput(
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                streamTargetIds = emptySet(),
+                displayedTrackerId = "t1",
+                displayedTrackerName = "Name",
+                selectedTrackerId = "t1",
+                trackingRunning = false,
+            )
+        )
+
+        assertTrue(command is TrackerMapStreamingCommand.Start)
+        val start = command as TrackerMapStreamingCommand.Start
+        assertEquals(setOf("t1"), start.trackerIds)
     }
 
     @Test
@@ -90,11 +109,11 @@ class TrackerMapStreamingCoordinatorTest {
     }
 
     @Test
-    fun resolve_multiContext_trackingRunning_stripsSelectedFromTargets() {
+    fun resolve_multiContext_usesAlreadyProjectedTargets() {
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
-                streamTargetIds = setOf("self", "other"),
+                streamTargetIds = setOf("other"),
                 displayedTrackerId = "other",
                 displayedTrackerName = "O",
                 selectedTrackerId = "self",
@@ -108,11 +127,29 @@ class TrackerMapStreamingCoordinatorTest {
     }
 
     @Test
-    fun resolve_multiContext_trackingRunning_allSelected_returnsStop() {
+    fun resolve_multiContext_defensivelyExcludesLocalRecorder() {
+        val command = TrackerMapStreamingCoordinator.resolve(
+            TrackerMapStreamingDecisionInput(
+                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                streamTargetIds = setOf("self", "other"),
+                displayedTrackerId = "other",
+                displayedTrackerName = "Other",
+                selectedTrackerId = "self",
+                trackingRunning = true,
+            )
+        )
+
+        assertTrue(command is TrackerMapStreamingCommand.Start)
+        val start = command as TrackerMapStreamingCommand.Start
+        assertEquals(setOf("other"), start.trackerIds)
+    }
+
+    @Test
+    fun resolve_multiContext_projectedNoTargets_returnsStop() {
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
-                streamTargetIds = setOf("only"),
+                streamTargetIds = emptySet(),
                 displayedTrackerId = "only",
                 displayedTrackerName = "Only",
                 selectedTrackerId = "only",

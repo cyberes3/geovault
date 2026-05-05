@@ -2,6 +2,7 @@ package com.geovault.tracker.presentation
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -22,9 +23,19 @@ class LiveTrackStreamingReconcilerTest {
             streamTargetIds = emptySet(),
             runtime = TrackingRuntimeSnapshot(selectedTrackerId = "t1", isRunning = false),
         )
-        reconciler.reconcile(state, effectiveDisplayedId = "t1", effectiveDisplayedName = "One")
+        reconciler.reconcile(
+            state = state,
+            effectiveDisplayedId = "t1",
+            effectiveDisplayedName = "One",
+            streamRuntime = LiveStreamRuntimeSnapshot(),
+        )
         reconciler.invalidateDedupe()
-        reconciler.reconcile(state, effectiveDisplayedId = "t1", effectiveDisplayedName = "One")
+        reconciler.reconcile(
+            state = state,
+            effectiveDisplayedId = "t1",
+            effectiveDisplayedName = "One",
+            streamRuntime = LiveStreamRuntimeSnapshot(),
+        )
         reconciler.stopForegroundStreaming()
     }
 }

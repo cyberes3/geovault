@@ -17,7 +17,7 @@ internal class TrackerMapRuntimeResyncPolicy {
         previousIsRunning: Boolean?,
         currentIsRunning: Boolean,
         mapReady: Boolean,
-        mapViewContext: TrackerMapViewContext
+        mapViewContext: TrackerMapViewContext,
     ): TrackerMapRuntimeResyncDecision {
         val transition = when {
             previousIsRunning == null -> TrackerMapRuntimeTransition.NONE
@@ -29,7 +29,10 @@ internal class TrackerMapRuntimeResyncPolicy {
             TrackerMapRuntimeTransition.STARTED -> TrackerMapRuntimeResyncDecision(
                 transition = transition,
                 restartTrackPointStream = true,
-                restartDisplayedStreaming = mapReady && mapViewContext == TrackerMapViewContext.SINGLE_TRACKER
+                restartDisplayedStreaming = mapReady && (
+                    mapViewContext == TrackerMapViewContext.SINGLE_TRACKER ||
+                        mapViewContext == TrackerMapViewContext.GROUP
+                    ),
             )
             TrackerMapRuntimeTransition.STOPPED,
             TrackerMapRuntimeTransition.NONE -> TrackerMapRuntimeResyncDecision(

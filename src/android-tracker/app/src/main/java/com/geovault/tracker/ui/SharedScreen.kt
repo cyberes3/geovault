@@ -296,7 +296,16 @@ fun SharedScreen(
                         onViewTrackerParams = { tracker ->
                             onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
                         },
-                        onViewTrackerInList = null,
+                        onViewTrackerInList = { trackerId ->
+                            groupActionsDialog = null
+                            vm.clearSharedListQuery()
+                            vm.openFromNavigationSubTab(SharedSubTab.SHARED)
+                            pendingNavigationRequest = SharedHostNavigationRequest(
+                                subTab = SharedSubTab.SHARED,
+                                trackerId = trackerId,
+                                focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+                            )
+                        },
                         onEditGroup = { _ -> },
                         onViewGroupOnMap = { groupId ->
                             onOpenGroupOnMap(groupId)

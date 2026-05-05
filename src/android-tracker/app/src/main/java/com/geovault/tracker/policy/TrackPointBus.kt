@@ -1,6 +1,6 @@
 package com.geovault.tracker.policy
 
-import com.geovault.tracker.services.TrackingRuntimeStateStore
+import android.util.Log
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -21,13 +21,18 @@ data class TrackPointBusDiagnostics(
     val isLocalDeliveryPaused: Boolean,
     val pausedBufferSize: Int,
     val deferredEmitCount: Long,
-    val droppedPausedLocalEvents: Long
+    val droppedPausedLocalEvents: Long,
+    val droppedInvalidEvents: Long = 0L,
+    val droppedLocalEchoEvents: Long = 0L,
+    val droppedRemotePolicyEvents: Long = 0L,
 )
 
 object TrackPointBus {
+    private const val TAG = "TrackPointBus"
     private const val REPLAY_EVENTS = 6144
     private const val EXTRA_BUFFER_EVENTS = 16384
     private const val PAUSED_BUFFER_CAPACITY = 512
+    private const val WARNING_INTERVAL_MS = 30_000L
 
     private val emitScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val orderedEmitQueue = Channel<TrackPointEvent>(Channel.UNLIMITED)
@@ -35,6 +40,8 @@ object TrackPointBus {
     private val deferredEmitCount = AtomicLong(0L)
     private val pausedLocalEvents = ArrayDeque<TrackPointEvent>()
     private val droppedPausedLocalEvents = AtomicLong(0L)
+    private val lastEnqueueFailureWarningAtMs = AtomicLong(0L)
+    private val lastPausedDropWarningAtMs = AtomicLong(0L)
 
     private val eventsFlow = MutableSharedFlow<TrackPointEvent>(
         replay = REPLAY_EVENTS,
@@ -55,29 +62,24 @@ object TrackPointBus {
     val remoteStreamEvents: Flow<TrackPointEvent> = events.filter { it.source == TrackPointSource.REMOTE_STREAM }
 
     fun publish(event: TrackPointEvent) {
-        val sanitizedEvent = sanitize(event) ?: return
-        val policyValidatedEvent = if (sanitizedEvent.source == TrackPointSource.REMOTE_STREAM) {
-            if (isLocallyRecordedTrack(sanitizedEvent.trackId)) return
-            RemoteStreamIngressPolicy.process(
-                event = sanitizedEvent,
-                nowMs = System.currentTimeMillis()
-            )
-        } else {
-            sanitizedEvent
-        } ?: return
-        if (policyValidatedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
+        val orderedEvent = event.withOrderingKey()
+        if (orderedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
             synchronized(pausedLocalEvents) {
                 if (pausedLocalEvents.size >= PAUSED_BUFFER_CAPACITY) {
                     pausedLocalEvents.removeFirst()
-                    droppedPausedLocalEvents.incrementAndGet()
+                    val dropped = droppedPausedLocalEvents.incrementAndGet()
+                    warnRateLimited(
+                        lastPausedDropWarningAtMs,
+                        "Dropped paused LOCAL_GPS event while delivery is paused; dropped=$dropped buffer=$PAUSED_BUFFER_CAPACITY"
+                    )
                 }
-                pausedLocalEvents.addLast(policyValidatedEvent)
+                pausedLocalEvents.addLast(orderedEvent)
             }
             return
         }
-        val sendResult = orderedEmitQueue.trySend(policyValidatedEvent)
+        val sendResult = orderedEmitQueue.trySend(orderedEvent)
         if (!sendResult.isSuccess) {
-            deferredEmitCount.incrementAndGet()
+            recordEnqueueFailure(orderedEvent)
         }
     }
 
@@ -95,7 +97,7 @@ object TrackPointBus {
         buffered.forEach {
             val sendResult = orderedEmitQueue.trySend(it)
             if (!sendResult.isSuccess) {
-                deferredEmitCount.incrementAndGet()
+                recordEnqueueFailure(it)
             }
         }
     }
@@ -104,11 +106,15 @@ object TrackPointBus {
 
     fun diagnostics(): TrackPointBusDiagnostics {
         val pausedSize = synchronized(pausedLocalEvents) { pausedLocalEvents.size }
+        val ingressDiagnostics = RemoteTrackPointIngress.diagnostics()
         return TrackPointBusDiagnostics(
             isLocalDeliveryPaused = localDeliveryPaused.get(),
             pausedBufferSize = pausedSize,
             deferredEmitCount = deferredEmitCount.get(),
-            droppedPausedLocalEvents = droppedPausedLocalEvents.get()
+            droppedPausedLocalEvents = droppedPausedLocalEvents.get(),
+            droppedInvalidEvents = ingressDiagnostics.droppedInvalidEvents,
+            droppedLocalEchoEvents = ingressDiagnostics.droppedLocalEchoEvents,
+            droppedRemotePolicyEvents = ingressDiagnostics.droppedRemotePolicyEvents,
         )
     }
 
@@ -117,6 +123,7 @@ object TrackPointBus {
         localDeliveryPaused.set(false)
         deferredEmitCount.set(0L)
         droppedPausedLocalEvents.set(0L)
+        RemoteTrackPointIngress.resetForTests()
         synchronized(pausedLocalEvents) {
             pausedLocalEvents.clear()
         }
@@ -126,18 +133,25 @@ object TrackPointBus {
         }
     }
 
-    private fun sanitize(event: TrackPointEvent): TrackPointEvent? {
-        if (!event.lat.isFinite() || !event.lon.isFinite()) return null
-        if (event.lat !in -90.0..90.0 || event.lon !in -180.0..180.0) return null
-        if (event.timestampMs <= 0L) return null
-        if (event.orderingKey > 0L) return event
-        return event.copy(orderingKey = event.timestampMs)
+    private fun TrackPointEvent.withOrderingKey(): TrackPointEvent {
+        if (orderingKey > 0L) return this
+        return copy(orderingKey = timestampMs)
     }
 
-    private fun isLocallyRecordedTrack(trackId: String): Boolean {
-        val normalizedTrackId = trackId.trim()
-        if (normalizedTrackId.isEmpty()) return false
-        val runtime = TrackingRuntimeStateStore.state.value
-        return runtime.isRunning && runtime.selectedTrackerId.trim() == normalizedTrackId
+    private fun recordEnqueueFailure(event: TrackPointEvent) {
+        val deferred = deferredEmitCount.incrementAndGet()
+        warnRateLimited(
+            lastEnqueueFailureWarningAtMs,
+            "Failed to enqueue ${event.source} event track=${event.trackId.trim()} deferred=$deferred"
+        )
+    }
+
+    private fun warnRateLimited(lastWarningAtMs: AtomicLong, message: String) {
+        val nowMs = System.currentTimeMillis()
+        val previous = lastWarningAtMs.get()
+        if (nowMs - previous < WARNING_INTERVAL_MS) return
+        if (lastWarningAtMs.compareAndSet(previous, nowMs)) {
+            runCatching { Log.w(TAG, message) }
+        }
     }
 }

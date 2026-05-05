@@ -8,6 +8,7 @@ data class TrackerMapPointReductionInput(
     val state: TrackerMapUiState,
     val point: TrackPointEvent,
     val trailPointLimit: Int,
+    val sessionPlan: TrackerMapStreamingPlan,
 )
 
 data class TrackerMapPointReductionResult(
@@ -20,18 +21,8 @@ object TrackerMapPointEventReducer {
     fun reduce(input: TrackerMapPointReductionInput): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
-        val displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
-        val accepted = TrackerMapPointAcceptancePolicy.shouldAccept(
-            event = point,
-            input = TrackerMapPointAcceptanceInput(
-                trackingRunning = state.runtime.isRunning,
-                mode = state.mode,
-                displayedTrackerId = displayedTrackerId,
-                selectedTrackerId = state.runtime.selectedTrackerId,
-                activeStreamedTrackerIds = state.activeStreamedTrackerIds
-            )
-        )
-        if (!accepted) {
+        val route = TrackerMapPointRouter.route(point, input.sessionPlan)
+        if (!route.accepted) {
             return TrackerMapPointReductionResult(
                 acceptedBySourcePolicy = false,
                 shouldUpdateUiState = false,
@@ -40,38 +31,33 @@ object TrackerMapPointEventReducer {
         }
 
         return when (point.source) {
-            TrackPointSource.REMOTE_STREAM -> reduceRemote(input, displayedTrackerId)
-            TrackPointSource.LOCAL_GPS -> reduceLocal(input, displayedTrackerId)
+            TrackPointSource.REMOTE_STREAM -> reduceRemote(input, route)
+            TrackPointSource.LOCAL_GPS -> reduceLocal(input, route)
         }
     }
 
     private fun reduceRemote(
         input: TrackerMapPointReductionInput,
-        displayedTrackerId: String
+        route: TrackerMapPointRoute,
     ): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
+        val remoteTrackerId = route.normalizedTrackerId
 
-        val nextRemoteLastPoints = state.remoteLastPoints.toMutableMap().apply {
-            this[point.trackId] = point
+        val nextRemoteLastPoints = if (route.updateRemoteLastPoint) state.remoteLastPoints.toMutableMap().apply {
+            this[remoteTrackerId] = point.copy(trackId = remoteTrackerId)
+        } else {
+            state.remoteLastPoints
         }
-        val nextTrail = if (
-            state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-            !state.runtime.isRunning &&
-            displayedTrackerId.isNotBlank() &&
-            displayedTrackerId == point.trackId
-        ) {
-            appendRemotePoint(state.trail, point, input.trailPointLimit)
+        val nextTrail = if (route.appendSingleTrail) {
+            appendRemotePoint(state.trail, point.copy(trackId = remoteTrackerId), input.trailPointLimit)
         } else {
             state.trail
         }
-        val nextAllQueueTrails = if (
-            state.mode == TrackerMapDisplayMode.ALL_QUEUE ||
-            state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
-        ) {
+        val nextAllQueueTrails = if (route.appendMultiTrail) {
             val updated = state.allQueueTrailsByTracker.toMutableMap()
-            val base = updated[point.trackId].orEmpty()
-            updated[point.trackId] = appendRemotePoint(base, point, input.trailPointLimit)
+            val base = updated[remoteTrackerId].orEmpty()
+            updated[remoteTrackerId] = appendRemotePoint(base, point.copy(trackId = remoteTrackerId), input.trailPointLimit)
             updated
         } else {
             state.allQueueTrailsByTracker
@@ -90,11 +76,11 @@ object TrackerMapPointEventReducer {
 
     private fun reduceLocal(
         input: TrackerMapPointReductionInput,
-        displayedTrackerId: String,
+        route: TrackerMapPointRoute,
     ): TrackerMapPointReductionResult {
         val state = input.state
         val point = input.point
-        val overlayTrackerId = point.trackId.trim()
+        val overlayTrackerId = route.normalizedTrackerId
         if (overlayTrackerId.isBlank()) {
             return TrackerMapPointReductionResult(
                 acceptedBySourcePolicy = true,
@@ -113,18 +99,15 @@ object TrackerMapPointEventReducer {
             bearing = null,
             accuracy = point.accuracyMeters,
             sat = null,
-            prov = "local_gps",
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
             dist = null
         )
-        val nextTrail = if (shouldUpdateSingleTrail(state, displayedTrackerId, overlayTrackerId)) {
+        val nextTrail = if (route.appendSingleTrail) {
             appendQueuedPoint(state.trail, localOverlayPoint, input.trailPointLimit)
         } else {
             state.trail
         }
-        val nextAllQueueTrails = if (
-            state.mode == TrackerMapDisplayMode.ALL_QUEUE ||
-            state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
-        ) {
+        val nextAllQueueTrails = if (route.appendMultiTrail) {
             val updated = state.allQueueTrailsByTracker.toMutableMap()
             val base = updated[overlayTrackerId].orEmpty()
             updated[overlayTrackerId] = appendQueuedPoint(base, localOverlayPoint, input.trailPointLimit)
@@ -148,18 +131,6 @@ object TrackerMapPointEventReducer {
                 allQueueTrailsByTracker = nextAllQueueTrails,
             ),
         )
-    }
-
-    private fun shouldUpdateSingleTrail(
-        state: TrackerMapUiState,
-        displayedTrackerId: String,
-        localTrackerId: String,
-    ): Boolean {
-        if (state.mode != TrackerMapDisplayMode.SINGLE_SESSION) return false
-        val selectedTrackerId = state.runtime.selectedTrackerId.trim()
-        return displayedTrackerId.isBlank() ||
-            selectedTrackerId.isBlank() ||
-            displayedTrackerId == localTrackerId
     }
 
     private fun appendQueuedPoint(
@@ -203,7 +174,7 @@ object TrackerMapPointEventReducer {
             bearing = null,
             accuracy = point.accuracyMeters,
             sat = null,
-            prov = "remote_stream",
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
             dist = null
         )
         return (currentTrail + queued).takeLast(trailPointLimit)

@@ -1,23 +1,27 @@
 package com.geovault.tracker.runtime
 
-import com.geovault.tracker.TrackingService
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 
 internal interface RuntimeServiceStateProvider {
-    fun isRuntimeStoreRunning(): Boolean
-    fun isStartupInProgress(): Boolean
+    fun isServiceStartingOrUsable(): Boolean
+    fun isSessionActive(): Boolean
+    fun isStartupActive(): Boolean
 }
 
 internal class RuntimeServiceStateProbe(
     private val provider: RuntimeServiceStateProvider = DefaultRuntimeServiceStateProvider
 ) {
     fun isServiceRunningOrStarting(): Boolean {
-        return provider.isRuntimeStoreRunning() || provider.isStartupInProgress()
+        return provider.isServiceStartingOrUsable() ||
+            provider.isSessionActive() ||
+            provider.isStartupActive()
     }
 }
 
 private object DefaultRuntimeServiceStateProvider : RuntimeServiceStateProvider {
-    override fun isRuntimeStoreRunning(): Boolean = TrackingRuntimeStateStore.state.value.isRunning
+    override fun isServiceStartingOrUsable(): Boolean = TrackingServiceLifecycleGate.isServiceStartingOrUsable()
 
-    override fun isStartupInProgress(): Boolean = TrackingService.isStartupInProgress
+    override fun isSessionActive(): Boolean = TrackingRuntimeStateStore.state.value.sessionActive
+
+    override fun isStartupActive(): Boolean = TrackingRuntimeStateStore.state.value.startupActive
 }

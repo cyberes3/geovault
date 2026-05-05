@@ -12,6 +12,7 @@ class TrackerMapTrailReloadCoordinatorTest {
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = false,
+                selectedTrackerId = "t1",
                 activeTrackerId = "t1",
                 rosterTrackerIds = setOf("t1", "t2"),
                 groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
@@ -24,11 +25,47 @@ class TrackerMapTrailReloadCoordinatorTest {
     }
 
     @Test
+    fun resolvePlan_singleSessionRunningForDifferentDisplayedTracker_loadsDisplayedFromServer() {
+        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+            TrackerMapTrailReloadInput(
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                runtimeRunning = true,
+                selectedTrackerId = "local",
+                activeTrackerId = "remote",
+                rosterTrackerIds = setOf("local", "remote"),
+                groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
+            )
+        )
+
+        assertEquals(TrackerMapTrailSource.SINGLE_SERVER, plan.source)
+        assertEquals("remote", plan.singleTrackerId)
+        assertEquals("remote", plan.activeTrackerId)
+    }
+
+    @Test
+    fun resolvePlan_singleSessionRunningForSelectedTracker_usesLocalQueue() {
+        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+            TrackerMapTrailReloadInput(
+                mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                runtimeRunning = true,
+                selectedTrackerId = "local",
+                activeTrackerId = "local",
+                rosterTrackerIds = setOf("local", "remote"),
+                groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
+            )
+        )
+
+        assertEquals(TrackerMapTrailSource.SINGLE_QUEUE, plan.source)
+        assertEquals("local", plan.activeTrackerId)
+    }
+
+    @Test
     fun resolvePlan_allQueueRunning_usesRosterWithOverlayOnActive() {
         val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
                 runtimeRunning = true,
+                selectedTrackerId = "active",
                 activeTrackerId = "active",
                 rosterTrackerIds = setOf("active", "t2", " "),
                 groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
@@ -47,6 +84,7 @@ class TrackerMapTrailReloadCoordinatorTest {
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = false,
+                selectedTrackerId = "t1",
                 activeTrackerId = "t1",
                 rosterTrackerIds = setOf("x"),
                 groupSelection = TrackerMapGroupModeSelection(
@@ -68,6 +106,7 @@ class TrackerMapTrailReloadCoordinatorTest {
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = true,
+                selectedTrackerId = "t9",
                 activeTrackerId = "t9",
                 rosterTrackerIds = setOf("x"),
                 groupSelection = TrackerMapGroupModeSelection(

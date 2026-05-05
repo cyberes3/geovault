@@ -451,6 +451,15 @@ fun MainScreen(
                                     openGroupOnMap(groupId, MapReturnSource.TRACKERS)
                                 },
                                 onRequestTrackerParams = { args -> trackerParamsArgs = args },
+                                onOpenSharedListToTracker = { trackerId ->
+                                    selectedTab = TrackerTab.SHARED.name
+                                    sharedViewModel.showSharedList()
+                                    pendingSharedRequest = SharedHostNavigationRequest(
+                                        subTab = SharedSubTab.SHARED,
+                                        trackerId = trackerId,
+                                        focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+                                    )
+                                },
                             )
                         }
                         }

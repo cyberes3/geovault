@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -12,6 +13,7 @@ class HomeUiStateMergeTest {
     fun merge_mapsRuntimeAndPermissions() {
         val runtime = TrackingRuntimeSnapshot(
             isRunning = true,
+            recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "t1"),
             lifecycleState = TrackingLifecycleState.RUNNING,
             selectedTrackerId = "t1",
             selectedTrackerName = "Field truck",

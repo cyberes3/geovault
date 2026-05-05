@@ -368,7 +368,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun isTrackingServiceActiveOrStarting(): Boolean {
-        return TrackingRuntimeStateStore.state.value.isRunning || TrackingService.isStartupInProgress
+        val runtime = TrackingRuntimeStateStore.state.value
+        return runtime.sessionActive || runtime.startupActive
     }
 
     private fun launchVersionCheckIfNeeded() {

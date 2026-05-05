@@ -19,14 +19,24 @@ data class LiveActiveFitVisibility(
     val buttonEnabled: Boolean,
 )
 
+sealed class LiveActiveTrailBoundsResult {
+    data class Active(val bounds: LatLngBounds) : LiveActiveTrailBoundsResult()
+    data object NoActiveTrackers : LiveActiveTrailBoundsResult()
+}
+
 object TrackerMapLiveActiveFitPolicy {
 
     const val LIVE_ACTIVE_TRACKER_WINDOW_MS = 15 * 60 * 1000L
 
+    fun resolveLockArmed(
+        singleTrackerMapView: Boolean,
+        singleTrackerLocked: Boolean,
+        multiFollowLockArmed: Boolean,
+    ): Boolean {
+        return if (singleTrackerMapView) singleTrackerLocked else multiFollowLockArmed
+    }
+
     fun resolveVisibility(input: LiveActiveFitInput): LiveActiveFitVisibility {
-        if (input.runtimeRunning) {
-            return LiveActiveFitVisibility(showButton = false, buttonEnabled = false)
-        }
         val isMultiMode = input.mode == TrackerMapDisplayMode.ALL_QUEUE ||
             input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
         val singleTrackerVisible = !isMultiMode &&
@@ -46,32 +56,64 @@ object TrackerMapLiveActiveFitPolicy {
     fun filterActiveTrails(
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
         remoteLastPoints: Map<String, TrackPointEvent>,
+        acceptedRemoteTrackerIds: Set<String> = remoteLastPoints.keys,
         trackers: List<Tracker>,
         nowMs: Long,
     ): Map<String, List<QueuedLocation>> {
+        val acceptedRemoteIds = acceptedRemoteTrackerIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        val filteredRemoteLastPoints = remoteLastPoints.filterKeys { it.trim() in acceptedRemoteIds }
         val activeIds = resolveActiveTrackerIds(
             allQueueTrailsByTracker = allQueueTrailsByTracker,
-            remoteLastPoints = remoteLastPoints,
+            remoteLastPoints = filteredRemoteLastPoints,
             trackers = trackers,
             nowMs = nowMs,
         )
-        if (activeIds.isEmpty()) return allQueueTrailsByTracker
+        if (activeIds.isEmpty()) return emptyMap()
         return allQueueTrailsByTracker.filterKeys { it in activeIds }
     }
 
     fun activeTrailBounds(
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
         remoteLastPoints: Map<String, TrackPointEvent>,
+        acceptedRemoteTrackerIds: Set<String> = remoteLastPoints.keys,
         trackers: List<Tracker>,
         nowMs: Long,
     ): LatLngBounds? {
-        val filtered = filterActiveTrails(
+        return when (val result = activeTrailBoundsResult(
             allQueueTrailsByTracker = allQueueTrailsByTracker,
             remoteLastPoints = remoteLastPoints,
+            acceptedRemoteTrackerIds = acceptedRemoteTrackerIds,
+            trackers = trackers,
+            nowMs = nowMs,
+        )) {
+            is LiveActiveTrailBoundsResult.Active -> result.bounds
+            LiveActiveTrailBoundsResult.NoActiveTrackers -> null
+        }
+    }
+
+    fun activeTrailBoundsResult(
+        allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
+        remoteLastPoints: Map<String, TrackPointEvent>,
+        acceptedRemoteTrackerIds: Set<String> = remoteLastPoints.keys,
+        trackers: List<Tracker>,
+        nowMs: Long,
+    ): LiveActiveTrailBoundsResult {
+        val acceptedRemoteIds = acceptedRemoteTrackerIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        val filteredRemoteLastPoints = remoteLastPoints.filterKeys { it.trim() in acceptedRemoteIds }
+        val activeIds = resolveActiveTrackerIds(
+            allQueueTrailsByTracker = allQueueTrailsByTracker,
+            remoteLastPoints = filteredRemoteLastPoints,
             trackers = trackers,
             nowMs = nowMs,
         )
-        return TrackerMapStateTransforms.multiTrailBounds(filtered)
+        if (activeIds.isEmpty()) return LiveActiveTrailBoundsResult.NoActiveTrackers
+        val activeTrails = allQueueTrailsByTracker.filterKeys { it in activeIds }
+        val activeRemoteHeads = filteredRemoteLastPoints.filterKeys { it in activeIds }
+        val trailBounds = TrackerMapStateTransforms.multiTrailBounds(activeTrails)
+        val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(activeRemoteHeads)
+        val bounds = TrackerMapStateTransforms.mergeBounds(trailBounds, remoteBounds)
+            ?: return LiveActiveTrailBoundsResult.NoActiveTrackers
+        return LiveActiveTrailBoundsResult.Active(bounds)
     }
 
     private fun resolveActiveTrackerIds(
@@ -98,13 +140,12 @@ object TrackerMapLiveActiveFitPolicy {
         remoteLastPoints: Map<String, TrackPointEvent>,
         trackers: List<Tracker>,
     ): Long? {
-        val remoteMs = remoteLastPoints[trackerId]?.timestampMs
-        if (remoteMs != null && remoteMs > 0L) return remoteMs
-
-        val trailMs = allQueueTrailsByTracker[trackerId]?.lastOrNull()?.time
-        if (trailMs != null && trailMs > 0L) return trailMs
-
+        val remoteMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(remoteLastPoints[trackerId]?.timestampMs)
+        val trailMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(allQueueTrailsByTracker[trackerId]?.lastOrNull()?.time)
         val tracker = trackers.firstOrNull { it.id == trackerId }
-        return tracker?.updated_at
+        val trackerMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(tracker?.updated_at)
+        return listOfNotNull(remoteMs, trailMs, trackerMs)
+            .filter { it > 0L }
+            .maxOrNull()
     }
 }

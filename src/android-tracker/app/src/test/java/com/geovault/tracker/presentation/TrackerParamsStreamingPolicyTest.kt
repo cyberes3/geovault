@@ -61,9 +61,8 @@ class TrackerParamsStreamingPolicyTest {
             )
         )
 
-        val command = resolution.command as TrackerParamsStreamingCommand.Start
-        assertEquals(setOf("remote"), command.trackerIds)
-        assertEquals(TrackerParamsStreamingOwnership.StartedFromIdle, resolution.session?.ownership)
+        assertEquals(TrackerParamsStreamingCommand.NoOp, resolution.command)
+        assertEquals(TrackerParamsStreamingOwnership.AlreadyActive, resolution.session?.ownership)
         val stopCommand = TrackerParamsStreamingPolicy.resolveStop(
             TrackerParamsStreamingStopInput(
                 session = requireNotNull(resolution.session),
@@ -71,7 +70,7 @@ class TrackerParamsStreamingPolicyTest {
                 activeTrackerIds = setOf("remote"),
             )
         )
-        assertEquals(TrackerParamsStreamingCommand.Stop, stopCommand)
+        assertEquals(TrackerParamsStreamingCommand.NoOp, stopCommand)
     }
 
     @Test
@@ -86,7 +85,8 @@ class TrackerParamsStreamingPolicyTest {
 
         val command = resolution.command as TrackerParamsStreamingCommand.Start
         assertEquals(setOf("params"), command.trackerIds)
-        assertEquals(TrackerParamsStreamingOwnership.StartedFromIdle, resolution.session?.ownership)
+        assertEquals(setOf("map"), resolution.session?.baselineTrackerIds)
+        assertEquals(TrackerParamsStreamingOwnership.ExpandedExistingStream, resolution.session?.ownership)
     }
 
     @Test

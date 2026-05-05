@@ -1,7 +1,6 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.location.TrackingLifecycleState
-import com.geovault.tracker.TrackingService
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingUiStatus
 
@@ -46,9 +45,8 @@ internal fun mergeHomeUiState(
     val displayName = runtime.selectedTrackerName.trim().ifBlank {
         runtime.selectedTrackerId.trim()
     }
-    val startupInProgress = TrackingService.isStartupInProgress
-    val effectiveRunning = runtime.isRunning || startupInProgress
-    val effectiveLifecycleState = if (!runtime.isRunning && startupInProgress) {
+    val effectiveRunning = runtime.sessionActive || runtime.startupActive
+    val effectiveLifecycleState = if (!runtime.sessionActive && runtime.startupActive) {
         TrackingLifecycleState.STARTING
     } else {
         runtime.lifecycleState

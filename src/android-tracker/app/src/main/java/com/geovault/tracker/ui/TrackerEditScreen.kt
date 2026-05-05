@@ -243,7 +243,7 @@ fun TrackerEditorScreen(
                     TrackerCreateFormContent(
                         dialog = mode.dialog,
                         isSaving = isSaving,
-                        defaultSelectedTrackerEnabled = !runtime.isRunning,
+                        defaultSelectedTrackerEnabled = !runtime.localRecordingActive,
                         onDraftChanged = c.onDraftChanged,
                         onSetAsSelectedChanged = c.onSetAsSelected,
                     )

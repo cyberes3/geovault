@@ -20,6 +20,7 @@ import com.geovault.tracker.params.TrackerParamsContentReducer
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackerParamsPointAcceptancePolicy
+import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
@@ -72,7 +73,14 @@ class TrackerParamsViewModel(
                     it.copy(motionModeText = motionModeLabel(runtime, args.trackerId))
                 }
                 if (screenStarted) {
-                    startParamsStreaming(runtime)
+                    refreshParamsStreamingLease(runtime)
+                }
+            }
+        }
+        viewModelScope.launch {
+            LiveStreamRuntimeStateStore.state.collect {
+                if (screenStarted) {
+                    refreshParamsStreamingLease(TrackingRuntimeStateStore.state.value)
                 }
             }
         }
@@ -81,12 +89,12 @@ class TrackerParamsViewModel(
 
     fun onScreenStarted() {
         screenStarted = true
-        startParamsStreaming(TrackingRuntimeStateStore.state.value)
+        refreshParamsStreamingLease(TrackingRuntimeStateStore.state.value)
         if (pointStreamJob?.isActive == true) return
         pointStreamJob = viewModelScope.launch {
             TrackPointBus.events.collect { event ->
                 val latestSelectedId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
-                val trackingRunning = TrackingRuntimeStateStore.state.value.isRunning
+                val trackingRunning = TrackingRuntimeStateStore.state.value.localRecordingActive
                 if (
                     TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(
                         event = event,
@@ -114,14 +122,15 @@ class TrackerParamsViewModel(
         _uiState.update { it.copy(isRefreshing = false) }
     }
 
-    private fun startParamsStreaming(runtime: TrackingRuntimeSnapshot) {
+    private fun refreshParamsStreamingLease(runtime: TrackingRuntimeSnapshot) {
         val app = getApplication<Application>()
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(app)
         streamingController.onScreenStarted(
             trackerId = args.trackerId,
             trackerName = streamTrackerName,
             selectedTrackerId = selectedId,
-            trackingRunning = runtime.isRunning,
+            trackingRunning = runtime.localRecordingActive,
+            streamSnapshot = LiveStreamRuntimeStateStore.state.value,
         )
     }
 
@@ -304,7 +313,7 @@ class TrackerParamsViewModel(
     }
 
     private fun motionModeLabel(runtime: TrackingRuntimeSnapshot, trackerId: String): String? {
-        val isLocalTracking = runtime.isRunning &&
+        val isLocalTracking = runtime.localRecordingActive &&
             runtime.selectedTrackerId.isNotEmpty() &&
             trackerId == runtime.selectedTrackerId
         if (!isLocalTracking || !runtime.autoTrackingEnabled) return null
@@ -373,7 +382,7 @@ private fun isLocalTrackingMode(
     selectedTrackerId: String,
     trackerId: String,
 ): Boolean {
-    return runtime.isRunning &&
+    return runtime.localRecordingActive &&
         selectedTrackerId.isNotEmpty() &&
         trackerId == selectedTrackerId
 }

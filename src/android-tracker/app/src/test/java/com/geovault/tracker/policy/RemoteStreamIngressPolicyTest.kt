@@ -78,6 +78,57 @@ class RemoteStreamIngressPolicyTest {
         assertNotNull(accepted)
     }
 
+    @Test
+    fun updateSubscribedTracks_evictsRemovedTrackStateWithoutResettingRetainedTracks() {
+        val now = 1_700_000_000_000L
+        RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("A", "B"))
+        assertNotNull(
+            RemoteStreamIngressPolicy.process(
+                event = remoteEvent(trackId = "A", timestampMs = now - 1_000L, lon = 10.0, lat = 20.0),
+                nowMs = now
+            )
+        )
+        assertNotNull(
+            RemoteStreamIngressPolicy.process(
+                event = remoteEvent(trackId = "B", timestampMs = now - 1_000L, lon = 30.0, lat = 40.0),
+                nowMs = now
+            )
+        )
+
+        RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("B", "C"))
+        val acceptedAfterEviction = RemoteStreamIngressPolicy.process(
+            event = remoteEvent(trackId = "A", timestampMs = now - 2_000L, lon = 10.1, lat = 20.1),
+            nowMs = now
+        )
+        val retainedOutOfOrder = RemoteStreamIngressPolicy.process(
+            event = remoteEvent(trackId = "B", timestampMs = now - 2_000L, lon = 30.1, lat = 40.1),
+            nowMs = now
+        )
+
+        assertNotNull(acceptedAfterEviction)
+        assertNull(retainedOutOfOrder)
+    }
+
+    @Test
+    fun startSubscriptionSession_resetsCurrentSubscribedTrackState() {
+        val now = 1_700_000_000_000L
+        RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("B"))
+        assertNotNull(
+            RemoteStreamIngressPolicy.process(
+                event = remoteEvent(trackId = "B", timestampMs = now - 1_000L, lon = 30.0, lat = 40.0),
+                nowMs = now
+            )
+        )
+
+        RemoteStreamIngressPolicy.startSubscriptionSession(listOf("B"))
+        val acceptedAfterSocketReset = RemoteStreamIngressPolicy.process(
+            event = remoteEvent(trackId = "B", timestampMs = now - 2_000L, lon = 30.1, lat = 40.1),
+            nowMs = now
+        )
+
+        assertNotNull(acceptedAfterSocketReset)
+    }
+
     private fun remoteEvent(trackId: String, timestampMs: Long, lon: Double, lat: Double): TrackPointEvent {
         return TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,

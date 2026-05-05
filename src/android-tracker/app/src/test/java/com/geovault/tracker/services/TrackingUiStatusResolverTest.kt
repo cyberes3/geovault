@@ -48,9 +48,9 @@ class TrackingUiStatusResolverTest {
     }
 
     @Test
-    fun resolve_gpsPaused_returnsTrackingActive() {
+    fun resolve_gpsPaused_returnsPausedForMotion() {
         assertEquals(
-            TrackingUiStatus.TRACKING_ACTIVE,
+            TrackingUiStatus.PAUSED_FOR_MOTION,
             TrackingUiStatusResolver.resolve(
                 isRunning = true,
                 gpsProviderEnabled = true,

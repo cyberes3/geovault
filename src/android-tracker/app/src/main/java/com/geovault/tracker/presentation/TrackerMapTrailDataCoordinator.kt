@@ -9,7 +9,7 @@ object TrackerMapTrailDataCoordinator {
         trackerId: String,
         existingTrailMinTimeMs: Long?,
         loadTrackerGeometry: suspend (String) -> RepositoryResult<Tracker>,
-        loadQueueTrailWithOverlay: suspend () -> List<QueuedLocation>,
+        loadQueueTrail: suspend () -> List<QueuedLocation>,
         mapCoordinatesToTrail: (String, List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
     ): List<QueuedLocation> {
         val geometryResult = loadTrackerGeometry(trackerId)
@@ -22,7 +22,7 @@ object TrackerMapTrailDataCoordinator {
             is RepositoryResult.Failure -> null
         }
         return if (geometryCoords.isEmpty()) {
-            loadQueueTrailWithOverlay()
+            loadQueueTrail()
         } else {
             mapCoordinatesToTrail(trackerId, geometryCoords, pointParams, existingTrailMinTimeMs)
         }

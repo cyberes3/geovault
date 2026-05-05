@@ -185,7 +185,7 @@ class LaunchNetworkCallDedupeSimulationTest {
                     RepositoryResult.Success(Tracker(id = id, name = "Tracker", color = null))
                 }
             },
-            loadQueueTrailWithOverlay = { emptyList<QueuedLocation>() },
+            loadQueueTrail = { emptyList<QueuedLocation>() },
             mapCoordinatesToTrail = { _, _, _, _ -> emptyList() },
         )
     }

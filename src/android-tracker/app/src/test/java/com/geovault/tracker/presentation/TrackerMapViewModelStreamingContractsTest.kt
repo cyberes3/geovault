@@ -1,5 +1,9 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.services.RecordingRuntime
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.TrackPointSource
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -30,15 +34,16 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun resolveStreamTargetIds_groupPlaceholder_returnsEmpty() {
+    fun resolveStreamTargetIds_groupPlaceholder_usesGroupTrackerIds() {
         val ids = TrackerMapViewModel.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtimeRunning = false,
             selectedTrackerId = "tracker-1",
             displayedTrackerId = "tracker-2",
-            rosterTrackerIds = setOf("tracker-2", "tracker-3")
+            rosterTrackerIds = setOf("tracker-2", "tracker-3"),
+            groupTrackerIds = setOf("group-1", "group-2"),
         )
-        assertEquals(emptySet<String>(), ids)
+        assertEquals(setOf("group-1", "group-2"), ids)
     }
 
     @Test
@@ -63,6 +68,63 @@ class TrackerMapViewModelStreamingContractsTest {
             rosterTrackerIds = setOf("tracker-1", "tracker-2", " ")
         )
         assertEquals(setOf("tracker-1", "tracker-2"), ids)
+    }
+
+    @Test
+    fun filterRemoteLastPointsForAcceptedIds_dropsStaleRemoteHeads() {
+        val filtered = TrackerMapViewModel.filterRemoteLastPointsForAcceptedIds(
+            remoteLastPoints = mapOf(
+                "accepted" to remotePoint("accepted"),
+                "stale" to remotePoint("stale"),
+            ),
+            acceptedRemoteTrackerIds = setOf("accepted"),
+        )
+
+        assertEquals(setOf("accepted"), filtered.keys)
+    }
+
+    @Test
+    fun allQueueTrailsWithLocalRuntimeOverlay_groupWhileTracking_addsSelectedLocalPoint() {
+        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1234L,
+                lastAccuracyMeters = 4f,
+            ),
+            groupTrackerIds = setOf("tracker-1", "tracker-2"),
+            allQueueTrailsByTracker = emptyMap(),
+            nowMs = 2000L,
+        )
+
+        val selectedTrail = trails["tracker-1"].orEmpty()
+        assertEquals(1, selectedTrail.size)
+        assertEquals("local_gps_runtime", selectedTrail.first().prov)
+        assertEquals(20.0, selectedTrail.first().latitude, 0.0)
+        assertEquals(10.0, selectedTrail.first().longitude, 0.0)
+    }
+
+    @Test
+    fun allQueueTrailsWithLocalRuntimeOverlay_groupWithoutSelected_doesNotAddPoint() {
+        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+            ),
+            groupTrackerIds = setOf("tracker-2"),
+            allQueueTrailsByTracker = emptyMap(),
+            nowMs = 2000L,
+        )
+
+        assertEquals(emptyMap<String, List<com.geovault.tracker.db.QueuedLocation>>(), trails)
     }
 
     @Test
@@ -129,7 +191,7 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun shouldReloadForRecentDataWindowChange_selectedButStreaming_returnsFalse() {
+    fun shouldReloadForRecentDataWindowChange_selectedWhileRunningButNotStreaming_returnsTrue() {
         val shouldReload = TrackerMapViewModel.shouldReloadForRecentDataWindowChange(
             oldWindow = "1h",
             newWindow = "session",
@@ -137,10 +199,10 @@ class TrackerMapViewModelStreamingContractsTest {
             selectedTrackerId = "tracker-1",
             displayedTrackerId = "tracker-1",
             runtimeRunning = true,
-            activeStreamedTrackerIds = setOf("tracker-1"),
+            activeStreamedTrackerIds = emptySet(),
             changedTrackerId = "tracker-1"
         )
-        assertEquals(false, shouldReload)
+        assertEquals(true, shouldReload)
     }
 
     @Test
@@ -241,5 +303,15 @@ class TrackerMapViewModelStreamingContractsTest {
             )
         )
         assertEquals(setOf("tracker-1"), allowed)
+    }
+
+    private fun remotePoint(trackerId: String): TrackPointEvent {
+        return TrackPointEvent(
+            source = TrackPointSource.REMOTE_STREAM,
+            trackId = trackerId,
+            lon = 2.0,
+            lat = 1.0,
+            timestampMs = 1_000L,
+        )
     }
 }

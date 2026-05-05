@@ -9,6 +9,7 @@ enum class TrackerMapTrailSource {
 data class TrackerMapTrailReloadInput(
     val mode: TrackerMapDisplayMode,
     val runtimeRunning: Boolean,
+    val selectedTrackerId: String,
     val activeTrackerId: String,
     val rosterTrackerIds: Set<String>,
     val groupSelection: TrackerMapGroupModeSelection,
@@ -26,6 +27,7 @@ data class TrackerMapTrailReloadPlan(
 object TrackerMapTrailReloadCoordinator {
     fun resolvePlan(input: TrackerMapTrailReloadInput): TrackerMapTrailReloadPlan {
         val active = input.activeTrackerId.trim()
+        val selected = input.selectedTrackerId.trim()
         val rosterIds = input.rosterTrackerIds
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -34,8 +36,8 @@ object TrackerMapTrailReloadCoordinator {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .toSet()
-        if (!input.runtimeRunning &&
-            input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
+        if (input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
+            (!input.runtimeRunning || active != selected) &&
             active.isNotEmpty()
         ) {
             return TrackerMapTrailReloadPlan(

@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +26,7 @@ class TrackerMapGpsAccuracyIndicatorPolicyTest {
         val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
             TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, gpsCollecting = true),
                 lastAccuracyMeters = null,
                 effectiveAccuracyThresholdMeters = 20f,
             )
@@ -38,6 +40,7 @@ class TrackerMapGpsAccuracyIndicatorPolicyTest {
         val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
             TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, gpsCollecting = true),
                 lastAccuracyMeters = 20f,
                 effectiveAccuracyThresholdMeters = 20f,
             )
@@ -51,6 +54,7 @@ class TrackerMapGpsAccuracyIndicatorPolicyTest {
         val result = TrackerMapGpsAccuracyIndicatorPolicy.resolve(
             TrackingRuntimeSnapshot(
                 isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, gpsCollecting = true),
                 lastAccuracyMeters = 20.1f,
                 effectiveAccuracyThresholdMeters = 20f,
             )
