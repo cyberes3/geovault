@@ -43,7 +43,7 @@ class TrackerMapTrailReloadCoordinatorTest {
     }
 
     @Test
-    fun resolvePlan_singleSessionRunningForSelectedTracker_usesLocalQueue() {
+    fun resolvePlan_singleSessionRunningForSelectedTracker_loadsServerWithLocalOverlay() {
         val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -55,7 +55,9 @@ class TrackerMapTrailReloadCoordinatorTest {
             )
         )
 
-        assertEquals(TrackerMapTrailSource.SINGLE_QUEUE, plan.source)
+        assertEquals(TrackerMapTrailSource.SINGLE_SERVER, plan.source)
+        assertEquals("local", plan.singleTrackerId)
+        assertEquals("local", plan.overlayTrackerId)
         assertEquals("local", plan.activeTrackerId)
     }
 

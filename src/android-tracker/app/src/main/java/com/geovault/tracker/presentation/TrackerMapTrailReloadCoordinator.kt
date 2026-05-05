@@ -36,13 +36,11 @@ object TrackerMapTrailReloadCoordinator {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .toSet()
-        if (input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-            (!input.runtimeRunning || active != selected) &&
-            active.isNotEmpty()
-        ) {
+        if (input.mode == TrackerMapDisplayMode.SINGLE_SESSION && active.isNotEmpty()) {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.SINGLE_SERVER,
                 singleTrackerId = active,
+                overlayTrackerId = active.takeIf { input.runtimeRunning && active == selected },
                 activeTrackerId = active
             )
         }

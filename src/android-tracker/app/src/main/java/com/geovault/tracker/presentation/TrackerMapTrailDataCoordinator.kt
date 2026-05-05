@@ -12,19 +12,16 @@ object TrackerMapTrailDataCoordinator {
         loadQueueTrail: suspend () -> List<QueuedLocation>,
         mapCoordinatesToTrail: (String, List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
     ): List<QueuedLocation> {
-        val geometryResult = loadTrackerGeometry(trackerId)
-        val geometryCoords = when (geometryResult) {
-            is RepositoryResult.Success -> geometryResult.data.geometry?.coordinates.orEmpty()
-            is RepositoryResult.Failure -> emptyList()
-        }
-        val pointParams = when (geometryResult) {
-            is RepositoryResult.Success -> geometryResult.data.point_params
-            is RepositoryResult.Failure -> null
-        }
-        return if (geometryCoords.isEmpty()) {
-            loadQueueTrail()
-        } else {
-            mapCoordinatesToTrail(trackerId, geometryCoords, pointParams, existingTrailMinTimeMs)
+        return when (val geometryResult = loadTrackerGeometry(trackerId)) {
+            is RepositoryResult.Success -> {
+                mapCoordinatesToTrail(
+                    trackerId,
+                    geometryResult.data.geometry?.coordinates.orEmpty(),
+                    geometryResult.data.point_params,
+                    existingTrailMinTimeMs
+                )
+            }
+            is RepositoryResult.Failure -> loadQueueTrail()
         }
     }
 
@@ -32,22 +29,31 @@ object TrackerMapTrailDataCoordinator {
         trackerIds: Collection<String>,
         existingTrailMinTimeMsByTracker: Map<String, Long>,
         loadTrackersGeometry: suspend (List<String>) -> RepositoryResult<List<Tracker>>,
+        loadQueueTrail: suspend (String) -> List<QueuedLocation>,
         mapCoordinatesToTrail: (String, List<List<Double>>, List<Map<String, Any?>>?, Long?) -> List<QueuedLocation>,
     ): Map<String, List<QueuedLocation>> {
         val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (normalizedIds.isEmpty()) return emptyMap()
         return when (val result = loadTrackersGeometry(normalizedIds)) {
             is RepositoryResult.Success -> {
-                result.data.associate { tracker ->
-                    tracker.id to mapCoordinatesToTrail(
-                        tracker.id,
-                        tracker.geometry?.coordinates.orEmpty(),
-                        tracker.point_params,
-                        existingTrailMinTimeMsByTracker[tracker.id]
-                    )
+                val trackersById = result.data.associateBy { it.id.trim() }
+                normalizedIds.associateWith { trackerId ->
+                    val tracker = trackersById[trackerId]
+                    if (tracker == null) {
+                        loadQueueTrail(trackerId)
+                    } else {
+                        mapCoordinatesToTrail(
+                            trackerId,
+                            tracker.geometry?.coordinates.orEmpty(),
+                            tracker.point_params,
+                            existingTrailMinTimeMsByTracker[trackerId]
+                        )
+                    }
                 }
             }
-            is RepositoryResult.Failure -> emptyMap()
+            is RepositoryResult.Failure -> {
+                normalizedIds.associateWith { trackerId -> loadQueueTrail(trackerId) }
+            }
         }
     }
 }

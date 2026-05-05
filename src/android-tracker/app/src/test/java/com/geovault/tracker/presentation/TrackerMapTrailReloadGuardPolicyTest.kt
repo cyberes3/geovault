@@ -11,7 +11,6 @@ class TrackerMapTrailReloadGuardPolicyTest {
         mode: TrackerMapDisplayMode = TrackerMapDisplayMode.SINGLE_SESSION,
         trailSize: Int = 50,
         runtimeRunning: Boolean = false,
-        activeStreamedTrackerIds: Set<String> = emptySet(),
         displayedTrackerId: String = "tracker1",
         trailReloadPlan: TrackerMapTrailReloadPlan = TrackerMapTrailReloadPlan(
             source = TrackerMapTrailSource.SINGLE_SERVER,
@@ -23,7 +22,6 @@ class TrackerMapTrailReloadGuardPolicyTest {
         mode = mode,
         trailSize = trailSize,
         runtimeRunning = runtimeRunning,
-        activeStreamedTrackerIds = activeStreamedTrackerIds,
         displayedTrackerId = displayedTrackerId,
         trailReloadPlan = trailReloadPlan,
     )
@@ -37,7 +35,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
         )
         assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(force = true, activeStreamedTrackerIds = setOf("tracker1"), trailSize = 100)
+                input(force = true, trailSize = 100)
             )
         )
     }
@@ -51,7 +49,7 @@ class TrackerMapTrailReloadGuardPolicyTest {
         )
         assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(trailSize = 0, activeStreamedTrackerIds = setOf("tracker1"))
+                input(trailSize = 0)
             )
         )
     }
@@ -105,23 +103,10 @@ class TrackerMapTrailReloadGuardPolicyTest {
     }
 
     @Test
-    fun streamingActiveSuppressesReload() {
-        assertFalse(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(activeStreamedTrackerIds = setOf("tracker1"), trailSize = 10)
-            )
-        )
-    }
-
-    @Test
-    fun streamingActiveDifferentTrackerProceeds() {
+    fun singleServerProceedsWhenTrailExists() {
         assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(
-                    activeStreamedTrackerIds = setOf("other_tracker"),
-                    displayedTrackerId = "tracker1",
-                    trailSize = 10,
-                )
+                input(trailSize = 10)
             )
         )
     }
@@ -130,18 +115,17 @@ class TrackerMapTrailReloadGuardPolicyTest {
     fun noStreamingNoTrackingProceeds() {
         assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(runtimeRunning = false, activeStreamedTrackerIds = emptySet(), trailSize = 10)
+                input(runtimeRunning = false, trailSize = 10)
             )
         )
     }
 
     @Test
     fun displayedTrackerIdWhitespaceTrimmed() {
-        assertFalse(
+        assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
                 input(
                     displayedTrackerId = "  tracker1  ",
-                    activeStreamedTrackerIds = setOf("tracker1"),
                     trailSize = 10,
                 )
             )
@@ -155,7 +139,6 @@ class TrackerMapTrailReloadGuardPolicyTest {
                 input(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                     displayedTrackerId = "tracker1",
-                    activeStreamedTrackerIds = setOf("tracker1"),
                     trailSize = 10,
                     trailReloadPlan = TrackerMapTrailReloadPlan(
                         source = TrackerMapTrailSource.MULTI_SERVER,

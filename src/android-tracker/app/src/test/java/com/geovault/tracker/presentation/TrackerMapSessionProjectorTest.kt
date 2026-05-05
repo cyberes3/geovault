@@ -25,7 +25,7 @@ class TrackerMapSessionProjectorTest {
     }
 
     @Test
-    fun singleLocalWhileTracking_usesQueueAndNoRemoteSubscription() {
+    fun singleLocalWhileTracking_loadsServerHistoryWithLocalOverlayAndNoRemoteSubscription() {
         val plan = project(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             selectedTrackerId = "local",
@@ -35,7 +35,9 @@ class TrackerMapSessionProjectorTest {
 
         assertTrue(plan.remoteSubscriptionIds.isEmpty())
         assertEquals(setOf("local"), plan.localOverlayTrackerIds)
-        assertEquals(TrackerMapTrailSource.SINGLE_QUEUE, plan.trailReloadPlan.source)
+        assertEquals(TrackerMapTrailSource.SINGLE_SERVER, plan.trailReloadPlan.source)
+        assertEquals("local", plan.trailReloadPlan.singleTrackerId)
+        assertEquals("local", plan.trailReloadPlan.overlayTrackerId)
     }
 
     @Test

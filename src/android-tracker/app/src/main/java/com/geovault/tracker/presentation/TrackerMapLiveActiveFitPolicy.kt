@@ -37,12 +37,10 @@ object TrackerMapLiveActiveFitPolicy {
     }
 
     fun resolveVisibility(input: LiveActiveFitInput): LiveActiveFitVisibility {
-        val isMultiMode = input.mode == TrackerMapDisplayMode.ALL_QUEUE ||
-            input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
-        val singleTrackerVisible = !isMultiMode &&
-            input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
+        val isAllQueueMode = input.mode == TrackerMapDisplayMode.ALL_QUEUE
+        val singleTrackerVisible = input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
             input.hasTrailPoints
-        val available = isMultiMode || singleTrackerVisible
+        val available = isAllQueueMode || singleTrackerVisible
         if (!available || input.isSelectedDefaultTracker) {
             return LiveActiveFitVisibility(showButton = false, buttonEnabled = false)
         }

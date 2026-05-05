@@ -497,8 +497,11 @@ private fun TrackerMapAuthenticatedContent(
                 .trim()
             val singleTrackerMapView = state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
                 effectiveDisplayedTrackerId.isNotEmpty()
+            val groupMapView = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
             val lockSelected = if (singleTrackerMapView) {
                 state.selectionLockTrackerId == effectiveDisplayedTrackerId
+            } else if (groupMapView) {
+                state.liveActiveFitEnabled
             } else {
                 state.followLockEnabled
             }
@@ -555,13 +558,22 @@ private fun TrackerMapAuthenticatedContent(
                         } else {
                             fabDescLockSelection
                         }
+                    } else if (groupMapView) {
+                        if (state.liveActiveFitEnabled) {
+                            fabDescLiveActiveFitDisable
+                        } else {
+                            fabDescLiveActiveFitEnable
+                        }
                     } else {
                         fabDescFollow
                     },
-                    tooltip = tooltipMapSelectionZoomLock,
+                    tooltip = if (groupMapView) tooltipMapLiveActiveFit else tooltipMapSelectionZoomLock,
                     onTap = {
                         if (singleTrackerMapView) {
                             viewModel.toggleDisplayedTrackerLock()
+                        } else if (groupMapView) {
+                            followLockArmedThisSession = false
+                            viewModel.setLiveActiveFit(!state.liveActiveFitEnabled)
                         } else {
                             val nextEnabled = !lockSelected
                             followLockArmedThisSession = nextEnabled
@@ -586,7 +598,7 @@ private fun TrackerMapAuthenticatedContent(
                         isSelectedDefaultTracker = isSelectedDefaultTracker,
                     )
                 )
-                if (liveActiveFitVisibility.showButton) {
+                if (liveActiveFitVisibility.showButton && !groupMapView) {
                     action(
                         id = "live_active_fit",
                         order = 32,

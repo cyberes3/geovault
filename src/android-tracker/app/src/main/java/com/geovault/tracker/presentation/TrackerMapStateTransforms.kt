@@ -91,20 +91,25 @@ object TrackerMapStateTransforms {
         )
         val singleLineColorHex = TrackerMapIconIds.parseSpec(singleIconId)?.colorHex
             ?: TrackerMapIconIds.DEFAULT_COLOR_HEX
-        val effectiveTrail = effectiveTrail(mode, trail, runtime)
+        val renderTrail = trail
         val lines = buildTrailLines(
             mode = mode,
-            effectiveTrail = effectiveTrail,
+            effectiveTrail = renderTrail,
             allQueueTrailsByTracker = allQueueTrailsByTracker,
             trackerColorById = trackerColorById,
             singleTrackerLineColorHex = singleLineColorHex,
         )
         val markers = mutableListOf<MapRenderPoint>()
         if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            val lastQueued = effectiveTrail.lastOrNull()
-            val lastLat = lastQueued?.latitude
-            val lastLon = lastQueued?.longitude
-            val lastRotation = trackDirectionDegrees(validLatLngsFromTrail(effectiveTrail))
+            val lastQueued = renderTrail.lastOrNull()
+            val effectiveDisplayedTrackerId = displayedTrackerId.trim().ifEmpty { runtime.selectedTrackerId.trim() }
+            val runtimePointVisible = effectiveDisplayedTrackerId.isNotEmpty() &&
+                effectiveDisplayedTrackerId == runtime.selectedTrackerId.trim() &&
+                runtime.lastTrackedLatitude != null &&
+                runtime.lastTrackedLongitude != null
+            val lastLat = lastQueued?.latitude ?: runtime.lastTrackedLatitude.takeIf { runtimePointVisible }
+            val lastLon = lastQueued?.longitude ?: runtime.lastTrackedLongitude.takeIf { runtimePointVisible }
+            val lastRotation = trackDirectionDegrees(validLatLngsFromTrail(renderTrail))
             if (lastLat != null && lastLon != null && isValidMapLibreGeographicLatLng(lastLat, lastLon)) {
                 markers.add(
                     MapRenderPoint(
@@ -204,18 +209,6 @@ object TrackerMapStateTransforms {
             lines = lines,
             polygons = polygons,
         )
-    }
-
-    fun effectiveTrail(
-        mode: TrackerMapDisplayMode,
-        trail: List<QueuedLocation>,
-        runtime: TrackingRuntimeSnapshot
-    ): List<QueuedLocation> {
-        if (mode != TrackerMapDisplayMode.SINGLE_SESSION) return trail
-        val boundaryId = runtime.sessionVisibleBoundaryId
-        if (boundaryId <= 0L) return trail
-        // Live in-memory overlay points use non-positive ids; keep them in session mode.
-        return trail.filter { it.id <= 0L || it.id > boundaryId }
     }
 
     fun trailBounds(trail: List<QueuedLocation>): LatLngBounds? {

@@ -40,13 +40,12 @@ class TrackerMapReloadSeedPolicyTest {
     }
 
     @Test
-    fun trailSeed_changesWhenBoundaryChanges() {
+    fun trailSeed_ignoresSessionBoundaryChanges() {
         val base = TrackerMapReloadSeedPolicy.trailSeed(
             TrackerMapTrailSeedInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = false,
                 activeTrackerId = "t1",
-                sessionVisibleBoundaryId = 1L,
                 rosterTrackerIds = listOf("t1"),
                 groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
             )
@@ -56,13 +55,12 @@ class TrackerMapReloadSeedPolicyTest {
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 runtimeRunning = false,
                 activeTrackerId = "t1",
-                sessionVisibleBoundaryId = 2L,
                 rosterTrackerIds = listOf("t1"),
                 groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
             )
         )
 
-        assertNotEquals(base, changed)
+        assertEquals(base, changed)
     }
 
     @Test
@@ -72,7 +70,6 @@ class TrackerMapReloadSeedPolicyTest {
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = false,
                 activeTrackerId = "t1",
-                sessionVisibleBoundaryId = 0L,
                 rosterTrackerIds = listOf("t1"),
                 groupSelection = TrackerMapGroupModeSelection(groupId = "g1", trackerIds = setOf("t1")),
                 renderMetadataSignature = "geometry:1,2;3,4",
@@ -83,7 +80,6 @@ class TrackerMapReloadSeedPolicyTest {
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 runtimeRunning = false,
                 activeTrackerId = "t1",
-                sessionVisibleBoundaryId = 0L,
                 rosterTrackerIds = listOf("t1"),
                 groupSelection = TrackerMapGroupModeSelection(groupId = "g1", trackerIds = setOf("t1")),
                 renderMetadataSignature = "geometry:1,2;5,6",

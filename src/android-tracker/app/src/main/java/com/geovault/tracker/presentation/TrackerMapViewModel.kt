@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLngBounds
 
@@ -306,6 +308,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var pendingInitialTrackerForMap: Boolean = false
     private var runtimeTrailReloadJob: Job? = null
     private var runtimeTrailReloadPending: Boolean = false
+    private val trailReloadMutex = Mutex()
     private var lastTrailLoadSeed: String? = null
     private var pendingReopenSingleTrackerLoadId: String? = null
     private var pendingFitAfterReload: Boolean = false
@@ -1128,13 +1131,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 ?: TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
                 ?: singlePointBoundsFromRuntime(s.runtime)
         }
-        val effectiveTrail = TrackerMapStateTransforms.effectiveTrail(
-            mode = s.mode,
-            trail = snapshot.singleTrail,
-            runtime = s.runtime
-        )
         val sessionPlan = snapshot.plan
-        return TrackerMapStateTransforms.trailBounds(effectiveTrail)
+        return TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
             ?: singlePointBoundsFromRuntime(s.runtime, sessionPlan)
     }
 
@@ -1310,6 +1308,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun reloadTrailFromDatabase(force: Boolean = false) {
+        trailReloadMutex.withLock {
+            reloadTrailFromDatabaseLocked(force)
+        }
+    }
+
+    private suspend fun reloadTrailFromDatabaseLocked(force: Boolean) {
         val state = _uiState.value
         val groupSelection = resolveGroupModeSelection(state)
         val rosterTrackerIds = visibleMapRosterTrackerIds()
@@ -1324,7 +1328,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             mode = state.mode,
             trailSize = state.trail.size,
             runtimeRunning = state.runtime.localRecordingActive,
-            activeStreamedTrackerIds = state.activeStreamedTrackerIds,
             displayedTrackerId = activeTrackerId,
             trailReloadPlan = sessionPlan.trailReloadPlan,
         )
@@ -1334,7 +1337,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 mode = state.mode,
                 runtimeRunning = state.runtime.localRecordingActive,
                 activeTrackerId = sessionPlan.displayedTrackerId,
-                sessionVisibleBoundaryId = state.runtime.sessionVisibleBoundaryId,
                 rosterTrackerIds = rosterTrackerIds,
                 groupSelection = groupSelection,
                 renderMetadataSignature = state.renderMetadataSignature,
@@ -1386,13 +1388,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         val currentState = _uiState.value
-        val mergedTrail = replaceHistoricalTrailPreservingLiveBuffer(
-            reloadedTrail = trail,
+        val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
+            serverTrail = trail,
             currentTrail = currentState.trail,
+            allowedLiveOverlayTrackerIds = setOfNotBlank(plan.activeTrackerId),
+            trailPointLimit = TRAIL_POINT_LIMIT,
         )
-        val mergedMultiTrails = replaceHistoricalMultiTrailsPreservingLiveBuffers(
-            reloadedTrails = allQueueTrailsByTracker,
+        val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
+            serverTrails = allQueueTrailsByTracker,
             currentTrails = currentState.allQueueTrailsByTracker,
+            allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotBlank(plan.overlayTrackerId),
+            trailPointLimit = TRAIL_POINT_LIMIT,
         )
         _uiState.value = currentState.copy(
             trail = mergedTrail,
@@ -1427,30 +1433,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun replaceHistoricalTrailPreservingLiveBuffer(
-        reloadedTrail: List<QueuedLocation>,
-        currentTrail: List<QueuedLocation>,
-    ): List<QueuedLocation> {
-        val liveBuffer = currentTrail.filter(TrackerMapPointProvenancePolicy::isLiveOverlay)
-        if (liveBuffer.isEmpty()) return reloadedTrail
-        return (reloadedTrail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay) + liveBuffer)
-            .sortedBy { it.time }
-            .takeLast(TRAIL_POINT_LIMIT)
-    }
-
-    private fun replaceHistoricalMultiTrailsPreservingLiveBuffers(
-        reloadedTrails: Map<String, List<QueuedLocation>>,
-        currentTrails: Map<String, List<QueuedLocation>>,
-    ): Map<String, List<QueuedLocation>> {
-        if (currentTrails.isEmpty()) return reloadedTrails
-        if (reloadedTrails.isEmpty()) return currentTrails
-        val trackerIds = reloadedTrails.keys + currentTrails.keys
-        return trackerIds.associateWith { trackerId ->
-            replaceHistoricalTrailPreservingLiveBuffer(
-                reloadedTrail = reloadedTrails[trackerId].orEmpty(),
-                currentTrail = currentTrails[trackerId].orEmpty(),
-            )
-        }
+    private fun setOfNotBlank(value: String?): Set<String> {
+        val normalized = value?.trim().orEmpty()
+        return normalized.takeIf { it.isNotEmpty() }?.let(::setOf).orEmpty()
     }
 
     private suspend fun loadQueueTrail(trackerId: String): List<QueuedLocation> {
@@ -1494,6 +1479,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     geometryLoadingTracker.track { trackerManagementRepository.loadTrackersGeometry(ids) }
                 }
             },
+            loadQueueTrail = { id -> loadQueueTrail(id) },
             mapCoordinatesToTrail = { id, merged, pointParams, minTime ->
                 mapCoordinatesToTrail(id, merged, pointParams, minTime)
             }
@@ -1676,7 +1662,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 mode = state.mode,
                 runtimeRunning = state.runtime.localRecordingActive,
                 activeTrackerId = plan.displayedTrackerId,
-                sessionVisibleBoundaryId = state.runtime.sessionVisibleBoundaryId,
                 rosterTrackerIds = rosterIds,
                 groupSelection = groupSelection,
                 renderMetadataSignature = state.renderMetadataSignature,

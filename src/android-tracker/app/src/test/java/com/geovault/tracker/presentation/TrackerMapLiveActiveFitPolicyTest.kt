@@ -75,7 +75,7 @@ class TrackerMapLiveActiveFitPolicyTest {
     }
 
     @Test
-    fun visibility_groupWithFollowArmed_shown() {
+    fun visibility_groupWithFollowArmed_hiddenBecauseLockFabOwnsLiveFit() {
         val result = TrackerMapLiveActiveFitPolicy.resolveVisibility(
             LiveActiveFitInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -86,7 +86,7 @@ class TrackerMapLiveActiveFitPolicyTest {
                 isSelectedDefaultTracker = false,
             )
         )
-        assertTrue(result.showButton)
+        assertFalse(result.showButton)
     }
 
     @Test
@@ -222,6 +222,36 @@ class TrackerMapLiveActiveFitPolicyTest {
         assertEquals(12.0, active.bounds.latitudeSouth, 0.0)
         assertEquals(34.0, active.bounds.longitudeEast, 0.0)
         assertEquals(34.0, active.bounds.longitudeWest, 0.0)
+    }
+
+    @Test
+    fun activeTrailBoundsResult_groupStreamingIncludesLocalOverlayAndRemoteHeads() {
+        val nowMs = System.currentTimeMillis()
+        val remotePoints = mapOf(
+            "remote" to TrackPointEvent(
+                trackId = "remote",
+                lat = 50.0,
+                lon = 60.0,
+                timestampMs = nowMs - 30_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                source = TrackPointSource.REMOTE_STREAM,
+            )
+        )
+
+        val result = TrackerMapLiveActiveFitPolicy.activeTrailBoundsResult(
+            allQueueTrailsByTracker = mapOf("local" to listOf(makeQueuedLocation(nowMs - 20_000L))),
+            remoteLastPoints = remotePoints,
+            acceptedRemoteTrackerIds = setOf("remote"),
+            trackers = emptyList(),
+            nowMs = nowMs,
+        )
+
+        val active = result as LiveActiveTrailBoundsResult.Active
+        assertEquals(50.0, active.bounds.latitudeNorth, 0.0)
+        assertEquals(40.0, active.bounds.latitudeSouth, 0.0)
+        assertEquals(60.0, active.bounds.longitudeEast, 0.0)
+        assertEquals(-74.0, active.bounds.longitudeWest, 0.0)
     }
 
     @Test

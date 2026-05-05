@@ -5,7 +5,6 @@ data class TrailReloadGuardInput(
     val mode: TrackerMapDisplayMode,
     val trailSize: Int,
     val runtimeRunning: Boolean,
-    val activeStreamedTrackerIds: Set<String>,
     val displayedTrackerId: String,
     val trailReloadPlan: TrackerMapTrailReloadPlan,
 )
@@ -18,9 +17,6 @@ object TrackerMapTrailReloadGuardPolicy {
         if (activeId.isEmpty()) return true
         if (input.trailReloadPlan.source == TrackerMapTrailSource.MULTI_SERVER) return true
         if (input.runtimeRunning && input.trailReloadPlan.source == TrackerMapTrailSource.SINGLE_QUEUE) return false
-        if (activeId in input.activeStreamedTrackerIds && input.trailReloadPlan.source == TrackerMapTrailSource.SINGLE_SERVER) {
-            return false
-        }
         return true
     }
 }

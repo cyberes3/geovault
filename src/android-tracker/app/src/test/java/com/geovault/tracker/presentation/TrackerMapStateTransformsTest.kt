@@ -167,32 +167,80 @@ class TrackerMapStateTransformsTest {
     }
 
     @Test
-    fun effectiveTrail_singleSession_filtersBacklogBySessionBoundary() {
+    fun singleSession_emptyTrailUsesSelectedRuntimePointForMarker() {
+        val st = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "local",
+                selectedTrackerName = "Local Tracker",
+                lastTrackedLatitude = -33.0,
+                lastTrackedLongitude = 151.0,
+            ),
+            displayedTrackerId = "local",
+        )
+
+        assertTrue(st.lines.isEmpty())
+        assertEquals(1, st.points.size)
+        assertEquals("last-fix", st.points.first().id)
+        assertEquals(-33.0, st.points.first().latitude, 1e-9)
+        assertEquals(151.0, st.points.first().longitude, 1e-9)
+        assertEquals("Local Tracker", st.points.first().title)
+    }
+
+    @Test
+    fun singleSessionRendersLoadedTrailWithoutSessionBoundaryClipping() {
         val trail = listOf(
             QueuedLocation(id = 1L, trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-            QueuedLocation(id = 2L, trackerId = "t1", time = 2L, latitude = 2.0, longitude = 2.0, altitude = null, speed = null, bearing = null, accuracy = null),
-            QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 2L, trackerId = "t1", time = 2L, latitude = 1.001, longitude = 1.001, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 1.002, longitude = 1.002, altitude = null, speed = null, bearing = null, accuracy = null),
         )
-        val filtered = TrackerMapStateTransforms.effectiveTrail(
+        val render = TrackerMapStateTransforms.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
             runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L)
         )
-        assertEquals(listOf(3L), filtered.map { it.id })
+
+        assertEquals(trail.map { it.latitude to it.longitude }, render.lines.flatMap { it.coordinates })
+        assertEquals(1.002, render.points.first().latitude, 1e-9)
     }
 
     @Test
-    fun effectiveTrail_allQueue_keepsBacklogAndCurrentSession() {
+    fun singleSessionKeepsLoadedLiveOverlayPointsRegardlessOfSessionStart() {
+        val trail = listOf(
+            QueuedLocation(id = 10L, trackerId = "t1", time = 100L, latitude = 25.79, longitude = -80.13, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 0L, trackerId = "t1", time = 150L, latitude = 25.79, longitude = -80.13, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 0L, trackerId = "t1", time = 300L, latitude = 24.55, longitude = -81.78, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 12L, trackerId = "t1", time = 320L, latitude = 24.56, longitude = -81.77, altitude = null, speed = null, bearing = null, accuracy = null),
+        )
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = trail,
+            runtime = TrackingRuntimeSnapshot(
+                sessionVisibleBoundaryId = 10L,
+                sessionStartTimeMs = 250L,
+            )
+        )
+
+        assertEquals(trail.map { it.latitude to it.longitude }, render.lines.flatMap { it.coordinates })
+        assertEquals(24.56, render.points.first().latitude, 1e-9)
+    }
+
+    @Test
+    fun allQueue_keepsLoadedBacklogAndCurrentSession() {
         val trail = listOf(
             QueuedLocation(id = 1L, trackerId = "t1", time = 1L, latitude = 1.0, longitude = 1.0, altitude = null, speed = null, bearing = null, accuracy = null),
-            QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 3.0, longitude = 3.0, altitude = null, speed = null, bearing = null, accuracy = null),
+            QueuedLocation(id = 3L, trackerId = "t1", time = 3L, latitude = 1.002, longitude = 1.002, altitude = null, speed = null, bearing = null, accuracy = null),
         )
-        val filtered = TrackerMapStateTransforms.effectiveTrail(
+        val render = TrackerMapStateTransforms.buildRenderState(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             trail = trail,
-            runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L)
+            runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L),
+            allQueueTrailsByTracker = mapOf("t1" to trail),
         )
-        assertEquals(listOf(1L, 3L), filtered.map { it.id })
+
+        assertEquals(trail.map { it.latitude to it.longitude }, render.lines.flatMap { it.coordinates })
+        assertEquals(1, render.points.size)
     }
 
     @Test
