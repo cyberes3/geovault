@@ -59,7 +59,7 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun resolveStreamTargetIds_allQueue_notRunning_keepsAllNormalized() {
+    fun resolveStreamTargetIds_allQueue_notRunning_excludesSelectedAndBlanks() {
         val ids = TrackerMapViewModel.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             runtimeRunning = false,
@@ -67,7 +67,20 @@ class TrackerMapViewModelStreamingContractsTest {
             displayedTrackerId = "",
             rosterTrackerIds = setOf("tracker-1", "tracker-2", " ")
         )
-        assertEquals(setOf("tracker-1", "tracker-2"), ids)
+        assertEquals(setOf("tracker-2"), ids)
+    }
+
+    @Test
+    fun resolveStreamTargetIds_groupPlaceholder_notRunning_excludesSelected() {
+        val ids = TrackerMapViewModel.resolveStreamTargetIds(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            runtimeRunning = false,
+            selectedTrackerId = "tracker-1",
+            displayedTrackerId = "",
+            rosterTrackerIds = emptySet(),
+            groupTrackerIds = setOf("tracker-1", "tracker-2"),
+        )
+        assertEquals(setOf("tracker-2"), ids)
     }
 
     @Test
@@ -81,6 +94,16 @@ class TrackerMapViewModelStreamingContractsTest {
         )
 
         assertEquals(setOf("accepted"), filtered.keys)
+    }
+
+    @Test
+    fun sanitizeResumeStreamTrackerIds_excludesSelectedFromRecoveredTargets() {
+        val ids = TrackerMapViewModel.sanitizeResumeStreamTrackerIds(
+            trackerIds = setOf("selected", "remote-a", " ", "remote-b"),
+            selectedTrackerId = "selected",
+        )
+
+        assertEquals(setOf("remote-a", "remote-b"), ids)
     }
 
     @Test

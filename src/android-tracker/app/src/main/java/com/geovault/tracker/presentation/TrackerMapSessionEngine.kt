@@ -70,7 +70,7 @@ object TrackerMapSessionEngine {
                 plan = input.snapshot.plan.copy(
                     acceptedRemoteTrackerIds = input.snapshot.plan.acceptedRemoteTrackerIds,
                 ),
-                localRuntimeOverlayTrails = reduction.nextState.allQueueTrailsByTracker,
+                localRuntimeOverlayTrails = input.snapshot.renderTrailsByTracker + reduction.nextState.allQueueTrailsByTracker,
             )
         )
         return TrackerMapSessionPointResult(

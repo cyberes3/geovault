@@ -102,6 +102,51 @@ class TrackerMapSessionEngineTest {
         assertEquals("remote", result.nextSnapshot.acceptedRemoteLastPoints.keys.single())
     }
 
+    @Test
+    fun reducePoint_preservesRuntimeOverlayTracksFromInputSnapshot() {
+        val initial = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
+                plan = plan(
+                    mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                    acceptedRemoteTrackerIds = setOf("remote"),
+                    remoteSubscriptionIds = setOf("remote"),
+                ),
+                localRuntimeOverlayTrails = mapOf(
+                    "local" to listOf(
+                        queued(
+                            trackerId = "local",
+                            id = 0L,
+                            time = 10L,
+                            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME,
+                        )
+                    )
+                ),
+            )
+        )
+
+        val result = TrackerMapSessionEngine.reducePoint(
+            TrackerMapSessionPointInput(
+                snapshot = initial,
+                point = TrackPointEvent(
+                    source = TrackPointSource.REMOTE_STREAM,
+                    trackId = "remote",
+                    lon = 2.0,
+                    lat = 1.0,
+                    timestampMs = 100L,
+                ),
+                trailPointLimit = 100,
+            )
+        )
+
+        assertTrue(result.shouldUpdate)
+        assertEquals(setOf("local", "remote"), result.nextSnapshot.tracks.keys)
+        assertEquals(
+            listOf(TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME),
+            result.nextSnapshot.tracks.getValue("local").renderTrail.map { it.prov },
+        )
+    }
+
     private fun plan(
         mode: TrackerMapDisplayMode = TrackerMapDisplayMode.ALL_QUEUE,
         displayedTrackerId: String = "",

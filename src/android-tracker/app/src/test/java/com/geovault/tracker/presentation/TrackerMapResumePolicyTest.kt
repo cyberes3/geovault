@@ -8,7 +8,7 @@ class TrackerMapResumePolicyTest {
     private val resolver = TrackerMapResolveResumeUseCase()
 
     @Test
-    fun longBackgroundGap_nonTracking_single_returnsRuntimeReload() {
+    fun longBackgroundGap_nonTrackingSingleWithTrail_doesNotReloadHistory() {
         val decision = resolver.resolve(
             TrackerMapResumeInput(
                 trackingRunning = false,
@@ -20,10 +20,10 @@ class TrackerMapResumePolicyTest {
                 selectedTrackerId = "a",
                 displayedTrackerId = "a",
                 hasTrailPoints = true,
-                backgroundedDurationMs = TrackerMapResolveResumeUseCase.BACKFILL_MIN_BACKGROUND_MS
+                backgroundedDurationMs = 60_000L
             )
         )
-        assertEquals(TrackerMapResumeDecision.LoadSingleTrackerRuntime("a"), decision)
+        assertEquals(TrackerMapResumeDecision.RestartDisplayedTrackerStreaming, decision)
     }
 
     @Test
@@ -62,5 +62,24 @@ class TrackerMapResumePolicyTest {
             )
         )
         assertEquals(TrackerMapResumeDecision.StartMultiContextStreaming(setOf("x", "y")), decision)
+    }
+
+    @Test
+    fun groupContext_neverRestartsSelectedTrackerStream() {
+        val decision = resolver.resolve(
+            TrackerMapResumeInput(
+                trackingRunning = false,
+                mapReady = true,
+                showAllTrackers = false,
+                mapViewContext = TrackerMapViewContext.GROUP,
+                activeStreamedTrackerIds = setOf("a"),
+                currentGroupTrackIds = setOf("a"),
+                selectedTrackerId = "a",
+                displayedTrackerId = "",
+                hasTrailPoints = false,
+                backgroundedDurationMs = 2_000L
+            )
+        )
+        assertEquals(TrackerMapResumeDecision.MultiContextNoStreaming, decision)
     }
 }

@@ -83,6 +83,27 @@ class LiveTrackStreamingTargetCoordinatorTest {
     }
 
     @Test
+    fun resolveSubscriptionPlan_excludesSelectedAcrossOwners() {
+        val plan = LiveTrackStreamingTargetCoordinator.resolveSubscriptionPlan(
+            StreamingLeaseSet(
+                mapRequest = LiveTrackStreamingTargetRequest(
+                    trackerIds = setOf("selected", "remote-a"),
+                    trackerName = null,
+                    locallyRecordedTrackerId = null,
+                    excludedTrackerIds = setOf("selected"),
+                ),
+                paramsRequest = LiveTrackStreamingTargetRequest(
+                    trackerIds = setOf("selected", "remote-b"),
+                    trackerName = null,
+                    locallyRecordedTrackerId = null,
+                ),
+            )
+        )
+
+        assertEquals(setOf("remote-a", "remote-b"), plan.trackerIds)
+    }
+
+    @Test
     fun replaceRequest_startFailureStopsPreviousStreamAndMarksRuntimeFailed() {
         val context: Context = ApplicationProvider.getApplicationContext()
         val gateway = FakeLiveTrackStreamingServiceGateway(

@@ -5,6 +5,8 @@ import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.MapStreamingStartResult
 import com.geovault.tracker.MapStreamingStopResult
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.policy.StreamingTargetPolicyInput
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 
 internal enum class LiveTrackStreamingOwner {
@@ -16,6 +18,7 @@ internal data class LiveTrackStreamingTargetRequest(
     val trackerIds: Set<String>,
     val trackerName: String?,
     val locallyRecordedTrackerId: String?,
+    val excludedTrackerIds: Set<String> = emptySet(),
 )
 
 internal data class StreamingLeaseSet(
@@ -43,8 +46,8 @@ internal interface LiveTrackStreamingServiceGateway {
 
 /**
  * Merges independent streaming intents from Map and Tracker Params into one foreground subscription:
- * `trackerIds` from each owner are unioned after trimming; any id marked as [LiveTrackStreamingTargetRequest.locallyRecordedTrackerId]
- * (device is recording that tracker) is stripped so locals never appear on the websocket. Either owner may replace its half with `null`,
+ * `trackerIds` from each owner are unioned after trimming; any id marked local or excluded is stripped so local/selected
+ * trackers never appear on the websocket. Either owner may replace its half with `null`,
  * dropping it from merge. Naming for the notification is retained only when the merged set has exactly one id.
  *
  * Apply-layer dedupe ([lastAppliedIds]) avoids duplicate `ACTION_START`; [resetApplyGate] must be invoked when reconciliation decides the
@@ -107,14 +110,15 @@ internal object LiveTrackStreamingTargetCoordinator {
 
     internal fun resolveSubscriptionPlan(leases: StreamingLeaseSet): StreamingSubscriptionPlan {
         val requests = listOfNotNull(leases.mapRequest, leases.paramsRequest)
-        val locallyRecordedIds = requests
-            .mapNotNull { it.locallyRecordedTrackerId?.trim()?.takeIf(String::isNotEmpty) }
-            .toSet()
-        val trackerIds = requests
-            .flatMap { it.trackerIds }
-            .mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-            .filterNot { it in locallyRecordedIds }
-            .toSet()
+        val locallyRecordedIds = requests.mapNotNull { it.locallyRecordedTrackerId }
+        val excludedIds = requests.flatMap { it.excludedTrackerIds }
+        val trackerIds = StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = requests.flatMap { it.trackerIds },
+                locallyRecordedTrackerIds = locallyRecordedIds,
+                excludedTrackerIds = excludedIds,
+            )
+        )
         val trackerName = if (trackerIds.size == 1) {
             requests.firstNotNullOfOrNull { request ->
                 request.trackerName?.trim()?.ifBlank { null }

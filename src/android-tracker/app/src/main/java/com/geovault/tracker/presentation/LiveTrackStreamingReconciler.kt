@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import android.content.Context
+import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 
 /**
@@ -11,14 +12,24 @@ class LiveTrackStreamingReconciler(
     private val appContext: Context,
 ) {
     private var lastStreamingServiceSeed: String? = null
+    private var mapStreamingLeaseActive: Boolean = false
 
     fun invalidateDedupe() {
         lastStreamingServiceSeed = null
         LiveTrackStreamingTargetCoordinator.resetApplyGate()
     }
 
+    fun hasMapStreamingLease(): Boolean = mapStreamingLeaseActive
+
+    fun consumeStoppedMapStreamingLease(): Boolean {
+        val wasMapOwned = mapStreamingLeaseActive
+        mapStreamingLeaseActive = false
+        return wasMapOwned
+    }
+
     /** Unconditional stop (e.g. map context reset); clears dedupe so the next reconcile can start fresh. */
     fun stopForegroundStreaming() {
+        mapStreamingLeaseActive = false
         LiveTrackStreamingTargetCoordinator.replaceRequest(
             context = appContext,
             owner = LiveTrackStreamingOwner.Map,
@@ -40,10 +51,11 @@ class LiveTrackStreamingReconciler(
             .sorted()
             .joinToString(separator = ",")
         val trackingActiveOrStarting = state.runtime.localRecordingActive
+        val selectedTrackerId = state.runtime.selectedTrackerId.trim()
         val seed =
             "${state.mode}|$trackingActiveOrStarting|$streamIdsSignature|$effectiveDisplayedId|" +
-                "${state.runtime.selectedTrackerId}|$effectiveDisplayedName|" +
-                "${streamRuntime.isRunning}|${streamRuntime.lifecycleState.name}|$activeIdsSignature|" +
+                "$selectedTrackerId|$effectiveDisplayedName|" +
+                "${streamRuntime.hasSubscriptionIntent}|${streamRuntime.lifecycleState.name}|$activeIdsSignature|" +
                 "${streamRuntime.failureReason.orEmpty()}"
         if (seed == lastStreamingServiceSeed) return
         val command = TrackerMapStreamingCoordinator.resolve(
@@ -52,13 +64,13 @@ class LiveTrackStreamingReconciler(
                 streamTargetIds = state.streamTargetIds,
                 displayedTrackerId = effectiveDisplayedId,
                 displayedTrackerName = effectiveDisplayedName,
-                selectedTrackerId = state.runtime.selectedTrackerId,
+                selectedTrackerId = selectedTrackerId,
                 trackingRunning = trackingActiveOrStarting,
             )
         )
         when (command) {
             is TrackerMapStreamingCommand.Start -> {
-                val locallyRecordedTrackerId = state.runtime.selectedTrackerId
+                val locallyRecordedTrackerId = selectedTrackerId
                     .takeIf { trackingActiveOrStarting }
                 val result = LiveTrackStreamingTargetCoordinator.replaceRequest(
                     context = appContext,
@@ -67,17 +79,28 @@ class LiveTrackStreamingReconciler(
                         trackerIds = command.trackerIds,
                         trackerName = command.trackerName,
                         locallyRecordedTrackerId = locallyRecordedTrackerId,
+                        excludedTrackerIds = StreamingTargetPolicy.selectedTrackerExclusion(selectedTrackerId),
                     ),
                 )
-                lastStreamingServiceSeed = seed.takeIf { result is StreamingSubscriptionApplyResult.Applied }
+                if (result is StreamingSubscriptionApplyResult.Applied) {
+                    mapStreamingLeaseActive = command.trackerIds.isNotEmpty()
+                    lastStreamingServiceSeed = seed
+                } else {
+                    lastStreamingServiceSeed = null
+                }
             }
             TrackerMapStreamingCommand.Stop -> {
-                LiveTrackStreamingTargetCoordinator.replaceRequest(
+                val result = LiveTrackStreamingTargetCoordinator.replaceRequest(
                     context = appContext,
                     owner = LiveTrackStreamingOwner.Map,
                     request = null,
                 )
-                lastStreamingServiceSeed = seed
+                if (result is StreamingSubscriptionApplyResult.Applied) {
+                    mapStreamingLeaseActive = false
+                    lastStreamingServiceSeed = seed
+                } else {
+                    lastStreamingServiceSeed = null
+                }
             }
             TrackerMapStreamingCommand.NoOp -> {
                 // Single-session with no resolved displayed id cannot own a map streaming lease; Params may keep streaming alone.
@@ -87,6 +110,7 @@ class LiveTrackStreamingReconciler(
                         owner = LiveTrackStreamingOwner.Map,
                         request = null,
                     )
+                    mapStreamingLeaseActive = false
                 }
                 lastStreamingServiceSeed = seed
             }

@@ -1,5 +1,7 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.policy.StreamingTargetPolicyInput
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 
 data class TrackerMapSessionIntent(
@@ -35,25 +37,41 @@ object TrackerMapSessionProjector {
         val displayedTrackerName = input.displayedTrackerName.trim().ifBlank {
             input.runtime.selectedTrackerName.trim()
         }
-        val groupTrackerIds = normalizedIds(input.groupSelection.trackerIds)
-        val rosterTrackerIds = normalizedIds(input.rosterTrackerIds)
+        val groupTrackerIds = StreamingTargetPolicy.normalizeTrackerIds(input.groupSelection.trackerIds)
+        val rosterTrackerIds = StreamingTargetPolicy.normalizeTrackerIds(input.rosterTrackerIds)
         val localTrackerIds = if (runtimeRunning && selectedTrackerId.isNotEmpty()) {
             setOf(selectedTrackerId)
         } else {
             emptySet()
         }
-        val remoteSubscriptionIds = when (input.mode) {
+        val requestedRemoteTrackerIds = when (input.mode) {
             TrackerMapDisplayMode.SINGLE_SESSION -> {
-                displayedTrackerId.takeIf { it.isNotEmpty() && it !in localTrackerIds }?.let(::setOf).orEmpty()
+                displayedTrackerId.takeIf { it.isNotEmpty() }?.let(::setOf).orEmpty()
             }
-            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupTrackerIds - localTrackerIds
-            TrackerMapDisplayMode.ALL_QUEUE -> rosterTrackerIds - localTrackerIds
+            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupTrackerIds
+            TrackerMapDisplayMode.ALL_QUEUE -> rosterTrackerIds
         }
+        val remoteSubscriptionIds = StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = requestedRemoteTrackerIds,
+                selectedTrackerId = selectedTrackerId,
+                locallyRecordedTrackerIds = localTrackerIds,
+            )
+        )
         val acceptedRemoteTrackerIds = TrackerMapRemoteAcceptancePolicy
             .mergedAcceptedRemoteTrackerIds(
                 streamTargetIds = remoteSubscriptionIds,
                 activeStreamedTrackerIds = input.activeStreamedTrackerIds,
-            ) - localTrackerIds
+            )
+            .let { acceptedIds ->
+                StreamingTargetPolicy.remoteSubscriptionTargets(
+                    StreamingTargetPolicyInput(
+                        requestedTrackerIds = acceptedIds,
+                        selectedTrackerId = selectedTrackerId,
+                        locallyRecordedTrackerIds = localTrackerIds,
+                    )
+                )
+            }
         val localOverlayTrackerIds = when {
             localTrackerIds.isEmpty() -> emptySet()
             input.mode == TrackerMapDisplayMode.ALL_QUEUE -> localTrackerIds
@@ -90,9 +108,5 @@ object TrackerMapSessionProjector {
             localOverlayTrackerIds = localOverlayTrackerIds,
             trailReloadPlan = trailReloadPlan,
         )
-    }
-
-    private fun normalizedIds(ids: Collection<String>): Set<String> {
-        return ids.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
     }
 }

@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.policy.StreamingTargetPolicyInput
 
 internal sealed class MapStreamingStartResult {
     data class Started(val trackerIds: Set<String>) : MapStreamingStartResult()
@@ -24,8 +26,16 @@ internal object MapStreamingServiceHelper {
      * Prefer a normal service start; if Android rejects background start, escalate to
      * startForegroundService so streaming can still bootstrap.
      */
-    fun startStreaming(context: Context, trackerIds: Set<String>, trackerName: String? = null): MapStreamingStartResult {
-        val cleanedIds = trackerIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+    fun startStreaming(
+        context: Context,
+        trackerIds: Set<String>,
+        trackerName: String? = null,
+        excludedTrackerIds: Set<String> = emptySet(),
+    ): MapStreamingStartResult {
+        val cleanedIds = sanitizeStreamingTargets(
+            trackerIds = trackerIds,
+            excludedTrackerIds = excludedTrackerIds,
+        )
         if (cleanedIds.isEmpty()) {
             return MapStreamingStartResult.Failed("No live streaming trackers were selected")
         }
@@ -78,13 +88,37 @@ internal object MapStreamingServiceHelper {
         return MapStreamingStopResult.Stopped
     }
 
-    fun persistedTargets(context: Context): Pair<Set<String>, String?> {
+    fun persistedTargets(
+        context: Context,
+        excludedTrackerIds: Set<String> = emptySet(),
+    ): Pair<Set<String>, String?> {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val ids = prefs.getStringSet(KEY_TRACKER_IDS, emptySet()).orEmpty()
-            .mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-            .toSet()
+        val rawIds = prefs.getStringSet(KEY_TRACKER_IDS, emptySet()).orEmpty()
+        val ids = sanitizeStreamingTargets(
+            trackerIds = rawIds,
+            excludedTrackerIds = excludedTrackerIds,
+        )
         val name = prefs.getString(KEY_TRACKER_NAME, null)?.trim()?.ifBlank { null }
+        if (ids != rawIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()) {
+            if (ids.isEmpty()) {
+                clearPersistedTargets(context.applicationContext)
+            } else {
+                persistTargets(context.applicationContext, ids, name)
+            }
+        }
         return ids to name
+    }
+
+    internal fun sanitizeStreamingTargets(
+        trackerIds: Collection<String>,
+        excludedTrackerIds: Collection<String> = emptySet(),
+    ): Set<String> {
+        return StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = trackerIds,
+                excludedTrackerIds = excludedTrackerIds,
+            )
+        )
     }
 
     private fun persistTargets(context: Context, trackerIds: Set<String>, trackerName: String?) {

@@ -255,6 +255,35 @@ class TrackerMapLiveActiveFitPolicyTest {
     }
 
     @Test
+    fun activeTrailBoundsResult_groupStreamingKeepsAcceptedRemoteTrailsWhileLocalIsOnlyFreshPoint() {
+        val nowMs = System.currentTimeMillis()
+        val oldRemoteTrail = listOf(
+            makeQueuedLocation(
+                timeMs = nowMs - 30 * 60 * 1000L,
+                latitude = 50.0,
+                longitude = 60.0,
+            )
+        )
+
+        val result = TrackerMapLiveActiveFitPolicy.activeTrailBoundsResult(
+            allQueueTrailsByTracker = mapOf(
+                "local" to listOf(makeQueuedLocation(nowMs - 20_000L)),
+                "remote" to oldRemoteTrail,
+            ),
+            remoteLastPoints = emptyMap(),
+            acceptedRemoteTrackerIds = setOf("remote"),
+            trackers = emptyList(),
+            nowMs = nowMs,
+        )
+
+        val active = result as LiveActiveTrailBoundsResult.Active
+        assertEquals(50.0, active.bounds.latitudeNorth, 0.0)
+        assertEquals(40.0, active.bounds.latitudeSouth, 0.0)
+        assertEquals(60.0, active.bounds.longitudeEast, 0.0)
+        assertEquals(-74.0, active.bounds.longitudeWest, 0.0)
+    }
+
+    @Test
     fun filterActiveTrails_ignoresUnacceptedRemotePointTimestamp() {
         val nowMs = System.currentTimeMillis()
         val staleTrail = listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))
@@ -337,13 +366,17 @@ class TrackerMapLiveActiveFitPolicyTest {
         assertEquals(LiveActiveTrailBoundsResult.NoActiveTrackers, result)
     }
 
-    private fun makeQueuedLocation(timeMs: Long): QueuedLocation {
+    private fun makeQueuedLocation(
+        timeMs: Long,
+        latitude: Double = 40.0,
+        longitude: Double = -74.0,
+    ): QueuedLocation {
         return QueuedLocation(
             id = 0L,
             trackerId = "test-tracker",
             time = timeMs,
-            latitude = 40.0,
-            longitude = -74.0,
+            latitude = latitude,
+            longitude = longitude,
             altitude = null,
             speed = null,
             bearing = null,

@@ -7,7 +7,6 @@ import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRecentDataWindowOptions
@@ -18,6 +17,7 @@ import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.common.NaturalSort
 import java.util.Locale
 import kotlinx.coroutines.async
@@ -50,6 +50,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             trackers = stateStore.trackers.value,
             groups = stateStore.groups.value,
             mapVisibility = stateStore.mapVisibility.value,
+            selectedTrackerId = selectedTrackerId(),
         )
     )
     val uiState: StateFlow<TrackersGroupsUiState> = _uiState.asStateFlow()
@@ -77,6 +78,11 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             stateStore.mapVisibility.collectLatest { mapVisibility ->
                 _uiState.update { it.copy(mapVisibility = mapVisibility) }
+            }
+        }
+        viewModelScope.launch {
+            TrackingRuntimeStateStore.state.collectLatest { runtime ->
+                _uiState.update { it.copy(selectedTrackerId = runtime.selectedTrackerId.trim()) }
             }
         }
     }
@@ -198,7 +204,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 is RepositoryResult.Success -> loadResult.data
                 is RepositoryResult.Failure -> fallbackTracker
             }
-            val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
+            val selectedTrackerId = selectedTrackerId()
             _uiState.update {
                 val loading = it.dialog as? TrackersGroupsDialog.EditTrackerLoading ?: return@update it
                 if (loading.trackerId != fallbackTracker.id) return@update it
@@ -834,7 +840,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             },
             onSuccess = {
                 val app = getApplication<Application>()
-                val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(app)
+                val selectedTrackerId = selectedTrackerId()
                 if (d.setAsSelectedTracker) {
                     SelectedTrackerManager.setSelectedTracker(
                         context = app,
@@ -957,13 +963,17 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             mutation = { trackerRepository.deleteTracker(trackerId) },
             onSuccess = {
                 val app = getApplication<Application>()
-                if (SelectedTrackerPrefs.selectedTrackerId(app) == trackerId) {
+                if (selectedTrackerId() == trackerId) {
                     SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
                 }
                 dismissDialog()
             },
             successMessage = getApplication<Application>().getString(R.string.trackers_deleted)
         )
+    }
+
+    private fun selectedTrackerId(): String {
+        return TrackingRuntimeStateStore.state.value.selectedTrackerId.trim()
     }
 
     fun deleteGroup(groupId: String) {

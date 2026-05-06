@@ -9,7 +9,6 @@ import com.geovault.common.NaturalSort
 import com.geovault.tracker.AppError
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.di.TrackerAppServices
@@ -93,14 +92,13 @@ class TrackerParamsViewModel(
         if (pointStreamJob?.isActive == true) return
         pointStreamJob = viewModelScope.launch {
             TrackPointBus.events.collect { event ->
-                val latestSelectedId = SelectedTrackerPrefs.selectedTrackerId(getApplication())
-                val trackingRunning = TrackingRuntimeStateStore.state.value.localRecordingActive
+                val runtime = TrackingRuntimeStateStore.state.value
                 if (
                     TrackerParamsPointAcceptancePolicy.shouldAcceptForParams(
                         event = event,
                         trackerId = args.trackerId,
-                        trackingRunning = trackingRunning,
-                        selectedTrackerId = latestSelectedId,
+                        trackingRunning = runtime.localRecordingActive,
+                        selectedTrackerId = runtime.selectedTrackerId,
                     )
                 ) {
                     applyPointPayload(
@@ -123,12 +121,10 @@ class TrackerParamsViewModel(
     }
 
     private fun refreshParamsStreamingLease(runtime: TrackingRuntimeSnapshot) {
-        val app = getApplication<Application>()
-        val selectedId = SelectedTrackerPrefs.selectedTrackerId(app)
         streamingController.onScreenStarted(
             trackerId = args.trackerId,
             trackerName = streamTrackerName,
-            selectedTrackerId = selectedId,
+            selectedTrackerId = runtime.selectedTrackerId,
             trackingRunning = runtime.localRecordingActive,
             streamSnapshot = LiveStreamRuntimeStateStore.state.value,
         )
@@ -137,9 +133,8 @@ class TrackerParamsViewModel(
     fun loadTrackerData(refresh: Boolean = false) {
         viewModelScope.launch {
             val app = getApplication<Application>()
-            val selectedId = SelectedTrackerPrefs.selectedTrackerId(app)
             val runtime = TrackingRuntimeStateStore.state.value
-            val localLive = isLocalTrackingMode(runtime, selectedId, args.trackerId)
+            val localLive = isLocalTrackingMode(runtime, runtime.selectedTrackerId, args.trackerId)
             if (refresh) {
                 _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
             } else if (!localLive) {

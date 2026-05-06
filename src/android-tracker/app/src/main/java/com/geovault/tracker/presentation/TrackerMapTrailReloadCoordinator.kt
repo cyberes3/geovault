@@ -1,5 +1,8 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.policy.StreamingTargetPolicyInput
+
 enum class TrackerMapTrailSource {
     SINGLE_SERVER,
     MULTI_SERVER,
@@ -47,7 +50,7 @@ object TrackerMapTrailReloadCoordinator {
         if (input.mode == TrackerMapDisplayMode.ALL_QUEUE) {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.MULTI_SERVER,
-                trackerIds = rosterIds,
+                trackerIds = serverHistoryTrackerIds(rosterIds, selected),
                 overlayTrackerId = active.takeIf { input.runtimeRunning && it.isNotEmpty() },
                 activeTrackerId = active
             )
@@ -55,7 +58,7 @@ object TrackerMapTrailReloadCoordinator {
         if (input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.MULTI_SERVER,
-                trackerIds = groupIds,
+                trackerIds = serverHistoryTrackerIds(groupIds, selected),
                 overlayTrackerId = active.takeIf {
                     input.runtimeRunning && it.isNotEmpty() && it in groupIds
                 },
@@ -66,6 +69,15 @@ object TrackerMapTrailReloadCoordinator {
         return TrackerMapTrailReloadPlan(
             source = TrackerMapTrailSource.SINGLE_QUEUE,
             activeTrackerId = active
+        )
+    }
+
+    private fun serverHistoryTrackerIds(requestedTrackerIds: Set<String>, selectedTrackerId: String): Set<String> {
+        return StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = requestedTrackerIds,
+                selectedTrackerId = selectedTrackerId,
+            )
         )
     }
 }

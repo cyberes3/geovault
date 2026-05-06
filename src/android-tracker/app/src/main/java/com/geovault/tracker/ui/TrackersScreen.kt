@@ -87,7 +87,6 @@ import com.geovault.tracker.Group
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import java.util.Locale
 import com.geovault.tracker.presentation.OwnershipActionPolicy
@@ -798,10 +797,7 @@ private fun TrackersGroupsAuthenticatedBody(
 ) {
     val trackersListState = remember { androidx.compose.foundation.lazy.LazyListState() }
     val groupsListState = remember { androidx.compose.foundation.lazy.LazyListState() }
-    val context = LocalContext.current
-    // Selection only changes through dialog flows; do not re-read SharedPreferences on every
-    // tracker upsert from live data.
-    val selectedTrackerId = remember(state.dialog) { SelectedTrackerPrefs.selectedTrackerId(context) }
+    val selectedTrackerId = state.selectedTrackerId
     val visibleTrackers = remember(state.trackers, state.trackerSearchQuery) {
         filterVisibleOwnerTrackersForSearch(state.trackers, state.trackerSearchQuery)
     }

@@ -10,7 +10,10 @@ data class LiveStreamRuntimeSnapshot(
     val lifecycleState: TrackingLifecycleState = TrackingLifecycleState.STOPPED,
     val activeTrackerIds: Set<String> = emptySet(),
     val failureReason: String? = null,
-)
+) {
+    val hasSubscriptionIntent: Boolean
+        get() = activeTrackerIds.isNotEmpty() && lifecycleState != TrackingLifecycleState.STOPPED
+}
 
 object LiveStreamRuntimeStateStore {
     private val _state = MutableStateFlow(LiveStreamRuntimeSnapshot())

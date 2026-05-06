@@ -20,6 +20,20 @@ class TrackerParamsStreamingPolicyTest {
     }
 
     @Test
+    fun resolveStart_selectedTrackerNotTracking_noops() {
+        val resolution = TrackerParamsStreamingPolicy.resolveStart(
+            startInput(
+                trackerId = "self",
+                selectedTrackerId = "self",
+                trackingRunning = false,
+            )
+        )
+
+        assertEquals(TrackerParamsStreamingCommand.NoOp, resolution.command)
+        assertEquals(TrackerParamsStreamingOwnership.NoOp, resolution.session?.ownership)
+    }
+
+    @Test
     fun resolveStart_idleRemoteTracker_startsParamsStream() {
         val resolution = TrackerParamsStreamingPolicy.resolveStart(
             startInput(trackerId = "remote")
@@ -87,6 +101,23 @@ class TrackerParamsStreamingPolicyTest {
         assertEquals(setOf("params"), command.trackerIds)
         assertEquals(setOf("map"), resolution.session?.baselineTrackerIds)
         assertEquals(TrackerParamsStreamingOwnership.ExpandedExistingStream, resolution.session?.ownership)
+    }
+
+    @Test
+    fun resolveStart_staleSelectedActiveStream_doesNotExpandFromSelected() {
+        val resolution = TrackerParamsStreamingPolicy.resolveStart(
+            startInput(
+                trackerId = "remote",
+                selectedTrackerId = "selected",
+                liveStreamRunning = true,
+                activeTrackerIds = setOf("selected"),
+            )
+        )
+
+        val command = resolution.command as TrackerParamsStreamingCommand.Start
+        assertEquals(setOf("remote"), command.trackerIds)
+        assertEquals(emptySet<String>(), resolution.session?.baselineTrackerIds)
+        assertEquals(TrackerParamsStreamingOwnership.StartedFromIdle, resolution.session?.ownership)
     }
 
     @Test

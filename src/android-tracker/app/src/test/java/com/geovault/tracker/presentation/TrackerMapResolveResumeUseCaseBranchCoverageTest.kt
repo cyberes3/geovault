@@ -82,7 +82,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
     }
 
     @Test
-    fun resolve_nonTrackingSingle_noTrail_usesBootstrapWhenAlreadyStreamed() {
+    fun resolve_initialNonTrackingSingleNoTrail_usesBootstrapWhenAlreadyStreamed() {
         val decision = resolver.resolve(
             baseInput(
                 trackingRunning = false,
@@ -90,6 +90,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
                 displayedTrackerId = "selected",
                 activeStreamedTrackerIds = setOf("selected"),
                 hasTrailPoints = false,
+                hasPendingInitialTracker = true,
                 backgroundedDurationMs = 0L
             )
         )
@@ -97,17 +98,33 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
     }
 
     @Test
-    fun resolve_nonTrackingSingle_withNoTrail_loadsRuntime() {
+    fun resolve_initialNonTrackingSingleWithNoTrail_loadsRuntime() {
         val decision = resolver.resolve(
             baseInput(
                 trackingRunning = false,
                 selectedTrackerId = "selected",
                 displayedTrackerId = "selected",
                 hasTrailPoints = false,
-                activeStreamedTrackerIds = emptySet()
+                activeStreamedTrackerIds = emptySet(),
+                hasPendingInitialTracker = true,
             )
         )
         assertEquals(TrackerMapResumeDecision.LoadSingleTrackerRuntime("selected"), decision)
+    }
+
+    @Test
+    fun resolve_resumeNonTrackingSingleWithNoTrail_doesNotLoadHistory() {
+        val decision = resolver.resolve(
+            baseInput(
+                trackingRunning = false,
+                selectedTrackerId = "selected",
+                displayedTrackerId = "selected",
+                hasTrailPoints = false,
+                activeStreamedTrackerIds = emptySet(),
+                hasPendingInitialTracker = false,
+            )
+        )
+        assertEquals(TrackerMapResumeDecision.RestartDisplayedTrackerStreaming, decision)
     }
 
     private fun baseInput(

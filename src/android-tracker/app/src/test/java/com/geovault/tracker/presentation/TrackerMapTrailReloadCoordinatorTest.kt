@@ -75,9 +75,27 @@ class TrackerMapTrailReloadCoordinatorTest {
         )
 
         assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
-        assertEquals(setOf("active", "t2"), plan.trackerIds)
+        assertEquals(setOf("t2"), plan.trackerIds)
         assertEquals("active", plan.overlayTrackerId)
         assertEquals("active", plan.activeTrackerId)
+    }
+
+    @Test
+    fun resolvePlan_allQueueNotRunning_excludesSelectedFromServerHistory() {
+        val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
+            TrackerMapTrailReloadInput(
+                mode = TrackerMapDisplayMode.ALL_QUEUE,
+                runtimeRunning = false,
+                selectedTrackerId = "selected",
+                activeTrackerId = "selected",
+                rosterTrackerIds = setOf("selected", "remote"),
+                groupSelection = TrackerMapGroupModeSelection(groupId = null, trackerIds = emptySet())
+            )
+        )
+
+        assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
+        assertEquals(setOf("remote"), plan.trackerIds)
+        assertNull(plan.overlayTrackerId)
     }
 
     @Test
@@ -97,7 +115,7 @@ class TrackerMapTrailReloadCoordinatorTest {
         )
 
         assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
-        assertEquals(setOf("t1", "t2"), plan.trackerIds)
+        assertEquals(setOf("t2"), plan.trackerIds)
         assertNull(plan.overlayTrackerId)
         assertEquals("g1", plan.resolvedGroupId)
     }

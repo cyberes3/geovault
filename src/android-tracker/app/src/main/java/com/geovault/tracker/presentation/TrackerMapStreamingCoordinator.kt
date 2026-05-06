@@ -1,12 +1,15 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.policy.StreamingTargetPolicyInput
+
 data class TrackerMapStreamingDecisionInput(
     val mode: TrackerMapDisplayMode,
     val streamTargetIds: Set<String>,
     val displayedTrackerId: String,
     val displayedTrackerName: String,
     val selectedTrackerId: String,
-    /** When true and [selectedTrackerId] is non-blank, multi-context streaming excludes the selected id (local GPS). */
+    /** The selected tracker is local to this device and must never be subscribed as a remote stream. */
     val trackingRunning: Boolean = false,
 )
 
@@ -31,22 +34,28 @@ object TrackerMapStreamingCoordinator {
             // Keep no-op behavior while single-track context is still resolving.
             return TrackerMapStreamingCommand.NoOp
         }
-        if (input.trackingRunning && id == input.selectedTrackerId.trim() && input.selectedTrackerId.isNotBlank()) {
+        val ids = StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = setOf(id),
+                selectedTrackerId = input.selectedTrackerId,
+            )
+        )
+        if (ids.isEmpty()) {
             return TrackerMapStreamingCommand.Stop
         }
         return TrackerMapStreamingCommand.Start(
-            trackerIds = setOf(id),
+            trackerIds = ids,
             trackerName = input.displayedTrackerName.trim().ifBlank { null }
         )
     }
 
     private fun resolveMultiContext(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
-        val localTrackerId = input.selectedTrackerId.trim().takeIf { input.trackingRunning && it.isNotEmpty() }
-        val ids = input.streamTargetIds
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .filterNot { it == localTrackerId }
-            .toSet()
+        val ids = StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = input.streamTargetIds,
+                selectedTrackerId = input.selectedTrackerId,
+            )
+        )
         if (ids.isEmpty()) return TrackerMapStreamingCommand.Stop
         val trackerName = if (ids.size == 1) {
             input.displayedTrackerName.trim().ifBlank { null }

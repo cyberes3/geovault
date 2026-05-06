@@ -1,6 +1,8 @@
 package com.geovault.tracker.presentation
 
 import android.content.Context
+import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.policy.StreamingTargetPolicyInput
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import kotlinx.coroutines.flow.StateFlow
@@ -76,7 +78,7 @@ object TrackerParamsStreamingPolicy {
             )
         }
         val selectedTrackerId = input.selectedTrackerId.trim()
-        if (input.trackingRunning && selectedTrackerId.isNotEmpty() && trackerId == selectedTrackerId) {
+        if (selectedTrackerId.isNotEmpty() && trackerId == selectedTrackerId) {
             return TrackerParamsStreamingResolution(
                 session = TrackerParamsStreamingSession(
                     trackerId = trackerId,
@@ -91,13 +93,19 @@ object TrackerParamsStreamingPolicy {
         val activeTrackerIds = input.activeTrackerIds
             .mapNotNull { it.trim().takeIf(String::isNotEmpty) }
             .toSet()
-        if (input.liveStreamRunning && trackerId in activeTrackerIds) {
+        val remoteActiveTrackerIds = StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = activeTrackerIds,
+                selectedTrackerId = selectedTrackerId,
+            )
+        )
+        if (input.liveStreamRunning && trackerId in remoteActiveTrackerIds) {
             return TrackerParamsStreamingResolution(
                 session = TrackerParamsStreamingSession(
                     trackerId = trackerId,
                     trackerName = input.trackerName?.trim()?.ifBlank { null },
                     requestedTrackerIds = emptySet(),
-                    baselineTrackerIds = activeTrackerIds,
+                    baselineTrackerIds = remoteActiveTrackerIds,
                     ownership = TrackerParamsStreamingOwnership.AlreadyActive,
                 ),
                 command = TrackerParamsStreamingCommand.NoOp,
@@ -109,8 +117,8 @@ object TrackerParamsStreamingPolicy {
                 trackerId = trackerId,
                 trackerName = input.trackerName?.trim()?.ifBlank { null },
                 requestedTrackerIds = setOf(trackerId),
-                baselineTrackerIds = activeTrackerIds,
-                ownership = if (input.liveStreamRunning && activeTrackerIds.isNotEmpty()) {
+                baselineTrackerIds = remoteActiveTrackerIds,
+                ownership = if (input.liveStreamRunning && remoteActiveTrackerIds.isNotEmpty()) {
                     TrackerParamsStreamingOwnership.ExpandedExistingStream
                 } else {
                     TrackerParamsStreamingOwnership.StartedFromIdle
@@ -167,7 +175,7 @@ internal class TrackerParamsStreamingController(
                 trackerName = trackerName,
                 selectedTrackerId = selectedTrackerId,
                 trackingRunning = trackingRunning,
-                liveStreamRunning = streamSnapshot.isRunning,
+                liveStreamRunning = streamSnapshot.hasSubscriptionIntent,
                 activeTrackerIds = streamSnapshot.activeTrackerIds,
             )
         )
@@ -187,7 +195,7 @@ internal class TrackerParamsStreamingController(
         val command = TrackerParamsStreamingPolicy.resolveStop(
             TrackerParamsStreamingStopInput(
                 session = activeSession,
-                liveStreamRunning = snapshot.isRunning,
+                liveStreamRunning = snapshot.hasSubscriptionIntent,
                 activeTrackerIds = snapshot.activeTrackerIds,
             )
         )
@@ -204,12 +212,13 @@ internal class TrackerParamsStreamingController(
                 trackerIds = activeSession.requestedTrackerIds,
                 trackerName = activeSession.trackerName,
                 locallyRecordedTrackerId = selectedTrackerId.takeIf { trackingRunning },
+                excludedTrackerIds = StreamingTargetPolicy.selectedTrackerExclusion(selectedTrackerId),
             ),
         )
     }
 
     private fun streamFingerprint(snapshot: LiveStreamRuntimeSnapshot): String {
-        return "${snapshot.isRunning}|${snapshot.lifecycleState.name}|" +
+        return "${snapshot.hasSubscriptionIntent}|${snapshot.lifecycleState.name}|" +
             snapshot.activeTrackerIds
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
@@ -231,6 +240,7 @@ internal class TrackerParamsStreamingController(
                         trackerIds = command.trackerIds,
                         trackerName = command.trackerName,
                         locallyRecordedTrackerId = locallyRecordedTrackerId,
+                        excludedTrackerIds = StreamingTargetPolicy.selectedTrackerExclusion(selectedTrackerId),
                     ),
                 )
             }

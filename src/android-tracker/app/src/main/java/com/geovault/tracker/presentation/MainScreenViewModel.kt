@@ -10,7 +10,6 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.tracker.BuildConfig
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.RepositoryResult
@@ -138,7 +137,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             return
         }
-        if (SelectedTrackerPrefs.selectedTrackerId(app).isBlank()) {
+        if (TrackingRuntimeStateStore.state.value.selectedTrackerId.isBlank()) {
             _state.update {
                 it.copy(infoMessage = app.getString(R.string.no_tracker_selected_go_to_settings))
             }
@@ -402,7 +401,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun ensureSelectedTrackerReadyForStart(showNoSelectionMessage: Boolean): Boolean {
-        val trackerId = SelectedTrackerPrefs.selectedTrackerId(app)
+        val trackerId = TrackingRuntimeStateStore.state.value.selectedTrackerId.trim()
         if (trackerId.isBlank()) {
             if (showNoSelectionMessage) {
                 _state.update {

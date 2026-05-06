@@ -80,7 +80,11 @@ class LiveTrackStreamingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
-            val (restoredTrackerIds, restoredTrackerName) = MapStreamingServiceHelper.persistedTargets(this)
+            val selectedExclusion = selectedTrackerExclusion()
+            val (restoredTrackerIds, restoredTrackerName) = MapStreamingServiceHelper.persistedTargets(
+                context = this,
+                excludedTrackerIds = selectedExclusion,
+            )
             if (restoredTrackerIds.isEmpty()) {
                 Log.w(TAG, "Null intent received with no persisted stream targets; stopping streaming service")
                 stopSelf()
@@ -92,7 +96,10 @@ class LiveTrackStreamingService : Service() {
         }
         when (intent.action) {
             ACTION_START -> {
-                val trackerIds = extractTrackerIds(intent)
+                val trackerIds = MapStreamingServiceHelper.sanitizeStreamingTargets(
+                    trackerIds = extractTrackerIds(intent),
+                    excludedTrackerIds = selectedTrackerExclusion(),
+                )
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
                 startStreamingTargets(trackerIds, trackerName)
             }
@@ -412,6 +419,14 @@ class LiveTrackStreamingService : Service() {
             ?: emptySet()
         if (idsFromArray.isNotEmpty()) return idsFromArray
         return intent.getStringExtra(EXTRA_TRACKER_ID)?.trim()?.takeIf { it.isNotEmpty() }?.let { setOf(it) } ?: emptySet()
+    }
+
+    private fun selectedTrackerExclusion(): Set<String> {
+        return SelectedTrackerPrefs.selectedTrackerId(this)
+            .trim()
+            .takeIf { it.isNotEmpty() }
+            ?.let(::setOf)
+            .orEmpty()
     }
 
     private fun emitStreamingError(message: String) {

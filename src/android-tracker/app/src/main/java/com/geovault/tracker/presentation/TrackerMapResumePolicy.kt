@@ -84,18 +84,25 @@ class TrackerMapResolveResumeUseCase {
             if (displayedTrackerId != null && displayedTrackerId in streamedWithoutSelected) {
                 return TrackerMapResumeDecision.RestartDisplayedTrackerStreaming
             }
-            if (activeSingleTrackerId.isNotEmpty() && activeSingleTrackerId == selectedTrackerId) {
+            if (activeSingleTrackerId.isNotEmpty() && activeSingleTrackerId == selectedTrackerId && input.hasPendingInitialTracker) {
                 return TrackerMapResumeDecision.LoadSingleTrackerRuntime(activeSingleTrackerId)
             }
             return TrackerMapResumeDecision.NoOp
         }
 
         if (input.mapViewContext == TrackerMapViewContext.GROUP || input.showAllTrackers) {
+            val selectedTrackerId = input.selectedTrackerId.takeIf { it.isNotBlank() }
+            val streamedWithoutSelected = input.activeStreamedTrackerIds.filterTo(mutableSetOf()) { id ->
+                id.isNotBlank() && id != selectedTrackerId
+            }
+            val groupIdsWithoutSelected = input.currentGroupTrackIds.filterTo(mutableSetOf()) { id ->
+                id.isNotBlank() && id != selectedTrackerId
+            }
             return when {
-                input.activeStreamedTrackerIds.isNotEmpty() ->
-                    TrackerMapResumeDecision.StartMultiContextStreaming(input.activeStreamedTrackerIds)
-                input.mapViewContext == TrackerMapViewContext.GROUP && input.currentGroupTrackIds.isNotEmpty() ->
-                    TrackerMapResumeDecision.StartMultiContextStreaming(input.currentGroupTrackIds)
+                streamedWithoutSelected.isNotEmpty() ->
+                    TrackerMapResumeDecision.StartMultiContextStreaming(streamedWithoutSelected)
+                input.mapViewContext == TrackerMapViewContext.GROUP && groupIdsWithoutSelected.isNotEmpty() ->
+                    TrackerMapResumeDecision.StartMultiContextStreaming(groupIdsWithoutSelected)
                 else -> TrackerMapResumeDecision.MultiContextNoStreaming
             }
         }
@@ -110,6 +117,9 @@ class TrackerMapResolveResumeUseCase {
         }
         val displayedTrackerId = input.displayedTrackerId.takeIf { it.isNotBlank() }
         if (activeTrackerId.isNotEmpty() && displayedTrackerId != activeTrackerId) {
+            if (!input.hasPendingInitialTracker) {
+                return TrackerMapResumeDecision.RestartDisplayedTrackerStreaming
+            }
             val isStreamBootstrap = activeTrackerId in input.activeStreamedTrackerIds
             return if (isStreamBootstrap) {
                 TrackerMapResumeDecision.LoadSingleTrackerBootstrap(activeTrackerId)
@@ -118,17 +128,9 @@ class TrackerMapResolveResumeUseCase {
             }
         }
         if (!input.hasTrailPoints && activeTrackerId.isNotEmpty()) {
-            val isStreamBootstrap = activeTrackerId in input.activeStreamedTrackerIds
-            return if (isStreamBootstrap) {
-                TrackerMapResumeDecision.LoadSingleTrackerBootstrap(activeTrackerId)
-            } else {
-                TrackerMapResumeDecision.LoadSingleTrackerRuntime(activeTrackerId)
+            if (!input.hasPendingInitialTracker) {
+                return TrackerMapResumeDecision.RestartDisplayedTrackerStreaming
             }
-        }
-        if (input.hasTrailPoints &&
-            activeTrackerId.isNotEmpty() &&
-            input.backgroundedDurationMs >= BACKFILL_MIN_BACKGROUND_MS
-        ) {
             val isStreamBootstrap = activeTrackerId in input.activeStreamedTrackerIds
             return if (isStreamBootstrap) {
                 TrackerMapResumeDecision.LoadSingleTrackerBootstrap(activeTrackerId)
@@ -148,9 +150,6 @@ class TrackerMapResolveResumeUseCase {
         return displayedTrackerId.takeIf { it.isNotBlank() } ?: selectedTrackerId
     }
 
-    companion object {
-        const val BACKFILL_MIN_BACKGROUND_MS = 15_000L
-    }
 }
 
 class TrackerMapReopenOrchestrator(

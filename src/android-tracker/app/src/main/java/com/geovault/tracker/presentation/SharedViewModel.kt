@@ -6,13 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.AppError
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerSessionBootstrap
 import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -632,7 +632,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun selectedTrackerId(): String =
-        SelectedTrackerPrefs.selectedTrackerId(getApplication())
+        TrackingRuntimeStateStore.state.value.selectedTrackerId.trim()
 
     private fun resolveBulkUnsubscribeMessage(
         outcome: SharedBulkMutationOutcome,

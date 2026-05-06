@@ -102,7 +102,7 @@ class TrackerMapSessionProjectorTest {
     }
 
     @Test
-    fun groupModeNotRunning_includesSelectedWhenSelectedIsGroupMember() {
+    fun groupModeNotRunning_excludesSelectedWhenSelectedIsGroupMember() {
         val plan = project(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             selectedTrackerId = "a",
@@ -111,8 +111,38 @@ class TrackerMapSessionProjectorTest {
             groupTrackerIds = setOf("a", "b", "c"),
         )
 
-        assertEquals(setOf("a", "b", "c"), plan.remoteSubscriptionIds)
+        assertEquals(setOf("b", "c"), plan.remoteSubscriptionIds)
+        assertEquals(setOf("b", "c"), plan.trailReloadPlan.trackerIds)
         assertEquals(emptySet<String>(), plan.locallyRecordedTrackerIds)
+    }
+
+    @Test
+    fun singleSelectedNotTracking_neverStreamsSelected() {
+        val plan = project(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "selected",
+            displayedTrackerId = "selected",
+            runtimeRunning = false,
+        )
+
+        assertEquals(emptySet<String>(), plan.remoteSubscriptionIds)
+        assertEquals(emptySet<String>(), plan.acceptedRemoteTrackerIds)
+        assertEquals(TrackerMapTrailSource.SINGLE_SERVER, plan.trailReloadPlan.source)
+        assertEquals("selected", plan.trailReloadPlan.singleTrackerId)
+    }
+
+    @Test
+    fun allQueueNotTracking_excludesSelectedFromStreamingAndStreamingStartHistory() {
+        val plan = project(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            selectedTrackerId = "selected",
+            displayedTrackerId = "",
+            runtimeRunning = false,
+            rosterTrackerIds = setOf("selected", "remote"),
+        )
+
+        assertEquals(setOf("remote"), plan.remoteSubscriptionIds)
+        assertEquals(setOf("remote"), plan.trailReloadPlan.trackerIds)
     }
 
     @Test

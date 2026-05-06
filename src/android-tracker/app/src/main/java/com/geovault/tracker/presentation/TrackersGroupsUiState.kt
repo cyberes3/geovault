@@ -61,6 +61,7 @@ data class TrackersGroupsUiState(
     val mapVisibility: MapVisibilityResponse? = null,
     val trackerSearchQuery: String = "",
     val groupSearchQuery: String = "",
+    val selectedTrackerId: String = "",
     val shareRecipientSuggestions: List<String> = emptyList(),
     val shareRecipientUsers: List<UserItem> = emptyList(),
     val isShareRecipientSuggestionsLoading: Boolean = false,

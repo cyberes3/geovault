@@ -1,23 +1,23 @@
 package com.geovault.tracker.presentation
 
 /**
- * Unified set of tracker ids for multi-tracker map modes: subscribed targets requested by map/params logic
- * plus ids the foreground streaming service considers active once connected.
+ * Remote points are accepted only for the current projected subscription targets.
+ * Foreground service state can lag during target changes, so active ids are only
+ * retained when they still match the current projection.
  */
 object TrackerMapRemoteAcceptancePolicy {
     fun mergedAcceptedRemoteTrackerIds(
         streamTargetIds: Set<String>,
         activeStreamedTrackerIds: Set<String>,
     ): Set<String> {
-        val out = LinkedHashSet<String>()
-        for (id in streamTargetIds) {
-            val t = id.trim()
-            if (t.isNotEmpty()) out.add(t)
-        }
-        for (id in activeStreamedTrackerIds) {
-            val t = id.trim()
-            if (t.isNotEmpty()) out.add(t)
-        }
-        return out
+        val projectedIds = streamTargetIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        val activeIds = activeStreamedTrackerIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        return projectedIds + (activeIds intersect projectedIds)
     }
 }

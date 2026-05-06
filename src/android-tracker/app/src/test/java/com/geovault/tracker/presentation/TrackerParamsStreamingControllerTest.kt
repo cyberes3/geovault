@@ -34,6 +34,22 @@ class TrackerParamsStreamingControllerTest {
     }
 
     @Test
+    fun onScreenStarted_selectedTrackerNotTracking_doesNotCreateParamsLease() {
+        val sink = FakeLeaseSink()
+        val controller = controller(sink)
+
+        controller.onScreenStarted(
+            trackerId = "selected",
+            trackerName = "Selected",
+            selectedTrackerId = "selected",
+            trackingRunning = false,
+            streamSnapshot = LiveStreamRuntimeSnapshot(),
+        )
+
+        assertEquals(null, sink.lastRequest)
+    }
+
+    @Test
     fun onScreenStopped_startedFromIdle_clearsParamsLease() {
         val sink = FakeLeaseSink()
         val controller = controller(sink)
@@ -78,6 +94,29 @@ class TrackerParamsStreamingControllerTest {
 
         assertEquals(1, sink.resetApplyGateCount)
         assertEquals(setOf("remote"), sink.lastRequest?.trackerIds)
+    }
+
+    @Test
+    fun onScreenStarted_startingStreamCountsAsExistingSubscription() {
+        val streamState = MutableStateFlow(
+            LiveStreamRuntimeSnapshot(
+                isRunning = false,
+                lifecycleState = TrackingLifecycleState.STARTING,
+                activeTrackerIds = setOf("remote"),
+            )
+        )
+        val sink = FakeLeaseSink()
+        val controller = controller(sink, streamState)
+
+        controller.onScreenStarted(
+            trackerId = "remote",
+            trackerName = "Remote",
+            selectedTrackerId = "",
+            trackingRunning = false,
+            streamSnapshot = streamState.value,
+        )
+
+        assertEquals(null, sink.lastRequest)
     }
 
     private fun controller(

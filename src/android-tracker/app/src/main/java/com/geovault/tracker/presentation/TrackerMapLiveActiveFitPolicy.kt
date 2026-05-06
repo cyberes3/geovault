@@ -104,9 +104,13 @@ object TrackerMapLiveActiveFitPolicy {
             trackers = trackers,
             nowMs = nowMs,
         )
-        if (activeIds.isEmpty()) return LiveActiveTrailBoundsResult.NoActiveTrackers
-        val activeTrails = allQueueTrailsByTracker.filterKeys { it in activeIds }
-        val activeRemoteHeads = filteredRemoteLastPoints.filterKeys { it in activeIds }
+        val pinnedRemoteIds = acceptedRemoteIds.filter { trackerId ->
+            allQueueTrailsByTracker.containsKey(trackerId) || filteredRemoteLastPoints.containsKey(trackerId)
+        }
+        val boundsIds = activeIds + pinnedRemoteIds
+        if (boundsIds.isEmpty()) return LiveActiveTrailBoundsResult.NoActiveTrackers
+        val activeTrails = allQueueTrailsByTracker.filterKeys { it in boundsIds }
+        val activeRemoteHeads = filteredRemoteLastPoints.filterKeys { it in boundsIds }
         val trailBounds = TrackerMapStateTransforms.multiTrailBounds(activeTrails)
         val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(activeRemoteHeads)
         val bounds = TrackerMapStateTransforms.mergeBounds(trailBounds, remoteBounds)
