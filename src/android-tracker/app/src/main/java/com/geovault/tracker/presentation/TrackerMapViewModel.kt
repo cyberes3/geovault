@@ -1452,6 +1452,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 plan = plan,
                 localRuntimeOverlayTrails = renderTrails,
                 recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                currentSessionStartByTracker = currentSessionStartByTracker(state),
                 nowMs = nowMs,
             )
         )
@@ -1461,6 +1462,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return trackerManagementStateStore.trackers.value.associate { tracker ->
             tracker.id to tracker.settingString("recent_data_window")
         }
+    }
+
+    /**
+     * Authoritative current-session start, keyed by tracker id. Populated only for the
+     * locally-recorded tracker (the only tracker whose session boundary the client knows
+     * authoritatively); foreign trackers are absent and fall back to per-point starttimestamps.
+     */
+    private fun currentSessionStartByTracker(state: TrackerMapUiState): Map<String, Long> {
+        if (!state.runtime.localRecordingActive) return emptyMap()
+        val sessionStart = state.runtime.sessionStartTimeMs
+        if (sessionStart <= 0L) return emptyMap()
+        val trackerId = state.runtime.locallyRecordedTrackerId.trim()
+        if (trackerId.isEmpty()) return emptyMap()
+        return mapOf(trackerId to sessionStart)
     }
 
     fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
@@ -2226,12 +2241,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {
         val nowMs = System.currentTimeMillis()
+        val snapshot = buildCurrentSessionSnapshot(nowMs)
         val reduction = TrackerMapSessionEngine.reducePoint(
             TrackerMapSessionPointInput(
-                snapshot = buildCurrentSessionSnapshot(nowMs),
+                snapshot = snapshot,
                 point = point,
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                currentSessionStartByTracker = currentSessionStartByTracker(snapshot.uiState),
                 nowMs = nowMs,
             )
         )

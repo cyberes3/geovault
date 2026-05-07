@@ -1,5 +1,5 @@
 """
-App-ingress GVLT binary format tests.
+App-ingress GVL2 binary format tests.
 Run this file alone if needed: ./run-tests.sh test_api/test_live_track_app_ingress.py
 If a run hangs, use a timeout (e.g. pytest --timeout=60) or run a single test.
 """
@@ -34,8 +34,12 @@ def _patch_live_track_enabled():
     return patch("website.extensions.extension_loader.get_config_loader", return_value=mock_config)
 
 
-def _encode_point_gvlt(p):
-    """Encode one point: base 17 bytes (Bqff) + extended (no starttimestamp, no ser)."""
+_GVL2_MAGIC = b"GVL2"
+_FLAG_HAS_EXTENDED = 0x01
+
+
+def _encode_extended_point(p):
+    """Encode one point: base 17 bytes (Bqff) + extended fields. starttimestamp/ser come from header."""
     ts_ms = int(p["timestamp"] * 1000) if isinstance(p["timestamp"], float) else int(p["timestamp"])
     lat = float(p["lat"])
     lon = float(p["lon"])
@@ -62,38 +66,45 @@ def _encode_point_gvlt(p):
     return bytes(out)
 
 
-def encode_gvlt_payload(tracker_id_uuid, points, starttimestamp_ms=0, ser=""):
-    """
-    GVLT format: magic (4) + tracker_id (16) + batch block (starttimestamp 8 + ser_len 1 + ser)
-    + points. Each point: base 17 bytes (float32 lat/lon) + extended (batt/ischarging per-point).
-    """
-    ser_bytes = ser.encode("utf-8")[:64]
-    out = bytearray(b"GVLT")
+def _encode_minimal_point(p):
+    """Encode one minimal point: base 17 bytes only (Bqff). Used when HAS_EXTENDED=0."""
+    ts_ms = int(p["timestamp"] * 1000) if isinstance(p["timestamp"], float) else int(p["timestamp"])
+    lat = float(p["lat"])
+    lon = float(p["lon"])
+    return struct.pack(">Bqff", 0, ts_ms, lat, lon)
+
+
+def _gvl2_header(tracker_id_uuid, *, has_extended, session_start_ms, ser=""):
+    """Build the GVL2 header. ser is gated behind HAS_EXTENDED."""
+    out = bytearray(_GVL2_MAGIC)
     out.extend(tracker_id_uuid.bytes)
-    out.extend(struct.pack(">q", starttimestamp_ms))
-    out.append(len(ser_bytes))
-    out.extend(ser_bytes)
+    out.append(_FLAG_HAS_EXTENDED if has_extended else 0)
+    out.extend(struct.pack(">q", session_start_ms))
+    if has_extended:
+        ser_bytes = ser.encode("utf-8")[:64]
+        out.append(len(ser_bytes))
+        out.extend(ser_bytes)
+    return out
+
+
+def encode_gvl2_extended(tracker_id_uuid, points, session_start_ms=0, ser=""):
+    """GVL2 extended (HAS_EXTENDED=1) payload."""
+    out = _gvl2_header(tracker_id_uuid, has_extended=True, session_start_ms=session_start_ms, ser=ser)
     for p in points:
-        out.extend(_encode_point_gvlt(p))
+        out.extend(_encode_extended_point(p))
     return bytes(out)
 
 
-def encode_gvlm_minimal_payload(tracker_id_uuid, points):
-    """
-    GVLM minimal format: magic "GVLM" (4) + tracker_id (16) + points.
-    Each point: 17 bytes (flag 1 + time 8 + lat float32 4 + lon float32 4). No extended data.
-    """
-    out = bytearray(b"GVLM")
-    out.extend(tracker_id_uuid.bytes)
+def encode_gvl2_minimal(tracker_id_uuid, points, session_start_ms=0):
+    """GVL2 minimal (HAS_EXTENDED=0) payload. session_start_ms still lives in the header."""
+    out = _gvl2_header(tracker_id_uuid, has_extended=False, session_start_ms=session_start_ms)
     for p in points:
-        ts_ms = int(p["timestamp"] * 1000) if isinstance(p["timestamp"], float) else int(p["timestamp"])
-        lat, lon = float(p["lat"]), float(p["lon"])
-        out.extend(struct.pack(">Bqff", 0, ts_ms, lat, lon))
+        out.extend(_encode_minimal_point(p))
     return bytes(out)
 
 
 class TestLiveTrackAppIngress(TestCase):
-    """Test app_ingress endpoint (POST only, OAuth + GVLT binary, no version byte)."""
+    """Test app_ingress endpoint (POST only, OAuth + GVL2 binary)."""
 
     def setUp(self):
         User = get_user_model()
@@ -123,7 +134,7 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_401_unauthenticated(self):
         """POST without auth returns 401."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
@@ -139,8 +150,8 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_app_ingress_success_basic_point(self):
-        """POST with valid GVLT binary single point returns 200 and appends point."""
-        payload = encode_gvlt_payload(
+        """POST with valid GVL2 extended single point returns 200 and appends point."""
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
@@ -161,19 +172,18 @@ class TestLiveTrackAppIngress(TestCase):
 
         params = track.point_params or []
         self.assertEqual(len(params), 1)
-        # Extended fields stored (bearing, not dir)
         self.assertNotIn("dir", params[0])
 
     def test_app_ingress_success_extended_point(self):
-        """POST with valid GVLT binary extended point returns 200 and stores point params (bearing, not dir)."""
-        payload = encode_gvlt_payload(
+        """POST with valid GVL2 extended point returns 200 and stores point params (bearing, not dir)."""
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{
                 "lat": 38.0, "lon": -121.0, "timestamp": 1705312800000,
                 "alt": 100.5, "acc": 10.0, "spd_kph": 5.0, "bearing": 180.0,
                 "sat": 8, "prov": "gps", "batt": 85, "ischarging": True, "dist": 100.5,
             }],
-            starttimestamp_ms=1705312700000,
+            session_start_ms=1705312700000,
             ser="ABC123",
         )
         with _patch_live_track_enabled():
@@ -197,12 +207,11 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertTrue(params[0].get("ischarging"))
         self.assertAlmostEqual(params[0].get("dist"), 100.5, places=1)
         self.assertEqual(params[0].get("ser"), "ABC123")
-        self.assertEqual(params[0].get("starttimestamp"), 1705312700000)
         self.assertNotIn("dir", params[0])
 
     def test_app_ingress_success_multiple_points(self):
-        """POST with multiple points in one GVLT binary payload works."""
-        payload = encode_gvlt_payload(
+        """POST with multiple points in one GVL2 extended payload works."""
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [
                 {"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000},
@@ -228,14 +237,15 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertAlmostEqual(params[1].get("alt"), 50.0, places=1)
         self.assertAlmostEqual(params[1].get("bearing"), 90.0, places=1)
 
-    def test_app_ingress_success_gvlm_minimal(self):
-        """POST with GVLM minimal payload (extended params off) returns 200, stores coords only."""
-        payload = encode_gvlm_minimal_payload(
+    def test_app_ingress_success_minimal_stamps_starttimestamp(self):
+        """GVL2 minimal payload (HAS_EXTENDED=0) still stamps starttimestamp on every point's params."""
+        payload = encode_gvl2_minimal(
             self.tracker_uuid,
             [
                 {"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000},
                 {"lat": 37.01, "lon": -122.01, "timestamp": 1705312860000},
             ],
+            session_start_ms=1705312700000,
         )
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
@@ -251,15 +261,66 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertAlmostEqual(coords[1][0], -122.01, places=4)
         self.assertAlmostEqual(coords[1][1], 37.01, places=4)
         self.assertEqual(coords[1][2], 1705312860000)
-        self.assertEqual(params[0], {})
-        self.assertEqual(params[1], {})
+        # Minimal mode does NOT carry ser, batt, etc, but ALWAYS carries starttimestamp.
+        self.assertEqual(params[0].get("starttimestamp"), 1705312700000)
+        self.assertEqual(params[1].get("starttimestamp"), 1705312700000)
+        self.assertNotIn("ser", params[0])
+        self.assertNotIn("batt", params[0])
+        self.assertNotIn("alt", params[0])
+
+    def test_app_ingress_legacy_gvlm_minimal_still_accepted(self):
+        """Legacy GVLM minimal payload (old Android client) is still accepted."""
+        out = bytearray(b"GVLM")
+        out.extend(self.tracker_uuid.bytes)
+        out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
+        out.extend(struct.pack(">Bqff", 0, 1705312860000, 37.01, -122.01))
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self._ingress_post(bytes(out))
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        params = track.point_params or []
+        self.assertEqual(len(coords), 2)
+        self.assertEqual(len(params), 2)
+        self.assertEqual(coords[0], [-122.0, 37.0, 1705312800000])
+        # Legacy GVLM has no batch starttimestamp.
+        self.assertNotIn("starttimestamp", params[0])
+        self.assertNotIn("starttimestamp", params[1])
+
+    def test_app_ingress_legacy_gvlt_extended_still_accepted(self):
+        """Legacy GVLT extended payload (old Android client) is still accepted and stamps starttimestamp."""
+        out = bytearray(b"GVLT")
+        out.extend(self.tracker_uuid.bytes)
+        out.extend(struct.pack(">q", 1705312700000))
+        ser_bytes = b"build-9.9"
+        out.append(len(ser_bytes))
+        out.extend(ser_bytes)
+        out.extend(_encode_extended_point({
+            "lat": 37.0, "lon": -122.0, "timestamp": 1705312800000,
+            "alt": 100.5, "spd_kph": 5.0, "bearing": 90.0, "acc": 5.0,
+            "sat": 8, "prov": "gps", "batt": 75, "ischarging": True, "dist": 100.0,
+        }))
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self._ingress_post(bytes(out))
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        params = track.point_params or []
+        self.assertEqual(len(params), 1)
+        self.assertEqual(params[0].get("starttimestamp"), 1705312700000)
+        self.assertEqual(params[0].get("ser"), "build-9.9")
+        self.assertEqual(params[0].get("sat"), 8)
+        self.assertEqual(params[0].get("prov"), "gps")
 
     def test_app_ingress_404_wrong_user(self):
         """POST with another user's tracker ID returns 404."""
         User = get_user_model()
         other = User.objects.create_user(email="other@example.com", password="x", username="other")
         self.client.force_login(other)
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
@@ -269,66 +330,58 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_400_invalid_magic_bytes(self):
         """POST with wrong magic bytes returns 400."""
-        payload = bytearray(b"BADV")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(_encode_point_gvlt({"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}))
+        out = bytearray(b"BADV")
+        out.extend(self.tracker_uuid.bytes)
+        out.append(_FLAG_HAS_EXTENDED)
+        out.extend(struct.pack(">q", 0))
+        out.append(0)
+        out.extend(_encode_extended_point({"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}))
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid magic bytes", response.content.decode())
 
     def test_app_ingress_400_truncated_header(self):
-        """POST with body shorter than 20 bytes returns 400 Invalid magic bytes."""
+        """POST with body shorter than the GVL2 header returns 400 Invalid magic bytes."""
         with _patch_live_track_enabled():
-            response = self._ingress_post(b"GVLT")
+            response = self._ingress_post(b"GVL2")
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid magic bytes", response.content.decode())
 
     def test_app_ingress_400_truncated_payload(self):
-        """POST with batch header but incomplete first point (no extended block) returns 400."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
+        """POST with header but incomplete first point's extended block returns 400."""
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+        out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Incomplete", response.content.decode())
 
     def test_app_ingress_400_truncated_extended_payload(self):
         """POST with base point but truncated extended data returns 400."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
-        payload.extend(struct.pack(">H", 0))
-        payload.extend(struct.pack(">ffff", 100.5, 10.0, 90.0, 5.0))
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+        out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
+        out.extend(struct.pack(">H", 0))
+        out.extend(struct.pack(">ffff", 100.5, 10.0, 90.0, 5.0))
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Incomplete", response.content.decode())
 
     def test_app_ingress_400_second_point_truncated_base(self):
         """POST with first point complete but second point missing base bytes returns 400."""
-        full_point = _encode_point_gvlt({"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000})
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(full_point)
-        payload.extend(struct.pack(">Bq", 0, 1705312860000))
+        full_point = _encode_extended_point({"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000})
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+        out.extend(full_point)
+        out.extend(struct.pack(">Bq", 0, 1705312860000))
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Incomplete", response.content.decode())
 
     def test_app_ingress_success_gzip_compressed(self):
         """POST with Content-Encoding: gzip and compressed body returns 200."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
@@ -351,7 +404,7 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_keeps_all_points(self):
         """App-ingress retains all received points; point-count trimming is not applied."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [
                 {"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000},
@@ -377,25 +430,22 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_empty_points_batch_header_only(self):
         """POST with valid header and batch block but zero points returns 200 (no new coords)."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 1705312700000))
-        payload.append(0)
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=1705312700000, ser="")
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                response = self._ingress_post(bytes(payload))
+                response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
         coords = (track.geometry or {}).get("coordinates", [])
         self.assertEqual(len(coords), 0)
 
     def test_app_ingress_404_nonexistent_tracker_uuid(self):
-        """POST with valid GVLT but UUID that does not match any track returns 404."""
+        """POST with valid GVL2 but UUID that does not match any track returns 404."""
         other_uuid = uuid.uuid4()
         while other_uuid == self.tracker_uuid:
             other_uuid = uuid.uuid4()
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             other_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
@@ -404,61 +454,56 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_app_ingress_400_incomplete_batch_block_truncated_after_uuid(self):
-        """POST with body length 20–28 bytes (missing starttimestamp/ser_len/ser) returns 400."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        self.assertEqual(len(payload), 20)
+        """POST with body missing flags/session_start (header < base header bytes) returns 400."""
+        out = bytearray(_GVL2_MAGIC)
+        out.extend(self.tracker_uuid.bytes)
+        self.assertEqual(len(out), 20)
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Incomplete batch block", response.content.decode())
+        self.assertIn("Invalid magic bytes", response.content.decode())
 
     def test_app_ingress_400_incomplete_batch_block_ser_claimed_too_long(self):
         """POST with ser_len claiming more bytes than present returns 400."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(10)
-        payload.extend(b"only3")
+        out = bytearray(_GVL2_MAGIC)
+        out.extend(self.tracker_uuid.bytes)
+        out.append(_FLAG_HAS_EXTENDED)
+        out.extend(struct.pack(">q", 0))
+        out.append(10)
+        out.extend(b"only3")
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Incomplete batch block", response.content.decode())
 
     def test_app_ingress_400_truncated_prov_string(self):
         """POST with prov_len pointing past end of body returns 400."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
-        payload.extend(struct.pack(">H", 0))
-        payload.extend(struct.pack(">ffff", 0.0, 0.0, 0.0, 0.0))
-        payload.extend(struct.pack(">Bb", 0, 0))
-        payload.extend(struct.pack(">f", 0.0))
-        payload.append(10)
-        payload.extend(b"abc")
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+        out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
+        out.extend(struct.pack(">H", 0))
+        out.extend(struct.pack(">ffff", 0.0, 0.0, 0.0, 0.0))
+        out.extend(struct.pack(">Bb", 0, 0))
+        out.extend(struct.pack(">f", 0.0))
+        out.append(10)
+        out.extend(b"abc")
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Incomplete", response.content.decode())
 
     def test_app_ingress_400_truncated_desc_string(self):
         """POST with desc_len pointing past end of body returns 400."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
-        payload.extend(struct.pack(">H", 0))
-        payload.extend(struct.pack(">ffff", 0.0, 0.0, 0.0, 0.0))
-        payload.extend(struct.pack(">Bb", 0, 0))
-        payload.extend(struct.pack(">f", 0.0))
-        payload.append(0)
-        payload.extend(struct.pack(">H", 5))
-        payload.extend(b"ab")
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+        out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
+        out.extend(struct.pack(">H", 0))
+        out.extend(struct.pack(">ffff", 0.0, 0.0, 0.0, 0.0))
+        out.extend(struct.pack(">Bb", 0, 0))
+        out.extend(struct.pack(">f", 0.0))
+        out.append(0)
+        out.extend(struct.pack(">H", 5))
+        out.extend(b"ab")
         with _patch_live_track_enabled():
-            response = self._ingress_post(bytes(payload))
+            response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Incomplete", response.content.decode())
 
@@ -469,23 +514,20 @@ class TestLiveTrackAppIngress(TestCase):
                 "extensions.live_track.src.backend.ingress_views._MAX_POINTS_PER_PAYLOAD",
                 2,
             ):
-                min_point = _encode_point_gvlt({
+                min_point = _encode_extended_point({
                     "lat": 37.0, "lon": -122.0, "timestamp": 1705312800000,
                 })
-                payload = bytearray(b"GVLT")
-                payload.extend(self.tracker_uuid.bytes)
-                payload.extend(struct.pack(">q", 0))
-                payload.append(0)
-                payload.extend(min_point)
-                payload.extend(min_point)
-                payload.extend(min_point)
-                response = self._ingress_post(bytes(payload))
+                out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+                out.extend(min_point)
+                out.extend(min_point)
+                out.extend(min_point)
+                response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 400)
         self.assertIn("Too many points", response.content.decode())
 
     def test_app_ingress_success_sat_zero_omitted_from_params(self):
         """When sat is 0, backend does not store 'sat' in point_params."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000, "sat": 0}],
         )
@@ -501,7 +543,7 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_success_batt_ischarging_boundaries(self):
         """batt 0/100 and ischarging false/true are stored correctly."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [
                 {"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000, "batt": 0, "ischarging": False},
@@ -523,7 +565,7 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_success_float32_lat_lon_precision(self):
         """Float32 lat/lon are accepted and stored (precision loss is acceptable)."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.123456, "lon": -122.654321, "timestamp": 1705312800000}],
         )
@@ -543,7 +585,7 @@ class TestLiveTrackAppIngress(TestCase):
         long_prov = "p" * 64
         long_ser = "s" * 64
         long_desc = "d" * 256
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{
                 "lat": 37.0, "lon": -122.0, "timestamp": 1705312800000,
@@ -565,10 +607,10 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_success_empty_ser_batch_no_ser_in_params(self):
         """When batch ser is empty, point_params do not include 'ser'."""
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
-            starttimestamp_ms=0,
+            session_start_ms=0,
             ser="",
         )
         with _patch_live_track_enabled():
@@ -583,23 +625,20 @@ class TestLiveTrackAppIngress(TestCase):
 
     def test_app_ingress_utf8_replacement_invalid_sequences(self):
         """Invalid UTF-8 in prov or desc is decoded with replacement and stored."""
-        payload = bytearray(b"GVLT")
-        payload.extend(self.tracker_uuid.bytes)
-        payload.extend(struct.pack(">q", 0))
-        payload.append(0)
-        payload.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
-        payload.extend(struct.pack(">H", 0))
-        payload.extend(struct.pack(">ffff", 0.0, 0.0, 0.0, 0.0))
-        payload.extend(struct.pack(">Bb", 0, 0))
-        payload.extend(struct.pack(">f", 0.0))
-        payload.append(3)
-        payload.extend(b"\xff\xfe\xfd")
-        payload.extend(struct.pack(">H", 2))
-        payload.extend(b"\x80\x81")
+        out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=0, ser="")
+        out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
+        out.extend(struct.pack(">H", 0))
+        out.extend(struct.pack(">ffff", 0.0, 0.0, 0.0, 0.0))
+        out.extend(struct.pack(">Bb", 0, 0))
+        out.extend(struct.pack(">f", 0.0))
+        out.append(3)
+        out.extend(b"\xff\xfe\xfd")
+        out.extend(struct.pack(">H", 2))
+        out.extend(b"\x80\x81")
         with _patch_live_track_enabled():
             with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
-                response = self._ingress_post(bytes(payload))
+                response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
         params = track.point_params or []
@@ -647,7 +686,7 @@ class TestLiveTrackAppIngress(TestCase):
     def test_app_ingress_success_deflate_compressed(self):
         """POST with Content-Encoding: deflate and zlib-compressed body returns 200."""
         import zlib
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
@@ -671,7 +710,7 @@ class TestLiveTrackAppIngress(TestCase):
     def test_app_ingress_dedups_identical_points_within_payload(self):
         """Incoming payload duplicates with identical lon/lat/timestamp are inserted once."""
         duplicate_ts = 1705312800000
-        payload = encode_gvlt_payload(
+        payload = encode_gvl2_extended(
             self.tracker_uuid,
             [
                 {"lat": 37.0, "lon": -122.0, "timestamp": duplicate_ts},
@@ -698,11 +737,11 @@ class TestLiveTrackAppIngress(TestCase):
     def test_app_ingress_dedups_against_existing_geometry(self):
         """Incoming point identical to existing geometry point is skipped."""
         ts = 1705312800000
-        first_payload = encode_gvlt_payload(
+        first_payload = encode_gvl2_extended(
             self.tracker_uuid,
             [{"lat": 37.0, "lon": -122.0, "timestamp": ts}],
         )
-        second_payload = encode_gvlt_payload(
+        second_payload = encode_gvl2_extended(
             self.tracker_uuid,
             [
                 {"lat": 37.0, "lon": -122.0, "timestamp": ts},

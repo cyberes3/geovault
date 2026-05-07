@@ -7,6 +7,8 @@ import bisect
 import gzip
 import struct
 import uuid
+from dataclasses import dataclass
+from typing import Callable
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -145,20 +147,36 @@ def ingress(request):
     return JsonResponse({"ok": True}, status=200)
 
 
-# Max string lengths for GVLT extended block (match Android encoder caps)
+# Max string lengths for the extended block (match Android encoder caps).
+# Shared across GVL2 (current) and the legacy GVLM/GVLT parsers.
 _MAX_PROV_BYTES = 64
 _MAX_SER_BYTES = 64
 _MAX_DESC_BYTES = 256
 _MAX_POINTS_PER_PAYLOAD = 5000
 
+_GVL2_MAGIC = b"GVL2"
+_GVLT_MAGIC = b"GVLT"
+_GVLM_MAGIC = b"GVLM"
 
-def _parse_gvlm_minimal(body):
+_GVL2_FLAG_HAS_EXTENDED = 0x01
+_GVL2_BASE_HEADER_BYTES = 4 + 16 + 1 + 8  # magic + uuid + flags + session_start_ms
+_GVL2_BASE_POINT_BYTES = 1 + 8 + 4 + 4  # flag + ts + lat + lon
+
+# Result tuple alias: (tracker_uuid, points, error_message). On success error is None;
+# on failure tracker_uuid and points are None and error is a human-readable string.
+_ParseResult = tuple[uuid.UUID | None, list[dict] | None, str | None]
+
+
+def _parse_gvlm_minimal(body) -> _ParseResult:
     """
-    Parse GVLM minimal payload: magic "GVLM" (4) + uuid (16) + points.
-    Each point: 17 bytes (flag, time int64, lat float32, lon float32). No extended fields.
-    Returns (tracker_uuid, points, err). Points have only lat, lon, timestamp.
+    Legacy parser (kept for old Android clients that have not upgraded to GVL2).
+
+    GVLM minimal payload: magic (4) + uuid (16) + repeated 17-byte points
+    (flag, time int64, lat float32, lon float32). No batch session start, no
+    extended fields. Resulting points have only lat/lon/timestamp; the
+    server-side filter falls back to its time-based heuristic for these.
     """
-    if not body.startswith(b"GVLM"):
+    if not body.startswith(_GVLM_MAGIC):
         return None, None, "Invalid magic bytes"
     if len(body) < 20:
         return None, None, "Invalid magic bytes"
@@ -167,7 +185,7 @@ def _parse_gvlm_minimal(body):
     except (ValueError, TypeError):
         return None, None, "Invalid tracker ID"
     offset = 20
-    points = []
+    points: list[dict] = []
     while offset < len(body):
         if len(points) >= _MAX_POINTS_PER_PAYLOAD:
             return None, None, "Too many points"
@@ -179,14 +197,17 @@ def _parse_gvlm_minimal(body):
     return tracker_uuid, points, None
 
 
-def _parse_gvlt_points(body):
+def _parse_gvlt_extended(body) -> _ParseResult:
     """
-    Parse GVLT binary: magic(4) + uuid(16) + batch_block(8+1+ser) then per-point.
-    Per-point: base 17 bytes (flag, time, lat float32, lon float32), extended (sat, alt, spd_kph,
-    bearing, acc, batt, ischarging, dist_m, prov, desc). starttimestamp and ser come from batch.
-    Returns (tracker_uuid, points, err). Uses bearing only (not dir).
+    Legacy parser (kept for old Android clients that have not upgraded to GVL2).
+
+    GVLT layout: magic(4) + uuid(16) + batch block (starttimestamp 8 + ser_len 1 + ser)
+    + repeated points. Per point: base 17 bytes (flag, time, lat float32, lon float32)
+    plus extended fields (sat, alt, spd_kph, bearing, acc, batt, ischarging, dist_m,
+    prov, desc). `starttimestamp` and `ser` come from the batch header and are stamped
+    onto every point's params dict.
     """
-    if not body.startswith(b"GVLT"):
+    if not body.startswith(_GVLT_MAGIC):
         return None, None, "Invalid magic bytes"
     if len(body) < 20:
         return None, None, "Invalid magic bytes"
@@ -207,7 +228,7 @@ def _parse_gvlt_points(body):
         ser_str = body[29 : 29 + read_len].decode("utf-8", errors="replace")
 
     offset = 29 + ser_len
-    points = []
+    points: list[dict] = []
     while offset < len(body):
         if len(points) >= _MAX_POINTS_PER_PAYLOAD:
             return None, None, "Too many points"
@@ -217,8 +238,12 @@ def _parse_gvlt_points(body):
         _flag, ts_ms, lat, lon = struct.unpack_from(">Bqff", body, offset)
         offset += 17
 
-        point_data = {"lat": float(lat), "lon": float(lon), "timestamp": ts_ms}
-        point_data["starttimestamp"] = starttimestamp_ms
+        point_data: dict = {
+            "lat": float(lat),
+            "lon": float(lon),
+            "timestamp": ts_ms,
+            "starttimestamp": starttimestamp_ms,
+        }
         if ser_str:
             point_data["ser"] = ser_str
 
@@ -270,6 +295,153 @@ def _parse_gvlt_points(body):
     return tracker_uuid, points, None
 
 
+def _parse_gvl2(body) -> _ParseResult:
+    """
+    Parse the GVL2 self-describing binary upload format.
+
+    Header layout:
+      magic[4]              "GVL2"
+      uuid[16]              tracker UUID
+      flags[1]              bit0 = HAS_EXTENDED (other bits reserved, must be 0)
+      session_start_ms[8]   batch session start, milliseconds
+      -- if HAS_EXTENDED:
+      ser_len[1]
+      ser_bytes[ser_len]    build serial
+
+    Per-point layout: base 17 bytes (flag, ts_ms, lat_f32, lon_f32). When HAS_EXTENDED
+    is set, each point also carries (sat, alt, spd_kph, bearing, acc, batt, ischarging,
+    dist_m, prov, desc). `starttimestamp` and (when extended) `ser` come from the header
+    and are stamped onto every point's params dict.
+
+    Returns (tracker_uuid, points, err). Uses bearing only (not legacy dir).
+    """
+    if not body.startswith(_GVL2_MAGIC):
+        return None, None, "Invalid magic bytes"
+    if len(body) < _GVL2_BASE_HEADER_BYTES:
+        return None, None, "Invalid magic bytes"
+    try:
+        tracker_uuid = uuid.UUID(bytes=bytes(body[4:20]))
+    except (ValueError, TypeError):
+        return None, None, "Invalid tracker ID"
+
+    flags_byte = body[20]
+    has_extended = bool(flags_byte & _GVL2_FLAG_HAS_EXTENDED)
+    starttimestamp_ms, = struct.unpack_from(">q", body, 21)
+
+    offset = _GVL2_BASE_HEADER_BYTES
+    ser_str = ""
+    if has_extended:
+        if len(body) < offset + 1:
+            return None, None, "Incomplete batch block"
+        ser_len = body[offset]
+        offset += 1
+        if len(body) < offset + ser_len:
+            return None, None, "Incomplete batch block"
+        if ser_len > 0:
+            read_len = min(ser_len, _MAX_SER_BYTES)
+            ser_str = body[offset : offset + read_len].decode("utf-8", errors="replace")
+        offset += ser_len
+
+    points = []
+    while offset < len(body):
+        if len(points) >= _MAX_POINTS_PER_PAYLOAD:
+            return None, None, "Too many points"
+        if offset + _GVL2_BASE_POINT_BYTES > len(body):
+            return None, None, "Incomplete base point"
+
+        _flag, ts_ms, lat, lon = struct.unpack_from(">Bqff", body, offset)
+        offset += _GVL2_BASE_POINT_BYTES
+
+        point_data = {
+            "lat": float(lat),
+            "lon": float(lon),
+            "timestamp": ts_ms,
+            "starttimestamp": starttimestamp_ms,
+        }
+
+        if not has_extended:
+            points.append(point_data)
+            continue
+
+        if ser_str:
+            point_data["ser"] = ser_str
+
+        if offset + 2 + 4 * 4 + 1 + 1 + 4 > len(body):
+            return None, None, "Incomplete extended data"
+        sat, = struct.unpack_from(">H", body, offset)
+        offset += 2
+        alt, spd_kph, bearing, acc = struct.unpack_from(">ffff", body, offset)
+        offset += 16
+        batt, ischarging = struct.unpack_from(">Bb", body, offset)
+        offset += 2
+        dist_m, = struct.unpack_from(">f", body, offset)
+        offset += 4
+
+        if sat > 0:
+            point_data["sat"] = sat
+        point_data["alt"] = alt
+        point_data["spd_kph"] = spd_kph
+        point_data["bearing"] = bearing
+        point_data["acc"] = acc
+        point_data["batt"] = batt
+        point_data["ischarging"] = bool(ischarging)
+        point_data["dist"] = dist_m
+
+        if offset + 1 > len(body):
+            return None, None, "Incomplete extended data"
+        prov_len = body[offset]
+        offset += 1
+        if offset + prov_len > len(body):
+            return None, None, "Incomplete extended data"
+        if prov_len > 0:
+            read_len = min(prov_len, _MAX_PROV_BYTES)
+            point_data["prov"] = body[offset : offset + read_len].decode("utf-8", errors="replace")
+        offset += prov_len
+
+        if offset + 2 > len(body):
+            return None, None, "Incomplete extended data"
+        desc_len, = struct.unpack_from(">H", body, offset)
+        offset += 2
+        if offset + desc_len > len(body):
+            return None, None, "Incomplete extended data"
+        if desc_len > 0:
+            read_len = min(desc_len, _MAX_DESC_BYTES)
+            point_data["desc"] = body[offset : offset + read_len].decode("utf-8", errors="replace")
+        offset += desc_len
+
+        points.append(point_data)
+
+    return tracker_uuid, points, None
+
+
+@dataclass(frozen=True)
+class _BinaryFormat:
+    """One supported binary upload format. The dispatch table below holds one
+    entry per format; adding a new format means appending a new instance with
+    its magic and parser, no other site needs editing."""
+    magic: bytes
+    parse: Callable[[bytes], _ParseResult]
+
+
+# Dispatch table for app_ingress binary uploads. GVL2 is the current Android
+# format; GVLT and GVLM are kept for backwards compatibility with older app
+# versions that have not upgraded yet. New formats append here.
+_BINARY_FORMATS: tuple[_BinaryFormat, ...] = (
+    _BinaryFormat(magic=_GVL2_MAGIC, parse=_parse_gvl2),
+    _BinaryFormat(magic=_GVLT_MAGIC, parse=_parse_gvlt_extended),
+    _BinaryFormat(magic=_GVLM_MAGIC, parse=_parse_gvlm_minimal),
+)
+
+
+def _select_binary_format(body: bytes) -> _BinaryFormat | None:
+    if len(body) < 4:
+        return None
+    for fmt in _BINARY_FORMATS:
+        if body.startswith(fmt.magic):
+            return fmt
+    return None
+
+
 def _get_request_body_decompressed(request):
     """Return request body, decompressing if Content-Encoding is gzip or deflate."""
     body = request.body
@@ -298,12 +470,10 @@ def app_ingress(request):
     body = _get_request_body_decompressed(request)
     if body is None:
         return error_response("Invalid or unsupported Content-Encoding", 400)
-    if body.startswith(b"GVLM"):
-        tracker_uuid, points, err = _parse_gvlm_minimal(body)
-    elif body.startswith(b"GVLT"):
-        tracker_uuid, points, err = _parse_gvlt_points(body)
-    else:
+    fmt = _select_binary_format(body)
+    if fmt is None:
         return error_response("Invalid magic bytes", 400)
+    tracker_uuid, points, err = fmt.parse(body)
     if err is not None:
         return error_response(err, 400)
     if tracker_uuid is None or points is None:

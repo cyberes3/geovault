@@ -171,21 +171,17 @@ class QueueUploadEngine(
                 )
                 if (batch.isEmpty()) break
                 locallyClaimedIds.addAll(batch.map { it.id })
-                val payload = if (config.useExtendedParams) {
-                    BinaryPayloadBuilder.buildPayload(
-                        locations = batch,
-                        trackerId = trackerUuid,
-                        sessionStartTimeMs = config.sessionStartTimeMs,
-                        batteryLevel = config.batteryLevel,
-                        isCharging = config.isCharging,
-                        buildSerial = config.deviceIdentifier
-                    )
-                } else {
-                    BinaryPayloadBuilder.buildPayloadMinimal(
-                        locations = batch,
-                        trackerId = trackerUuid
-                    )
-                }
+                val payload = BinaryPayloadBuilder.build(
+                    locations = batch,
+                    header = BinaryPayloadBuilder.Header(
+                        trackerUuid = trackerUuid,
+                        sessionStartMs = config.sessionStartTimeMs,
+                        hasExtended = config.useExtendedParams,
+                        buildSerial = config.deviceIdentifier,
+                    ),
+                    batteryLevel = config.batteryLevel,
+                    isCharging = config.isCharging,
+                )
                 val requestBody = gzipCompress(payload).toRequestBody("application/octet-stream".toMediaTypeOrNull())
                 val request = Request.Builder()
                     .url(ingressUrl)

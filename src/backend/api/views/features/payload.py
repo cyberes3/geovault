@@ -1,6 +1,6 @@
 from typing import Optional
 
-from coordinate_parser import parse_coordinate
+from geo_lib.coordinate_parser import parse_coordinate
 from pydantic import BaseModel, Field, field_validator
 
 

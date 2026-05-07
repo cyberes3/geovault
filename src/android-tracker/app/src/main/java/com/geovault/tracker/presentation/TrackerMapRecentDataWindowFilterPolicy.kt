@@ -3,22 +3,32 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.db.QueuedLocation
 
 /**
- * Client-side mirror of the server's `recent_data_window` filter
- * (see `src/backend/extensions/live_track/src/backend/helpers.py`).
- *
- * Applied as the last step of the render projection so live and queued
- * appends obey the same window the server uses for its initial response.
+ * Recent-data-window selection on the map: drives the visible point subset for a
+ * tracker's trail. Mirrors the server's `recent_data_window` selector
+ * (`src/backend/extensions/live_track/src/backend/helpers.py`).
  *
  * Recognized keys:
- *  - "1min", "1h", "1d", "1w", "1m": rolling time window from `nowMs`.
- *  - "current_session": only the latest session by `startTimestampMs`.
- *  - "session": latest two sessions by `startTimestampMs`.
- *  - null / "all" / unknown: identity.
+ *  - `1min`, `1h`, `1d`, `1w`, `1m`: rolling time window from `nowMs`.
+ *  - `current_session`: only the latest session.
+ *  - `session`: latest two sessions (previous + current).
+ *  - null / `all` / unknown: identity.
  *
- * If filtering would drop every point of an otherwise non-empty trail,
- * the most recent point is preserved so the marker still has a position
- * (matching the server's `_with_latest_point_fallback`).
+ * Session-keyed selections delegate session attribution to
+ * [TrackerSessionAttributionPolicy], which uses the authoritative current-session
+ * start (when supplied) plus per-point starttimestamps to assign every point to
+ * exactly one segment. The filter then keeps the last 1 (current_session) or last 2
+ * (session) segments.
+ *
+ * Latest-point fallback parity with the server: if filtering would drop every point
+ * of an otherwise non-empty trail, the most recent input point is preserved so the
+ * marker still has a position.
  */
+data class TrackerSessionWindowContext(
+    val windowKey: String?,
+    val nowMs: Long,
+    val currentSessionStartMs: Long? = null,
+)
+
 object TrackerMapRecentDataWindowFilterPolicy {
 
     private const val MS_PER_SEC = 1_000L
@@ -36,22 +46,47 @@ object TrackerMapRecentDataWindowFilterPolicy {
         "1m" to MS_PER_MONTH,
     )
 
-    fun apply(
-        points: List<QueuedLocation>,
-        windowKey: String?,
-        nowMs: Long,
-    ): List<QueuedLocation> {
+    fun apply(points: List<QueuedLocation>, context: TrackerSessionWindowContext): List<QueuedLocation> {
         if (points.isEmpty()) return points
-        val key = windowKey?.trim()?.lowercase()
+        val key = context.windowKey?.trim()?.lowercase()
         if (key.isNullOrEmpty() || key == "all") return points
         return when (key) {
-            "current_session" -> withLatestPointFallback(points, filterByLatestSessionStart(points))
-            "session" -> withLatestPointFallback(points, filterByLastAndCurrentSession(points))
+            "current_session" -> withLatestPointFallback(
+                original = points,
+                filtered = filterByLatestSegments(points, context.currentSessionStartMs, keep = 1),
+            )
+            "session" -> withLatestPointFallback(
+                original = points,
+                filtered = filterByLatestSegments(points, context.currentSessionStartMs, keep = 2),
+            )
             else -> {
                 val windowMs = ROLLING_WINDOWS_MS[key] ?: return points
-                withLatestPointFallback(points, filterByRollingWindow(points, windowMs, nowMs))
+                withLatestPointFallback(
+                    original = points,
+                    filtered = filterByRollingWindow(points, windowMs, context.nowMs),
+                )
             }
         }
+    }
+
+    private fun filterByLatestSegments(
+        points: List<QueuedLocation>,
+        currentSessionStartMs: Long?,
+        keep: Int,
+    ): List<QueuedLocation> {
+        val segments = TrackerSessionAttributionPolicy.segment(
+            points = points,
+            context = TrackerSessionAttributionContext(currentSessionStartMs = currentSessionStartMs),
+        )
+        if (segments.isEmpty()) return emptyList()
+        // Identity membership: a point's segment is the one the attributor placed it in,
+        // and segments hold the original instances. IdentityHashMap keeps lookup O(1) and
+        // sidesteps the data-class structural equality cost.
+        val keptIdentity = java.util.IdentityHashMap<QueuedLocation, Boolean>()
+        for (segment in segments.takeLast(keep)) {
+            for (point in segment.points) keptIdentity[point] = true
+        }
+        return points.filter { keptIdentity.containsKey(it) }
     }
 
     private fun filterByRollingWindow(
@@ -61,36 +96,6 @@ object TrackerMapRecentDataWindowFilterPolicy {
     ): List<QueuedLocation> {
         val cutoff = nowMs - windowMs
         return points.filter { it.time >= cutoff }
-    }
-
-    private fun filterByLatestSessionStart(points: List<QueuedLocation>): List<QueuedLocation> {
-        val latestStart = points.mapNotNull { it.startTimestampMs }.maxOrNull() ?: return points
-        return points.filter { point ->
-            val start = point.startTimestampMs
-            if (start != null) start == latestStart
-            else point.time >= latestStart
-        }
-    }
-
-    private fun filterByLastAndCurrentSession(points: List<QueuedLocation>): List<QueuedLocation> {
-        val uniqueStartsDesc = points
-            .mapNotNull { it.startTimestampMs }
-            .distinct()
-            .sortedDescending()
-        if (uniqueStartsDesc.isEmpty()) return points
-        val latestStart = uniqueStartsDesc[0]
-        val previousStart = uniqueStartsDesc.getOrNull(1)
-        val allowedStarts = if (previousStart != null) {
-            setOf(latestStart, previousStart)
-        } else {
-            setOf(latestStart)
-        }
-        val fallbackCutoff = previousStart ?: latestStart
-        return points.filter { point ->
-            val start = point.startTimestampMs
-            if (start != null) start in allowedStarts
-            else point.time >= fallbackCutoff
-        }
     }
 
     private fun withLatestPointFallback(

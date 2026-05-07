@@ -10,7 +10,7 @@ This module provides validation functions for coordinate arrays, ensuring they:
 
 from typing import List, Any, Tuple, Optional
 
-from coordinate_parser import parse_coordinate
+from geo_lib.coordinate_parser import parse_coordinate
 
 
 class CoordinateValidationError(Exception):

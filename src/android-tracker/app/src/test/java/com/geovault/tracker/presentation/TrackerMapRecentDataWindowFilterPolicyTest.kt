@@ -11,31 +11,30 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
     @Test
     fun nullKey_isIdentity() {
         val points = listOf(point(time = 1L), point(time = 2L))
-        assertSame(points, TrackerMapRecentDataWindowFilterPolicy.apply(points, null, NOW))
+        assertSame(points, apply(points, key = null))
     }
 
     @Test
     fun blankKey_isIdentity() {
         val points = listOf(point(time = 1L))
-        assertSame(points, TrackerMapRecentDataWindowFilterPolicy.apply(points, "  ", NOW))
+        assertSame(points, apply(points, key = "  "))
     }
 
     @Test
     fun allKey_isIdentity() {
         val points = listOf(point(time = 1L), point(time = 2L))
-        assertSame(points, TrackerMapRecentDataWindowFilterPolicy.apply(points, "all", NOW))
+        assertSame(points, apply(points, key = "all"))
     }
 
     @Test
     fun unknownKey_isIdentity() {
         val points = listOf(point(time = 1L), point(time = 2L))
-        assertSame(points, TrackerMapRecentDataWindowFilterPolicy.apply(points, "2h", NOW))
+        assertSame(points, apply(points, key = "2h"))
     }
 
     @Test
     fun emptyTrail_returnsEmpty() {
-        val out = TrackerMapRecentDataWindowFilterPolicy.apply(emptyList(), "1h", NOW)
-        assertTrue(out.isEmpty())
+        assertTrue(apply(emptyList(), key = "1h").isEmpty())
     }
 
     @Test
@@ -45,7 +44,7 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = NOW - 30_000L),
             point(time = NOW - 10_000L),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "1min", NOW)
+        val filtered = apply(points, key = "1min")
         assertEquals(2, filtered.size)
         assertEquals(NOW - 30_000L, filtered.first().time)
     }
@@ -58,7 +57,7 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = cutoff),
             point(time = cutoff + 1L),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "1h", NOW)
+        val filtered = apply(points, key = "1h")
         assertEquals(listOf(cutoff, cutoff + 1L), filtered.map { it.time })
     }
 
@@ -73,9 +72,9 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = day - 1L),
             point(time = NOW),
         )
-        assertEquals(1, TrackerMapRecentDataWindowFilterPolicy.apply(points, "1d", NOW).size)
-        assertEquals(2, TrackerMapRecentDataWindowFilterPolicy.apply(points, "1w", NOW).size)
-        assertEquals(3, TrackerMapRecentDataWindowFilterPolicy.apply(points, "1m", NOW).size)
+        assertEquals(1, apply(points, key = "1d").size)
+        assertEquals(2, apply(points, key = "1w").size)
+        assertEquals(3, apply(points, key = "1m").size)
     }
 
     @Test
@@ -84,7 +83,7 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = NOW - 10L * 60_000L),
             point(time = NOW - 5L * 60_000L),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "1min", NOW)
+        val filtered = apply(points, key = "1min")
         assertEquals(1, filtered.size)
         assertEquals(points.last().time, filtered.single().time)
     }
@@ -99,21 +98,35 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = 300L, startTimestampMs = newer),
             point(time = 400L, startTimestampMs = newer),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "current_session", NOW)
+        val filtered = apply(points, key = "current_session")
         assertEquals(2, filtered.size)
         assertTrue(filtered.all { it.startTimestampMs == newer })
     }
 
     @Test
-    fun currentSession_missingStart_fallsBackToCoordTimestamp() {
+    fun currentSession_authoritativeStart_overridesPointsBoundaries() {
+        val olderStart = 10_000L
+        val authoritative = 50_000L
+        val points = listOf(
+            point(time = 100L, startTimestampMs = olderStart),
+            point(time = 200L, startTimestampMs = olderStart),
+            point(time = 60_000L, startTimestampMs = null),
+        )
+        val filtered = apply(points, key = "current_session", currentSessionStartMs = authoritative)
+        assertEquals(listOf(60_000L), filtered.map { it.time })
+    }
+
+    @Test
+    fun currentSession_missingStart_attributesByTimeBoundary() {
+        val olderStart = 10_000L
         val latestStart = 20_000L
         val points = listOf(
-            point(time = 5_000L, startTimestampMs = 10_000L),
+            point(time = 5_000L, startTimestampMs = olderStart),
             point(time = 15_000L, startTimestampMs = null),
             point(time = 25_000L, startTimestampMs = null),
             point(time = 30_000L, startTimestampMs = latestStart),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "current_session", NOW)
+        val filtered = apply(points, key = "current_session")
         assertEquals(listOf(25_000L, 30_000L), filtered.map { it.time })
     }
 
@@ -123,7 +136,8 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = 1L, startTimestampMs = null),
             point(time = 2L, startTimestampMs = null),
         )
-        assertSame(points, TrackerMapRecentDataWindowFilterPolicy.apply(points, "current_session", NOW))
+        val filtered = apply(points, key = "current_session")
+        assertEquals(points, filtered)
     }
 
     @Test
@@ -137,7 +151,7 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = 30L, startTimestampMs = s3),
             point(time = 40L, startTimestampMs = s2),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "session", NOW)
+        val filtered = apply(points, key = "session")
         assertEquals(3, filtered.size)
         assertTrue(filtered.none { it.startTimestampMs == s1 })
     }
@@ -149,12 +163,12 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = 10L, startTimestampMs = onlyStart),
             point(time = 20L, startTimestampMs = onlyStart),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "session", NOW)
+        val filtered = apply(points, key = "session")
         assertEquals(2, filtered.size)
     }
 
     @Test
-    fun session_missingStart_keepsPointsAfterPreviousBoundary() {
+    fun session_missingStart_attributesByTimeBoundary() {
         val s1 = 1_000L
         val s2 = 2_000L
         val points = listOf(
@@ -164,25 +178,62 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             point(time = 100L, startTimestampMs = s1),
             point(time = 200L, startTimestampMs = s2),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(points, "session", NOW)
+        val filtered = apply(points, key = "session")
+        // With only two distinct sessions both segments are kept; null-start points
+        // attribute to the latest segment whose start <= point.time, with the first
+        // segment swallowing pre-boundary points (defensible default for legacy data).
+        assertEquals(5, filtered.size)
+        assertTrue(filtered.any { it.time == 500L })
         assertTrue(filtered.any { it.time == 1_500L })
         assertTrue(filtered.any { it.time == 2_500L })
-        assertTrue(filtered.none { it.time == 500L })
         assertTrue(filtered.any { it.time == 100L })
         assertTrue(filtered.any { it.time == 200L })
     }
 
     @Test
+    fun session_authoritativeStart_includesEvenWhenNoLivePointYet() {
+        // The locally-recorded tracker just started a new session: trail still holds
+        // last session's points (s_prev) and zero new points. The authoritative
+        // current-session start nevertheless creates a "current" segment, and "session"
+        // (last 2) keeps both prev and current segments.
+        val sPrev = 1_000L
+        val authoritative = 5_000L
+        val points = listOf(
+            point(time = 100L, startTimestampMs = sPrev),
+            point(time = 200L, startTimestampMs = sPrev),
+        )
+        val filtered = apply(points, key = "session", currentSessionStartMs = authoritative)
+        assertEquals(2, filtered.size)
+        assertTrue(filtered.all { it.startTimestampMs == sPrev })
+    }
+
+    @Test
     fun currentSession_keepsLatestPointWhenFilterWouldEmpty() {
+        // The fallback is exercised when filtering nukes every point. Use authoritative
+        // override that no point in the trail belongs to.
+        val authoritative = 99_000L
         val points = listOf(
             point(time = 1L, startTimestampMs = 10_000L),
+            point(time = 2L, startTimestampMs = 10_000L),
         )
-        val filtered = TrackerMapRecentDataWindowFilterPolicy.apply(
-            points = listOf(points.first()),
-            windowKey = "current_session",
-            nowMs = NOW,
-        )
+        val filtered = apply(points, key = "current_session", currentSessionStartMs = authoritative)
         assertEquals(1, filtered.size)
+        assertEquals(points.last(), filtered.single())
+    }
+
+    private fun apply(
+        points: List<QueuedLocation>,
+        key: String?,
+        currentSessionStartMs: Long? = null,
+    ): List<QueuedLocation> {
+        return TrackerMapRecentDataWindowFilterPolicy.apply(
+            points = points,
+            context = TrackerSessionWindowContext(
+                windowKey = key,
+                nowMs = NOW,
+                currentSessionStartMs = currentSessionStartMs,
+            ),
+        )
     }
 
     private fun point(
@@ -190,7 +241,7 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
         startTimestampMs: Long? = null,
     ): QueuedLocation {
         return QueuedLocation(
-            id = 0L,
+            id = idCounter++,
             trackerId = "tracker-1",
             time = time,
             latitude = 0.0,
@@ -205,6 +256,8 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
             startTimestampMs = startTimestampMs,
         )
     }
+
+    private var idCounter: Long = 1L
 
     private companion object {
         const val NOW = 1_710_000_000_000L

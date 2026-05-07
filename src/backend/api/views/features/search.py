@@ -236,7 +236,7 @@ def search_features(request):
     # Convert results to GeoJSON format
     geojson_features = []
     for feature_id, geojson_data, geojson_hash in results:
-        # Parse JSON if it's a string (depends on psycopg2 configuration)
+        # Parse JSON if it's a string (depends on psycopg configuration)
         if isinstance(geojson_data, str):
             geojson_data = json.loads(geojson_data)
 

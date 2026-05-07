@@ -8,6 +8,12 @@ data class TrackerMapSessionBuildInput(
     val plan: TrackerMapStreamingPlan,
     val localRuntimeOverlayTrails: Map<String, List<QueuedLocation>> = emptyMap(),
     val recentDataWindowByTracker: Map<String, String?> = emptyMap(),
+    /**
+     * Authoritative current-session start, keyed by tracker id. Populated only for
+     * the locally-recorded tracker; foreign trackers are absent (their session start
+     * is inferred from points). See [TrackerSessionAttributionPolicy].
+     */
+    val currentSessionStartByTracker: Map<String, Long> = emptyMap(),
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -16,6 +22,8 @@ data class TrackerMapSessionPointInput(
     val point: TrackPointEvent,
     val trailPointLimit: Int,
     val recentDataWindowByTracker: Map<String, String?> = emptyMap(),
+    /** See [TrackerMapSessionBuildInput.currentSessionStartByTracker]. */
+    val currentSessionStartByTracker: Map<String, Long> = emptyMap(),
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -41,8 +49,11 @@ object TrackerMapSessionEngine {
             val rawTrail = normalizedTrails[trackerId].orEmpty()
             val filteredTrail = TrackerMapRecentDataWindowFilterPolicy.apply(
                 points = rawTrail,
-                windowKey = input.recentDataWindowByTracker[trackerId],
-                nowMs = input.nowMs,
+                context = TrackerSessionWindowContext(
+                    windowKey = input.recentDataWindowByTracker[trackerId],
+                    nowMs = input.nowMs,
+                    currentSessionStartMs = input.currentSessionStartByTracker[trackerId],
+                ),
             )
             val split = splitTrail(filteredTrail)
             TrackerTrackModel(
@@ -55,13 +66,16 @@ object TrackerMapSessionEngine {
         // Single-trail renders the displayed tracker (mirrors `activeTrackerId =
         // sessionPlan.displayedTrackerId` in the view model). The plan does not carry a separate
         // activeTrackerId field; displayedTrackerId is the canonical anchor when single-mode.
-        val singleTrailWindowKey = plan.displayedTrackerId.trim()
-            .takeIf { it.isNotEmpty() }
-            ?.let { input.recentDataWindowByTracker[it] }
+        val displayedKey = plan.displayedTrackerId.trim().takeIf { it.isNotEmpty() }
+        val singleTrailWindowKey = displayedKey?.let { input.recentDataWindowByTracker[it] }
+        val singleTrailCurrentSessionStartMs = displayedKey?.let { input.currentSessionStartByTracker[it] }
         val filteredSingleTrail = TrackerMapRecentDataWindowFilterPolicy.apply(
             points = state.trail,
-            windowKey = singleTrailWindowKey,
-            nowMs = input.nowMs,
+            context = TrackerSessionWindowContext(
+                windowKey = singleTrailWindowKey,
+                nowMs = input.nowMs,
+                currentSessionStartMs = singleTrailCurrentSessionStartMs,
+            ),
         )
         val singleSplit = splitTrail(filteredSingleTrail)
         return TrackerMapSessionSnapshot(
@@ -98,6 +112,7 @@ object TrackerMapSessionEngine {
                 ),
                 localRuntimeOverlayTrails = input.snapshot.renderTrailsByTracker + reduction.nextState.allQueueTrailsByTracker,
                 recentDataWindowByTracker = input.recentDataWindowByTracker,
+                currentSessionStartByTracker = input.currentSessionStartByTracker,
                 nowMs = input.nowMs,
             )
         )
