@@ -1,8 +1,6 @@
 package com.geovault.tracker.services
 
-import com.geovault.tracker.policy.TrackPointOutlierPolicy
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,26 +13,45 @@ class TrackingPolicyProfilesTest {
     }
 
     @Test
-    fun ingestConfig_walkingHasTighterBurstThanBiking() {
+    fun ingestConfig_isProfileIndependent_andOnlyAdjustsAccuracyThreshold() {
         val walking = TrackingPolicyProfiles.ingestConfig(
             maxAccuracyMeters = 25f,
             motionMode = TrackingMotionMode.WALKING,
-            isMockLocation = false
+            isMockLocation = false,
         )
         val biking = TrackingPolicyProfiles.ingestConfig(
             maxAccuracyMeters = 25f,
             motionMode = TrackingMotionMode.BIKING,
-            isMockLocation = false
+            isMockLocation = false,
         )
-        assertTrue(walking.maxBurstDistanceMeters < biking.maxBurstDistanceMeters)
-        assertTrue(walking.rollingDistanceMultiplier < biking.rollingDistanceMultiplier)
+        val driving = TrackingPolicyProfiles.ingestConfig(
+            maxAccuracyMeters = 25f,
+            motionMode = TrackingMotionMode.DRIVING,
+            isMockLocation = false,
+        )
+        assertEquals(walking, biking)
+        assertEquals(walking, driving)
+        assertEquals(25.0, walking.trackingAccuracyThresholdMeters, 1e-9)
     }
 
     @Test
-    fun fallbackTransitionConfig_allowsDegradedAndUsesStrictOutlierPolicy() {
-        val cfg = TrackingPolicyProfiles.fallbackTransitionConfig()
-        assertTrue(cfg.allowDegradedAccuracy)
-        assertFalse(cfg.requireAccuracyForAcceptance)
-        assertEquals(TrackPointOutlierPolicy.STRICT, cfg.outlierPolicy)
+    fun ingestConfig_appliesAccuracyThresholdAcrossModes() {
+        val tight = TrackingPolicyProfiles.ingestConfig(
+            maxAccuracyMeters = 10f,
+            motionMode = TrackingMotionMode.WALKING,
+            isMockLocation = false,
+        )
+        val loose = TrackingPolicyProfiles.ingestConfig(
+            maxAccuracyMeters = 80f,
+            motionMode = TrackingMotionMode.WALKING,
+            isMockLocation = false,
+        )
+        assertTrue(tight.trackingAccuracyThresholdMeters < loose.trackingAccuracyThresholdMeters)
+    }
+
+    @Test
+    fun fallbackTransitionConfig_setsConservativeFreshnessTtl() {
+        val fallback = TrackingPolicyProfiles.fallbackTransitionConfig()
+        assertEquals(2L * 60L * 1000L, fallback.freshnessTtlMs)
     }
 }

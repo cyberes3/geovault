@@ -20,5 +20,7 @@ data class TrackPointEvent(
     val propsJson: String? = null,
     val quality: TrackPointQuality = TrackPointQuality.HIGH_CONFIDENCE,
     val orderingKey: Long = 0L,
-    val elapsedRealtimeNanos: Long? = null
+    val elapsedRealtimeNanos: Long? = null,
+    val gpsSpeedMps: Float? = null,
+    val gpsBearingDeg: Float? = null,
 )

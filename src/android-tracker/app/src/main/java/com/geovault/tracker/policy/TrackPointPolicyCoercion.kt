@@ -1,64 +1,53 @@
 package com.geovault.tracker.policy
 
+import com.geovault.tracker.policy.filter.LocationFilterConfig
+
+/**
+ * Defensive clamping for [LocationFilterConfig] values that come from
+ * persisted user settings. Filters constructed from these clamped values
+ * are guaranteed to produce sane behaviour even if a setting on disk is
+ * out of range (e.g. corrupted preference, future schema regression).
+ */
 object TrackPointPolicyCoercion {
-    private const val MIN_MAX_JUMP_SPEED_MPS = 1.0
-    private const val MAX_MAX_JUMP_SPEED_MPS = 200.0
+    private const val MIN_MAX_IMPLIED_SPEED_MPS = 1.0
+    private const val MAX_MAX_IMPLIED_SPEED_MPS = 200.0
     private const val MIN_MAX_BURST_DISTANCE_METERS = 5.0
     private const val MAX_MAX_BURST_DISTANCE_METERS = 2_000.0
     private const val MIN_BURST_WINDOW_SECONDS = 0.2
     private const val MAX_BURST_WINDOW_SECONDS = 120.0
-    private const val MIN_ROLLING_WINDOW_SIZE = 3
-    private const val MAX_ROLLING_WINDOW_SIZE = 20
-    private const val MIN_OUTLIER_DISTANCE_MULTIPLIER = 1.0
-    private const val MAX_OUTLIER_DISTANCE_MULTIPLIER = 10.0
-    private const val MIN_ACCURACY_ENVELOPE_PADDING_METERS = 0.0
-    private const val MAX_ACCURACY_ENVELOPE_PADDING_METERS = 500.0
-    private const val MIN_ACCURACY_ENVELOPE_MULTIPLIER = 1.0
-    private const val MAX_ACCURACY_ENVELOPE_MULTIPLIER = 10.0
-    private const val MIN_KINEMATIC_CAP_METERS = 1.0
-    private const val MAX_KINEMATIC_CAP_METERS = 2_000.0
-    private const val MIN_ROLLING_DISTANCE_MULTIPLIER = 1.0
-    private const val MAX_ROLLING_DISTANCE_MULTIPLIER = 10.0
+    private const val MIN_ROLLING_WINDOW_SECONDS = 1.0
+    private const val MAX_ROLLING_WINDOW_SECONDS = 60.0
+    private const val MIN_TRACKING_ACCURACY_METERS = 1.0
+    private const val MAX_TRACKING_ACCURACY_METERS = 10_000.0
+    private const val MIN_FUTURE_SKEW_MS = 0L
+    private const val MAX_FUTURE_SKEW_MS = 24L * 60L * 60L * 1000L
+    private const val MIN_FRESHNESS_TTL_MS = 0L
+    private const val MAX_FRESHNESS_TTL_MS = 24L * 60L * 60L * 1000L
 
-    fun sanitize(config: TrackPointPolicyConfig): TrackPointPolicyConfig {
-        val coercedMaxAccuracy = config.maxAccuracyMeters?.coerceIn(1f, 10_000f)
-        val coercedFutureSkewMs = config.maxFutureSkewMs.coerceIn(0L, 24L * 60L * 60L * 1000L)
-        val coercedFreshnessTtlMs = config.freshnessTtlMs?.coerceIn(0L, 24L * 60L * 60L * 1000L)
+    fun sanitize(config: LocationFilterConfig): LocationFilterConfig {
         return config.copy(
-            maxAccuracyMeters = coercedMaxAccuracy,
-            degradedAccuracyMultiplier = config.degradedAccuracyMultiplier.coerceIn(1f, 10f),
-            maxFutureSkewMs = coercedFutureSkewMs,
-            maxJumpSpeedMps = config.maxJumpSpeedMps?.coerceIn(MIN_MAX_JUMP_SPEED_MPS, MAX_MAX_JUMP_SPEED_MPS),
+            maxImpliedSpeedMps = config.maxImpliedSpeedMps.coerceIn(
+                MIN_MAX_IMPLIED_SPEED_MPS,
+                MAX_MAX_IMPLIED_SPEED_MPS,
+            ),
             maxBurstDistanceMeters = config.maxBurstDistanceMeters.coerceIn(
                 MIN_MAX_BURST_DISTANCE_METERS,
-                MAX_MAX_BURST_DISTANCE_METERS
+                MAX_MAX_BURST_DISTANCE_METERS,
             ),
             burstWindowSeconds = config.burstWindowSeconds.coerceIn(
                 MIN_BURST_WINDOW_SECONDS,
-                MAX_BURST_WINDOW_SECONDS
+                MAX_BURST_WINDOW_SECONDS,
             ),
-            rollingWindowSize = config.rollingWindowSize.coerceIn(MIN_ROLLING_WINDOW_SIZE, MAX_ROLLING_WINDOW_SIZE),
-            outlierDistanceMultiplier = config.outlierDistanceMultiplier.coerceIn(
-                MIN_OUTLIER_DISTANCE_MULTIPLIER,
-                MAX_OUTLIER_DISTANCE_MULTIPLIER
+            rollingWindowSeconds = config.rollingWindowSeconds.coerceIn(
+                MIN_ROLLING_WINDOW_SECONDS,
+                MAX_ROLLING_WINDOW_SECONDS,
             ),
-            accuracyEnvelopePaddingMeters = config.accuracyEnvelopePaddingMeters.coerceIn(
-                MIN_ACCURACY_ENVELOPE_PADDING_METERS,
-                MAX_ACCURACY_ENVELOPE_PADDING_METERS
+            trackingAccuracyThresholdMeters = config.trackingAccuracyThresholdMeters.coerceIn(
+                MIN_TRACKING_ACCURACY_METERS,
+                MAX_TRACKING_ACCURACY_METERS,
             ),
-            accuracyEnvelopeMultiplier = config.accuracyEnvelopeMultiplier.coerceIn(
-                MIN_ACCURACY_ENVELOPE_MULTIPLIER,
-                MAX_ACCURACY_ENVELOPE_MULTIPLIER
-            ),
-            minimumKinematicCapMeters = config.minimumKinematicCapMeters.coerceIn(
-                MIN_KINEMATIC_CAP_METERS,
-                MAX_KINEMATIC_CAP_METERS
-            ),
-            rollingDistanceMultiplier = config.rollingDistanceMultiplier.coerceIn(
-                MIN_ROLLING_DISTANCE_MULTIPLIER,
-                MAX_ROLLING_DISTANCE_MULTIPLIER
-            ),
-            freshnessTtlMs = coercedFreshnessTtlMs
+            maxFutureSkewMs = config.maxFutureSkewMs.coerceIn(MIN_FUTURE_SKEW_MS, MAX_FUTURE_SKEW_MS),
+            freshnessTtlMs = config.freshnessTtlMs.coerceIn(MIN_FRESHNESS_TTL_MS, MAX_FRESHNESS_TTL_MS),
         )
     }
 }

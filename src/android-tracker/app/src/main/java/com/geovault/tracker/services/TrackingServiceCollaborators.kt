@@ -9,10 +9,10 @@ import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import com.geovault.tracker.policy.TrackPointQuality
-import com.geovault.tracker.policy.TrackPointPolicyConfig
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.settings.TrackerSettings
 import kotlin.math.abs
 import java.util.concurrent.ConcurrentHashMap
@@ -38,7 +38,6 @@ data class LocationIngestResult(
 
 class LocationIngestCoordinator(private val locationDao: LocationDao) {
     private val lastAcceptedByStream = ConcurrentHashMap<String, TrackPointEvent>()
-    private val acceptedHistoryByStream = ConcurrentHashMap<String, ArrayDeque<TrackPointEvent>>()
     private val jumpRejectStreakByStream = ConcurrentHashMap<String, AtomicLong>()
 
     @Synchronized
@@ -174,7 +173,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         )
         val insertedId = locationDao.insert(queued)
         if (bypassCanonical != null) {
-            updateAcceptedStateForLocalStream(trackId = trackId, canonical = bypassCanonical, historyWindowSize = 5)
+            updateAcceptedStateForLocalStream(trackId = trackId, canonical = bypassCanonical)
         }
         val visible = locationDao.getCurrentSessionCountForTracker(
             trackerId = queuedTrackerId,
@@ -232,20 +231,16 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         event: TrackPointEvent,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
-        config: TrackPointPolicyConfig
+        config: LocationFilterConfig
     ): com.geovault.tracker.policy.TrackPointDecision {
         return TrackPointCrossSourceState.withLock {
             val streamKey = localStreamKey(trackId)
-            val currentPreviousByStream = lastAcceptedByStream[streamKey]
             val currentPreviousByTrack = TrackPointCrossSourceState.previous(trackId)
-            val history = acceptedHistoryByStream[streamKey]?.toList() ?: emptyList()
             var decision = TrackPointPolicyEngine.evaluate(
                 event = event,
-                previous = currentPreviousByStream,
-                history = history,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-                rawConfig = config
+                config = config,
             )
             var effectivePreviousByTrack = currentPreviousByTrack
             if (!decision.accepted &&
@@ -260,11 +255,9 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 effectivePreviousByTrack = null
                 decision = TrackPointPolicyEngine.evaluate(
                     event = event,
-                    previous = null,
-                    history = emptyList(),
                     nowMs = nowMs,
                     nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-                    rawConfig = config
+                    config = config,
                 )
             }
             if (!decision.accepted || decision.canonicalEvent == null) {
@@ -290,7 +283,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             }
             lastAcceptedByStream[streamKey] = canonical
             TrackPointCrossSourceState.update(trackId, canonical)
-            appendHistory(streamKey, canonical, config.rollingWindowSize)
             jumpRejectStreakByStream.remove(streamKey)
             decision.copy(canonicalEvent = canonical)
         }
@@ -318,15 +310,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         }
     }
 
-    private fun appendHistory(streamKey: String, event: TrackPointEvent, windowSize: Int) {
-        val history = acceptedHistoryByStream.getOrPut(streamKey) { ArrayDeque() }
-        history.addLast(event)
-        val maxHistory = windowSize.coerceIn(3, 20)
-        while (history.size > maxHistory) {
-            history.removeFirst()
-        }
-    }
-
     private fun isOutOfOrderAgainstTrack(previousByTrack: TrackPointEvent?, canonical: TrackPointEvent): Boolean {
         val previousTs = previousByTrack?.timestampMs ?: return false
         return canonical.timestampMs < previousTs
@@ -342,8 +325,8 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
     private fun resetLocalSession(trackId: String) {
         val streamKey = localStreamKey(trackId)
         lastAcceptedByStream.remove(streamKey)
-        acceptedHistoryByStream.remove(streamKey)
         jumpRejectStreakByStream.remove(streamKey)
+        TrackPointPolicyEngine.resetStream(TrackPointSource.LOCAL_GPS, trackId)
         TrackPointCrossSourceState.resetTrack(trackId)
     }
 
@@ -354,13 +337,11 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
     private fun updateAcceptedStateForLocalStream(
         trackId: String,
         canonical: TrackPointEvent,
-        historyWindowSize: Int
     ) {
         TrackPointCrossSourceState.withLock {
             val streamKey = localStreamKey(trackId)
             lastAcceptedByStream[streamKey] = canonical
             TrackPointCrossSourceState.update(trackId, canonical)
-            appendHistory(streamKey, canonical, historyWindowSize)
             jumpRejectStreakByStream.remove(streamKey)
         }
     }
@@ -388,7 +369,9 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             lat = location.latitude,
             timestampMs = timestampForPolicyMs,
             accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
-            elapsedRealtimeNanos = location.elapsedRealtimeNanos
+            elapsedRealtimeNanos = location.elapsedRealtimeNanos,
+            gpsSpeedMps = if (location.hasSpeed()) location.speed else null,
+            gpsBearingDeg = if (location.hasBearing()) location.bearing else null,
         )
     }
 

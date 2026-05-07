@@ -224,6 +224,7 @@ class TrackingService : Service() {
         const val CHANNEL_ID = "tracker_service"
         const val SESSION_STATS_UPDATE = "com.geovault.tracker.SESSION_STATS_UPDATE"
 
+        private const val FALLBACK_TRANSITION_TRACK_ID = "fallback_transition"
         private const val MAX_QUEUE_SIZE = 5000
         private const val MAX_QUEUE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
         private const val RETRY_JITTER_MS = 10_000L
@@ -2100,36 +2101,36 @@ class TrackingService : Service() {
         nowMs: Long
     ): Boolean {
         if (previousAcceptedLocation == null) return true
-        val trackId = "fallback_transition"
-        val event = TrackPointEvent(
-            source = TrackPointSource.LOCAL_GPS,
-            trackId = trackId,
-            lon = fallbackCandidateLocation.longitude,
-            lat = fallbackCandidateLocation.latitude,
-            timestampMs = fallbackCandidateLocation.time,
-            accuracyMeters = if (fallbackCandidateLocation.hasAccuracy()) fallbackCandidateLocation.accuracy else null,
-            elapsedRealtimeNanos = fallbackCandidateLocation.elapsedRealtimeNanos
+        val trackId = FALLBACK_TRANSITION_TRACK_ID
+        val config = TrackingPolicyProfiles.fallbackTransitionConfig()
+        TrackPointPolicyEngine.resetStream(source = TrackPointSource.LOCAL_GPS, trackId = trackId)
+        TrackPointPolicyEngine.evaluate(
+            event = trackPointEventFromLocation(previousAcceptedLocation, trackId),
+            nowMs = previousAcceptedLocation.time,
+            nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            config = config,
         )
-        val previous = previousAcceptedLocation.let {
-            TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = trackId,
-                lon = it.longitude,
-                lat = it.latitude,
-                timestampMs = it.time,
-                accuracyMeters = if (it.hasAccuracy()) it.accuracy else null,
-                elapsedRealtimeNanos = it.elapsedRealtimeNanos
-            )
-        }
         val decision = TrackPointPolicyEngine.evaluate(
-            event = event,
-            previous = previous,
-            history = emptyList(),
+            event = trackPointEventFromLocation(fallbackCandidateLocation, trackId),
             nowMs = nowMs,
             nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
-            rawConfig = TrackingPolicyProfiles.fallbackTransitionConfig()
+            config = config,
         )
         return decision.accepted
+    }
+
+    private fun trackPointEventFromLocation(location: Location, trackId: String): TrackPointEvent {
+        return TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            lon = location.longitude,
+            lat = location.latitude,
+            timestampMs = location.time,
+            accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+            elapsedRealtimeNanos = location.elapsedRealtimeNanos,
+            gpsSpeedMps = if (location.hasSpeed()) location.speed else null,
+            gpsBearingDeg = if (location.hasBearing()) location.bearing else null,
+        )
     }
 
     private fun isWaitingForProviderState(): Boolean {
@@ -2347,7 +2348,9 @@ class TrackingService : Service() {
                 propsJson = propsJson,
                 quality = quality,
                 orderingKey = orderingKey,
-                elapsedRealtimeNanos = location.elapsedRealtimeNanos
+                elapsedRealtimeNanos = location.elapsedRealtimeNanos,
+                gpsSpeedMps = if (location.hasSpeed()) location.speed else null,
+                gpsBearingDeg = if (location.hasBearing()) location.bearing else null,
             )
         )
     }

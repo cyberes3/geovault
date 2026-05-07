@@ -107,13 +107,23 @@ object TrackerParamsStreamingPolicy {
             )
         }
 
+        // If the only thing currently being streamed is the user's selected tracker, that
+        // stream is owned by the selected-tracker lifecycle and should be replaced (not
+        // expanded) when a params-targeted stream arrives. Treating it as the baseline
+        // would falsely "preserve" a stream the params policy doesn't actually own.
+        val activeIsStaleSelectedOnly = selectedTrackerId.isNotEmpty() &&
+            activeTrackerIds == setOf(selectedTrackerId)
+        val baseline = if (activeIsStaleSelectedOnly) emptySet() else activeTrackerIds
+        val expanding = input.liveStreamRunning && activeTrackerIds.isNotEmpty() &&
+            !activeIsStaleSelectedOnly
+
         return TrackerParamsStreamingResolution(
             session = TrackerParamsStreamingSession(
                 trackerId = trackerId,
                 trackerName = input.trackerName?.trim()?.ifBlank { null },
                 requestedTrackerIds = setOf(trackerId),
-                baselineTrackerIds = activeTrackerIds,
-                ownership = if (input.liveStreamRunning && activeTrackerIds.isNotEmpty()) {
+                baselineTrackerIds = baseline,
+                ownership = if (expanding) {
                     TrackerParamsStreamingOwnership.ExpandedExistingStream
                 } else {
                     TrackerParamsStreamingOwnership.StartedFromIdle

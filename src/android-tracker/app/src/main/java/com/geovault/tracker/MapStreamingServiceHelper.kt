@@ -95,7 +95,7 @@ internal object MapStreamingServiceHelper {
         val rawIds = prefs.getStringSet(KEY_TRACKER_IDS, emptySet()).orEmpty()
         val ids = sanitizeStreamingTargets(rawIds)
         val name = prefs.getString(KEY_TRACKER_NAME, null)?.trim()?.ifBlank { null }
-        if (ids != rawIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()) {
+        if (ids != rawIds.toSet()) {
             if (ids.isEmpty()) {
                 clearPersistedTargets(context.applicationContext)
             } else {
