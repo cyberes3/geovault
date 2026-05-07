@@ -2,8 +2,9 @@ package com.geovault.tracker.presentation
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
+import com.geovault.tracker.services.StreamingHealth
+import com.geovault.tracker.services.StreamingIntent
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -79,8 +80,8 @@ class TrackerParamsStreamingControllerTest {
             streamSnapshot = streamState.value,
         )
         streamState.value = LiveStreamRuntimeSnapshot(
-            isRunning = true,
-            lifecycleState = TrackingLifecycleState.RUNNING,
+            intent = StreamingIntent.Wanted(setOf("remote")),
+            health = StreamingHealth.Running,
             activeTrackerIds = setOf("remote"),
         )
 
@@ -100,8 +101,8 @@ class TrackerParamsStreamingControllerTest {
     fun onScreenStarted_startingStreamCountsAsExistingSubscription() {
         val streamState = MutableStateFlow(
             LiveStreamRuntimeSnapshot(
-                isRunning = false,
-                lifecycleState = TrackingLifecycleState.STARTING,
+                intent = StreamingIntent.Wanted(setOf("remote")),
+                health = StreamingHealth.Starting,
                 activeTrackerIds = setOf("remote"),
             )
         )

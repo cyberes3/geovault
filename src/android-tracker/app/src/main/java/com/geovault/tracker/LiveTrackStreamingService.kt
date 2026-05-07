@@ -25,6 +25,8 @@ import com.geovault.tracker.policy.RemoteTrackPointIngress
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.WireTimestampNormalizer
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.StreamingHealth
+import com.geovault.tracker.services.StreamingIntent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,6 +61,7 @@ class LiveTrackStreamingService : Service() {
         private const val CHANNEL_ID = "live_track_streaming"
         private const val WS_READ_TIMEOUT_SEC = 90L
         private const val WS_PING_INTERVAL_SEC = 30L
+        private const val WS_UPGRADE_HTTP_CODE = 101
 
         @Volatile
         @JvmStatic
@@ -80,11 +83,14 @@ class LiveTrackStreamingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
-            val selectedExclusion = selectedTrackerExclusion()
-            val (restoredTrackerIds, restoredTrackerName) = MapStreamingServiceHelper.persistedTargets(
-                context = this,
-                excludedTrackerIds = selectedExclusion,
-            )
+            // STREAMING TRUST: the upstream pipeline (TrackerMapSessionProjector +
+            // LiveTrackStreamingReconciler / TrackerParamsStreamingController +
+            // LiveTrackStreamingTargetCoordinator) is the single source of truth for which
+            // trackers belong in the stream. The service trusts the persisted target list
+            // verbatim — re-applying any exclusion here would silently drop the user's own
+            // tracker from a previously-persisted group stream whenever the service is
+            // reconstructed via START_STICKY.
+            val (restoredTrackerIds, restoredTrackerName) = MapStreamingServiceHelper.persistedTargets(this)
             if (restoredTrackerIds.isEmpty()) {
                 Log.w(TAG, "Null intent received with no persisted stream targets; stopping streaming service")
                 stopSelf()
@@ -96,10 +102,9 @@ class LiveTrackStreamingService : Service() {
         }
         when (intent.action) {
             ACTION_START -> {
-                val trackerIds = MapStreamingServiceHelper.sanitizeStreamingTargets(
-                    trackerIds = extractTrackerIds(intent),
-                    excludedTrackerIds = selectedTrackerExclusion(),
-                )
+                // STREAMING TRUST: see the START_STICKY note above; the incoming intent is
+                // authoritative and we just normalize blanks/whitespace.
+                val trackerIds = MapStreamingServiceHelper.sanitizeStreamingTargets(extractTrackerIds(intent))
                 val trackerName = intent.getStringExtra(EXTRA_TRACKER_NAME)
                 startStreamingTargets(trackerIds, trackerName)
             }
@@ -115,10 +120,17 @@ class LiveTrackStreamingService : Service() {
             }
 
             ACTION_RESHOW_FOREGROUND -> {
+                // FGS-RESHOW-PREDICATE: the previous predicate keyed off `isRunning`, which is only
+                // true once the WebSocket is fully connected. That meant a notification dismiss
+                // during STARTING or RECONNECTING (very common on flaky networks) silently failed
+                // to reshow the FGS notification. Use "should currently be foreground" instead:
+                // active targets exist and we are not already in the terminal STOPPED state.
                 val snapshot = synchronized(stateLock) {
-                    Triple(isRunning, currentTrackerIds, currentTrackerName)
+                    Triple(lifecycle.lifecycleState, currentTrackerIds, currentTrackerName)
                 }
-                if (snapshot.first && snapshot.second.isNotEmpty()) {
+                val shouldReshow = snapshot.second.isNotEmpty() &&
+                    snapshot.first != TrackingLifecycleState.STOPPED
+                if (shouldReshow) {
                     ensureStreamingChannel()
                     startForegroundForStreaming(
                         createNotification(snapshot.third, snapshot.second.size),
@@ -191,8 +203,25 @@ class LiveTrackStreamingService : Service() {
         connectJob?.cancel()
         disconnectWebSocket()
         applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
+        // OKHTTP-LIFECYCLE: OkHttpClient owns a connection pool and a dispatcher executor. If we
+        // never close it, the executor threads survive each service restart and accumulate. Tear
+        // both down here so the streaming service has no lingering Java threads after stop.
+        shutdownStreamingHttpClient()
         serviceJob.cancel()
         super.onDestroy()
+    }
+
+    private fun shutdownStreamingHttpClient() {
+        val client = synchronized(stateLock) {
+            wsHttpClient.also { wsHttpClient = null }
+        } ?: return
+        runCatching {
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+            client.cache?.close()
+        }.exceptionOrNull()?.let { error ->
+            Log.w(TAG, "Failed to shut down streaming OkHttpClient cleanly", error)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -203,9 +232,14 @@ class LiveTrackStreamingService : Service() {
             runCatching { GeovaultAuthManager.getValidAccessToken(applicationContext, null) }.getOrNull()
         }
         if (token.isNullOrBlank()) {
-            val reason = getString(R.string.error_server_unreachable)
+            val reason = getString(R.string.error_streaming_auth_failed)
             emitStreamingErrorIfNeeded(reason)
-            scheduleReconnect(sessionId, StreamingFailureClass.AUTH, reason)
+            val attempt = synchronized(stateLock) { lifecycle.reconnectAttempt }
+            scheduleReconnect(
+                sessionId = sessionId,
+                failureClass = StreamingLifecycleOrchestrator.classifyAuthFailure(attempt),
+                failureReason = reason,
+            )
             return
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(applicationContext).trimEnd('/')
@@ -229,16 +263,30 @@ class LiveTrackStreamingService : Service() {
             .build()
         val trackerIdsSnapshot = currentTrackerIdsSnapshot()
         val listener = TrackersWebSocketListener(
-            filterTrackIds = trackerIdsSnapshot,
-            onOpen = { openedSocket -> handleSocketOpened(sessionId, openedSocket) },
+            filterTrackIds = ::currentTrackerIdsSnapshot,
+            onOpened = { openedSocket, response ->
+                handleSocketOpened(sessionId, openedSocket, response)
+            },
             onPoint = { socket, point -> publishRemotePoint(sessionId, socket, point) },
             onActivity = { socket -> markSocketActivity(sessionId, socket) },
-            onDisconnect = { socket ->
+            onDisconnect = { socket, failureClass, reasonHint ->
+                val effectiveClass = resolveFailureClass(failureClass)
+                val reason = when (effectiveClass) {
+                    StreamingFailureClass.AUTH,
+                    StreamingFailureClass.PERMANENT -> getString(R.string.error_streaming_auth_failed)
+                    StreamingFailureClass.TRANSIENT -> reasonHint
+                        ?: getString(R.string.error_server_unreachable)
+                }
+                if (effectiveClass == StreamingFailureClass.AUTH ||
+                    effectiveClass == StreamingFailureClass.PERMANENT
+                ) {
+                    emitStreamingErrorIfNeeded(reason)
+                }
                 handleSocketDisconnected(
                     sessionId = sessionId,
                     socket = socket,
-                    failureClass = StreamingFailureClass.TRANSIENT,
-                    failureReason = getString(R.string.error_server_unreachable),
+                    failureClass = effectiveClass,
+                    failureReason = reason,
                 )
             },
         )
@@ -270,7 +318,17 @@ class LiveTrackStreamingService : Service() {
     private fun scheduleReconnect(sessionId: Long, failureClass: StreamingFailureClass, failureReason: String) {
         if (sessionId != connectionSessionId.get()) return
         val trackerIdsSnapshot = currentTrackerIdsSnapshot()
-        if (trackerIdsSnapshot.isEmpty() || failureClass == StreamingFailureClass.PERMANENT) return
+        if (trackerIdsSnapshot.isEmpty()) return
+        if (failureClass == StreamingFailureClass.PERMANENT) {
+            applyLifecycleEvent(
+                event = StreamingLifecycleEvent.PermanentFailure,
+                activeTrackerIds = trackerIdsSnapshot,
+                failureReason = failureReason,
+            )
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         applyLifecycleEvent(StreamingLifecycleEvent.RecoverableFailure, trackerIdsSnapshot, failureReason)
         connectJob?.cancel()
         connectJob = serviceScope.launch {
@@ -287,7 +345,21 @@ class LiveTrackStreamingService : Service() {
         }
     }
 
-    private fun handleSocketOpened(sessionId: Long, socket: WebSocket) {
+    private fun handleSocketOpened(sessionId: Long, socket: WebSocket, response: Response) {
+        // WS_UPGRADE_HTTP_CODE: a successful WebSocket upgrade always reports HTTP 101 Switching
+        // Protocols. Any other code means OkHttp delivered onOpen for a non-upgrade response (rare
+        // server misconfig); treat it as a permanent failure rather than pretending we are RUNNING.
+        if (response.code != WS_UPGRADE_HTTP_CODE) {
+            Log.w(TAG, "Unexpected onOpen response code=${response.code}; closing")
+            runCatching { socket.close(1002, "bad_upgrade") }
+            handleSocketDisconnected(
+                sessionId = sessionId,
+                socket = socket,
+                failureClass = StreamingFailureClass.PERMANENT,
+                failureReason = getString(R.string.error_server_unreachable),
+            )
+            return
+        }
         val acceptedOpen = synchronized(stateLock) {
             sessionId == connectionSessionId.get() &&
                 webSocket === socket &&
@@ -299,6 +371,17 @@ class LiveTrackStreamingService : Service() {
         } else {
             socket.close(1000, "stale_session")
         }
+    }
+
+    /**
+     * Apply the AUTH retry budget. Once the streaming lifecycle has burned through
+     * [StreamingLifecycleOrchestrator.MAX_AUTH_RETRY_ATTEMPTS] consecutive AUTH failures we escalate
+     * to PERMANENT so the orchestrator stops looping on a token the server keeps rejecting.
+     */
+    private fun resolveFailureClass(reported: StreamingFailureClass): StreamingFailureClass {
+        if (reported != StreamingFailureClass.AUTH) return reported
+        val attempt = synchronized(stateLock) { lifecycle.reconnectAttempt }
+        return StreamingLifecycleOrchestrator.classifyAuthFailure(attempt)
     }
 
     private fun handleSocketDisconnected(
@@ -376,15 +459,48 @@ class LiveTrackStreamingService : Service() {
             )
             val running = lifecycle.lifecycleState == TrackingLifecycleState.RUNNING
             isRunning = running
-            Triple(running, lifecycle.lifecycleState, lifecycle.failureReason)
+            lifecycle.failureReason
         }
-        LiveStreamRuntimeStateStore.update {
-            it.copy(
-                isRunning = snapshot.first,
-                lifecycleState = snapshot.second,
+        // STREAM-STATE-MACHINE: translate the lifecycle-orchestrator event into the (intent,
+        // health) projection. The orchestrator stays in charge of retry-attempt counting and the
+        // coarse lifecycle-state shape; we only adapt its output to the snapshot model here.
+        val nextIntent = nextStreamingIntent(event = event, activeTrackerIds = activeTrackerIds)
+        val nextHealth = nextStreamingHealth(event = event)
+        LiveStreamRuntimeStateStore.update { previous ->
+            previous.copy(
+                intent = nextIntent ?: previous.intent,
+                health = nextHealth,
                 activeTrackerIds = activeTrackerIds,
-                failureReason = snapshot.third
+                failureReason = snapshot,
             )
+        }
+    }
+
+    private fun nextStreamingIntent(
+        event: StreamingLifecycleEvent,
+        activeTrackerIds: Set<String>,
+    ): StreamingIntent? {
+        return when (event) {
+            StreamingLifecycleEvent.StartRequested -> StreamingIntent.Wanted(activeTrackerIds)
+            StreamingLifecycleEvent.StopRequested -> StreamingIntent.Idle
+            // Retry / Connected / RecoverableFailure / PermanentFailure all preserve the prior
+            // intent so consumers can keep telling "we still want to be subscribed but the
+            // current attempt is unhealthy" apart from "we deliberately stopped".
+            StreamingLifecycleEvent.RetryRequested,
+            StreamingLifecycleEvent.Connected,
+            StreamingLifecycleEvent.RecoverableFailure,
+            StreamingLifecycleEvent.PermanentFailure -> null
+        }
+    }
+
+    private fun nextStreamingHealth(event: StreamingLifecycleEvent): StreamingHealth {
+        return when (event) {
+            StreamingLifecycleEvent.StartRequested -> StreamingHealth.Starting
+            StreamingLifecycleEvent.RetryRequested -> StreamingHealth.Reconnecting
+            StreamingLifecycleEvent.Connected -> StreamingHealth.Running
+            StreamingLifecycleEvent.RecoverableFailure -> StreamingHealth.FailedTransient
+            StreamingLifecycleEvent.PermanentFailure -> StreamingHealth.FailedPermanent
+            StreamingLifecycleEvent.StopRequested -> StreamingHealth.Stopped
         }
     }
 
@@ -419,14 +535,6 @@ class LiveTrackStreamingService : Service() {
             ?: emptySet()
         if (idsFromArray.isNotEmpty()) return idsFromArray
         return intent.getStringExtra(EXTRA_TRACKER_ID)?.trim()?.takeIf { it.isNotEmpty() }?.let { setOf(it) } ?: emptySet()
-    }
-
-    private fun selectedTrackerExclusion(): Set<String> {
-        return SelectedTrackerPrefs.selectedTrackerId(this)
-            .trim()
-            .takeIf { it.isNotEmpty() }
-            ?.let(::setOf)
-            .orEmpty()
     }
 
     private fun emitStreamingError(message: String) {
@@ -546,22 +654,37 @@ class LiveTrackStreamingService : Service() {
             .build()
     }
 
+    /**
+     * WebSocket listener for the live-tracker stream.
+     *
+     * - [filterTrackIds] is a per-message supplier so subscription changes (e.g. group expansion,
+     *   tracker reselection) take effect on the next inbound message rather than on the next
+     *   reconnect. This eliminates the rare drop/admit anomalies that occurred when the service
+     *   updated its target set without tearing the socket down.
+     * - Failure classification is done here (where the HTTP response code is available) and
+     *   handed back to the service via [onDisconnect], which lets the service apply the AUTH
+     *   retry budget and pick the right user-facing copy without inspecting OkHttp internals.
+     */
     private class TrackersWebSocketListener(
-        private val filterTrackIds: Set<String>,
-        private val onOpen: (WebSocket) -> Unit = {},
+        private val filterTrackIds: () -> Set<String>,
+        // NAMING: these lambdas previously shadowed the WebSocketListener override names (onOpen,
+        // onClosed). Kotlin resolves bare `onOpen(...)` to the member function, so the override
+        // recursed into itself and crashed with StackOverflowError. Renamed to avoid the clash.
+        private val onOpened: (WebSocket, Response) -> Unit = { _, _ -> },
         private val onPoint: (WebSocket, StreamingTrackPoint) -> Unit,
         private val onActivity: (WebSocket) -> Unit = {},
-        private val onDisconnect: (WebSocket) -> Unit = {},
+        private val onDisconnect: (WebSocket, StreamingFailureClass, String?) -> Unit = { _, _, _ -> },
     ) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            onOpen(webSocket)
+            onOpened(webSocket, response)
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             try {
                 onActivity(webSocket)
+                val liveFilter = filterTrackIds()
                 StreamingTrackPointParser.parseTrackUpdatedMessages(text)
-                    .filter { it.trackId in filterTrackIds }
+                    .filter { it.trackId in liveFilter }
                     .forEach { point -> onPoint(webSocket, point) }
             } catch (e: Exception) {
                 Log.e(TAG, "Parse track_updated failed", e)
@@ -569,8 +692,11 @@ class LiveTrackStreamingService : Service() {
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            Log.w(TAG, "WebSocket failed: ${t.message}")
-            onDisconnect(webSocket)
+            val code = response?.code
+            Log.w(TAG, "WebSocket failed: ${t.message} code=$code")
+            val failureClass = classifyHttpCode(code)
+            val reason = code?.let { "HTTP $it: ${t.message ?: ""}".trim() } ?: t.message
+            onDisconnect(webSocket, failureClass, reason)
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -578,7 +704,16 @@ class LiveTrackStreamingService : Service() {
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            onDisconnect(webSocket)
+            onDisconnect(webSocket, StreamingFailureClass.TRANSIENT, reason.takeIf { it.isNotBlank() })
+        }
+
+        private fun classifyHttpCode(code: Int?): StreamingFailureClass {
+            return when (code) {
+                null -> StreamingFailureClass.TRANSIENT
+                401, 403 -> StreamingFailureClass.AUTH
+                in 400..499 -> StreamingFailureClass.PERMANENT
+                else -> StreamingFailureClass.TRANSIENT
+            }
         }
     }
 }

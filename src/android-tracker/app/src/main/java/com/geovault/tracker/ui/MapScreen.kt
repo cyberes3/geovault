@@ -318,6 +318,22 @@ private fun TrackerMapAuthenticatedContent(
             userLocation = locationPlugin,
             order = 30,
             onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
+            coordinateOverride = {
+                // RUNTIME-TRACKING RECENTER: while actively recording, the user's tracker marker
+                // already represents their position. The default FAB path enables the MapLibre
+                // user-location plugin and renders a synthetic puck — that paints a duplicate
+                // chevron on top of the tracker marker (TrackerMapUserLocationPolicy intentionally
+                // suppresses the plugin while tracking). Provide the runtime tracker coord so the
+                // controller animates the camera to it without enabling the puck.
+                val runtime = state.runtime
+                if (runtime.localRecordingActive) {
+                    val lat = runtime.lastTrackedLatitude
+                    val lon = runtime.lastTrackedLongitude
+                    if (lat != null && lon != null) LatLng(lat, lon) else null
+                } else {
+                    null
+                }
+            },
         )
     }
 
@@ -395,30 +411,6 @@ private fun TrackerMapAuthenticatedContent(
         locationPlugin.setCameraTracking(userLocationDecision.shouldEnableFollowCamera)
     }
 
-    LaunchedEffect(
-        phase,
-        state.followLockEnabled,
-        state.runtime.gpsCollecting,
-        state.runtime.lastTrackedLatitude,
-        state.runtime.lastTrackedLongitude,
-        state.trail
-    ) {
-        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        if (!state.followLockEnabled || !state.runtime.gpsCollecting) return@LaunchedEffect
-        val targetLat = state.runtime.lastTrackedLatitude ?: state.trail.lastOrNull()?.latitude ?: return@LaunchedEffect
-        val targetLon = state.runtime.lastTrackedLongitude ?: state.trail.lastOrNull()?.longitude ?: return@LaunchedEffect
-        geoVaultCenterCameraPreserveZoom(map, targetLat, targetLon)
-    }
-    LaunchedEffect(
-        phase,
-        renderPackage.revision,
-        state.selectionLockTrackerId,
-    ) {
-        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        val lockPoint = renderPackage.selectionLockPoint ?: return@LaunchedEffect
-        geoVaultCenterCameraPreserveZoom(map, lockPoint.first, lockPoint.second)
-    }
-
     DisposableEffect(map) {
         val listener = geoVaultCreateGestureMoveStartedListener {
             viewModel.disableAllMapLocks()
@@ -438,23 +430,40 @@ private fun TrackerMapAuthenticatedContent(
         renderPlugin.setRenderState(resolvedState)
     }
 
-    LaunchedEffect(
-        phase,
-        renderPackage.revision,
-    ) {
+    // CAMERA-DIRECTIVE: single consumer for VM-resolved camera moves. Precedence is enforced
+    // upstream so this effect doesn't have to consider whether follow-lock or selection-lock or
+    // initial-fit "wins"; it just applies whatever the VM resolved. Tracks consumed directive
+    // ids for InitialFit so the one-shot semantics survive bounds shape churn (e.g. trail growth)
+    // until the viewport context resets and re-arms them.
+    val cameraDirective by viewModel.cameraDirective.collectAsState()
+    LaunchedEffect(phase, cameraDirective.id) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        if (didInitialBounds) return@LaunchedEffect
-        val bounds = renderPackage.bounds
-        if (bounds != null) {
-            map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
-            didInitialBounds = true
+        when (val directive = cameraDirective) {
+            is com.geovault.tracker.presentation.TrackerMapCameraDirective.None -> Unit
+            is com.geovault.tracker.presentation.TrackerMapCameraDirective.CenterPreserveZoom -> {
+                geoVaultCenterCameraPreserveZoom(map, directive.latitude, directive.longitude)
+            }
+            is com.geovault.tracker.presentation.TrackerMapCameraDirective.FitBounds -> {
+                if (directive.reason == com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.InitialFit) {
+                    if (didInitialBounds) return@LaunchedEffect
+                    map.moveCameraToFitLatLngBounds(directive.bounds, boundsFitPaddingPx)
+                    didInitialBounds = true
+                } else {
+                    map.moveCameraToFitLatLngBounds(directive.bounds, boundsFitPaddingPx)
+                }
+            }
         }
     }
 
     LaunchedEffect(Unit) {
         viewModel.fitTrailEvents.collect {
             if (map.phase.value != GeoVaultMapPhase.Ready) return@collect
-            val bounds = latestRenderPackage.bounds
+            // FIT-FRESHNESS: compute bounds at the moment of fit instead of reading the cached
+            // render-package bounds. The render package is published asynchronously off
+            // _uiState.collect, so when a fit is requested in the same tick that flipped
+            // _uiState.value (e.g. immediately after a server reload completes) the cached
+            // bounds can still reflect the previous frame and the camera animates to stale data.
+            val bounds = viewModel.trailBoundsOrNull() ?: latestRenderPackage.bounds
             val anchor = gpsHomeAnchor
             val effective = when {
                 bounds != null && anchor != null -> geoVaultLatLngBoundsUnion(bounds, listOf(anchor))

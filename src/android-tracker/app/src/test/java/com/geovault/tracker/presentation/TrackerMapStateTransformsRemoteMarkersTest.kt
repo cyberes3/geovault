@@ -31,7 +31,8 @@ class TrackerMapStateTransformsRemoteMarkersTest {
                 "active" to remotePoint("active", 5.0, 6.0),
                 "inactive" to remotePoint("inactive", 7.0, 8.0)
             ),
-            activeStreamedTrackerIds = setOf("active")
+            activeStreamedTrackerIds = setOf("active"),
+            streamTargetIds = setOf("active"),
         )
 
         val markerIds = render.points.map { it.id }
@@ -144,6 +145,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
             runtime = TrackingRuntimeSnapshot(),
             remoteLastPoints = mapOf("remote-a" to remotePoint("remote-a", 5.0, 6.0)),
             activeStreamedTrackerIds = setOf("remote-a"),
+            streamTargetIds = setOf("remote-a"),
             trackerDisplayNameById = emptyMap(),
         )
 
@@ -162,6 +164,7 @@ class TrackerMapStateTransformsRemoteMarkersTest {
                 "r2" to remotePoint("r2", 7.0, 8.0),
             ),
             activeStreamedTrackerIds = setOf("r1", "r2"),
+            streamTargetIds = setOf("r1", "r2"),
             streamedAccuracyByTrackerId = mapOf(
                 "r1" to 4f,
                 "r2" to 7f,

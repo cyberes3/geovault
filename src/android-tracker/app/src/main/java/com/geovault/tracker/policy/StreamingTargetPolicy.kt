@@ -2,9 +2,7 @@ package com.geovault.tracker.policy
 
 data class StreamingTargetPolicyInput(
     val requestedTrackerIds: Collection<String>,
-    val selectedTrackerId: String = "",
     val locallyRecordedTrackerIds: Collection<String> = emptySet(),
-    val excludedTrackerIds: Collection<String> = emptySet(),
 )
 
 object StreamingTargetPolicy {
@@ -12,14 +10,15 @@ object StreamingTargetPolicy {
         return ids.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
     }
 
-    fun selectedTrackerExclusion(selectedTrackerId: String): Set<String> {
-        return selectedTrackerId.trim().takeIf { it.isNotEmpty() }?.let(::setOf).orEmpty()
-    }
-
+    /**
+     * The only streaming exclusion is the locally-recorded tracker; its live GPS feed is the
+     * source of truth on this device, so we never round-trip it through the websocket. Per-mode
+     * targeting (e.g. SINGLE_SESSION on the selected tracker is history-only) is decided by
+     * [com.geovault.tracker.presentation.TrackerMapSessionProjector] before the request reaches
+     * this policy — by the time we get here, `requestedTrackerIds` already encodes the intent.
+     */
     fun remoteSubscriptionTargets(input: StreamingTargetPolicyInput): Set<String> {
-        val excludedIds = normalizeTrackerIds(input.excludedTrackerIds) +
-            normalizeTrackerIds(input.locallyRecordedTrackerIds) +
-            selectedTrackerExclusion(input.selectedTrackerId)
+        val excludedIds = normalizeTrackerIds(input.locallyRecordedTrackerIds)
         return normalizeTrackerIds(input.requestedTrackerIds) - excludedIds
     }
 }

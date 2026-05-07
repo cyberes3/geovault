@@ -62,7 +62,12 @@ class TrackerMapTrailReloadCoordinatorTest {
     }
 
     @Test
-    fun resolvePlan_allQueueRunning_usesRosterWithOverlayOnActive() {
+    fun resolvePlan_allQueueRunning_loadsServerHistoryForFullRosterIncludingSelected() {
+        // GROUP / ALL-QUEUE TRAIL HISTORY: load history for every visible tracker, including the
+        // user's own / locally-recorded one. The local-overlay path is additive on top of server
+        // history; it is not a substitute, and the previous "exclude selected/locallyRecorded
+        // from server history" rule left the user's own trail blank in roster mode whenever the
+        // queue did not contain enough recent points.
         val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
@@ -75,13 +80,15 @@ class TrackerMapTrailReloadCoordinatorTest {
         )
 
         assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
-        assertEquals(setOf("t2"), plan.trackerIds)
+        assertEquals(setOf("active", "t2"), plan.trackerIds)
         assertEquals("active", plan.overlayTrackerId)
         assertEquals("active", plan.activeTrackerId)
     }
 
     @Test
-    fun resolvePlan_allQueueNotRunning_excludesSelectedFromServerHistory() {
+    fun resolvePlan_allQueueNotRunning_includesSelectedInServerHistory() {
+        // GROUP / ALL-QUEUE TRAIL HISTORY: same rationale as above for the not-running case;
+        // the user expects to see their own trail alongside the rest of the roster.
         val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.ALL_QUEUE,
@@ -94,12 +101,15 @@ class TrackerMapTrailReloadCoordinatorTest {
         )
 
         assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
-        assertEquals(setOf("remote"), plan.trackerIds)
+        assertEquals(setOf("selected", "remote"), plan.trackerIds)
         assertNull(plan.overlayTrackerId)
     }
 
     @Test
-    fun resolvePlan_groupMode_stopped_hasNoOverlay_andCarriesGroupId() {
+    fun resolvePlan_groupMode_stopped_includesSelectedInServerHistoryAndCarriesGroupId() {
+        // GROUP TRAIL HISTORY: in group mode the user explicitly chose a multi-tracker view that
+        // may include their own tracker. Server history must include the selected tracker so the
+        // user actually sees their own trail on the group map.
         val plan = TrackerMapTrailReloadCoordinator.resolvePlan(
             TrackerMapTrailReloadInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -115,7 +125,7 @@ class TrackerMapTrailReloadCoordinatorTest {
         )
 
         assertEquals(TrackerMapTrailSource.MULTI_SERVER, plan.source)
-        assertEquals(setOf("t2"), plan.trackerIds)
+        assertEquals(setOf("t1", "t2"), plan.trackerIds)
         assertNull(plan.overlayTrackerId)
         assertEquals("g1", plan.resolvedGroupId)
     }

@@ -14,7 +14,11 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
     }
 
     @Test
-    fun resolve_trackingGroup_prefersActiveStreamsWithoutSelected() {
+    fun resolve_trackingGroup_prefersActiveStreamsIncludingSelected() {
+        // GROUP STREAMING: while locally tracking and viewing a group, the active streamed set
+        // (which already excludes the locally-recorded tracker upstream) is taken verbatim. The
+        // selected tracker is NOT scrubbed out at the resume layer because group mode is an
+        // explicit multi-tracker subscription that may legitimately include it.
         val decision = resolver.resolve(
             baseInput(
                 trackingRunning = true,
@@ -24,11 +28,12 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
                 selectedTrackerId = "selected"
             )
         )
-        assertEquals(TrackerMapResumeDecision.StartMultiContextStreaming(setOf("x", "y")), decision)
+        assertEquals(TrackerMapResumeDecision.StartMultiContextStreaming(setOf("selected", "x", "y")), decision)
     }
 
     @Test
-    fun resolve_trackingGroup_usesFallbackGroupIdsWhenNoActiveStreams() {
+    fun resolve_trackingGroup_usesFallbackGroupIdsIncludingSelected() {
+        // GROUP STREAMING: same rationale — the fallback group set keeps the selected tracker.
         val decision = resolver.resolve(
             baseInput(
                 trackingRunning = true,
@@ -38,7 +43,7 @@ class TrackerMapResolveResumeUseCaseBranchCoverageTest {
                 selectedTrackerId = "selected"
             )
         )
-        assertEquals(TrackerMapResumeDecision.StartMultiContextStreaming(setOf("g1", "g2")), decision)
+        assertEquals(TrackerMapResumeDecision.StartMultiContextStreaming(setOf("selected", "g1", "g2")), decision)
     }
 
     @Test

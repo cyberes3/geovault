@@ -89,15 +89,4 @@ class TrackerMapReloadSeedPolicyTest {
         assertNotEquals(base, changed)
     }
 
-    @Test
-    fun geometryContentFingerprint_changesWhenCoordinatesChangeButCountDoesNot() {
-        val first = TrackerMapViewModel.geometryContentFingerprint(
-            listOf(listOf(1.0, 2.0), listOf(3.0, 4.0))
-        )
-        val second = TrackerMapViewModel.geometryContentFingerprint(
-            listOf(listOf(1.0, 2.0), listOf(5.0, 6.0))
-        )
-
-        assertNotEquals(first, second)
-    }
 }

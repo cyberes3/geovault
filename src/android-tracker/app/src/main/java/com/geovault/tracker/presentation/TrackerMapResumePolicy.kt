@@ -50,18 +50,26 @@ class TrackerMapResolveResumeUseCase {
     fun resolve(input: TrackerMapResumeInput): TrackerMapResumeDecision {
         if (!input.mapReady) return TrackerMapResumeDecision.NoOp
 
+        // STREAMING EXCLUSION: the resume policy no longer strips the selected tracker out of
+        // group / all-queue resume sets. The only real exclusion is the locally-recorded tracker
+        // and that is re-applied by the projector / streaming reconciler at the moment of
+        // dispatch. Pre-filtering here previously produced "reconnecting" churn, because the
+        // resume policy proposed `StartMultiContextStreaming(setMinusSelected)` while the
+        // projector simultaneously proposed the full set including the selected tracker — every
+        // resume tick the two layers fought each other. Trust the upstream sets verbatim.
+
         if (input.trackingRunning) {
             val selectedTrackerId = input.selectedTrackerId.takeIf { it.isNotBlank() }
-            val streamedWithoutSelected = input.activeStreamedTrackerIds.filterTo(mutableSetOf()) { id ->
-                id.isNotBlank() && id != selectedTrackerId
+            val streamedSanitized = input.activeStreamedTrackerIds.filterTo(mutableSetOf()) { id ->
+                id.isNotBlank()
             }
             if (input.mapViewContext == TrackerMapViewContext.GROUP || input.showAllTrackers) {
                 val fallbackGroupIds = input.currentGroupTrackIds.filterTo(mutableSetOf()) { id ->
-                    id.isNotBlank() && id != selectedTrackerId
+                    id.isNotBlank()
                 }
                 return when {
-                    streamedWithoutSelected.isNotEmpty() ->
-                        TrackerMapResumeDecision.StartMultiContextStreaming(streamedWithoutSelected)
+                    streamedSanitized.isNotEmpty() ->
+                        TrackerMapResumeDecision.StartMultiContextStreaming(streamedSanitized)
                     input.mapViewContext == TrackerMapViewContext.GROUP && fallbackGroupIds.isNotEmpty() ->
                         TrackerMapResumeDecision.StartMultiContextStreaming(fallbackGroupIds)
                     !selectedTrackerId.isNullOrEmpty() ->
@@ -81,7 +89,7 @@ class TrackerMapResolveResumeUseCase {
             if (input.hasTrailPoints && displayedTrackerId == activeSingleTrackerId) {
                 return TrackerMapResumeDecision.NoOp
             }
-            if (displayedTrackerId != null && displayedTrackerId in streamedWithoutSelected) {
+            if (displayedTrackerId != null && displayedTrackerId in streamedSanitized) {
                 return TrackerMapResumeDecision.RestartDisplayedTrackerStreaming
             }
             if (activeSingleTrackerId.isNotEmpty() && activeSingleTrackerId == selectedTrackerId && input.hasPendingInitialTracker) {
@@ -91,18 +99,17 @@ class TrackerMapResolveResumeUseCase {
         }
 
         if (input.mapViewContext == TrackerMapViewContext.GROUP || input.showAllTrackers) {
-            val selectedTrackerId = input.selectedTrackerId.takeIf { it.isNotBlank() }
-            val streamedWithoutSelected = input.activeStreamedTrackerIds.filterTo(mutableSetOf()) { id ->
-                id.isNotBlank() && id != selectedTrackerId
+            val streamedSanitized = input.activeStreamedTrackerIds.filterTo(mutableSetOf()) { id ->
+                id.isNotBlank()
             }
-            val groupIdsWithoutSelected = input.currentGroupTrackIds.filterTo(mutableSetOf()) { id ->
-                id.isNotBlank() && id != selectedTrackerId
+            val groupIdsSanitized = input.currentGroupTrackIds.filterTo(mutableSetOf()) { id ->
+                id.isNotBlank()
             }
             return when {
-                streamedWithoutSelected.isNotEmpty() ->
-                    TrackerMapResumeDecision.StartMultiContextStreaming(streamedWithoutSelected)
-                input.mapViewContext == TrackerMapViewContext.GROUP && groupIdsWithoutSelected.isNotEmpty() ->
-                    TrackerMapResumeDecision.StartMultiContextStreaming(groupIdsWithoutSelected)
+                streamedSanitized.isNotEmpty() ->
+                    TrackerMapResumeDecision.StartMultiContextStreaming(streamedSanitized)
+                input.mapViewContext == TrackerMapViewContext.GROUP && groupIdsSanitized.isNotEmpty() ->
+                    TrackerMapResumeDecision.StartMultiContextStreaming(groupIdsSanitized)
                 else -> TrackerMapResumeDecision.MultiContextNoStreaming
             }
         }

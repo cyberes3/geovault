@@ -208,6 +208,9 @@ data class TrackingRuntimeSnapshot(
 
     val localRecordingActive: Boolean
         get() = recordingRuntime.localRecordingActive
+
+    val locallyRecordedTrackerId: String
+        get() = recordingRuntime.selectedTrackerId.trim().takeIf { localRecordingActive }.orEmpty()
 }
 
 object TrackingRuntimeStateStore {

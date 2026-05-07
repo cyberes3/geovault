@@ -26,7 +26,10 @@ class LiveTrackStreamingReconcilerTest {
     }
 
     @Test
-    fun reconcileAndInvalidate_smokeServicePipeline() = runBlocking {
+    fun reconcile_smokeServicePipeline() = runBlocking {
+        // COMBINED-RECONCILE: invalidateDedupe is gone — back-to-back identical reconciles are
+        // absorbed by the coordinator's `lastAppliedIds` gate. We only smoke the pipeline here to
+        // make sure repeated reconcile + stopForegroundStreaming calls don't crash.
         val app: Context = ApplicationProvider.getApplicationContext()
         val reconciler = LiveTrackStreamingReconciler(app)
         val state = TrackerMapUiState(
@@ -40,7 +43,6 @@ class LiveTrackStreamingReconcilerTest {
             effectiveDisplayedName = "One",
             streamRuntime = LiveStreamRuntimeSnapshot(),
         )
-        reconciler.invalidateDedupe()
         reconciler.reconcile(
             state = state,
             effectiveDisplayedId = "t1",

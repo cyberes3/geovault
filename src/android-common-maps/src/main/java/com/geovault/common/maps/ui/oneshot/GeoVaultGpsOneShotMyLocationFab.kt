@@ -55,6 +55,13 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
      * because the host already has continuous position follow from the heading-follow bundle.
      */
     positionFollowActive: Boolean = false,
+    /**
+     * Resolved at tap time. When non-null, the controller uses the supplied coordinate as the
+     * recenter target and skips the GPS one-shot lookup AND the MapLibre user-location puck.
+     * Hosts use this to recenter on their own authoritative position (e.g. an active recording
+     * tracker's last fix) without painting a duplicate puck on top of their marker.
+     */
+    coordinateOverride: (() -> LatLng?)? = null,
 ): GeoVaultGpsOneShotMyLocationController {
     val context = LocalContext.current
     var hadSuccessfulJump by remember { mutableStateOf(false) }
@@ -67,6 +74,36 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
         }
     }
 
+    fun animateCameraToTarget(target: LatLng, requestId: Int) {
+        val mapLibreMap = map.maplibreMap ?: return
+        map.animateCameraWithPadding(
+            CameraUpdateFactory.newCameraPosition(
+                geoVaultRetargetCameraPositionWithMinimumZoom(
+                    current = mapLibreMap.cameraPosition,
+                    target = target,
+                    minimumZoom = GPS_ONE_SHOT_MIN_ZOOM,
+                ),
+            ),
+            callback = object : org.maplibre.android.maps.MapLibreMap.CancelableCallback {
+                override fun onCancel() {
+                    map.ensureInteractiveGestures()
+                }
+
+                override fun onFinish() {
+                    map.ensureInteractiveGestures()
+                }
+            },
+        )
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+            {
+                if (requestId == activeRequestId) {
+                    map.ensureInteractiveGestures()
+                }
+            },
+            350L,
+        )
+    }
+
     fun jumpToMyLocation(showSpinner: Boolean) {
         if (showSpinner) {
             waitingForFix = true
@@ -74,6 +111,22 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
         activeRequestId += 1
         val requestId = activeRequestId
         map.ensureInteractiveGestures()
+
+        // OVERRIDE PATH: host has its own authoritative coordinate (e.g. the user's tracker
+        // marker while actively recording). Skip the GPS lookup and the MapLibre puck so we
+        // don't paint a duplicate chevron on top of the host's marker.
+        val overrideTarget = coordinateOverride?.invoke()
+        if (overrideTarget != null) {
+            if (showSpinner) {
+                waitingForFix = false
+            }
+            if (map.phase.value != GeoVaultMapPhase.Ready) return
+            hadSuccessfulJump = true
+            onLocationResolved?.invoke(overrideTarget)
+            animateCameraToTarget(overrideTarget, requestId)
+            return
+        }
+
         if (showUserLocationPuck) {
             userLocation.setEnabled(true)
             userLocation.setCameraTracking(false)
@@ -187,6 +240,7 @@ fun rememberGeoVaultGpsOneShotMyLocationFabAction(
     onPermissionDenied: (() -> Unit)? = null,
     showUserLocationPuck: Boolean = true,
     positionFollowActive: Boolean = false,
+    coordinateOverride: (() -> LatLng?)? = null,
 ): GeoVaultMapFabAction {
     val controller = rememberGeoVaultGpsOneShotMyLocationController(
         map = map,
@@ -195,6 +249,7 @@ fun rememberGeoVaultGpsOneShotMyLocationFabAction(
         onPermissionDenied = onPermissionDenied,
         showUserLocationPuck = showUserLocationPuck,
         positionFollowActive = positionFollowActive,
+        coordinateOverride = coordinateOverride,
     )
     return GeoVaultMapFabAction(
         id = id,

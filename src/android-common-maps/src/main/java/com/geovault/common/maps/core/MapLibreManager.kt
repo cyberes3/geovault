@@ -61,7 +61,9 @@ class MapLibreManager(
         map.uiSettings.setCompassEnabled(false)
         map.uiSettings.isScrollGesturesEnabled = true
         map.uiSettings.isZoomGesturesEnabled = true
-        map.uiSettings.isTiltGesturesEnabled = true
+        // Two-finger tilt is intentionally disabled across all geovault maps; see
+        // GeoVaultMapController.ensureInteractiveGestures for the matching policy.
+        map.uiSettings.isTiltGesturesEnabled = false
         map.uiSettings.isDoubleTapGesturesEnabled = true
         map.uiSettings.isRotateGesturesEnabled = false
         // Unbounded camera target: MapLibre Native is initialised with `ConstrainMode::HeightOnly`

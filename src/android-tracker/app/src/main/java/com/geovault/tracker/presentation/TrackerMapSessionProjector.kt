@@ -33,20 +33,33 @@ object TrackerMapSessionProjector {
     fun project(input: TrackerMapSessionIntent): TrackerMapStreamingPlan {
         val selectedTrackerId = input.runtime.selectedTrackerId.trim()
         val runtimeRunning = input.runtime.localRecordingActive
+        val locallyRecordedTrackerId = input.runtime.locallyRecordedTrackerId
         val displayedTrackerId = input.displayedTrackerId.trim().ifBlank { selectedTrackerId }
         val displayedTrackerName = input.displayedTrackerName.trim().ifBlank {
             input.runtime.selectedTrackerName.trim()
         }
         val groupTrackerIds = StreamingTargetPolicy.normalizeTrackerIds(input.groupSelection.trackerIds)
         val rosterTrackerIds = StreamingTargetPolicy.normalizeTrackerIds(input.rosterTrackerIds)
-        val localTrackerIds = if (runtimeRunning && selectedTrackerId.isNotEmpty()) {
-            setOf(selectedTrackerId)
+        val localTrackerIds = if (locallyRecordedTrackerId.isNotEmpty()) {
+            setOf(locallyRecordedTrackerId)
         } else {
             emptySet()
         }
-        val requestedRemoteTrackerIds = when (input.mode) {
+        // STREAMING TARGETING: build the per-mode requested set. In SINGLE_SESSION the dedicated
+        // selected-tracker view is intentionally history-only (no streaming subscription when the
+        // displayed tracker IS the selected one). For any other displayed tracker in SINGLE we
+        // stream that one tracker. GROUP / ALL-QUEUE stream the full set, with only the
+        // locally-recorded tracker excluded below — the local GPS feed is the source of truth
+        // for our own active recording; everything else, including the selected tracker when
+        // we are not recording, is fair game for streaming.
+        val requestedRemoteTrackerIds: Set<String> = when (input.mode) {
             TrackerMapDisplayMode.SINGLE_SESSION -> {
-                displayedTrackerId.takeIf { it.isNotEmpty() }?.let(::setOf).orEmpty()
+                val id = displayedTrackerId
+                when {
+                    id.isEmpty() -> emptySet()
+                    selectedTrackerId.isNotEmpty() && id == selectedTrackerId -> emptySet()
+                    else -> setOf(id)
+                }
             }
             TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupTrackerIds
             TrackerMapDisplayMode.ALL_QUEUE -> rosterTrackerIds
@@ -54,7 +67,6 @@ object TrackerMapSessionProjector {
         val remoteSubscriptionIds = StreamingTargetPolicy.remoteSubscriptionTargets(
             StreamingTargetPolicyInput(
                 requestedTrackerIds = requestedRemoteTrackerIds,
-                selectedTrackerId = selectedTrackerId,
                 locallyRecordedTrackerIds = localTrackerIds,
             )
         )
@@ -67,7 +79,6 @@ object TrackerMapSessionProjector {
                 StreamingTargetPolicy.remoteSubscriptionTargets(
                     StreamingTargetPolicyInput(
                         requestedTrackerIds = acceptedIds,
-                        selectedTrackerId = selectedTrackerId,
                         locallyRecordedTrackerIds = localTrackerIds,
                     )
                 )
@@ -75,9 +86,9 @@ object TrackerMapSessionProjector {
         val localOverlayTrackerIds = when {
             localTrackerIds.isEmpty() -> emptySet()
             input.mode == TrackerMapDisplayMode.ALL_QUEUE -> localTrackerIds
-            input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER && selectedTrackerId in groupTrackerIds -> localTrackerIds
+            input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER && locallyRecordedTrackerId in groupTrackerIds -> localTrackerIds
             input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-                (displayedTrackerId.isEmpty() || displayedTrackerId == selectedTrackerId) -> localTrackerIds
+                (displayedTrackerId.isEmpty() || displayedTrackerId == locallyRecordedTrackerId) -> localTrackerIds
             else -> emptySet()
         }
         val trailReloadPlan = TrackerMapTrailReloadCoordinator.resolvePlan(
@@ -85,6 +96,7 @@ object TrackerMapSessionProjector {
                 mode = input.mode,
                 runtimeRunning = runtimeRunning,
                 selectedTrackerId = selectedTrackerId,
+                locallyRecordedTrackerId = locallyRecordedTrackerId,
                 activeTrackerId = displayedTrackerId,
                 rosterTrackerIds = rosterTrackerIds,
                 groupSelection = input.groupSelection,

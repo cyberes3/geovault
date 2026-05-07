@@ -320,7 +320,10 @@ sealed class GeoVaultBaseMap(
         map.uiSettings.setCompassEnabled(false)
         map.uiSettings.isScrollGesturesEnabled = true
         map.uiSettings.isZoomGesturesEnabled = true
-        map.uiSettings.isTiltGesturesEnabled = true
+        // Two-finger tilt is intentionally disabled across all geovault maps; users were tilting
+        // the camera by accident during pinch zoom and the resulting pitch made the orthographic
+        // overlays look broken. No app currently relies on a tilted camera.
+        map.uiSettings.isTiltGesturesEnabled = false
         map.uiSettings.isDoubleTapGesturesEnabled = true
         map.uiSettings.isRotateGesturesEnabled = false
     }

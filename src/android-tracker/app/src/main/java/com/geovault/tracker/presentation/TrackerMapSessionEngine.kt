@@ -28,6 +28,11 @@ object TrackerMapSessionEngine {
         val acceptedRemoteLastPoints = state.remoteLastPoints.filterKeys { it in plan.acceptedRemoteTrackerIds }
         val normalizedTrails = input.localRuntimeOverlayTrails.mapKeys { it.key.trim() }
             .filterKeys { it.isNotEmpty() }
+        // Render trails for any tracker we have data for. We intentionally do NOT gate keys on
+        // plan.acceptedRemoteTrackerIds: server history loaded for multi-mode (group/all) trackers
+        // must remain visible even when the live stream's accepted set transiently flickers (e.g.
+        // service start lag, reconciliation). Marker heads from acceptedRemoteLastPoints are still
+        // gated by plan.acceptedRemoteTrackerIds via the filter above.
         val tracks = (normalizedTrails.keys + acceptedRemoteLastPoints.keys).associateWith { trackerId ->
             val split = splitTrail(normalizedTrails[trackerId].orEmpty())
             TrackerTrackModel(

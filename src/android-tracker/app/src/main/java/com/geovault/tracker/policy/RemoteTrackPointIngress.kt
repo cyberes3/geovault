@@ -72,7 +72,7 @@ object RemoteTrackPointIngress {
         val normalizedTrackId = trackId.trim()
         if (normalizedTrackId.isEmpty()) return false
         val runtime = TrackingRuntimeStateStore.state.value
-        return runtime.localRecordingActive && runtime.selectedTrackerId.trim() == normalizedTrackId
+        return runtime.locallyRecordedTrackerId == normalizedTrackId
     }
 
     private fun warnRateLimited(message: String) {

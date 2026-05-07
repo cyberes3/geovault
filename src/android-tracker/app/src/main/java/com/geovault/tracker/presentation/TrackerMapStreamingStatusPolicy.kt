@@ -1,7 +1,7 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
+import com.geovault.tracker.services.StreamingHealth
 
 enum class TrackerMapStreamingStatus {
     INACTIVE,
@@ -17,13 +17,18 @@ data class TrackerMapStreamingStatusUiModel(
     val failureReason: String? = null,
 )
 
+/**
+ * STREAM-STATE-MACHINE: status mapping is now driven by [StreamingHealth] directly so consumers
+ * see distinct UI for "starting fresh" vs "reconnecting after a drop", and so a permanent
+ * failure is not silently lumped in with a transient blip.
+ */
 object TrackerMapStreamingStatusPolicy {
     fun resolve(
         snapshot: LiveStreamRuntimeSnapshot,
         streamTargetIds: Set<String>,
     ): TrackerMapStreamingStatusUiModel {
         val desiredIds = normalizeIds(streamTargetIds)
-        if (!snapshot.isRunning && desiredIds.isEmpty()) {
+        if (!snapshot.wantsSubscription && desiredIds.isEmpty()) {
             return TrackerMapStreamingStatusUiModel()
         }
 
@@ -31,8 +36,8 @@ object TrackerMapStreamingStatusPolicy {
         val activeCount = activeIds.size
         val desiredMatched = desiredIds.isNotEmpty() && activeIds == desiredIds
 
-        return when (snapshot.lifecycleState) {
-            TrackingLifecycleState.STARTING -> TrackerMapStreamingStatusUiModel(
+        return when (snapshot.health) {
+            StreamingHealth.Starting -> TrackerMapStreamingStatusUiModel(
                 status = if (activeCount > 0) {
                     TrackerMapStreamingStatus.RECONNECTING
                 } else {
@@ -40,7 +45,11 @@ object TrackerMapStreamingStatusPolicy {
                 },
                 activeCount = activeCount,
             )
-            TrackingLifecycleState.RUNNING -> TrackerMapStreamingStatusUiModel(
+            StreamingHealth.Reconnecting -> TrackerMapStreamingStatusUiModel(
+                status = TrackerMapStreamingStatus.RECONNECTING,
+                activeCount = activeCount,
+            )
+            StreamingHealth.Running -> TrackerMapStreamingStatusUiModel(
                 status = if (desiredMatched) {
                     TrackerMapStreamingStatus.LIVE
                 } else if (activeCount > 0) {
@@ -50,15 +59,13 @@ object TrackerMapStreamingStatusPolicy {
                 },
                 activeCount = activeCount,
             )
-            TrackingLifecycleState.FAILED -> TrackerMapStreamingStatusUiModel(
+            StreamingHealth.FailedTransient,
+            StreamingHealth.FailedPermanent -> TrackerMapStreamingStatusUiModel(
                 status = TrackerMapStreamingStatus.FAILED,
                 activeCount = activeCount,
                 failureReason = snapshot.failureReason,
             )
-            TrackingLifecycleState.STOPPED -> {
-                TrackerMapStreamingStatusUiModel()
-            }
-            else -> TrackerMapStreamingStatusUiModel()
+            StreamingHealth.Stopped -> TrackerMapStreamingStatusUiModel()
         }
     }
 

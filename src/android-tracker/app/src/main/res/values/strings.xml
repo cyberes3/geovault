@@ -25,6 +25,7 @@
     <string name="live_track_streaming_channel_description">Foreground notification while live tracker updates stream</string>
     <string name="stop_streaming">Stop Streaming</string>
     <string name="error_server_unreachable">Could not reach server. Check URL and connection.</string>
+    <string name="error_streaming_auth_failed">Streaming sign-in expired. Sign in again in settings.</string>
     <string name="recovery_channel_name">Tracking recovery</string>
     <string name="recovery_channel_description">Alerts when tracking needs attention</string>
     <string name="no_tracker_selected_go_to_settings">Select a tracker before starting. Trackers tab → Edit → Selected tracker</string>
@@ -124,7 +125,7 @@
     <string name="tooltip_map_live_active_fit">Keep adjusting the view to fit new live points while you watch.</string>
     <string name="tooltip_map_selection_zoom_lock">Follow this tracker automatically as new points arrive.</string>
     <string name="tooltip_map_selection_close">Close the panel and clear the map selection.</string>
-    <string name="tooltip_map_selection_focus">Move the camera to this tracker.</string>
+    <string name="tooltip_map_selection_focus">View only this tracker.</string>
     <string name="tooltip_map_selection_view_params">Open detailed parameters for this track.</string>
     <string name="tooltip_map_selection_view_in_list">Open this tracker in your trackers list.</string>
     <string name="tooltip_trackers_pager_fab">Create a new tracker on the My Trackers tab, or a new group on the Groups tab.</string>
@@ -201,7 +202,7 @@
     <string name="map_action_open_trackers">Open trackers</string>
     <string name="map_action_view_in_list">View in list</string>
     <string name="map_action_view_params">View params</string>
-    <string name="map_action_focus_tracker">Focus tracker</string>
+    <string name="map_action_focus_tracker">View only this tracker</string>
     <string name="map_action_lock_selection">Lock selection</string>
     <string name="map_action_unlock_selection">Unlock selection</string>
     <string name="map_action_open_shared">Open shared</string>

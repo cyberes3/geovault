@@ -25,6 +25,11 @@ object StreamingLifecycleOrchestrator {
     private const val BASE_TRANSIENT_DELAY_MS = 3_000L
     private const val MAX_TRANSIENT_DELAY_MS = 60_000L
     private const val AUTH_DELAY_MS = 30_000L
+    /**
+     * Hard cap for AUTH retries. Once exceeded, the failure is reclassified as PERMANENT so the
+     * orchestrator stops looping on a token that the server keeps rejecting.
+     */
+    const val MAX_AUTH_RETRY_ATTEMPTS = 3
 
     fun transition(
         current: StreamingLifecycleState,
@@ -73,6 +78,19 @@ object StreamingLifecycleOrchestrator {
             }
             StreamingFailureClass.AUTH -> AUTH_DELAY_MS
             StreamingFailureClass.PERMANENT -> Long.MAX_VALUE
+        }
+    }
+
+    /**
+     * AUTH failures get a small bounded retry window. After [MAX_AUTH_RETRY_ATTEMPTS] consecutive
+     * AUTH failures we escalate to PERMANENT so the connect loop stops, the user is shown a
+     * sign-in prompt, and we stop battery-draining background reconnects.
+     */
+    fun classifyAuthFailure(reconnectAttempt: Int): StreamingFailureClass {
+        return if (reconnectAttempt >= MAX_AUTH_RETRY_ATTEMPTS) {
+            StreamingFailureClass.PERMANENT
+        } else {
+            StreamingFailureClass.AUTH
         }
     }
 }

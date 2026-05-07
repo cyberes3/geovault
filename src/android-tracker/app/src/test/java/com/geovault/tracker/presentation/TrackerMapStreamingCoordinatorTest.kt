@@ -14,7 +14,6 @@ class TrackerMapStreamingCoordinatorTest {
                 streamTargetIds = emptySet(),
                 displayedTrackerId = " ",
                 displayedTrackerName = "Name",
-                selectedTrackerId = "selected"
             )
         )
 
@@ -22,15 +21,15 @@ class TrackerMapStreamingCoordinatorTest {
     }
 
     @Test
-    fun resolve_singleSession_displayedEqualsSelectedAndRecording_returnsStop() {
+    fun resolve_singleSession_emptyStreamTargets_returnsStop() {
+        // When the projector emits an empty stream target set (e.g. SINGLE_SESSION on the
+        // selected tracker, where the dedicated view is history-only), the coordinator stops.
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
                 streamTargetIds = emptySet(),
                 displayedTrackerId = "t1",
                 displayedTrackerName = "Name",
-                selectedTrackerId = "t1",
-                trackingRunning = true,
             )
         )
 
@@ -38,48 +37,34 @@ class TrackerMapStreamingCoordinatorTest {
     }
 
     @Test
-    fun resolve_singleSession_displayedEqualsSelectedButNotRecording_returnsStop() {
-        val command = TrackerMapStreamingCoordinator.resolve(
-            TrackerMapStreamingDecisionInput(
-                mode = TrackerMapDisplayMode.SINGLE_SESSION,
-                streamTargetIds = emptySet(),
-                displayedTrackerId = "t1",
-                displayedTrackerName = "Name",
-                selectedTrackerId = "t1",
-                trackingRunning = false,
-            )
-        )
-
-        assertEquals(TrackerMapStreamingCommand.Stop, command)
-    }
-
-    @Test
-    fun resolve_multiContext_defensivelyExcludesSelectedEvenWhenNotRecording() {
+    fun resolve_multiContext_groupTrustsProjectedTargetsIncludingSelected() {
+        // STREAMING-COORDINATOR: the projector is the single source of truth for which trackers
+        // belong in the group/all-queue subscription set; the coordinator just forwards what the
+        // projector produced.
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                 streamTargetIds = setOf("self", "other"),
                 displayedTrackerId = "",
                 displayedTrackerName = "",
-                selectedTrackerId = "self",
-                trackingRunning = false,
             )
         )
 
         assertTrue(command is TrackerMapStreamingCommand.Start)
         val start = command as TrackerMapStreamingCommand.Start
-        assertEquals(setOf("other"), start.trackerIds)
+        assertEquals(setOf("self", "other"), start.trackerIds)
     }
 
     @Test
     fun resolve_singleSession_displayedDifferent_returnsStart() {
+        // For a single-session view of a non-selected tracker the projector emits
+        // {displayedTrackerId}; the coordinator forwards it and keeps the display name.
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.SINGLE_SESSION,
-                streamTargetIds = emptySet(),
+                streamTargetIds = setOf("t2"),
                 displayedTrackerId = "t2",
                 displayedTrackerName = "Tracker 2",
-                selectedTrackerId = "t1"
             )
         )
 
@@ -97,8 +82,6 @@ class TrackerMapStreamingCoordinatorTest {
                 streamTargetIds = emptySet(),
                 displayedTrackerId = "t1",
                 displayedTrackerName = "Name",
-                selectedTrackerId = "t1",
-                trackingRunning = false,
             )
         )
 
@@ -113,8 +96,6 @@ class TrackerMapStreamingCoordinatorTest {
                 streamTargetIds = setOf("a", "b"),
                 displayedTrackerId = "a",
                 displayedTrackerName = "A",
-                selectedTrackerId = "z",
-                trackingRunning = false,
             )
         )
 
@@ -125,54 +106,22 @@ class TrackerMapStreamingCoordinatorTest {
     }
 
     @Test
-    fun resolve_multiContext_usesAlreadyProjectedTargets() {
-        val command = TrackerMapStreamingCoordinator.resolve(
-            TrackerMapStreamingDecisionInput(
-                mode = TrackerMapDisplayMode.ALL_QUEUE,
-                streamTargetIds = setOf("other"),
-                displayedTrackerId = "other",
-                displayedTrackerName = "O",
-                selectedTrackerId = "self",
-                trackingRunning = true,
-            )
-        )
-
-        assertTrue(command is TrackerMapStreamingCommand.Start)
-        val start = command as TrackerMapStreamingCommand.Start
-        assertEquals(setOf("other"), start.trackerIds)
-    }
-
-    @Test
-    fun resolve_multiContext_defensivelyExcludesLocalRecorder() {
+    fun resolve_multiContext_singleProjectedTarget_keepsName() {
+        // STREAMING-COORDINATOR: when the projector excludes the locally-recorded tracker from a
+        // group / all-queue stream, the coordinator receives the already-filtered set and just
+        // forwards it. Per-mode filtering and the locally-recorded exclusion live one layer up.
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
                 mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                streamTargetIds = setOf("self", "other"),
+                streamTargetIds = setOf("other"),
                 displayedTrackerId = "other",
                 displayedTrackerName = "Other",
-                selectedTrackerId = "self",
-                trackingRunning = true,
             )
         )
 
         assertTrue(command is TrackerMapStreamingCommand.Start)
         val start = command as TrackerMapStreamingCommand.Start
         assertEquals(setOf("other"), start.trackerIds)
-    }
-
-    @Test
-    fun resolve_multiContext_projectedNoTargets_returnsStop() {
-        val command = TrackerMapStreamingCoordinator.resolve(
-            TrackerMapStreamingDecisionInput(
-                mode = TrackerMapDisplayMode.ALL_QUEUE,
-                streamTargetIds = emptySet(),
-                displayedTrackerId = "only",
-                displayedTrackerName = "Only",
-                selectedTrackerId = "only",
-                trackingRunning = true,
-            )
-        )
-
-        assertEquals(TrackerMapStreamingCommand.Stop, command)
+        assertEquals("Other", start.trackerName)
     }
 }

@@ -32,10 +32,20 @@ object TrackPointBus {
     private const val REPLAY_EVENTS = 6144
     private const val EXTRA_BUFFER_EVENTS = 16384
     private const val PAUSED_BUFFER_CAPACITY = 512
+    /**
+     * Bounded ordering queue capacity. Sized to absorb realistic bursts (e.g. dozens of trackers
+     * each pushing a few points per second) without permitting unbounded growth on a stuck
+     * consumer. Once full, the oldest queued event is dropped via [BufferOverflow.DROP_OLDEST];
+     * this is preferable to OOM and is logged via [droppedQueueOverflowEvents].
+     */
+    private const val ORDERED_QUEUE_CAPACITY = 4096
     private const val WARNING_INTERVAL_MS = 30_000L
 
     private val emitScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val orderedEmitQueue = Channel<TrackPointEvent>(Channel.UNLIMITED)
+    private val orderedEmitQueue = Channel<TrackPointEvent>(
+        capacity = ORDERED_QUEUE_CAPACITY,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     private val localDeliveryPaused = AtomicBoolean(false)
     private val deferredEmitCount = AtomicLong(0L)
     private val pausedLocalEvents = ArrayDeque<TrackPointEvent>()
@@ -79,6 +89,9 @@ object TrackPointBus {
         }
         val sendResult = orderedEmitQueue.trySend(orderedEvent)
         if (!sendResult.isSuccess) {
+            // With DROP_OLDEST this should not normally fire (the channel evicts internally), but
+            // closed-channel or other failure modes still land here. Treat them like deferred
+            // emits so we keep telemetry symmetric.
             recordEnqueueFailure(orderedEvent)
         }
     }

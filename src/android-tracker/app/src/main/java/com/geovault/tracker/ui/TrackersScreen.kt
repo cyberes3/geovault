@@ -492,7 +492,7 @@ fun TrackersScreen(
         tabOverlay = {
             // Editor sub-views render here, directly above the body (same slot as the
             // params overlay) — that keeps the outer NavTabShell title bar visible
-            // across open/close. `else if` mirrors the original mutual-exclusion order.
+            // across open/close. `else if` enforces mutual exclusion between overlays.
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
                 Box(modifier = Modifier.fillMaxSize()) {

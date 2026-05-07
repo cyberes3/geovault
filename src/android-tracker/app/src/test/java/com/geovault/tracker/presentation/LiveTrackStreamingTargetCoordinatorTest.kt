@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.geovault.tracker.MapStreamingStartResult
 import com.geovault.tracker.MapStreamingStopResult
-import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.StreamingHealth
+import com.geovault.tracker.services.StreamingIntent
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -83,17 +84,19 @@ class LiveTrackStreamingTargetCoordinatorTest {
     }
 
     @Test
-    fun resolveSubscriptionPlan_excludesSelectedAcrossOwners() {
+    fun resolveSubscriptionPlan_excludesLocallyRecordedAcrossOwners() {
+        // STREAMING EXCLUSION: a locally-recorded id declared by ANY owner removes that tracker
+        // from the merged plan so we never round-trip the actively-recorded GPS feed through the
+        // websocket. The other owner's request can list the same id; the union is filtered.
         val plan = LiveTrackStreamingTargetCoordinator.resolveSubscriptionPlan(
             StreamingLeaseSet(
                 mapRequest = LiveTrackStreamingTargetRequest(
-                    trackerIds = setOf("selected", "remote-a"),
+                    trackerIds = setOf("local", "remote-a"),
                     trackerName = null,
-                    locallyRecordedTrackerId = null,
-                    excludedTrackerIds = setOf("selected"),
+                    locallyRecordedTrackerId = "local",
                 ),
                 paramsRequest = LiveTrackStreamingTargetRequest(
-                    trackerIds = setOf("selected", "remote-b"),
+                    trackerIds = setOf("local", "remote-b"),
                     trackerName = null,
                     locallyRecordedTrackerId = null,
                 ),
@@ -117,8 +120,8 @@ class LiveTrackStreamingTargetCoordinatorTest {
         LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
         LiveStreamRuntimeStateStore.update {
             it.copy(
-                isRunning = true,
-                lifecycleState = TrackingLifecycleState.RUNNING,
+                intent = StreamingIntent.Wanted(setOf("old")),
+                health = StreamingHealth.Running,
                 activeTrackerIds = setOf("old"),
             )
         }
@@ -145,8 +148,11 @@ class LiveTrackStreamingTargetCoordinatorTest {
         assertTrue(failed is StreamingSubscriptionApplyResult.Failed)
         assertEquals(1, gateway.stopCount)
         val snapshot = LiveStreamRuntimeStateStore.state.value
-        assertFalse(snapshot.isRunning)
-        assertEquals(TrackingLifecycleState.FAILED, snapshot.lifecycleState)
+        // Stop succeeded by default, so the coordinator collapses to Idle/Stopped with empty
+        // active set and the failure reason carried forward for UX.
+        assertFalse(snapshot.wantsSubscription)
+        assertEquals(StreamingIntent.Idle, snapshot.intent)
+        assertEquals(StreamingHealth.Stopped, snapshot.health)
         assertEquals(emptySet<String>(), snapshot.activeTrackerIds)
         assertEquals("blocked", snapshot.failureReason)
     }
@@ -195,8 +201,8 @@ class LiveTrackStreamingTargetCoordinatorTest {
         LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
         LiveStreamRuntimeStateStore.update {
             it.copy(
-                isRunning = true,
-                lifecycleState = TrackingLifecycleState.RUNNING,
+                intent = StreamingIntent.Wanted(setOf("old")),
+                health = StreamingHealth.Running,
                 activeTrackerIds = setOf("old"),
             )
         }
@@ -210,7 +216,10 @@ class LiveTrackStreamingTargetCoordinatorTest {
         assertTrue(failed is StreamingSubscriptionApplyResult.Failed)
         assertEquals(1, gateway.stopCount)
         val snapshot = LiveStreamRuntimeStateStore.state.value
-        assertEquals(TrackingLifecycleState.FAILED, snapshot.lifecycleState)
+        // Stop request failed -> intent is Idle (we wanted to stop) but health is FailedTransient
+        // so reconcile can attempt cleanup again on the next tick.
+        assertEquals(StreamingIntent.Idle, snapshot.intent)
+        assertEquals(StreamingHealth.FailedTransient, snapshot.health)
         assertEquals("stop blocked", snapshot.failureReason)
     }
 
@@ -224,8 +233,8 @@ class LiveTrackStreamingTargetCoordinatorTest {
         LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
         LiveStreamRuntimeStateStore.update {
             it.copy(
-                isRunning = true,
-                lifecycleState = TrackingLifecycleState.RUNNING,
+                intent = StreamingIntent.Wanted(setOf("old")),
+                health = StreamingHealth.Running,
                 activeTrackerIds = setOf("old"),
             )
         }
@@ -243,8 +252,11 @@ class LiveTrackStreamingTargetCoordinatorTest {
         assertTrue(failed is StreamingSubscriptionApplyResult.Failed)
         assertEquals(1, gateway.stopCount)
         val snapshot = LiveStreamRuntimeStateStore.state.value
-        assertEquals(TrackingLifecycleState.FAILED, snapshot.lifecycleState)
-        assertTrue(snapshot.isRunning)
+        // Start failed AND the cleanup stop also failed -> we keep the prior Wanted intent (we
+        // are still trying to subscribe conceptually) but health is FailedTransient and the
+        // active set is preserved so callers can decide whether to retry or surface an error.
+        assertEquals(StreamingHealth.FailedTransient, snapshot.health)
+        assertTrue(snapshot.wantsSubscription)
         assertEquals(setOf("old"), snapshot.activeTrackerIds)
         assertEquals("start blocked; stop_failed:stop blocked", snapshot.failureReason)
     }

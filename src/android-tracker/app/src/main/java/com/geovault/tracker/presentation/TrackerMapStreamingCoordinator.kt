@@ -1,16 +1,12 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.policy.StreamingTargetPolicy
-import com.geovault.tracker.policy.StreamingTargetPolicyInput
 
 data class TrackerMapStreamingDecisionInput(
     val mode: TrackerMapDisplayMode,
     val streamTargetIds: Set<String>,
     val displayedTrackerId: String,
     val displayedTrackerName: String,
-    val selectedTrackerId: String,
-    /** The selected tracker is local to this device and must never be subscribed as a remote stream. */
-    val trackingRunning: Boolean = false,
 )
 
 sealed class TrackerMapStreamingCommand {
@@ -20,42 +16,21 @@ sealed class TrackerMapStreamingCommand {
 }
 
 object TrackerMapStreamingCoordinator {
+    /**
+     * STREAMING-COORDINATOR (single source of truth): the projected `streamTargetIds` already
+     * encodes every per-mode targeting decision (SINGLE on selected -> empty, SINGLE on other
+     * -> {other}, GROUP -> group minus locally-recorded, ALL_QUEUE -> roster minus locally-
+     * recorded). We do NOT re-derive or re-filter the set here. The only special case is
+     * SINGLE_SESSION with no displayed id at all: that is "single context still resolving"
+     * and must NoOp instead of Stop, otherwise we'd kill an in-flight params subscription.
+     */
     fun resolve(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
-        return if (input.mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            resolveSingleSession(input)
-        } else {
-            resolveMultiContext(input)
-        }
-    }
-
-    private fun resolveSingleSession(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
-        val id = input.displayedTrackerId.trim()
-        if (id.isEmpty()) {
-            // Keep no-op behavior while single-track context is still resolving.
+        if (input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
+            input.displayedTrackerId.trim().isEmpty()
+        ) {
             return TrackerMapStreamingCommand.NoOp
         }
-        val ids = StreamingTargetPolicy.remoteSubscriptionTargets(
-            StreamingTargetPolicyInput(
-                requestedTrackerIds = setOf(id),
-                selectedTrackerId = input.selectedTrackerId,
-            )
-        )
-        if (ids.isEmpty()) {
-            return TrackerMapStreamingCommand.Stop
-        }
-        return TrackerMapStreamingCommand.Start(
-            trackerIds = ids,
-            trackerName = input.displayedTrackerName.trim().ifBlank { null }
-        )
-    }
-
-    private fun resolveMultiContext(input: TrackerMapStreamingDecisionInput): TrackerMapStreamingCommand {
-        val ids = StreamingTargetPolicy.remoteSubscriptionTargets(
-            StreamingTargetPolicyInput(
-                requestedTrackerIds = input.streamTargetIds,
-                selectedTrackerId = input.selectedTrackerId,
-            )
-        )
+        val ids = StreamingTargetPolicy.normalizeTrackerIds(input.streamTargetIds)
         if (ids.isEmpty()) return TrackerMapStreamingCommand.Stop
         val trackerName = if (ids.size == 1) {
             input.displayedTrackerName.trim().ifBlank { null }

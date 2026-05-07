@@ -4,10 +4,11 @@ import android.content.Context
 import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.MapStreamingStartResult
 import com.geovault.tracker.MapStreamingStopResult
-import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.policy.StreamingTargetPolicyInput
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
+import com.geovault.tracker.services.StreamingHealth
+import com.geovault.tracker.services.StreamingIntent
 
 internal enum class LiveTrackStreamingOwner {
     Map,
@@ -18,7 +19,6 @@ internal data class LiveTrackStreamingTargetRequest(
     val trackerIds: Set<String>,
     val trackerName: String?,
     val locallyRecordedTrackerId: String?,
-    val excludedTrackerIds: Set<String> = emptySet(),
 )
 
 internal data class StreamingLeaseSet(
@@ -45,13 +45,16 @@ internal interface LiveTrackStreamingServiceGateway {
 }
 
 /**
- * Merges independent streaming intents from Map and Tracker Params into one foreground subscription:
- * `trackerIds` from each owner are unioned after trimming; any id marked local or excluded is stripped so local/selected
- * trackers never appear on the websocket. Either owner may replace its half with `null`,
- * dropping it from merge. Naming for the notification is retained only when the merged set has exactly one id.
+ * Merges independent streaming intents from Map and Tracker Params into one foreground
+ * subscription: `trackerIds` from each owner are unioned after trimming, then the union of all
+ * `locallyRecordedTrackerId`s is stripped so the actively-recorded tracker (whose live GPS feed
+ * is the local source of truth) never round-trips through the websocket. Either owner may
+ * replace its half with `null`, dropping it from the merge. The notification name is retained
+ * only when the merged set has exactly one id.
  *
- * Apply-layer dedupe ([lastAppliedIds]) avoids duplicate `ACTION_START`; [resetApplyGate] must be invoked when reconciliation decides the
- * same ids must be pushed again after a transient service failure ([LiveTrackStreamingReconciler.invalidateDedupe]).
+ * Apply-layer dedupe ([lastAppliedIds]) avoids duplicate `ACTION_START`; [resetApplyGate] must
+ * be invoked when reconciliation decides the same ids must be pushed again after a transient
+ * service failure (the failure paths inside this coordinator do this automatically).
  */
 internal object LiveTrackStreamingTargetCoordinator {
     private var mapRequest: LiveTrackStreamingTargetRequest? = null
@@ -111,12 +114,10 @@ internal object LiveTrackStreamingTargetCoordinator {
     internal fun resolveSubscriptionPlan(leases: StreamingLeaseSet): StreamingSubscriptionPlan {
         val requests = listOfNotNull(leases.mapRequest, leases.paramsRequest)
         val locallyRecordedIds = requests.mapNotNull { it.locallyRecordedTrackerId }
-        val excludedIds = requests.flatMap { it.excludedTrackerIds }
         val trackerIds = StreamingTargetPolicy.remoteSubscriptionTargets(
             StreamingTargetPolicyInput(
                 requestedTrackerIds = requests.flatMap { it.trackerIds },
                 locallyRecordedTrackerIds = locallyRecordedIds,
-                excludedTrackerIds = excludedIds,
             )
         )
         val trackerName = if (trackerIds.size == 1) {
@@ -161,12 +162,17 @@ internal object LiveTrackStreamingTargetCoordinator {
                         MapStreamingStopResult.Stopped -> result.reason
                         is MapStreamingStopResult.Failed -> "${result.reason}; stop_failed:${stopResult.reason}"
                     }
-                    LiveStreamRuntimeStateStore.update {
-                        val stopped = stopResult == MapStreamingStopResult.Stopped
-                        it.copy(
-                            isRunning = if (stopped) false else it.isRunning,
-                            lifecycleState = TrackingLifecycleState.FAILED,
-                            activeTrackerIds = if (stopped) emptySet() else it.activeTrackerIds,
+                    // STREAM-STATE-MACHINE: when the start is rejected we treat the failure as
+                    // transient by default; the caller drove an explicit start so the user/app
+                    // intent stays Wanted unless the bundled cleanup-stop succeeded, in which case
+                    // we collapse to Idle/Stopped to keep the snapshot consistent with the empty
+                    // active set.
+                    val stoppedCleanly = stopResult == MapStreamingStopResult.Stopped
+                    LiveStreamRuntimeStateStore.update { previous ->
+                        previous.copy(
+                            intent = if (stoppedCleanly) StreamingIntent.Idle else previous.intent,
+                            health = if (stoppedCleanly) StreamingHealth.Stopped else StreamingHealth.FailedTransient,
+                            activeTrackerIds = if (stoppedCleanly) emptySet() else previous.activeTrackerIds,
                             failureReason = failureReason,
                         )
                     }
@@ -190,9 +196,14 @@ internal object LiveTrackStreamingTargetCoordinator {
             }
             is MapStreamingStopResult.Failed -> {
                 resetApplyGate()
-                LiveStreamRuntimeStateStore.update {
-                    it.copy(
-                        lifecycleState = TrackingLifecycleState.FAILED,
+                // STREAM-STATE-MACHINE: stop failed -> the user/app wanted to stop but the
+                // service didn't acknowledge. Surface that as a transient failure with intent
+                // Idle (we are no longer trying to subscribe) so reconcile can attempt cleanup
+                // again on the next tick without resurrecting the old target set.
+                LiveStreamRuntimeStateStore.update { previous ->
+                    previous.copy(
+                        intent = StreamingIntent.Idle,
+                        health = StreamingHealth.FailedTransient,
                         failureReason = stopResult.reason,
                     )
                 }

@@ -89,7 +89,6 @@ fun MainScreen(
     val trackersGroupsViewModel: TrackersGroupsViewModel = viewModel()
     val sharedViewModel: SharedViewModel = viewModel()
     var selectedTab by rememberSaveable { mutableStateOf(TrackerTab.HOME.name) }
-    var lastSelectedTab by rememberSaveable { mutableStateOf("") }
     var tabBackStack by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
     var isHandlingTabBack by remember { mutableStateOf(false) }
@@ -255,12 +254,6 @@ fun MainScreen(
             isSettingsOpen = false
             selectedTab = TrackerTab.HOME.name
         }
-    }
-    LaunchedEffect(selectedTab) {
-        if (selectedTab == TrackerTab.MAP.name && lastSelectedTab != TrackerTab.MAP.name) {
-            mapViewModel.markPendingInitialTrackerForMap()
-        }
-        lastSelectedTab = selectedTab
     }
     LaunchedEffect(mapRecoveryRequestToken) {
         if (mapRecoveryRequestToken <= 0L) return@LaunchedEffect

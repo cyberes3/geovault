@@ -1,7 +1,6 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.policy.StreamingTargetPolicy
-import com.geovault.tracker.policy.StreamingTargetPolicyInput
 
 enum class TrackerMapTrailSource {
     SINGLE_SERVER,
@@ -13,6 +12,7 @@ data class TrackerMapTrailReloadInput(
     val mode: TrackerMapDisplayMode,
     val runtimeRunning: Boolean,
     val selectedTrackerId: String,
+    val locallyRecordedTrackerId: String = "",
     val activeTrackerId: String,
     val rosterTrackerIds: Set<String>,
     val groupSelection: TrackerMapGroupModeSelection,
@@ -31,6 +31,9 @@ object TrackerMapTrailReloadCoordinator {
     fun resolvePlan(input: TrackerMapTrailReloadInput): TrackerMapTrailReloadPlan {
         val active = input.activeTrackerId.trim()
         val selected = input.selectedTrackerId.trim()
+        val locallyRecorded = input.locallyRecordedTrackerId.trim().ifBlank {
+            selected.takeIf { input.runtimeRunning }.orEmpty()
+        }
         val rosterIds = input.rosterTrackerIds
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -43,23 +46,23 @@ object TrackerMapTrailReloadCoordinator {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.SINGLE_SERVER,
                 singleTrackerId = active,
-                overlayTrackerId = active.takeIf { input.runtimeRunning && active == selected },
+                overlayTrackerId = locallyRecorded.takeIf { input.runtimeRunning && active == locallyRecorded },
                 activeTrackerId = active
             )
         }
         if (input.mode == TrackerMapDisplayMode.ALL_QUEUE) {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.MULTI_SERVER,
-                trackerIds = serverHistoryTrackerIds(rosterIds, selected),
-                overlayTrackerId = active.takeIf { input.runtimeRunning && it.isNotEmpty() },
+                trackerIds = serverHistoryTrackerIds(rosterIds),
+                overlayTrackerId = locallyRecorded.takeIf { input.runtimeRunning && it.isNotEmpty() },
                 activeTrackerId = active
             )
         }
         if (input.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             return TrackerMapTrailReloadPlan(
                 source = TrackerMapTrailSource.MULTI_SERVER,
-                trackerIds = serverHistoryTrackerIds(groupIds, selected),
-                overlayTrackerId = active.takeIf {
+                trackerIds = serverHistoryTrackerIds(groupIds),
+                overlayTrackerId = locallyRecorded.takeIf {
                     input.runtimeRunning && it.isNotEmpty() && it in groupIds
                 },
                 activeTrackerId = active,
@@ -72,12 +75,16 @@ object TrackerMapTrailReloadCoordinator {
         )
     }
 
-    private fun serverHistoryTrackerIds(requestedTrackerIds: Set<String>, selectedTrackerId: String): Set<String> {
-        return StreamingTargetPolicy.remoteSubscriptionTargets(
-            StreamingTargetPolicyInput(
-                requestedTrackerIds = requestedTrackerIds,
-                selectedTrackerId = selectedTrackerId,
-            )
-        )
+    /**
+     * GROUP / ALL-QUEUE TRAIL HISTORY: load server history for every visible tracker, including
+     * the user's own selected and locally-recorded tracker. Selected/locally-recorded exclusion
+     * is a STREAMING decision (a subscription targeting concern), not a HISTORY decision; the
+     * user expects to see their own trail alongside the rest of the group/roster. This matches
+     * SINGLE_SESSION, which already loads server history for the displayed tracker even when
+     * that tracker is locally recorded — the local overlay is applied on top via the trail merge
+     * policy, not as a substitute for history.
+     */
+    private fun serverHistoryTrackerIds(requestedTrackerIds: Set<String>): Set<String> {
+        return StreamingTargetPolicy.normalizeTrackerIds(requestedTrackerIds)
     }
 }

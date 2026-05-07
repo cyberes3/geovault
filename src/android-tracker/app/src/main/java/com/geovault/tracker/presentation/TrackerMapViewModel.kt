@@ -16,10 +16,10 @@ import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.policy.StreamingTargetPolicy
-import com.geovault.tracker.policy.StreamingTargetPolicyInput
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
@@ -35,13 +35,17 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
+import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
+import java.util.concurrent.atomic.AtomicReference
 
 data class TrackerMapUiState(
     val runtime: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot(),
@@ -83,12 +87,29 @@ data class TrackerMapSelectionCard(
     val serverMetadataUpdatedAtMs: Long? = null,
 )
 
+/**
+ * HISTORY-FETCH POLICY: server-side trail/geometry history is fetched ONCE per logical context,
+ * never on lifecycle ticks like resume-from-background, runtime state changes, or live cosmetic
+ * metadata refreshes. The four "load" reasons below are the only paths that may hit the server;
+ * everything else is a render-only refresh that consumes the WS data already in memory.
+ *
+ *  - [GenericMapRefresh]: re-render only. Fired by runtime state ticks / WS-driven UI churn.
+ *  - [MetadataMapRefresh]: re-render only. Fired by tracker name/color/visibility/group structure
+ *    changes. WS provides the live data; we never re-fetch geometry just because a tracker's
+ *    `updated_at` advanced or its cached geometry grew. This was historically wired to a
+ *    multi-server reload, which caused the entire group's history to re-download every time a
+ *    single live point arrived.
+ *  - The remaining four reasons are explicit context-change triggers that legitimately need a
+ *    one-shot server fetch (entering a new mode/group, loading a tracker for the first time,
+ *    streaming starting, or returning to the selected tracker after group streaming ends).
+ */
 private enum class TrackerMapTrailReloadReason(
     val allowServerHistoryFetch: Boolean,
     val allowMultiServerHistoryFetch: Boolean = allowServerHistoryFetch,
 ) {
     GenericMapRefresh(allowServerHistoryFetch = false, allowMultiServerHistoryFetch = false),
-    MetadataMapRefresh(allowServerHistoryFetch = false, allowMultiServerHistoryFetch = true),
+    MetadataMapRefresh(allowServerHistoryFetch = false, allowMultiServerHistoryFetch = false),
+    MapContextChange(allowServerHistoryFetch = true),
     ExplicitTrackerLoad(allowServerHistoryFetch = true),
     StreamingStart(allowServerHistoryFetch = true),
     RestoreSelectedAfterStreaming(allowServerHistoryFetch = true),
@@ -100,10 +121,16 @@ private fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = cop
     selectionLockTrackerId = "",
 )
 
+/**
+ * Hides the per-tracker info card and drops the in-card selection. Intentionally does NOT clear
+ * `selectionLockTrackerId` — the camera lock is tied to a tracker, not to the card's visibility.
+ * Closing the card via background tap, marker re-tap, or any other "dismiss the card" gesture
+ * leaves the camera locked to whichever tracker the user previously locked. Context resets that
+ * legitimately need to drop the lock chain `withAllMapLocksDisabled()` explicitly.
+ */
 private fun TrackerMapUiState.withClearedMapSelectionCard(): TrackerMapUiState = copy(
     isBottomCardVisible = false,
     selectedMapTracker = null,
-    selectionLockTrackerId = "",
 )
 
 class TrackerMapViewModel(application: Application) : AndroidViewModel(application) {
@@ -206,7 +233,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 return allQueueTrailsByTracker
             }
             if (!runtime.localRecordingActive) return allQueueTrailsByTracker
-            val trackerId = runtime.selectedTrackerId.trim()
+            val trackerId = runtime.locallyRecordedTrackerId
             if (trackerId.isEmpty()) return allQueueTrailsByTracker
             if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER && trackerId !in groupTrackerIds) {
                 return allQueueTrailsByTracker
@@ -233,7 +260,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 val duplicate = last.time == point.time &&
                     last.latitude == point.latitude &&
                     last.longitude == point.longitude
-                if (duplicate) {
+                // TIME-MONOTONIC GUARD: mirror TrackerMapPointEventReducer.appendQueuedPoint and
+                // reject any overlay point whose synthesized timestamp is strictly older than the
+                // existing tail. runtime.lastTrackedTimestampMs can lag the bus-appended trail tail
+                // briefly; without this check the multi-trail head would silently regress.
+                if (duplicate || point.time < last.time) {
                     currentTrail
                 } else {
                     (currentTrail + point).takeLast(TRAIL_POINT_LIMIT)
@@ -245,6 +276,52 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             return allQueueTrailsByTracker.toMutableMap().apply {
                 this[trackerId] = nextTrail
             }
+        }
+
+        /**
+         * STREAMING-RESUME GUARD (Bug 3): pure helper for evaluateResumeAfterBackground's
+         * short-circuit. Returns true when the live-stream runtime is currently subscribed to
+         * exactly the trackers the displayed mode wants, after applying the streaming exclusion
+         * for the locally-recorded tracker.
+         */
+        @JvmStatic
+        internal fun streamingActiveTargetsMatchDisplayed(
+            mode: TrackerMapDisplayMode,
+            displayedIds: Set<String>,
+            localRecordingActive: Boolean,
+            locallyRecordedTrackerId: String,
+            activeStreamTargets: Set<String>,
+        ): Boolean {
+            if (mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER && mode != TrackerMapDisplayMode.ALL_QUEUE) {
+                return false
+            }
+            val excluded = if (localRecordingActive && locallyRecordedTrackerId.isNotBlank()) {
+                setOf(locallyRecordedTrackerId.trim())
+            } else {
+                emptySet()
+            }
+            val expected = StreamingTargetPolicy.normalizeTrackerIds(displayedIds - excluded)
+            if (expected.isEmpty()) return false
+            val active = StreamingTargetPolicy.normalizeTrackerIds(activeStreamTargets)
+            return active == expected
+        }
+
+        /**
+         * STREAMING-RESUME GUARD (Bug 3): pure helper for evaluateResumeAfterBackground's
+         * short-circuit. Returns true when at least one displayed roster tracker has a populated
+         * trail in the multi-trail map (so a fresh reload would be cosmetic churn).
+         */
+        @JvmStatic
+        internal fun displayedRosterHasLoadedTrails(
+            mode: TrackerMapDisplayMode,
+            rosterIds: Set<String>,
+            allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
+        ): Boolean {
+            if (mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER && mode != TrackerMapDisplayMode.ALL_QUEUE) {
+                return false
+            }
+            if (rosterIds.isEmpty()) return false
+            return rosterIds.any { id -> !allQueueTrailsByTracker[id.trim()].isNullOrEmpty() }
         }
 
         @JvmStatic
@@ -277,25 +354,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             return mode != TrackerMapDisplayMode.SINGLE_SESSION
         }
 
-        internal fun geometryContentFingerprint(coordinates: List<List<Double>>?): String {
-            return coordinates.orEmpty().joinToString(separator = ";") { coordinate ->
-                coordinate.joinToString(separator = ",") { value -> value.toString() }
-            }
-        }
-
-        @JvmStatic
-        internal fun sanitizeResumeStreamTrackerIds(
-            trackerIds: Collection<String>,
-            selectedTrackerId: String,
-        ): Set<String> {
-            return StreamingTargetPolicy.remoteSubscriptionTargets(
-                StreamingTargetPolicyInput(
-                    requestedTrackerIds = trackerIds,
-                    selectedTrackerId = selectedTrackerId,
-                )
-            )
-        }
-
         @JvmStatic
         internal fun filterRemoteLastPointsForAcceptedIds(
             remoteLastPoints: Map<String, TrackPointEvent>,
@@ -305,7 +363,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .toSet()
-            if (acceptedIds.isEmpty()) return emptyMap()
+            // Empty acceptance commonly occurs during transient projection/service-lag frames
+            // (e.g. mode transitions, tracking start mid-stream). Wiping all heads here would flicker
+            // remote markers off the map. Callers explicitly clear remoteLastPoints when streaming
+            // is fully STOPPED with no targets; here we preserve the previous heads so they remain
+            // visible until a settled non-empty projection trims keys deterministically.
+            if (acceptedIds.isEmpty()) return remoteLastPoints
             return remoteLastPoints.filterKeys { it.trim() in acceptedIds }
         }
     }
@@ -323,6 +386,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private val _renderPackage = MutableStateFlow(TrackerMapRenderPackage())
     val renderPackage: StateFlow<TrackerMapRenderPackage> = _renderPackage.asStateFlow()
 
+    /**
+     * CAMERA-DIRECTIVE: stable resolved camera target consumed by `MapScreen`. Replaces the prior
+     * stack of overlapping `LaunchedEffect`s; the directive id increments only when the resolved
+     * camera target changes meaningfully so equal back-to-back resolutions don't re-animate.
+     */
+    private val _cameraDirective = MutableStateFlow<TrackerMapCameraDirective>(TrackerMapCameraDirective.None())
+    val cameraDirective: StateFlow<TrackerMapCameraDirective> = _cameraDirective.asStateFlow()
+    private var lastCameraResolution: TrackerMapCameraDirectivePolicy.Resolution =
+        TrackerMapCameraDirectivePolicy.Resolution.None
+    private var nextCameraDirectiveId: Long = 1L
+
     fun trackerRosterForMapChip(): List<Tracker> = trackerManagementStateStore.trackers.value
 
     private val fitTrailSignal = Channel<Unit>(Channel.CONFLATED)
@@ -333,7 +407,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var mapReady: Boolean = false
     private var pendingResumeEvaluation: Boolean = false
     private var mapSurfaceVisible: Boolean = false
-    private var pendingInitialTrackerForMap: Boolean = false
+    private var pendingInitialTrackerForMap: Boolean = true
     private var runtimeTrailReloadJob: Job? = null
     private var runtimeTrailReloadPending: Boolean = false
     private var runtimeTrailReloadPendingReason: TrackerMapTrailReloadReason = TrackerMapTrailReloadReason.GenericMapRefresh
@@ -343,7 +417,24 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var pendingFitAfterReload: Boolean = false
     private val recentDataWindowByTracker = mutableMapOf<String, String?>()
     private var lastObservedTrackingRunning: Boolean? = null
-    private var lastObservedStreamingRunning: Boolean = false
+
+    /**
+     * STREAM-STATE-MACHINE: tracks whether the previous snapshot represented an active streaming
+     * session (intent expressed and orchestrator not yet terminal). Used to detect the
+     * active -> ended transition that triggers map-lease cleanup. Replaces the legacy
+     * `isRunning` boolean — derived from the new `wantsSubscription` / `subscriptionEnded` axes.
+     */
+    private var lastObservedStreamingSessionActive: Boolean = false
+    private var lastObservedStreamingFailureReason: String? = null
+
+    /**
+     * COMBINED-RECONCILE: a monotonic version counter included in the combined-reconcile seed.
+     * Calling [bumpReconcileToken] forces the next emission through `distinctUntilChangedBy` even
+     * if [_uiState] and [LiveStreamRuntimeStateStore.state] are otherwise identical to the prior
+     * tick. This replaces [LiveTrackStreamingReconciler.invalidateDedupe], which previously had to
+     * reach into the reconciler to clear an internal seed.
+     */
+    private val _reconcileToken = MutableStateFlow(0L)
     private val runtimeResyncPolicy = TrackerMapRuntimeResyncPolicy()
     private val reopenOrchestrator = TrackerMapReopenOrchestrator()
     private val sessionRequestDeduper = TrackerMapSessionRequestDeduper()
@@ -399,8 +490,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 requestRuntimeTrailReload(TrackerMapTrailReloadReason.GenericMapRefresh)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
-                    streamingReconciler.invalidateDedupe()
-                    reconcileStreaming(_uiState.value)
+                    bumpReconcileToken()
                 }
                 if (pendingInitialTrackerForMap && mapReady && mapSurfaceVisible) {
                     evaluateResumeAfterBackground(allowZeroGap = true)
@@ -412,11 +502,19 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 pointEventChannel.send(point)
             }
         }
+        // COMBINED-RECONCILE: this collector handles _state-mutation_ side effects of streaming
+        // runtime updates only (mirroring active ids, trimming remote heads, recomputing the
+        // status pill, and emitting post-stop lease cleanup). The reconcile call itself moves to
+        // the combined flow below so reconcile inputs come from a single coherent snapshot.
         viewModelScope.launch {
             LiveStreamRuntimeStateStore.state.collectLatest { snapshot ->
-                val wasRunning = lastObservedStreamingRunning
+                // STREAM-STATE-MACHINE: an active session = the user/app expressed intent AND the
+                // orchestrator hasn't terminated (cleanly stopped or permanently failed). The
+                // active -> ended transition is what triggers lease cleanup below.
+                val sessionActive = snapshot.wantsSubscription && !snapshot.subscriptionEnded
+                val wasActive = lastObservedStreamingSessionActive
                 val hadMapStreamingLease = streamingReconciler.hasMapStreamingLease()
-                lastObservedStreamingRunning = snapshot.isRunning
+                lastObservedStreamingSessionActive = sessionActive
                 _uiState.update { current ->
                     val plan = projectSession(
                         state = current.copy(activeStreamedTrackerIds = snapshot.activeTrackerIds),
@@ -426,7 +524,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     current.copy(
                         activeStreamedTrackerIds = snapshot.activeTrackerIds,
                         remoteLastPoints = if (
-                            snapshot.lifecycleState == TrackingLifecycleState.STOPPED &&
+                            snapshot.subscriptionEnded &&
                             current.streamTargetIds.isEmpty()
                         ) {
                             emptyMap()
@@ -442,13 +540,24 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         ),
                     )
                 }
-                if ((wasRunning || hadMapStreamingLease) && !snapshot.isRunning &&
-                    snapshot.lifecycleState == TrackingLifecycleState.STOPPED &&
+                // STREAM-STATE-MACHINE: lease cleanup keys off subscriptionEnded (Stopped OR
+                // FailedPermanent) rather than only Stopped, so an auth-burned-out streaming
+                // session deterministically falls back to the user's selected tracker instead of
+                // leaving the map staring at the failed group.
+                if ((wasActive || hadMapStreamingLease) &&
+                    snapshot.subscriptionEnded &&
                     streamingReconciler.consumeStoppedMapStreamingLease()
                 ) {
                     restoreSelectedTrackerAfterStreamingStop()
                 }
-                reconcileStreaming(_uiState.value)
+                // STREAM-FAILURE-INVALIDATE: a fresh failure reason should re-trigger reconcile so
+                // any cleared dedupe in the coordinator can dispatch the next Start cleanly.
+                val failureReason = snapshot.failureReason
+                val previousFailure = lastObservedStreamingFailureReason
+                if (failureReason != null && failureReason != previousFailure) {
+                    bumpReconcileToken()
+                }
+                lastObservedStreamingFailureReason = failureReason
             }
         }
         viewModelScope.launch {
@@ -457,12 +566,19 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 trackerManagementStateStore.groups,
                 trackerManagementStateStore.mapVisibility
             ) { trackers, groups, visibility ->
+                // METADATA SIGNATURE: only structural/cosmetic fields that affect rendering and
+                // streaming target sets. We deliberately do NOT include tracker.updated_at,
+                // tracker.geometry coordinates, or per-group updated_at — those advance with every
+                // live data point and would otherwise fire a MetadataMapRefresh on every WS tick.
+                // The live data itself flows through state updates (remoteLastPoints,
+                // allQueueTrailsByTracker) which already drive a render package refresh; we don't
+                // need a metadata-tier reload to surface them.
                 val trackerFingerprint = trackers.joinToString(separator = "|") { tracker ->
-                    "${tracker.id}:${tracker.updated_at ?: 0L}:${tracker.name}:${tracker.color}:" +
-                        geometryContentFingerprint(tracker.geometry?.coordinates)
+                    "${tracker.id}:${tracker.name}:${tracker.color}"
                 }
                 val groupFingerprint = groups.joinToString(separator = "|") { group ->
-                    "${group.id}:${group.updated_at ?: 0L}:${group.track_ids?.size ?: 0}"
+                    val memberIds = group.track_ids.orEmpty().sorted().joinToString(",")
+                    "${group.id}:$memberIds"
                 }
                 val visibilityFingerprint = if (visibility == null) {
                     "none"
@@ -527,12 +643,56 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 handleTrackPointEvent(point)
             }
         }
+        // COMBINED-RECONCILE: the single source of truth for reconcile triggering. By combining
+        // ui state, streaming runtime, and the explicit invalidation token into one flow we
+        // eliminate the dual-collector race where one path could see a fresher uiState than the
+        // other saw of streamRuntime (or vice versa). distinctUntilChangedBy on the seed dedupes
+        // identical inputs without requiring an internal reconciler-side seed cache.
         viewModelScope.launch {
-            uiState.collectLatest { state ->
-                reconcileStreaming(state)
-            }
+            combine(
+                _uiState,
+                LiveStreamRuntimeStateStore.state,
+                _reconcileToken,
+            ) { ui, stream, token -> ReconcileInputs(ui, stream, token) }
+                .distinctUntilChangedBy { reconcileSeedKey(it.state, it.streamRuntime, it.token) }
+                .collect { inputs -> reconcileStreaming(inputs.state, inputs.streamRuntime) }
         }
         refreshStreamTargets()
+    }
+
+    private data class ReconcileInputs(
+        val state: TrackerMapUiState,
+        val streamRuntime: LiveStreamRuntimeSnapshot,
+        val token: Long,
+    )
+
+    private fun bumpReconcileToken() {
+        _reconcileToken.value = _reconcileToken.value + 1L
+    }
+
+    /**
+     * COMBINED-RECONCILE: stable string key that captures every input the reconciler reads. Two
+     * adjacent ticks with the same key are deduped; any change here triggers exactly one
+     * reconcile call.
+     */
+    private fun reconcileSeedKey(
+        state: TrackerMapUiState,
+        streamRuntime: LiveStreamRuntimeSnapshot,
+        token: Long,
+    ): String {
+        val plan = projectSession(state)
+        val streamIdsSignature = state.streamTargetIds.toList().sorted().joinToString(separator = ",")
+        val activeIdsSignature = streamRuntime.activeTrackerIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .sorted()
+            .joinToString(separator = ",")
+        val trackingActiveOrStarting = state.runtime.localRecordingActive
+        val selectedTrackerId = state.runtime.selectedTrackerId.trim()
+        return "${state.mode}|$trackingActiveOrStarting|$streamIdsSignature|${plan.displayedTrackerId}|" +
+            "$selectedTrackerId|${plan.displayedTrackerName}|" +
+            "${streamRuntime.wantsSubscription}|${streamRuntime.health.name}|$activeIdsSignature|" +
+            "${streamRuntime.failureReason.orEmpty()}|$token"
     }
 
     fun setMode(mode: TrackerMapDisplayMode) {
@@ -560,7 +720,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
         applyMapContextTransition(
             nextState = nextState,
-            pendingReopenTrackerId = pendingReopenTrackerId
+            pendingReopenTrackerId = pendingReopenTrackerId,
+            reloadReason = TrackerMapTrailReloadReason.MapContextChange,
         )
     }
 
@@ -577,7 +738,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         applyMapContextTransition(
             nextState = nextState,
-            pendingReopenTrackerId = null
+            pendingReopenTrackerId = null,
+            reloadReason = TrackerMapTrailReloadReason.MapContextChange,
         )
     }
 
@@ -626,7 +788,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         applyMapContextTransition(
             nextState = nextState,
-            pendingReopenTrackerId = null
+            pendingReopenTrackerId = null,
+            reloadReason = TrackerMapTrailReloadReason.MapContextChange,
         )
     }
 
@@ -638,6 +801,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val state = _uiState.value
         val selectedId = state.runtime.selectedTrackerId.trim()
         streamingReconciler.stopForegroundStreaming()
+        // CHIP-X / POST-STREAM RESTORE: always collapse back to SINGLE_SESSION on the selected
+        // tracker. Both entry points (the X on the top-left chip and the auto-restore that fires
+        // when streaming ends) want a deterministic return to the user's selected tracker view.
+        // Leaving the mode unchanged would only stop the foreground service and then immediately
+        // reissue Start via the combined reconcile flow (since GROUP_PLACEHOLDER's
+        // streamTargetIds are unchanged), producing a visible "reconnecting" flicker without
+        // any actual exit from the group.
         if (selectedId.isBlank()) {
             pendingInitialTrackerForMap = true
             pendingResumeEvaluation = true
@@ -870,24 +1040,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         evaluateResumeAfterBackground(allowZeroGap = true)
-        viewModelScope.launch {
-            streamingReconciler.invalidateDedupe()
-            reconcileStreaming(_uiState.value)
-        }
+        bumpReconcileToken()
     }
 
     fun onMapSurfaceHidden() {
         mapSurfaceVisible = false
         mapReady = false
         lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
-        streamingReconciler.invalidateDedupe()
+        bumpReconcileToken()
         viewModelScope.launch {
             sessionRequestDeduper.clear()
         }
-    }
-
-    fun markPendingInitialTrackerForMap() {
-        pendingInitialTrackerForMap = true
     }
 
     fun setMapReady(isReady: Boolean) {
@@ -918,19 +1081,40 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
         pendingInitialTrackerForMap = false
         val streamRuntime = LiveStreamRuntimeStateStore.state.value
+        // STREAMING-RESUME NO-OP: when a group / all-queue stream is already running with the
+        // right targets and we have populated trails for the displayed roster, the WS is the
+        // authoritative source and the orchestrator's reload+reconcile pass would only cause
+        // a visible "Reconnecting" flicker on resume. Trust the existing wiring; the combined
+        // reconcile collector still validates the lease on the next state tick.
+        if (
+            streamRuntime.wantsSubscription &&
+            streamRuntime.subscriptionHealthy &&
+            (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER ||
+                state.mode == TrackerMapDisplayMode.ALL_QUEUE) &&
+            streamingActiveTargetsMatchDisplayed(state, streamRuntime, groupSelection) &&
+            displayedRosterHasLoadedTrails(state, groupSelection)
+        ) {
+            lastBackgroundAtElapsedMs = 0L
+            pendingResumeEvaluation = false
+            return
+        }
+        // STREAMING EXCLUSION (resume): the persisted ids are taken at face value. The projector
+        // re-applies the only meaningful exclusion (locally-recorded) on the next reconcile pass;
+        // pre-filtering selected here previously produced churn whenever resume and the projector
+        // disagreed about whether selected belonged in the stream.
         val persistedStreamTargetIds = MapStreamingServiceHelper.persistedTargets(
             context = getApplication<Application>(),
-            excludedTrackerIds = setOfNotBlank(selectedTrackerId),
         ).first
         val unsanitizedResumeStreamTrackerIds = if (streamRuntime.activeTrackerIds.isNotEmpty()) {
             streamRuntime.activeTrackerIds
         } else {
             state.activeStreamedTrackerIds + persistedStreamTargetIds
         }
-        val resumeStreamTrackerIds = sanitizeResumeStreamTrackerIds(
-            trackerIds = unsanitizedResumeStreamTrackerIds,
-            selectedTrackerId = selectedTrackerId,
-        )
+        // STREAMING EXCLUSION (resume): just normalize the persisted ids. The projector / runtime
+        // resync re-applies the only meaningful exclusion (locally-recorded) on the next reconcile
+        // pass; pre-filtering the selected tracker here would silently drop our own tracker from a
+        // persisted group / all-queue stream every time we resume from background.
+        val resumeStreamTrackerIds = StreamingTargetPolicy.normalizeTrackerIds(unsanitizedResumeStreamTrackerIds)
         val outcome = reopenOrchestrator.resolve(
             TrackerMapResumeInput(
                 trackingRunning = state.runtime.localRecordingActive,
@@ -962,11 +1146,43 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             applyReopenDecision(outcome.decision)
             refreshStreamTargets()
-            streamingReconciler.invalidateDedupe()
-            reconcileStreaming(_uiState.value)
+            bumpReconcileToken()
             lastBackgroundAtElapsedMs = 0L
             pendingResumeEvaluation = false
         }
+    }
+
+    private fun streamingActiveTargetsMatchDisplayed(
+        state: TrackerMapUiState,
+        streamRuntime: LiveStreamRuntimeSnapshot,
+        groupSelection: TrackerMapGroupModeSelection,
+    ): Boolean {
+        return streamingActiveTargetsMatchDisplayed(
+            mode = state.mode,
+            displayedIds = when (state.mode) {
+                TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupSelection.trackerIds
+                TrackerMapDisplayMode.ALL_QUEUE -> visibleMapRosterTrackerIds()
+                else -> emptySet()
+            },
+            localRecordingActive = state.runtime.localRecordingActive,
+            locallyRecordedTrackerId = state.runtime.locallyRecordedTrackerId,
+            activeStreamTargets = streamRuntime.activeTrackerIds,
+        )
+    }
+
+    private fun displayedRosterHasLoadedTrails(
+        state: TrackerMapUiState,
+        groupSelection: TrackerMapGroupModeSelection,
+    ): Boolean {
+        return displayedRosterHasLoadedTrails(
+            mode = state.mode,
+            rosterIds = when (state.mode) {
+                TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupSelection.trackerIds
+                TrackerMapDisplayMode.ALL_QUEUE -> visibleMapRosterTrackerIds()
+                else -> emptySet()
+            },
+            allQueueTrailsByTracker = state.allQueueTrailsByTracker,
+        )
     }
 
     private suspend fun applyReopenDecision(decision: TrackerMapResumeDecision) {
@@ -982,18 +1198,19 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         remoteLastPoints = filterRemoteLastPointsForAcceptedIds(cur.remoteLastPoints, ids),
                     )
                 }
-                streamingReconciler.invalidateDedupe()
-                reconcileStreaming(_uiState.value)
+                bumpReconcileToken()
             }
             TrackerMapResumeDecision.ClearSingleTrackerState -> {
                 pendingReopenSingleTrackerLoadId = null
+                // CONTEXT RESET: no tracker is displayed anymore, so any previously-set selection
+                // lock is no longer meaningful — clear all map locks alongside the card.
                 _uiState.update { cur ->
                     cur.copy(
                         displayedTrackerId = "",
                         displayedTrackerName = "",
                         remoteLastPoints = emptyMap(),
                         streamTargetIds = emptySet(),
-                    ).withClearedMapSelectionCard()
+                    ).withAllMapLocksDisabled().withClearedMapSelectionCard()
                 }
                 streamingReconciler.stopForegroundStreaming()
             }
@@ -1011,23 +1228,28 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     } else {
                         _uiState.value.displayedTrackerName
                     }
+                    // SWITCHING DISPLAYED TRACKER: when the resume decision points us at a
+                    // different tracker than the one currently displayed, drop any selection lock
+                    // tied to the previous tracker. Same-tracker bootstraps/runtime resyncs leave
+                    // the lock alone so a user-set lock survives a benign resume.
+                    val previousDisplayedTrackerId = _uiState.value.displayedTrackerId.trim()
+                    val trackerChanged = trackerId.trim() != previousDisplayedTrackerId
                     _uiState.value = _uiState.value.copy(
                         displayedTrackerId = trackerId,
                         displayedTrackerName = trackerName,
-                    )
-                    _uiState.value = _uiState.value.withClearedMapSelectionCard()
+                    ).let { next ->
+                        if (trackerChanged) next.withAllMapLocksDisabled() else next
+                    }.withClearedMapSelectionCard()
                 }
                 reloadTrailFromDatabase(TrackerMapTrailReloadReason.ExplicitTrackerLoad)
                 if (pendingReopenSingleTrackerLoadId == trackerId) {
                     pendingReopenSingleTrackerLoadId = null
                 }
-                streamingReconciler.invalidateDedupe()
-                reconcileStreaming(_uiState.value)
+                bumpReconcileToken()
             }
             TrackerMapResumeDecision.RestartDisplayedTrackerStreaming -> {
                 pendingReopenSingleTrackerLoadId = null
-                streamingReconciler.invalidateDedupe()
-                reconcileStreaming(_uiState.value)
+                bumpReconcileToken()
             }
         }
     }
@@ -1068,13 +1290,99 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private fun publishRenderPackage() {
         val nowMs = System.currentTimeMillis()
         val snapshot = buildCurrentSessionSnapshot(nowMs = nowMs)
+        val nextRenderState = buildMapRenderState(snapshot)
+        val nextBounds = trailBoundsOrNull(snapshot, nowMs)
+        val nextSelectionLockPoint = selectionLockPointOrNull(snapshot)
         _renderPackage.update { current ->
-            TrackerMapRenderPackage(
-                renderState = buildMapRenderState(snapshot),
-                bounds = trailBoundsOrNull(snapshot, nowMs),
-                selectionLockPoint = selectionLockPointOrNull(snapshot),
-                revision = current.revision + 1L,
+            // RENDER-COALESCE: every _uiState tick previously bumped `revision`, which made every
+            // downstream collector (camera effects, polyline rerenders, marker refreshes) treat
+            // every state change as a unique frame even when the rendered output was bit-identical.
+            // Compare the structural fields and only mint a new revision when the visible scene
+            // truly changes. Identity equality on `renderState` is fine because [MapRenderState] is
+            // a data class produced from immutable inputs; pair it with bounds and selection-lock
+            // coords for completeness.
+            if (current.renderState == nextRenderState &&
+                current.bounds == nextBounds &&
+                current.selectionLockPoint == nextSelectionLockPoint
+            ) {
+                current
+            } else {
+                TrackerMapRenderPackage(
+                    renderState = nextRenderState,
+                    bounds = nextBounds,
+                    selectionLockPoint = nextSelectionLockPoint,
+                    revision = current.revision + 1L,
+                )
+            }
+        }
+        publishCameraDirective(
+            state = _uiState.value,
+            bounds = nextBounds,
+            selectionLockPoint = nextSelectionLockPoint,
+        )
+    }
+
+    /**
+     * CAMERA-DIRECTIVE: resolve the precedence-aware camera target and only mint a new directive
+     * id when the resolution semantically changes. Equal back-to-back resolutions reuse the prior
+     * directive (and therefore reuse the prior id), so a `LaunchedEffect(directive.id)` consumer
+     * doesn't re-animate on noisy state changes.
+     */
+    private fun publishCameraDirective(
+        state: TrackerMapUiState,
+        bounds: org.maplibre.android.geometry.LatLngBounds?,
+        selectionLockPoint: Pair<Double, Double>?,
+    ) {
+        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = state.followLockEnabled,
+                gpsCollecting = state.runtime.gpsCollecting,
+                followTargetLat = state.runtime.lastTrackedLatitude
+                    ?: state.trail.lastOrNull()?.latitude,
+                followTargetLon = state.runtime.lastTrackedLongitude
+                    ?: state.trail.lastOrNull()?.longitude,
+                selectionLockEnabled = state.selectionLockTrackerId.trim().isNotEmpty(),
+                selectionLockLat = selectionLockPoint?.first,
+                selectionLockLon = selectionLockPoint?.second,
+                liveActiveFitEnabled = state.liveActiveFitEnabled,
+                bounds = bounds,
             )
+        )
+        if (resolution == lastCameraResolution) return
+        lastCameraResolution = resolution
+        val id = nextCameraDirectiveId++
+        _cameraDirective.value = when (resolution.reason) {
+            TrackerMapCameraDirective.Reason.SelectionLock,
+            TrackerMapCameraDirective.Reason.FollowLock -> {
+                val lat = resolution.centerLat
+                val lon = resolution.centerLon
+                if (lat != null && lon != null) {
+                    TrackerMapCameraDirective.CenterPreserveZoom(
+                        latitude = lat,
+                        longitude = lon,
+                        reason = resolution.reason,
+                        id = id,
+                    )
+                } else {
+                    TrackerMapCameraDirective.None(id = id)
+                }
+            }
+            TrackerMapCameraDirective.Reason.LiveActiveFit,
+            TrackerMapCameraDirective.Reason.InitialFit -> {
+                val nextBounds = resolution.bounds
+                if (nextBounds != null) {
+                    TrackerMapCameraDirective.FitBounds(
+                        bounds = nextBounds,
+                        reason = resolution.reason,
+                        id = id,
+                    )
+                } else {
+                    TrackerMapCameraDirective.None(id = id)
+                }
+            }
+            // ExplicitFit is routed through fitTrailEvents, not the directive flow.
+            TrackerMapCameraDirective.Reason.ExplicitFit,
+            TrackerMapCameraDirective.Reason.NoOp -> TrackerMapCameraDirective.None(id = id)
         }
     }
 
@@ -1192,15 +1500,72 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     LiveActiveTrailBoundsResult.NoActiveTrackers -> null
                 }
             }
+            // GROUP/ALL-QUEUE FIT: union three independent sources so the camera reflects every
+            // tracker that *should* be on screen, not just the ones whose trail / live head we've
+            // received so far. Without (3), entering a group while tracking would frame only the
+            // user's own trail because A/B/C still have empty trails and no live head has arrived
+            // yet — the map then sticks on self until the user pans, which the user sees as
+            // "bbox fits only my tracker".
+            //  1) trail history we already loaded (per-tracker server geometry / queue overlay)
+            //  2) live remote heads accepted for this session
+            //  3) cached `last_point` from the trackers store for every member of the visible
+            //     group / roster — this is the server-truth for "where this tracker last was"
+            //     and is the same coordinate the markers render on before WS catches up.
             val multiBounds = TrackerMapStateTransforms.multiTrailBounds(renderAllQueueTrailsByTracker)
             val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(snapshot.acceptedRemoteLastPoints)
-            return TrackerMapStateTransforms.mergeBounds(multiBounds, remoteBounds)
+            val rosterBounds = visibleRosterLastPointBounds(s.mode, sessionPlan)
+            val combined = TrackerMapStateTransforms.mergeBounds(
+                TrackerMapStateTransforms.mergeBounds(multiBounds, remoteBounds),
+                rosterBounds,
+            )
+            return combined
                 ?: TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
                 ?: singlePointBoundsFromRuntime(s.runtime)
         }
         val sessionPlan = snapshot.plan
         return TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
             ?: singlePointBoundsFromRuntime(s.runtime, sessionPlan)
+    }
+
+    /**
+     * GROUP/ALL-QUEUE FIT: build bounds from the cached `last_point` of every tracker the user
+     * expects to see on screen (group members in GROUP mode, full visible roster in ALL_QUEUE).
+     * This is the server-side "where is each tracker right now" answer and is available before
+     * any WS data has been received, which is exactly when the camera-fit is most likely to
+     * misframe the scene to a single tracker.
+     */
+    private fun visibleRosterLastPointBounds(
+        mode: TrackerMapDisplayMode,
+        sessionPlan: TrackerMapStreamingPlan,
+    ): LatLngBounds? {
+        if (mode != TrackerMapDisplayMode.ALL_QUEUE && mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+            return null
+        }
+        val visibleIds = when (mode) {
+            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> sessionPlan.groupTrackerIds
+            TrackerMapDisplayMode.ALL_QUEUE -> sessionPlan.visibleRosterTrackerIds
+            TrackerMapDisplayMode.SINGLE_SESSION -> emptySet()
+        }
+        if (visibleIds.isEmpty()) return null
+        val latLngs = trackerManagementStateStore.trackers.value
+            .asSequence()
+            .filter { it.id.trim() in visibleIds }
+            .mapNotNull { tracker ->
+                val coord = tracker.last_point ?: return@mapNotNull null
+                val lon = coord.getOrNull(0) ?: return@mapNotNull null
+                val lat = coord.getOrNull(1) ?: return@mapNotNull null
+                if (!isValidMapLibreGeographicLatLng(lat, lon)) return@mapNotNull null
+                LatLng(lat, lon)
+            }
+            .toList()
+        if (latLngs.isEmpty()) return null
+        if (latLngs.size == 1) {
+            val p = latLngs.first()
+            return LatLngBounds.from(p.latitude, p.longitude, p.latitude, p.longitude)
+        }
+        val builder = LatLngBounds.Builder()
+        latLngs.forEach(builder::include)
+        return builder.build()
     }
 
     private fun singlePointBoundsFromRuntime(
@@ -1395,8 +1760,42 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             trailReloadPlan = sessionPlan.trailReloadPlan,
         )
         if (!TrackerMapTrailReloadGuardPolicy.shouldProceed(guardInput)) return
+        // PRELOAD (early): seed an empty single-tracker trail from the in-memory cache as soon as
+        // we know which tracker is displayed, BEFORE the allowsSource gate. Cosmetic refresh
+        // reasons (MetadataMapRefresh / GenericMapRefresh) deliberately don't fetch from the
+        // server, but they DO fire when the trackers list finally lands from the management
+        // store — which is exactly when the cached geometry first becomes available. Skipping
+        // preload on those reasons leaves the selected tracker's trail blank until a different
+        // server-fetching reason fires (often never, on a quiet launch). The preload itself is
+        // a pure in-memory copy, so it's safe and cheap to run for every reload.
+        val preloadedTrail = preloadedSingleTrackerTrailFromCacheOrNull(
+            mode = state.mode,
+            activeTrackerId = activeTrackerId
+        )
+        if (preloadedTrail != null) {
+            _uiState.update { latest ->
+                if (latest.trail.isEmpty()) {
+                    latest.copy(
+                        trail = preloadedTrail,
+                        allQueueTrailsByTracker = emptyMap(),
+                    )
+                } else {
+                    latest
+                }
+            }
+        }
         if (!reason.allowsSource(sessionPlan.trailReloadPlan.source)) {
             return
+        }
+        // RE-FIT AFTER FETCH: every reload that legitimately hit the server can move state.trail
+        // arbitrarily far from whatever the camera is currently framing (process death + resume,
+        // launch with a stale runtime GPS coord, switching to a different selected tracker, etc).
+        // Without this flag the fit-after-reload path only triggers from explicit map context
+        // change handlers — leaving the camera frozen on stale bounds even though the trail data
+        // it was sized to is no longer in state. Treat any server-fetching reload as the caller
+        // having implicitly asked the camera to re-fit when the new data lands.
+        if (reason.allowServerHistoryFetch) {
+            pendingFitAfterReload = true
         }
         val seed = TrackerMapReloadSeedPolicy.trailSeed(
             TrackerMapTrailSeedInput(
@@ -1410,32 +1809,28 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         if (!reason.allowServerHistoryFetch && lastTrailLoadSeed == seed) return
         lastTrailLoadSeed = seed
-        var workingState = state
-        preloadedSingleTrackerTrailFromCacheOrNull(
-            mode = workingState.mode,
-            activeTrackerId = activeTrackerId
-        )?.let { preloadedTrail ->
-            if (workingState.trail.isEmpty()) {
-                workingState = workingState.copy(
-                    trail = preloadedTrail,
-                    allQueueTrailsByTracker = emptyMap(),
-                )
-                _uiState.value = workingState
-            }
-        }
+        val planSourceState = _uiState.value
         val plan = projectSession(
-            state = workingState,
+            state = planSourceState,
             groupSelection = groupSelection,
             visibleRosterTrackerIds = rosterTrackerIds,
         ).trailReloadPlan
-        val existingTrailMinTimeMs = workingState.trail.minOfOrNull { it.time }
-        val existingMultiMinTimes = workingState.allQueueTrailsByTracker
+        val existingTrailMinTimeMs = planSourceState.trail.minOfOrNull { it.time }
+        val existingMultiMinTimes = planSourceState.allQueueTrailsByTracker
             .mapValues { (_, pts) -> pts.minOfOrNull { it.time } }
             .filterValues { it != null }
             .mapValues { it.value!! }
-        val (trail, allQueueTrailsByTracker) = when (plan.source) {
+        // SINGLE_SERVER + LOCAL OVERLAY: when the displayed tracker is the locally-recorded one,
+        // server geometry alone can lag the live recording (uploads are async). We pair the
+        // server fetch with the local DB queue so the merge has authoritative recent fixes to
+        // splice on top of server history. Without this, returning to the local tracker from a
+        // group stream shows only the server's last-uploaded snapshot and the recently-recorded
+        // tail is missing.
+        val (trail, allQueueTrailsByTracker, singleQueueOverlay) = when (plan.source) {
             TrackerMapTrailSource.SINGLE_SERVER -> {
-                loadSingleTrackerTrailFromServer(plan.singleTrackerId, existingTrailMinTimeMs) to emptyMap()
+                val server = loadSingleTrackerTrailFromServer(plan.singleTrackerId, existingTrailMinTimeMs)
+                val overlay = plan.overlayTrackerId?.let { loadQueueTrail(it) }.orEmpty()
+                Triple(server, emptyMap<String, List<QueuedLocation>>(), overlay)
             }
             TrackerMapTrailSource.MULTI_SERVER -> {
                 val multiTrails = loadTrailsForTrackerIds(plan.trackerIds, existingMultiMinTimes).toMutableMap()
@@ -1443,48 +1838,75 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     multiTrails[overlayTrackerId] = loadQueueTrail(overlayTrackerId)
                 }
                 val fallbackTrail = multiTrails[plan.activeTrackerId].orEmpty()
-                fallbackTrail to multiTrails.toMap()
+                Triple(fallbackTrail, multiTrails.toMap(), emptyList())
             }
             TrackerMapTrailSource.SINGLE_QUEUE -> {
-                loadQueueTrail(plan.activeTrackerId) to emptyMap()
+                Triple(loadQueueTrail(plan.activeTrackerId), emptyMap<String, List<QueuedLocation>>(), emptyList())
             }
         }
         if (trailSeedForState(_uiState.value) != seed) {
             lastTrailLoadSeed = null
             return
         }
-        val currentState = _uiState.value
-        val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
-            serverTrail = trail,
-            currentTrail = currentState.trail,
-            allowedLiveOverlayTrackerIds = setOfNotBlank(plan.activeTrackerId),
-            trailPointLimit = TRAIL_POINT_LIMIT,
-        )
-        val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
-            serverTrails = allQueueTrailsByTracker,
-            currentTrails = currentState.allQueueTrailsByTracker,
-            allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotBlank(plan.overlayTrackerId),
-            trailPointLimit = TRAIL_POINT_LIMIT,
-        )
-        _uiState.value = currentState.copy(
-            trail = mergedTrail,
-            allQueueTrailsByTracker = mergedMultiTrails,
-            currentGroupId = if (workingState.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                plan.resolvedGroupId
+        // RACE-FREE COMMIT: re-merge against the LATEST live trail at write time. The IO above
+        // (loadQueueTrail / loadTrailsForTrackerIds / loadSingleTrackerTrailFromServer) suspends,
+        // and the bus collector is free to append fresh fixes via handleTrackPointEvent during
+        // that window. Snapshotting _uiState.value before the merge and writing it back via
+        // .copy(...) silently overwrites those bus updates, causing the rendered marker to
+        // regress one or two fixes (the "double-back while walking" symptom). _uiState.update
+        // re-applies the merge against the latest state, preserving any newly-arrived live points.
+        val mergeResult = AtomicReference<MergedTrailResult?>(null)
+        _uiState.update { latest ->
+            // Seed the merge's live-overlay input with the freshly-loaded local DB queue (when
+            // the active tracker is the locally-recorded one). Queue rows have PROVENANCE_LOCAL_GPS
+            // which the merge policy treats as live overlay; the merge keeps any with time >
+            // latestServerTime so locally-recorded fixes that haven't been uploaded yet survive.
+            val liveOverlayInput = if (singleQueueOverlay.isNotEmpty()) {
+                latest.trail + singleQueueOverlay
             } else {
-                workingState.currentGroupId
-            },
-            groupModeOptions = if (workingState.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-                resolveGroupModeOptions()
-            } else {
-                emptyList()
-            },
-        )
-        if (pendingFitAfterReload && (mergedTrail.isNotEmpty() || mergedMultiTrails.isNotEmpty())) {
+                latest.trail
+            }
+            val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
+                serverTrail = trail,
+                currentTrail = liveOverlayInput,
+                allowedLiveOverlayTrackerIds = setOfNotBlank(plan.activeTrackerId),
+                trailPointLimit = TRAIL_POINT_LIMIT,
+            )
+            val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
+                serverTrails = allQueueTrailsByTracker,
+                currentTrails = latest.allQueueTrailsByTracker,
+                allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotBlank(plan.overlayTrackerId),
+                trailPointLimit = TRAIL_POINT_LIMIT,
+            )
+            mergeResult.set(MergedTrailResult(mergedTrail, mergedMultiTrails))
+            latest.copy(
+                trail = mergedTrail,
+                allQueueTrailsByTracker = mergedMultiTrails,
+                currentGroupId = if (latest.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                    plan.resolvedGroupId
+                } else {
+                    latest.currentGroupId
+                },
+                groupModeOptions = if (latest.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                    resolveGroupModeOptions()
+                } else {
+                    emptyList()
+                },
+            )
+        }
+        val finalMerge = mergeResult.get()
+        if (pendingFitAfterReload && finalMerge != null &&
+            (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
+        ) {
             pendingFitAfterReload = false
             requestFitTrail()
         }
     }
+
+    private data class MergedTrailResult(
+        val trail: List<QueuedLocation>,
+        val multiTrails: Map<String, List<QueuedLocation>>,
+    )
 
     private fun requestRuntimeTrailReload(reason: TrackerMapTrailReloadReason) {
         if (runtimeTrailReloadJob?.isActive == true) {
@@ -1720,14 +2142,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return buildCurrentSessionSnapshot().plan.acceptedRemoteTrackerIds
     }
 
-    private fun reconcileStreaming(state: TrackerMapUiState) {
+    private fun reconcileStreaming(
+        state: TrackerMapUiState,
+        streamRuntime: LiveStreamRuntimeSnapshot = LiveStreamRuntimeStateStore.state.value,
+    ) {
         val plan = projectSession(state)
         val decisionState = state.copy(streamTargetIds = plan.remoteSubscriptionIds)
         streamingReconciler.reconcile(
             decisionState,
             plan.displayedTrackerId,
             plan.displayedTrackerName,
-            LiveStreamRuntimeStateStore.state.value,
+            streamRuntime,
         )
     }
 

@@ -59,7 +59,10 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun resolveStreamTargetIds_allQueue_notRunning_excludesSelectedAndBlanks() {
+    fun resolveStreamTargetIds_allQueue_notRunning_includesSelected() {
+        // STREAMING EXCLUSION: when the user is NOT recording, the selected tracker is just
+        // another roster member and should be streamed alongside the rest. Only `locallyRecorded`
+        // is excluded, and that is empty when not recording.
         val ids = TrackerMapViewModel.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
             runtimeRunning = false,
@@ -67,11 +70,12 @@ class TrackerMapViewModelStreamingContractsTest {
             displayedTrackerId = "",
             rosterTrackerIds = setOf("tracker-1", "tracker-2", " ")
         )
-        assertEquals(setOf("tracker-2"), ids)
+        assertEquals(setOf("tracker-1", "tracker-2"), ids)
     }
 
     @Test
-    fun resolveStreamTargetIds_groupPlaceholder_notRunning_excludesSelected() {
+    fun resolveStreamTargetIds_groupPlaceholder_notRunning_includesSelected() {
+        // STREAMING EXCLUSION: same rationale as above for group mode.
         val ids = TrackerMapViewModel.resolveStreamTargetIds(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             runtimeRunning = false,
@@ -80,7 +84,7 @@ class TrackerMapViewModelStreamingContractsTest {
             rosterTrackerIds = emptySet(),
             groupTrackerIds = setOf("tracker-1", "tracker-2"),
         )
-        assertEquals(setOf("tracker-2"), ids)
+        assertEquals(setOf("tracker-1", "tracker-2"), ids)
     }
 
     @Test
@@ -94,16 +98,6 @@ class TrackerMapViewModelStreamingContractsTest {
         )
 
         assertEquals(setOf("accepted"), filtered.keys)
-    }
-
-    @Test
-    fun sanitizeResumeStreamTrackerIds_excludesSelectedFromRecoveredTargets() {
-        val ids = TrackerMapViewModel.sanitizeResumeStreamTrackerIds(
-            trackerIds = setOf("selected", "remote-a", " ", "remote-b"),
-            selectedTrackerId = "selected",
-        )
-
-        assertEquals(setOf("remote-a", "remote-b"), ids)
     }
 
     @Test
@@ -148,6 +142,145 @@ class TrackerMapViewModelStreamingContractsTest {
         )
 
         assertEquals(emptyMap<String, List<com.geovault.tracker.db.QueuedLocation>>(), trails)
+    }
+
+    @Test
+    fun allQueueTrailsWithLocalRuntimeOverlay_rejectsRuntimePointOlderThanTrailTail() {
+        // TIME-MONOTONIC GUARD (Bug 1 defensive secondary): runtime.lastTrackedTimestampMs can
+        // briefly lag the bus-appended trail tail (the bus updates _uiState.trail directly while
+        // the tracking-runtime store is updated separately). Without this rejection the overlay
+        // would prepend a stale, "older than tail" point to the multi-trail head, causing the
+        // marker to visibly regress one fix backward.
+        val newerFix = com.geovault.tracker.db.QueuedLocation(
+            id = 0L,
+            trackerId = "tracker-1",
+            time = 5000L,
+            latitude = 40.0,
+            longitude = 30.0,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+        )
+        val initial = mapOf("tracker-1" to listOf(newerFix))
+
+        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1000L,
+                lastAccuracyMeters = 4f,
+            ),
+            groupTrackerIds = setOf("tracker-1", "tracker-2"),
+            allQueueTrailsByTracker = initial,
+            nowMs = 9999L,
+        )
+
+        assertEquals(initial, trails)
+    }
+
+    @Test
+    fun allQueueTrailsWithLocalRuntimeOverlay_usesRecordingTrackerWhenSelectedDiffers() {
+        val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "selected",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+            ),
+            groupTrackerIds = setOf("local", "remote"),
+            allQueueTrailsByTracker = emptyMap(),
+            nowMs = 2000L,
+        )
+
+        assertEquals(setOf("local"), trails.keys)
+    }
+
+    @Test
+    fun streamingActiveTargetsMatchDisplayed_groupModeWithMatchingStream_returnsTrue() {
+        // STREAMING-RESUME SHORT-CIRCUIT (Bug 3): when the WS is already subscribed to exactly
+        // the group's non-locally-recorded members, evaluateResumeAfterBackground should treat
+        // resume as a no-op rather than triggering a redundant reload+reconcile pass.
+        val match = TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            displayedIds = setOf("a", "b", "self"),
+            localRecordingActive = true,
+            locallyRecordedTrackerId = "self",
+            activeStreamTargets = setOf("a", "b"),
+        )
+        assertEquals(true, match)
+    }
+
+    @Test
+    fun streamingActiveTargetsMatchDisplayed_groupModeWithMissingMember_returnsFalse() {
+        val match = TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            displayedIds = setOf("a", "b"),
+            localRecordingActive = false,
+            locallyRecordedTrackerId = "",
+            activeStreamTargets = setOf("a"),
+        )
+        assertEquals(false, match)
+    }
+
+    @Test
+    fun streamingActiveTargetsMatchDisplayed_singleSession_returnsFalse() {
+        val match = TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedIds = setOf("a"),
+            localRecordingActive = false,
+            locallyRecordedTrackerId = "",
+            activeStreamTargets = setOf("a"),
+        )
+        assertEquals(false, match)
+    }
+
+    @Test
+    fun displayedRosterHasLoadedTrails_groupModeWithPopulatedMember_returnsTrue() {
+        val populated = mapOf(
+            "a" to listOf(
+                com.geovault.tracker.db.QueuedLocation(
+                    id = 0L,
+                    trackerId = "a",
+                    time = 1L,
+                    latitude = 0.0,
+                    longitude = 0.0,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                    sat = null,
+                    prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
+                    dist = null,
+                )
+            ),
+            "b" to emptyList(),
+        )
+        val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            rosterIds = setOf("a", "b"),
+            allQueueTrailsByTracker = populated,
+        )
+        assertEquals(true, ready)
+    }
+
+    @Test
+    fun displayedRosterHasLoadedTrails_groupModeAllEmpty_returnsFalse() {
+        val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            rosterIds = setOf("a", "b"),
+            allQueueTrailsByTracker = mapOf("a" to emptyList(), "b" to emptyList()),
+        )
+        assertEquals(false, ready)
     }
 
     @Test

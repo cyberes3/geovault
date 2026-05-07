@@ -3,11 +3,10 @@ package com.geovault.tracker.presentation
 /**
  * Whether the map chrome should show the my-location (one-shot jump to device location) FAB.
  *
- * Matches the pre-rewrite intent of `MapFragment.isSelectedDefaultTrackerMode` and the
- * `!isSelectedDefaultTracker` part of `MapMyLocationPolicy.shouldShowButton` in `old android-tracker`
- * (hide only when the single-session map is showing the **selected** tracker). Unlike legacy
- * `MapMyLocationPolicy`, FAB visibility does **not** depend on tracking / `runtime.isRunning`;
- * puck and streaming rules live in [TrackerMapUserLocationPolicy].
+ * Visibility rule: hide the FAB only when the single-session map is showing the **selected**
+ * tracker (the user is already centered on their own default view). FAB visibility does **not**
+ * depend on tracking / `runtime.isRunning`; the location puck and streaming rules live in
+ * [TrackerMapUserLocationPolicy].
  */
 object TrackerMapMyLocationFabPolicy {
 

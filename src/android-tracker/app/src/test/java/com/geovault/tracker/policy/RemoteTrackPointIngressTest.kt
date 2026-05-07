@@ -65,6 +65,25 @@ class RemoteTrackPointIngressTest {
         assertEquals(1L, RemoteTrackPointIngress.diagnostics().droppedLocalEchoEvents)
     }
 
+    @Test
+    fun process_remoteForUiSelectedButNotRecordedTracker_isAccepted() {
+        TrackingRuntimeStateStore.update {
+            it.copy(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "selected",
+            )
+        }
+
+        val result = RemoteTrackPointIngress.process(
+            remoteEvent(trackId = "selected"),
+            nowMs = NOW_MS,
+        )
+
+        assertNotNull(result)
+        assertEquals(0L, RemoteTrackPointIngress.diagnostics().droppedLocalEchoEvents)
+    }
+
     private fun remoteEvent(
         trackId: String = "remote",
         lon: Double = 20.0,

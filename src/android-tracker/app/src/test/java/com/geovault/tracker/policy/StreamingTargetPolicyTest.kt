@@ -6,16 +6,25 @@ import org.junit.Test
 class StreamingTargetPolicyTest {
 
     @Test
-    fun remoteSubscriptionTargets_excludesSelectedLocalAndExplicitIds() {
+    fun remoteSubscriptionTargets_excludesLocallyRecordedAndBlanks() {
         val targets = StreamingTargetPolicy.remoteSubscriptionTargets(
             StreamingTargetPolicyInput(
-                requestedTrackerIds = setOf(" selected ", "local", "remote", "excluded", " "),
-                selectedTrackerId = "selected",
+                requestedTrackerIds = setOf(" local ", "remote", " "),
                 locallyRecordedTrackerIds = setOf("local"),
-                excludedTrackerIds = setOf("excluded"),
             )
         )
 
         assertEquals(setOf("remote"), targets)
+    }
+
+    @Test
+    fun remoteSubscriptionTargets_keepsAllRequestedWhenNoLocalRecorder() {
+        val targets = StreamingTargetPolicy.remoteSubscriptionTargets(
+            StreamingTargetPolicyInput(
+                requestedTrackerIds = setOf("a", "b"),
+            )
+        )
+
+        assertEquals(setOf("a", "b"), targets)
     }
 }
