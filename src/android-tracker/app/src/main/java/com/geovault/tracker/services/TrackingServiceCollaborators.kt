@@ -60,6 +60,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         queuedTrackerId: String,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
+        sessionStartTimeMs: Long = 0L,
         isMockLocation: Boolean = LocationCompat.isMock(location)
     ): LocationIngestResult {
         require(queuedTrackerId.isNotBlank()) { "queuedTrackerId must not be blank" }
@@ -169,6 +170,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             loc = location,
             trackerId = queuedTrackerId,
             totalDistanceMeters = nextSessionDistanceMeters,
+            startTimestampMs = sessionStartTimeMs.takeIf { it > 0L },
         )
         val insertedId = locationDao.insert(queued)
         if (bypassCanonical != null) {

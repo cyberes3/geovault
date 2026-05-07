@@ -147,6 +147,86 @@ class TrackerMapSessionEngineTest {
         )
     }
 
+    @Test
+    fun build_currentSession_filtersOlderSessionsFromMultiTrail() {
+        val s1 = 1_000L
+        val s2 = 2_000L
+        val snapshot = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                ),
+                plan = plan(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
+                localRuntimeOverlayTrails = mapOf(
+                    "tracker-a" to listOf(
+                        queued("tracker-a", id = -1L, time = 10L, prov = "server_geometry", startTimestampMs = s1),
+                        queued("tracker-a", id = -2L, time = 20L, prov = "server_geometry", startTimestampMs = s1),
+                        queued("tracker-a", id = 0L, time = 30L, prov = "local_gps", startTimestampMs = s2),
+                    )
+                ),
+                recentDataWindowByTracker = mapOf("tracker-a" to "current_session"),
+                nowMs = 1_000_000L,
+            )
+        )
+        val track = snapshot.tracks.getValue("tracker-a")
+        assertEquals(listOf(30L), track.renderTrail.map { it.time })
+    }
+
+    @Test
+    fun build_appliesPerTrackerWindowIndependently() {
+        val s1 = 1_000L
+        val s2 = 2_000L
+        val snapshot = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
+                plan = plan(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
+                localRuntimeOverlayTrails = mapOf(
+                    "tracker-a" to listOf(
+                        queued("tracker-a", id = -1L, time = 10L, prov = "server_geometry", startTimestampMs = s1),
+                        queued("tracker-a", id = 0L, time = 20L, prov = "local_gps", startTimestampMs = s2),
+                    ),
+                    "tracker-b" to listOf(
+                        queued("tracker-b", id = -1L, time = 10L, prov = "server_geometry", startTimestampMs = s1),
+                        queued("tracker-b", id = 0L, time = 20L, prov = "local_gps", startTimestampMs = s2),
+                    ),
+                ),
+                recentDataWindowByTracker = mapOf(
+                    "tracker-a" to "current_session",
+                    "tracker-b" to "all",
+                ),
+                nowMs = 1_000_000L,
+            )
+        )
+        assertEquals(listOf(20L), snapshot.tracks.getValue("tracker-a").renderTrail.map { it.time })
+        assertEquals(listOf(10L, 20L), snapshot.tracks.getValue("tracker-b").renderTrail.map { it.time })
+    }
+
+    @Test
+    fun build_singleTrail_appliesActiveTrackerWindow() {
+        val s1 = 1_000L
+        val s2 = 2_000L
+        val snapshot = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                    displayedTrackerId = "active",
+                    trail = listOf(
+                        queued("active", id = -1L, time = 10L, prov = "server_geometry", startTimestampMs = s1),
+                        queued("active", id = 0L, time = 30L, prov = "local_gps", startTimestampMs = s2),
+                    ),
+                ),
+                plan = plan(
+                    mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                    displayedTrackerId = "active",
+                ),
+                localRuntimeOverlayTrails = emptyMap(),
+                recentDataWindowByTracker = mapOf("active" to "current_session"),
+                nowMs = 1_000_000L,
+            )
+        )
+        assertEquals(listOf(30L), snapshot.singleTrail.map { it.time })
+    }
+
     private fun plan(
         mode: TrackerMapDisplayMode = TrackerMapDisplayMode.ALL_QUEUE,
         displayedTrackerId: String = "",
@@ -169,7 +249,13 @@ class TrackerMapSessionEngineTest {
         )
     }
 
-    private fun queued(trackerId: String, id: Long, time: Long, prov: String): QueuedLocation {
+    private fun queued(
+        trackerId: String,
+        id: Long,
+        time: Long,
+        prov: String,
+        startTimestampMs: Long? = null,
+    ): QueuedLocation {
         return QueuedLocation(
             id = id,
             trackerId = trackerId,
@@ -183,6 +269,7 @@ class TrackerMapSessionEngineTest {
             sat = null,
             prov = prov,
             dist = null,
+            startTimestampMs = startTimestampMs,
         )
     }
 }

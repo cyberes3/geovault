@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.SelectedTrackerManager
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.RepositoryResult
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -18,6 +19,7 @@ import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.WireTimestampNormalizer
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
@@ -46,6 +48,22 @@ import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Tells the map's `fitTrailEvents` consumer how to apply a bounds fit.
+ *
+ * - [Animated]: smooth animateCamera. Used for user-initiated fits (live-active fit
+ *   toggle, incoming live track points while live-active fit is on) where the motion
+ *   is feedback the user expects to see.
+ * - [Instant]: snapshot moveCamera. Used for system-initiated fits (post-reload
+ *   re-fit) where animation would be a visible jolt the user did not request — e.g.
+ *   on first map open, when the server geometry slightly enlarges the locally-preloaded
+ *   bounds and the camera was already framed correctly by the InitialFit directive.
+ */
+enum class TrackerMapFitTrailMode {
+    Animated,
+    Instant,
+}
 
 data class TrackerMapUiState(
     val runtime: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot(),
@@ -253,6 +271,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 sat = null,
                 prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME,
                 dist = null,
+                startTimestampMs = runtime.sessionStartTimeMs.takeIf { it > 0L },
             )
             val currentTrail = allQueueTrailsByTracker[trackerId].orEmpty()
             val last = currentTrail.lastOrNull()
@@ -399,7 +418,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     fun trackerRosterForMapChip(): List<Tracker> = trackerManagementStateStore.trackers.value
 
-    private val fitTrailSignal = Channel<Unit>(Channel.CONFLATED)
+    private val fitTrailSignal = Channel<TrackerMapFitTrailMode>(Channel.CONFLATED)
     private val pointEventChannel = Channel<TrackPointEvent>(Channel.UNLIMITED)
     val fitTrailEvents = fitTrailSignal.receiveAsFlow()
     private var lastStreamTargetsSeed: String? = null
@@ -444,6 +463,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         SelectedTrackerManager.syncRuntimeSelectedTracker(application)
+        // PRELOAD-AT-INIT: read the persisted selected tracker id straight from prefs and
+        // seed `_uiState.trail` from the local Room queue ASAP. This races (intentionally)
+        // with the first `_uiState.collect` below so the very first render package the map
+        // sees already has a trail to fit the camera to. Without this, the launch sequence
+        // is "empty render -> 0,0 flash -> ExplicitTrackerLoad -> server fetch -> snap"
+        // because `getTrackers()` is metadata-only (no geometry) so the in-memory cache
+        // preload inside `reloadTrailFromDatabaseLocked` returns null on every cold launch.
+        // The Room queue is the only source of truth that survives process death without
+        // a network round-trip.
+        viewModelScope.launch {
+            seedInitialTrailFromLocalQueue()
+        }
         viewModelScope.launch {
             _uiState.collect {
                 publishRenderPackage()
@@ -620,6 +651,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         val newWindow = event.tracker.settingString("recent_data_window")
                         val oldWindow = recentDataWindowByTracker.put(trackerId, newWindow)
                         val state = _uiState.value
+                        val windowChanged = oldWindow != newWindow
                         if (shouldReloadForRecentDataWindowChange(
                                 oldWindow = oldWindow,
                                 newWindow = newWindow,
@@ -632,6 +664,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             )
                         ) {
                             requestRuntimeTrailReload(TrackerMapTrailReloadReason.GenericMapRefresh)
+                        } else if (windowChanged) {
+                            // RECENT-DATA-WINDOW-LIVE: when the server reload path declines a
+                            // refetch (narrow change, non-displayed tracker, etc.) the engine must
+                            // still re-project so the new window is applied to whatever points the
+                            // client already holds. _uiState itself didn't change, so nudge the
+                            // render package directly.
+                            publishRenderPackage()
                         }
                     }
                     else -> Unit
@@ -1283,8 +1322,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun requestFitTrail() {
-        fitTrailSignal.trySend(Unit)
+    fun requestFitTrail(mode: TrackerMapFitTrailMode = TrackerMapFitTrailMode.Animated) {
+        fitTrailSignal.trySend(mode)
     }
 
     private fun publishRenderPackage() {
@@ -1412,8 +1451,16 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 state = state,
                 plan = plan,
                 localRuntimeOverlayTrails = renderTrails,
+                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                nowMs = nowMs,
             )
         )
+    }
+
+    private fun currentRecentDataWindowByTracker(): Map<String, String?> {
+        return trackerManagementStateStore.trackers.value.associate { tracker ->
+            tracker.id to tracker.settingString("recent_data_window")
+        }
     }
 
     fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
@@ -1899,7 +1946,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
         ) {
             pendingFitAfterReload = false
-            requestFitTrail()
+            // INSTANT after server-fetching reload: the InitialFit directive (or a prior
+            // user-driven fit) has already framed the camera on the locally-preloaded
+            // bounds. The server response typically nudges those bounds by a small delta;
+            // animating that delta produces a visible jolt at first map open. moveCamera
+            // snaps to the final framing in one frame, which is the right semantics for a
+            // re-fit the user did not initiate.
+            requestFitTrail(TrackerMapFitTrailMode.Instant)
         }
     }
 
@@ -2058,6 +2111,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return coordinates.mapIndexedNotNull { index, point ->
             val lon = point.getOrNull(0) ?: return@mapIndexedNotNull null
             val lat = point.getOrNull(1) ?: return@mapIndexedNotNull null
+            val startTimestampMs = pointParams?.getOrNull(index)?.let { params ->
+                WireTimestampNormalizer.normalizeToMilliseconds(params["starttimestamp"])
+            }
             QueuedLocation(
                 id = -(index + 1L),
                 trackerId = normalizedTrackerId,
@@ -2070,7 +2126,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 accuracy = if (index == coordinates.lastIndex) latestAccuracyMeters else null,
                 sat = null,
                 prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
-                dist = null
+                dist = null,
+                startTimestampMs = startTimestampMs
             )
         }.takeLast(TRAIL_POINT_LIMIT)
     }
@@ -2093,7 +2150,64 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return coordinates.indices.map { idx -> (fallbackStart + idx).coerceAtLeast(0L) }
     }
 
-    private fun preloadedSingleTrackerTrailFromCacheOrNull(
+    /**
+     * Seed `_uiState.trail` from the local Room queue at ViewModel construction. Runs
+     * concurrently with the rest of `init`; the goal is for this to land before the
+     * Compose layer attaches its `_uiState.collect` listener so the very first render
+     * package the map sees already has a trail to fit the camera to.
+     *
+     * Race semantics: if any other code path populates the trail first (a server fetch,
+     * a track point arriving, a reload coordinator preload), we leave it alone. If the
+     * trail is still empty when we land, we populate it AND seed `displayedTrackerId`
+     * from the persisted selection so downstream camera/render logic has a target.
+     */
+    private suspend fun seedInitialTrailFromLocalQueue() {
+        if (_uiState.value.trail.isNotEmpty()) return
+        val context = getApplication<Application>()
+        val selectedId = SelectedTrackerPrefs.selectedTrackerId(context).trim()
+        if (selectedId.isEmpty()) return
+        val queueTrail = loadQueueTrail(selectedId)
+        if (queueTrail.isEmpty()) return
+        _uiState.update { latest ->
+            if (latest.trail.isNotEmpty()) return@update latest
+            val displayedId = if (latest.displayedTrackerId.isBlank()) {
+                selectedId
+            } else {
+                latest.displayedTrackerId
+            }
+            val displayedName = if (latest.displayedTrackerName.isBlank()) {
+                SelectedTrackerPrefs.selectedTrackerName(context)
+            } else {
+                latest.displayedTrackerName
+            }
+            latest.copy(
+                trail = queueTrail,
+                displayedTrackerId = displayedId,
+                displayedTrackerName = displayedName,
+            )
+        }
+    }
+
+    /**
+     * Seed the single-tracker trail from the most recently available local source so the
+     * map has SOMETHING to fit to before the (slow) server geometry fetch returns.
+     *
+     * Source priority:
+     *  1. In-memory `TrackerManagementStateStore` cache. Populated by previous geometry
+     *     fetches in this process; effectively always empty on a fresh launch because
+     *     `GET /trackers/` returns metadata-only (no geometry).
+     *  2. Local Room queue (`loadQueueTrail`). Persists across process death, so on every
+     *     launch after the first recording session this provides recent fixes for the
+     *     locally-recorded tracker without any network round-trip. The merge policy
+     *     drops these once the server response arrives (queue rows are not tagged as
+     *     live overlay), so they cleanly hand off without leaving stale data behind.
+     *
+     * Returning null means "no local data available, let the server fetch handle it."
+     * The two-source pattern eliminates the visible 0,0 flash that occurred when the
+     * cache was empty (every cold launch) and the trail stayed empty through the
+     * geometry fetch window.
+     */
+    private suspend fun preloadedSingleTrackerTrailFromCacheOrNull(
         mode: TrackerMapDisplayMode,
         activeTrackerId: String
     ): List<QueuedLocation>? {
@@ -2102,18 +2216,23 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         if (trackerId.isEmpty()) return null
         val cachedTracker = trackerManagementStateStore.trackers.value
             .firstOrNull { it.id == trackerId }
-            ?: return null
-        val cachedGeometry = cachedTracker.geometry?.coordinates.orEmpty()
-        if (cachedGeometry.isEmpty()) return null
-        return mapCoordinatesToTrail(trackerId, cachedGeometry).takeIf { it.isNotEmpty() }
+        val cachedGeometry = cachedTracker?.geometry?.coordinates.orEmpty()
+        if (cachedGeometry.isNotEmpty()) {
+            val trail = mapCoordinatesToTrail(trackerId, cachedGeometry)
+            if (trail.isNotEmpty()) return trail
+        }
+        return loadQueueTrail(trackerId).takeIf { it.isNotEmpty() }
     }
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {
+        val nowMs = System.currentTimeMillis()
         val reduction = TrackerMapSessionEngine.reducePoint(
             TrackerMapSessionPointInput(
-                snapshot = buildCurrentSessionSnapshot(),
+                snapshot = buildCurrentSessionSnapshot(nowMs),
                 point = point,
                 trailPointLimit = TRAIL_POINT_LIMIT,
+                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                nowMs = nowMs,
             )
         )
         if (reduction.shouldUpdate) {

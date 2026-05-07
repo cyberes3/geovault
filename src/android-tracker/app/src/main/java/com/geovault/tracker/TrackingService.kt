@@ -763,6 +763,7 @@ class TrackingService : Service() {
             queuedTrackerId = selectedTrackerId,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
             isMockLocation = LocationCompat.isMock(location)
         )
         val nextSessionDistance = result.nextSessionDistanceMeters

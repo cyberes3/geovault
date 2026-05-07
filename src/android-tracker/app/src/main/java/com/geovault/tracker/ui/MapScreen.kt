@@ -294,6 +294,14 @@ private fun TrackerMapAuthenticatedContent(
     }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
     var didInitialBounds by remember { mutableStateOf(false) }
+    // INITIAL-FRAME GATE: covers the map view with a loading overlay until the very
+    // first camera directive at this viewport context has been applied (or, as a
+    // safety net, until a short timeout has elapsed). This is the same pattern the
+    // legacy fragment-based tracker app used (`mapLoadingOverlay` hidden inside
+    // `onMapReady` AFTER the camera was positioned). Without this, the user briefly
+    // sees the map at MapLibre's default camera (around 0,0) for the time it takes
+    // the directive `LaunchedEffect` to schedule + run after `phase` flips to Ready.
+    var mapInitialFrameReady by remember { mutableStateOf(false) }
     val viewportContextSeed = remember(
         state.mode,
         state.currentGroupId,
@@ -308,6 +316,10 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(viewportContextSeed) {
         didInitialBounds = false
         gpsHomeAnchor = null
+        // Re-arm the loading overlay on every viewport context change so the brief
+        // window between "old context's camera position" and "new context's camera
+        // fit" is hidden (e.g. switching tracker, switching to group mode).
+        mapInitialFrameReady = false
     }
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
@@ -445,7 +457,10 @@ private fun TrackerMapAuthenticatedContent(
             }
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.FitBounds -> {
                 if (directive.reason == com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.InitialFit) {
-                    if (didInitialBounds) return@LaunchedEffect
+                    if (didInitialBounds) {
+                        mapInitialFrameReady = true
+                        return@LaunchedEffect
+                    }
                     map.moveCameraToFitLatLngBounds(directive.bounds, boundsFitPaddingPx)
                     didInitialBounds = true
                 } else {
@@ -453,10 +468,27 @@ private fun TrackerMapAuthenticatedContent(
                 }
             }
         }
+        // Order matters: the camera move above must complete BEFORE we flip the
+        // overlay flag, otherwise we'd reveal the map for one frame at the previous
+        // (default / stale) camera position. The MapLibre move is synchronous so by
+        // the time we reach this line the new camera is in the next frame.
+        mapInitialFrameReady = true
+    }
+    // SAFETY NET: if no camera directive ever arrives with bounds (e.g. fresh install
+    // with empty queue and the geometry endpoint is slow), don't leave the map hidden
+    // forever. Wait a short, fixed window after `phase == Ready` for the directive
+    // path to land naturally; if it doesn't, reveal the map anyway. The user may
+    // briefly see a default camera position, but that's strictly better than an
+    // indefinite spinner.
+    LaunchedEffect(phase, viewportContextSeed) {
+        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
+        if (mapInitialFrameReady) return@LaunchedEffect
+        delay(800L)
+        mapInitialFrameReady = true
     }
 
     LaunchedEffect(Unit) {
-        viewModel.fitTrailEvents.collect {
+        viewModel.fitTrailEvents.collect { mode ->
             if (map.phase.value != GeoVaultMapPhase.Ready) return@collect
             // FIT-FRESHNESS: compute bounds at the moment of fit instead of reading the cached
             // render-package bounds. The render package is published asynchronously off
@@ -470,7 +502,12 @@ private fun TrackerMapAuthenticatedContent(
                 else -> bounds
             }
             if (effective != null) {
-                map.animateCameraToFitLatLngBounds(effective, boundsFitPaddingPx)
+                when (mode) {
+                    com.geovault.tracker.presentation.TrackerMapFitTrailMode.Animated ->
+                        map.animateCameraToFitLatLngBounds(effective, boundsFitPaddingPx)
+                    com.geovault.tracker.presentation.TrackerMapFitTrailMode.Instant ->
+                        map.moveCameraToFitLatLngBounds(effective, boundsFitPaddingPx)
+                }
             }
         }
     }
@@ -759,6 +796,28 @@ private fun TrackerMapAuthenticatedContent(
                             )
                         }
                     }
+                }
+            }
+            // INITIAL-FRAME LOADING SHIELD: drawn last so it occludes everything in
+            // the map area (map view, FABs, chips, indicators) until the very first
+            // camera directive for the current viewport context has been applied.
+            // This is the same pattern the legacy fragment-based tracker app used —
+            // see `MapFragment.onMapReady` which hides `mapLoadingOverlay` only AFTER
+            // the camera position is set. Without it, the user briefly sees the map
+            // at MapLibre's default camera (~0,0) before the LaunchedEffect that
+            // consumes the directive can run on the same frame `phase` flips Ready.
+            // Touch is swallowed so the user can't pan the still-loading map.
+            if (!mapInitialFrameReady) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colors.background)
+                        .pointerInteropFilter { true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    GeoVaultLoadingSpinner(
+                        bottomText = stringResource(R.string.map_status_map_loading),
+                    )
                 }
             }
         }

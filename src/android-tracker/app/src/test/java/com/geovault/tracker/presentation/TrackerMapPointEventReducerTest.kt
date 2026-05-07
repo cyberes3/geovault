@@ -311,6 +311,93 @@ class TrackerMapPointEventReducerTest {
         assertEquals("tracker-1", result.nextState.trail.first().trackerId)
     }
 
+    @Test
+    fun localGps_stampsStartTimestampFromRuntime_whenPropsJsonAbsent() {
+        val sessionStart = 1_700_000_000_000L
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                sessionStartTimeMs = sessionStart,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "tracker-1",
+                    lon = 1.0,
+                    lat = 2.0,
+                    timestampMs = sessionStart + 5_000L,
+                    propsJson = null,
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+        assertEquals(sessionStart, result.nextState.trail.first().startTimestampMs)
+    }
+
+    @Test
+    fun localGps_prefersPropsJsonStartTimestampOverRuntime() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                sessionStartTimeMs = 5_000L,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "tracker-1",
+                    lon = 1.0,
+                    lat = 2.0,
+                    timestampMs = 6_000L,
+                    propsJson = """{"starttimestamp": 9000000000000}""",
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+        assertEquals(9_000_000_000_000L, result.nextState.trail.first().startTimestampMs)
+    }
+
+    @Test
+    fun remoteStream_stampsStartTimestampFromPropsJson() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = false,
+                selectedTrackerId = "tracker-1",
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "tracker-1",
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.REMOTE_STREAM,
+                    trackId = "tracker-1",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 1_710_000_000_000L,
+                    propsJson = """{"starttimestamp": 1700000000000}""",
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+        assertEquals(1_700_000_000_000L, result.nextState.trail.first().startTimestampMs)
+    }
+
     private fun sessionPlanFor(state: TrackerMapUiState): TrackerMapStreamingPlan {
         val visibleIds = buildSet {
             state.runtime.selectedTrackerId.trim().takeIf { it.isNotEmpty() }?.let(::add)

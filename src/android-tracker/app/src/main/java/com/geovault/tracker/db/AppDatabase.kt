@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.geovault.tracker.SelectedTrackerPrefs
 
-@Database(entities = [QueuedLocation::class], version = 4, exportSchema = true)
+@Database(entities = [QueuedLocation::class], version = 5, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun locationDao(): LocationDao
 

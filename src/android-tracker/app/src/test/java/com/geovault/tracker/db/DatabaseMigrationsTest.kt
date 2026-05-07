@@ -91,6 +91,46 @@ class DatabaseMigrationsTest {
         assertEquals(200L, rows.single().time)
     }
 
+    @Test
+    fun migrate_4To5_addsStartTimestampColumnAndPreservesRows() {
+        val db = helper.writableDatabase
+        insertRow(db, trackerId = "tracker-a", time = 100L)
+        DatabaseMigrations.migration3To4(selectedTrackerId = null).migrate(db)
+        val countAfter4 = readAllRows(db).size
+        assertEquals(1, countAfter4)
+
+        DatabaseMigrations.MIGRATION_4_5.migrate(db)
+
+        val before = db.query(
+            "SELECT id, tracker_id, time, start_timestamp_ms FROM queued_locations"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            Triple(
+                c.getString(1),
+                c.getLong(2),
+                if (c.isNull(3)) null else c.getLong(3),
+            )
+        }
+        assertEquals("tracker-a", before.first)
+        assertEquals(100L, before.second)
+        // Existing rows pre-migration get NULL; matches the server's missing-starttimestamp
+        // fallback used by `current_session` / `session` filters.
+        assertEquals(null, before.third)
+
+        // New inserts can populate the column.
+        db.execSQL(
+            "INSERT INTO queued_locations (tracker_id, time, latitude, longitude, start_timestamp_ms) " +
+                "VALUES ('tracker-b', 200, 0, 0, 5555)"
+        )
+        val populated = db.query(
+            "SELECT start_timestamp_ms FROM queued_locations WHERE tracker_id = 'tracker-b'"
+        ).use { c ->
+            assertTrue(c.moveToFirst())
+            c.getLong(0)
+        }
+        assertEquals(5555L, populated)
+    }
+
     private fun insertRow(db: SupportSQLiteDatabase, trackerId: String?, time: Long) {
         if (trackerId == null) {
             db.execSQL(

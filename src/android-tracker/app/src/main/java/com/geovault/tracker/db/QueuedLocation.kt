@@ -22,7 +22,8 @@ data class QueuedLocation(
     val accuracy: Float?,
     val sat: Int? = null,
     val prov: String? = null,
-    val dist: Float? = null
+    val dist: Float? = null,
+    @ColumnInfo(name = "start_timestamp_ms") val startTimestampMs: Long? = null
 ) {
     init {
         require(trackerId.isNotBlank()) { "QueuedLocation.trackerId must not be blank" }
@@ -47,6 +48,7 @@ data class QueuedLocation(
             loc: Location,
             trackerId: String,
             totalDistanceMeters: Float? = null,
+            startTimestampMs: Long? = null,
         ): QueuedLocation {
             require(trackerId.isNotBlank()) { "trackerId must not be blank" }
             val sat = loc.extras?.getInt(EXTRAS_KEY_SATELLITES, 0)?.takeIf { it > 0 } ?: 0
@@ -61,7 +63,8 @@ data class QueuedLocation(
                 accuracy = if (loc.hasAccuracy()) loc.accuracy else null,
                 sat = if (sat > 0) sat else null,
                 prov = loc.provider,
-                dist = totalDistanceMeters
+                dist = totalDistanceMeters,
+                startTimestampMs = startTimestampMs?.takeIf { it > 0L }
             )
         }
     }

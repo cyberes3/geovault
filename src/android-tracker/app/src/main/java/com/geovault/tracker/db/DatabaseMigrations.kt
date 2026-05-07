@@ -78,10 +78,24 @@ object DatabaseMigrations {
         }
     }
 
+    /**
+     * Version 5 adds `start_timestamp_ms` so client-side recent-data-window
+     * filtering can apply session-based windows (current_session / session) to
+     * locally queued and live points the same way the server does. Existing
+     * rows get NULL and fall back to coordinate-timestamp behavior, matching
+     * the server's missing-starttimestamp logic in `helpers.py`.
+     */
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE queued_locations ADD COLUMN start_timestamp_ms INTEGER")
+        }
+    }
+
     fun all(selectedTrackerId: String?): Array<Migration> = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
-        migration3To4(selectedTrackerId)
+        migration3To4(selectedTrackerId),
+        MIGRATION_4_5
     )
 
     private fun singleLongQuery(db: SupportSQLiteDatabase, sql: String): Long {

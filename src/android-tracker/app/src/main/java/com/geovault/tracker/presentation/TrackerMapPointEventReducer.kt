@@ -88,6 +88,9 @@ object TrackerMapPointEventReducer {
                 nextState = state,
             )
         }
+        val parsedStart = TrackerMapPointStartTimestampParser.parse(point.propsJson)
+        val resolvedStart = parsedStart
+            ?: state.runtime.sessionStartTimeMs.takeIf { it > 0L }
         val localOverlayPoint = QueuedLocation(
             id = 0L,
             trackerId = overlayTrackerId,
@@ -100,7 +103,8 @@ object TrackerMapPointEventReducer {
             accuracy = point.accuracyMeters,
             sat = null,
             prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
-            dist = null
+            dist = null,
+            startTimestampMs = resolvedStart
         )
         val nextTrail = if (route.appendSingleTrail) {
             appendQueuedPoint(state.trail, localOverlayPoint, input.trailPointLimit)
@@ -175,7 +179,8 @@ object TrackerMapPointEventReducer {
             accuracy = point.accuracyMeters,
             sat = null,
             prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
-            dist = null
+            dist = null,
+            startTimestampMs = TrackerMapPointStartTimestampParser.parse(point.propsJson)
         )
         return (currentTrail + queued).takeLast(trailPointLimit)
     }

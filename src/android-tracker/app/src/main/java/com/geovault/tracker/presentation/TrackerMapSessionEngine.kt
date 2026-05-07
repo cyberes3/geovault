@@ -7,12 +7,16 @@ data class TrackerMapSessionBuildInput(
     val state: TrackerMapUiState,
     val plan: TrackerMapStreamingPlan,
     val localRuntimeOverlayTrails: Map<String, List<QueuedLocation>> = emptyMap(),
+    val recentDataWindowByTracker: Map<String, String?> = emptyMap(),
+    val nowMs: Long = System.currentTimeMillis(),
 )
 
 data class TrackerMapSessionPointInput(
     val snapshot: TrackerMapSessionSnapshot,
     val point: TrackPointEvent,
     val trailPointLimit: Int,
+    val recentDataWindowByTracker: Map<String, String?> = emptyMap(),
+    val nowMs: Long = System.currentTimeMillis(),
 )
 
 data class TrackerMapSessionPointResult(
@@ -34,7 +38,13 @@ object TrackerMapSessionEngine {
         // service start lag, reconciliation). Marker heads from acceptedRemoteLastPoints are still
         // gated by plan.acceptedRemoteTrackerIds via the filter above.
         val tracks = (normalizedTrails.keys + acceptedRemoteLastPoints.keys).associateWith { trackerId ->
-            val split = splitTrail(normalizedTrails[trackerId].orEmpty())
+            val rawTrail = normalizedTrails[trackerId].orEmpty()
+            val filteredTrail = TrackerMapRecentDataWindowFilterPolicy.apply(
+                points = rawTrail,
+                windowKey = input.recentDataWindowByTracker[trackerId],
+                nowMs = input.nowMs,
+            )
+            val split = splitTrail(filteredTrail)
             TrackerTrackModel(
                 trackerId = trackerId,
                 historicalTrail = split.historicalTrail,
@@ -42,7 +52,18 @@ object TrackerMapSessionEngine {
                 remoteHead = acceptedRemoteLastPoints[trackerId],
             )
         }
-        val singleSplit = splitTrail(state.trail)
+        // Single-trail renders the displayed tracker (mirrors `activeTrackerId =
+        // sessionPlan.displayedTrackerId` in the view model). The plan does not carry a separate
+        // activeTrackerId field; displayedTrackerId is the canonical anchor when single-mode.
+        val singleTrailWindowKey = plan.displayedTrackerId.trim()
+            .takeIf { it.isNotEmpty() }
+            ?.let { input.recentDataWindowByTracker[it] }
+        val filteredSingleTrail = TrackerMapRecentDataWindowFilterPolicy.apply(
+            points = state.trail,
+            windowKey = singleTrailWindowKey,
+            nowMs = input.nowMs,
+        )
+        val singleSplit = splitTrail(filteredSingleTrail)
         return TrackerMapSessionSnapshot(
             uiState = state,
             plan = plan,
@@ -76,6 +97,8 @@ object TrackerMapSessionEngine {
                     acceptedRemoteTrackerIds = input.snapshot.plan.acceptedRemoteTrackerIds,
                 ),
                 localRuntimeOverlayTrails = input.snapshot.renderTrailsByTracker + reduction.nextState.allQueueTrailsByTracker,
+                recentDataWindowByTracker = input.recentDataWindowByTracker,
+                nowMs = input.nowMs,
             )
         )
         return TrackerMapSessionPointResult(

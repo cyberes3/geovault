@@ -11,6 +11,7 @@ import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.SelectedTrackerManager
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.di.TrackerAppServices
@@ -89,6 +90,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var startupTrackingAutomationJob: Job? = null
     private var startupRefreshHandled = false
     private var startupRefreshJob: Job? = null
+    private var startupSelectedTrackerGeometryHandled = false
+    private var startupSelectedTrackerGeometryJob: Job? = null
     private var serverAccessibilityRefreshJob: Job? = null
     private var preparingStartJob: Job? = null
 
@@ -235,8 +238,38 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private fun launchPostAuthStartupFlowsIfNeeded() {
         if (!_state.value.isAuthenticated) return
         launchStartupRefreshIfNeeded()
+        launchStartupSelectedTrackerGeometryPreloadIfNeeded()
         launchStartupTrackingAutomationIfNeeded()
         launchVersionCheckIfNeeded()
+    }
+
+    /**
+     * Pre-fetch the persisted selected tracker's full geometry as part of post-auth
+     * launch I/O so the trackers cache (`TrackerManagementStateStore`) already holds
+     * server-authoritative geometry by the time the user opens the map. Without this
+     * the geometry fetch is gated on the map surface becoming visible, which produces
+     * a visible loading spinner / 0,0 flash even when launch I/O finished long ago.
+     *
+     * Runs in parallel with the rest of the bootstrap fetches; the repository's
+     * single-flight gate (`tracker-geometry:<id>`) coalesces against any later fetch
+     * triggered by `TrackerMapViewModel`. A failed fetch is logged but does not
+     * affect bootstrap success — a subsequent `ExplicitTrackerLoad` reload will retry.
+     */
+    private fun launchStartupSelectedTrackerGeometryPreloadIfNeeded() {
+        if (startupSelectedTrackerGeometryHandled || startupSelectedTrackerGeometryJob?.isActive == true) return
+        startupSelectedTrackerGeometryJob = viewModelScope.launch {
+            startupSelectedTrackerGeometryHandled = true
+            val selectedId = SelectedTrackerPrefs.selectedTrackerId(app).trim()
+            if (selectedId.isEmpty()) return@launch
+            when (val result = trackerManagementRepository.loadTrackerGeometry(selectedId)) {
+                is RepositoryResult.Success -> Unit
+                is RepositoryResult.Failure ->
+                    Log.w(
+                        "MainScreenViewModel",
+                        "Selected tracker geometry preload failed trackerId=$selectedId error=${result.error}"
+                    )
+            }
+        }
     }
 
     private fun launchStartupTrackingAutomationIfNeeded() {
@@ -381,11 +414,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         sessionBootstrap.resetForSignedOutSession()
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
+        startupSelectedTrackerGeometryHandled = false
         versionCheckSession.reset()
         startupTrackingAutomationJob?.cancel()
         startupTrackingAutomationJob = null
         startupRefreshJob?.cancel()
         startupRefreshJob = null
+        startupSelectedTrackerGeometryJob?.cancel()
+        startupSelectedTrackerGeometryJob = null
         serverAccessibilityRefreshJob?.cancel()
         serverAccessibilityRefreshJob = null
         preparingStartJob?.cancel()
