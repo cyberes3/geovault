@@ -1865,9 +1865,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         if (preloadedTrail != null) {
             _uiState.update { latest ->
-                if (latest.trail.isEmpty()) {
+                val restored = TrackerMapLocalTrailRestorePolicy.restore(
+                    localHistoryTrail = preloadedTrail,
+                    currentTrail = latest.trail,
+                    trackerId = activeTrackerId,
+                    trailPointLimit = TRAIL_POINT_LIMIT,
+                )
+                if (restored.changed) {
                     latest.copy(
-                        trail = preloadedTrail,
+                        trail = restored.trail,
                         allQueueTrailsByTracker = emptyMap(),
                     )
                 } else {
@@ -2162,14 +2168,21 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
      * from the persisted selection so downstream camera/render logic has a target.
      */
     private suspend fun seedInitialTrailFromLocalQueue() {
-        if (_uiState.value.trail.isNotEmpty()) return
         val context = getApplication<Application>()
         val selectedId = SelectedTrackerPrefs.selectedTrackerId(context).trim()
         if (selectedId.isEmpty()) return
         val queueTrail = loadQueueTrail(selectedId)
         if (queueTrail.isEmpty()) return
         _uiState.update { latest ->
-            if (latest.trail.isNotEmpty()) return@update latest
+            val displayedNow = latest.displayedTrackerId.trim()
+            if (displayedNow.isNotEmpty() && displayedNow != selectedId) return@update latest
+            val restored = TrackerMapLocalTrailRestorePolicy.restore(
+                localHistoryTrail = queueTrail,
+                currentTrail = latest.trail,
+                trackerId = selectedId,
+                trailPointLimit = TRAIL_POINT_LIMIT,
+            )
+            if (!restored.changed) return@update latest
             val displayedId = if (latest.displayedTrackerId.isBlank()) {
                 selectedId
             } else {
@@ -2181,7 +2194,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 latest.displayedTrackerName
             }
             latest.copy(
-                trail = queueTrail,
+                trail = restored.trail,
                 displayedTrackerId = displayedId,
                 displayedTrackerName = displayedName,
             )
@@ -2228,9 +2241,23 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 cachedGeometry,
                 pointParams = cachedTracker?.point_params,
             )
-            if (trail.isNotEmpty()) return trail
+            if (trail.isNotEmpty()) {
+                return TrackerMapLocalTrailRestorePolicy.restore(
+                    localHistoryTrail = trail,
+                    currentTrail = _uiState.value.trail,
+                    trackerId = trackerId,
+                    trailPointLimit = TRAIL_POINT_LIMIT,
+                ).trail
+            }
         }
-        return loadQueueTrail(trackerId).takeIf { it.isNotEmpty() }
+        val queueTrail = loadQueueTrail(trackerId)
+        if (queueTrail.isEmpty()) return null
+        return TrackerMapLocalTrailRestorePolicy.restore(
+            localHistoryTrail = queueTrail,
+            currentTrail = _uiState.value.trail,
+            trackerId = trackerId,
+            trailPointLimit = TRAIL_POINT_LIMIT,
+        ).trail
     }
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {

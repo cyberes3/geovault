@@ -227,6 +227,45 @@ class TrackerMapSessionEngineTest {
         assertEquals(listOf(30L), snapshot.singleTrail.map { it.time })
     }
 
+    @Test
+    fun build_singleTrailWithRestoredLocalTrail_keepsPreviousAndCurrentSessions() {
+        val older = 1_000L
+        val previous = 2_000L
+        val current = 3_000L
+        val restoredTrail = listOf(
+            queued("active", id = 1L, time = 10L, prov = "local_gps", startTimestampMs = older),
+            queued("active", id = 2L, time = 20L, prov = "local_gps", startTimestampMs = older),
+            queued("active", id = 3L, time = 30L, prov = "local_gps", startTimestampMs = previous),
+            queued("active", id = 4L, time = 40L, prov = "local_gps", startTimestampMs = previous),
+            queued("active", id = 0L, time = 50L, prov = "local_gps_runtime", startTimestampMs = current),
+        )
+
+        val snapshot = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                    displayedTrackerId = "active",
+                    runtime = TrackingRuntimeSnapshot(
+                        isRunning = true,
+                        recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "active"),
+                        selectedTrackerId = "active",
+                        sessionStartTimeMs = current,
+                    ),
+                    trail = restoredTrail,
+                ),
+                plan = plan(
+                    mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                    displayedTrackerId = "active",
+                ),
+                recentDataWindowByTracker = mapOf("active" to "session"),
+                currentSessionStartByTracker = mapOf("active" to current),
+                nowMs = 1_000_000L,
+            )
+        )
+
+        assertEquals(listOf(30L, 40L, 50L), snapshot.singleTrail.map { it.time })
+    }
+
     private fun plan(
         mode: TrackerMapDisplayMode = TrackerMapDisplayMode.ALL_QUEUE,
         displayedTrackerId: String = "",

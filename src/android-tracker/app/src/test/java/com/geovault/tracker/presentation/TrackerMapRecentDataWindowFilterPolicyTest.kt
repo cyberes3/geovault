@@ -208,6 +208,25 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
     }
 
     @Test
+    fun session_afterLocalRestore_keepsPreviousNonEmptyAndCurrentSession() {
+        val older = 1_000L
+        val previous = 2_000L
+        val current = 3_000L
+        val points = listOf(
+            point(time = 10L, startTimestampMs = older),
+            point(time = 20L, startTimestampMs = older),
+            point(time = 30L, startTimestampMs = previous),
+            point(time = 40L, startTimestampMs = previous),
+            point(time = 50L, startTimestampMs = current),
+        )
+
+        val filtered = apply(points, key = "session", currentSessionStartMs = current)
+
+        assertEquals(listOf(30L, 40L, 50L), filtered.map { it.time })
+        assertTrue(filtered.none { it.startTimestampMs == older })
+    }
+
+    @Test
     fun currentSession_keepsLatestPointWhenFilterWouldEmpty() {
         // The fallback is exercised when filtering nukes every point. Use authoritative
         // override that no point in the trail belongs to.

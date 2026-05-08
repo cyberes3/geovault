@@ -31,7 +31,6 @@ from .helpers import (
     normalize_track_settings_for_api,
     _filter_coords_by_recent_window,
     _strip_ser_from_params,
-    _timestamp_to_ms,
     accepted_group_track_ids_for_user,
     can_user_see_track,
     can_user_see_track_via_accepted_group_share,
@@ -42,9 +41,6 @@ from .helpers import (
     track_to_response,
     track_to_response_metadata_only,
 )
-
-SESSION_KEYED_WINDOW_KEYS = frozenset({"session", "current_session"})
-
 from .models import (
     LiveTrack,
     LiveTrackGroup,
@@ -227,221 +223,6 @@ def _fit_tail_count_to_max_bytes(
         else:
             hi = mid - 1
     return best
-
-def _segment_indices_by_starttimestamp(coords: list, point_params: list) -> list[list[int]]:
-    """Group coord indices into ordered session segments using `point_params[i].starttimestamp`.
-
-    Points whose `starttimestamp` is null/missing are attributed to the segment whose
-    `starttimestamp` is the largest boundary <= the point's coord timestamp. If no such
-    boundary exists, they join the earliest segment. Mirrors the client-side
-    `TrackerSessionAttributionPolicy` so server and client agree on segmentation.
-    """
-    n = len(coords)
-    if n == 0 or len(point_params) != n:
-        return [list(range(n))] if n else []
-
-    boundaries: list[int] = []
-    for params in point_params:
-        if not isinstance(params, dict):
-            continue
-        ts = _timestamp_to_ms(params.get("starttimestamp"))
-        if ts is None:
-            continue
-        boundaries.append(ts)
-    boundaries = sorted(set(boundaries))
-
-    if not boundaries:
-        return [list(range(n))]
-
-    buckets: dict[int, list[int]] = {b: [] for b in boundaries}
-    for i in range(n):
-        params = point_params[i]
-        explicit = (
-            _timestamp_to_ms(params.get("starttimestamp"))
-            if isinstance(params, dict)
-            else None
-        )
-        if explicit is not None and explicit in buckets:
-            buckets[explicit].append(i)
-            continue
-        coord = coords[i]
-        coord_ts = _timestamp_to_ms(coord[2]) if len(coord) >= 3 else None
-        target = boundaries[0]
-        if coord_ts is not None:
-            for b in boundaries:
-                if b <= coord_ts:
-                    target = b
-                else:
-                    break
-        buckets[target].append(i)
-
-    return [buckets[b] for b in boundaries if buckets[b]]
-
-
-def _uniform_stride_keep(indices: list[int], target_count: int) -> list[int]:
-    """Sample `target_count` items from `indices` via uniform stride, always keeping the
-    first and last entries. Returns indices sorted in their original order. When
-    `target_count >= len(indices)` returns the input unchanged. Floors at 1.
-    """
-    n = len(indices)
-    if n <= 0 or target_count >= n:
-        return list(indices)
-    if target_count <= 1:
-        return [indices[-1]]
-    if target_count == 2:
-        return [indices[0], indices[-1]]
-    step = (n - 1) / (target_count - 1)
-    chosen: list[int] = []
-    seen: set[int] = set()
-    for k in range(target_count):
-        pos = int(round(k * step))
-        if pos >= n:
-            pos = n - 1
-        idx = indices[pos]
-        if idx not in seen:
-            chosen.append(idx)
-            seen.add(idx)
-    if indices[-1] not in seen:
-        chosen.append(indices[-1])
-    chosen.sort()
-    return chosen
-
-
-def _payload_size_for_indices(
-    base_payload: dict,
-    coords: list,
-    point_params: list,
-    indices: list[int],
-    params_align_with_coords: bool,
-) -> int:
-    """Exact JSON byte size of the response payload restricted to `indices` (sorted)."""
-    selected_coords = [coords[i] for i in indices] if indices else []
-    if params_align_with_coords:
-        selected_params = [point_params[i] for i in indices] if indices else []
-    else:
-        selected_params = point_params
-    payload = dict(base_payload)
-    payload["geometry"] = {"type": "LineString", "coordinates": selected_coords}
-    payload["point_params"] = selected_params
-    payload["bbox"] = _bbox_from_normalized_coords(selected_coords)
-    return _json_size_bytes(payload)
-
-
-def _fit_session_aware_indices(
-    base_payload: dict,
-    coords: list,
-    point_params: list,
-    max_bytes: int,
-    params_align_with_coords: bool,
-) -> list[int]:
-    """Pick a sorted index list that fits within `max_bytes` while preserving every
-    session segment's boundary points. Decimates segments uniformly, proportionally to
-    their length. Falls back to tail-trim only if even per-segment boundaries do not fit.
-    """
-    n = len(coords)
-    if n == 0 or max_bytes <= 0:
-        return list(range(n))
-
-    if not params_align_with_coords:
-        take = _fit_tail_count_to_max_bytes(
-            base_payload, coords, point_params, max_bytes, params_align_with_coords
-        )
-        return list(range(n - take, n))
-
-    segments = _segment_indices_by_starttimestamp(coords, point_params)
-    if len(segments) <= 1:
-        take = _fit_tail_count_to_max_bytes(
-            base_payload, coords, point_params, max_bytes, params_align_with_coords
-        )
-        return list(range(n - take, n))
-
-    full_indices = sorted(i for seg in segments for i in seg)
-    if (
-        _payload_size_for_indices(
-            base_payload, coords, point_params, full_indices, params_align_with_coords
-        )
-        <= max_bytes
-    ):
-        return full_indices
-
-    seg_lens = [len(s) for s in segments]
-    floors = [min(2, length) for length in seg_lens]
-    floor_sum = sum(floors)
-
-    def _select_for_target(target: int) -> list[int]:
-        target = max(floor_sum, min(n, target))
-        extras_pool = n - floor_sum
-        remaining = target - floor_sum
-        allocations: list[int] = []
-        for length, floor in zip(seg_lens, floors):
-            extra_avail = length - floor
-            if extras_pool == 0 or remaining <= 0:
-                allocations.append(floor)
-                continue
-            extra = int(round(remaining * extra_avail / extras_pool))
-            extra = max(0, min(extra_avail, extra))
-            allocations.append(floor + extra)
-        selected: list[int] = []
-        for seg, alloc in zip(segments, allocations):
-            selected.extend(_uniform_stride_keep(seg, alloc))
-        selected.sort()
-        return selected
-
-    lo = floor_sum
-    hi = n
-    best: list[int] = []
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        candidate = _select_for_target(mid)
-        size = _payload_size_for_indices(
-            base_payload, coords, point_params, candidate, params_align_with_coords
-        )
-        if size <= max_bytes:
-            best = candidate
-            lo = mid + 1
-        else:
-            hi = mid - 1
-
-    if best:
-        return best
-
-    take = _fit_tail_count_to_max_bytes(
-        base_payload, coords, point_params, max_bytes, params_align_with_coords
-    )
-    return list(range(n - take, n))
-
-
-def _shrink_largest_segment_until_fits(
-    response_payload: dict,
-    normalized_coords: list,
-    normalized_params: list,
-    max_bytes: int,
-    params_align_with_coords: bool,
-) -> None:
-    """In-place exact-byte guard for session-keyed filters. Drops one point at a time
-    from the LARGEST current session segment, never letting any segment fall below 2
-    points (first + last). If every segment is already at its 2-point floor and we
-    still exceed the budget, falls back to head-drop as last resort.
-    """
-    while normalized_coords and _json_size_bytes(response_payload) > max_bytes:
-        segments = _segment_indices_by_starttimestamp(normalized_coords, normalized_params)
-        candidates = [
-            (len(seg), seg) for seg in segments if len(seg) > 2
-        ]
-        if candidates:
-            candidates.sort(key=lambda pair: pair[0], reverse=True)
-            seg = candidates[0][1]
-            mid = seg[len(seg) // 2]
-            del normalized_coords[mid]
-            if params_align_with_coords and normalized_params:
-                del normalized_params[mid]
-        else:
-            normalized_coords.pop(0)
-            if params_align_with_coords and normalized_params:
-                normalized_params.pop(0)
-        response_payload["geometry"]["coordinates"] = normalized_coords
-        response_payload["point_params"] = normalized_params
-        response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
 
 
 def _normalize_coords_for_response(coords: list) -> list:
@@ -880,32 +661,18 @@ def tracker_get_geometry(request, tracker_id):
             1048576,
         )
         params_align_with_coords = len(point_params) == len(coords)
-        session_aware = (
-            window_key in SESSION_KEYED_WINDOW_KEYS and params_align_with_coords
+        take_last = _fit_tail_count_to_max_bytes(
+            response_payload,
+            coords,
+            point_params,
+            max_bytes,
+            params_align_with_coords,
         )
-        if session_aware:
-            kept_indices = _fit_session_aware_indices(
-                response_payload,
-                coords,
-                point_params,
-                max_bytes,
-                params_align_with_coords,
-            )
-            selected_coords = [coords[i] for i in kept_indices]
-            selected_params = [point_params[i] for i in kept_indices]
+        selected_coords = coords[-take_last:] if take_last > 0 else []
+        if params_align_with_coords:
+            selected_params = point_params[-take_last:] if take_last > 0 else []
         else:
-            take_last = _fit_tail_count_to_max_bytes(
-                response_payload,
-                coords,
-                point_params,
-                max_bytes,
-                params_align_with_coords,
-            )
-            selected_coords = coords[-take_last:] if take_last > 0 else []
-            if params_align_with_coords:
-                selected_params = point_params[-take_last:] if take_last > 0 else []
-            else:
-                selected_params = point_params
+            selected_params = point_params
 
         normalized_coords = _normalize_coords_for_response(selected_coords)
         normalized_params = _normalize_point_params_for_response(selected_params)
@@ -913,28 +680,17 @@ def tracker_get_geometry(request, tracker_id):
         response_payload["point_params"] = normalized_params
         response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
 
-        # Final exact guard against edge cases in estimation. For session-keyed windows
-        # we drop interior points of the LARGEST segment first so neither session loses
-        # its boundary anchors; otherwise we head-drop the oldest point.
-        if session_aware:
-            _shrink_largest_segment_until_fits(
-                response_payload,
-                normalized_coords,
-                normalized_params,
-                max_bytes,
-                params_align_with_coords,
-            )
-        else:
-            while (
-                normalized_coords
-                and _json_size_bytes(response_payload) > max_bytes
-            ):
-                normalized_coords.pop(0)
-                if params_align_with_coords and normalized_params:
-                    normalized_params.pop(0)
-                response_payload["geometry"]["coordinates"] = normalized_coords
-                response_payload["point_params"] = normalized_params
-                response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
+        # Final exact guard against edge cases in estimation.
+        while (
+            normalized_coords
+            and _json_size_bytes(response_payload) > max_bytes
+        ):
+            normalized_coords.pop(0)
+            if params_align_with_coords and normalized_params:
+                normalized_params.pop(0)
+            response_payload["geometry"]["coordinates"] = normalized_coords
+            response_payload["point_params"] = normalized_params
+            response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
 
     return JsonResponse(
         response_payload,

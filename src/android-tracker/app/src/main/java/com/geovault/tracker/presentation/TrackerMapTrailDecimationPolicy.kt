@@ -15,10 +15,8 @@ import kotlin.math.roundToInt
  * session disappears entirely.
  *
  * This policy decimates each session segment uniformly (always keeping the first and
- * last point of every segment) so the cap never erases a full session. The algorithm
- * mirrors the backend `_fit_session_aware_indices` in
- * `src/backend/extensions/live_track/src/backend/tracker_views.py` so the client and
- * server agree on which points to keep.
+ * last point of every segment) so the client-side map cap never erases a full
+ * locally-restored session.
  */
 object TrackerMapTrailDecimationPolicy {
 

@@ -12,7 +12,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
-from extensions.live_track.src.backend import ingress_views
+from extensions.live_track.src.backend import ingress_views, tracker_views
 from extensions.live_track.src.backend.models import (
     LiveTrack,
     LiveTrackGroup,
@@ -2653,7 +2653,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader") as mock_cfg:
+            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
                 mock_cfg.return_value.get_int.return_value = 1200
                 response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
         self.assertEqual(response.status_code, 200)
@@ -2683,7 +2683,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader") as mock_cfg:
+            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
                 mock_cfg.return_value.get_int.return_value = 1200
                 response = self.client.get(
                     f"/api/extensions/live-track/trackers/{track_id}/geometry/",
@@ -2714,7 +2714,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader") as mock_cfg:
+            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
                 mock_cfg.return_value.get_int.return_value = 1048576
                 started = time.perf_counter()
                 response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
@@ -3509,7 +3509,7 @@ class TestLiveTrackAPI(TestCase):
         mock_loader = MagicMock()
         mock_loader.get_str.side_effect = lambda key, default="": default
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader", return_value=mock_loader):
+            with patch.object(tracker_views, "get_config_loader", return_value=mock_loader):
                 response = self.client.get("/api/extensions/live-track/hauk-config/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -3523,7 +3523,7 @@ class TestLiveTrackAPI(TestCase):
             lambda key, default="": "hauk.example.com" if key == "extensions.live_track.hauk_domain" else default
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.tracker_views.get_config_loader", return_value=mock_loader):
+            with patch.object(tracker_views, "get_config_loader", return_value=mock_loader):
                 response = self.client.get("/api/extensions/live-track/hauk-config/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["hauk_domain"], "hauk.example.com")

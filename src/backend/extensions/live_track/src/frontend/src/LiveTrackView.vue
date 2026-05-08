@@ -556,6 +556,12 @@ import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMap
 import { useTileSources } from './useTileSources.js';
 import { formatTimestampLocal } from './paramFormatters.js';
 import {
+  isRollingRecentDataWindow,
+  pruneCoordinatesForRecentDataWindow,
+  shouldClearGeometryForSessionTransition,
+  shouldReloadGeometryForSessionTransition,
+} from './recentDataWindowGeometryPolicy.js';
+import {
   buildGroupUnhidePayload,
   buildHiddenItemsClearPayload,
   buildTrackerUnhidePayload,
@@ -2557,7 +2563,9 @@ export default {
         let geom = track.geometry ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] } : { type: 'LineString', coordinates: [] };
         if (!geom.coordinates) geom.coordinates = [];
         let latestPointParams = {};
+        const windowKey = getRecentDataWindow(track);
         const isSessionWindow = isSessionWindowTrack(track);
+        let reloadAfterApply = false;
         let activeSessionStartMs = getKnownSessionStartMsForTrack(track);
         let appliedUpdateCount = 0;
         for (const u of updates) {
@@ -2568,7 +2576,10 @@ export default {
             if (activeSessionStartMs != null && incomingSessionStartMs < activeSessionStartMs) {
               continue;
             }
-            if (activeSessionStartMs != null && incomingSessionStartMs > activeSessionStartMs) {
+            if (shouldReloadGeometryForSessionTransition(windowKey, activeSessionStartMs, incomingSessionStartMs)) {
+              reloadAfterApply = true;
+            }
+            if (shouldClearGeometryForSessionTransition(windowKey, activeSessionStartMs, incomingSessionStartMs)) {
               geom.coordinates = [];
             }
             activeSessionStartMs = incomingSessionStartMs;
@@ -2605,6 +2616,9 @@ export default {
           if (u.props && typeof u.props === 'object') latestPointParams = u.props;
         }
         if (appliedUpdateCount === 0) return;
+        if (isRollingRecentDataWindow(windowKey)) {
+          geom.coordinates = pruneCoordinatesForRecentDataWindow(geom.coordinates, windowKey);
+        }
         if (isSessionWindow && activeSessionStartMs != null) {
           latestSessionStartMsByTrackId.set(String(track.id), activeSessionStartMs);
         } else {
@@ -2627,6 +2641,9 @@ export default {
         updateMapFeatures();
         if (data.track_id === selectedId.value && followLocked.value && map) {
           scheduleCenterOnSelectedTrack();
+        }
+        if (reloadAfterApply) {
+          fetchAndMergeTracker(data.track_id);
         }
       };
       trackersLiveSocket.onReconnect = () => {
