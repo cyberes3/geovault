@@ -110,12 +110,7 @@ class LiveTrackStreamingService : Service() {
             }
 
             ACTION_STOP -> {
-                MapStreamingServiceHelper.clearPersistedStreamingTargets(this)
-                disconnectWebSocket()
-                connectionSessionId.incrementAndGet()
-                applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                stopStreamingSession()
                 return START_NOT_STICKY
             }
 
@@ -196,7 +191,17 @@ class LiveTrackStreamingService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        stopStreamingSession()
         super.onTaskRemoved(rootIntent)
+    }
+
+    private fun stopStreamingSession() {
+        MapStreamingServiceHelper.clearPersistedStreamingTargets(this)
+        disconnectWebSocket()
+        connectionSessionId.incrementAndGet()
+        applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
