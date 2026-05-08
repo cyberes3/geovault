@@ -2167,11 +2167,21 @@ class TrackingService : Service() {
     }
 
     private fun resolveObservedSpeedMps(location: Location, referenceLocation: Location?): Float? {
-        if (location.hasSpeed()) return location.speed.coerceAtLeast(0f)
-        val previous = referenceLocation ?: return null
-        val elapsedSec = (location.time - previous.time) / 1000f
-        if (elapsedSec <= 0f) return null
-        return (previous.distanceTo(location) / elapsedSec).coerceAtLeast(0f)
+        val reported = if (location.hasSpeed()) location.speed.coerceAtLeast(0f) else null
+        val implied = referenceLocation?.let { previous ->
+            val elapsedSec = (location.time - previous.time) / 1000f
+            if (elapsedSec <= 0f) {
+                null
+            } else {
+                (previous.distanceTo(location) / elapsedSec).coerceAtLeast(0f)
+            }
+        }
+        return when {
+            reported == null && implied == null -> null
+            reported == null -> implied
+            implied == null -> reported
+            else -> maxOf(reported, implied)
+        }
     }
 
     private fun selectPreferredFastGpsSample(

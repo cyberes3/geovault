@@ -6,12 +6,21 @@ import com.geovault.tracker.services.TrackingRuntimeSnapshot
 
 data class TrackerTrackModel(
     val trackerId: String,
-    val historicalTrail: List<QueuedLocation> = emptyList(),
-    val liveTrail: List<QueuedLocation> = emptyList(),
+    /**
+     * Time-sorted render trail. This is the canonical, chronologically-ordered list of points
+     * for both line rendering and marker placement. Do NOT reorder by provenance — the marker
+     * reads `renderTrail.lastOrNull()` and lines connect points in this order.
+     */
+    val renderTrail: List<QueuedLocation> = emptyList(),
     val remoteHead: TrackPointEvent? = null,
 ) {
-    val renderTrail: List<QueuedLocation>
-        get() = historicalTrail + liveTrail
+    /** Derived view: non-live-overlay points (server geometry, persisted DB fixes, etc.). */
+    val historicalTrail: List<QueuedLocation>
+        get() = renderTrail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay)
+
+    /** Derived view: in-memory live overlay points (bus-reduced local GPS / remote stream). */
+    val liveTrail: List<QueuedLocation>
+        get() = renderTrail.filter(TrackerMapPointProvenancePolicy::isLiveOverlay)
 }
 
 data class TrackerMapSessionSnapshot(

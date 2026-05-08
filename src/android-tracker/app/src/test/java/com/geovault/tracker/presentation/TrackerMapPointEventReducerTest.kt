@@ -398,6 +398,61 @@ class TrackerMapPointEventReducerTest {
         assertEquals(1_700_000_000_000L, result.nextState.trail.first().startTimestampMs)
     }
 
+    @Test
+    fun localGps_newSessionFirstFix_isNotRejectedAsDuplicateWhenTimeMatchesPriorSessionTail() {
+        // SESSION-AWARE DUPLICATE GUARD: a new session's first fix can collide on `time`
+        // (and even lat/lon, if the device hasn't moved) with the previous session's tail.
+        // The original time-only duplicate guard silently dropped that point and the new
+        // session never received a head, leaving the chevron pinned to the prior session.
+        val priorSession = 1_000L
+        val newSession = 2_000L
+        val priorTail = QueuedLocation(
+            id = 0L,
+            trackerId = "tracker-1",
+            time = 5_000L,
+            latitude = 20.0,
+            longitude = 10.0,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+            startTimestampMs = priorSession,
+        )
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                sessionStartTimeMs = newSession,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(priorTail),
+        )
+
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "tracker-1",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 5_000L,
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+
+        assertTrue(result.shouldUpdateUiState)
+        assertEquals(2, result.nextState.trail.size)
+        assertEquals(priorSession, result.nextState.trail.first().startTimestampMs)
+        assertEquals(newSession, result.nextState.trail.last().startTimestampMs)
+    }
+
     private fun sessionPlanFor(state: TrackerMapUiState): TrackerMapStreamingPlan {
         val visibleIds = buildSet {
             state.runtime.selectedTrackerId.trim().takeIf { it.isNotEmpty() }?.let(::add)

@@ -23,9 +23,9 @@ import kotlin.math.sqrt
  *    yields a 390 m allowance, which is exactly the over-permissive band
  *    that produces rubber-banding at slow walking speed.
  *  - The kinematic cap is driven by GPS-reported speed (either `prevSpeed`
- *    or `currSpeed`), not by accuracy. A standstill fix with reported
- *    speed ~ 0 contributes ~ 0 m to the cap regardless of how noisy the
- *    accuracy reading is.
+ *    or `currSpeed`) when present. Some mock / fused providers omit speed;
+ *    for high-confidence fixes only, implied speed is allowed to stand in.
+ *    A noisy standstill fix with poor accuracy still contributes ~0 m.
  *  - The rolling cap is the rolling step distance averaged over the
  *    configured window, scaled by 3.
  *
@@ -122,7 +122,13 @@ class LocationMetricsEngine(
         val effectivePreviousSpeed = if (previousReportedSpeed.isNaN()) 0.0 else previousReportedSpeed
 
         val accCap = max(previousAccuracy, accuracy) * 3.0
-        val kinCap = if (dtSeconds > 0.0) max(effectivePreviousSpeed, effectiveCurrentSpeed) * 2.0 * dtSeconds else 0.0
+        val speedForKinematicCap = resolveSpeedForKinematicCap(
+            reportedSpeedMps = max(effectivePreviousSpeed, effectiveCurrentSpeed),
+            impliedSpeedMps = impliedSpeed,
+            maxAccuracyMeters = max(previousAccuracy, accuracy),
+            dtSeconds = dtSeconds,
+        )
+        val kinCap = if (dtSeconds > 0.0) speedForKinematicCap * 2.0 * dtSeconds else 0.0
 
         val rollingAvgStep = computeRollingAverageStepMeters()
         val rollingCap = rollingAvgStep * 3.0
@@ -281,6 +287,19 @@ class LocationMetricsEngine(
         return sum
     }
 
+    private fun resolveSpeedForKinematicCap(
+        reportedSpeedMps: Double,
+        impliedSpeedMps: Double,
+        maxAccuracyMeters: Double,
+        dtSeconds: Double,
+    ): Double {
+        val safeReported = reportedSpeedMps.coerceAtLeast(0.0)
+        val canTrustImplied = dtSeconds >= IMPLIED_SPEED_FALLBACK_MIN_DT_SECONDS &&
+            impliedSpeedMps >= IMPLIED_SPEED_FALLBACK_MIN_SPEED_MPS &&
+            maxAccuracyMeters <= IMPLIED_SPEED_FALLBACK_MAX_ACCURACY_METERS
+        return if (canTrustImplied) max(safeReported, impliedSpeedMps) else safeReported
+    }
+
     private fun computeHeadingChange(current: LocationInput, dtSeconds: Double): Pair<Double, Double> {
         val currentBearing = current.bearingDegrees?.toDouble()
         if (currentBearing == null || lastBearingDegrees.isNaN()) {
@@ -425,6 +444,9 @@ class LocationMetricsEngine(
         private const val MIN_CAP_FLOOR_METERS = 5.0
         private const val DEFAULT_ROLLING_FALLBACK_METERS = 6.0
         private const val DEFAULT_ACCURACY_FALLBACK_METERS = 65.0
+        private const val IMPLIED_SPEED_FALLBACK_MAX_ACCURACY_METERS = 15.0
+        private const val IMPLIED_SPEED_FALLBACK_MIN_DT_SECONDS = 1.0
+        private const val IMPLIED_SPEED_FALLBACK_MIN_SPEED_MPS = 1.5
         private const val STATIONARY_THRESHOLD = 0.55
         private const val OSCILLATION_HEADING_RATE_DEG_PER_SEC = 60.0
         private const val OSCILLATION_JERK_THRESHOLD = 3.0

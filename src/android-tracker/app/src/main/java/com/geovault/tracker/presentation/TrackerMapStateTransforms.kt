@@ -280,7 +280,7 @@ object TrackerMapStateTransforms {
         } else {
             buildSegmentedLines(
                 lineIdPrefix = "tracker-trail",
-                points = effectiveTrail.map { it.latitude to it.longitude },
+                points = effectiveTrail,
                 lineColorHex = singleTrackerLineColorHex,
             )
         }
@@ -296,25 +296,62 @@ object TrackerMapStateTransforms {
                 val color = normalizeColor(trackerColorById[trackerId]) ?: GeoVaultColorTokens.Hex.Gray500
                 buildSegmentedLines(
                     lineIdPrefix = "all-track-$trackerId",
-                    points = queuedLocations.map { it.latitude to it.longitude },
+                    points = queuedLocations,
                     lineColorHex = color,
                 )
             }
     }
 
+    /**
+     * SESSION-AWARE LINE SPLIT: split a tracker's points by recording session
+     * (`startTimestampMs`) before applying the existing geographic-distance split. Two
+     * adjacent points with different non-null `startTimestampMs` values must never share
+     * a line segment — local-queue points from a previous, never-uploaded session can
+     * otherwise stitch onto the active session's trail and produce a "spike" that only
+     * disappears after a queue-clearing app restart.
+     */
     private fun buildSegmentedLines(
         lineIdPrefix: String,
-        points: List<Pair<Double, Double>>,
+        points: List<QueuedLocation>,
         lineColorHex: String,
     ): List<MapRenderLine> {
-        val segments = geoVaultSplitTrackByDistance(points, MAX_TRACK_JUMP_METERS)
-        return segments.mapIndexed { index, segment ->
-            MapRenderLine(
-                id = "$lineIdPrefix-$index",
-                coordinates = segment,
-                lineColorHex = lineColorHex,
-            )
+        if (points.isEmpty()) return emptyList()
+        val sessionGroups = groupAdjacentBySession(points)
+        val lines = mutableListOf<MapRenderLine>()
+        sessionGroups.forEachIndexed { sessionIndex, group ->
+            val coords = group.map { it.latitude to it.longitude }
+            val distanceSegments = geoVaultSplitTrackByDistance(coords, MAX_TRACK_JUMP_METERS)
+            distanceSegments.forEachIndexed { distanceIndex, segment ->
+                lines += MapRenderLine(
+                    id = "$lineIdPrefix-$sessionIndex-$distanceIndex",
+                    coordinates = segment,
+                    lineColorHex = lineColorHex,
+                )
+            }
         }
+        return lines
+    }
+
+    private fun groupAdjacentBySession(points: List<QueuedLocation>): List<List<QueuedLocation>> {
+        if (points.isEmpty()) return emptyList()
+        val groups = mutableListOf<MutableList<QueuedLocation>>()
+        var currentKey: Long? = points.first().startTimestampMs
+        var currentGroup = mutableListOf<QueuedLocation>().apply { add(points.first()) }
+        for (i in 1 until points.size) {
+            val point = points[i]
+            // Adjacent null-start points group together as a single "legacy" session; any
+            // change between null and non-null, or between two different non-null values,
+            // starts a new group.
+            if (point.startTimestampMs == currentKey) {
+                currentGroup.add(point)
+            } else {
+                groups.add(currentGroup)
+                currentKey = point.startTimestampMs
+                currentGroup = mutableListOf(point)
+            }
+        }
+        groups.add(currentGroup)
+        return groups
     }
 
     private fun normalizeColor(raw: String?): String? {

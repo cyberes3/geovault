@@ -515,4 +515,96 @@ class TrackerMapStateTransformsTest {
         assertEquals("accuracy-t2", render.polygons.first().id)
     }
 
+    @Test
+    fun buildRenderState_singleSession_splitsAdjacentPointsByDifferentSessionStart() {
+        // SESSION-AWARE LINE SPLIT: two adjacent points at the same physical location but
+        // belonging to different recording sessions must produce two separate lines, not a
+        // single connector. The geographic-distance split (5-mile threshold) alone would
+        // happily merge them; only the session split prevents the cross-session "spike".
+        val sessionA = 1_000L
+        val sessionB = 2_000L
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    trackerId = "t1", time = 10L,
+                    latitude = 40.0, longitude = -74.0,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionA,
+                ),
+                QueuedLocation(
+                    trackerId = "t1", time = 20L,
+                    latitude = 40.0001, longitude = -74.0001,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionA,
+                ),
+                QueuedLocation(
+                    trackerId = "t1", time = 30L,
+                    latitude = 40.0002, longitude = -74.0002,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionB,
+                ),
+                QueuedLocation(
+                    trackerId = "t1", time = 40L,
+                    latitude = 40.0003, longitude = -74.0003,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionB,
+                ),
+            ),
+            runtime = TrackingRuntimeSnapshot(),
+            displayedTrackerId = "t1",
+        )
+
+        assertEquals(2, render.lines.size)
+        assertEquals(listOf(2, 2), render.lines.map { it.coordinates.size })
+        assertEquals("tracker-trail-0-0", render.lines[0].id)
+        assertEquals("tracker-trail-1-0", render.lines[1].id)
+    }
+
+    @Test
+    fun buildRenderState_singleSession_markerLastFixMatchesLatestSessionTail() {
+        // CHEVRON COHERENCE: the single-session marker reads `state.trail.lastOrNull()`. The
+        // latest session's last vertex must equal the marker position; in particular, after
+        // a session change we must not paint the marker on the previous session's tail.
+        val sessionA = 1_000L
+        val sessionB = 2_000L
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    trackerId = "t1", time = 10L,
+                    latitude = 40.0, longitude = -74.0,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionA,
+                ),
+                QueuedLocation(
+                    trackerId = "t1", time = 20L,
+                    latitude = 40.0001, longitude = -74.0001,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionA,
+                ),
+                QueuedLocation(
+                    trackerId = "t1", time = 30L,
+                    latitude = 41.0, longitude = -75.0,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionB,
+                ),
+                QueuedLocation(
+                    trackerId = "t1", time = 40L,
+                    latitude = 41.0001, longitude = -75.0001,
+                    altitude = null, speed = null, bearing = null, accuracy = null,
+                    startTimestampMs = sessionB,
+                ),
+            ),
+            runtime = TrackingRuntimeSnapshot(),
+            displayedTrackerId = "t1",
+        )
+
+        val marker = render.points.first { it.id == "last-fix" }
+        val latestSessionLine = render.lines.last()
+        val tailCoord = latestSessionLine.coordinates.last()
+        assertEquals(tailCoord.first, marker.latitude, 0.0)
+        assertEquals(tailCoord.second, marker.longitude, 0.0)
+    }
+
 }

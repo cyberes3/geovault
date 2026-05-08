@@ -2,7 +2,7 @@ package com.geovault.tracker.location
 
 import com.google.android.gms.location.Priority
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class TrackingLocationRequestPolicyTest {
@@ -24,13 +24,13 @@ class TrackingLocationRequestPolicyTest {
     }
 
     @Test
-    fun buildFastLockRequest_isHighAccuracyAndWaitsForAccurateLocation() {
+    fun buildFastLockRequest_isHighAccuracyAndDoesNotWaitForAccurateLocation() {
         val request = TrackingLocationRequestPolicy.buildFastLockRequest()
 
         assertEquals(Priority.PRIORITY_HIGH_ACCURACY, request.priority)
         assertEquals(0L, request.intervalMillis)
         assertEquals(0L, request.minUpdateIntervalMillis)
         assertEquals(0f, request.minUpdateDistanceMeters, 0.001f)
-        assertTrue(request.isWaitForAccurateLocation)
+        assertFalse(request.isWaitForAccurateLocation)
     }
 }

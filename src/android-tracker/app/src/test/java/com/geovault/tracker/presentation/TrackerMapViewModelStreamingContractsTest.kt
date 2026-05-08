@@ -101,6 +101,91 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
+    fun resolveLiveHeadCoord_prefersTrailTailFromActiveSession_overFresherRuntime() {
+        // CHEVRON-COHERENCE (Bug 1 root cause): the runtime store collector publishes a new
+        // `runtime.lastTracked*` BEFORE the bus-reducer appends the same fix to `state.trail`.
+        // If the camera reads runtime first, it leads the marker by one fix — the user sees
+        // the world move and the chevron stay put. When the trail tail belongs to the active
+        // recording session it is the authoritative live head and must win, even if the
+        // runtime carries a (briefly) newer timestamp.
+        val sessionStart = 1_000L
+        val tail = com.geovault.tracker.db.QueuedLocation(
+            id = 0L,
+            trackerId = "tracker-1",
+            time = 5_000L,
+            latitude = 40.5,
+            longitude = -74.5,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+            startTimestampMs = sessionStart,
+        )
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                lastTrackedLatitude = 41.0,
+                lastTrackedLongitude = -75.0,
+                lastTrackedTimestampMs = 6_000L,
+                sessionStartTimeMs = sessionStart,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(tail),
+        )
+
+        val coord = TrackerMapViewModel.resolveLiveHeadCoord(state)
+
+        assertEquals(40.5 to -74.5, coord)
+    }
+
+    @Test
+    fun resolveLiveHeadCoord_usesRuntimeWhenTrailFromPriorSession() {
+        // PRIOR-SESSION FALLBACK: just after starting a new session, `state.trail` may still
+        // hold the previous session's tail until the reload completes. The new runtime fix
+        // is from the current session and is the only correct camera target — the helper
+        // must NOT pin the camera to the prior session's tail.
+        val priorSession = 1_000L
+        val activeSession = 2_000L
+        val priorTail = com.geovault.tracker.db.QueuedLocation(
+            id = 0L,
+            trackerId = "tracker-1",
+            time = 5_000L,
+            latitude = 40.5,
+            longitude = -74.5,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+            startTimestampMs = priorSession,
+        )
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "tracker-1"),
+                selectedTrackerId = "tracker-1",
+                lastTrackedLatitude = 41.0,
+                lastTrackedLongitude = -75.0,
+                lastTrackedTimestampMs = 6_000L,
+                sessionStartTimeMs = activeSession,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(priorTail),
+        )
+
+        val coord = TrackerMapViewModel.resolveLiveHeadCoord(state)
+
+        assertEquals(41.0 to -75.0, coord)
+    }
+
+    @Test
     fun allQueueTrailsWithLocalRuntimeOverlay_groupWhileTracking_addsSelectedLocalPoint() {
         val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -115,7 +200,6 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             groupTrackerIds = setOf("tracker-1", "tracker-2"),
             allQueueTrailsByTracker = emptyMap(),
-            nowMs = 2000L,
         )
 
         val selectedTrail = trails["tracker-1"].orEmpty()
@@ -138,19 +222,18 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             groupTrackerIds = setOf("tracker-2"),
             allQueueTrailsByTracker = emptyMap(),
-            nowMs = 2000L,
         )
 
         assertEquals(emptyMap<String, List<com.geovault.tracker.db.QueuedLocation>>(), trails)
     }
 
     @Test
-    fun allQueueTrailsWithLocalRuntimeOverlay_rejectsRuntimePointOlderThanTrailTail() {
-        // TIME-MONOTONIC GUARD (Bug 1 defensive secondary): runtime.lastTrackedTimestampMs can
-        // briefly lag the bus-appended trail tail (the bus updates _uiState.trail directly while
-        // the tracking-runtime store is updated separately). Without this rejection the overlay
-        // would prepend a stale, "older than tail" point to the multi-trail head, causing the
-        // marker to visibly regress one fix backward.
+    fun allQueueTrailsWithLocalRuntimeOverlay_rejectsRuntimePointWhenSameSessionTailIsFresher() {
+        // CHEVRON-COHERENCE (Bug 1): when the bus reducer has already appended a same-session
+        // fix at >= runtime.lastTrackedTimestampMs, the trail tail is the authoritative live
+        // point. The runtime overlay must not synthesize on top, otherwise the multi-trail
+        // head paints a phantom point ahead of (or behind) the bus-driven marker.
+        val sessionStart = 500L
         val newerFix = com.geovault.tracker.db.QueuedLocation(
             id = 0L,
             trackerId = "tracker-1",
@@ -164,6 +247,7 @@ class TrackerMapViewModelStreamingContractsTest {
             sat = null,
             prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
             dist = null,
+            startTimestampMs = sessionStart,
         )
         val initial = mapOf("tracker-1" to listOf(newerFix))
 
@@ -177,10 +261,10 @@ class TrackerMapViewModelStreamingContractsTest {
                 lastTrackedLongitude = 10.0,
                 lastTrackedTimestampMs = 1000L,
                 lastAccuracyMeters = 4f,
+                sessionStartTimeMs = sessionStart,
             ),
             groupTrackerIds = setOf("tracker-1", "tracker-2"),
             allQueueTrailsByTracker = initial,
-            nowMs = 9999L,
         )
 
         assertEquals(initial, trails)
@@ -196,10 +280,10 @@ class TrackerMapViewModelStreamingContractsTest {
                 selectedTrackerId = "selected",
                 lastTrackedLatitude = 20.0,
                 lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1234L,
             ),
             groupTrackerIds = setOf("local", "remote"),
             allQueueTrailsByTracker = emptyMap(),
-            nowMs = 2000L,
         )
 
         assertEquals(setOf("local"), trails.keys)

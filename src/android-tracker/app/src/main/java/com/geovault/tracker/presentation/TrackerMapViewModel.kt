@@ -247,13 +247,41 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             return changed !in activeStreamedTrackerIds
         }
 
+        /**
+         * CHEVRON-COHERENCE: resolve the current live-head coordinate the camera should follow.
+         *
+         * The camera, the marker, and the line must advance from the same datum. The marker
+         * reads `state.trail.lastOrNull()`; binding the camera to that same tail when it
+         * represents the active recording session prevents the runtime-store collector from
+         * publishing a frame with a fresher camera target than the bus-reducer-driven trail
+         * tail (which the user perceives as the chevron lagging while the world moves on).
+         *
+         * Falls through to `runtime.lastTrackedLatitude/Longitude` when there is no active
+         * session trail tail (e.g. just-started recording, mid-mode-switch, or a stale
+         * prior-session trail still in state). Returns null when neither is available.
+         */
+        @JvmStatic
+        internal fun resolveLiveHeadCoord(state: TrackerMapUiState): Pair<Double, Double>? {
+            val tail = state.trail.lastOrNull()
+            val activeSessionStart = state.runtime.sessionStartTimeMs
+                .takeIf { it > 0L && state.runtime.localRecordingActive }
+            if (tail != null && activeSessionStart != null && tail.startTimestampMs == activeSessionStart) {
+                return tail.latitude to tail.longitude
+            }
+            val runtimeLat = state.runtime.lastTrackedLatitude
+            val runtimeLon = state.runtime.lastTrackedLongitude
+            if (runtimeLat != null && runtimeLon != null && state.runtime.lastTrackedTimestampMs > 0L) {
+                return runtimeLat to runtimeLon
+            }
+            return tail?.let { it.latitude to it.longitude }
+        }
+
         @JvmStatic
         internal fun allQueueTrailsWithLocalRuntimeOverlay(
             mode: TrackerMapDisplayMode,
             runtime: TrackingRuntimeSnapshot,
             groupTrackerIds: Set<String>,
             allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
-            nowMs: Long,
         ): Map<String, List<QueuedLocation>> {
             if (mode != TrackerMapDisplayMode.ALL_QUEUE && mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                 return allQueueTrailsByTracker
@@ -266,10 +294,29 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             }
             val lat = runtime.lastTrackedLatitude ?: return allQueueTrailsByTracker
             val lon = runtime.lastTrackedLongitude ?: return allQueueTrailsByTracker
+            val runtimeTs = runtime.lastTrackedTimestampMs
+            if (runtimeTs <= 0L) return allQueueTrailsByTracker
+            val activeSessionStart = runtime.sessionStartTimeMs.takeIf { it > 0L }
+            val currentTrail = allQueueTrailsByTracker[trackerId].orEmpty()
+            val last = currentTrail.lastOrNull()
+            // SAME-SESSION TAIL DOMINATES: if the bus reducer has already appended a same-
+            // session fix at >= runtimeTs, the trail tail is the authoritative live point.
+            // Synthesizing a runtime overlay on top would paint a phantom point ahead of
+            // the bus-driven marker (the chevron-vs-line lag bug). For different sessions
+            // (or null-start legacy tails) we always synthesize so the active session has
+            // a head and the line builder can split it from prior data.
+            val tailSession = last?.startTimestampMs
+            val tailMatchesActiveSession = last != null &&
+                tailSession != null &&
+                activeSessionStart != null &&
+                tailSession == activeSessionStart
+            if (tailMatchesActiveSession && last.time >= runtimeTs) {
+                return allQueueTrailsByTracker
+            }
             val point = QueuedLocation(
                 id = 0L,
                 trackerId = trackerId,
-                time = runtime.lastTrackedTimestampMs.takeIf { it > 0L } ?: nowMs,
+                time = runtimeTs,
                 latitude = lat,
                 longitude = lon,
                 altitude = null,
@@ -279,30 +326,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 sat = null,
                 prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME,
                 dist = null,
-                startTimestampMs = runtime.sessionStartTimeMs.takeIf { it > 0L },
+                startTimestampMs = activeSessionStart,
             )
-            val currentTrail = allQueueTrailsByTracker[trackerId].orEmpty()
-            val last = currentTrail.lastOrNull()
-            val nextTrail = if (last != null) {
-                val duplicate = last.time == point.time &&
-                    last.latitude == point.latitude &&
-                    last.longitude == point.longitude
-                // TIME-MONOTONIC GUARD: mirror TrackerMapPointEventReducer.appendQueuedPoint and
-                // reject any overlay point whose synthesized timestamp is strictly older than the
-                // existing tail. runtime.lastTrackedTimestampMs can lag the bus-appended trail tail
-                // briefly; without this check the multi-trail head would silently regress.
-                if (duplicate || point.time < last.time) {
-                    currentTrail
-                } else {
-                    TrackerMapTrailDecimationPolicy.fitToCount(
-                        currentTrail + point,
-                        TRAIL_POINT_LIMIT,
-                    )
-                }
-            } else {
-                listOf(point)
-            }
-            if (nextTrail === currentTrail) return allQueueTrailsByTracker
+            val nextTrail = TrackerMapTrailDecimationPolicy.fitToCount(
+                currentTrail + point,
+                TRAIL_POINT_LIMIT,
+            )
             return allQueueTrailsByTracker.toMutableMap().apply {
                 this[trackerId] = nextTrail
             }
@@ -1394,14 +1423,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         bounds: org.maplibre.android.geometry.LatLngBounds?,
         selectionLockPoint: Pair<Double, Double>?,
     ) {
+        val followTarget = Companion.resolveLiveHeadCoord(state)
         val resolution = TrackerMapCameraDirectivePolicy.resolve(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = state.followLockEnabled,
                 gpsCollecting = state.runtime.gpsCollecting,
-                followTargetLat = state.runtime.lastTrackedLatitude
-                    ?: state.trail.lastOrNull()?.latitude,
-                followTargetLon = state.runtime.lastTrackedLongitude
-                    ?: state.trail.lastOrNull()?.longitude,
+                followTargetLat = followTarget?.first,
+                followTargetLon = followTarget?.second,
                 selectionLockEnabled = state.selectionLockTrackerId.trim().isNotEmpty(),
                 selectionLockLat = selectionLockPoint?.first,
                 selectionLockLon = selectionLockPoint?.second,
@@ -1466,7 +1494,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             runtime = state.runtime,
             groupTrackerIds = plan.groupTrackerIds,
             allQueueTrailsByTracker = state.allQueueTrailsByTracker,
-            nowMs = nowMs,
         )
         return TrackerMapSessionEngine.build(
             TrackerMapSessionBuildInput(
@@ -1963,17 +1990,37 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 latest.trail
             }
+            // SESSION-SAFE OVERLAY: only honor active-session overlay points when the local
+            // tracker is currently recording. The runtime carries the active session start;
+            // overlay points stamped with a different non-null session start are stale and
+            // would otherwise paint a cross-session connector ("spike") on the rendered line.
+            val activeLocalTrackerId = latest.runtime.locallyRecordedTrackerId.trim()
+            val activeSessionStart = latest.runtime.sessionStartTimeMs
+                .takeIf { it > 0L && latest.runtime.localRecordingActive }
+            val activeSessionStartByTracker: Map<String, Long> = if (
+                activeSessionStart != null && activeLocalTrackerId.isNotEmpty()
+            ) {
+                mapOf(activeLocalTrackerId to activeSessionStart)
+            } else {
+                emptyMap()
+            }
+            val singleSessionStart = activeSessionStart?.takeIf {
+                activeLocalTrackerId.isNotEmpty() &&
+                    activeLocalTrackerId == plan.activeTrackerId.trim()
+            }
             val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
                 serverTrail = trail,
                 currentTrail = liveOverlayInput,
                 allowedLiveOverlayTrackerIds = setOfNotBlank(plan.activeTrackerId),
                 trailPointLimit = TRAIL_POINT_LIMIT,
+                activeSessionStartMs = singleSessionStart,
             )
             val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
                 serverTrails = allQueueTrailsByTracker,
                 currentTrails = latest.allQueueTrailsByTracker,
                 allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotBlank(plan.overlayTrackerId),
                 trailPointLimit = TRAIL_POINT_LIMIT,
+                activeSessionStartByTracker = activeSessionStartByTracker,
             )
             mergeResult.set(MergedTrailResult(mergedTrail, mergedMultiTrails))
             latest.copy(

@@ -55,11 +55,9 @@ object TrackerMapSessionEngine {
                     currentSessionStartMs = input.currentSessionStartByTracker[trackerId],
                 ),
             )
-            val split = splitTrail(filteredTrail)
             TrackerTrackModel(
                 trackerId = trackerId,
-                historicalTrail = split.historicalTrail,
-                liveTrail = split.liveTrail,
+                renderTrail = filteredTrail,
                 remoteHead = acceptedRemoteLastPoints[trackerId],
             )
         }
@@ -77,12 +75,11 @@ object TrackerMapSessionEngine {
                 currentSessionStartMs = singleTrailCurrentSessionStartMs,
             ),
         )
-        val singleSplit = splitTrail(filteredSingleTrail)
         return TrackerMapSessionSnapshot(
             uiState = state,
             plan = plan,
             runtime = state.runtime,
-            singleTrail = singleSplit.historicalTrail + singleSplit.liveTrail,
+            singleTrail = filteredSingleTrail,
             tracks = tracks,
             acceptedRemoteLastPoints = acceptedRemoteLastPoints,
         )
@@ -123,13 +120,4 @@ object TrackerMapSessionEngine {
         )
     }
 
-    private fun splitTrail(trail: List<QueuedLocation>): TrackerTrackModel {
-        val live = trail.filter(TrackerMapPointProvenancePolicy::isLiveOverlay)
-        val historical = trail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay)
-        return TrackerTrackModel(
-            trackerId = trail.firstOrNull()?.trackerId.orEmpty(),
-            historicalTrail = historical,
-            liveTrail = live,
-        )
-    }
 }

@@ -137,17 +137,28 @@ object TrackerMapPointEventReducer {
         )
     }
 
+    /**
+     * SESSION-AWARE DUPLICATE/REGRESSION CHECK: a new session's first fix can collide on
+     * `time` (and even lat/lon, if the device hasn't moved) with the previous session's
+     * tail. The original time-only duplicate guard silently dropped that point, leaving
+     * the new session without a head and stitching it visually onto the prior session.
+     * When the existing tail and the incoming point both carry non-null but DIFFERENT
+     * `startTimestampMs`, treat them as belonging to independent sessions and let the
+     * line builder handle splitting them apart.
+     */
     private fun appendQueuedPoint(
         currentTrail: List<QueuedLocation>,
         point: QueuedLocation,
         trailPointLimit: Int,
     ): List<QueuedLocation> {
         val last = currentTrail.lastOrNull()
-        if (last != null) {
+        if (last != null && !isDifferentSession(last.startTimestampMs, point.startTimestampMs)) {
             val duplicate = last.time == point.time &&
                 last.latitude == point.latitude &&
                 last.longitude == point.longitude
-            if (duplicate || point.time < last.time) return currentTrail
+            if (duplicate || point.time < last.time) {
+                return currentTrail
+            }
         }
         return TrackerMapTrailDecimationPolicy.fitToCount(currentTrail + point, trailPointLimit)
     }
@@ -158,8 +169,9 @@ object TrackerMapPointEventReducer {
         trailPointLimit: Int
     ): List<QueuedLocation> {
         val normalizedTime = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(point.timestampMs) ?: point.timestampMs
+        val pointStart = TrackerMapPointStartTimestampParser.parse(point.propsJson)
         val last = currentTrail.lastOrNull()
-        if (last != null) {
+        if (last != null && !isDifferentSession(last.startTimestampMs, pointStart)) {
             val duplicate = last.time == normalizedTime &&
                 last.latitude == point.lat &&
                 last.longitude == point.lon
@@ -180,9 +192,13 @@ object TrackerMapPointEventReducer {
             sat = null,
             prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
             dist = null,
-            startTimestampMs = TrackerMapPointStartTimestampParser.parse(point.propsJson)
+            startTimestampMs = pointStart,
         )
         return TrackerMapTrailDecimationPolicy.fitToCount(currentTrail + queued, trailPointLimit)
+    }
+
+    private fun isDifferentSession(tailStart: Long?, pointStart: Long?): Boolean {
+        return tailStart != null && pointStart != null && tailStart != pointStart
     }
 
 }

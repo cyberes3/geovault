@@ -97,10 +97,97 @@ class TrackerMapTrailMergePolicyTest {
         assertEquals(listOf(50L, 60L, 70L, 80L), merged.map { it.time })
     }
 
+    @Test
+    fun mergeServerTrailWithLiveOverlay_dropsOverlayFromDifferentSession() {
+        // SESSION-SAFE OVERLAY: a local-queue row stamped with a previous session's
+        // startTimestampMs must NOT graft onto the active trail. Without this filter the
+        // rendered line connects last-session's tail to this-session's head, producing the
+        // "spike" the user reports (which restart fixes only because the queue clears).
+        val activeStart = 5_000L
+        val staleStart = 1_000L
+        val serverGeometry = listOf(
+            point("local", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
+        )
+        val liveOverlayCandidates = listOf(
+            point("local", time = 200L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = staleStart),
+            point("local", time = 300L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+        )
+
+        val merged = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
+            serverTrail = serverGeometry,
+            currentTrail = liveOverlayCandidates,
+            allowedLiveOverlayTrackerIds = setOf("local"),
+            trailPointLimit = 10,
+            activeSessionStartMs = activeStart,
+        )
+
+        assertEquals(listOf(100L, 300L), merged.map { it.time })
+        assertEquals(listOf(activeStart, activeStart), merged.map { it.startTimestampMs })
+    }
+
+    @Test
+    fun mergeServerTrailWithLiveOverlay_keepsLegacyNullStartOverlayWhenSessionSet() {
+        // BACKWARDS-DATA TOLERANCE: legacy queue rows (startTimestampMs == null) predate the
+        // session-stamping change and must continue to flow through the merge — the new
+        // filter only rejects overlay points with a *non-null but mismatching* session.
+        val activeStart = 5_000L
+        val serverGeometry = listOf(
+            point("local", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
+        )
+        val liveOverlayCandidates = listOf(
+            point("local", time = 200L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = null),
+            point("local", time = 300L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+        )
+
+        val merged = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
+            serverTrail = serverGeometry,
+            currentTrail = liveOverlayCandidates,
+            allowedLiveOverlayTrackerIds = setOf("local"),
+            trailPointLimit = 10,
+            activeSessionStartMs = activeStart,
+        )
+
+        assertEquals(listOf(100L, 200L, 300L), merged.map { it.time })
+    }
+
+    @Test
+    fun mergeServerTrailsWithLiveOverlays_filtersOnlyLocallyRecordingTrackerBySession() {
+        // The multi-tracker variant filters by per-tracker active session: the locally
+        // recording tracker drops cross-session overlay points; remote trackers (no entry
+        // in activeSessionStartByTracker) pass through unfiltered, since we cannot infer
+        // remote session boundaries from streamed points alone.
+        val localActive = 5_000L
+        val serverTrails = mapOf(
+            "local" to listOf(point("local", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = localActive)),
+            "remote" to listOf(point("remote", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = 9_000L)),
+        )
+        val currentTrails = mapOf(
+            "local" to listOf(
+                point("local", time = 200L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = 1_000L),
+                point("local", time = 300L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = localActive),
+            ),
+            "remote" to listOf(
+                point("remote", time = 250L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM, startTimestampMs = 9_000L),
+            ),
+        )
+
+        val merged = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
+            serverTrails = serverTrails,
+            currentTrails = currentTrails,
+            allowedLiveOverlayTrackerIds = setOf("local", "remote"),
+            trailPointLimit = 10,
+            activeSessionStartByTracker = mapOf("local" to localActive),
+        )
+
+        assertEquals(listOf(100L, 300L), merged.getValue("local").map { it.time })
+        assertEquals(listOf(100L, 250L), merged.getValue("remote").map { it.time })
+    }
+
     private fun point(
         trackerId: String,
         time: Long,
         prov: String,
+        startTimestampMs: Long? = null,
     ): QueuedLocation {
         return QueuedLocation(
             id = if (prov == TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY) -time else 0L,
@@ -115,6 +202,7 @@ class TrackerMapTrailMergePolicyTest {
             sat = null,
             prov = prov,
             dist = null,
+            startTimestampMs = startTimestampMs,
         )
     }
 }

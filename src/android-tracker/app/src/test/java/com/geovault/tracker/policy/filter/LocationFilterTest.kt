@@ -180,6 +180,90 @@ class LocationFilterTest {
     }
 
     @Test
+    fun accurateHighwayMotion_withTinyReportedSpeed_isAccepted() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 3f,
+                speedMps = 0.05f,
+                bearingDegrees = 45f,
+            )
+        )
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7115,
+                longitude = -81.1011,
+                timestampMs = 8_000L,
+                accuracyMeters = 3f,
+                speedMps = 0.05f,
+                bearingDegrees = 45f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+    }
+
+    @Test
+    fun accurateHighwayMotion_withoutReportedSpeed_isAccepted() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 3f,
+                speedMps = null,
+                bearingDegrees = 45f,
+            )
+        )
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7115,
+                longitude = -81.1011,
+                timestampMs = 8_000L,
+                accuracyMeters = 3f,
+                speedMps = null,
+                bearingDegrees = 45f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+    }
+
+    @Test
+    fun lowAccuracyMotion_withoutReportedSpeed_stillRejectsAnomaly() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 55f,
+                speedMps = null,
+                bearingDegrees = 45f,
+            )
+        )
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7115,
+                longitude = -81.1011,
+                timestampMs = 8_000L,
+                accuracyMeters = 55f,
+                speedMps = null,
+                bearingDegrees = 45f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+    }
+
+    @Test
     fun motionChangeReset_clearsAnchor() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
