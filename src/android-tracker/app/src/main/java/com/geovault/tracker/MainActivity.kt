@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     onSettingsSignificantMotionOnly = settingsViewModel::setSignificantDataOnly,
                     onSettingsAutoTrackingMode = settingsViewModel::setAutoTrackingMode,
                     onSettingsKeepScreenOnMap = settingsViewModel::setKeepScreenOnWhileViewingMap,
+                    onSettingsGroupModeFitOnlyActiveTrackers = settingsViewModel::setGroupModeFitOnlyActiveTrackers,
                     onSettingsRefreshHiddenTrackerItems = settingsViewModel::refreshHiddenTrackerItems,
                     onSettingsUnhideTrackerItem = settingsViewModel::unhideTrackerItem,
                     onSettingsUnhideAllTrackerItems = settingsViewModel::unhideAllTrackerItems,

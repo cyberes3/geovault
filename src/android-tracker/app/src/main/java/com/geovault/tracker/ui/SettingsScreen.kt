@@ -90,6 +90,7 @@ fun SettingsScreen(
     onSignificantMotionOnly: (Boolean) -> Unit,
     onAutoTrackingMode: (Boolean) -> Unit,
     onKeepScreenOnMap: (Boolean) -> Unit,
+    onGroupModeFitOnlyActiveTrackers: (Boolean) -> Unit,
     onRefreshHiddenTrackerItems: () -> Unit,
     onUnhideTrackerItem: (HiddenTrackerItem) -> Unit,
     onUnhideAllTrackerItems: () -> Unit,
@@ -403,6 +404,13 @@ fun SettingsScreen(
             onCheckedChange = { if (!shouldIgnoreSettingChange()) onKeepScreenOnMap(it) },
             title = stringResource(R.string.keep_screen_on_while_viewing_map_label),
             helpText = stringResource(R.string.keep_screen_on_while_viewing_map_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
+        )
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.groupModeFitOnlyActiveTrackers,
+            onCheckedChange = { if (!shouldIgnoreSettingChange()) onGroupModeFitOnlyActiveTrackers(it) },
+            title = stringResource(R.string.group_mode_fit_only_active_trackers_label),
+            helpText = stringResource(R.string.group_mode_fit_only_active_trackers_help_text),
             modifier = Modifier.padding(vertical = 6.dp),
         )
 

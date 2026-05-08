@@ -12,10 +12,12 @@ data class TrackerSettings(
     val trackingProfile: TrackerTrackingProfile = TrackerTrackingProfile.BIKING,
     val startOnBoot: Boolean = false,
     val startTrackingOnLaunch: Boolean = false,
-    val keepScreenOnWhileViewingMap: Boolean = DEFAULT_KEEP_SCREEN_ON_WHILE_VIEWING_MAP
+    val keepScreenOnWhileViewingMap: Boolean = DEFAULT_KEEP_SCREEN_ON_WHILE_VIEWING_MAP,
+    val groupModeFitOnlyActiveTrackers: Boolean = DEFAULT_GROUP_MODE_FIT_ONLY_ACTIVE_TRACKERS,
 ) {
     companion object {
         const val DEFAULT_KEEP_SCREEN_ON_WHILE_VIEWING_MAP: Boolean = true
+        const val DEFAULT_GROUP_MODE_FIT_ONLY_ACTIVE_TRACKERS: Boolean = true
 
         const val DEFAULT_LOGGING_INTERVAL_SEC: Long = 15L
         const val MIN_LOGGING_INTERVAL_SEC: Long = 1L

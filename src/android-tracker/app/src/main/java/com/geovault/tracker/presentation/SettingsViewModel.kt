@@ -202,6 +202,10 @@ class SettingsViewModel(
         trackerSettingsRepository.setKeepScreenOnWhileViewingMap(enabled)
     }
 
+    fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) {
+        trackerSettingsRepository.setGroupModeFitOnlyActiveTrackers(enabled)
+    }
+
     fun clearMessage() {
         _state.update { it.copy(infoMessage = null) }
     }

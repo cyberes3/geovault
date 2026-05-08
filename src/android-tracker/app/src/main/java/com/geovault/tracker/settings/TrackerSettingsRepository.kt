@@ -23,6 +23,8 @@ interface TrackerSettingsRepository {
     fun setStartTrackingOnLaunch(enabled: Boolean)
     fun setKeepScreenOnWhileViewingMap(enabled: Boolean)
 
+    fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean)
+
     fun wasTrackingBeforeExit(): Boolean
     fun setWasTrackingBeforeExit(value: Boolean)
     fun clearWasTrackingBeforeExit()

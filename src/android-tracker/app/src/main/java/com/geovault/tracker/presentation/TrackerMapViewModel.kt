@@ -16,6 +16,7 @@ import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerManagementStateStore
+import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
@@ -37,6 +38,8 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -407,6 +410,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerManagementRepository()
     private val trackerManagementStateStore: TrackerManagementStateStore =
         TrackerAppServices.from(application).trackerManagementStateStore()
+    private val trackerSettingsRepository: TrackerSettingsRepository =
+        TrackerAppServices.from(application).trackerSettingsRepository()
 
     private val _uiState = MutableStateFlow(TrackerMapUiState())
     val uiState: StateFlow<TrackerMapUiState> = _uiState.asStateFlow()
@@ -487,6 +492,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.collect {
                 publishRenderPackage()
             }
+        }
+        viewModelScope.launch {
+            trackerSettingsRepository.observeSettings()
+                .map { it.groupModeFitOnlyActiveTrackers }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    publishRenderPackage()
+                }
         }
         viewModelScope.launch {
             TrackingRuntimeStateStore.state.collect { snap ->
@@ -1558,17 +1572,24 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             val renderAllQueueTrailsByTracker = snapshot.renderTrailsByTracker
             if (s.liveActiveFitEnabled) {
                 val trackers = trackerManagementStateStore.trackers.value
-                val activeBounds = TrackerMapLiveActiveFitPolicy.activeTrailBoundsResult(
+                val multiBounds = TrackerMapStateTransforms.multiTrailBounds(renderAllQueueTrailsByTracker)
+                val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(snapshot.acceptedRemoteLastPoints)
+                val rosterBounds = visibleRosterLastPointBounds(s.mode, sessionPlan)
+                val filterActiveOnly = trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers
+                val bounds = TrackerMapLiveActiveFitPolicy.resolveGroupLiveFitBounds(
+                    filterToActiveOnly = filterActiveOnly,
                     allQueueTrailsByTracker = renderAllQueueTrailsByTracker,
                     remoteLastPoints = snapshot.acceptedRemoteLastPoints,
                     acceptedRemoteTrackerIds = sessionPlan.acceptedRemoteTrackerIds,
                     trackers = trackers,
                     nowMs = nowMs,
+                    multiTrailBounds = multiBounds,
+                    remotePointBounds = remoteBounds,
+                    rosterLastPointBounds = rosterBounds,
                 )
-                return when (activeBounds) {
-                    is LiveActiveTrailBoundsResult.Active -> activeBounds.bounds
-                    LiveActiveTrailBoundsResult.NoActiveTrackers -> null
-                }
+                return bounds
+                    ?: TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
+                    ?: singlePointBoundsFromRuntime(s.runtime)
             }
             // GROUP/ALL-QUEUE FIT: union three independent sources so the camera reflects every
             // tracker that *should* be on screen, not just the ones whose trail / live head we've

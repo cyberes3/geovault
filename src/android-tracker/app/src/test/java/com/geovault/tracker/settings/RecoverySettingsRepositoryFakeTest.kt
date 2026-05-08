@@ -77,6 +77,8 @@ private class StubTrackerSettingsRepository(
 
     override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) = Unit
 
+    override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) = Unit
+
     override fun wasTrackingBeforeExit(): Boolean = flow.value.wasTrackingBeforeExit
 
     override fun setWasTrackingBeforeExit(value: Boolean) = Unit

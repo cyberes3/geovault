@@ -105,6 +105,9 @@ class TrackerSettingsRepositoryImpl(
     override fun setKeepScreenOnWhileViewingMap(enabled: Boolean) =
         enqueueMutation("set_keep_screen_on_while_viewing_map") { it.copy(keepScreenOnWhileViewingMap = enabled) }
 
+    override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) =
+        enqueueMutation("set_group_mode_fit_only_active_trackers") { it.copy(groupModeFitOnlyActiveTrackers = enabled) }
+
     override fun setWasTrackingBeforeExit(value: Boolean) {
         val opId = nextOpId()
         enqueueCommand(
@@ -244,7 +247,7 @@ class TrackerSettingsRepositoryImpl(
     }
 
     private fun settingsSummary(settings: TrackerSettings): String {
-        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},profile=${settings.trackingProfile},interval=${settings.loggingIntervalSec},distance=${settings.distanceFilterMeters},accuracy=${settings.accuracyFilterMeters},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
+        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},profile=${settings.trackingProfile},interval=${settings.loggingIntervalSec},distance=${settings.distanceFilterMeters},accuracy=${settings.accuracyFilterMeters},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
     }
 
     private data class SettingsCommand(

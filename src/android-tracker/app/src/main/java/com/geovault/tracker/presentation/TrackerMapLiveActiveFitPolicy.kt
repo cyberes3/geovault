@@ -26,22 +26,61 @@ sealed class LiveActiveTrailBoundsResult {
 
 object TrackerMapLiveActiveFitPolicy {
 
-    const val LIVE_ACTIVE_TRACKER_WINDOW_MS = 15 * 60 * 1000L
+    /**
+     * Rolling time window for "recently active" trackers when group / all-queue live-active-fit
+     * uses activity filtering (settings: auto-fit only active trackers in group mode, default on).
+     */
+    const val LIVE_ACTIVE_TRACKER_WINDOW_MS = 10 * 60 * 1000L
 
-    fun resolveLockArmed(
-        singleTrackerMapView: Boolean,
-        singleTrackerLocked: Boolean,
-        multiFollowLockArmed: Boolean,
-    ): Boolean {
-        return if (singleTrackerMapView) singleTrackerLocked else multiFollowLockArmed
+    /**
+     * GROUP / ALL_QUEUE live-active-fit bounds: either the recent-activity subset only, or the full
+     * union of trail bounds, accepted remote heads, and roster `last_point` (same composition as
+     * the non-live-active multi-mode fit in [TrackerMapViewModel.trailBoundsOrNull]).
+     */
+    fun resolveGroupLiveFitBounds(
+        filterToActiveOnly: Boolean,
+        allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
+        remoteLastPoints: Map<String, TrackPointEvent>,
+        acceptedRemoteTrackerIds: Set<String>,
+        trackers: List<Tracker>,
+        nowMs: Long,
+        multiTrailBounds: LatLngBounds?,
+        remotePointBounds: LatLngBounds?,
+        rosterLastPointBounds: LatLngBounds?,
+    ): LatLngBounds? {
+        if (filterToActiveOnly) {
+            return when (
+                val result = activeTrailBoundsResult(
+                    allQueueTrailsByTracker = allQueueTrailsByTracker,
+                    remoteLastPoints = remoteLastPoints,
+                    acceptedRemoteTrackerIds = acceptedRemoteTrackerIds,
+                    trackers = trackers,
+                    nowMs = nowMs,
+                )
+            ) {
+                is LiveActiveTrailBoundsResult.Active -> result.bounds
+                LiveActiveTrailBoundsResult.NoActiveTrackers -> null
+            }
+        }
+        return TrackerMapStateTransforms.mergeBounds(
+            TrackerMapStateTransforms.mergeBounds(multiTrailBounds, remotePointBounds),
+            rosterLastPointBounds,
+        )
     }
 
+    /**
+     * Resolves the "lock armed" gate for the secondary live-active-fit FAB.
+     *
+     * The secondary FAB now exists only in SINGLE_SESSION (ALL_QUEUE and GROUP_PLACEHOLDER both
+     * have their lock FAB own live-active-fit directly), so the gate is simply whether the
+     * displayed single tracker is selection-locked.
+     */
+    fun resolveLockArmed(singleTrackerLocked: Boolean): Boolean = singleTrackerLocked
+
     fun resolveVisibility(input: LiveActiveFitInput): LiveActiveFitVisibility {
-        val isAllQueueMode = input.mode == TrackerMapDisplayMode.ALL_QUEUE
         val singleTrackerVisible = input.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
             input.hasTrailPoints
-        val available = isAllQueueMode || singleTrackerVisible
-        if (!available || input.isSelectedDefaultTracker) {
+        if (!singleTrackerVisible || input.isSelectedDefaultTracker) {
             return LiveActiveFitVisibility(showButton = false, buttonEnabled = false)
         }
         val toggleEnabled = input.followLockArmed

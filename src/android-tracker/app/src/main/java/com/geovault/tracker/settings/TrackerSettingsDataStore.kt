@@ -122,10 +122,11 @@ class TrackerSettingsDataStore(context: Context) {
         prefs[KEY_START_ON_BOOT] = record.settings.startOnBoot
         prefs[KEY_START_TRACKING_ON_LAUNCH] = record.settings.startTrackingOnLaunch
         prefs[KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP] = record.settings.keepScreenOnWhileViewingMap
+        prefs[KEY_GROUP_MODE_FIT_ONLY_ACTIVE_TRACKERS] = record.settings.groupModeFitOnlyActiveTrackers
     }
 
     private fun settingsSummary(settings: TrackerSettings): String {
-        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},profile=${settings.trackingProfile},interval=${settings.loggingIntervalSec},distance=${settings.distanceFilterMeters},accuracy=${settings.accuracyFilterMeters},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
+        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},profile=${settings.trackingProfile},interval=${settings.loggingIntervalSec},distance=${settings.distanceFilterMeters},accuracy=${settings.accuracyFilterMeters},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
     }
 
     private fun toRecord(prefs: Preferences): TrackerSettingsRecord {
@@ -152,7 +153,9 @@ class TrackerSettingsDataStore(context: Context) {
                 startOnBoot = prefs[KEY_START_ON_BOOT] ?: defaults.startOnBoot,
                 startTrackingOnLaunch = prefs[KEY_START_TRACKING_ON_LAUNCH] ?: defaults.startTrackingOnLaunch,
                 keepScreenOnWhileViewingMap = prefs[KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP]
-                    ?: defaults.keepScreenOnWhileViewingMap
+                    ?: defaults.keepScreenOnWhileViewingMap,
+                groupModeFitOnlyActiveTrackers = prefs[KEY_GROUP_MODE_FIT_ONLY_ACTIVE_TRACKERS]
+                    ?: defaults.groupModeFitOnlyActiveTrackers,
             ),
             wasTrackingBeforeExit = prefs[KEY_WAS_TRACKING_BEFORE_EXIT] ?: false,
             schemaVersion = prefs[KEY_SCHEMA_VERSION] ?: 0
@@ -181,6 +184,9 @@ class TrackerSettingsDataStore(context: Context) {
         private val KEY_START_TRACKING_ON_LAUNCH = booleanPreferencesKey("start_tracking_on_launch")
         private val KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP = booleanPreferencesKey(
             "keep_screen_on_while_viewing_map"
+        )
+        private val KEY_GROUP_MODE_FIT_ONLY_ACTIVE_TRACKERS = booleanPreferencesKey(
+            "group_mode_fit_only_active_trackers"
         )
         private val KEY_WAS_TRACKING_BEFORE_EXIT = booleanPreferencesKey("was_tracking_before_exit")
     }

@@ -105,6 +105,9 @@ import com.geovault.tracker.presentation.TrackerMapSelectionCard
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipMapper
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
 import com.geovault.tracker.presentation.TrackerMapUiState
+import com.geovault.tracker.presentation.TrackerMapLockFabBehavior
+import com.geovault.tracker.presentation.TrackerMapLockFabInput
+import com.geovault.tracker.presentation.TrackerMapLockFabPolicy
 import com.geovault.tracker.presentation.TrackerMapMyLocationFabPolicy
 import com.geovault.tracker.presentation.TrackerMapUserLocationInput
 import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
@@ -541,15 +544,23 @@ private fun TrackerMapAuthenticatedContent(
             val effectiveDisplayedTrackerId = state.displayedTrackerId
                 .ifBlank { state.runtime.selectedTrackerId }
                 .trim()
-            val singleTrackerMapView = state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
-                effectiveDisplayedTrackerId.isNotEmpty()
-            val groupMapView = state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
-            val lockSelected = if (singleTrackerMapView) {
-                state.selectionLockTrackerId == effectiveDisplayedTrackerId
-            } else if (groupMapView) {
-                state.liveActiveFitEnabled
-            } else {
-                state.followLockEnabled
+            val lockFabBehavior = TrackerMapLockFabPolicy.resolve(
+                TrackerMapLockFabInput(
+                    mode = state.mode,
+                    displayedTrackerId = effectiveDisplayedTrackerId,
+                    selectionLockTrackerId = state.selectionLockTrackerId,
+                    liveActiveFitEnabled = state.liveActiveFitEnabled,
+                    followLockEnabled = state.followLockEnabled,
+                )
+            )
+            val selectionLockBehavior = lockFabBehavior as? TrackerMapLockFabBehavior.SelectionLock
+            val singleTrackerLocked = selectionLockBehavior?.isLocked == true
+            val isSelectedDefaultTracker = selectionLockBehavior != null &&
+                selectionLockBehavior.displayedTrackerId == state.runtime.selectedTrackerId.trim()
+            val lockFabIsActive = when (lockFabBehavior) {
+                is TrackerMapLockFabBehavior.SelectionLock -> lockFabBehavior.isLocked
+                is TrackerMapLockFabBehavior.LiveActiveFit -> lockFabBehavior.isEnabled
+                is TrackerMapLockFabBehavior.FollowLock -> lockFabBehavior.isEnabled
             }
             val mapFabActions = buildGeoVaultMapFabActions {
                 action(
@@ -596,43 +607,38 @@ private fun TrackerMapAuthenticatedContent(
                     id = "follow_lock",
                     order = 25,
                     icon = GeoVaultMapFabIcon.Vector(
-                        if (lockSelected) Icons.Default.Lock else Icons.Outlined.LockOpen,
+                        if (lockFabIsActive) Icons.Default.Lock else Icons.Outlined.LockOpen,
                     ),
-                    contentDescription = if (singleTrackerMapView) {
-                        if (lockSelected) {
-                            fabDescUnlockSelection
-                        } else {
-                            fabDescLockSelection
-                        }
-                    } else if (groupMapView) {
-                        if (state.liveActiveFitEnabled) {
-                            fabDescLiveActiveFitDisable
-                        } else {
-                            fabDescLiveActiveFitEnable
-                        }
-                    } else {
-                        fabDescFollow
+                    contentDescription = when (val behavior = lockFabBehavior) {
+                        is TrackerMapLockFabBehavior.SelectionLock ->
+                            if (behavior.isLocked) fabDescUnlockSelection else fabDescLockSelection
+                        is TrackerMapLockFabBehavior.LiveActiveFit ->
+                            if (behavior.isEnabled) fabDescLiveActiveFitDisable else fabDescLiveActiveFitEnable
+                        is TrackerMapLockFabBehavior.FollowLock -> fabDescFollow
                     },
-                    tooltip = if (groupMapView) tooltipMapLiveActiveFit else tooltipMapSelectionZoomLock,
+                    tooltip = when (lockFabBehavior) {
+                        is TrackerMapLockFabBehavior.LiveActiveFit -> tooltipMapLiveActiveFit
+                        is TrackerMapLockFabBehavior.SelectionLock,
+                        is TrackerMapLockFabBehavior.FollowLock -> tooltipMapSelectionZoomLock
+                    },
                     onTap = {
-                        if (singleTrackerMapView) {
-                            viewModel.toggleDisplayedTrackerLock()
-                        } else if (groupMapView) {
-                            followLockArmedThisSession = false
-                            viewModel.setLiveActiveFit(!state.liveActiveFitEnabled)
-                        } else {
-                            val nextEnabled = !lockSelected
-                            followLockArmedThisSession = nextEnabled
-                            viewModel.setFollowLock(nextEnabled)
+                        when (val behavior = lockFabBehavior) {
+                            is TrackerMapLockFabBehavior.SelectionLock ->
+                                viewModel.toggleDisplayedTrackerLock()
+                            is TrackerMapLockFabBehavior.LiveActiveFit -> {
+                                followLockArmedThisSession = false
+                                viewModel.setLiveActiveFit(!behavior.isEnabled)
+                            }
+                            is TrackerMapLockFabBehavior.FollowLock -> {
+                                val nextEnabled = !behavior.isEnabled
+                                followLockArmedThisSession = nextEnabled
+                                viewModel.setFollowLock(nextEnabled)
+                            }
                         }
                     },
                 )
-                val isSelectedDefaultTracker = singleTrackerMapView &&
-                    effectiveDisplayedTrackerId == state.runtime.selectedTrackerId.trim()
                 val liveActiveFitLockArmed = TrackerMapLiveActiveFitPolicy.resolveLockArmed(
-                    singleTrackerMapView = singleTrackerMapView,
-                    singleTrackerLocked = lockSelected,
-                    multiFollowLockArmed = followLockArmedThisSession,
+                    singleTrackerLocked = singleTrackerLocked,
                 )
                 val liveActiveFitVisibility = TrackerMapLiveActiveFitPolicy.resolveVisibility(
                     LiveActiveFitInput(
@@ -644,7 +650,7 @@ private fun TrackerMapAuthenticatedContent(
                         isSelectedDefaultTracker = isSelectedDefaultTracker,
                     )
                 )
-                if (liveActiveFitVisibility.showButton && !groupMapView) {
+                if (liveActiveFitVisibility.showButton) {
                     action(
                         id = "live_active_fit",
                         order = 32,

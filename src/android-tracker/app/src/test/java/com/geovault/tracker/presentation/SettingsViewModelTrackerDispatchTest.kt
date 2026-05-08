@@ -134,6 +134,10 @@ private class RecordingTrackerSettingsRepository : TrackerSettingsRepository {
         calls += "setKeepScreenOnWhileViewingMap($enabled)"
     }
 
+    override fun setGroupModeFitOnlyActiveTrackers(enabled: Boolean) {
+        calls += "setGroupModeFitOnlyActiveTrackers($enabled)"
+    }
+
     override fun wasTrackingBeforeExit(): Boolean = false
 
     override fun setWasTrackingBeforeExit(value: Boolean) = Unit
