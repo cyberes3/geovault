@@ -17,9 +17,9 @@ object TrackerMapTrailMergePolicy {
             .filter { it.trackerId.trim() in allowedOverlayIds }
             .filter { latestServerTime == null || it.time > latestServerTime }
         if (liveBuffer.isEmpty()) return serverTrail
-        return (serverTrail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay) + liveBuffer)
+        val merged = (serverTrail.filterNot(TrackerMapPointProvenancePolicy::isLiveOverlay) + liveBuffer)
             .sortedBy { it.time }
-            .takeLast(trailPointLimit)
+        return TrackerMapTrailDecimationPolicy.fitToCount(merged, trailPointLimit)
     }
 
     fun mergeServerTrailsWithLiveOverlays(

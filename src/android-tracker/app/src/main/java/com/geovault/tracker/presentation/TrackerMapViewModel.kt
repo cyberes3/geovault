@@ -19,7 +19,6 @@ import com.geovault.tracker.data.TrackerManagementStateStore
 import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
-import com.geovault.tracker.policy.WireTimestampNormalizer
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
@@ -163,6 +162,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         const val TAG = "TrackerMapViewModel"
         const val TRAIL_POINT_LIMIT = 4000
 
+        // Upper bound for the local Room queue load. Mirrors TrackingService.MAX_QUEUE_SIZE so we
+        // always read every retained point and let the session-aware decimator decide which to
+        // drop, rather than letting `ORDER BY time DESC LIMIT TRAIL_POINT_LIMIT` silently truncate
+        // the head of the previous session below the SQL layer.
+        private const val QUEUE_TRAIL_FETCH_LIMIT = 5000
+
         @JvmStatic
         internal fun resolveStreamTargetIds(
             mode: TrackerMapDisplayMode,
@@ -286,7 +291,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 if (duplicate || point.time < last.time) {
                     currentTrail
                 } else {
-                    (currentTrail + point).takeLast(TRAIL_POINT_LIMIT)
+                    TrackerMapTrailDecimationPolicy.fitToCount(
+                        currentTrail + point,
+                        TRAIL_POINT_LIMIT,
+                    )
                 }
             } else {
                 listOf(point)
@@ -2016,9 +2024,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun loadQueueTrail(trackerId: String): List<QueuedLocation> {
         val normalizedTrackerId = trackerId.trim()
         if (normalizedTrackerId.isEmpty()) return emptyList()
-        return withContext(Dispatchers.IO) {
-            dao.getRecentChronologicalForTracker(normalizedTrackerId, TRAIL_POINT_LIMIT)
+        // Load up to QUEUE_TRAIL_FETCH_LIMIT (mirrors TrackingService.MAX_QUEUE_SIZE) and then
+        // apply session-aware decimation. The previous version asked the DAO for exactly
+        // TRAIL_POINT_LIMIT rows ordered by time DESC, which silently dropped the OLDEST points
+        // when both sessions exceeded the cap — exactly the bug the recent_data_window=session
+        // filter is supposed to prevent.
+        val recent = withContext(Dispatchers.IO) {
+            dao.getRecentChronologicalForTracker(normalizedTrackerId, QUEUE_TRAIL_FETCH_LIMIT)
         }
+        return TrackerMapTrailDecimationPolicy.fitToCount(recent, TRAIL_POINT_LIMIT)
     }
 
     private suspend fun loadSingleTrackerTrailFromServer(
@@ -2107,63 +2121,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         coordinates: List<List<Double>>,
         pointParams: List<Map<String, Any?>>? = null,
         existingTrailMinTimeMs: Long? = null,
-    ): List<QueuedLocation> {
-        if (coordinates.isEmpty()) return emptyList()
-        val normalizedTrackerId = trackerId.trim()
-        if (normalizedTrackerId.isEmpty()) return emptyList()
-        val latestAccuracyMeters = pointParams
-            ?.lastOrNull()
-            ?.get("acc")
-            ?.let { raw ->
-                when (raw) {
-                    is Number -> raw.toFloat()
-                    is String -> raw.toFloatOrNull()
-                    else -> null
-                }
-            }
-            ?.takeIf { it.isFinite() && it > 0f }
-        val timestamps = resolveGeometryTimestamps(coordinates, existingTrailMinTimeMs)
-        return coordinates.mapIndexedNotNull { index, point ->
-            val lon = point.getOrNull(0) ?: return@mapIndexedNotNull null
-            val lat = point.getOrNull(1) ?: return@mapIndexedNotNull null
-            val startTimestampMs = pointParams?.getOrNull(index)?.let { params ->
-                WireTimestampNormalizer.normalizeToMilliseconds(params["starttimestamp"])
-            }
-            QueuedLocation(
-                id = -(index + 1L),
-                trackerId = normalizedTrackerId,
-                time = timestamps[index],
-                latitude = lat,
-                longitude = lon,
-                altitude = null,
-                speed = null,
-                bearing = null,
-                accuracy = if (index == coordinates.lastIndex) latestAccuracyMeters else null,
-                sat = null,
-                prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
-                dist = null,
-                startTimestampMs = startTimestampMs
-            )
-        }.takeLast(TRAIL_POINT_LIMIT)
-    }
-
-    private fun resolveGeometryTimestamps(
-        coordinates: List<List<Double>>,
-        existingTrailMinTimeMs: Long? = null,
-    ): List<Long> {
-        val parsed = coordinates.map { coord ->
-            val raw = coord.getOrNull(2)?.toLong() ?: return@map null
-            TrackerMapSessionWindowPolicy.normalizeTimestampToMs(raw)
-        }
-        val hasRealTimestamps = parsed.any { it != null }
-        if (hasRealTimestamps) {
-            val fallbackBase = parsed.filterNotNull().maxOrNull() ?: 0L
-            return parsed.mapIndexed { index, ts -> ts ?: (fallbackBase + index + 1) }
-        }
-        val anchor = existingTrailMinTimeMs ?: System.currentTimeMillis()
-        val fallbackStart = anchor - coordinates.size - 1L
-        return coordinates.indices.map { idx -> (fallbackStart + idx).coerceAtLeast(0L) }
-    }
+    ): List<QueuedLocation> = TrackerMapTrailMaterializationPolicy.materialize(
+        trackerId = trackerId,
+        coordinates = coordinates,
+        pointParams = pointParams,
+        existingTrailMinTimeMs = existingTrailMinTimeMs,
+        trailPointLimit = TRAIL_POINT_LIMIT,
+    )
 
     /**
      * Seed `_uiState.trail` from the local Room queue at ViewModel construction. Runs
@@ -2233,7 +2197,16 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             .firstOrNull { it.id == trackerId }
         val cachedGeometry = cachedTracker?.geometry?.coordinates.orEmpty()
         if (cachedGeometry.isNotEmpty()) {
-            val trail = mapCoordinatesToTrail(trackerId, cachedGeometry)
+            // Pass point_params alongside the coordinates so each preloaded point carries its
+            // starttimestamp. Without this, the recent_data_window=session filter cannot attribute
+            // previous-session points and they vanish from the trail until the (later) server
+            // fetch lands — visible to the user as "missing history" after closing & reopening
+            // the app mid-session.
+            val trail = mapCoordinatesToTrail(
+                trackerId,
+                cachedGeometry,
+                pointParams = cachedTracker?.point_params,
+            )
             if (trail.isNotEmpty()) return trail
         }
         return loadQueueTrail(trackerId).takeIf { it.isNotEmpty() }

@@ -12,6 +12,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from extensions.live_track.src.backend.helpers import DEFAULT_TRACK_COLOR
+from extensions.live_track.src.backend import ingress_views
 from extensions.live_track.src.backend.models import (
     LiveTrack,
     LiveTrackGroup,
@@ -1747,7 +1748,7 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 for i in range(3):
                     self.client.post(
@@ -1786,7 +1787,7 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -1840,7 +1841,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -1887,7 +1888,7 @@ class TestLiveTrackAPI(TestCase):
         old_ts = now_sec - 7200  # 2 hours ago
         recent_ts = now_sec - 300  # 5 minutes ago
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -1932,7 +1933,7 @@ class TestLiveTrackAPI(TestCase):
         old_ts_1 = now_sec - 7200
         old_ts_2 = now_sec - 7100
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -1974,7 +1975,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2048,7 +2049,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2092,7 +2093,7 @@ class TestLiveTrackAPI(TestCase):
         older_start_sec = now_sec - 1800
         newer_start_ms = (now_sec - 600) * 1000
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2150,7 +2151,7 @@ class TestLiveTrackAPI(TestCase):
         older_start = now_sec - 5000
         latest_start = now_sec - 900
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 # Older session points (explicit older starttimestamp).
                 self.client.post(
@@ -2225,7 +2226,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2276,7 +2277,7 @@ class TestLiveTrackAPI(TestCase):
         latest_session_start = now_sec - 400
         older_session_start = now_sec - 2000
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 # Newest session point arrives first.
                 self.client.post(
@@ -2329,7 +2330,7 @@ class TestLiveTrackAPI(TestCase):
         valid_old = now_sec - 5000
         valid_new = now_sec - 800
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2387,7 +2388,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2436,7 +2437,7 @@ class TestLiveTrackAPI(TestCase):
         old_ts = now_sec - 7200  # 2 hours ago
         recent_ts = now_sec - 300  # 5 minutes ago
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2482,7 +2483,7 @@ class TestLiveTrackAPI(TestCase):
         old_ts_1 = now_sec - 7200
         old_ts_2 = now_sec - 7100
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2525,7 +2526,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2560,7 +2561,7 @@ class TestLiveTrackAPI(TestCase):
         old_ts = now_sec - 7200
         recent_ts = now_sec - 300
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2606,7 +2607,7 @@ class TestLiveTrackAPI(TestCase):
         old_ts_1 = now_sec - 7200
         old_ts_2 = now_sec - 7100
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -3288,7 +3289,7 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -3314,7 +3315,7 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -3351,7 +3352,7 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -3955,7 +3956,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_success(self):
         """POST with valid Basic Auth and lat, lon, time returns 200 and appends point."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(auth_header=self.auth_header)
         self.assertEqual(response.status_code, 200)
@@ -3970,7 +3971,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_success_form_body(self):
         """POST with application/x-www-form-urlencoded body works."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self.client.post(
                     self.ingress_url,
@@ -3994,7 +3995,7 @@ class TestLiveTrackIngress(TestCase):
             "&ischarging=true&ser=852210c6e27f72b8&dist=0"
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self.client.post(
                     self.ingress_url,
@@ -4018,7 +4019,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_optional_params_stored(self):
         """Optional params (alt, acc, spd_kph) are stored in point_params."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
                     data={"lat": 38.0, "lon": -121.0, "timestamp": 1705312800, "alt": 100.5, "acc": 10, "spd_kph": 5.0},
@@ -4073,7 +4074,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_timestamp_optional_uses_server_time(self):
         """POST without timestamp is accepted; server uses current wall clock for the point."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0},
@@ -4102,7 +4103,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_same_timestamp_inserted_after(self):
         """POST with timestamp equal to last point is accepted; point is inserted after (same ts)."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800},
@@ -4124,7 +4125,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_older_timestamp_inserted_in_order(self):
         """POST with timestamp older than last is accepted; point is inserted at correct index."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800},
@@ -4144,7 +4145,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_insert_in_middle(self):
         """Out-of-order: A (ts=100), B (ts=300), C (ts=200) -> order A, C, B."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 100},
@@ -4173,7 +4174,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_insert_at_start(self):
         """Out-of-order: A (ts=200), B (ts=100) -> order B, A."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
@@ -4193,7 +4194,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_multiple_out_of_order(self):
         """Send timestamps 500, 100, 300, 200, 400 -> final order 100, 200, 300, 400, 500."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 for ts in (500, 100, 300, 200, 400):
                     response = self._ingress_post(
@@ -4209,7 +4210,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_insert_at_start_keeps_full_history(self):
         """Out-of-order insertion at start keeps all points with no trimming."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
@@ -4234,7 +4235,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_unknown_key_silently_dropped(self):
         """POST with body key not in allowed list is accepted; unknown key is dropped."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800, "foo": "bar"},
@@ -4249,7 +4250,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_disallowed_param_silently_dropped(self):
         """POST with profile (disallowed) is accepted; profile is dropped and not stored."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800, "profile": "x"},
@@ -4273,7 +4274,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_rate_limit_429(self):
         """Two POSTs for same track within same second: first 200, second 429."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache"}}
                 response1 = self._ingress_post(auth_header=self.auth_header)
                 response2 = self._ingress_post(auth_header=self.auth_header)
@@ -4283,7 +4284,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_keeps_all_points(self):
         """Ingress retains all received points; point-count trimming is not applied."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 for i in range(4):
                     self._ingress_post(
@@ -4303,7 +4304,7 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_timestamp_stored_as_unix_ms(self):
         """timestamp (epoch sec) yields coordinate third value as Unix ms."""
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+            with patch.object(ingress_views, "settings") as mock_settings:
                 mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
                 response = self._ingress_post(
                     data={"lat": 39.0, "lon": -120.0, "timestamp": 1705312800},

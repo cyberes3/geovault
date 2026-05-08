@@ -149,7 +149,7 @@ object TrackerMapPointEventReducer {
                 last.longitude == point.longitude
             if (duplicate || point.time < last.time) return currentTrail
         }
-        return (currentTrail + point).takeLast(trailPointLimit)
+        return TrackerMapTrailDecimationPolicy.fitToCount(currentTrail + point, trailPointLimit)
     }
 
     private fun appendRemotePoint(
@@ -182,7 +182,7 @@ object TrackerMapPointEventReducer {
             dist = null,
             startTimestampMs = TrackerMapPointStartTimestampParser.parse(point.propsJson)
         )
-        return (currentTrail + queued).takeLast(trailPointLimit)
+        return TrackerMapTrailDecimationPolicy.fitToCount(currentTrail + queued, trailPointLimit)
     }
 
 }
