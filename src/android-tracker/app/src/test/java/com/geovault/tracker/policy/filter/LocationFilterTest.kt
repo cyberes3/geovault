@@ -236,14 +236,18 @@ class LocationFilterTest {
     }
 
     @Test
-    fun conservativePolicy_suppressesTightAccuracyStationaryJitter() {
+    fun conservativePolicy_suppressesStationaryJitterWithinAccuracyEnvelope() {
+        // Realistic standstill noise: 8.9 m raw step with ~20 m accuracy
+        // means RSS-corrected motion is zero -- the chipset is telling us
+        // we did not move beyond uncertainty. The filter must snap to
+        // the anchor instead of recording phantom drift.
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
                 latitude = 24.7097,
                 longitude = -81.1011,
                 timestampMs = 0L,
-                accuracyMeters = 3f,
+                accuracyMeters = 20f,
                 speedMps = 0f,
             )
         )
@@ -253,7 +257,7 @@ class LocationFilterTest {
                 latitude = 24.70978,
                 longitude = -81.1011,
                 timestampMs = 1_000L,
-                accuracyMeters = 3f,
+                accuracyMeters = 20f,
                 speedMps = 0f,
             )
         )
@@ -290,6 +294,73 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+    }
+
+    @Test
+    fun phantomStepWhileSittingStill_isSnappedToAnchor_notAcceptedWithinCap() {
+        // Reproduction of the field log: dt=20s, raw=~38m, accuracy=~30m,
+        // reported speed = 0. Pre-fix, this was accepted as "within-cap"
+        // because raw < (accuracy * 3). The tightened noisy-standstill
+        // gate must trust the stationary classifier and snap to anchor.
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        repeat(3) { i ->
+            filter.evaluate(
+                LocationInput(
+                    latitude = 24.7097,
+                    longitude = -81.1011,
+                    timestampMs = (i * 1_000L),
+                    accuracyMeters = 30f,
+                    speedMps = 0f,
+                    bearingDegrees = 45f,
+                )
+            )
+        }
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.71004,  // ~38 m north of the anchor
+                longitude = -81.1011,
+                timestampMs = 20_000L,
+                accuracyMeters = 30f,
+                speedMps = 0f,
+                bearingDegrees = 45f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals("uncertainty-suppressed", result.reason)
+    }
+
+    @Test
+    fun outlierBeyondOneAndAHalfCapCandidate_isRejectedAsOutlierCapped() {
+        // Cap inflation (anchor trust, anomaly) puts the cap around 90 m
+        // for accuracy=30 m. A 200 m raw step blows past the 1.5x cap
+        // multiplier and must reject as outlier-capped, not get clipped.
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 30f,
+                speedMps = 1f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.0991,  // ~200 m east
+                timestampMs = 5_000L,
+                accuracyMeters = 30f,
+                speedMps = 1f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals("outlier-capped", result.reason)
     }
 
     @Test

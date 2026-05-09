@@ -36,10 +36,9 @@ package com.geovault.tracker.policy.filter
  *  - [speedStability] 0..1 over the rolling window (1 == speeds agree)
  *  - [impliedAnomaly] 0..1 anomaly score from implied-speed and burst spikes;
  *    inflates the cap and feeds the policy switch's reject branch
- *  - [isStationary] confident standstill detection
- *  - [isOscillating] standing still while accuracy hops -- the textbook
- *    rubber-banding signature
- *  - [stationaryConfidence] 0..1 evidence weight backing [isStationary]
+ *  - [stationary] multi-signal stationary classification; see
+ *    [StationaryConfidence] for the score, isStationary flag, and the
+ *    rubber-banding (oscillation) flag
  *  - [anchorTrust] 0..1 confidence in the previous accepted anchor; 0 means
  *    "do not trust prior anchor for cap inflation"
  */
@@ -62,9 +61,7 @@ data class LocationMetrics(
     val bearingStability: Double,
     val speedStability: Double,
     val impliedAnomaly: Double,
-    val isStationary: Boolean,
-    val isOscillating: Boolean,
-    val stationaryConfidence: Double,
+    val stationary: StationaryConfidence,
     val anchorTrust: Double,
     val accuracyMeters: Double,
     val previousAccuracyMeters: Double,

@@ -69,7 +69,21 @@ class LocationFilter(
         previousAccepted = null
     }
 
-    fun evaluate(input: LocationInput): LocationFilterResult {
+    /**
+     * Evaluate a single fix.
+     *
+     * @param input the canonical fix value object
+     * @param activeMotionHint independent evidence (from the upstream
+     *   motion engine) that the user is actually moving. When true, the
+     *   conservative noisy-standstill suppression is bypassed: a fix
+     *   showing real displacement should never be snapped to the anchor
+     *   when something else already concluded "the user is walking".
+     */
+    @JvmOverloads
+    fun evaluate(
+        input: LocationInput,
+        activeMotionHint: Boolean = false,
+    ): LocationFilterResult {
         val accuracy = input.accuracyMeters?.toDouble()
         val metrics = metricsEngine.compute(current = input, previous = previousAccepted)
 
@@ -125,6 +139,7 @@ class LocationFilter(
                 previous = previous,
                 capCandidate = capCandidate,
                 metrics = metrics,
+                activeMotionHint = activeMotionHint,
             )
         }
     }
@@ -134,29 +149,23 @@ class LocationFilter(
         previous: LocationInput,
         capCandidate: Double,
         metrics: LocationMetrics,
+        activeMotionHint: Boolean,
     ): LocationFilterResult {
-        val noReportedMotion = metrics.reportedSpeedMps < REPORTED_MOTION_FLOOR_MPS
-        val tightAccuracyStationaryJitter =
-            metrics.dtSeconds <= STATIONARY_JITTER_MAX_DT_SECONDS &&
-                metrics.rawDistanceMeters <= max(
-                    STATIONARY_JITTER_MIN_RAW_METERS,
-                    metrics.accuracyMeters * STATIONARY_JITTER_RAW_ACCURACY_MULTIPLIER
-                ) &&
-                metrics.effectiveDistanceMeters <= max(
-                    STATIONARY_JITTER_MIN_EFFECTIVE_METERS,
-                    metrics.accuracyMeters * STATIONARY_JITTER_EFFECTIVE_ACCURACY_MULTIPLIER
-                )
-        val noisyStandstill = (metrics.effectiveDistanceMeters <= 0.0 || tightAccuracyStationaryJitter) &&
-            metrics.rawDistanceMeters > 0.0 &&
-            noReportedMotion &&
-            (metrics.isOscillating || metrics.isStationary)
-        if (noisyStandstill) {
+        // Standstill noise is checked before the outlier gate: a phantom
+        // jump while sitting still must snap to anchor (Adjusted), not
+        // be reported as an outlier (Rejected). Outlier handling is for
+        // real-motion teleports the cap couldn't accommodate.
+        if (!activeMotionHint && isNoisyStandstill(metrics)) {
             return commitAdjustToAnchor(
                 input = input,
                 previous = previous,
                 reason = "uncertainty-suppressed",
                 metrics = metrics,
             )
+        }
+
+        if (isOutlier(metrics, capCandidate)) {
+            return LocationFilterResult.rejected(reason = "outlier-capped", metrics = metrics)
         }
 
         if (metrics.rawDistanceMeters <= capCandidate) {
@@ -167,10 +176,6 @@ class LocationFilter(
             return LocationFilterResult.rejected(reason = "severe-anomaly", metrics = metrics)
         }
 
-        if (metrics.rawDistanceMeters > capCandidate * CONSERVATIVE_REJECT_RATIO) {
-            return LocationFilterResult.rejected(reason = "cap-exceeded", metrics = metrics)
-        }
-
         val capMeters = capCandidate.coerceAtMost(metrics.rawDistanceMeters)
         return commitClip(
             input = input,
@@ -179,6 +184,39 @@ class LocationFilter(
             reason = "conservative-clip",
             metrics = metrics,
         )
+    }
+
+    /**
+     * A fix is an outlier when its raw displacement blows past the
+     * already-inflated capCandidate by more than [OUTLIER_CAP_MULTIPLIER].
+     *
+     * Promoted to the first check in [resolveConservative] so a 200 m
+     * teleport is rejected before any clip / standstill logic runs.
+     */
+    private fun isOutlier(metrics: LocationMetrics, capCandidate: Double): Boolean =
+        metrics.rawDistanceMeters > capCandidate * OUTLIER_CAP_MULTIPLIER
+
+    /**
+     * The "phone is sitting on the table but GPS keeps moving" pattern.
+     *
+     * Both reported speed AND implied speed (RSS-corrected raw distance
+     * over dt) must be below [REPORTED_MOTION_FLOOR_MPS]. Real motion
+     * with a flaky speed sensor still produces meaningful implied speed
+     * because the displacement exceeds the combined accuracy envelope;
+     * a phantom GPS jump while stationary collapses the implied speed
+     * to ~0 once RSS subtracts the uncertainty.
+     *
+     * Combined with [LocationMetrics.stationary] -- which already
+     * weighs reported speed, implied speed, bearing/speed stability,
+     * jerk, and accuracy vs displacement -- this is enough to suppress
+     * the 38 m phantom step that previously slipped through as
+     * "within-cap".
+     */
+    private fun isNoisyStandstill(metrics: LocationMetrics): Boolean {
+        if (metrics.rawDistanceMeters <= 0.0) return false
+        if (metrics.reportedSpeedMps >= REPORTED_MOTION_FLOOR_MPS) return false
+        if (metrics.impliedSpeedMps >= REPORTED_MOTION_FLOOR_MPS) return false
+        return metrics.stationary.isStationary || metrics.stationary.isOscillating
     }
 
     private fun resolveSpeedSpike(
@@ -307,16 +345,11 @@ class LocationFilter(
 
     companion object {
         private const val LONG_GAP_REANCHOR_SECONDS = 180.0
-        private const val CONSERVATIVE_REJECT_RATIO = 1.5
+        private const val OUTLIER_CAP_MULTIPLIER = 1.5
         private const val SEVERE_ANOMALY_THRESHOLD = 0.85
         private const val ANCHOR_TRUST_FULL = 0.7
         private const val ANCHOR_TRUST_INFLATION = 0.5
         private const val ANOMALY_DEFLATION = 0.4
         private const val REPORTED_MOTION_FLOOR_MPS = 0.5
-        private const val STATIONARY_JITTER_MAX_DT_SECONDS = 5.0
-        private const val STATIONARY_JITTER_MIN_RAW_METERS = 12.0
-        private const val STATIONARY_JITTER_RAW_ACCURACY_MULTIPLIER = 4.0
-        private const val STATIONARY_JITTER_MIN_EFFECTIVE_METERS = 6.0
-        private const val STATIONARY_JITTER_EFFECTIVE_ACCURACY_MULTIPLIER = 2.0
     }
 }

@@ -31,6 +31,7 @@ import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingEngineOutput
+import com.geovault.tracker.location.IdleProbeScheduler
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.SyncFailureClass
@@ -158,6 +159,7 @@ class TrackingService : Service() {
     private var sigMotionSensorStartTime: Long = 0L
     private var watchdogJob: Job? = null
     private var significantMotionBridge: SignificantMotionResumeBridge? = null
+    private var idleProbeScheduler: IdleProbeScheduler? = null
     private var consecutiveStationaryPoints: Int = 0
     private var stationaryAnchorLocation: Location? = null
     private var consecutivePushFailures = 0
@@ -217,6 +219,7 @@ class TrackingService : Service() {
         const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
         const val ACTION_SEND_MANUAL_POINT = "com.geovault.tracker.ACTION_SEND_MANUAL_POINT"
         const val ACTION_LOCATION_UPDATE = "com.geovault.tracker.ACTION_LOCATION_UPDATE"
+        const val ACTION_IDLE_PROBE = IdleProbeScheduler.ACTION_IDLE_PROBE
         const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
         const val EXTRA_TRACKING_ERROR_MESSAGE = "extra_tracking_error_message"
         const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
@@ -246,6 +249,12 @@ class TrackingService : Service() {
         private const val WALKING_ELASTICITY_MAX_SPEED_BUCKET = 2
         private const val ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS = 0.5f
 
+        // Threshold above which observed/smoothed speed counts as "user is
+        // really moving". Used to override the conservative location filter
+        // when it would otherwise snap a fix to the anchor as noise, and to
+        // hold off the stationary detector from pausing GPS during motion.
+        private const val MOTION_HINT_FLOOR_MPS = 0.75f
+
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(): Boolean = false
 
@@ -255,6 +264,7 @@ class TrackingService : Service() {
             ReshowForeground,
             ManualSendPoint,
             LocationUpdate,
+            IdleProbe,
             StopUnknown
         }
 
@@ -266,6 +276,7 @@ class TrackingService : Service() {
                 ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
                 ACTION_SEND_MANUAL_POINT -> StartupCommandPath.ManualSendPoint
                 ACTION_LOCATION_UPDATE -> StartupCommandPath.LocationUpdate
+                ACTION_IDLE_PROBE -> StartupCommandPath.IdleProbe
                 null -> {
                     if (shouldRestartTrackingAfterProcessDeath()) {
                         StartupCommandPath.StartTracking
@@ -290,6 +301,7 @@ class TrackingService : Service() {
                 ACTION_RESHOW_FOREGROUND -> "reshow_foreground"
                 ACTION_SEND_MANUAL_POINT -> "manual_send_point"
                 ACTION_LOCATION_UPDATE -> "location_update"
+                ACTION_IDLE_PROBE -> "idle_probe"
                 null -> "process_restart"
                 else -> "unknown_action"
             }
@@ -305,6 +317,15 @@ class TrackingService : Service() {
                     EXTRA_LOCATION_UPDATES,
                     ArrayList(locations.map { Location(it) })
                 )
+            }
+        }
+
+        @JvmStatic
+        fun buildIdleProbeIntent(context: Context): Intent {
+            val appContext = context.applicationContext
+            return Intent(appContext, TrackingService::class.java).apply {
+                action = ACTION_IDLE_PROBE
+                setPackage(appContext.packageName)
             }
         }
 
@@ -350,6 +371,7 @@ class TrackingService : Service() {
                 trigger = SensorManagerSignificantMotionTrigger(applicationContext),
                 onResume = { resumeGps() }
             )
+            idleProbeScheduler = IdleProbeScheduler(applicationContext)
             SelectedTrackerManager.syncRuntimeSelectedTracker(this)
             TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
             syncRuntimeStateStore()
@@ -434,6 +456,14 @@ class TrackingService : Service() {
                     START_NOT_STICKY
                 }
             }
+            StartupCommandPath.IdleProbe -> {
+                if (handleIdleProbeCommand()) {
+                    START_STICKY
+                } else {
+                    stopSelfSafelyAfterStartup(reason = "idle_probe_not_tracking")
+                    START_NOT_STICKY
+                }
+            }
             StartupCommandPath.StopUnknown -> {
                 if (intent?.action == ACTION_STOP) {
                     stopTracking(reason = "action_stop")
@@ -469,6 +499,8 @@ class TrackingService : Service() {
         cleanupServiceResources(reason = "on_destroy")
         significantMotionBridge?.cancel()
         significantMotionBridge = null
+        idleProbeScheduler?.cancel()
+        idleProbeScheduler = null
         serviceJob.cancel()
         TrackingServiceLifecycleGate.markDestroyed()
         super.onDestroy()
@@ -744,11 +776,19 @@ class TrackingService : Service() {
         syncRuntimeStateStore()
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
+        val autoMotionSnapshot = autoTrackingMotionEngine.snapshot()
         val motionMode = if (settings.autoTrackingMode) {
-            autoTrackingMotionEngine.snapshot().mode
+            autoMotionSnapshot.mode
         } else {
             TrackingMotionMode.fromProfileIndex(settings.trackingProfile.index)
         }
+        // Independent evidence that the user is actually moving. Fed into
+        // both the location filter (so it does not snap real motion fixes
+        // to the anchor as "uncertainty-suppressed" noise) and the
+        // stationary detector (so we do not pause GPS while moving).
+        val activeMotionHint = settings.autoTrackingMode &&
+            ((observedSpeedMps ?: 0f) > MOTION_HINT_FLOOR_MPS ||
+                autoMotionSnapshot.smoothedSpeedMps > MOTION_HINT_FLOOR_MPS)
         val pointPropsJson = propsJson
         val result = locationIngestCoordinator.ingest(
             trackId = selectedTrackerId,
@@ -765,7 +805,8 @@ class TrackingService : Service() {
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
-            isMockLocation = LocationCompat.isMock(location)
+            isMockLocation = LocationCompat.isMock(location),
+            activeMotionHint = activeMotionHint,
         )
         val nextSessionDistance = result.nextSessionDistanceMeters
         updateRuntimeSnapshot {
@@ -867,24 +908,33 @@ class TrackingService : Service() {
         }
         if (!skipAdaptiveTrackingEffects) {
             val stationaryRadius = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS
-            val autoMotionSnapshot = autoTrackingMotionEngine.snapshot()
-            val activeMotionHint = settings.autoTrackingMode &&
-                ((observedSpeedMps ?: 0f) > 0.75f || autoMotionSnapshot.smoothedSpeedMps > 0.75f)
-            val stationaryResult = TrackingLocationPolicy.stationaryUpdate(
+            val filterIntervened = result.adjustmentReason != null
+            val stationaryReferenceLocation = result.lastFilteredLocation ?: location
+            val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
                 lastLocation = stationaryAnchorLocation,
-                location = result.lastFilteredLocation ?: location,
+                location = stationaryReferenceLocation,
                 stationaryRadiusMeters = stationaryRadius,
                 currentConsecutive = consecutiveStationaryPoints,
                 significantMotionOnly = settings.significantDataOnly,
                 activeMotionHint = activeMotionHint,
+                filterIntervened = filterIntervened,
             )
-            consecutiveStationaryPoints = stationaryResult.first
+            if (stationaryDecision.reason != "disabled") {
+                runtimeTelemetry.event(
+                    name = "stationary_update",
+                    details = "from=$consecutiveStationaryPoints to=${stationaryDecision.consecutive} " +
+                        "shouldPause=${stationaryDecision.shouldPause} reason=${stationaryDecision.reason} " +
+                        "accuracy=${if (stationaryReferenceLocation.hasAccuracy()) stationaryReferenceLocation.accuracy else -1f} " +
+                        "filterIntervened=$filterIntervened"
+                )
+            }
+            consecutiveStationaryPoints = stationaryDecision.consecutive
             stationaryAnchorLocation = when (consecutiveStationaryPoints) {
                 0 -> null
-                1 -> Location(result.lastFilteredLocation ?: location)
+                1 -> Location(stationaryReferenceLocation)
                 else -> stationaryAnchorLocation
             }
-            if (stationaryResult.second) {
+            if (stationaryDecision.shouldPause) {
                 pauseGps()
             }
             if (settings.autoTrackingMode) {
@@ -903,12 +953,14 @@ class TrackingService : Service() {
                     ?.accuracy
             )
         }
-        publishTrackPoint(
-            trackId = selectedTrackerId,
-            location = acceptedLocation,
-            propsJson = finalPropsJson,
-            quality = acceptedQuality
-        )
+        if (result.pointPersisted) {
+            publishTrackPoint(
+                trackId = selectedTrackerId,
+                location = acceptedLocation,
+                propsJson = finalPropsJson,
+                quality = acceptedQuality
+            )
+        }
         lastSpeedReferenceLocation = Location(location)
         withContext(Dispatchers.Main) {
             syncRuntimeStateStore()
@@ -934,6 +986,41 @@ class TrackingService : Service() {
             val snapshot = Location(location)
             locationListener.onLocationChanged(snapshot)
         }
+        return true
+    }
+
+    /**
+     * Periodic idle probe fired by [IdleProbeScheduler]. The probe wakes
+     * GPS while we are paused for stationarity so the system can verify
+     * the user is still still (or recover when accuracy degraded into a
+     * false-stationary). Resume reuses the standard machinery: if the
+     * incoming fixes confirm stationarity at good accuracy, the natural
+     * stationary detector will re-pause and reschedule the next probe.
+     * If accuracy is poor or the user has moved, GPS stays hot and the
+     * recording resumes.
+     *
+     * Returns false when the service is no longer tracking (so the caller
+     * stops the service); returns true otherwise (including when we are
+     * not paused, in which case the probe is a harmless no-op and any
+     * stale alarm is cancelled).
+     */
+    private fun handleIdleProbeCommand(): Boolean {
+        if (!isTracking) {
+            idleProbeScheduler?.cancel()
+            return false
+        }
+        if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
+            gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+        ) {
+            idleProbeScheduler?.cancel()
+            runtimeTelemetry.event("idle_probe_skipped", "reason=not_paused state=$gpsRuntimeState")
+            return true
+        }
+        runtimeTelemetry.event(
+            "idle_probe_fired",
+            "state=$gpsRuntimeState consecutiveStationary=$consecutiveStationaryPoints"
+        )
+        resumeGps()
         return true
     }
 
@@ -1437,7 +1524,6 @@ class TrackingService : Service() {
                 lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
                 if (!shouldPersistFallbackPoint(lastFilteredLocation, fallbackLocation)) {
                     runtimeTelemetry.event("fallback_skipped_persist", "reason=accuracy_uncertainty")
-                    emitFallbackPointWithoutPersist(fallbackLocation)
                     continue
                 }
                 processLocationUpdateSerialized(
@@ -1778,6 +1864,11 @@ class TrackingService : Service() {
         significantMotionBridge?.request()
         sigMotionSensorStartTime = System.currentTimeMillis()
         startSensorWatchdog()
+        idleProbeScheduler?.schedule()
+        runtimeTelemetry.event(
+            "idle_probe_scheduled",
+            "intervalMs=${IdleProbeScheduler.DEFAULT_INTERVAL_MS}"
+        )
         syncRuntimeStateStore()
         updateNotificationFromDb(broadcastStats = true)
     }
@@ -1814,6 +1905,7 @@ class TrackingService : Service() {
         resetElasticDistanceOverride(reason = "gps_resumed", reapplyRequest = false)
         stopFastGpsLockWindow(reason = "gps_resumed")
         cancelLowAccuracyFallbackTimer(clearCandidate = false)
+        idleProbeScheduler?.cancel()
         consecutiveStationaryPoints = 0
         stationaryAnchorLocation = null
         if (settingsRepository.getSettings().autoTrackingMode) {
@@ -1928,7 +2020,6 @@ class TrackingService : Service() {
                     runtimeTelemetry.event("fast_lock_timeout_rejected", "reason=implausible_transition")
                 } else if (!shouldPersistFallbackPoint(lastFilteredLocation, fallbackLocation)) {
                     runtimeTelemetry.event("fast_lock_timeout_skipped_persist", "reason=accuracy_uncertainty")
-                    emitFallbackPointWithoutPersist(fallbackLocation)
                 } else {
                     processLocationUpdateSerialized(
                         fallbackLocation,
@@ -2353,30 +2444,6 @@ class TrackingService : Service() {
                 gpsBearingDeg = if (location.hasBearing()) location.bearing else null,
             )
         )
-    }
-
-    private fun emitFallbackPointWithoutPersist(location: Location) {
-        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
-        if (!hasValidSelectedTrackerId(trackerId)) return
-        val propsJson = buildLocalPointPropsJson(
-            location = location,
-            distanceMeters = runtimeSnapshot.sessionTotalDistanceMeters
-        )
-        updateRuntimeSnapshot {
-            it.copy(
-                lastTrackedLatitude = location.latitude,
-                lastTrackedLongitude = location.longitude,
-                lastTrackedTimestampMs = location.time,
-                lastTrackedPropsJson = propsJson
-            )
-        }
-        publishTrackPoint(
-            trackId = trackerId,
-            location = location,
-            propsJson = propsJson,
-            quality = TrackPointQuality.DEGRADED
-        )
-        syncRuntimeStateStore()
     }
 
     private fun resolveTrackPointQuality(location: Location, propsJson: String?): TrackPointQuality {

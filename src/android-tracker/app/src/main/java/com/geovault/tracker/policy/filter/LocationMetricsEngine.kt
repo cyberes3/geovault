@@ -29,21 +29,10 @@ import kotlin.math.sqrt
  *  - The rolling cap is the rolling step distance averaged over the
  *    configured window, scaled by 3.
  *
- * The stationary detector blends multiple signals:
- *  - bearingStability and speedStability over the ring buffer
- *  - reported speed magnitude
- *  - accuracy-vs-displacement ratio (oscillating fixes have small
- *    displacement and large accuracy)
- *  - heading-quality (bearing usable / accuracy small)
- *  - jerk (low jerk == steady walk; high jerk + low displacement is the
- *    classic rubber-banding pattern)
- *
- * The output [LocationMetrics.stationaryConfidence] is a 0..1 weighted
- * sum; [LocationMetrics.isStationary] is true iff confidence >= 0.55, and
- * [LocationMetrics.isOscillating] is true iff stationary AND accuracy is
- * "moving" (delta accuracy + heading change rate are above thresholds)
- * while raw distance is non-trivial -- the textbook rubber-banding
- * signature.
+ * Stationary classification is delegated to
+ * [StationaryConfidenceCalculator]; this engine's responsibility is to
+ * keep the rolling buffer and compute the per-fix scalars the calculator
+ * consumes (stability, jerk, raw vs accuracy ratio).
  */
 class LocationMetricsEngine(
     private val rollingWindowSeconds: Double = 5.0,
@@ -153,25 +142,25 @@ class LocationMetricsEngine(
             burstDistance = burstDistance,
         )
 
-        val stationaryConfidence = computeStationaryConfidence(
-            speed = effectiveCurrentSpeed,
-            impliedSpeed = impliedSpeed,
-            bearingStability = bearingStability,
-            speedStability = speedStability,
-            jerk = jerk,
-            accuracyMeters = accuracy,
-            rawDistance = rawDistance,
+        val stationary = StationaryConfidenceCalculator.evaluate(
+            StationaryConfidenceCalculator.Input(
+                reportedSpeedMps = effectiveCurrentSpeed,
+                impliedSpeedMps = impliedSpeed,
+                bearingStability = bearingStability,
+                speedStability = speedStability,
+                jerk = jerk,
+                accuracyMeters = accuracy,
+                rawDistanceMeters = rawDistance,
+                headingChangeRateDegPerSec = headingChangeRate,
+                bufferCount = ring.size,
+            )
         )
-        val isStationary = stationaryConfidence >= STATIONARY_THRESHOLD
-        val isOscillating = isStationary &&
-            rawDistance > 1.0 &&
-            (headingChangeRate > OSCILLATION_HEADING_RATE_DEG_PER_SEC || jerk > OSCILLATION_JERK_THRESHOLD)
 
         val nextAccumulatedAccuracySq = accumulatedAccuracySquared + (accuracy * accuracy)
         val nextAnchorTrust = computeAnchorTrust(
             previousTrust = anchorTrust,
             currentAccuracy = accuracy,
-            stationaryConfidence = stationaryConfidence,
+            stationaryConfidence = stationary.score,
             headingQuality = headingQuality,
             accumulatedAccuracySquared = nextAccumulatedAccuracySq,
         )
@@ -195,9 +184,7 @@ class LocationMetricsEngine(
             bearingStability = bearingStability,
             speedStability = speedStability,
             impliedAnomaly = impliedAnomaly,
-            isStationary = isStationary,
-            isOscillating = isOscillating,
-            stationaryConfidence = stationaryConfidence,
+            stationary = stationary,
             anchorTrust = nextAnchorTrust,
             accuracyMeters = accuracy,
             previousAccuracyMeters = previousAccuracy,
@@ -371,31 +358,6 @@ class LocationMetricsEngine(
         return max(speedScore, burstScore).coerceIn(0.0, 1.0)
     }
 
-    private fun computeStationaryConfidence(
-        speed: Double,
-        impliedSpeed: Double,
-        bearingStability: Double,
-        speedStability: Double,
-        jerk: Double,
-        accuracyMeters: Double,
-        rawDistance: Double,
-    ): Double {
-        val speedTerm = (1.0 - min(speed / 1.5, 1.0)).coerceIn(0.0, 1.0)
-        val impliedTerm = (1.0 - min(impliedSpeed / 1.5, 1.0)).coerceIn(0.0, 1.0)
-        val stabilityTerm = (bearingStability * 0.5 + speedStability * 0.5).coerceIn(0.0, 1.0)
-        val jerkTerm = (1.0 - min(jerk / 4.0, 1.0)).coerceIn(0.0, 1.0)
-        val accuracyVsDisplacement = if (accuracyMeters <= 0.0 || rawDistance <= 0.0) {
-            0.5
-        } else {
-            (accuracyMeters / max(rawDistance, 1.0)).coerceIn(0.0, 1.0)
-        }
-        return (speedTerm * 0.30 +
-            impliedTerm * 0.25 +
-            stabilityTerm * 0.15 +
-            jerkTerm * 0.15 +
-            accuracyVsDisplacement * 0.15).coerceIn(0.0, 1.0)
-    }
-
     private fun computeAnchorTrust(
         previousTrust: Double,
         currentAccuracy: Double,
@@ -447,8 +409,5 @@ class LocationMetricsEngine(
         private const val IMPLIED_SPEED_FALLBACK_MAX_ACCURACY_METERS = 15.0
         private const val IMPLIED_SPEED_FALLBACK_MIN_DT_SECONDS = 1.0
         private const val IMPLIED_SPEED_FALLBACK_MIN_SPEED_MPS = 1.5
-        private const val STATIONARY_THRESHOLD = 0.55
-        private const val OSCILLATION_HEADING_RATE_DEG_PER_SEC = 60.0
-        private const val OSCILLATION_JERK_THRESHOLD = 3.0
     }
 }

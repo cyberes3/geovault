@@ -106,6 +106,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".IdleProbeReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".TrackingRecoveryReceiver"
             android:exported="false">
             <intent-filter>

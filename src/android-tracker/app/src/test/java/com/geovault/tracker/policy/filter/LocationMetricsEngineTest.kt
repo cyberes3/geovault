@@ -169,8 +169,8 @@ class LocationMetricsEngineTest {
             ts += 1_000L
         }
         val metrics = lastMetrics!!
-        assertTrue("steady standstill must score as stationary", metrics.isStationary)
-        assertFalse("steady standstill must not be flagged as oscillating", metrics.isOscillating)
+        assertTrue("steady standstill must score as stationary", metrics.stationary.isStationary)
+        assertFalse("steady standstill must not be flagged as oscillating", metrics.stationary.isOscillating)
     }
 
     @Test
@@ -197,8 +197,8 @@ class LocationMetricsEngineTest {
             ts += 1_000L
         }
         val metrics = lastMetrics!!
-        assertTrue("oscillating cluster should be classified stationary", metrics.isStationary)
-        assertTrue("oscillating cluster should be flagged as oscillating", metrics.isOscillating)
+        assertTrue("oscillating cluster should be classified stationary", metrics.stationary.isStationary)
+        assertTrue("oscillating cluster should be flagged as oscillating", metrics.stationary.isOscillating)
     }
 
     @Test

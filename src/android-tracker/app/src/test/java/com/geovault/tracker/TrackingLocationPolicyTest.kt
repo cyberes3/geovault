@@ -46,15 +46,15 @@ class TrackingLocationPolicyTest {
             longitude = 0.00002
             time = t0 + 2000
         }
-        val (c1, p1) = TrackingLocationPolicy.stationaryUpdate(null, loc1, filter, 0, true)
-        assertEquals(1, c1)
-        assertFalse(p1)
-        val (c2, p2) = TrackingLocationPolicy.stationaryUpdate(loc1, loc2, filter, c1, true)
-        assertEquals(2, c2)
-        assertFalse(p2)
-        val (c3, p3) = TrackingLocationPolicy.stationaryUpdate(loc2, loc3, filter, c2, true)
-        assertEquals(3, c3)
-        assertTrue(p3)
+        val r1 = TrackingLocationPolicy.stationaryUpdate(null, loc1, filter, 0, true)
+        assertEquals(1, r1.consecutive)
+        assertFalse(r1.shouldPause)
+        val r2 = TrackingLocationPolicy.stationaryUpdate(loc1, loc2, filter, r1.consecutive, true)
+        assertEquals(2, r2.consecutive)
+        assertFalse(r2.shouldPause)
+        val r3 = TrackingLocationPolicy.stationaryUpdate(loc2, loc3, filter, r2.consecutive, true)
+        assertEquals(3, r3.consecutive)
+        assertTrue(r3.shouldPause)
     }
 
     @Test
@@ -66,9 +66,9 @@ class TrackingLocationPolicyTest {
             time = 5_000L
             speed = 2f
         }
-        val (c, p) = TrackingLocationPolicy.stationaryUpdate(null, base, filter, 2, true)
-        assertEquals(0, c)
-        assertFalse(p)
+        val r = TrackingLocationPolicy.stationaryUpdate(null, base, filter, 2, true)
+        assertEquals(0, r.consecutive)
+        assertFalse(r.shouldPause)
     }
 
     @Test
@@ -84,7 +84,7 @@ class TrackingLocationPolicyTest {
             time = 6_000L
         }
 
-        val (count, shouldPause) = TrackingLocationPolicy.stationaryUpdate(
+        val result = TrackingLocationPolicy.stationaryUpdate(
             lastLocation = base,
             location = next,
             stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
@@ -93,7 +93,132 @@ class TrackingLocationPolicyTest {
             activeMotionHint = true,
         )
 
-        assertEquals(0, count)
-        assertFalse(shouldPause)
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+    }
+
+    /**
+     * Regression: this is the exact bug observed in the field at 21:14:55.
+     * Three fixes with mediocre 27 m accuracy that the upstream filter
+     * snapped to the anchor (`uncertainty-suppressed`) used to advance the
+     * stationary counter to 3 and pause GPS, leaving the device unable to
+     * recover until the user moved. With the hardened policy these fixes
+     * must hold the counter (no advance, no reset) and never pause.
+     */
+    @Test
+    fun stationaryUpdate_filterIntervenedFixes_doNotPause() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 27.55f
+        }
+        val noisy = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 40_000L
+            accuracy = 27.55f
+        }
+        var consecutive = 1
+        repeat(5) {
+            val result = TrackingLocationPolicy.stationaryUpdate(
+                lastLocation = anchor,
+                location = noisy,
+                stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+                currentConsecutive = consecutive,
+                significantMotionOnly = true,
+                filterIntervened = true,
+            )
+            assertEquals(consecutive, result.consecutive)
+            assertFalse(result.shouldPause)
+            assertEquals("filter_intervened", result.reason)
+            consecutive = result.consecutive
+        }
+    }
+
+    @Test
+    fun stationaryUpdate_poorAccuracy_holdsCounterAndDoesNotPause() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val poor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 50f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = poor,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+        )
+        assertEquals(2, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("poor_accuracy", result.reason)
+    }
+
+    @Test
+    fun stationaryUpdate_goodAccuracyClusteredFixes_pausesAfterThree() {
+        val anchor = Location("test").apply {
+            latitude = 47.6062
+            longitude = -122.3321
+            time = 0L
+            accuracy = 6f
+        }
+        val close = Location("test").apply {
+            latitude = 47.6062
+            longitude = -122.3321
+            time = 20_000L
+            accuracy = 7f
+        }
+        var consecutive = 1
+        for (i in 0 until 2) {
+            val result = TrackingLocationPolicy.stationaryUpdate(
+                lastLocation = anchor,
+                location = close,
+                stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+                currentConsecutive = consecutive,
+                significantMotionOnly = true,
+            )
+            consecutive = result.consecutive
+            if (i < 1) assertFalse(result.shouldPause)
+            else assertTrue(result.shouldPause)
+        }
+    }
+
+    @Test
+    fun stationaryUpdate_radiusNotInflatedByAccuracy() {
+        // A 60 m drift between anchor and fix must reset the counter even
+        // though the fix has 100 m accuracy. The old policy inflated the
+        // radius to max(50, 100) = 100 m, swallowing real movement; the
+        // hardened policy rejects the fix entirely (poor_accuracy) and
+        // holds the counter without falsely affirming stationarity.
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val drifted = Location("test").apply {
+            latitude = 0.00054 // ~60 m
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 100f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = drifted,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+        )
+        assertEquals(2, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("poor_accuracy", result.reason)
     }
 }

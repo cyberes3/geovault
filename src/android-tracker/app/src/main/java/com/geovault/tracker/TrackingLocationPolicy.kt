@@ -9,6 +9,14 @@ import android.location.Location
 object TrackingLocationPolicy {
     const val MIN_STATIONARY_RADIUS_METERS = 25f
     const val DEFAULT_STATIONARY_RADIUS_METERS = 50f
+
+    /**
+     * Maximum fix accuracy (meters) at which the stationary counter is allowed
+     * to advance. Beyond this, a fix is too noisy to be evidence of being
+     * still: a "tight" cluster of bad-accuracy fixes has nothing to do with
+     * the user actually standing in one place.
+     */
+    const val STATIONARY_ACCURACY_CEILING_METERS = 35f
     const val AUTO_START_PROFILE_INDEX = 0
     const val WALKING_INTERVAL_SEC = 20L
     const val WALKING_DISTANCE_FILTER_METERS = 7f
@@ -64,36 +72,87 @@ object TrackingLocationPolicy {
     }
 
     /**
-     * Updates stationary state. When significantMotionOnly is true and we have
-     * 3 consecutive points within distanceFilter, shouldPause is true.
+     * Outcome of a single [stationaryUpdate] call. [consecutive] is the next
+     * counter value, [shouldPause] is true when GPS may be paused, and
+     * [reason] is a stable identifier suitable for telemetry.
      *
-     * @return Pair(newConsecutiveStationaryCount, shouldPauseGps)
+     * "Hold" reasons leave the counter unchanged (neither resetting nor
+     * advancing) - they describe situations where the fix is too noisy to
+     * be evidence about stationarity in either direction.
+     */
+    data class StationaryDecision(
+        val consecutive: Int,
+        val shouldPause: Boolean,
+        val reason: String,
+    )
+
+    /**
+     * Updates stationary state from a single accepted fix.
+     *
+     * Pause requires three independent pieces of evidence to all agree on
+     * "stationary":
+     *
+     *  1. The user has opted into GPS-pause behavior ([significantMotionOnly]).
+     *  2. The fix was not adjusted by the upstream filter
+     *     ([filterIntervened] = false). A snap-to-anchor adjustment carries
+     *     no positional information about the user, only about fix quality.
+     *  3. The fix is sufficiently accurate ([accuracyCeilingMeters]) that
+     *     "no displacement against the anchor" is meaningful. A tight cluster
+     *     of bad-accuracy fixes is *not* evidence of stationarity.
+     *
+     * When (2) or (3) fails the counter is held (not reset, not advanced):
+     * a transient noisy fix should neither erase legitimate progress nor
+     * push us into a false pause.
      */
     @JvmStatic
+    @JvmOverloads
     fun stationaryUpdate(
         lastLocation: Location?,
         location: Location,
         stationaryRadiusMeters: Float,
         currentConsecutive: Int,
         significantMotionOnly: Boolean,
-        activeMotionHint: Boolean = false
-    ): Pair<Int, Boolean> {
-        if (!significantMotionOnly) return 0 to false
-        if (activeMotionHint) return 0 to false
-
-        // If hardware already detects walking-or-faster motion, we are not stationary.
+        activeMotionHint: Boolean = false,
+        filterIntervened: Boolean = false,
+        accuracyCeilingMeters: Float = STATIONARY_ACCURACY_CEILING_METERS,
+    ): StationaryDecision {
+        if (!significantMotionOnly) {
+            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "disabled")
+        }
+        if (activeMotionHint) {
+            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_motion_hint")
+        }
         if (location.hasSpeed() && location.speed > 0.75f) {
-            return 0 to false
+            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "gps_speed_movement")
+        }
+        if (filterIntervened) {
+            return StationaryDecision(
+                consecutive = currentConsecutive,
+                shouldPause = false,
+                reason = "filter_intervened",
+            )
+        }
+        if (location.hasAccuracy() && location.accuracy > accuracyCeilingMeters) {
+            return StationaryDecision(
+                consecutive = currentConsecutive,
+                shouldPause = false,
+                reason = "poor_accuracy",
+            )
         }
 
-        val anchor = lastLocation ?: return 1 to false
-        val radius = stationaryRadiusMeters
-            .coerceAtLeast(MIN_STATIONARY_RADIUS_METERS)
-            .coerceAtLeast(location.accuracy.takeIf { location.hasAccuracy() } ?: 0f)
+        val anchor = lastLocation
+            ?: return StationaryDecision(consecutive = 1, shouldPause = false, reason = "first_anchor")
+        val radius = stationaryRadiusMeters.coerceAtLeast(MIN_STATIONARY_RADIUS_METERS)
         val dist = anchor.distanceTo(location)
-        val newConsecutive = if (dist <= radius) currentConsecutive + 1 else 1
+        val withinRadius = dist <= radius
+        val newConsecutive = if (withinRadius) currentConsecutive + 1 else 1
         val shouldPause = newConsecutive >= 3
-        return newConsecutive to shouldPause
+        val reason = when {
+            shouldPause -> "pause_threshold_reached"
+            withinRadius -> "advance_within_radius"
+            else -> "reset_outside_radius"
+        }
+        return StationaryDecision(consecutive = newConsecutive, shouldPause = shouldPause, reason = reason)
     }
 
     /**

@@ -69,6 +69,7 @@ object TrackPointPolicyEngine {
         nowMs: Long,
         nowElapsedRealtimeNanos: Long? = null,
         config: LocationFilterConfig,
+        activeMotionHint: Boolean = false,
     ): TrackPointDecision {
         if (event.lat !in -90.0..90.0 || event.lon !in -180.0..180.0) {
             return rejectWithBaseMetrics(
@@ -144,7 +145,7 @@ object TrackPointPolicyEngine {
             bearingDegrees = event.gpsBearingDeg,
         )
 
-        val result = filter.evaluate(input)
+        val result = filter.evaluate(input, activeMotionHint = activeMotionHint)
         return mapResultToDecision(
             event = event,
             normalizedTimestampMs = normalizedTimestampMs,
