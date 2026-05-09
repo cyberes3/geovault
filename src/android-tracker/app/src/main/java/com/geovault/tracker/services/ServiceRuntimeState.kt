@@ -189,6 +189,8 @@ data class TrackingRuntimeSnapshot(
     val queuedPointsVisible: Int = 0,
     val sessionTotalDistanceMeters: Float = 0f,
     val lastAccuracyMeters: Float? = null,
+    val lastGoodAccuracyMeters: Float? = null,
+    val lastGoodAccuracyAtElapsedMs: Long = 0L,
     val lastTrackedLatitude: Double? = null,
     val lastTrackedLongitude: Double? = null,
     val lastTrackedTimestampMs: Long = 0L,

@@ -70,6 +70,7 @@ import com.geovault.tracker.services.QueueUploadConfig
 import com.geovault.tracker.services.QueueUploadEngine
 import com.geovault.tracker.services.QueueUploadScope
 import com.geovault.tracker.services.RecordingRuntimeReducer
+import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
 import com.geovault.tracker.services.RuntimeEventPublisher
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
@@ -853,9 +854,9 @@ class TrackingService : Service() {
         }
         val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
         if (!isTracking || runGeneration != trackingGeneration) return
-        updateRuntimeSnapshot {
-            it.copy(lastAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null)
-        }
+        applyAccuracyHoldUpdate(
+            incomingAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+        )
         syncRuntimeStateStore()
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
@@ -907,12 +908,14 @@ class TrackingService : Service() {
             isMockLocation = LocationCompat.isMock(location),
         )
         val nextSessionDistance = result.nextSessionDistanceMeters
-        updateRuntimeSnapshot {
-            it.copy(
-                lastAccuracyMeters = result.lastAccuracyMeters,
-                sessionTotalDistanceMeters = if (result.accepted) nextSessionDistance else it.sessionTotalDistanceMeters
-            )
-        }
+        applyAccuracyHoldUpdate(
+            incomingAccuracyMeters = result.lastAccuracyMeters,
+            extraTransform = { snapshot ->
+                snapshot.copy(
+                    sessionTotalDistanceMeters = if (result.accepted) nextSessionDistance else snapshot.sessionTotalDistanceMeters
+                )
+            },
+        )
         result.policyMetrics?.let { metrics ->
             runtimeTelemetry.decision(
                 name = "location_filter",
@@ -1311,17 +1314,19 @@ class TrackingService : Service() {
             location = acceptedLocation,
             distanceMeters = result.nextSessionDistanceMeters,
         )
-        updateRuntimeSnapshot {
-            it.copy(
-                queuedPointsVisible = result.queuedPointsVisible,
-                lastAccuracyMeters = result.lastAccuracyMeters,
-                sessionTotalDistanceMeters = result.nextSessionDistanceMeters,
-                lastTrackedLatitude = result.lastTrackedLatitude,
-                lastTrackedLongitude = result.lastTrackedLongitude,
-                lastTrackedTimestampMs = result.lastTrackedTimestampMs,
-                lastTrackedPropsJson = finalPropsJson,
-            )
-        }
+        applyAccuracyHoldUpdate(
+            incomingAccuracyMeters = result.lastAccuracyMeters,
+            extraTransform = { snapshot ->
+                snapshot.copy(
+                    queuedPointsVisible = result.queuedPointsVisible,
+                    sessionTotalDistanceMeters = result.nextSessionDistanceMeters,
+                    lastTrackedLatitude = result.lastTrackedLatitude,
+                    lastTrackedLongitude = result.lastTrackedLongitude,
+                    lastTrackedTimestampMs = result.lastTrackedTimestampMs,
+                    lastTrackedPropsJson = finalPropsJson,
+                )
+            },
+        )
         publishTrackPoint(
             trackId = selectedTrackerId,
             location = acceptedLocation,
@@ -1520,6 +1525,45 @@ class TrackingService : Service() {
         return synchronized(runtimeSnapshotLock) {
             runtimeSnapshot = transform(runtimeSnapshot)
             runtimeSnapshot
+        }
+    }
+
+    /**
+     * Applies [RuntimeAccuracyHoldPolicy] for the incoming fix's accuracy and folds the result
+     * into the snapshot so brief noisy fixes after a wakeup don't flicker the UI accuracy
+     * indicator. Optional [extraTransform] runs against the snapshot *after* the accuracy fields
+     * are folded in, so callers can update unrelated fields atomically alongside the accuracy
+     * decision.
+     */
+    private fun applyAccuracyHoldUpdate(
+        incomingAccuracyMeters: Float?,
+        extraTransform: ((TrackingRuntimeSnapshot) -> TrackingRuntimeSnapshot)? = null,
+    ): TrackingRuntimeSnapshot {
+        val threshold = resolveCurrentAccuracyFilter()
+        val nowElapsedMs = SystemClock.elapsedRealtime()
+        return updateRuntimeSnapshot { snapshot ->
+            val decision = RuntimeAccuracyHoldPolicy.next(
+                previous = snapshot,
+                incomingAccuracyMeters = incomingAccuracyMeters,
+                effectiveAccuracyThresholdMeters = threshold,
+                nowElapsedMs = nowElapsedMs,
+            )
+            val lastGoodAgeMs = decision.lastGoodAccuracyAtElapsedMs
+                .takeIf { it > 0L }
+                ?.let { nowElapsedMs - it }
+            runtimeTelemetry.decision(
+                name = "accuracy_hold",
+                details = "raw=${incomingAccuracyMeters ?: -1f} displayed=${decision.displayedAccuracyMeters ?: -1f} " +
+                    "threshold=$threshold held=${decision.heldLastGoodAccuracy} " +
+                    "lastGood=${decision.lastGoodAccuracyMeters ?: -1f} lastGoodAgeMs=${lastGoodAgeMs ?: -1L} " +
+                    "graceMs=${RuntimeAccuracyHoldPolicy.ACCURACY_HOLD_GRACE_MS}"
+            )
+            val withAccuracy = snapshot.copy(
+                lastAccuracyMeters = decision.displayedAccuracyMeters,
+                lastGoodAccuracyMeters = decision.lastGoodAccuracyMeters,
+                lastGoodAccuracyAtElapsedMs = decision.lastGoodAccuracyAtElapsedMs,
+            )
+            extraTransform?.invoke(withAccuracy) ?: withAccuracy
         }
     }
 
