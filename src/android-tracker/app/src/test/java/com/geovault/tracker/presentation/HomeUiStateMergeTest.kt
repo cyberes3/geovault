@@ -46,4 +46,19 @@ class HomeUiStateMergeTest {
         val merged = mergeHomeUiState(runtime, HomePermissionSnapshot(), statusMessage = "")
         assertEquals("id-only", merged.selectedTrackerDisplayName)
     }
+
+    @Test
+    fun merge_startupActiveRendersAsTrackingAndStarting() {
+        val runtime = TrackingRuntimeSnapshot(
+            recordingRuntime = RecordingRuntime(startupActive = true, selectedTrackerId = "t1"),
+            lifecycleState = TrackingLifecycleState.STOPPED,
+            selectedTrackerId = "t1",
+            selectedTrackerName = "Field truck",
+        )
+
+        val merged = mergeHomeUiState(runtime, HomePermissionSnapshot(), statusMessage = "")
+
+        assertTrue(merged.isTracking)
+        assertEquals(TrackingLifecycleState.STARTING, merged.lifecycleState)
+    }
 }

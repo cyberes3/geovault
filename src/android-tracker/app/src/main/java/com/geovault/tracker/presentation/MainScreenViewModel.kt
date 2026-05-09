@@ -95,6 +95,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var serverAccessibilityRefreshJob: Job? = null
     private var preparingStartJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            TrackingRuntimeStateStore.state.collect { runtime ->
+                if (_state.value.isPreparingToTrack &&
+                    StartTrackingPreparationPolicy.shouldClearForRuntime(runtime)
+                ) {
+                    _state.update { it.copy(isPreparingToTrack = false) }
+                }
+            }
+        }
+    }
+
     fun initialize() {
         refreshAuthState()
         launchPostAuthStartupFlowsIfNeeded()
@@ -108,17 +120,25 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         preparingStartJob = viewModelScope.launch {
             if (!ensureStartupTrackingPreflight()) return@launch
             _state.update { it.copy(isPreparingToTrack = true, infoMessage = null) }
-            if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = true)) return@launch
+            if (!ensureSelectedTrackerReadyForStart(showNoSelectionMessage = true)) {
+                _state.update { it.copy(isPreparingToTrack = false) }
+                return@launch
+            }
             if (!_state.value.isPreparingToTrack) return@launch
-            TrackingCommandFacade.requestStart(
+            val result = TrackingCommandFacade.requestStart(
                 getApplication(),
                 trigger = RuntimeTrigger.EXPLICIT_START,
                 reason = "home_start"
             )
-        }.also { job ->
-            job.invokeOnCompletion {
-                preparingStartJob = null
+            if (StartTrackingPreparationPolicy.shouldClearAfterStartCommand(result)) {
                 _state.update { it.copy(isPreparingToTrack = false) }
+            }
+        }.also { job ->
+            job.invokeOnCompletion { cause ->
+                preparingStartJob = null
+                if (cause != null) {
+                    _state.update { it.copy(isPreparingToTrack = false) }
+                }
             }
         }
     }

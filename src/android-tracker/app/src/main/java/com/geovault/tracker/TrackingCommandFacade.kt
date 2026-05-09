@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import android.content.Context
 import com.geovault.tracker.runtime.RuntimeCommand
+import com.geovault.tracker.runtime.RuntimeCommandResult
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingRuntimeController
@@ -14,8 +15,8 @@ object TrackingCommandFacade {
     private const val SELECTED_TRACKER_RESTART_STOP_REASON = "selected_tracker_restart_stop"
     private val explicitStopGeneration = AtomicLong(0L)
 
-    fun requestStart(context: Context, trigger: RuntimeTrigger, reason: String) {
-        TrackingRuntimeController.get(context.applicationContext).handle(
+    fun requestStart(context: Context, trigger: RuntimeTrigger, reason: String): RuntimeCommandResult {
+        return TrackingRuntimeController.get(context.applicationContext).handle(
             RuntimeCommand(type = RuntimeCommandType.START, trigger = trigger, reason = reason)
         )
     }
