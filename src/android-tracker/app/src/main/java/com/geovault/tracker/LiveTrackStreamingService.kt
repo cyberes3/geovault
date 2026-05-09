@@ -24,6 +24,7 @@ import com.geovault.tracker.policy.RemoteStreamIngressPolicy
 import com.geovault.tracker.policy.RemoteTrackPointIngress
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.WireTimestampNormalizer
+import com.geovault.tracker.presentation.LiveTrackStreamingTargetCoordinator
 import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.StreamingHealth
 import com.geovault.tracker.services.StreamingIntent
@@ -196,6 +197,7 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun stopStreamingSession() {
+        LiveTrackStreamingTargetCoordinator.clearInMemoryRequests()
         MapStreamingServiceHelper.clearPersistedStreamingTargets(this)
         disconnectWebSocket()
         connectionSessionId.incrementAndGet()

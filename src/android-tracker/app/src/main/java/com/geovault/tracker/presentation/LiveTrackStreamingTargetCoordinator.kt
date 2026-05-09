@@ -101,6 +101,13 @@ internal object LiveTrackStreamingTargetCoordinator {
         return apply(context, emptySet(), null)
     }
 
+    @Synchronized
+    fun clearInMemoryRequests() {
+        mapRequest = null
+        paramsRequest = null
+        resetApplyGate()
+    }
+
     private fun reconcile(context: Context): StreamingSubscriptionApplyResult {
         val plan = resolveSubscriptionPlan(
             StreamingLeaseSet(

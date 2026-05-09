@@ -19,6 +19,7 @@ import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.SettingsViewModel
+import com.geovault.tracker.presentation.LiveTrackStreamingTargetCoordinator
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.ui.MainScreen
@@ -188,6 +189,7 @@ class MainActivity : ComponentActivity() {
                 })
             }
             LiveTrackStreamingService.ACTION_STOP -> {
+                LiveTrackStreamingTargetCoordinator.clearInMemoryRequests()
                 startService(Intent(this, LiveTrackStreamingService::class.java).apply {
                     this.action = action
                 })

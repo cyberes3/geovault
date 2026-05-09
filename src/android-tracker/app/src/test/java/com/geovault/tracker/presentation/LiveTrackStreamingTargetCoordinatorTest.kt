@@ -261,6 +261,56 @@ class LiveTrackStreamingTargetCoordinatorTest {
         assertEquals("start blocked; stop_failed:stop blocked", snapshot.failureReason)
     }
 
+    @Test
+    fun clearInMemoryRequests_dropsStaleMapAndParamsOwnersBeforeNextStart() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val gateway = FakeLiveTrackStreamingServiceGateway(
+            startResults = ArrayDeque(
+                listOf(
+                    MapStreamingStartResult.Started(setOf("map")),
+                    MapStreamingStartResult.Started(setOf("map", "params")),
+                    MapStreamingStartResult.Started(setOf("params")),
+                )
+            )
+        )
+        LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
+
+        LiveTrackStreamingTargetCoordinator.replaceRequest(
+            context = context,
+            owner = LiveTrackStreamingOwner.Map,
+            request = LiveTrackStreamingTargetRequest(
+                trackerIds = setOf("map"),
+                trackerName = null,
+                locallyRecordedTrackerId = null,
+            ),
+        )
+        LiveTrackStreamingTargetCoordinator.replaceRequest(
+            context = context,
+            owner = LiveTrackStreamingOwner.Params,
+            request = LiveTrackStreamingTargetRequest(
+                trackerIds = setOf("params"),
+                trackerName = null,
+                locallyRecordedTrackerId = null,
+            ),
+        )
+
+        LiveTrackStreamingTargetCoordinator.clearInMemoryRequests()
+        LiveTrackStreamingTargetCoordinator.replaceRequest(
+            context = context,
+            owner = LiveTrackStreamingOwner.Params,
+            request = LiveTrackStreamingTargetRequest(
+                trackerIds = setOf("params"),
+                trackerName = null,
+                locallyRecordedTrackerId = null,
+            ),
+        )
+
+        assertEquals(
+            listOf(setOf("map"), setOf("map", "params"), setOf("params")),
+            gateway.startedIds,
+        )
+    }
+
     private class FakeLiveTrackStreamingServiceGateway(
         private val startResults: ArrayDeque<MapStreamingStartResult>,
         private val stopResults: ArrayDeque<MapStreamingStopResult> = ArrayDeque()

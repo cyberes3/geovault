@@ -329,8 +329,8 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun displayedRosterHasLoadedTrails_groupModeWithPopulatedMember_returnsTrue() {
-        val populated = mapOf(
+    fun displayedRosterHasLoadedTrails_groupModeWithPartialRoster_returnsFalse() {
+        val partial = mapOf(
             "a" to listOf(
                 com.geovault.tracker.db.QueuedLocation(
                     id = 0L,
@@ -348,6 +348,20 @@ class TrackerMapViewModelStreamingContractsTest {
                 )
             ),
             "b" to emptyList(),
+        )
+        val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            rosterIds = setOf("a", "b"),
+            allQueueTrailsByTracker = partial,
+        )
+        assertEquals(false, ready)
+    }
+
+    @Test
+    fun displayedRosterHasLoadedTrails_groupModeWithFullRoster_returnsTrue() {
+        val populated = mapOf(
+            "a" to listOf(queuedPoint("a", time = 1L)),
+            "b" to listOf(queuedPoint("b", time = 2L)),
         )
         val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -552,6 +566,23 @@ class TrackerMapViewModelStreamingContractsTest {
             lon = 2.0,
             lat = 1.0,
             timestampMs = 1_000L,
+        )
+    }
+
+    private fun queuedPoint(trackerId: String, time: Long): com.geovault.tracker.db.QueuedLocation {
+        return com.geovault.tracker.db.QueuedLocation(
+            id = time,
+            trackerId = trackerId,
+            time = time,
+            latitude = time.toDouble(),
+            longitude = time.toDouble(),
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
+            dist = null,
         )
     }
 }

@@ -78,14 +78,12 @@ class LiveTrackStreamingReconciler(
                 }
             }
             TrackerMapStreamingCommand.Stop -> {
-                val result = LiveTrackStreamingTargetCoordinator.replaceRequest(
+                LiveTrackStreamingTargetCoordinator.replaceRequest(
                     context = appContext,
                     owner = LiveTrackStreamingOwner.Map,
                     request = null,
                 )
-                if (result is StreamingSubscriptionApplyResult.Applied) {
-                    mapStreamingLeaseActive = false
-                }
+                mapStreamingLeaseActive = false
             }
             TrackerMapStreamingCommand.NoOp -> {
                 // Single-session with no resolved displayed id cannot own a map streaming lease;
