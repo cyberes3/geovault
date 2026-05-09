@@ -72,18 +72,13 @@ class LocationFilter(
     /**
      * Evaluate a single fix.
      *
-     * @param input the canonical fix value object
-     * @param activeMotionHint independent evidence (from the upstream
-     *   motion engine) that the user is actually moving. When true, the
-     *   conservative noisy-standstill suppression is bypassed: a fix
-     *   showing real displacement should never be snapped to the anchor
-     *   when something else already concluded "the user is walking".
+     * The filter is intentionally motion-agnostic (mirrors
+     * `tslocationmanager`'s design): standstill is decided from the
+     * GPS signal itself (RSS-corrected effective distance, reported
+     * speed, jerk, stability) rather than from an upstream motion-hint
+     * boolean that can lag the chipset state.
      */
-    @JvmOverloads
-    fun evaluate(
-        input: LocationInput,
-        activeMotionHint: Boolean = false,
-    ): LocationFilterResult {
+    fun evaluate(input: LocationInput): LocationFilterResult {
         val accuracy = input.accuracyMeters?.toDouble()
         val metrics = metricsEngine.compute(current = input, previous = previousAccepted)
 
@@ -139,7 +134,6 @@ class LocationFilter(
                 previous = previous,
                 capCandidate = capCandidate,
                 metrics = metrics,
-                activeMotionHint = activeMotionHint,
             )
         }
     }
@@ -149,13 +143,12 @@ class LocationFilter(
         previous: LocationInput,
         capCandidate: Double,
         metrics: LocationMetrics,
-        activeMotionHint: Boolean,
     ): LocationFilterResult {
         // Standstill noise is checked before the outlier gate: a phantom
         // jump while sitting still must snap to anchor (Adjusted), not
         // be reported as an outlier (Rejected). Outlier handling is for
         // real-motion teleports the cap couldn't accommodate.
-        if (!activeMotionHint && isNoisyStandstill(metrics)) {
+        if (isNoisyStandstill(metrics)) {
             return commitAdjustToAnchor(
                 input = input,
                 previous = previous,
@@ -164,16 +157,25 @@ class LocationFilter(
             )
         }
 
+        // Severe-anomaly check ahead of within-cap accept, mirroring
+        // TS `LocationFilter.a` lines 158-169: an RSS-derived anomaly
+        // above 0.85 is rejected outright rather than slipped through
+        // the cap test.
+        if (metrics.impliedAnomaly >= SEVERE_ANOMALY_THRESHOLD) {
+            return LocationFilterResult.rejected(reason = "severe-anomaly", metrics = metrics)
+        }
+
         if (isOutlier(metrics, capCandidate)) {
             return LocationFilterResult.rejected(reason = "outlier-capped", metrics = metrics)
         }
 
-        if (metrics.rawDistanceMeters <= capCandidate) {
+        // Use `effectiveDistanceMeters` (RSS-corrected) for the
+        // within-cap test, matching TS lines 123 + 151. `effective` is
+        // strictly <= `raw`, so this is more permissive in the
+        // high-noise large-displacement regime, but those cases are
+        // already handled by the snap and outlier paths above.
+        if (metrics.effectiveDistanceMeters <= capCandidate) {
             return commitAccept(input = input, reason = "within-cap", metrics = metrics)
-        }
-
-        if (metrics.impliedAnomaly >= SEVERE_ANOMALY_THRESHOLD) {
-            return LocationFilterResult.rejected(reason = "severe-anomaly", metrics = metrics)
         }
 
         val capMeters = capCandidate.coerceAtMost(metrics.rawDistanceMeters)
@@ -199,24 +201,33 @@ class LocationFilter(
     /**
      * The "phone is sitting on the table but GPS keeps moving" pattern.
      *
-     * Both reported speed AND implied speed (RSS-corrected raw distance
-     * over dt) must be below [REPORTED_MOTION_FLOOR_MPS]. Real motion
-     * with a flaky speed sensor still produces meaningful implied speed
-     * because the displacement exceeds the combined accuracy envelope;
-     * a phantom GPS jump while stationary collapses the implied speed
-     * to ~0 once RSS subtracts the uncertainty.
+     * Two paths fire, both gated by the chipset itself reporting
+     * near-zero motion (`reportedSpeed < REPORTED_MOTION_FLOOR_MPS`).
      *
-     * Combined with [LocationMetrics.stationary] -- which already
-     * weighs reported speed, implied speed, bearing/speed stability,
-     * jerk, and accuracy vs displacement -- this is enough to suppress
-     * the 38 m phantom step that previously slipped through as
-     * "within-cap".
+     *  1. **Multi-signal stationary score**.
+     *     [LocationMetrics.stationary] is true (or rubber-band
+     *     oscillation flagged). The calculator -- gated by TS-style
+     *     `effective <= 1 m && bufferCount >= 3` -- weighs reported
+     *     speed, bearing/speed stability, jerk, and `rawClose`. Catches
+     *     the 38 m phantom step that previously slipped through as
+     *     "within-cap".
+     *
+     *  2. **Raw within accuracy envelope**.
+     *     The fix has displacement that fits inside
+     *     `accuracyMeters * 1.5` -- TS's `rawClose` signal. The
+     *     calculator's strict `effective <= 1 m` gate doesn't classify
+     *     this as stationary (effective can be tens of meters during
+     *     low-accuracy GPS rubber-banding), but if the chipset reports
+     *     we're not moving and the raw distance fits inside the
+     *     uncertainty envelope, we should snap rather than commit
+     *     phantom motion. This also covers the field-log case
+     *     `raw=31.8, acc=26 -> 31.8 <= 26 * 1.5 = 39`.
      */
     private fun isNoisyStandstill(metrics: LocationMetrics): Boolean {
         if (metrics.rawDistanceMeters <= 0.0) return false
         if (metrics.reportedSpeedMps >= REPORTED_MOTION_FLOOR_MPS) return false
-        if (metrics.impliedSpeedMps >= REPORTED_MOTION_FLOOR_MPS) return false
-        return metrics.stationary.isStationary || metrics.stationary.isOscillating
+        if (metrics.stationary.isStationary || metrics.stationary.isOscillating) return true
+        return metrics.rawDistanceMeters <= metrics.accuracyMeters * RAW_WITHIN_ACCURACY_MULTIPLIER
     }
 
     private fun resolveSpeedSpike(
@@ -351,5 +362,6 @@ class LocationFilter(
         private const val ANCHOR_TRUST_INFLATION = 0.5
         private const val ANOMALY_DEFLATION = 0.4
         private const val REPORTED_MOTION_FLOOR_MPS = 0.5
+        private const val RAW_WITHIN_ACCURACY_MULTIPLIER = 1.5
     }
 }

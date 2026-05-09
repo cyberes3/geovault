@@ -180,7 +180,12 @@ class LocationFilterTest {
     }
 
     @Test
-    fun accurateHighwayMotion_withTinyReportedSpeed_isAccepted() {
+    fun accurateHighwayMotion_withTinyReportedSpeed_isRejectedAsAnomaly() {
+        // TS-aligned behavior: a near-zero reported speed paired with a
+        // ~25 m/s RSS-implied displacement is a clear chipset
+        // misreport, and the implied/reported ratio (~50) puts the
+        // anomaly score at 1.0. The filter must reject this outright
+        // rather than smuggle it through as accurate motion.
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -204,7 +209,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
     }
 
     @Test
@@ -240,23 +245,27 @@ class LocationFilterTest {
         // Realistic standstill noise: 8.9 m raw step with ~20 m accuracy
         // means RSS-corrected motion is zero -- the chipset is telling us
         // we did not move beyond uncertainty. The filter must snap to
-        // the anchor instead of recording phantom drift.
+        // the anchor instead of recording phantom drift. Three priming
+        // fixes match `tslocationmanager`'s minimum buffer for stationary
+        // classification.
         val filter = LocationFilter(LocationFilterConfig.Default)
-        filter.evaluate(
-            LocationInput(
-                latitude = 24.7097,
-                longitude = -81.1011,
-                timestampMs = 0L,
-                accuracyMeters = 20f,
-                speedMps = 0f,
+        repeat(3) { i ->
+            filter.evaluate(
+                LocationInput(
+                    latitude = 24.7097,
+                    longitude = -81.1011,
+                    timestampMs = i * 1_000L,
+                    accuracyMeters = 20f,
+                    speedMps = 0f,
+                )
             )
-        )
+        }
 
         val result = filter.evaluate(
             LocationInput(
                 latitude = 24.70978,
                 longitude = -81.1011,
-                timestampMs = 1_000L,
+                timestampMs = 4_000L,
                 accuracyMeters = 20f,
                 speedMps = 0f,
             )
@@ -332,30 +341,113 @@ class LocationFilterTest {
     }
 
     @Test
-    fun outlierBeyondOneAndAHalfCapCandidate_isRejectedAsOutlierCapped() {
-        // Cap inflation (anchor trust, anomaly) puts the cap around 90 m
-        // for accuracy=30 m. A 200 m raw step blows past the 1.5x cap
-        // multiplier and must reject as outlier-capped, not get clipped.
+    fun phantomJumpInsideRawCloseEnvelope_isSnappedToAnchor() {
+        // Field-log shape: raw~31.8 m, accuracy=26 m, dt=30 s. Path 2
+        // (raw <= accuracy * 1.5 = 39 m) catches it: chipset reports
+        // zero motion, displacement fits inside the uncertainty
+        // envelope, so we snap to anchor instead of committing phantom
+        // motion that would pollute the rolling buffer.
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        repeat(3) { i ->
+            filter.evaluate(
+                LocationInput(
+                    latitude = 24.7097,
+                    longitude = -81.1011,
+                    timestampMs = i * 1_000L,
+                    accuracyMeters = 26f,
+                    speedMps = 0f,
+                    bearingDegrees = 90f,
+                )
+            )
+        }
+
+        // ~31 m east of the anchor at lat 24.7 (well inside 39 m envelope)
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.10079,
+                timestampMs = 30_000L,
+                accuracyMeters = 26f,
+                speedMps = 0f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals("uncertainty-suppressed", result.reason)
+    }
+
+    @Test
+    fun severeImpliedAnomaly_isRejectedBeforeWithinCapAccept() {
+        // Locks in the resolveConservative reorder: when implied
+        // anomaly is >= 0.85 the fix must be rejected as
+        // `severe-anomaly`, even if other paths (within-cap accept,
+        // outlier-capped) would otherwise apply.
+        //
+        // computeImpliedAnomaly's speedScore saturates when
+        // (RSS-corrected implied) / max(reported, 0.5) >= 4. With
+        // accuracy=2 m, RSS = ~2.83 m. A 50 m raw step in 1 s gives
+        // effective ~47 m and implied ~47 m/s. Against a reported
+        // speed of 1 m/s the ratio is 47 -> speedScore = 1 -> anomaly
+        // = 1, well above the 0.85 severe threshold. The reorder
+        // ensures we reject before any within-cap accept could fire.
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
                 latitude = 24.7097,
                 longitude = -81.1011,
                 timestampMs = 0L,
-                accuracyMeters = 30f,
+                accuracyMeters = 2f,
                 speedMps = 1f,
-                bearingDegrees = 90f,
+                bearingDegrees = 0f,
             )
         )
 
         val result = filter.evaluate(
             LocationInput(
-                latitude = 24.7097,
-                longitude = -81.0991,  // ~200 m east
-                timestampMs = 5_000L,
-                accuracyMeters = 30f,
+                latitude = 24.7097 + 0.000449,  // ~50 m north
+                longitude = -81.1011,
+                timestampMs = 1_000L,
+                accuracyMeters = 2f,
                 speedMps = 1f,
-                bearingDegrees = 90f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals("severe-anomaly", result.reason)
+    }
+
+    @Test
+    fun outlierBeyondOneAndAHalfCapCandidate_isRejectedAsOutlierCapped() {
+        // Reproduces the outlier-capped path under the new TS-aligned
+        // ordering: severe-anomaly is checked first, so the inputs
+        // must keep the implied/reported ratio below 3.625 while still
+        // pushing raw above capCandidate * 1.5. With reported 15 m/s,
+        // accuracy 5 m, dt 0.5 s, raw ~30 m the kinematic cap collapses
+        // to 15 m (`canTrustImplied` is false at dt < 1 s), implied
+        // works out to ~46 m/s (ratio 3.06 -> speedScore 0.62), and
+        // raw 30 > cap * 1.5 = 22.5 fires the outlier path.
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 15f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097 + 0.000270,  // ~30 m north
+                longitude = -81.1011,
+                timestampMs = 500L,
+                accuracyMeters = 5f,
+                speedMps = 15f,
+                bearingDegrees = 0f,
             )
         )
 

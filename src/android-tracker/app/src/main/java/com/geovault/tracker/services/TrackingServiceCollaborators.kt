@@ -61,7 +61,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         nowElapsedRealtimeNanos: Long,
         sessionStartTimeMs: Long = 0L,
         isMockLocation: Boolean = LocationCompat.isMock(location),
-        activeMotionHint: Boolean = false,
     ): LocationIngestResult {
         require(queuedTrackerId.isNotBlank()) { "queuedTrackerId must not be blank" }
         val accuracy = if (location.hasAccuracy()) location.accuracy else null
@@ -77,7 +76,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 isMockLocation = isMockLocation,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-                activeMotionHint = activeMotionHint,
             )
             if (!decision.accepted || decision.canonicalEvent == null) {
                 return ignored(
@@ -209,7 +207,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         isMockLocation: Boolean,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
-        activeMotionHint: Boolean,
     ): com.geovault.tracker.policy.TrackPointDecision {
         val event = trackPointEventForPolicy(trackId = trackId, location = location, isMockLocation = isMockLocation, nowMs = nowMs)
         // Pipeline derives "previous" from pipeline-local accepted state.
@@ -225,7 +222,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             config = config,
-            activeMotionHint = activeMotionHint,
         )
     }
 
@@ -236,7 +232,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
         config: LocationFilterConfig,
-        activeMotionHint: Boolean = false,
     ): com.geovault.tracker.policy.TrackPointDecision {
         return TrackPointCrossSourceState.withLock {
             val streamKey = localStreamKey(trackId)
@@ -246,7 +241,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
                 config = config,
-                activeMotionHint = activeMotionHint,
             )
             var effectivePreviousByTrack = currentPreviousByTrack
             if (!decision.accepted &&
@@ -264,7 +258,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                     nowMs = nowMs,
                     nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
                     config = config,
-                    activeMotionHint = activeMotionHint,
                 )
             }
             if (!decision.accepted || decision.canonicalEvent == null) {

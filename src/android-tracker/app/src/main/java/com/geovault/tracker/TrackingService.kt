@@ -806,7 +806,6 @@ class TrackingService : Service() {
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
             isMockLocation = LocationCompat.isMock(location),
-            activeMotionHint = activeMotionHint,
         )
         val nextSessionDistance = result.nextSessionDistanceMeters
         updateRuntimeSnapshot {

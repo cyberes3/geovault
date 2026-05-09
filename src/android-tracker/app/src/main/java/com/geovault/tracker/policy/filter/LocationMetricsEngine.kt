@@ -145,13 +145,12 @@ class LocationMetricsEngine(
         val stationary = StationaryConfidenceCalculator.evaluate(
             StationaryConfidenceCalculator.Input(
                 reportedSpeedMps = effectiveCurrentSpeed,
-                impliedSpeedMps = impliedSpeed,
                 bearingStability = bearingStability,
                 speedStability = speedStability,
                 jerk = jerk,
                 accuracyMeters = accuracy,
                 rawDistanceMeters = rawDistance,
-                headingChangeRateDegPerSec = headingChangeRate,
+                effectiveDistanceMeters = effectiveDistance,
                 bufferCount = ring.size,
             )
         )

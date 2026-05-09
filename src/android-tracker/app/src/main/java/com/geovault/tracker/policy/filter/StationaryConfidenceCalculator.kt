@@ -1,65 +1,67 @@
 package com.geovault.tracker.policy.filter
 
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.abs
 
 /**
- * Pure scoring function that combines the chipset-level signals
- * [LocationMetricsEngine] already tracks (reported speed, implied speed,
- * bearing/speed stability, jerk, accuracy vs displacement) into a single
- * [StationaryConfidence].
+ * Pure scoring function adapted verbatim from `tslocationmanager`'s
+ * `LocationMetricsEngine.a(m, current)` (decompiled lib v4.1.3,
+ * lines 280-319). Stateless and side-effect free for unit testability
+ * and easy retuning.
  *
- * Stateless and side-effect free so it can be unit tested in isolation
- * and freely swapped if the weighting needs tuning.
+ * Inputs all come from the engine's per-fix scalars; the gate
+ * (`bufferCount >= 3 && effectiveDistanceMeters <= 1.0 m`) and the
+ * conditional-bonus weighting are TS's exact formulation. We do not
+ * weigh implied speed here -- TS doesn't either, because the
+ * `effective <= 1.0` gate already encodes "RSS says we did not move."
  *
- * Weights mirror the well-tested heuristic used by `tslocationmanager`:
- * speed-zero dominates, with stability, jerk, and the
- * accuracy-vs-displacement ratio providing supporting evidence. The
- * weighted sum is clamped to [0, 1] and compared against
- * [StationaryConfidence.STATIONARY_THRESHOLD].
+ * Score breakdown:
+ *  - `speedZero` (`speed in [0, 1)`): `+0.4` if `speed < 0.5`, else `+0.3`
+ *  - `speedStable` (`speedStability > 0.7`): `+ speedStability * 0.2`
+ *  - `bearingNoisy` (`bearingStability < 0.3`): `+ (1 - bearingStability) * 0.15`
+ *  - `rawClose` (`raw < accuracy * 1.5`): `+0.15`
+ *  - `lowJerk` (`abs(jerk) < 0.5`): `+0.10`
+ *
+ * `isStationary = score >= STATIONARY_THRESHOLD` with one override:
+ * if `isOscillating && score > 0.5`, force `isStationary = true`.
+ * This catches rubber-band patterns whose score falls in the marginal
+ * (0.5, 0.6) band but whose oscillation signature is unambiguous.
+ *
+ * `isOscillating = bearingNoisy && rawClose && speedZero` (TS line 291).
  */
 object StationaryConfidenceCalculator {
-    /**
-     * @param input current location signals.
-     * @return [StationaryConfidence.NONE] when the rolling window has
-     *   not yet accumulated enough evidence; otherwise a fully-populated
-     *   [StationaryConfidence].
-     */
     fun evaluate(input: Input): StationaryConfidence {
-        if (input.bufferCount <= 0) {
-            // First fix in a session: no prior anchor, no displacement
-            // history -- nothing to be confident about.
-            return StationaryConfidence.NONE
+        if (input.bufferCount < MIN_SAMPLES_FOR_SCORING) return StationaryConfidence.NONE
+        if (input.effectiveDistanceMeters > EFFECTIVE_STATIONARY_CEILING_METERS) return StationaryConfidence.NONE
+
+        val speedZero = input.reportedSpeedMps >= 0.0 && input.reportedSpeedMps < SPEED_ZERO_CEILING_MPS
+        val speedStable = input.speedStability > SPEED_STABILITY_FLOOR
+        val bearingNoisy = input.bearingStability < BEARING_STABILITY_NOISE_CEILING
+        val rawClose = input.rawDistanceMeters < input.accuracyMeters * RAW_CLOSE_ACCURACY_MULTIPLIER
+        val lowJerk = abs(input.jerk) < LOW_JERK_CEILING
+
+        val isOscillating = bearingNoisy && rawClose && speedZero
+
+        var score = 0.0
+        if (speedZero) {
+            score += if (input.reportedSpeedMps < SPEED_HIGH_BONUS_CEILING) {
+                SPEED_HIGH_BONUS
+            } else {
+                SPEED_LOW_BONUS
+            }
         }
+        if (speedStable) score += input.speedStability * SPEED_STABLE_WEIGHT
+        if (bearingNoisy) score += (1.0 - input.bearingStability) * BEARING_NOISY_WEIGHT
+        if (rawClose) score += RAW_CLOSE_BONUS
+        if (lowJerk) score += LOW_JERK_BONUS
+        score = score.coerceIn(0.0, 1.0)
 
-        val speedTerm = (1.0 - min(input.reportedSpeedMps / SPEED_SCALE, 1.0)).coerceIn(0.0, 1.0)
-        val impliedTerm = (1.0 - min(input.impliedSpeedMps / SPEED_SCALE, 1.0)).coerceIn(0.0, 1.0)
-        val stabilityTerm = (input.bearingStability * 0.5 + input.speedStability * 0.5)
-            .coerceIn(0.0, 1.0)
-        val jerkTerm = (1.0 - min(input.jerk / JERK_SCALE, 1.0)).coerceIn(0.0, 1.0)
-        val accuracyVsDisplacement = if (input.accuracyMeters <= 0.0 || input.rawDistanceMeters <= 0.0) {
-            0.5
-        } else {
-            (input.accuracyMeters / max(input.rawDistanceMeters, 1.0)).coerceIn(0.0, 1.0)
+        var isStationary = score >= StationaryConfidence.STATIONARY_THRESHOLD
+        if (isOscillating && score > OSCILLATION_OVERRIDE_FLOOR) {
+            // Rubber-band patterns whose individual signals don't push
+            // the score over the main threshold but whose oscillation
+            // signature is unambiguous.
+            isStationary = true
         }
-
-        val score = (
-            speedTerm * WEIGHT_SPEED +
-                impliedTerm * WEIGHT_IMPLIED_SPEED +
-                stabilityTerm * WEIGHT_STABILITY +
-                jerkTerm * WEIGHT_JERK +
-                accuracyVsDisplacement * WEIGHT_ACCURACY_RATIO
-            ).coerceIn(0.0, 1.0)
-
-        val isStationary = score >= StationaryConfidence.STATIONARY_THRESHOLD
-
-        // Rubber-banding signature: confident-stationary AND we still
-        // saw real motion in the raw signal AND something is bouncing
-        // (heading changing fast OR a sudden velocity discontinuity).
-        val isOscillating = isStationary &&
-            input.rawDistanceMeters > OSCILLATION_MIN_RAW_METERS &&
-            (input.headingChangeRateDegPerSec > OSCILLATION_HEADING_RATE_DEG_PER_SEC ||
-                input.jerk > OSCILLATION_JERK_THRESHOLD)
 
         return StationaryConfidence(
             score = score,
@@ -75,26 +77,28 @@ object StationaryConfidenceCalculator {
      */
     data class Input(
         val reportedSpeedMps: Double,
-        val impliedSpeedMps: Double,
         val bearingStability: Double,
         val speedStability: Double,
         val jerk: Double,
         val accuracyMeters: Double,
         val rawDistanceMeters: Double,
-        val headingChangeRateDegPerSec: Double,
+        val effectiveDistanceMeters: Double,
         val bufferCount: Int,
     )
 
-    private const val SPEED_SCALE = 1.5
-    private const val JERK_SCALE = 4.0
-
-    private const val WEIGHT_SPEED = 0.30
-    private const val WEIGHT_IMPLIED_SPEED = 0.25
-    private const val WEIGHT_STABILITY = 0.15
-    private const val WEIGHT_JERK = 0.15
-    private const val WEIGHT_ACCURACY_RATIO = 0.15
-
-    private const val OSCILLATION_MIN_RAW_METERS = 1.0
-    private const val OSCILLATION_HEADING_RATE_DEG_PER_SEC = 60.0
-    private const val OSCILLATION_JERK_THRESHOLD = 3.0
+    private const val MIN_SAMPLES_FOR_SCORING = 3
+    private const val EFFECTIVE_STATIONARY_CEILING_METERS = 1.0
+    private const val SPEED_ZERO_CEILING_MPS = 1.0
+    private const val SPEED_HIGH_BONUS_CEILING = 0.5
+    private const val SPEED_HIGH_BONUS = 0.4
+    private const val SPEED_LOW_BONUS = 0.3
+    private const val SPEED_STABILITY_FLOOR = 0.7
+    private const val SPEED_STABLE_WEIGHT = 0.2
+    private const val BEARING_STABILITY_NOISE_CEILING = 0.3
+    private const val BEARING_NOISY_WEIGHT = 0.15
+    private const val RAW_CLOSE_ACCURACY_MULTIPLIER = 1.5
+    private const val RAW_CLOSE_BONUS = 0.15
+    private const val LOW_JERK_CEILING = 0.5
+    private const val LOW_JERK_BONUS = 0.10
+    private const val OSCILLATION_OVERRIDE_FLOOR = 0.5
 }

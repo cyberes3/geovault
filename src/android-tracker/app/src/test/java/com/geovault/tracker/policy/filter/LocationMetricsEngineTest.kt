@@ -182,8 +182,12 @@ class LocationMetricsEngineTest {
         val baseLon = -81.1011
         val offsets = doubleArrayOf(0.0, 5e-5, -5e-5, 6e-5, -6e-5, 4e-5, -4e-5, 7e-5)
         var lastMetrics: LocationMetrics? = null
+        // Truly oscillating bearings (alternating ~180 deg) to drive
+        // bearingStability below the 0.3 noise threshold in the
+        // TS-aligned classifier; the previous (idx * 75) sequence
+        // produced uniform 75 deg deltas, which scores at 0.58.
         offsets.forEachIndexed { idx, off ->
-            val bearing = (idx * 75) % 360
+            val bearing = if (idx % 2 == 0) 10 else 190
             val sample = LocationInput(
                 latitude = baseLat + off,
                 longitude = baseLon - off,

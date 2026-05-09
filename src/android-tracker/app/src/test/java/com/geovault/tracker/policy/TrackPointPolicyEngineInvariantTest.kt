@@ -106,28 +106,32 @@ class TrackPointPolicyEngineInvariantTest {
             normalizeSecondsTimestamps = false,
             freshnessTtlMs = 0L,
         )
-        TrackPointPolicyEngine.evaluate(
-            event = TrackPointEvent(
-                source = TrackPointSource.LOCAL_GPS,
-                trackId = track,
-                lon = 10.0,
-                lat = 10.0,
-                timestampMs = 1_000L,
-                accuracyMeters = 50f,
-            ),
-            nowMs = 1_000L,
-            config = config,
-        )
+        // Three priming fixes at the anchor satisfy the bufferCount>=3
+        // gate the stationary classifier inherits from `tslocationmanager`.
+        repeat(3) { i ->
+            TrackPointPolicyEngine.evaluate(
+                event = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = track,
+                    lon = 10.0,
+                    lat = 10.0,
+                    timestampMs = 1_000L + i * 1_000L,
+                    accuracyMeters = 50f,
+                ),
+                nowMs = 1_000L + i * 1_000L,
+                config = config,
+            )
+        }
         val decision = TrackPointPolicyEngine.evaluate(
             event = TrackPointEvent(
                 source = TrackPointSource.LOCAL_GPS,
                 trackId = track,
                 lon = 10.00001,
                 lat = 10.00001,
-                timestampMs = 2_000L,
+                timestampMs = 5_000L,
                 accuracyMeters = 50f,
             ),
-            nowMs = 2_000L,
+            nowMs = 5_000L,
             config = config,
         )
         assertTrue(decision.accepted)
