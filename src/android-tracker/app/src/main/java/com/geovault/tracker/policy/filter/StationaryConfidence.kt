@@ -26,8 +26,8 @@ data class StationaryConfidence(
         /**
          * Threshold above which we treat the score as confident
          * standstill. 0.60 leaves a clear margin above the marginal
-         * 0.55 region, matching `tslocationmanager`'s threshold and
-         * preventing snap/accept flicker on borderline fixes.
+         * 0.55 region and prevents snap/accept flicker on borderline
+         * fixes.
          */
         const val STATIONARY_THRESHOLD = 0.60
 

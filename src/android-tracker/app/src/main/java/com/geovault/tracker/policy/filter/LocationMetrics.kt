@@ -28,14 +28,13 @@ package com.geovault.tracker.policy.filter
  *
  * Stability / motion:
  *  - [jerk] |dSpeed|/dt; large values indicate sudden velocity discontinuities
- *  - [deltaHeadingDegrees] absolute shortest-arc bearing change since the
- *    previous fix (0..180)
- *  - [headingChangeRateDegPerSec] [deltaHeadingDegrees] / [dtSeconds]
  *  - [headingQuality] 0..1, blends bearing stability and horizontal accuracy
  *  - [bearingStability] 0..1 over the rolling window (1 == bearings agree)
  *  - [speedStability] 0..1 over the rolling window (1 == speeds agree)
- *  - [impliedAnomaly] 0..1 anomaly score from implied-speed and burst spikes;
- *    inflates the cap and feeds the policy switch's reject branch
+ *  - [impliedAnomaly] true iff the fix is anomalous:
+ *    `raw/dt > maxImpliedSpeed` OR `(raw > maxBurstDistance && dt <=
+ *    burstWindow)`. Used by the Conservative policy to inflate the cap and
+ *    flip the outlier reject reason from `outlier-capped` to `implied-speed`.
  *  - [stationary] multi-signal stationary classification; see
  *    [StationaryConfidence] for the score, isStationary flag, and the
  *    rubber-banding (oscillation) flag
@@ -55,16 +54,13 @@ data class LocationMetrics(
     val capCandidate: Double,
     val accumulatedAccuracySquared: Double,
     val jerk: Double,
-    val deltaHeadingDegrees: Double,
-    val headingChangeRateDegPerSec: Double,
     val headingQuality: Double,
     val bearingStability: Double,
     val speedStability: Double,
-    val impliedAnomaly: Double,
+    val impliedAnomaly: Boolean,
     val stationary: StationaryConfidence,
     val anchorTrust: Double,
     val accuracyMeters: Double,
     val previousAccuracyMeters: Double,
     val rollingAverageStepMeters: Double,
-    val burstDistanceMeters: Double,
 )

@@ -16,15 +16,15 @@ package com.geovault.tracker.policy.filter
  *   pass before the policy switch. Disable for diagnostics only.
  * @property kalmanProfile preset for [KalmanTuning].
  * @property policy outlier handling strategy. See [LocationFilterPolicy].
- * @property maxImpliedSpeedMps absolute upper bound on the implied speed
- *   between two accepted fixes (m/s). The default 50 m/s (180 km/h) covers
- *   highway driving with comfortable headroom.
- * @property maxBurstDistanceMeters maximum total distance any single fix
- *   may add inside a [burstWindowSeconds] window, regardless of how that
- *   distance was distributed.
- * @property burstWindowSeconds size of the rolling burst-distance window.
- *   2 s matches consumer-grade GPS update rates and the rate at which a
- *   handful of bad fixes can stack on top of a good one.
+ * @property maxImpliedSpeedMps absolute upper bound on `raw / dt` between
+ *   two consecutive seen fixes (m/s). Default 60 m/s (216 km/h) gives
+ *   comfortable highway headroom while still catching teleports.
+ * @property maxBurstDistanceMeters raw-distance threshold for the burst
+ *   term of the implied-anomaly check. A fix with `raw > maxBurst` AND
+ *   `dt <= burstWindow` is flagged as anomalous.
+ * @property burstWindowSeconds dt ceiling for the burst term. Above this
+ *   `dt`, a large `raw` is just a legitimate sparse-fix highway hop and
+ *   does not contribute to the anomaly.
  * @property trackingAccuracyThresholdMeters reported accuracy beyond which
  *   we reject the raw fix without scoring it. 100 m matches the user-visible
  *   "tracking accuracy" preference and is generally larger than legitimate
@@ -43,9 +43,9 @@ data class LocationFilterConfig(
     val useKalman: Boolean = true,
     val kalmanProfile: KalmanProfile = KalmanProfile.Default,
     val policy: LocationFilterPolicy = LocationFilterPolicy.Conservative,
-    val maxImpliedSpeedMps: Double = 50.0,
-    val maxBurstDistanceMeters: Double = 200.0,
-    val burstWindowSeconds: Double = 2.0,
+    val maxImpliedSpeedMps: Double = 60.0,
+    val maxBurstDistanceMeters: Double = 300.0,
+    val burstWindowSeconds: Double = 10.0,
     val trackingAccuracyThresholdMeters: Double = 100.0,
     val rollingWindowSeconds: Double = 5.0,
     val maxFutureSkewMs: Long = 60_000L,

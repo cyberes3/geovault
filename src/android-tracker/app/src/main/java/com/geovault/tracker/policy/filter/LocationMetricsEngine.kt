@@ -8,7 +8,7 @@ import kotlin.math.sqrt
 /**
  * Stateful metrics engine that produces a [LocationMetrics] snapshot for
  * each fix. Owns a 20-slot ring buffer of recent observations to compute
- * rolling average step, bearing/speed stability, and burst-distance.
+ * rolling average step and bearing/speed stability.
  *
  * The engine is intentionally allocation-light: the ring buffer is a fixed
  * Array of [Sample]s reused across calls, and every per-fix derivation is
@@ -36,23 +36,19 @@ import kotlin.math.sqrt
  */
 class LocationMetricsEngine(
     private val rollingWindowSeconds: Double = 5.0,
-    private val burstWindowSeconds: Double = 2.0,
+    private val burstWindowSeconds: Double = 10.0,
+    private val maxImpliedSpeedMps: Double = 60.0,
+    private val maxBurstDistanceMeters: Double = 300.0,
 ) {
     private data class Sample(
         val timestampMs: Long,
-        val latitude: Double,
-        val longitude: Double,
-        val accuracyMeters: Double,
         /**
          * Distance along the *committed* polyline from the previously
          * committed sample to this sample. Raw haversine of suppressed
          * jitter is intentionally not stored here, so a noisy standstill
-         * does not poison the rolling-step or burst windows.
+         * does not poison the rolling-step window.
          */
         val committedDisplacementMeters: Double,
-        val effectiveDistanceMeters: Double,
-        val dtSeconds: Double,
-        val impliedSpeedMps: Double,
         val reportedSpeedMps: Double,
         val reportedBearingDegrees: Double,
     )
@@ -60,7 +56,6 @@ class LocationMetricsEngine(
     private val ring = ArrayDeque<Sample>(RING_CAPACITY)
     private var accumulatedAccuracySquared: Double = 0.0
     private var lastReportedSpeedMps: Double = 0.0
-    private var lastImpliedSpeedMps: Double = 0.0
     private var lastBearingDegrees: Double = Double.NaN
     private var anchorTrust: Double = 1.0
 
@@ -68,7 +63,6 @@ class LocationMetricsEngine(
         ring.clear()
         accumulatedAccuracySquared = 0.0
         lastReportedSpeedMps = 0.0
-        lastImpliedSpeedMps = 0.0
         lastBearingDegrees = Double.NaN
         anchorTrust = 1.0
     }
@@ -80,8 +74,12 @@ class LocationMetricsEngine(
      * buffer or running anchor accumulators.
      *
      * @param current new observation
-     * @param previous previous accepted anchor; null on the first fix in
-     *   a session or after a reset
+     * @param previous reference fix used for `dt`, `raw`, and the
+     *   anomaly/cap calculations. Callers should pass the *last seen*
+     *   fix (accepted, adjusted, or rejected after passing the
+     *   accuracy gate) so that consecutive rejects can't unbound
+     *   `dt`/`raw`. Null on the first fix in a session or after a
+     *   reset.
      */
     fun compute(current: LocationInput, previous: LocationInput?): LocationMetrics {
         val accuracy = (current.accuracyMeters?.toDouble() ?: DEFAULT_ACCURACY_FALLBACK_METERS)
@@ -124,10 +122,6 @@ class LocationMetricsEngine(
 
         val capCandidate = maxOf(MIN_CAP_FLOOR_METERS, accCap, kinCap, rollingCap)
 
-        val burstDistance = computeBurstDistanceMeters(currentRawDistance = rawDistance, currentDtSeconds = dtSeconds)
-
-        val (deltaHeadingDeg, headingChangeRate) = computeHeadingChange(current, dtSeconds)
-
         val jerk = computeJerk(current = effectiveCurrentSpeed, previous = lastReportedSpeedMps, dtSeconds = dtSeconds)
 
         val (bearingStability, speedStability) = computeStability()
@@ -137,9 +131,8 @@ class LocationMetricsEngine(
         )
 
         val impliedAnomaly = computeImpliedAnomaly(
-            impliedSpeed = impliedSpeed,
-            reportedSpeed = if (currentReportedSpeed.isNaN()) impliedSpeed else currentReportedSpeed,
-            burstDistance = burstDistance,
+            rawDistance = rawDistance,
+            dtSeconds = dtSeconds,
         )
 
         val stationary = StationaryConfidenceCalculator.evaluate(
@@ -177,8 +170,6 @@ class LocationMetricsEngine(
             capCandidate = capCandidate,
             accumulatedAccuracySquared = nextAccumulatedAccuracySq,
             jerk = jerk,
-            deltaHeadingDegrees = deltaHeadingDeg,
-            headingChangeRateDegPerSec = headingChangeRate,
             headingQuality = headingQuality,
             bearingStability = bearingStability,
             speedStability = speedStability,
@@ -188,7 +179,6 @@ class LocationMetricsEngine(
             accuracyMeters = accuracy,
             previousAccuracyMeters = previousAccuracy,
             rollingAverageStepMeters = rollingAvgStep,
-            burstDistanceMeters = burstDistance,
         )
     }
 
@@ -204,28 +194,22 @@ class LocationMetricsEngine(
      * @param committedDisplacementMeters the haversine distance from the
      *   previously committed anchor to [current]. Verbatim accept passes
      *   `metrics.rawDistanceMeters`; clip passes the cap; adjust-to-anchor
-     *   passes 0.0. This drives rolling-step and burst windows; using
-     *   committed (not raw) distance prevents standstill jitter from
-     *   poisoning the windows that subsequent decisions are made against.
+     *   passes 0.0. This drives the rolling-step window; using committed
+     *   (not raw) distance prevents standstill jitter from poisoning the
+     *   window that subsequent decisions are made against.
      */
     fun commit(
         current: LocationInput,
         metrics: LocationMetrics,
         committedDisplacementMeters: Double,
     ) {
-        val effectiveCurrentSpeed = metrics.reportedSpeedMps
         recordSample(
             current = current,
-            accuracy = metrics.accuracyMeters,
             committedDisplacement = committedDisplacementMeters.coerceAtLeast(0.0),
-            effectiveDistance = metrics.effectiveDistanceMeters,
-            dtSeconds = metrics.dtSeconds,
-            impliedSpeed = metrics.impliedSpeedMps,
-            reportedSpeed = effectiveCurrentSpeed,
+            reportedSpeed = metrics.reportedSpeedMps,
         )
         accumulatedAccuracySquared = metrics.accumulatedAccuracySquared
-        lastReportedSpeedMps = effectiveCurrentSpeed
-        lastImpliedSpeedMps = metrics.impliedSpeedMps
+        lastReportedSpeedMps = metrics.reportedSpeedMps
         lastBearingDegrees = current.bearingDegrees?.toDouble() ?: lastBearingDegrees
         anchorTrust = metrics.anchorTrust
     }
@@ -258,21 +242,6 @@ class LocationMetricsEngine(
         return if (count > 0) total / count else DEFAULT_ROLLING_FALLBACK_METERS
     }
 
-    private fun computeBurstDistanceMeters(currentRawDistance: Double, currentDtSeconds: Double): Double {
-        if (ring.isEmpty()) return currentRawDistance
-        val window = burstWindowSeconds.coerceAtLeast(0.2)
-        val newestTs = ring.last().timestampMs
-        var sum = currentRawDistance
-        var elapsed = currentDtSeconds
-        for (i in ring.indices.reversed()) {
-            if (elapsed > window) break
-            val s = ring[i]
-            sum += s.committedDisplacementMeters
-            elapsed += (newestTs - s.timestampMs) / 1000.0
-        }
-        return sum
-    }
-
     private fun resolveSpeedForKinematicCap(
         reportedSpeedMps: Double,
         impliedSpeedMps: Double,
@@ -284,16 +253,6 @@ class LocationMetricsEngine(
             impliedSpeedMps >= IMPLIED_SPEED_FALLBACK_MIN_SPEED_MPS &&
             maxAccuracyMeters <= IMPLIED_SPEED_FALLBACK_MAX_ACCURACY_METERS
         return if (canTrustImplied) max(safeReported, impliedSpeedMps) else safeReported
-    }
-
-    private fun computeHeadingChange(current: LocationInput, dtSeconds: Double): Pair<Double, Double> {
-        val currentBearing = current.bearingDegrees?.toDouble()
-        if (currentBearing == null || lastBearingDegrees.isNaN()) {
-            return 0.0 to 0.0
-        }
-        val delta = GeoMath.shortestBearingDeltaDegrees(lastBearingDegrees, currentBearing)
-        val rate = if (dtSeconds > 0.0) delta / dtSeconds else 0.0
-        return delta to rate
     }
 
     private fun computeJerk(current: Double, previous: Double, dtSeconds: Double): Double {
@@ -337,24 +296,29 @@ class LocationMetricsEngine(
         return (bearingStability * 0.6 + accuracyFactor * 0.4).coerceIn(0.0, 1.0)
     }
 
+    /**
+     * Implied-anomaly check.
+     *
+     * Two strict gates:
+     *  - `raw / dt > maxImpliedSpeed`: per-fix implied speed exceeds the
+     *    configured ceiling (e.g. >60 m/s = >216 km/h is not real motion).
+     *  - `raw > maxBurstDistance && dt <= burstWindow`: a tightly-clustered
+     *    raw displacement burst that is too dense to be physical. Both
+     *    conditions are required; a large raw at a *long* dt is just a
+     *    legitimate sparse-fix highway hop, not a burst.
+     *
+     * Note: speed term uses **raw / dt**, not the RSS-corrected
+     * `impliedSpeedMps`. Effective distance collapses for high-noise fixes,
+     * which would let real teleports slip past the gate.
+     */
     private fun computeImpliedAnomaly(
-        impliedSpeed: Double,
-        reportedSpeed: Double,
-        burstDistance: Double,
-    ): Double {
-        val speedReference = max(reportedSpeed, 0.5)
-        val speedRatio = (impliedSpeed / speedReference).coerceAtLeast(0.0)
-        val speedScore = when {
-            speedRatio <= 1.5 -> 0.0
-            speedRatio >= 4.0 -> 1.0
-            else -> (speedRatio - 1.5) / (4.0 - 1.5)
-        }
-        val burstScore = when {
-            burstDistance <= 50.0 -> 0.0
-            burstDistance >= 250.0 -> 1.0
-            else -> (burstDistance - 50.0) / (250.0 - 50.0)
-        }
-        return max(speedScore, burstScore).coerceIn(0.0, 1.0)
+        rawDistance: Double,
+        dtSeconds: Double,
+    ): Boolean {
+        if (dtSeconds <= 0.0) return false
+        val rawImpliedSpeed = rawDistance / dtSeconds
+        return rawImpliedSpeed > maxImpliedSpeedMps ||
+            (rawDistance > maxBurstDistanceMeters && dtSeconds <= burstWindowSeconds)
     }
 
     private fun computeAnchorTrust(
@@ -374,24 +338,14 @@ class LocationMetricsEngine(
 
     private fun recordSample(
         current: LocationInput,
-        accuracy: Double,
         committedDisplacement: Double,
-        effectiveDistance: Double,
-        dtSeconds: Double,
-        impliedSpeed: Double,
         reportedSpeed: Double,
     ) {
         if (ring.size >= RING_CAPACITY) ring.removeFirst()
         ring.addLast(
             Sample(
                 timestampMs = current.timestampMs,
-                latitude = current.latitude,
-                longitude = current.longitude,
-                accuracyMeters = accuracy,
                 committedDisplacementMeters = committedDisplacement,
-                effectiveDistanceMeters = effectiveDistance,
-                dtSeconds = dtSeconds,
-                impliedSpeedMps = impliedSpeed,
                 reportedSpeedMps = reportedSpeed,
                 reportedBearingDegrees = current.bearingDegrees?.toDouble() ?: Double.NaN,
             )

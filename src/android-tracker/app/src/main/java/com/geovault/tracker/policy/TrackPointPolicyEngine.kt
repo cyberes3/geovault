@@ -36,9 +36,6 @@ data class TrackPointDecisionMetrics(
     val accuracyMeters: Float?,
     val rollingAverageStepMeters: Double,
     val capCandidateMeters: Double,
-    val speedSpike: Boolean,
-    val burstSpike: Boolean,
-    val capSpike: Boolean,
     val decision: String,
     val reason: String?,
 )
@@ -55,7 +52,7 @@ data class TrackPointDecisionMetrics(
  *  4. Per-stream out-of-order / duplicate (vs the filter's own anchor)
  *
  * Everything else -- accuracy threshold, RSS distance, accCap, kinCap,
- * rollingCap, burst, anomaly score, Kalman smoothing, anchor-trust --
+ * rollingCap, implied-anomaly boolean, Kalman smoothing, anchor-trust --
  * lives inside [LocationFilter].
  */
 object TrackPointPolicyEngine {
@@ -184,7 +181,6 @@ object TrackPointPolicyEngine {
                 else -> "accepted"
             },
             reason = result.reason,
-            config = config,
         )
         return when (result.decision) {
             LocationFilterResult.Decision.Rejected -> {
@@ -262,9 +258,6 @@ object TrackPointPolicyEngine {
                 accuracyMeters = accuracyMeters,
                 rollingAverageStepMeters = 0.0,
                 capCandidateMeters = 0.0,
-                speedSpike = false,
-                burstSpike = false,
-                capSpike = false,
                 decision = "rejected",
                 reason = reason,
             ),
@@ -277,25 +270,15 @@ object TrackPointPolicyEngine {
         accuracyMeters: Float?,
         decision: String,
         reason: String?,
-        config: LocationFilterConfig,
-    ): TrackPointDecisionMetrics {
-        val speedSpike = dtSeconds > 0.0 && impliedSpeedMps > config.maxImpliedSpeedMps
-        val burstSpike = burstDistanceMeters > config.maxBurstDistanceMeters &&
-            dtSeconds <= config.burstWindowSeconds
-        val capSpike = rawDistanceMeters > capCandidate
-        return TrackPointDecisionMetrics(
-            rawDistanceMeters = rawDistanceMeters,
-            effectiveDistanceMeters = effectiveDistanceMeters,
-            elapsedSeconds = dtSeconds,
-            impliedSpeedMps = impliedSpeedMps,
-            accuracyMeters = accuracyMeters,
-            rollingAverageStepMeters = rollingAverageStepMeters,
-            capCandidateMeters = capCandidate,
-            speedSpike = speedSpike,
-            burstSpike = burstSpike,
-            capSpike = capSpike,
-            decision = decision,
-            reason = reason,
-        )
-    }
+    ): TrackPointDecisionMetrics = TrackPointDecisionMetrics(
+        rawDistanceMeters = rawDistanceMeters,
+        effectiveDistanceMeters = effectiveDistanceMeters,
+        elapsedSeconds = dtSeconds,
+        impliedSpeedMps = impliedSpeedMps,
+        accuracyMeters = accuracyMeters,
+        rollingAverageStepMeters = rollingAverageStepMeters,
+        capCandidateMeters = capCandidate,
+        decision = decision,
+        reason = reason,
+    )
 }

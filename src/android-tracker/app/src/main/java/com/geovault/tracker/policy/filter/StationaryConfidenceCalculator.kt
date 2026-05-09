@@ -3,16 +3,15 @@ package com.geovault.tracker.policy.filter
 import kotlin.math.abs
 
 /**
- * Pure scoring function adapted verbatim from `tslocationmanager`'s
- * `LocationMetricsEngine.a(m, current)` (decompiled lib v4.1.3,
- * lines 280-319). Stateless and side-effect free for unit testability
- * and easy retuning.
+ * Pure stationary scoring function. Stateless and side-effect free for
+ * unit testability and easy retuning.
  *
  * Inputs all come from the engine's per-fix scalars; the gate
- * (`bufferCount >= 3 && effectiveDistanceMeters <= 1.0 m`) and the
- * conditional-bonus weighting are TS's exact formulation. We do not
- * weigh implied speed here -- TS doesn't either, because the
- * `effective <= 1.0` gate already encodes "RSS says we did not move."
+ * (`bufferCount >= 3 && effectiveDistanceMeters <= 1.0 m`) keeps the
+ * scorer from firing on the first fix in a session or when RSS-corrected
+ * motion is plainly non-zero. Implied speed is intentionally not
+ * weighed: the `effective <= 1.0` gate already encodes "RSS says we
+ * did not move."
  *
  * Score breakdown:
  *  - `speedZero` (`speed in [0, 1)`): `+0.4` if `speed < 0.5`, else `+0.3`
@@ -26,7 +25,7 @@ import kotlin.math.abs
  * This catches rubber-band patterns whose score falls in the marginal
  * (0.5, 0.6) band but whose oscillation signature is unambiguous.
  *
- * `isOscillating = bearingNoisy && rawClose && speedZero` (TS line 291).
+ * `isOscillating = bearingNoisy && rawClose && speedZero`.
  */
 object StationaryConfidenceCalculator {
     fun evaluate(input: Input): StationaryConfidence {

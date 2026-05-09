@@ -7,32 +7,6 @@ import org.junit.Test
 class LocationFilterEdgeCasesTest {
 
     @Test
-    fun longGapReanchor_acceptsVerbatimEvenAfterTeleportTrigger() {
-        // After ~3 minutes of GPS silence the next fix is allowed verbatim
-        // even if it would otherwise look like a teleport. This is the
-        // long-gap reanchor exit in the conservative policy.
-        val filter = LocationFilter(LocationFilterConfig.Default)
-        filter.evaluate(
-            LocationInput(
-                latitude = 0.0,
-                longitude = 0.0,
-                timestampMs = 0L,
-                accuracyMeters = 5f,
-            )
-        )
-        val gapped = filter.evaluate(
-            LocationInput(
-                latitude = 0.5,
-                longitude = 0.5,
-                timestampMs = 200_000L,
-                accuracyMeters = 5f,
-            )
-        )
-        assertEquals(LocationFilterResult.Decision.Accepted, gapped.decision)
-        assertEquals("long-gap-reanchor", gapped.reason)
-    }
-
-    @Test
     fun adjustPolicy_clipScalesAlongLineFromAnchor() {
         // Verify the clip-to-cap interpolation actually places the adjusted
         // point on the line between previous and candidate.

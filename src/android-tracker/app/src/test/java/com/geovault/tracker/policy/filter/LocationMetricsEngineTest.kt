@@ -184,7 +184,7 @@ class LocationMetricsEngineTest {
         var lastMetrics: LocationMetrics? = null
         // Truly oscillating bearings (alternating ~180 deg) to drive
         // bearingStability below the 0.3 noise threshold in the
-        // TS-aligned classifier; the previous (idx * 75) sequence
+        // stationary classifier; the previous (idx * 75) sequence
         // produced uniform 75 deg deltas, which scores at 0.58.
         offsets.forEachIndexed { idx, off ->
             val bearing = if (idx % 2 == 0) 10 else 190

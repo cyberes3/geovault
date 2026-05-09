@@ -33,9 +33,23 @@ class LocationFilter(
     private val metricsEngine = LocationMetricsEngine(
         rollingWindowSeconds = config.rollingWindowSeconds,
         burstWindowSeconds = config.burstWindowSeconds,
+        maxImpliedSpeedMps = config.maxImpliedSpeedMps,
+        maxBurstDistanceMeters = config.maxBurstDistanceMeters,
     )
     private val kalmanFilter = KalmanFilter(KalmanTuning.forProfile(config.kalmanProfile))
     private var previousAccepted: LocationInput? = null
+
+    /**
+     * Last fix the filter saw whose accuracy passed the gate, regardless
+     * of whether it was accepted, adjusted, or rejected. Used as the
+     * `previous` reference for [LocationMetricsEngine.compute] so a
+     * single bad fix can only poison one frame's metrics.
+     *
+     * Distinct from [previousAccepted], which remains the snap-to-anchor
+     * target and the basis for committed displacement / Kalman / rolling
+     * window state.
+     */
+    private var lastSeenFix: LocationInput? = null
 
     val currentConfig: LocationFilterConfig get() = config
 
@@ -47,6 +61,7 @@ class LocationFilter(
         metricsEngine.reset()
         kalmanFilter.reset()
         previousAccepted = null
+        lastSeenFix = null
     }
 
     /**
@@ -67,49 +82,47 @@ class LocationFilter(
     fun onMotionChanged() {
         kalmanFilter.reset()
         previousAccepted = null
+        lastSeenFix = null
     }
 
     /**
      * Evaluate a single fix.
      *
-     * The filter is intentionally motion-agnostic (mirrors
-     * `tslocationmanager`'s design): standstill is decided from the
-     * GPS signal itself (RSS-corrected effective distance, reported
-     * speed, jerk, stability) rather than from an upstream motion-hint
-     * boolean that can lag the chipset state.
+     * The filter is intentionally motion-agnostic: standstill is decided
+     * from the GPS signal itself (RSS-corrected effective distance,
+     * reported speed, jerk, stability) rather than from an upstream
+     * motion-hint boolean that can lag the chipset state.
      */
     fun evaluate(input: LocationInput): LocationFilterResult {
         val accuracy = input.accuracyMeters?.toDouble()
-        val metrics = metricsEngine.compute(current = input, previous = previousAccepted)
+        // `previous` for the metrics engine is the last fix we *saw*
+        // (post accuracy gate), not the last fix we accepted. Keeping
+        // `dt`, `raw`, and `impliedSpeed` bounded across reject streaks
+        // means a single bad fix can only poison one frame's metrics,
+        // never compound.
+        val metrics = metricsEngine.compute(current = input, previous = lastSeenFix ?: previousAccepted)
 
         if (accuracy != null && accuracy > config.trackingAccuracyThresholdMeters) {
+            // Skip lastSeenFix update: a 24 km / network-fallback fix
+            // is not a usable reference for the next frame's anomaly
+            // calculation.
             return LocationFilterResult.rejected(reason = "low-accuracy", metrics = metrics)
         }
 
-        val previous = previousAccepted
-        if (previous == null) {
-            return commitAccept(input = input, reason = "first-fix", metrics = metrics)
-        }
+        val result = resolveDecision(input = input, metrics = metrics)
+        lastSeenFix = input
+        return result
+    }
 
-        // After a long enough gap of silence the prior anchor is stale.
-        // The next fix must be allowed verbatim regardless of policy --
-        // applying a speed/burst cap against a 3-minute-old anchor would
-        // wrongly reject the natural re-anchor.
-        if (metrics.dtSeconds >= LONG_GAP_REANCHOR_SECONDS) {
-            return commitAccept(input = input, reason = "long-gap-reanchor", metrics = metrics)
-        }
+    private fun resolveDecision(input: LocationInput, metrics: LocationMetrics): LocationFilterResult {
+        val previous = previousAccepted
+            ?: return commitAccept(input = input, reason = "first-fix", metrics = metrics)
 
         val capCandidate = inflateCapForAnchorTrust(metrics.capCandidate, metrics.anchorTrust)
             .let { inflateCapForAnomaly(it, metrics.impliedAnomaly) }
 
         if (metrics.dtSeconds > 0.0 && metrics.impliedSpeedMps > config.maxImpliedSpeedMps) {
             return resolveSpeedSpike(input = input, previous = previous, metrics = metrics)
-        }
-
-        if (metrics.burstDistanceMeters > config.maxBurstDistanceMeters &&
-            metrics.dtSeconds <= config.burstWindowSeconds
-        ) {
-            return resolveBurstSpike(input = input, previous = previous, metrics = metrics)
         }
 
         return when (config.policy) {
@@ -157,23 +170,20 @@ class LocationFilter(
             )
         }
 
-        // Severe-anomaly check ahead of within-cap accept, mirroring
-        // TS `LocationFilter.a` lines 158-169: an RSS-derived anomaly
-        // above 0.85 is rejected outright rather than slipped through
-        // the cap test.
-        if (metrics.impliedAnomaly >= SEVERE_ANOMALY_THRESHOLD) {
-            return LocationFilterResult.rejected(reason = "severe-anomaly", metrics = metrics)
-        }
-
+        // Outlier reject: when raw overshoots `cap * 1.5` we reject --
+        // but if `impliedAnomaly` also fires we report it as
+        // `implied-speed` to distinguish chipset teleports from
+        // slow-but-far fixes.
         if (isOutlier(metrics, capCandidate)) {
-            return LocationFilterResult.rejected(reason = "outlier-capped", metrics = metrics)
+            val reason = if (metrics.impliedAnomaly) "implied-speed" else "outlier-capped"
+            return LocationFilterResult.rejected(reason = reason, metrics = metrics)
         }
 
         // Use `effectiveDistanceMeters` (RSS-corrected) for the
-        // within-cap test, matching TS lines 123 + 151. `effective` is
-        // strictly <= `raw`, so this is more permissive in the
-        // high-noise large-displacement regime, but those cases are
-        // already handled by the snap and outlier paths above.
+        // within-cap test. `effective` is strictly <= `raw`, so this
+        // is more permissive in the high-noise large-displacement
+        // regime, but those cases are already handled by the snap and
+        // outlier paths above.
         if (metrics.effectiveDistanceMeters <= capCandidate) {
             return commitAccept(input = input, reason = "within-cap", metrics = metrics)
         }
@@ -201,31 +211,39 @@ class LocationFilter(
     /**
      * The "phone is sitting on the table but GPS keeps moving" pattern.
      *
-     * Two paths fire, both gated by the chipset itself reporting
+     * Three paths fire, all gated by the chipset itself reporting
      * near-zero motion (`reportedSpeed < REPORTED_MOTION_FLOOR_MPS`).
+     * Ordered cheap-to-expensive; the first path that matches wins.
+     *
+     *  0. **Linear-sum uncertainty absorption**.
+     *     `raw <= prevAcc + currAcc`. Mirrors the previous (working)
+     *     GeoVault tracker's `effective <= 0` rule from
+     *     `TrackPointPolicyEngine.kt:162-185`. Linear sum over-states
+     *     joint uncertainty relative to RSS (which assumes independent
+     *     gaussian errors), but real GPS error is temporally
+     *     correlated -- so the linear sum is empirically the right
+     *     envelope for "did the user actually move past their own
+     *     uncertainty cloud?" No buffer-state dependency, fires
+     *     immediately on the first fix in a session.
      *
      *  1. **Multi-signal stationary score**.
      *     [LocationMetrics.stationary] is true (or rubber-band
-     *     oscillation flagged). The calculator -- gated by TS-style
+     *     oscillation flagged). The calculator -- gated by
      *     `effective <= 1 m && bufferCount >= 3` -- weighs reported
      *     speed, bearing/speed stability, jerk, and `rawClose`. Catches
      *     the 38 m phantom step that previously slipped through as
      *     "within-cap".
      *
-     *  2. **Raw within accuracy envelope**.
-     *     The fix has displacement that fits inside
-     *     `accuracyMeters * 1.5` -- TS's `rawClose` signal. The
-     *     calculator's strict `effective <= 1 m` gate doesn't classify
-     *     this as stationary (effective can be tens of meters during
-     *     low-accuracy GPS rubber-banding), but if the chipset reports
-     *     we're not moving and the raw distance fits inside the
-     *     uncertainty envelope, we should snap rather than commit
-     *     phantom motion. This also covers the field-log case
-     *     `raw=31.8, acc=26 -> 31.8 <= 26 * 1.5 = 39`.
+     *  2. **Raw within current-fix accuracy envelope**.
+     *     `raw <= currAcc * 1.5`. Current-fix-only fallback for the
+     *     case where the previous accuracy is missing or zero (e.g.
+     *     mocked / stale anchor) and path 0 cannot evaluate.
      */
     private fun isNoisyStandstill(metrics: LocationMetrics): Boolean {
         if (metrics.rawDistanceMeters <= 0.0) return false
         if (metrics.reportedSpeedMps >= REPORTED_MOTION_FLOOR_MPS) return false
+        val combinedAccuracy = metrics.previousAccuracyMeters + metrics.accuracyMeters
+        if (metrics.rawDistanceMeters <= combinedAccuracy) return true
         if (metrics.stationary.isStationary || metrics.stationary.isOscillating) return true
         return metrics.rawDistanceMeters <= metrics.accuracyMeters * RAW_WITHIN_ACCURACY_MULTIPLIER
     }
@@ -248,26 +266,6 @@ class LocationFilter(
             )
             LocationFilterPolicy.Conservative ->
                 LocationFilterResult.rejected(reason = "speed-cap-exceeded", metrics = metrics)
-        }
-    }
-
-    private fun resolveBurstSpike(
-        input: LocationInput,
-        previous: LocationInput,
-        metrics: LocationMetrics,
-    ): LocationFilterResult {
-        return when (config.policy) {
-            LocationFilterPolicy.PassThrough ->
-                commitAccept(input = input, reason = "burst-passthrough", metrics = metrics)
-            LocationFilterPolicy.Adjust -> commitClip(
-                input = input,
-                previous = previous,
-                capMeters = config.maxBurstDistanceMeters,
-                reason = "burst-cap",
-                metrics = metrics,
-            )
-            LocationFilterPolicy.Conservative ->
-                LocationFilterResult.rejected(reason = "burst-exceeded", metrics = metrics)
         }
     }
 
@@ -349,19 +347,27 @@ class LocationFilter(
         return cap * multiplier
     }
 
-    private fun inflateCapForAnomaly(cap: Double, anomaly: Double): Double {
-        if (anomaly <= 0.0) return cap
-        return cap * (1.0 - (ANOMALY_DEFLATION * anomaly)).coerceAtLeast(0.5)
-    }
+    /**
+     * When [LocationMetrics.impliedAnomaly] fires, inflate the cap by
+     * [ANOMALY_CAP_INFLATION]. The boolean already required raw to
+     * clear the burst threshold or the speed ceiling, so widening the
+     * cap here just gives the outlier-capped reject room to fire on
+     * truly egregious overshoots.
+     */
+    private fun inflateCapForAnomaly(cap: Double, anomaly: Boolean): Double =
+        if (anomaly) cap * ANOMALY_CAP_INFLATION else cap
 
     companion object {
-        private const val LONG_GAP_REANCHOR_SECONDS = 180.0
         private const val OUTLIER_CAP_MULTIPLIER = 1.5
-        private const val SEVERE_ANOMALY_THRESHOLD = 0.85
         private const val ANCHOR_TRUST_FULL = 0.7
         private const val ANCHOR_TRUST_INFLATION = 0.5
-        private const val ANOMALY_DEFLATION = 0.4
-        private const val REPORTED_MOTION_FLOOR_MPS = 0.5
+        private const val ANOMALY_CAP_INFLATION = 1.5
+        // The chipset routinely reports 0.6-1.2 m/s of phantom velocity
+        // while the device is truly stationary; gating below 1.0 lets
+        // the snap paths absorb that band. Slow walking commits via raw
+        // distance once accuracy improves enough that the linear-sum
+        // envelope is below the user's actual progress.
+        private const val REPORTED_MOTION_FLOOR_MPS = 1.0
         private const val RAW_WITHIN_ACCURACY_MULTIPLIER = 1.5
     }
 }

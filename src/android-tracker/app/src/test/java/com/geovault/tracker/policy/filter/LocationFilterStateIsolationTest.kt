@@ -10,14 +10,18 @@ import org.junit.Test
  * recover from a noisy standstill cluster instead of letting the jitter
  * permanently inflate its rolling baseline:
  *
- *  1. Rejected fixes must not mutate the metrics ring buffer or anchor
- *     accumulators.
- *  2. The Kalman filter must only see committed measurements, never
- *     rejected ones.
- *  3. The ring buffer's stored displacement must reflect the *committed*
+ *  1. Rejected fixes must not mutate the metrics ring buffer, the
+ *     `previousAccepted` snap target, or the Kalman state.
+ *  2. The ring buffer's stored displacement must reflect the *committed*
  *     polyline (0 for adjust-to-anchor, the cap for clip), so a noisy
  *     standstill does not poison the burst window that subsequent
  *     decisions are made against.
+ *
+ * Note: post-Phase-3 a rejected fix *does* advance `lastSeenFix` (so the
+ * metrics engine sees per-frame deltas instead of an unbounded stale-
+ * anchor delta on consecutive rejects). A single wild teleport therefore
+ * disturbs at most two frames of decisions; this is the deliberate
+ * tradeoff that eliminates the multi-minute driving stall.
  */
 class LocationFilterStateIsolationTest {
 
@@ -48,49 +52,72 @@ class LocationFilterStateIsolationTest {
 
     @Test
     fun rejectedFix_doesNotPollutePostRejectionDecisions() {
-        // Establish a stable slow-walk baseline.
+        // Establish a stable brisk-walk baseline (above the standstill
+        // motion floor, so the filter commits each fix verbatim and we
+        // have a real `previousAccepted` to compare against).
         val filter = LocationFilter(LocationFilterConfig.Default)
         var lat = 0.0
         var ts = 0L
         repeat(8) {
             ts += 1_000L
-            lat += 0.000005
+            lat += 0.00006 // ~6.7 m at the equator
             filter.evaluate(
                 LocationInput(
                     latitude = lat,
                     longitude = 0.0,
                     timestampMs = ts,
-                    accuracyMeters = 5f,
-                    speedMps = 0.6f,
+                    accuracyMeters = 3f,
+                    speedMps = 6.7f,
                     bearingDegrees = 0f,
                 )
             )
         }
 
-        // Inject a clear teleport (will reject under Conservative).
+        // Inject a clear teleport (rejected under Conservative).
         ts += 1_000L
         val teleport = filter.evaluate(
             LocationInput(
                 latitude = 5.0,
                 longitude = 5.0,
                 timestampMs = ts,
-                accuracyMeters = 5f,
-                speedMps = 0.6f,
+                accuracyMeters = 3f,
+                speedMps = 6.7f,
                 bearingDegrees = 0f,
             )
         )
         assertEquals(LocationFilterResult.Decision.Rejected, teleport.decision)
 
-        // The next legitimate slow-walk fix must still be accepted.
+        // First post-teleport fix is still measured against the bad
+        // lastSeenFix (the teleport position) so it is rejected too --
+        // this is the deliberate one-frame extra cost that buys
+        // immunity against multi-minute consecutive-reject stalls.
         ts += 1_000L
-        lat += 0.000005
+        lat += 0.00006
+        val firstAfter = filter.evaluate(
+            LocationInput(
+                latitude = lat,
+                longitude = 0.0,
+                timestampMs = ts,
+                accuracyMeters = 3f,
+                speedMps = 6.7f,
+                bearingDegrees = 0f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Rejected, firstAfter.decision)
+
+        // Second post-teleport fix sees lastSeenFix back at the real
+        // path; metrics are clean and the fix accepts. The accepted
+        // anchor (`previousAccepted`) was never advanced through the
+        // teleport, so the snap-to-anchor invariant still holds.
+        ts += 1_000L
+        lat += 0.00006
         val recovery = filter.evaluate(
             LocationInput(
                 latitude = lat,
                 longitude = 0.0,
                 timestampMs = ts,
-                accuracyMeters = 5f,
-                speedMps = 0.6f,
+                accuracyMeters = 3f,
+                speedMps = 6.7f,
                 bearingDegrees = 0f,
             )
         )

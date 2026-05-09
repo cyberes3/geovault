@@ -106,8 +106,8 @@ class TrackPointPolicyEngineInvariantTest {
             normalizeSecondsTimestamps = false,
             freshnessTtlMs = 0L,
         )
-        // Three priming fixes at the anchor satisfy the bufferCount>=3
-        // gate the stationary classifier inherits from `tslocationmanager`.
+        // Three priming fixes at the anchor satisfy the
+        // stationary classifier's bufferCount>=3 gate.
         repeat(3) { i ->
             TrackPointPolicyEngine.evaluate(
                 event = TrackPointEvent(

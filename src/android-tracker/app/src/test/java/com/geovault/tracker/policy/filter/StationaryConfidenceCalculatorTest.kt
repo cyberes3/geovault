@@ -20,9 +20,9 @@ class StationaryConfidenceCalculatorTest {
 
     @Test
     fun effectiveAboveOneMeter_returnsNone() {
-        // Mirrors `tslocationmanager`: once RSS-corrected motion exceeds
-        // 1 m, the chipset is reporting real displacement and we must
-        // not classify the fix as stationary.
+        // Once RSS-corrected motion exceeds 1 m the chipset is
+        // reporting real displacement and we must not classify the
+        // fix as stationary.
         val result = StationaryConfidenceCalculator.evaluate(
             input(
                 bufferCount = 6,
