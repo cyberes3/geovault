@@ -7,8 +7,7 @@ data class TrackerMapUserLocationInput(
     val isMapActive: Boolean,
     val hasLocationPermission: Boolean,
     val isMapReady: Boolean,
-    val userFollowLockArmedThisSession: Boolean,
-    val followLockEnabled: Boolean,
+    val userLocationRequestedThisSession: Boolean,
     val runtimeRunning: Boolean,
 )
 
@@ -16,14 +15,13 @@ enum class TrackerMapUserLocationBlocker {
     MapInactive,
     MissingPermission,
     MapNotReady,
-    FollowLockNotArmedThisSession,
+    LocationNotRequestedThisSession,
     RuntimeTrackingActive,
 }
 
 data class TrackerMapUserLocationDecision(
     val shouldStreamGps: Boolean,
     val shouldEnablePuck: Boolean,
-    val shouldEnableFollowCamera: Boolean,
     val blockers: Set<TrackerMapUserLocationBlocker>,
 )
 
@@ -31,7 +29,7 @@ data class TrackerMapUserLocationDecision(
  * Central authority for map user-location behavior.
  *
  * Design goal: location streaming must be impossible unless the user has explicitly
- * armed follow-lock in this session. This prevents launch-time auto activation.
+ * requested the live GPS puck in this session. This prevents launch-time auto activation.
  */
 class TrackerMapUserLocationPolicy(
     private val commonPolicy: GeoVaultMapLocationSessionPolicy = GeoVaultMapLocationSessionPolicy(),
@@ -41,8 +39,8 @@ class TrackerMapUserLocationPolicy(
         if (!input.isMapActive) blockers += TrackerMapUserLocationBlocker.MapInactive
         if (!input.hasLocationPermission) blockers += TrackerMapUserLocationBlocker.MissingPermission
         if (!input.isMapReady) blockers += TrackerMapUserLocationBlocker.MapNotReady
-        if (!input.userFollowLockArmedThisSession) {
-            blockers += TrackerMapUserLocationBlocker.FollowLockNotArmedThisSession
+        if (!input.userLocationRequestedThisSession) {
+            blockers += TrackerMapUserLocationBlocker.LocationNotRequestedThisSession
         }
         if (!TrackerMapCameraLockPolicy.shouldRenderUserLocation(input.runtimeRunning)) {
             blockers += TrackerMapUserLocationBlocker.RuntimeTrackingActive
@@ -52,7 +50,7 @@ class TrackerMapUserLocationPolicy(
                 isActive = input.isMapActive,
                 hasLocationPermission = input.hasLocationPermission,
                 isMapReady = input.isMapReady,
-                userLocationRequested = input.userFollowLockArmedThisSession,
+                userLocationRequested = input.userLocationRequestedThisSession,
                 positionFollowDesired = false,
                 headingFollowDesired = false,
             ),
@@ -61,12 +59,6 @@ class TrackerMapUserLocationPolicy(
         return TrackerMapUserLocationDecision(
             shouldStreamGps = allowPuck,
             shouldEnablePuck = allowPuck,
-            shouldEnableFollowCamera = allowPuck &&
-                input.followLockEnabled &&
-                TrackerMapCameraLockPolicy.shouldEnableFollowCamera(
-                    runtimeRunning = input.runtimeRunning,
-                    followLockEnabled = input.followLockEnabled
-                ),
             blockers = blockers,
         )
     }

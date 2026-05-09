@@ -288,12 +288,9 @@ private fun TrackerMapAuthenticatedContent(
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val userLocationPolicy = remember { TrackerMapUserLocationPolicy() }
-    var followLockArmedThisSession by rememberSaveable { mutableStateOf(false) }
-    val disarmFollowSessionAndClearMapLocks = remember(viewModel) {
-        {
-            followLockArmedThisSession = false
-            viewModel.disableAllMapLocks()
-        }
+    var liveGpsPuckRequestedThisSession by rememberSaveable { mutableStateOf(false) }
+    val clearMapLocks = remember(viewModel) {
+        { viewModel.disableAllMapLocks() }
     }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
     var didInitialBounds by remember { mutableStateOf(false) }
@@ -332,7 +329,10 @@ private fun TrackerMapAuthenticatedContent(
             map = map,
             userLocation = locationPlugin,
             order = 30,
-            onLocationResolved = { latLng -> gpsHomeAnchor = latLng },
+            onLocationResolved = { latLng ->
+                gpsHomeAnchor = latLng
+                locationPermission = TrackingPermissionGate.hasLocationPermission(context)
+            },
             coordinateOverride = {
                 // RUNTIME-TRACKING RECENTER: while actively recording, the user's tracker marker
                 // already represents their position. The default FAB path enables the MapLibre
@@ -385,18 +385,12 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(phase, isActive) {
         viewModel.setMapReady(isActive && phase == GeoVaultMapPhase.Ready)
     }
-    LaunchedEffect(isActive, state.followLockEnabled) {
-        if (!isActive || !state.followLockEnabled) {
-            followLockArmedThisSession = false
-        }
-    }
 
     val userLocationDecision = remember(
         isActive,
         locationPermission,
         phase,
-        followLockArmedThisSession,
-        state.followLockEnabled,
+        liveGpsPuckRequestedThisSession,
         state.runtime.gpsCollecting
     ) {
         userLocationPolicy.evaluate(
@@ -404,8 +398,7 @@ private fun TrackerMapAuthenticatedContent(
                 isMapActive = isActive,
                 hasLocationPermission = locationPermission,
                 isMapReady = phase == GeoVaultMapPhase.Ready,
-                userFollowLockArmedThisSession = followLockArmedThisSession,
-                followLockEnabled = state.followLockEnabled,
+                userLocationRequestedThisSession = liveGpsPuckRequestedThisSession,
                 runtimeRunning = state.runtime.gpsCollecting
             )
         )
@@ -423,7 +416,7 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(phase, userLocationDecision, viewportContextSeed) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         locationPlugin.setEnabled(userLocationDecision.shouldEnablePuck)
-        locationPlugin.setCameraTracking(userLocationDecision.shouldEnableFollowCamera)
+        locationPlugin.setCameraTracking(false)
     }
 
     DisposableEffect(map) {
@@ -578,7 +571,7 @@ private fun TrackerMapAuthenticatedContent(
                     contentDescription = fabDescFitTrail,
                     tooltip = tooltipMapZoomLatest,
                     onTap = {
-                        disarmFollowSessionAndClearMapLocks()
+                        clearMapLocks()
                         if (phase == GeoVaultMapPhase.Ready) {
                             geoVaultResetCameraBearingAndTilt(map)
                             viewModel.requestFitTrail()
@@ -598,7 +591,7 @@ private fun TrackerMapAuthenticatedContent(
                         icon = gpsFabAction.icon,
                         contentDescription = gpsFabAction.contentDescription,
                         onTap = {
-                            viewModel.disableAllMapLocks()
+                            liveGpsPuckRequestedThisSession = true
                             gpsFabAction.onTap?.invoke()
                         },
                     )
@@ -626,12 +619,10 @@ private fun TrackerMapAuthenticatedContent(
                             is TrackerMapLockFabBehavior.SelectionLock ->
                                 viewModel.toggleDisplayedTrackerLock()
                             is TrackerMapLockFabBehavior.LiveActiveFit -> {
-                                followLockArmedThisSession = false
                                 viewModel.setLiveActiveFit(!behavior.isEnabled)
                             }
                             is TrackerMapLockFabBehavior.FollowLock -> {
                                 val nextEnabled = !behavior.isEnabled
-                                followLockArmedThisSession = nextEnabled
                                 viewModel.setFollowLock(nextEnabled)
                             }
                         }
