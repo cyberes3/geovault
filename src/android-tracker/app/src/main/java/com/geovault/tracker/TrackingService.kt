@@ -860,11 +860,14 @@ class TrackingService : Service() {
                 }
             }
             if (settings.autoTrackingMode) {
+                // Rejected fixes are not motion evidence: the position
+                // filter has already classified them as teleport / low-
+                // accuracy / stale. Bumping `lastEvidenceAtMs` is the
+                // most we should do, so a phantom multipath burst can
+                // never push the auto-mode smoother across a hysteresis
+                // threshold.
                 processAutoTrackingOutput(
-                    output = autoTrackingMotionEngine.onRejectedFix(
-                        speedMpsHint = observedSpeedMps,
-                        eventTimeMs = nowMs
-                    ),
+                    output = autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
                     reason = "rejected_fix"
                 )
             }
@@ -937,9 +940,22 @@ class TrackingService : Service() {
                 pauseGps()
             }
             if (settings.autoTrackingMode) {
+                // Auto-mode classification runs on vetted geometry only:
+                // effectiveDistance / dt from the position filter's
+                // accepted, RSS-corrected metrics. Falling back to chipset
+                // speed here is what previously let phantom multipath
+                // bursts thrash WALKING <-> BIKING.
+                val vettedSpeedMps = result.policyMetrics?.let { metrics ->
+                    if (metrics.elapsedSeconds > 0.0) {
+                        (metrics.effectiveDistanceMeters / metrics.elapsedSeconds).toFloat()
+                            .coerceAtLeast(0f)
+                    } else {
+                        0f
+                    }
+                } ?: 0f
                 processAutoTrackingOutput(
                     output = autoTrackingMotionEngine.onAcceptedFix(
-                        speedMps = observedSpeedMps ?: 0f,
+                        speedMps = vettedSpeedMps,
                         eventTimeMs = nowMs
                     ),
                     reason = "accepted_fix"
@@ -1682,26 +1698,30 @@ class TrackingService : Service() {
         return status == 2 || status == 5
     }
 
-    private fun resolveCurrentProfileParams(): Triple<Long, Float, Float> {
-        val settings = settingsRepository.getSettings()
-        if (settings.autoTrackingMode) {
-            val mode = autoTrackingMotionEngine.snapshot().mode
-            return TrackingLocationPolicy.getProfileParams(mode.profileIndex)
-        }
-        return Triple(
-            settings.loggingIntervalSec,
-            settings.distanceFilterMeters,
-            settings.accuracyFilterMeters
-        )
-    }
-
+    /**
+     * Returns the [LocationRequest] cadence and distance filter for the
+     * current motion profile. The user-facing accuracy filter is
+     * profile-independent; see [resolveCurrentAccuracyFilter].
+     */
     private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
-        val (interval, distance, _) = resolveCurrentProfileParams()
+        val settings = settingsRepository.getSettings()
+        val (interval, distance) = if (settings.autoTrackingMode) {
+            val mode = autoTrackingMotionEngine.snapshot().mode
+            TrackingLocationPolicy.getProfileParams(mode.profileIndex)
+        } else {
+            settings.loggingIntervalSec to settings.distanceFilterMeters
+        }
         val effectiveDistance = elasticDistanceOverrideMeters ?: distance
         return interval to effectiveDistance
     }
 
-    private fun resolveCurrentAccuracyFilter(): Float = resolveCurrentProfileParams().third
+    /**
+     * The accuracy filter is the user's preference and does not change with
+     * motion profile. Keeping it stable means the [LocationFilter] config
+     * never thrashes when auto-mode flips between WALKING / BIKING / DRIVING.
+     */
+    private fun resolveCurrentAccuracyFilter(): Float =
+        settingsRepository.getSettings().accuracyFilterMeters
 
     private fun applyCurrentLocationRequest(reason: String): Boolean {
         if (!isTracking) return false
@@ -1804,8 +1824,10 @@ class TrackingService : Service() {
         if (isFastGpsLockWindowActive) return
         val settings = settingsRepository.getSettings()
         if (!settings.autoTrackingMode) return
-        val (_, baseDistanceMeters, accuracyThresholdMeters) = resolveCurrentProfileParams()
+        val mode = autoTrackingMotionEngine.snapshot().mode
+        val (_, baseDistanceMeters) = TrackingLocationPolicy.getProfileParams(mode.profileIndex)
         if (baseDistanceMeters <= 0f) return
+        val accuracyThresholdMeters = resolveCurrentAccuracyFilter()
         if (measuredAccuracyMeters == null || measuredAccuracyMeters > accuracyThresholdMeters) return
         val nextBucketRaw = computeElasticitySpeedBucket(observedSpeedMps)
         val nextBucket = computeElasticityModeBoundBucket(nextBucketRaw, autoTrackingMotionEngine.snapshot().mode)

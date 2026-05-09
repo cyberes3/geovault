@@ -15,10 +15,9 @@ class TrackingLocationPolicyTest {
 
     @Test
     fun getProfileParams_biking_matchesConstants() {
-        val triple = TrackingLocationPolicy.getProfileParams(1)
-        assertEquals(TrackingLocationPolicy.BIKING_INTERVAL_SEC, triple.first)
-        assertEquals(TrackingLocationPolicy.BIKING_DISTANCE_FILTER_METERS, triple.second, 0.001f)
-        assertEquals(TrackingLocationPolicy.BIKING_ACCURACY_FILTER_METERS, triple.third, 0.001f)
+        val params = TrackingLocationPolicy.getProfileParams(1)
+        assertEquals(TrackingLocationPolicy.BIKING_INTERVAL_SEC, params.first)
+        assertEquals(TrackingLocationPolicy.BIKING_DISTANCE_FILTER_METERS, params.second, 0.001f)
     }
 
     @Test
@@ -58,17 +57,66 @@ class TrackingLocationPolicyTest {
     }
 
     @Test
-    fun stationaryUpdate_speedAboveThreshold_resetsAndNoPause() {
+    fun stationaryUpdate_phantomSpeedWithoutDisplacement_doesNotResetCounter() {
+        // Multipath bursts indoors produce phantom Location.speed
+        // readings while the user sits still. Geometry must corroborate:
+        // a 5 m/s "speed" with the device parked at the anchor is NOT
+        // motion evidence and must not reset the stationary counter.
         val filter = 50f
-        val base = Location("test").apply {
-            latitude = 1.0
-            longitude = 1.0
-            time = 5_000L
-            speed = 2f
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
         }
-        val r = TrackingLocationPolicy.stationaryUpdate(null, base, filter, 2, true)
-        assertEquals(0, r.consecutive)
-        assertFalse(r.shouldPause)
+        val phantomMotion = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 5_000L
+            accuracy = 8f
+            speed = 5f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = phantomMotion,
+            stationaryRadiusMeters = filter,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+        )
+        assertTrue(
+            "phantom GPS speed without geometric displacement must not reset stationary counter",
+            result.consecutive >= 2
+        )
+    }
+
+    @Test
+    fun stationaryUpdate_realMotion_resetsCounter() {
+        // Real motion: speed > floor AND displacement past the radius.
+        val filter = 25f
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 6f
+        }
+        val moved = Location("test").apply {
+            // ~110 m east of anchor at the equator
+            latitude = 0.0
+            longitude = 0.001
+            time = 30_000L
+            accuracy = 6f
+            speed = 4f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = moved,
+            stationaryRadiusMeters = filter,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+        )
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("gps_motion_corroborated", result.reason)
     }
 
     @Test

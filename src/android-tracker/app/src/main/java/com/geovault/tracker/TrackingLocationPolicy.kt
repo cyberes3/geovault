@@ -20,13 +20,10 @@ object TrackingLocationPolicy {
     const val AUTO_START_PROFILE_INDEX = 0
     const val WALKING_INTERVAL_SEC = 20L
     const val WALKING_DISTANCE_FILTER_METERS = 7f
-    const val WALKING_ACCURACY_FILTER_METERS = 40f
     const val BIKING_INTERVAL_SEC = 15L
     const val BIKING_DISTANCE_FILTER_METERS = 30f
-    const val BIKING_ACCURACY_FILTER_METERS = 100f
     const val DRIVING_INTERVAL_SEC = 10L
     const val DRIVING_DISTANCE_FILTER_METERS = 100f
-    const val DRIVING_ACCURACY_FILTER_METERS = 200f
 
     @JvmStatic
     fun getAutoStartProfileIndex(): Int = AUTO_START_PROFILE_INDEX
@@ -122,9 +119,6 @@ object TrackingLocationPolicy {
         if (activeMotionHint) {
             return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_motion_hint")
         }
-        if (location.hasSpeed() && location.speed > 0.75f) {
-            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "gps_speed_movement")
-        }
         if (filterIntervened) {
             return StationaryDecision(
                 consecutive = currentConsecutive,
@@ -145,6 +139,21 @@ object TrackingLocationPolicy {
         val radius = stationaryRadiusMeters.coerceAtLeast(MIN_STATIONARY_RADIUS_METERS)
         val dist = anchor.distanceTo(location)
         val withinRadius = dist <= radius
+
+        // Motion is only credited when *both* the chipset reports
+        // measurable speed *and* the geometry shows displacement past
+        // the stationary radius. A multipath burst (phantom speed with
+        // no real geometry change) while sitting still is exactly the
+        // failure pattern we are filtering out -- the user reported it
+        // as "still logging points while I was still". Real motion
+        // produces both signals within one or two fixes.
+        val gpsSpeedMps = if (location.hasSpeed()) location.speed else 0f
+        val movedByGpsSpeed = gpsSpeedMps > GPS_MOTION_FLOOR_MPS
+        val movedByGeometry = !withinRadius
+        if (movedByGpsSpeed && movedByGeometry) {
+            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "gps_motion_corroborated")
+        }
+
         val newConsecutive = if (withinRadius) currentConsecutive + 1 else 1
         val shouldPause = newConsecutive >= 3
         val reason = when {
@@ -154,6 +163,8 @@ object TrackingLocationPolicy {
         }
         return StationaryDecision(consecutive = newConsecutive, shouldPause = shouldPause, reason = reason)
     }
+
+    private const val GPS_MOTION_FLOOR_MPS = 0.75f
 
     /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest from interval in seconds.
@@ -167,16 +178,20 @@ object TrackingLocationPolicy {
     }
 
     /**
-     * Profile indexes: 0: Walking, 1: Biking, 2: Driving
-     * Returns: Triple(intervalSec, distanceFilter, accuracyFilter)
+     * Profile indexes: 0: Walking, 1: Biking, 2: Driving.
+     *
+     * Profiles drive only the [android.location.LocationRequest] cadence and
+     * distance filter. The positioning filter accuracy gate is owned by the
+     * user setting (`accuracyFilterMeters`) and is profile-independent so
+     * mode flips never mutate the filter pipeline state.
      */
     @JvmStatic
-    fun getProfileParams(profileIndex: Int): Triple<Long, Float, Float> {
+    fun getProfileParams(profileIndex: Int): Pair<Long, Float> {
         return when (profileIndex) {
-            0 -> Triple(WALKING_INTERVAL_SEC, WALKING_DISTANCE_FILTER_METERS, WALKING_ACCURACY_FILTER_METERS)
-            1 -> Triple(BIKING_INTERVAL_SEC, BIKING_DISTANCE_FILTER_METERS, BIKING_ACCURACY_FILTER_METERS)
-            2 -> Triple(DRIVING_INTERVAL_SEC, DRIVING_DISTANCE_FILTER_METERS, DRIVING_ACCURACY_FILTER_METERS)
-            else -> Triple(BIKING_INTERVAL_SEC, BIKING_DISTANCE_FILTER_METERS, BIKING_ACCURACY_FILTER_METERS)
+            0 -> WALKING_INTERVAL_SEC to WALKING_DISTANCE_FILTER_METERS
+            1 -> BIKING_INTERVAL_SEC to BIKING_DISTANCE_FILTER_METERS
+            2 -> DRIVING_INTERVAL_SEC to DRIVING_DISTANCE_FILTER_METERS
+            else -> BIKING_INTERVAL_SEC to BIKING_DISTANCE_FILTER_METERS
         }
     }
 

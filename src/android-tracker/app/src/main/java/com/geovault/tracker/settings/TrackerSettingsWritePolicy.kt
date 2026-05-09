@@ -16,40 +16,23 @@ class TrackerSettingsWritePolicy {
         )
     }
 
+    /**
+     * Profile selection only mutates the [LocationRequest] cadence
+     * (interval + distance filter). The accuracy filter is the user's own
+     * preference and is preserved across profile switches; profiles must
+     * never thrash the [LocationFilter] config.
+     */
     fun applyProfile(base: TrackerSettings, profile: TrackerTrackingProfile): TrackerSettings {
-        val resolved = TrackingLocationPolicy.getProfileParams(profile.index)
-        val intervalSec = resolved.first
-        val distanceMeters = resolved.second
-        val accuracyMeters = resolved.third
-        return when (profile) {
-            TrackerTrackingProfile.WALKING -> sanitize(
-                base.copy(
-                    trackingProfile = profile,
-                    loggingIntervalSec = intervalSec,
-                    distanceFilterMeters = distanceMeters,
-                    accuracyFilterMeters = accuracyMeters
-                )
-            )
-
-            TrackerTrackingProfile.BIKING -> sanitize(
-                base.copy(
-                    trackingProfile = profile,
-                    loggingIntervalSec = intervalSec,
-                    distanceFilterMeters = distanceMeters,
-                    accuracyFilterMeters = accuracyMeters
-                )
-            )
-
-            TrackerTrackingProfile.DRIVING -> sanitize(
-                base.copy(
-                    trackingProfile = profile,
-                    loggingIntervalSec = intervalSec,
-                    distanceFilterMeters = distanceMeters,
-                    accuracyFilterMeters = accuracyMeters
-                )
-            )
-
-            TrackerTrackingProfile.CUSTOM -> sanitize(base.copy(trackingProfile = profile))
+        if (profile == TrackerTrackingProfile.CUSTOM) {
+            return sanitize(base.copy(trackingProfile = profile))
         }
+        val (intervalSec, distanceMeters) = TrackingLocationPolicy.getProfileParams(profile.index)
+        return sanitize(
+            base.copy(
+                trackingProfile = profile,
+                loggingIntervalSec = intervalSec,
+                distanceFilterMeters = distanceMeters,
+            )
+        )
     }
 }

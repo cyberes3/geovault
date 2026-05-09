@@ -221,7 +221,7 @@ class LocationFilterStateIsolationTest {
     }
 
     @Test
-    fun applyConfig_resetsAllInternalState() {
+    fun applyConfig_changingPhysicsField_resetsAllInternalState() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -238,6 +238,118 @@ class LocationFilterStateIsolationTest {
         )
         assertEquals(null, filter.lastAcceptedTimestampMs)
         assertEquals(null, filter.lastAcceptedLatLon)
+    }
+
+    @Test
+    fun applyConfig_changingOnlyAccuracyThreshold_preservesAnchor() {
+        // The motion profile flipping (Walking <-> Biking <-> Driving)
+        // historically swapped trackingAccuracyThresholdMeters on every
+        // fix, which used to wipe the filter's anchor and accept the
+        // next fix as `first-fix` verbatim. Selective applyConfig must
+        // treat the gate as a live-swap.
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        val anchor = LocationInput(
+            latitude = 0.0,
+            longitude = 0.0,
+            timestampMs = 0L,
+            accuracyMeters = 10f,
+            speedMps = 1f,
+        )
+        filter.evaluate(anchor)
+        val anchorTs = filter.lastAcceptedTimestampMs
+        val anchorLatLon = filter.lastAcceptedLatLon
+        assertEquals(0L, anchorTs)
+
+        filter.applyConfig(
+            LocationFilterConfig.Default.copy(trackingAccuracyThresholdMeters = 50.0)
+        )
+        // Anchor MUST survive the gate-only update.
+        assertEquals(anchorTs, filter.lastAcceptedTimestampMs)
+        assertEquals(anchorLatLon, filter.lastAcceptedLatLon)
+
+        // A 200 m teleport at 1 s would have been first-fix-accepted
+        // pre-fix; with the anchor preserved it gets rejected.
+        val teleport = LocationInput(
+            latitude = 0.002,
+            longitude = 0.0,
+            timestampMs = 1_000L,
+            accuracyMeters = 10f,
+            speedMps = 1f,
+        )
+        val result = filter.evaluate(teleport)
+        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+    }
+
+    @Test
+    fun applyConfig_changingFreshnessTtl_preservesAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 5.0,
+                longitude = 5.0,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+            )
+        )
+        val anchorTs = filter.lastAcceptedTimestampMs
+        filter.applyConfig(
+            LocationFilterConfig.Default.copy(freshnessTtlMs = 5_000L)
+        )
+        assertEquals(anchorTs, filter.lastAcceptedTimestampMs)
+    }
+
+    @Test
+    fun applyConfig_changingMaxFutureSkew_preservesAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 5.0,
+                longitude = 5.0,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+            )
+        )
+        val anchorTs = filter.lastAcceptedTimestampMs
+        filter.applyConfig(
+            LocationFilterConfig.Default.copy(maxFutureSkewMs = 999_999L)
+        )
+        assertEquals(anchorTs, filter.lastAcceptedTimestampMs)
+    }
+
+    @Test
+    fun applyConfig_changingKalmanProfile_resetsAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 1.0,
+                longitude = 1.0,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+            )
+        )
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
+
+        filter.applyConfig(
+            LocationFilterConfig.Default.copy(kalmanProfile = KalmanProfile.Conservative)
+        )
+        assertEquals(null, filter.lastAcceptedTimestampMs)
+    }
+
+    @Test
+    fun applyConfig_changingRollingWindowSeconds_resetsAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 1.0,
+                longitude = 1.0,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+            )
+        )
+        filter.applyConfig(
+            LocationFilterConfig.Default.copy(rollingWindowSeconds = 10.0)
+        )
+        assertEquals(null, filter.lastAcceptedTimestampMs)
     }
 
     @Test

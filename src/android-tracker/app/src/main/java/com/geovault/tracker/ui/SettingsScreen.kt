@@ -469,15 +469,11 @@ fun SettingsScreen(
             onValueSelected = { profile ->
                 selectedProfile = profile
                 if (profile != TrackerTrackingProfile.CUSTOM) {
-                    val params = TrackingLocationPolicy.getProfileParams(profile.index)
+                    val (intervalSec, distanceMeters) = TrackingLocationPolicy.getProfileParams(profile.index)
                     isUpdatingFromProfile = true
-                    intervalText = params.first.toString()
+                    intervalText = intervalSec.toString()
                     distanceText = SettingsMeasurementPolicy.metersToDisplayText(
-                        meters = params.second,
-                        usesImperial = state.usesImperialUnits
-                    )
-                    accuracyText = SettingsMeasurementPolicy.metersToDisplayText(
-                        meters = params.third,
+                        meters = distanceMeters,
                         usesImperial = state.usesImperialUnits
                     )
                     isUpdatingFromProfile = false

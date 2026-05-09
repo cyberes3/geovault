@@ -25,18 +25,19 @@ class TrackerSettingsWritePolicyTest {
     }
 
     @Test
-    fun applyProfile_walking_setsPolicyParamsAndSanitizes() {
+    fun applyProfile_walking_setsCadenceAndPreservesAccuracyPreference() {
+        val userAccuracyPreference = 17.5f
         val base = TrackerSettings(
             loggingIntervalSec = 1L,
             distanceFilterMeters = 1f,
-            accuracyFilterMeters = 1f,
+            accuracyFilterMeters = userAccuracyPreference,
             trackingProfile = TrackerTrackingProfile.CUSTOM
         )
         val next = policy.applyProfile(base, TrackerTrackingProfile.WALKING)
         assertEquals(TrackerTrackingProfile.WALKING, next.trackingProfile)
         assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, next.loggingIntervalSec)
         assertEquals(TrackingLocationPolicy.WALKING_DISTANCE_FILTER_METERS, next.distanceFilterMeters, 0.001f)
-        assertEquals(TrackingLocationPolicy.WALKING_ACCURACY_FILTER_METERS, next.accuracyFilterMeters, 0.001f)
+        assertEquals(userAccuracyPreference, next.accuracyFilterMeters, 0.001f)
     }
 
     @Test

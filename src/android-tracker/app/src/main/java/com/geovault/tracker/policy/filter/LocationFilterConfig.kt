@@ -52,6 +52,32 @@ data class LocationFilterConfig(
     val freshnessTtlMs: Long = 30_000L,
     val normalizeSecondsTimestamps: Boolean = true,
 ) {
+    /**
+     * True when transitioning from `this` config to [other] requires the
+     * [LocationFilter] to rebuild internal physics state (kalman, metrics
+     * engine ring buffer) and clear the anchor.
+     *
+     * Only fields that change the filter's *physics* qualify. Pure per-fix
+     * gates ([trackingAccuracyThresholdMeters], [maxFutureSkewMs],
+     * [freshnessTtlMs], [normalizeSecondsTimestamps]) are evaluated
+     * statelessly on every call to [LocationFilter.evaluate] and can be
+     * live-swapped without disturbing the anchor.
+     *
+     * This guarantee is what keeps the filter stable across user setting
+     * changes and any future per-profile gate tweaks: a benign config
+     * mutation must never produce a `first-fix` accept of the next noisy
+     * sample.
+     */
+    fun requiresFilterStateReset(other: LocationFilterConfig): Boolean {
+        return policy != other.policy ||
+            useKalman != other.useKalman ||
+            kalmanProfile != other.kalmanProfile ||
+            rollingWindowSeconds != other.rollingWindowSeconds ||
+            maxImpliedSpeedMps != other.maxImpliedSpeedMps ||
+            maxBurstDistanceMeters != other.maxBurstDistanceMeters ||
+            burstWindowSeconds != other.burstWindowSeconds
+    }
+
     companion object {
         val Default: LocationFilterConfig = LocationFilterConfig()
     }

@@ -30,13 +30,8 @@ import kotlin.math.max
 class LocationFilter(
     private var config: LocationFilterConfig = LocationFilterConfig.Default,
 ) {
-    private val metricsEngine = LocationMetricsEngine(
-        rollingWindowSeconds = config.rollingWindowSeconds,
-        burstWindowSeconds = config.burstWindowSeconds,
-        maxImpliedSpeedMps = config.maxImpliedSpeedMps,
-        maxBurstDistanceMeters = config.maxBurstDistanceMeters,
-    )
-    private val kalmanFilter = KalmanFilter(KalmanTuning.forProfile(config.kalmanProfile))
+    private var metricsEngine: LocationMetricsEngine = buildMetricsEngine(config)
+    private var kalmanFilter: KalmanFilter = buildKalmanFilter(config)
     private var previousAccepted: LocationInput? = null
 
     /**
@@ -58,19 +53,34 @@ class LocationFilter(
     val lastAcceptedLatLon: Pair<Double, Double>? get() = previousAccepted?.let { it.latitude to it.longitude }
 
     fun reset() {
-        metricsEngine.reset()
-        kalmanFilter.reset()
+        metricsEngine = buildMetricsEngine(config)
+        kalmanFilter = buildKalmanFilter(config)
         previousAccepted = null
         lastSeenFix = null
     }
 
     /**
-     * Reconfigure mid-session. Resets the internal Kalman + metrics state
-     * because tuning constants have changed.
+     * Reconfigure mid-session.
+     *
+     * Per-fix gates ([LocationFilterConfig.trackingAccuracyThresholdMeters],
+     * [LocationFilterConfig.maxFutureSkewMs],
+     * [LocationFilterConfig.freshnessTtlMs],
+     * [LocationFilterConfig.normalizeSecondsTimestamps]) are evaluated
+     * against the live `config` reference inside [evaluate], so updates to
+     * those fields take effect on the very next fix without disturbing the
+     * filter's anchor or rolling state.
+     *
+     * Physics-affecting fields (kalman, policy, rolling window, anomaly
+     * thresholds) require rebuilding the metrics engine and kalman, so a
+     * change there triggers a full [reset]. The classification is owned by
+     * [LocationFilterConfig.requiresFilterStateReset].
      */
     fun applyConfig(newConfig: LocationFilterConfig) {
+        val oldConfig = config
         config = newConfig
-        reset()
+        if (oldConfig.requiresFilterStateReset(newConfig)) {
+            reset()
+        }
     }
 
     /**
@@ -358,6 +368,17 @@ class LocationFilter(
         if (anomaly) cap * ANOMALY_CAP_INFLATION else cap
 
     companion object {
+        private fun buildMetricsEngine(config: LocationFilterConfig): LocationMetricsEngine =
+            LocationMetricsEngine(
+                rollingWindowSeconds = config.rollingWindowSeconds,
+                burstWindowSeconds = config.burstWindowSeconds,
+                maxImpliedSpeedMps = config.maxImpliedSpeedMps,
+                maxBurstDistanceMeters = config.maxBurstDistanceMeters,
+            )
+
+        private fun buildKalmanFilter(config: LocationFilterConfig): KalmanFilter =
+            KalmanFilter(KalmanTuning.forProfile(config.kalmanProfile))
+
         private const val OUTLIER_CAP_MULTIPLIER = 1.5
         private const val ANCHOR_TRUST_FULL = 0.7
         private const val ANCHOR_TRUST_INFLATION = 0.5
