@@ -367,6 +367,7 @@ private fun TrackerMapAuthenticatedContent(
 
     val fabDescSource = stringResource(R.string.map_fab_toggle_source)
     val fabDescFitTrail = stringResource(R.string.map_fab_fit_trail)
+    val fabDescLiveGpsPuck = stringResource(R.string.map_fab_live_gps_puck)
     val fabDescFollow = stringResource(R.string.map_fab_follow_lock)
     val fabDescZoomIn = stringResource(R.string.map_fab_zoom_in)
     val fabDescZoomOut = stringResource(R.string.map_fab_zoom_out)
@@ -376,6 +377,7 @@ private fun TrackerMapAuthenticatedContent(
     val fabDescLiveActiveFitDisable = stringResource(R.string.live_active_fit_disable)
     val tooltipMapLayers = stringResource(R.string.tooltip_map_layers)
     val tooltipMapZoomLatest = stringResource(R.string.tooltip_map_zoom_latest)
+    val tooltipMapLiveGpsPuck = stringResource(R.string.tooltip_map_live_gps_puck)
     val tooltipMapZoomIn = stringResource(R.string.tooltip_map_zoom_in)
     val tooltipMapZoomOut = stringResource(R.string.tooltip_map_zoom_out)
     val tooltipMapLiveActiveFit = stringResource(R.string.tooltip_map_live_active_fit)
@@ -589,7 +591,8 @@ private fun TrackerMapAuthenticatedContent(
                         id = gpsFabAction.id,
                         order = gpsFabAction.order,
                         icon = gpsFabAction.icon,
-                        contentDescription = gpsFabAction.contentDescription,
+                        contentDescription = fabDescLiveGpsPuck,
+                        tooltip = tooltipMapLiveGpsPuck,
                         onTap = {
                             liveGpsPuckRequestedThisSession = true
                             gpsFabAction.onTap?.invoke()

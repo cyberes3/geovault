@@ -3,6 +3,7 @@ package com.geovault.tracker.services
 import android.location.Location
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.settings.TrackerSettings
@@ -315,6 +316,58 @@ class LocationIngestCoordinatorTest {
         assertTrue(result.pointPersisted)
         assertTrue(result.nextSessionDistanceMeters > startingDistance)
         assertEquals(result.nextSessionDistanceMeters, dao.getAll().single().dist)
+    }
+
+    @Test
+    fun ingest_pausedFreshnessBypassAtAnchor_persistsWithoutAddingDistance() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val nowMs = System.currentTimeMillis()
+        val anchor = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 6f
+            time = nowMs - 5 * 60_000L
+        }
+        val probe = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.00001
+            accuracy = 8f
+            time = nowMs
+        }
+        val freshness = PausedFreshnessPointFactory.buildAnchoredFreshnessLocation(
+            anchorLocation = anchor,
+            probeLocation = probe,
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 123L,
+        )
+        val startingDistance = 456f
+
+        val result = coordinator.ingest(
+            trackId = "tracker-1",
+            location = freshness,
+            settings = settings,
+            motionMode = TrackingMotionMode.WALKING,
+            previousAcceptedLocation = anchor,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = true,
+            propsJson = null,
+            totalDistanceMeters = startingDistance,
+            queuedTrackerId = "tracker-1",
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = 123L,
+            isMockLocation = false
+        )
+
+        assertTrue(result.accepted)
+        assertTrue(result.pointPersisted)
+        assertEquals(startingDistance, result.nextSessionDistanceMeters, 0.001f)
+        val row = dao.getAll().single()
+        assertEquals(startingDistance, row.dist ?: -1f, 0.001f)
+        assertEquals(anchor.latitude, row.latitude, 0.0)
+        assertEquals(anchor.longitude, row.longitude, 0.0)
+        assertEquals("paused_freshness:gps", row.prov)
     }
 }
 
