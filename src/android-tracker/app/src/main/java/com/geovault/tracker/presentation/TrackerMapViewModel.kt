@@ -480,6 +480,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var pendingFitAfterReload: Boolean = false
     private val recentDataWindowByTracker = mutableMapOf<String, String?>()
     private var lastObservedTrackingRunning: Boolean? = null
+    private var lastObservedLocalRecordingActive: Boolean? = null
 
     /**
      * STREAM-STATE-MACHINE: tracks whether the previous snapshot represented an active streaming
@@ -560,6 +561,31 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     displayedTrackerId = displayedTrackerId,
                     displayedTrackerName = displayedTrackerName
                 )
+                val prevLocalRecording = lastObservedLocalRecordingActive
+                lastObservedLocalRecordingActive = snap.localRecordingActive
+                if (prevLocalRecording != null && !prevLocalRecording && snap.localRecordingActive) {
+                    val afterRuntime = _uiState.value
+                    when (
+                        val autoLock = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
+                            mode = afterRuntime.mode,
+                            displayedTrackerId = afterRuntime.displayedTrackerId,
+                            selectedTrackerId = afterRuntime.runtime.selectedTrackerId,
+                        )
+                    ) {
+                        is TrackerMapAutoLockOnRecordingResult.SelectionLock -> {
+                            _uiState.update {
+                                it.withAllMapLocksDisabled().copy(selectionLockTrackerId = autoLock.trackerId)
+                            }
+                        }
+                        TrackerMapAutoLockOnRecordingResult.LiveActiveFit -> {
+                            _uiState.update {
+                                it.withAllMapLocksDisabled().copy(liveActiveFitEnabled = true)
+                            }
+                            requestFitTrail()
+                        }
+                        TrackerMapAutoLockOnRecordingResult.None -> Unit
+                    }
+                }
                 val runtimeResyncDecision = runtimeResyncPolicy.decide(
                     previousIsRunning = lastObservedTrackingRunning,
                     currentIsRunning = snap.isRunning,
@@ -1153,9 +1179,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         bumpReconcileToken()
     }
 
-    fun onMapSurfaceHidden() {
+    fun onMapSurfaceHidden(markBackground: Boolean = false) {
         mapSurfaceVisible = false
         mapReady = false
+        if (markBackground) {
+            lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
+            pendingResumeEvaluation = true
+        }
         bumpReconcileToken()
         viewModelScope.launch {
             sessionRequestDeduper.clear()
@@ -1800,8 +1830,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             nextStreamTargetIds.isNotEmpty() &&
             nextStreamTargetIds != previousStreamTargetIds
         lastStreamTargetsSeed = seed
+        val autoSelectionLockId = TrackerMapAutoLockPolicy.resolveAutoSelectionLockForSingleStream(
+            mode = state.mode,
+            previousTargets = previousStreamTargetIds,
+            nextTargets = nextStreamTargetIds,
+            displayedTrackerId = plan.displayedTrackerId,
+        )
         _uiState.update { cur ->
-            val nextState = cur.copy(
+            val baseNext = cur.copy(
                 streamTargetIds = nextStreamTargetIds,
                 remoteLastPoints = filterRemoteLastPointsForAcceptedIds(
                     remoteLastPoints = cur.remoteLastPoints,
@@ -1818,6 +1854,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     emptyList()
                 },
             )
+            val nextState = if (autoSelectionLockId != null) {
+                baseNext.withAllMapLocksDisabled().copy(selectionLockTrackerId = autoSelectionLockId)
+            } else {
+                baseNext
+            }
             if (nextState == cur) cur else nextState
         }
         if (shouldLoadHistoryForStreamingStart) {

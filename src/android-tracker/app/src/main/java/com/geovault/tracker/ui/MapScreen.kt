@@ -198,15 +198,19 @@ private fun TrackerMapAuthenticatedContent(
         mutableStateOf(TrackingPermissionGate.hasLocationPermission(context))
     }
 
-    DisposableEffect(viewModel, isActive) {
+    DisposableEffect(viewModel, isActive, lifecycleOwner) {
         if (isActive) {
             viewModel.onMapSurfaceVisible()
         } else {
-            viewModel.onMapSurfaceHidden()
+            viewModel.onMapSurfaceHidden(
+                markBackground = !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+            )
         }
         onDispose {
             if (isActive) {
-                viewModel.onMapSurfaceHidden()
+                viewModel.onMapSurfaceHidden(
+                    markBackground = !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                )
             }
         }
     }
