@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import android.location.Location
 import com.geovault.tracker.services.GpsRuntimeState
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,6 +88,47 @@ class TrackingServiceRuntimeGuardTest {
         assertFalse(invokeShouldEmitFallbackForTransition(service, previous, candidate, 21_000L))
     }
 
+    @Test
+    fun observedSpeed_prefersReportedSpeedWhenPresent() {
+        val service = TrackingService()
+        val previous = Location("gps").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 1_000L
+        }
+        val candidate = Location("gps").apply {
+            latitude = 0.001
+            longitude = 0.0
+            time = 2_000L
+            speed = 0.05f
+        }
+
+        assertEquals(
+            0.05f,
+            invokeResolveObservedSpeedMps(service, candidate, previous) ?: -1f,
+            0.001f
+        )
+    }
+
+    @Test
+    fun observedSpeed_usesImpliedSpeedWhenReportedSpeedMissing() {
+        val service = TrackingService()
+        val previous = Location("gps").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 1_000L
+        }
+        val candidate = Location("gps").apply {
+            latitude = 0.00001
+            longitude = 0.0
+            time = 2_000L
+        }
+
+        val observed = invokeResolveObservedSpeedMps(service, candidate, previous)
+
+        assertTrue((observed ?: 0f) > 0f)
+    }
+
     private fun invokeIsWaitingForProviderState(service: TrackingService): Boolean {
         val method = service.javaClass.getDeclaredMethod("isWaitingForProviderState")
         method.isAccessible = true
@@ -107,5 +149,19 @@ class TrackingServiceRuntimeGuardTest {
         )
         method.isAccessible = true
         return method.invoke(service, previous, candidate, nowMs) as Boolean
+    }
+
+    private fun invokeResolveObservedSpeedMps(
+        service: TrackingService,
+        location: Location,
+        referenceLocation: Location?
+    ): Float? {
+        val method = service.javaClass.getDeclaredMethod(
+            "resolveObservedSpeedMps",
+            Location::class.java,
+            Location::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(service, location, referenceLocation) as Float?
     }
 }

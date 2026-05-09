@@ -236,6 +236,35 @@ class LocationFilterTest {
     }
 
     @Test
+    fun conservativePolicy_suppressesTightAccuracyStationaryJitter() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 3f,
+                speedMps = 0f,
+            )
+        )
+
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.70978,
+                longitude = -81.1011,
+                timestampMs = 1_000L,
+                accuracyMeters = 3f,
+                speedMps = 0f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals("uncertainty-suppressed", result.reason)
+        assertEquals(24.7097, result.adjustedLatitude ?: 0.0, 0.0000001)
+        assertEquals(-81.1011, result.adjustedLongitude ?: 0.0, 0.0000001)
+    }
+
+    @Test
     fun lowAccuracyMotion_withoutReportedSpeed_stillRejectsAnomaly() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(

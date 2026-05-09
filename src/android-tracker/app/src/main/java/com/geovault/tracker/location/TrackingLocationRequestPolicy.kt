@@ -29,7 +29,7 @@ object TrackingLocationRequestPolicy {
         return LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FAST_GPS_LOCK_INTERVAL_MS)
             .setMinUpdateIntervalMillis(FAST_GPS_LOCK_MIN_UPDATE_INTERVAL_MS)
             .setMinUpdateDistanceMeters(FAST_GPS_LOCK_MIN_DISTANCE_METERS)
-            .setWaitForAccurateLocation(false)
+            .setWaitForAccurateLocation(true)
             .build()
     }
 

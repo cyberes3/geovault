@@ -136,7 +136,17 @@ class LocationFilter(
         metrics: LocationMetrics,
     ): LocationFilterResult {
         val noReportedMotion = metrics.reportedSpeedMps < REPORTED_MOTION_FLOOR_MPS
-        val noisyStandstill = metrics.effectiveDistanceMeters <= 0.0 &&
+        val tightAccuracyStationaryJitter =
+            metrics.dtSeconds <= STATIONARY_JITTER_MAX_DT_SECONDS &&
+                metrics.rawDistanceMeters <= max(
+                    STATIONARY_JITTER_MIN_RAW_METERS,
+                    metrics.accuracyMeters * STATIONARY_JITTER_RAW_ACCURACY_MULTIPLIER
+                ) &&
+                metrics.effectiveDistanceMeters <= max(
+                    STATIONARY_JITTER_MIN_EFFECTIVE_METERS,
+                    metrics.accuracyMeters * STATIONARY_JITTER_EFFECTIVE_ACCURACY_MULTIPLIER
+                )
+        val noisyStandstill = (metrics.effectiveDistanceMeters <= 0.0 || tightAccuracyStationaryJitter) &&
             metrics.rawDistanceMeters > 0.0 &&
             noReportedMotion &&
             (metrics.isOscillating || metrics.isStationary)
@@ -303,5 +313,10 @@ class LocationFilter(
         private const val ANCHOR_TRUST_INFLATION = 0.5
         private const val ANOMALY_DEFLATION = 0.4
         private const val REPORTED_MOTION_FLOOR_MPS = 0.5
+        private const val STATIONARY_JITTER_MAX_DT_SECONDS = 5.0
+        private const val STATIONARY_JITTER_MIN_RAW_METERS = 12.0
+        private const val STATIONARY_JITTER_RAW_ACCURACY_MULTIPLIER = 4.0
+        private const val STATIONARY_JITTER_MIN_EFFECTIVE_METERS = 6.0
+        private const val STATIONARY_JITTER_EFFECTIVE_ACCURACY_MULTIPLIER = 2.0
     }
 }
