@@ -134,30 +134,27 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
         }
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             if (requestId != activeRequestId) return@post
-            LocationUpdates.getFreshCurrentLocation(context) { latLng ->
-                if (requestId != activeRequestId) return@getFreshCurrentLocation
+            LocationUpdates.getFreshCurrentLocationFix(context) { location ->
+                if (requestId != activeRequestId) return@getFreshCurrentLocationFix
                 if (showSpinner) {
                     waitingForFix = false
+                }
+                val latLng = location?.let {
+                    LatLng(it.latitude, it.longitude)
                 }
                 if (latLng == null) {
                     if (!showUserLocationPuck) {
                         userLocation.setEnabled(false)
                         userLocation.setAccuracyCircleVisible(false)
                     }
-                    return@getFreshCurrentLocation
+                    return@getFreshCurrentLocationFix
                 }
-                if (map.phase.value != GeoVaultMapPhase.Ready) return@getFreshCurrentLocation
+                if (map.phase.value != GeoVaultMapPhase.Ready) return@getFreshCurrentLocationFix
                 hadSuccessfulJump = true
                 onLocationResolved?.invoke(latLng)
                 if (showUserLocationPuck) {
-                    val syntheticLocation = android.location.Location("geovault-gps-oneshot").apply {
-                        latitude = latLng.latitude
-                        longitude = latLng.longitude
-                        accuracy = 10f
-                        time = System.currentTimeMillis()
-                    }
-                    userLocation.renderLocation(syntheticLocation)
-                    val mapLibreMap = map.maplibreMap ?: return@getFreshCurrentLocation
+                    userLocation.renderLocation(location)
+                    val mapLibreMap = map.maplibreMap ?: return@getFreshCurrentLocationFix
                     map.animateCameraWithPadding(
                         CameraUpdateFactory.newCameraPosition(
                             geoVaultRetargetCameraPositionWithMinimumZoom(

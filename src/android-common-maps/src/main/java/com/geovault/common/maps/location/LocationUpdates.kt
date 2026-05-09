@@ -35,8 +35,8 @@ object LocationUpdates {
     suspend fun getCurrentLatLngOnce(context: Context, timeoutMs: Long = 4000L): LatLng? =
         withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine<LatLng?> { cont ->
-                getCurrentLocation(context) { latLng ->
-                    if (cont.isActive) cont.resume(latLng)
+                getCurrentLocationFix(context) { location ->
+                    if (cont.isActive) cont.resume(location?.toValidLatLngOrNull())
                 }
             }
         }
@@ -50,20 +50,27 @@ object LocationUpdates {
     suspend fun getFreshCurrentLatLngOnce(context: Context, timeoutMs: Long = 4000L): LatLng? =
         withTimeoutOrNull(timeoutMs) {
             suspendCancellableCoroutine<LatLng?> { cont ->
-                getFreshCurrentLocation(context) { latLng ->
-                    if (cont.isActive) cont.resume(latLng)
+                getFreshCurrentLocationFix(context) { location ->
+                    if (cont.isActive) cont.resume(location?.toValidLatLngOrNull())
                 }
             }
         }
 
     @SuppressLint("MissingPermission")
     fun getFreshCurrentLocation(context: Context, callback: (LatLng?) -> Unit) {
+        getFreshCurrentLocationFix(context) { location ->
+            callback(location?.toValidLatLngOrNull())
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun getFreshCurrentLocationFix(context: Context, callback: (Location?) -> Unit) {
         val appContext = context.applicationContext
         val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val fusedClient = LocationServices.getFusedLocationProviderClient(appContext)
         val mainHandler = Handler(Looper.getMainLooper())
         val cancellation = CancellationTokenSource()
-        fun deliver(result: LatLng?) {
+        fun deliver(result: Location?) {
             mainHandler.post { callback(result) }
         }
         val request = CurrentLocationRequest.Builder()
@@ -73,7 +80,7 @@ object LocationUpdates {
         fusedClient.getCurrentLocation(request, cancellation.token)
             .addOnSuccessListener { location ->
                 if (location != null) {
-                    deliver(latLngOrNull(location.latitude, location.longitude))
+                    deliver(validLocationOrNull(location))
                 } else {
                     requestFreshCurrentLocationWithLocationManager(
                         appContext = appContext,
@@ -93,17 +100,24 @@ object LocationUpdates {
 
     @SuppressLint("MissingPermission")
     fun getCurrentLocation(context: Context, callback: (LatLng?) -> Unit) {
+        getCurrentLocationFix(context) { location ->
+            callback(location?.toValidLatLngOrNull())
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun getCurrentLocationFix(context: Context, callback: (Location?) -> Unit) {
         val appContext = context.applicationContext
         val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val fusedClient = LocationServices.getFusedLocationProviderClient(appContext)
         val mainHandler = Handler(Looper.getMainLooper())
-        fun deliver(result: LatLng?) {
+        fun deliver(result: Location?) {
             mainHandler.post { callback(result) }
         }
         fusedClient.lastLocation
             .addOnSuccessListener { location ->
                 if (location != null) {
-                    deliver(latLngOrNull(location.latitude, location.longitude))
+                    deliver(validLocationOrNull(location))
                 } else {
                     requestCurrentLocationWithLocationManager(
                         appContext = appContext,
@@ -125,11 +139,11 @@ object LocationUpdates {
     private fun requestCurrentLocationWithLocationManager(
         appContext: Context,
         manager: LocationManager,
-        deliver: (LatLng?) -> Unit,
+        deliver: (Location?) -> Unit,
     ) {
         val provider = pickBestProvider(manager)
         if (provider == null) {
-            deliver(getBestLastKnownLatLng(manager))
+            deliver(getBestLastKnownLocation(manager))
             return
         }
         runCatching {
@@ -139,13 +153,13 @@ object LocationUpdates {
                 ContextCompat.getMainExecutor(appContext),
             ) { location ->
                 if (location != null) {
-                    deliver(latLngOrNull(location.latitude, location.longitude))
+                    deliver(validLocationOrNull(location))
                 } else {
-                    deliver(getBestLastKnownLatLng(manager))
+                    deliver(getBestLastKnownLocation(manager))
                 }
             }
         }.onFailure {
-            deliver(getBestLastKnownLatLng(manager))
+            deliver(getBestLastKnownLocation(manager))
         }
     }
 
@@ -153,7 +167,7 @@ object LocationUpdates {
     private fun requestFreshCurrentLocationWithLocationManager(
         appContext: Context,
         manager: LocationManager,
-        deliver: (LatLng?) -> Unit,
+        deliver: (Location?) -> Unit,
     ) {
         val provider = pickBestProvider(manager)
         if (provider == null) {
@@ -166,7 +180,7 @@ object LocationUpdates {
                 null,
                 ContextCompat.getMainExecutor(appContext),
             ) { location ->
-                deliver(location?.let { latLngOrNull(it.latitude, it.longitude) })
+                deliver(validLocationOrNull(location))
             }
         }.onFailure {
             deliver(null)
@@ -255,19 +269,26 @@ object LocationUpdates {
         }
     }
 
-    private fun getBestLastKnownLatLng(manager: LocationManager): LatLng? {
+    private fun getBestLastKnownLocation(manager: LocationManager): Location? {
         val candidateProviders = listOf(
             LocationManager.GPS_PROVIDER,
             LocationManager.NETWORK_PROVIDER,
             LocationManager.PASSIVE_PROVIDER,
         )
-        val last = candidateProviders
+        return candidateProviders
             .mapNotNull { provider ->
                 runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
             }
+            .filter { it.toValidLatLngOrNull() != null }
             .maxByOrNull { it.time }
-            ?: return null
-        return latLngOrNull(last.latitude, last.longitude)
+    }
+
+    internal fun validLocationOrNull(location: Location?): Location? {
+        return location?.takeIf { it.toValidLatLngOrNull() != null }
+    }
+
+    internal fun Location.toValidLatLngOrNull(): LatLng? {
+        return latLngOrNull(latitude, longitude)
     }
 
     interface LocationUpdatesSession {

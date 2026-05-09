@@ -450,7 +450,6 @@ class TrackerMapStateTransformsTest {
             runtime = TrackingRuntimeSnapshot(),
             displayedTrackerId = "t1",
             trackerColorById = mapOf("t1" to "#3366CC"),
-            streamedAccuracyMeters = 10f,
             fallbackAccuracyMeters = null,
             allowAccuracyFallback = false,
         )
@@ -458,6 +457,36 @@ class TrackerMapStateTransformsTest {
         assertEquals(1, render.polygons.size)
         assertEquals("accuracy-last-fix", render.polygons.first().id)
         assertEquals("rgba(51,102,204,0.2509804)", render.polygons.first().fillColorHex)
+        assertPolygonRadiusMeters(
+            expectedMeters = 11.0,
+            centerLatitude = 1.001,
+            polygon = render.polygons.first(),
+        )
+    }
+
+    @Test
+    fun singleSession_runtimeOnlyMarkerUsesRuntimeAccuracyForAccuracyPolygon() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "t1",
+                lastTrackedLatitude = 1.0,
+                lastTrackedLongitude = 2.0,
+                lastAccuracyMeters = 37f,
+            ),
+            displayedTrackerId = "t1",
+            fallbackAccuracyMeters = null,
+            allowAccuracyFallback = false,
+        )
+
+        assertEquals(1, render.polygons.size)
+        assertEquals("accuracy-last-fix", render.polygons.first().id)
+        assertPolygonRadiusMeters(
+            expectedMeters = 37.0,
+            centerLatitude = 1.0,
+            polygon = render.polygons.first(),
+        )
     }
 
     @Test
@@ -480,15 +509,21 @@ class TrackerMapStateTransformsTest {
                 "t1" to "#AA0000",
                 "t2" to "#00AA00",
             ),
-            streamedAccuracyByTrackerId = mapOf(
-                "t1" to 10f,
-                "t2" to 20f,
-            )
         )
 
         assertEquals(2, render.polygons.size)
         assertTrue(render.polygons.any { it.id == "accuracy-t1" })
         assertTrue(render.polygons.any { it.id == "accuracy-t2" })
+        assertPolygonRadiusMeters(
+            expectedMeters = 10.0,
+            centerLatitude = 1.1,
+            polygon = render.polygons.first { it.id == "accuracy-t1" },
+        )
+        assertPolygonRadiusMeters(
+            expectedMeters = 20.0,
+            centerLatitude = 2.1,
+            polygon = render.polygons.first { it.id == "accuracy-t2" },
+        )
     }
 
     @Test
@@ -605,6 +640,17 @@ class TrackerMapStateTransformsTest {
         val tailCoord = latestSessionLine.coordinates.last()
         assertEquals(tailCoord.first, marker.latitude, 0.0)
         assertEquals(tailCoord.second, marker.longitude, 0.0)
+    }
+
+    private fun assertPolygonRadiusMeters(
+        expectedMeters: Double,
+        centerLatitude: Double,
+        polygon: com.geovault.common.maps.render.MapRenderPolygon,
+    ) {
+        val ring = polygon.rings.first()
+        val northPoint = ring.first()
+        val actualMeters = Math.toRadians(northPoint.first - centerLatitude) * 6_378_137.0
+        assertEquals(expectedMeters, actualMeters, 0.05)
     }
 
 }

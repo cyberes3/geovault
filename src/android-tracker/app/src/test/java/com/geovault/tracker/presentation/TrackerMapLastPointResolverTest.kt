@@ -133,6 +133,81 @@ class TrackerMapLastPointResolverTest {
     }
 
     @Test
+    fun resolveRenderedMarkerPoint_singleSessionPrefersRenderedTrailTailOverNewerRemoteHead() {
+        val state = TrackerMapUiState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "t1",
+            runtime = TrackingRuntimeSnapshot(selectedTrackerId = "other"),
+            trail = listOf(queued("t1", time = 1_000L, latitude = 30.0, longitude = 40.0, accuracy = 12f)),
+            remoteLastPoints = mapOf(
+                "t1" to remotePoint("t1", timestampMs = 2_000L, lat = 20.0, lon = 10.0, accuracyMeters = 99f),
+            ),
+        )
+
+        val p = TrackerMapLastPointResolver.resolveRenderedMarkerPoint(
+            state = state,
+            trackerId = "t1",
+            tracker = null,
+            acceptedRemoteTrackerIds = setOf("t1"),
+        )
+
+        assertNotNull(p)
+        assertEquals(30.0, p!!.latitude, 0.0)
+        assertEquals(40.0, p.longitude, 0.0)
+        assertEquals(1_000L, p.lastUpdatedMs)
+        assertEquals(12f, p.accuracyMeters)
+    }
+
+    @Test
+    fun resolveRenderedMarkerPoint_allQueuePrefersRenderedTrailTailOverNewerRemoteHead() {
+        val state = TrackerMapUiState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            allQueueTrailsByTracker = mapOf(
+                "t1" to listOf(queued("t1", time = 1_000L, latitude = 30.0, longitude = 40.0, accuracy = 12f)),
+            ),
+            remoteLastPoints = mapOf(
+                "t1" to remotePoint("t1", timestampMs = 2_000L, lat = 20.0, lon = 10.0, accuracyMeters = 99f),
+            ),
+        )
+
+        val p = TrackerMapLastPointResolver.resolveRenderedMarkerPoint(
+            state = state,
+            trackerId = "t1",
+            tracker = null,
+            acceptedRemoteTrackerIds = setOf("t1"),
+        )
+
+        assertNotNull(p)
+        assertEquals(30.0, p!!.latitude, 0.0)
+        assertEquals(40.0, p.longitude, 0.0)
+        assertEquals(1_000L, p.lastUpdatedMs)
+        assertEquals(12f, p.accuracyMeters)
+    }
+
+    @Test
+    fun resolveRenderedMarkerPoint_allQueueUsesAcceptedRemoteOnlyWhenNoTrailMarkerExists() {
+        val state = TrackerMapUiState(
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            remoteLastPoints = mapOf(
+                "t1" to remotePoint("t1", timestampMs = 2_000L, lat = 20.0, lon = 10.0, accuracyMeters = 99f),
+            ),
+        )
+
+        val p = TrackerMapLastPointResolver.resolveRenderedMarkerPoint(
+            state = state,
+            trackerId = "t1",
+            tracker = null,
+            acceptedRemoteTrackerIds = setOf("t1"),
+        )
+
+        assertNotNull(p)
+        assertEquals(20.0, p!!.latitude, 0.0)
+        assertEquals(10.0, p.longitude, 0.0)
+        assertEquals(2_000L, p.lastUpdatedMs)
+        assertEquals(99f, p.accuracyMeters)
+    }
+
+    @Test
     fun resolve_ignoresUnacceptedRemoteHead() {
         val state = TrackerMapUiState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
@@ -150,7 +225,13 @@ class TrackerMapLastPointResolverTest {
         assertEquals(1_000L, p.lastUpdatedMs)
     }
 
-    private fun queued(trackerId: String, time: Long, latitude: Double, longitude: Double): QueuedLocation {
+    private fun queued(
+        trackerId: String,
+        time: Long,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float? = null,
+    ): QueuedLocation {
         return QueuedLocation(
             trackerId = trackerId,
             time = time,
@@ -159,17 +240,24 @@ class TrackerMapLastPointResolverTest {
             altitude = null,
             speed = null,
             bearing = null,
-            accuracy = null,
+            accuracy = accuracy,
         )
     }
 
-    private fun remotePoint(trackId: String, timestampMs: Long, lat: Double, lon: Double): TrackPointEvent {
+    private fun remotePoint(
+        trackId: String,
+        timestampMs: Long,
+        lat: Double,
+        lon: Double,
+        accuracyMeters: Float? = null,
+    ): TrackPointEvent {
         return TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,
             trackId = trackId,
             lon = lon,
             lat = lat,
             timestampMs = timestampMs,
+            accuracyMeters = accuracyMeters,
         )
     }
 }

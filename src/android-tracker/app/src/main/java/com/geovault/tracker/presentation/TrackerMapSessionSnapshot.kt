@@ -47,10 +47,8 @@ data class TrackerMapRenderCosmetics(
 )
 
 data class TrackerMapAccuracyRenderModel(
-    val streamedAccuracyMeters: Float? = null,
     val fallbackAccuracyMeters: Float? = null,
     val allowAccuracyFallback: Boolean = false,
-    val streamedAccuracyByTrackerId: Map<String, Float> = emptyMap(),
     val fallbackAccuracyByTrackerId: Map<String, Float> = emptyMap(),
     val allowAccuracyFallbackByTrackerId: Set<String> = emptySet(),
 )

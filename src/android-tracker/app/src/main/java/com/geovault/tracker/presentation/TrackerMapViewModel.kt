@@ -1056,7 +1056,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             allQueueTrailsByTracker = snapshot.renderTrailsByTracker,
             remoteLastPoints = snapshot.acceptedRemoteLastPoints,
         )
-        return TrackerMapLastPointResolver.resolve(
+        return TrackerMapLastPointResolver.resolveRenderedMarkerPoint(
             state = effectiveState,
             trackerId = trackerId,
             tracker = tracker,
@@ -1546,10 +1546,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             allQueueTrailsByTracker = renderAllQueueTrailsByTracker,
             remoteLastPoints = snapshot.acceptedRemoteLastPoints,
         )
-        val streamedAccuracyByTrackerId = buildStreamedAccuracyByTrackerId(
-            effectiveMapState,
-            effectiveDisplayedId,
-        )
         val fallbackAccuracyByTrackerId = buildFallbackAccuracyByTrackerId(effectiveMapState, snapshot.plan)
         val visibleTrackerIds = resolveVisibleAccuracyTrackerIds(
             effectiveMapState,
@@ -1577,7 +1573,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 defaultIconColorHex = GeoVaultColorTokens.Hex.Blue400,
             ),
             accuracy = TrackerMapAccuracyRenderModel(
-                streamedAccuracyByTrackerId = streamedAccuracyByTrackerId,
                 fallbackAccuracyByTrackerId = fallbackAccuracyByTrackerId,
                 allowAccuracyFallbackByTrackerId = allowAccuracyFallbackByTrackerId,
             ),
@@ -1700,36 +1695,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val lat = runtime.lastTrackedLatitude ?: return null
         val lon = runtime.lastTrackedLongitude ?: return null
         return LatLngBounds.from(lat, lon, lat, lon)
-    }
-
-    private fun buildStreamedAccuracyByTrackerId(
-        state: TrackerMapUiState,
-        effectiveDisplayedId: String
-    ): Map<String, Float> {
-        val accuracyByTracker = mutableMapOf<String, Float>()
-        val displayedId = effectiveDisplayedId.trim()
-        state.trail.lastOrNull()?.accuracy?.toFinitePositiveOrNull()?.let { accuracy ->
-            if (displayedId.isNotEmpty()) {
-                accuracyByTracker[displayedId] = accuracy
-            }
-        }
-        state.allQueueTrailsByTracker.forEach { (trackerId, queueTrail) ->
-            queueTrail.lastOrNull()?.accuracy?.toFinitePositiveOrNull()?.let { accuracy ->
-                val normalizedId = trackerId.trim()
-                if (normalizedId.isNotEmpty()) {
-                    accuracyByTracker[normalizedId] = accuracy
-                }
-            }
-        }
-        state.remoteLastPoints.forEach { (trackerId, remotePoint) ->
-            remotePoint.accuracyMeters?.toFinitePositiveOrNull()?.let { accuracy ->
-                val normalizedId = trackerId.trim()
-                if (normalizedId.isNotEmpty()) {
-                    accuracyByTracker[normalizedId] = accuracy
-                }
-            }
-        }
-        return accuracyByTracker
     }
 
     private fun buildFallbackAccuracyByTrackerId(

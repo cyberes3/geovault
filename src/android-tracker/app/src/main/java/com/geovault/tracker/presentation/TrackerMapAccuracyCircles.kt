@@ -11,7 +11,7 @@ data class TrackerAccuracyCircleInput(
     val trackerId: String,
     val centerLatitude: Double,
     val centerLongitude: Double,
-    val streamedAccuracyMeters: Float?,
+    val sourceAccuracyMeters: Float?,
     val fallbackAccuracyMeters: Float?,
     val allowFallback: Boolean,
     val colorHex: String,
@@ -21,7 +21,7 @@ class TrackerAccuracyPolygonFactory {
     fun create(input: TrackerAccuracyCircleInput): MapRenderPolygon? {
         val radiusMeters = AccuracyRadiusPolicy.resolveAccuracyRadiusMeters(
             AccuracyRadiusInput(
-                streamedAccuracyMeters = input.streamedAccuracyMeters,
+                streamedAccuracyMeters = input.sourceAccuracyMeters,
                 fallbackAccuracyMeters = input.fallbackAccuracyMeters,
                 allowFallback = input.allowFallback,
             )

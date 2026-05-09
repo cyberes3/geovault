@@ -161,30 +161,52 @@ class TrackerMapStateTransformsRemoteMarkersTest {
             runtime = TrackingRuntimeSnapshot(),
             remoteLastPoints = mapOf(
                 "r1" to remotePoint("r1", 5.0, 6.0),
-                "r2" to remotePoint("r2", 7.0, 8.0),
+                "r2" to remotePoint("r2", 7.0, 8.0, accuracyMeters = 8f),
             ),
             activeStreamedTrackerIds = setOf("r1", "r2"),
             streamTargetIds = setOf("r1", "r2"),
-            streamedAccuracyByTrackerId = mapOf(
-                "r1" to 4f,
-                "r2" to 7f,
-            ),
         )
 
         assertTrue(render.points.any { it.id == "remote-r1" })
         assertTrue(render.points.any { it.id == "remote-r2" })
         assertTrue(render.polygons.any { it.id == "accuracy-r1" })
         assertTrue(render.polygons.any { it.id == "accuracy-r2" })
+        assertPolygonRadiusMeters(
+            expectedMeters = 4.0,
+            centerLatitude = 5.0,
+            polygon = render.polygons.first { it.id == "accuracy-r1" },
+        )
+        assertPolygonRadiusMeters(
+            expectedMeters = 8.0,
+            centerLatitude = 7.0,
+            polygon = render.polygons.first { it.id == "accuracy-r2" },
+        )
     }
 
-    private fun remotePoint(trackId: String, lat: Double, lon: Double): TrackPointEvent {
+    private fun remotePoint(
+        trackId: String,
+        lat: Double,
+        lon: Double,
+        accuracyMeters: Float = 4f,
+    ): TrackPointEvent {
         return TrackPointEvent(
             source = TrackPointSource.REMOTE_STREAM,
             trackId = trackId,
             lon = lon,
             lat = lat,
             timestampMs = 1234L,
-            accuracyMeters = 4f
+            accuracyMeters = accuracyMeters,
         )
+    }
+
+    private fun assertPolygonRadiusMeters(
+        expectedMeters: Double,
+        centerLatitude: Double,
+        polygon: com.geovault.common.maps.render.MapRenderPolygon,
+    ) {
+        val ring = polygon.rings.first()
+        val northPoint = ring.first()
+        val actualMeters = Math.toRadians(northPoint.first - centerLatitude) * 6_378_137.0
+        assertEquals(expectedMeters, actualMeters, 0.05)
     }
 }
