@@ -37,6 +37,10 @@ class RuntimeEffectDispatcher(
         scheduler.schedule()
     }
 
+    override fun scheduleWatchdogIn(delayMs: Long) {
+        scheduler.schedule(delayMs)
+    }
+
     override fun cancelWatchdog() {
         scheduler.cancel()
     }

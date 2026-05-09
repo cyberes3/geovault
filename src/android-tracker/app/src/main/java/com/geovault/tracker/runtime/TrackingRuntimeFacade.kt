@@ -62,6 +62,13 @@ class TrackingRuntimeFacade internal constructor(
         telemetry.decision("schedule_watchdog", "reason=$reason")
     }
 
+    fun scheduleWatchdogIn(delayMs: Long, reason: String) {
+        commandHandler.scheduleWatchdogIn(delayMs)
+        telemetry.decision("schedule_watchdog_in", "delayMs=$delayMs reason=$reason")
+    }
+
+    fun isServiceRunning(): Boolean = repository.isServiceRunning()
+
     fun cancelWatchdog(reason: String = "explicit_cancel") {
         commandHandler.cancelWatchdog()
         telemetry.decision("cancel_watchdog", "reason=$reason")

@@ -1,8 +1,11 @@
 package com.geovault.tracker.runtime
 
+import android.Manifest
+import android.app.Application
 import android.content.Context
+import android.location.LocationManager
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.SelectedTrackerPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -10,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -22,6 +26,7 @@ class RuntimeRecoveryInvariantsTest {
     @Before
     fun setUp() {
         appContext = ApplicationProvider.getApplicationContext()
+        SelectedTrackerPrefs.clearSelectedTracker(appContext)
     }
 
     @Test
@@ -79,10 +84,12 @@ class RuntimeRecoveryInvariantsTest {
 
     @Test
     fun watchdogTick_restartEnabled_andWasTrackingBeforeExit_attemptsRecoveryStart() {
+        enableRecoveryPrerequisites()
         val repo = FakeRuntimeStateAccessor(
             runtime = RuntimeState(
                 lifecycleState = RuntimeLifecycleState.RECOVERING,
-                shouldBeRunning = true
+                shouldBeRunning = true,
+                lastHeartbeatAtMs = 0L
             ),
             serviceRunning = false
         )
@@ -103,7 +110,46 @@ class RuntimeRecoveryInvariantsTest {
                 wasTrackingBeforeExit = true
             )
         )
-        assertTrue(result.commandResult?.reason != "watchdog_disabled")
+        assertEquals(RuntimeActionType.DISPATCH_START, result.commandResult?.action)
+        assertEquals("recovery:heartbeat_stale", result.commandResult?.reason)
+        assertEquals(1, effects.dispatchStartCalls)
+        assertEquals(RuntimeTrigger.WATCHDOG_TICK, effects.lastStartTrigger)
+        assertEquals(0, effects.cancelWatchdogCalls)
+        assertTrue(effects.scheduleWatchdogCalls >= 1)
+        assertTrue(result.state.runtime.shouldBeRunning)
+    }
+
+    @Test
+    fun watchdogTick_restartEnabledFreshHeartbeatDoesNotDispatchRecoveryStart() {
+        enableRecoveryPrerequisites()
+        val repo = FakeRuntimeStateAccessor(
+            runtime = RuntimeState(
+                lifecycleState = RuntimeLifecycleState.ACTIVE,
+                shouldBeRunning = true,
+                lastHeartbeatAtMs = System.currentTimeMillis()
+            ),
+            serviceRunning = false
+        )
+        val effects = RecordingRuntimeEffects()
+        val handler = RuntimeCommandHandler(
+            repository = repo,
+            stateMachine = RuntimeStateMachine(),
+            healthPolicy = RuntimeHealthPolicy(appContext),
+            effects = effects,
+            telemetry = RuntimeTelemetry(appContext)
+        )
+
+        val result = handler.handleWatchdogTick(
+            current = TrackingSessionState(runtime = repo.readState()),
+            request = WatchdogRecoveryRequest(
+                restartTrackingIfKilled = true,
+                wasTrackingBeforeExit = true
+            )
+        )
+
+        assertEquals(RuntimeActionType.NOOP, result.commandResult?.action)
+        assertEquals("heartbeat_fresh", result.commandResult?.reason)
+        assertEquals(0, effects.dispatchStartCalls)
         assertEquals(0, effects.cancelWatchdogCalls)
         assertTrue(effects.scheduleWatchdogCalls >= 1)
         assertTrue(result.state.runtime.shouldBeRunning)
@@ -237,6 +283,21 @@ class RuntimeRecoveryInvariantsTest {
         assertTrue(result.commandResult!!.startGateDecision!!.allowed)
         assertTrue(result.effects.any { it.type == RuntimeEffectType.SCHEDULE_WATCHDOG })
     }
+
+    private fun enableRecoveryPrerequisites() {
+        Shadows.shadowOf(appContext as Application).grantPermissions(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+        SelectedTrackerPrefs.setSelectedTracker(
+            appContext,
+            trackerId = "11111111-1111-1111-1111-111111111111",
+            trackerName = "Test Tracker"
+        )
+        val locationManager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        Shadows.shadowOf(locationManager).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
+    }
 }
 
 private class FakeRuntimeStateAccessor(
@@ -258,8 +319,16 @@ private class RecordingRuntimeEffects(
 ) : RuntimeEffects {
     var cancelWatchdogCalls = 0
     var scheduleWatchdogCalls = 0
+    var scheduleWatchdogInCalls = 0
+    var lastScheduleWatchdogInDelayMs: Long = -1L
+    var dispatchStartCalls = 0
+    var lastStartTrigger: RuntimeTrigger? = null
 
-    override fun dispatchStart(trigger: RuntimeTrigger, reason: String): StartGateDecision = startDecision
+    override fun dispatchStart(trigger: RuntimeTrigger, reason: String): StartGateDecision {
+        dispatchStartCalls++
+        lastStartTrigger = trigger
+        return startDecision
+    }
 
     override fun dispatchStop() = Unit
 
@@ -267,6 +336,11 @@ private class RecordingRuntimeEffects(
 
     override fun scheduleWatchdog() {
         scheduleWatchdogCalls++
+    }
+
+    override fun scheduleWatchdogIn(delayMs: Long) {
+        scheduleWatchdogInCalls++
+        lastScheduleWatchdogInDelayMs = delayMs
     }
 
     override fun cancelWatchdog() {

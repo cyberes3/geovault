@@ -73,9 +73,16 @@ class TrackingRuntimeController private constructor(context: Context) {
         runtimeFacade.handleServiceEvent(event)
     }
 
+    fun isServiceRunning(): Boolean = runtimeFacade.isServiceRunning()
+
     fun ensureWatchdogScheduled() {
         runtimeFacade.scheduleWatchdog(reason = "ensure_watchdog")
         telemetry.decision("ensure_watchdog", "scheduled=true")
+    }
+
+    fun ensureWatchdogScheduledIn(delayMs: Long, reason: String) {
+        runtimeFacade.scheduleWatchdogIn(delayMs = delayMs, reason = reason)
+        telemetry.decision("ensure_watchdog_in", "delayMs=$delayMs reason=$reason")
     }
 
     fun cancelWatchdog() {

@@ -8,6 +8,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.tracker.BuildConfig
+import com.geovault.tracker.startup.WatchdogColdStartArmer
 
 class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListener {
 
@@ -25,6 +26,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             key = HOOK_STOP_SERVICES,
             phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
         ) { hookContext ->
+            TrackingRecoveryCoordinator.markIntentionalStop(hookContext, reason = "app_reset")
             hookContext.startService(
                 Intent(hookContext, TrackingService::class.java).apply {
                     action = TrackingService.ACTION_STOP
@@ -47,6 +49,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
 
         TrackingNotificationChannels.ensureTrackingChannel(this)
         TrackingRecoveryCoordinator.createRecoveryChannel(this)
+        WatchdogColdStartArmer(this).start()
     }
 
     override fun onAuthFailure(context: Context) {

@@ -62,5 +62,6 @@ private class NoopRuntimeEffects : RuntimeEffects {
     override fun dispatchStop() = Unit
     override fun reshowForeground() = Unit
     override fun scheduleWatchdog() = Unit
+    override fun scheduleWatchdogIn(delayMs: Long) = Unit
     override fun cancelWatchdog() = Unit
 }

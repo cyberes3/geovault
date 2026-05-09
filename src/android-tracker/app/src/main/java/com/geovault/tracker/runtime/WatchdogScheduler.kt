@@ -66,7 +66,7 @@ class WatchdogScheduler(context: Context) {
 
     companion object {
         private const val TAG = "TrackingWatchdogV2"
-        const val RECOVERY_INTERVAL_MS = 5_000L
+        const val RECOVERY_INTERVAL_MS = 15_000L
         private const val REQUEST_CODE = 20101
     }
 }

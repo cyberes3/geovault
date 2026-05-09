@@ -340,6 +340,10 @@ class RuntimeCommandHandler(
         effects.scheduleWatchdog()
     }
 
+    fun scheduleWatchdogIn(delayMs: Long) {
+        effects.scheduleWatchdogIn(delayMs)
+    }
+
     fun cancelWatchdog() {
         effects.cancelWatchdog()
     }

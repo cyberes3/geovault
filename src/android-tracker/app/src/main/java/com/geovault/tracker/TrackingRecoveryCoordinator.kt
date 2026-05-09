@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioAttributes
 import android.util.Log
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingRuntimeController
 
@@ -30,6 +31,10 @@ object TrackingRecoveryCoordinator {
     }
 
     fun markIntentionalStop(context: Context, reason: String = "intentional_stop") {
+        val app = context.applicationContext as? android.app.Application
+        if (app != null) {
+            TrackerAppServices.from(app).trackerSettingsRepository().clearWasTrackingBeforeExit()
+        }
         TrackingRuntimeController.get(context).markIntentionalStop(reason)
         recordTelemetry(context, "markIntentionalStop reason=$reason")
         cancelWatchdog(context)

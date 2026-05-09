@@ -11,49 +11,42 @@ data class RecoveryStartupSnapshot(
     val wasTrackingBeforeExit: Boolean
 )
 
-enum class RecoveryStartupBlocker(val logLabel: String) {
-    UnsupportedAction("unsupported_action"),
-    SettingsNotReady("settings_not_ready"),
-    NoPreviousTrackingSession("no_previous_tracking_session")
+sealed class RecoveryTickOutcome {
+    data class Handle(val request: WatchdogRecoveryRequest) : RecoveryTickOutcome()
+    data class Defer(val delayMs: Long, val reason: String) : RecoveryTickOutcome()
+    data class Stop(val reason: String) : RecoveryTickOutcome()
 }
 
-data class RecoveryStartupDecision(
-    val shouldHandleTick: Boolean,
-    val request: WatchdogRecoveryRequest?,
-    val blockers: List<RecoveryStartupBlocker>
-)
-
 object RecoveryStartupPolicy {
+    const val LOADING_RETRY_MS: Long = 5_000L
+    const val SETTINGS_ERROR_RETRY_MS: Long = 30_000L
+
     private val supportedActions = setOf(
         TrackingRecoveryCoordinator.ACTION_RECOVERY_TICK,
         AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED
     )
 
-    fun evaluate(snapshot: RecoveryStartupSnapshot): RecoveryStartupDecision {
-        val blockers = mutableListOf<RecoveryStartupBlocker>()
-        if (!supportedActions.contains(snapshot.action)) {
-            blockers += RecoveryStartupBlocker.UnsupportedAction
+    fun evaluate(snapshot: RecoveryStartupSnapshot): RecoveryTickOutcome {
+        if (snapshot.action !in supportedActions) {
+            return RecoveryTickOutcome.Stop("unsupported_action")
         }
-        if (snapshot.settingsLoadState != TrackerSettingsLoadState.Ready) {
-            blockers += RecoveryStartupBlocker.SettingsNotReady
+        return when (snapshot.settingsLoadState) {
+            TrackerSettingsLoadState.Ready -> {
+                if (!snapshot.wasTrackingBeforeExit) {
+                    RecoveryTickOutcome.Stop("no_previous_tracking_session")
+                } else {
+                    RecoveryTickOutcome.Handle(
+                        WatchdogRecoveryRequest(
+                            restartTrackingIfKilled = true,
+                            wasTrackingBeforeExit = true
+                        )
+                    )
+                }
+            }
+            TrackerSettingsLoadState.Loading ->
+                RecoveryTickOutcome.Defer(LOADING_RETRY_MS, "settings_loading")
+            TrackerSettingsLoadState.Error ->
+                RecoveryTickOutcome.Defer(SETTINGS_ERROR_RETRY_MS, "settings_error")
         }
-        if (!snapshot.wasTrackingBeforeExit) {
-            blockers += RecoveryStartupBlocker.NoPreviousTrackingSession
-        }
-        if (blockers.isNotEmpty()) {
-            return RecoveryStartupDecision(
-                shouldHandleTick = false,
-                request = null,
-                blockers = blockers
-            )
-        }
-        return RecoveryStartupDecision(
-            shouldHandleTick = true,
-            request = WatchdogRecoveryRequest(
-                restartTrackingIfKilled = true,
-                wasTrackingBeforeExit = true
-            ),
-            blockers = emptyList()
-        )
     }
 }

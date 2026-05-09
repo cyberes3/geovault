@@ -9,5 +9,7 @@ interface RuntimeEffects {
 
     fun scheduleWatchdog()
 
+    fun scheduleWatchdogIn(delayMs: Long)
+
     fun cancelWatchdog()
 }
