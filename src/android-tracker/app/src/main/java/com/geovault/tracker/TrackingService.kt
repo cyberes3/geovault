@@ -227,6 +227,8 @@ class TrackingService : Service() {
         const val ACTION_SEND_MANUAL_POINT = "com.geovault.tracker.ACTION_SEND_MANUAL_POINT"
         const val ACTION_LOCATION_UPDATE = "com.geovault.tracker.ACTION_LOCATION_UPDATE"
         const val ACTION_IDLE_PROBE = IdleProbeScheduler.ACTION_IDLE_PROBE
+        const val EXTRA_FOREGROUND_SERVICE_START_REQUIRED = "extra_foreground_service_start_required"
+        const val EXTRA_BACKGROUND_WAKEUP_SOURCE = "extra_background_wakeup_source"
         const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
         const val EXTRA_TRACKING_ERROR_MESSAGE = "extra_tracking_error_message"
         const val NOTIFICATION_DISMISSED_ACTION = "com.geovault.tracker.TRACKING_NOTIFICATION_DISMISSED"
@@ -300,7 +302,25 @@ class TrackingService : Service() {
 
         @JvmStatic
         internal fun requiresForegroundPromotion(path: StartupCommandPath): Boolean {
-            return path == StartupCommandPath.StartTracking
+            return requiresForegroundPromotion(path, foregroundStartRequired = false)
+        }
+
+        @JvmStatic
+        internal fun requiresForegroundPromotion(
+            path: StartupCommandPath,
+            foregroundStartRequired: Boolean
+        ): Boolean {
+            if (path == StartupCommandPath.StartTracking) return true
+            if (!foregroundStartRequired) return false
+            return when (path) {
+                StartupCommandPath.LocationUpdate,
+                StartupCommandPath.IdleProbe -> true
+                StartupCommandPath.StartTracking,
+                StartupCommandPath.StopNoRestart,
+                StartupCommandPath.ReshowForeground,
+                StartupCommandPath.ManualSendPoint,
+                StartupCommandPath.StopUnknown -> false
+            }
         }
 
         @JvmStatic
@@ -395,10 +415,16 @@ class TrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val startupTrigger = resolveStartupTrigger(intent?.action)
         val commandPath = resolveStartupCommandPath(action = intent?.action)
+        val foregroundStartRequired = intent?.getBooleanExtra(
+            EXTRA_FOREGROUND_SERVICE_START_REQUIRED,
+            false
+        ) == true
         Log.i(
             TAG,
-            "onStartCommand action=${intent?.action} path=$commandPath startId=$startId trigger=$startupTrigger isTracking=$isTracking"
+            "onStartCommand action=${intent?.action} path=$commandPath startId=$startId " +
+                "trigger=$startupTrigger isTracking=$isTracking foregroundStartRequired=$foregroundStartRequired"
         )
+        logBackgroundWakeupDiagnostics(commandPath, foregroundStartRequired, intent)
         if (commandPath != StartupCommandPath.LocationUpdate) {
             logNotificationSurfaceDiagnostics(
                 trigger = startupTrigger,
@@ -407,7 +433,7 @@ class TrackingService : Service() {
                 stage = "on_start_command"
             )
         }
-        if (requiresForegroundPromotion(commandPath) &&
+        if (requiresForegroundPromotion(commandPath, foregroundStartRequired) &&
             !promoteToForegroundForStartup(
                 trigger = startupTrigger,
                 action = intent?.action,
@@ -487,6 +513,50 @@ class TrackingService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun logBackgroundWakeupDiagnostics(
+        path: StartupCommandPath,
+        foregroundStartRequired: Boolean,
+        intent: Intent?,
+    ) {
+        if (
+            path != StartupCommandPath.LocationUpdate &&
+            path != StartupCommandPath.IdleProbe &&
+            !foregroundStartRequired
+        ) {
+            return
+        }
+        val nowMs = System.currentTimeMillis()
+        val incomingLocations = if (path == StartupCommandPath.LocationUpdate) {
+            extractLocationUpdateIntentLocations(intent)
+        } else {
+            emptyList()
+        }
+        val diagnosticLocation = incomingLocations.lastOrNull()
+            ?: latestObservedRawLocation?.let { Location(it) }
+        val locationAgeMs = diagnosticLocation
+            ?.takeIf { it.time > 0L }
+            ?.let { nowMs - it.time }
+        val locationAccuracyMeters = diagnosticLocation
+            ?.takeIf { it.hasAccuracy() }
+            ?.accuracy
+        val source = intent?.getStringExtra(EXTRA_BACKGROUND_WAKEUP_SOURCE) ?: "direct"
+        val details = "path=$path foregroundStartRequired=$foregroundStartRequired source=$source " +
+            "isTracking=$isTracking startupInProgress=$startupInProgress gpsState=$gpsRuntimeState " +
+            "paused=${gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION || gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED} " +
+            "incomingCount=${incomingLocations.size} " +
+            "lastRawAgeMs=${locationAgeMs ?: -1L} lastRawAccuracy=${locationAccuracyMeters ?: -1f} " +
+            "provider=${diagnosticLocation?.provider ?: "none"}"
+        Log.i(TAG, "Background wakeup diagnostics $details")
+        runtimeTelemetry.event("background_wakeup", details)
+    }
+
+    private fun summarizeLocationForTelemetry(location: Location?): String {
+        if (location == null) return "none"
+        val ageMs = location.time.takeIf { it > 0L }?.let { System.currentTimeMillis() - it }
+        val accuracy = if (location.hasAccuracy()) location.accuracy else null
+        return "provider=${location.provider ?: "unknown"},ageMs=${ageMs ?: -1L},accuracy=${accuracy ?: -1f}"
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         TrackingRuntimeController.get(applicationContext).handle(
@@ -1024,8 +1094,19 @@ class TrackingService : Service() {
     }
 
     private fun handleLocationUpdateCommand(intent: Intent?): Boolean {
-        if (!isTracking) return false
         val locations = extractLocationUpdateIntentLocations(intent)
+        if (!isTracking) {
+            runtimeTelemetry.event(
+                "location_update_dropped",
+                "reason=not_tracking count=${locations.size} gpsState=$gpsRuntimeState"
+            )
+            return false
+        }
+        runtimeTelemetry.event(
+            "location_update_received",
+            "count=${locations.size} gpsState=$gpsRuntimeState " +
+                "foregroundStartRequired=${intent?.getBooleanExtra(EXTRA_FOREGROUND_SERVICE_START_REQUIRED, false) == true}"
+        )
         locations.forEach { location ->
             val snapshot = Location(location)
             locationListener.onLocationChanged(snapshot)
@@ -1051,6 +1132,10 @@ class TrackingService : Service() {
     private fun handleIdleProbeCommand(): Boolean {
         if (!isTracking) {
             idleProbeScheduler?.cancel()
+            runtimeTelemetry.event(
+                "idle_probe_dropped",
+                "reason=not_tracking gpsState=$gpsRuntimeState"
+            )
             return false
         }
         if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
@@ -1061,6 +1146,11 @@ class TrackingService : Service() {
             runtimeTelemetry.event("idle_probe_skipped", "reason=not_paused state=$gpsRuntimeState")
             return true
         }
+        runtimeTelemetry.event(
+            "idle_probe_received",
+            "state=$gpsRuntimeState lastRaw=${summarizeLocationForTelemetry(latestObservedRawLocation)} " +
+                "lastAccepted=${summarizeLocationForTelemetry(lastFilteredLocation)}"
+        )
         markPausedFreshnessProbeStarted(nowMs = System.currentTimeMillis())
         resumeGps()
         return true
@@ -1360,10 +1450,19 @@ class TrackingService : Service() {
             } else {
                 Log.e(TAG, "Foreground promotion failed for trigger=$trigger", e)
             }
-            TrackingRecoveryCoordinator.markIntentionalStop(
-                applicationContext,
-                reason = "fgs_start_failed_$trigger"
-            )
+            if (path == StartupCommandPath.StartTracking) {
+                TrackingRecoveryCoordinator.markIntentionalStop(
+                    applicationContext,
+                    reason = "fgs_start_failed_$trigger"
+                )
+            } else {
+                runtimeTelemetry.decision(
+                    "foreground_promotion_failed",
+                    "trigger=$trigger path=$path action=${action ?: "none"} " +
+                        "error=${e.javaClass.simpleName}:${e.message ?: "none"}"
+                )
+                TrackingRecoveryCoordinator.ensureWatchdogScheduled(applicationContext)
+            }
             logNotificationSurfaceDiagnostics(
                 trigger = trigger,
                 action = action,

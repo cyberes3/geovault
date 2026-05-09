@@ -16,10 +16,20 @@ class IdleProbeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != IdleProbeScheduler.ACTION_IDLE_PROBE) return
         val appContext = context.applicationContext
-        try {
-            appContext.startService(TrackingService.buildIdleProbeIntent(appContext))
-        } catch (error: IllegalStateException) {
-            Log.e(TAG, "Unable to deliver idle probe to TrackingService", error)
+        val result = TrackingServiceDeliveryHelper.deliver(
+            context = appContext,
+            intent = TrackingService.buildIdleProbeIntent(appContext),
+            source = TrackingServiceDeliverySource.IdleProbe,
+        )
+        when (result) {
+            is TrackingServiceDeliveryResult.Started -> Log.d(
+                TAG,
+                "Delivered idle probe foregroundEscalated=${result.foregroundEscalated}"
+            )
+            is TrackingServiceDeliveryResult.Failed -> Log.e(
+                TAG,
+                "Dropped idle probe reason=${result.reason}"
+            )
         }
     }
 

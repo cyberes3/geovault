@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.location.Location
 import android.util.Log
-import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.google.android.gms.location.LocationResult
 
 class TrackingLocationUpdateReceiver : BroadcastReceiver() {
@@ -15,16 +14,24 @@ class TrackingLocationUpdateReceiver : BroadcastReceiver() {
         if (locations.isEmpty()) return
 
         val appContext = context.applicationContext
-        try {
-            appContext.startService(
-                TrackingService.buildLocationUpdateIntent(
-                    context = appContext,
-                    locations = locations
-                )
+        val result = TrackingServiceDeliveryHelper.deliver(
+            context = appContext,
+            intent = TrackingService.buildLocationUpdateIntent(
+                context = appContext,
+                locations = locations
+            ),
+            source = TrackingServiceDeliverySource.FusedLocationUpdate,
+        )
+        when (result) {
+            is TrackingServiceDeliveryResult.Started -> Log.d(
+                TAG,
+                "Delivered fused location update count=${locations.size} " +
+                    "foregroundEscalated=${result.foregroundEscalated}"
             )
-        } catch (error: IllegalStateException) {
-            Log.e(TAG, "Unable to deliver fused location update to active tracking service", error)
-            TrackingRuntimeController.get(appContext).ensureWatchdogScheduled()
+            is TrackingServiceDeliveryResult.Failed -> Log.e(
+                TAG,
+                "Dropped fused location update count=${locations.size} reason=${result.reason}"
+            )
         }
     }
 
