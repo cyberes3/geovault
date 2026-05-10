@@ -160,11 +160,10 @@ class TrackPointPolicyEngineStreamIsolationTest {
     }
 
     /**
-     * Resume-from-pause: notifying motion-change on the live stream drops
-     * the stale anchor so the next driving fix several hundred meters away
-     * is accepted as a fresh first-fix instead of being rejected as a
-     * teleport against a 30-minute-old position. Sibling streams must be
-     * untouched.
+     * Resume-from-pause: notifying motion-change on the live stream marks
+     * the next fix as a resume boundary so a driving fix several hundred
+     * meters away is accepted instead of being rejected as a teleport
+     * against a 30-minute-old position. Sibling streams must be untouched.
      */
     @Test
     fun notifyMotionChanged_dropsStaleAnchorForTargetedStreamOnly() {
@@ -187,7 +186,7 @@ class TrackPointPolicyEngineStreamIsolationTest {
             nowMs = 31L * 60_000L,
             config = baseConfig,
         )
-        assertTrue("post-resume fix must take the first-fix path", postResume.accepted)
+        assertTrue("post-resume fix must take the motion-resume path", postResume.accepted)
 
         // Sibling anchor preserved: an earlier-ts fix is still rejected as
         // out-of-order.

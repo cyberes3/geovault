@@ -162,9 +162,9 @@ object TrackPointPolicyEngine {
 
     /**
      * Notify the per-stream filter that motion state changed (e.g. GPS
-     * resumed from a paused-for-stationary window). Drops the stale anchor
-     * and Kalman state so the next fix is treated as a session boundary
-     * rather than capped against a position from before the pause.
+     * resumed from a paused-for-stationary window). The next fix is treated
+     * as a resume boundary: real movement is accepted, while poor-accuracy
+     * stationary jitter can still snap to the pre-pause anchor.
      */
     fun notifyMotionChanged(source: TrackPointSource, trackId: String) {
         filters[streamKey(source, trackId)]?.onMotionChanged()

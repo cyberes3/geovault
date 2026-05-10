@@ -11,14 +11,18 @@ import kotlin.math.max
  *
  *  1. Accuracy threshold gate
  *  2. [LocationMetricsEngine.compute] -> [LocationMetrics] (pure)
- *  3. Implied-speed cap (hard ceiling on raw m/s)
- *  4. Optional 1D Kalman smoothing of the effective displacement,
+ *  3. Motion-resume short-circuit: the first fix after
+ *     [onMotionChanged] either snaps to the preserved anchor (false
+ *     wakeup) or is accepted verbatim (real movement), skipping the
+ *     speed/cap stack against a potentially stale anchor.
+ *  4. Implied-speed cap (hard ceiling on raw m/s)
+ *  5. Optional 1D Kalman smoothing of the effective displacement,
  *     evaluated *before* the cap comparison so a single-fix magnitude
  *     spike rides the prior down rather than being accepted at face
  *     value
- *  5. Outlier policy switch driven by [LocationFilterConfig.policy]
+ *  6. Outlier policy switch driven by [LocationFilterConfig.policy]
  *     (PassThrough / Adjust clip / Conservative reject)
- *  6. On accept/adjust only: metrics commit + anchor swap. Rejected
+ *  7. On accept/adjust only: metrics commit + anchor swap. Rejected
  *     fixes never mutate the anchor or rolling baseline that subsequent
  *     decisions are made against.
  *
@@ -37,6 +41,7 @@ class LocationFilter(
     private var metricsEngine: LocationMetricsEngine = buildMetricsEngine(config)
     private var kalmanFilter: KalmanFilter = buildKalmanFilter(config)
     private var previousAccepted: LocationInput? = null
+    private var pendingMotionResume: Boolean = false
 
     /**
      * Last fix the filter saw whose accuracy passed the gate, regardless
@@ -61,6 +66,7 @@ class LocationFilter(
         kalmanFilter = buildKalmanFilter(config)
         previousAccepted = null
         lastSeenFix = null
+        pendingMotionResume = false
     }
 
     /**
@@ -88,15 +94,18 @@ class LocationFilter(
     }
 
     /**
-     * Notify the filter that motion mode (or any other anchor-invalidating
-     * condition) has changed. Clears the anchor and resets the Kalman.
+     * Notify the filter that motion mode changed after a stationary pause.
+     * The next fix is treated as a resume boundary: real movement is
+     * accepted verbatim, while a false motion wakeup whose fix still
+     * overlaps the previous accuracy envelope snaps back to the old anchor.
+     *
      * Metrics engine ring buffer is preserved so the rolling window keeps
      * its evidence.
      */
     fun onMotionChanged() {
         kalmanFilter.reset()
-        previousAccepted = null
         lastSeenFix = null
+        pendingMotionResume = previousAccepted != null
     }
 
     /**
@@ -131,6 +140,10 @@ class LocationFilter(
     private fun resolveDecision(input: LocationInput, metrics: LocationMetrics): LocationFilterResult {
         val previous = previousAccepted
             ?: return commitAccept(input = input, reason = "first-fix", metrics = metrics)
+
+        if (pendingMotionResume) {
+            return resolveMotionResume(input = input, previous = previous, metrics = metrics)
+        }
 
         val capCandidate = inflateCapForAnchorTrust(metrics.capCandidate, metrics.anchorTrust)
             .let { inflateCapForAnomaly(it, metrics.impliedAnomaly) }
@@ -174,6 +187,18 @@ class LocationFilter(
         }
     }
 
+    private fun resolveMotionResume(
+        input: LocationInput,
+        previous: LocationInput,
+        metrics: LocationMetrics,
+    ): LocationFilterResult {
+        pendingMotionResume = false
+        if (isNoisyStandstill(metrics)) {
+            return snapToAnchor(input = input, previous = previous, metrics = metrics)
+        }
+        return commitAccept(input = input, reason = "motion-resume", metrics = metrics)
+    }
+
     /**
      * 1D Kalman smoothing of the effective (RSS-corrected) displacement,
      * run before the cap comparison so a single-fix magnitude spike rides
@@ -204,12 +229,7 @@ class LocationFilter(
         // be reported as an outlier (Rejected). Outlier handling is for
         // real-motion teleports the cap couldn't accommodate.
         if (isNoisyStandstill(metrics)) {
-            return commitAdjustToAnchor(
-                input = input,
-                previous = previous,
-                reason = "uncertainty-suppressed",
-                metrics = metrics,
-            )
+            return snapToAnchor(input = input, previous = previous, metrics = metrics)
         }
 
         // Outlier reject: when raw overshoots `cap * 1.5` we reject --
@@ -317,6 +337,22 @@ class LocationFilter(
         commit(input = input, metrics = metrics, committedDisplacement = metrics.rawDistanceMeters)
         return LocationFilterResult.accepted(reason = reason, metrics = metrics)
     }
+
+    /**
+     * Discard the noisy input and re-commit at the preserved anchor under
+     * the canonical `uncertainty-suppressed` reason. Used by both the
+     * motion-resume short-circuit and the conservative standstill path.
+     */
+    private fun snapToAnchor(
+        input: LocationInput,
+        previous: LocationInput,
+        metrics: LocationMetrics,
+    ): LocationFilterResult = commitAdjustToAnchor(
+        input = input,
+        previous = previous,
+        reason = "uncertainty-suppressed",
+        metrics = metrics,
+    )
 
     private fun commitAdjustToAnchor(
         input: LocationInput,

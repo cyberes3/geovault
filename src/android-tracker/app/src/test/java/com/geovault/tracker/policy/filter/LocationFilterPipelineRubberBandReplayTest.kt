@@ -114,7 +114,7 @@ class LocationFilterPipelineRubberBandReplayTest {
     }
 
     @Test
-    fun motionChange_walkToDrive_clearsAnchorAndAcceptsBurstWithoutClip() {
+    fun motionChange_walkToDrive_preservesAnchorAndAcceptsBurstWithoutClip() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         var ts = 1_700_000_000_000L
         WALK_CLUSTER.forEachIndexed { idx, latLon ->
@@ -130,8 +130,13 @@ class LocationFilterPipelineRubberBandReplayTest {
                 )
             )
         }
+        val anchorTsBeforeMotionChange = filter.lastAcceptedTimestampMs
         filter.onMotionChanged()
-        assertEquals(null, filter.lastAcceptedTimestampMs)
+        assertEquals(
+            "onMotionChanged must preserve the anchor so stationary jitter immediately after a false motion wakeup still snaps",
+            anchorTsBeforeMotionChange,
+            filter.lastAcceptedTimestampMs,
+        )
 
         ts += 5_000L
         var lat = WALK_CLUSTER.last().first

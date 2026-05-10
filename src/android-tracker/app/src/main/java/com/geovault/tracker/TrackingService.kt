@@ -2334,9 +2334,9 @@ class TrackingService : Service() {
         }
         transitionGpsState(GpsRuntimeEvent.RESUME_FROM_MOTION, "significant_motion_resume")
         transitionControlState(TrackingControlEvent.ResumeRequested)
-        // Drop the pre-pause anchor and Kalman state so the first post-resume
-        // fix isn't capped against a position that is now minutes-to-hours
-        // stale.
+        // Mark the next fix as a resume boundary. Real movement should be
+        // accepted, but a false motion wakeup while stationary should still
+        // be able to snap back to the pre-pause anchor.
         SelectedTrackerPrefs.selectedTrackerId(this).takeIf { it.isNotBlank() }?.let { trackerId ->
             TrackPointPolicyEngine.notifyMotionChanged(
                 source = TrackPointSource.LOCAL_GPS,

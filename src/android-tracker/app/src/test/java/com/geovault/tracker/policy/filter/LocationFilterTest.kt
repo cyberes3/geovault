@@ -657,7 +657,7 @@ class LocationFilterTest {
     }
 
     @Test
-    fun motionChangeReset_clearsAnchor() {
+    fun motionChangeReset_marksNextFixAsResumeBoundary() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -670,18 +670,18 @@ class LocationFilterTest {
         )
         assertTrue(filter.lastAcceptedTimestampMs == 0L)
         filter.onMotionChanged()
-        assertEquals(null, filter.lastAcceptedTimestampMs)
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
     /**
      * Resume-from-pause scenario: after a long stationary window the device
      * starts driving and the next fix lands hundreds of meters away. With
-     * `onMotionChanged()` invoked on resume, the stale anchor is dropped so
-     * the post-resume fix takes the first-fix path and is accepted verbatim
-     * instead of being capped/rejected against a 30-minute-old position.
+     * `onMotionChanged()` invoked on resume, the post-resume fix takes the
+     * motion-resume path and is accepted verbatim instead of being
+     * capped/rejected against a 30-minute-old position.
      */
     @Test
-    fun motionChangeReset_postResumeFixTakesFirstFixPath() {
+    fun motionChangeReset_postResumeMovementIsAcceptedVerbatim() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -708,7 +708,39 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Accepted, postResume.decision)
+        assertEquals("motion-resume", postResume.reason)
         assertEquals(30L * 60L * 1000L, filter.lastAcceptedTimestampMs)
+    }
+
+    @Test
+    fun motionChangeReset_stationaryResumeJitterSnapsToPreviousAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 35f,
+                speedMps = 0f,
+            )
+        )
+
+        filter.onMotionChanged()
+
+        val postResume = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1008, // ~30m east: stationary jitter inside joint accuracy.
+                timestampMs = 20_000L,
+                accuracyMeters = 37f,
+                speedMps = 0f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Adjusted, postResume.decision)
+        assertEquals("uncertainty-suppressed", postResume.reason)
+        assertEquals(24.7097, postResume.adjustedLatitude ?: 0.0, 0.0)
+        assertEquals(-81.1011, postResume.adjustedLongitude ?: 0.0, 0.0)
+        assertEquals(20_000L, filter.lastAcceptedTimestampMs)
     }
 
     /**
