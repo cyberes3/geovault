@@ -922,14 +922,16 @@ class TrackingService : Service() {
                     "dt=${metrics.elapsedSeconds} impliedSpeed=${metrics.impliedSpeedMps} " +
                     "accuracy=${metrics.accuracyMeters ?: -1f} rollingAverage=${metrics.rollingAverageStepMeters} " +
                     "capCandidate=${metrics.capCandidateMeters} decision=${metrics.decision} " +
-                    "reason=${metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"}"
+                    "reason=${metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"} " +
+                    "lat=${location.latitude} lon=${location.longitude}"
             )
         }
         if (!result.accepted && result.policyMetrics == null) {
             runtimeTelemetry.decision(
                 name = "location_filter",
                 details = "accepted=false reason=${result.rejectReason ?: result.adjustmentReason ?: "none"} " +
-                    "accuracy=${result.lastAccuracyMeters ?: -1f}"
+                    "accuracy=${result.lastAccuracyMeters ?: -1f} " +
+                    "lat=${location.latitude} lon=${location.longitude}"
             )
         }
         if (result.accepted) {
@@ -2332,6 +2334,15 @@ class TrackingService : Service() {
         }
         transitionGpsState(GpsRuntimeEvent.RESUME_FROM_MOTION, "significant_motion_resume")
         transitionControlState(TrackingControlEvent.ResumeRequested)
+        // Drop the pre-pause anchor and Kalman state so the first post-resume
+        // fix isn't capped against a position that is now minutes-to-hours
+        // stale.
+        SelectedTrackerPrefs.selectedTrackerId(this).takeIf { it.isNotBlank() }?.let { trackerId ->
+            TrackPointPolicyEngine.notifyMotionChanged(
+                source = TrackPointSource.LOCAL_GPS,
+                trackId = trackerId,
+            )
+        }
         resetElasticDistanceOverride(reason = "gps_resumed", reapplyRequest = false)
         stopFastGpsLockWindow(reason = "gps_resumed")
         cancelLowAccuracyFallbackTimer(clearCandidate = false)

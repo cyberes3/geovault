@@ -159,6 +159,52 @@ class TrackPointPolicyEngineStreamIsolationTest {
         assertNotEquals(true, keepRejection.accepted)
     }
 
+    /**
+     * Resume-from-pause: notifying motion-change on the live stream drops
+     * the stale anchor so the next driving fix several hundred meters away
+     * is accepted as a fresh first-fix instead of being rejected as a
+     * teleport against a 30-minute-old position. Sibling streams must be
+     * untouched.
+     */
+    @Test
+    fun notifyMotionChanged_dropsStaleAnchorForTargetedStreamOnly() {
+        TrackPointPolicyEngine.evaluate(
+            event = makeEvent(track = "live", lat = 24.7097, lon = -81.1011, ts = 1_000L),
+            nowMs = 1_000L,
+            config = baseConfig,
+        )
+        TrackPointPolicyEngine.evaluate(
+            event = makeEvent(track = "sibling", lat = 25.0, lon = -80.0, ts = 1_000L),
+            nowMs = 1_000L,
+            config = baseConfig,
+        )
+
+        TrackPointPolicyEngine.notifyMotionChanged(TrackPointSource.LOCAL_GPS, "live")
+
+        // ~530m east, 30 minutes later: would normally be capped/rejected.
+        val postResume = TrackPointPolicyEngine.evaluate(
+            event = makeEvent(track = "live", lat = 24.7097, lon = -81.0959, ts = 31L * 60_000L),
+            nowMs = 31L * 60_000L,
+            config = baseConfig,
+        )
+        assertTrue("post-resume fix must take the first-fix path", postResume.accepted)
+
+        // Sibling anchor preserved: an earlier-ts fix is still rejected as
+        // out-of-order.
+        val siblingOOO = TrackPointPolicyEngine.evaluate(
+            event = makeEvent(track = "sibling", lat = 25.0, lon = -80.0, ts = 500L),
+            nowMs = 31L * 60_000L,
+            config = baseConfig,
+        )
+        assertEquals(TrackPointRejectReason.OUT_OF_ORDER, siblingOOO.rejectReason)
+    }
+
+    @Test
+    fun notifyMotionChanged_unknownStream_isNoOp() {
+        // Should not throw or create an entry.
+        TrackPointPolicyEngine.notifyMotionChanged(TrackPointSource.LOCAL_GPS, "never-seen")
+    }
+
     private fun makeEvent(track: String, lat: Double, lon: Double, ts: Long): TrackPointEvent {
         return TrackPointEvent(
             source = TrackPointSource.LOCAL_GPS,

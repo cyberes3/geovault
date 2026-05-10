@@ -674,6 +674,44 @@ class LocationFilterTest {
     }
 
     /**
+     * Resume-from-pause scenario: after a long stationary window the device
+     * starts driving and the next fix lands hundreds of meters away. With
+     * `onMotionChanged()` invoked on resume, the stale anchor is dropped so
+     * the post-resume fix takes the first-fix path and is accepted verbatim
+     * instead of being capped/rejected against a 30-minute-old position.
+     */
+    @Test
+    fun motionChangeReset_postResumeFixTakesFirstFixPath() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 0f,
+            )
+        )
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
+
+        filter.onMotionChanged()
+
+        // ~530m east of the pre-pause anchor; would be hard-rejected as a
+        // teleport without the motion-change reset.
+        val postResume = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.0959,
+                timestampMs = 30L * 60L * 1000L,
+                accuracyMeters = 8f,
+                speedMps = 15f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Accepted, postResume.decision)
+        assertEquals(30L * 60L * 1000L, filter.lastAcceptedTimestampMs)
+    }
+
+    /**
      * First-fix bypasses the Kalman smoother: the very first observation
      * is accepted verbatim because [LocationFilter] short-circuits to
      * `commitAccept` before [smoothDecisionDistance] runs. Otherwise the
