@@ -5,10 +5,10 @@ package com.geovault.tracker.services
  *
  * GPS hardware briefly emits a few high-uncertainty fixes when coming out of doze / screen-off.
  * Surfacing those raw values to the UI causes the accuracy indicator and home readout to flash
- * red even though the recording filter rejects them. We mirror tslocationmanager's "don't emit
- * noise" approach: if a *good* fix was seen within [ACCURACY_HOLD_GRACE_MS], a subsequent bad
- * fix is held back and the previous good value is kept on display. After the grace expires the
- * raw value is surfaced so genuine degradations still reach the user.
+ * red even though the recording filter rejects them. The hold policy: if a *good* fix was seen
+ * within [ACCURACY_HOLD_GRACE_MS], a subsequent bad fix is held back and the last good value is
+ * kept on display. After the grace expires the raw value is surfaced so genuine degradations
+ * still reach the user.
  *
  * The grace window intentionally spans multiple normal tracking intervals. On the biking/driving
  * profiles we commonly receive fixes about every 20 seconds, so a shorter hold can expire between

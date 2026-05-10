@@ -2,11 +2,8 @@ package com.geovault.tracker.policy.filter
 
 /**
  * Multi-signal stationary classification produced by
- * [StationaryConfidenceCalculator].
- *
- * Replaces the previously-separate `isStationary`, `isOscillating`, and
- * `stationaryConfidence` fields on [LocationMetrics]; consumers now read
- * `metrics.stationary.*` and the three values can never disagree.
+ * [StationaryConfidenceCalculator]. Consumers read `metrics.stationary.*`
+ * so [score], [isStationary], and [isOscillating] can never disagree.
  *
  * @property score 0..1 weighted evidence of standstill (1.0 = certain).
  * @property isStationary true iff [score] is above

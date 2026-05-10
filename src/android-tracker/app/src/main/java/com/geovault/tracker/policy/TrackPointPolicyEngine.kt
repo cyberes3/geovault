@@ -5,6 +5,7 @@ import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.LocationFilterResult
 import com.geovault.tracker.policy.filter.LocationInput
 import com.geovault.tracker.policy.filter.LocationMetrics
+import com.geovault.tracker.policy.filter.StationaryConfidence
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
@@ -38,6 +39,7 @@ data class TrackPointDecisionMetrics(
     val capCandidateMeters: Double,
     val decision: String,
     val reason: String?,
+    val stationaryConfidence: StationaryConfidence? = null,
 )
 
 /**
@@ -280,5 +282,6 @@ object TrackPointPolicyEngine {
         capCandidateMeters = capCandidate,
         decision = decision,
         reason = reason,
+        stationaryConfidence = stationary,
     )
 }

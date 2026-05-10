@@ -59,8 +59,10 @@ object TrackingUiStatusResolver {
             return TrackingUiStatus.WAITING_FOR_GPS
         }
         return when (gpsState) {
-            GpsRuntimeState.LOCKING, GpsRuntimeState.FALLBACK_PENDING -> TrackingUiStatus.LOCKING
-            GpsRuntimeState.RUNNING, GpsRuntimeState.PAUSED_FOR_MOTION ->
+            GpsRuntimeState.LOCKING,
+            GpsRuntimeState.FALLBACK_PENDING,
+            GpsRuntimeState.RUNNING,
+            GpsRuntimeState.PAUSED_FOR_MOTION ->
                 resolve(
                     isRunning = true,
                     gpsProviderEnabled = true,

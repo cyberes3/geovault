@@ -266,7 +266,7 @@ class TrackingService : Service() {
         // really moving". Used to override the conservative location filter
         // when it would otherwise snap a fix to the anchor as noise, and to
         // hold off the stationary detector from pausing GPS during motion.
-        private const val MOTION_HINT_FLOOR_MPS = 0.75f
+        private const val MOTION_HINT_FLOOR_MPS = 1.0f
 
         @JvmStatic
         fun shouldRestartTrackingAfterProcessDeath(): Boolean = false
@@ -882,13 +882,12 @@ class TrackingService : Service() {
         ) {
             return
         }
-        // Independent evidence that the user is actually moving. Fed into
-        // both the location filter (so it does not snap real motion fixes
-        // to the anchor as "uncertainty-suppressed" noise) and the
-        // stationary detector (so we do not pause GPS while moving).
+        // Independent evidence that the user is actually moving. Gated
+        // only on the *current* observed chipset speed; an EMA-smoothed
+        // term would carry stale velocity from a prior drive across a
+        // long gap and permanently block the stationary counter.
         val activeMotionHint = settings.autoTrackingMode &&
-            ((observedSpeedMps ?: 0f) > MOTION_HINT_FLOOR_MPS ||
-                autoMotionSnapshot.smoothedSpeedMps > MOTION_HINT_FLOOR_MPS)
+            (observedSpeedMps ?: 0f) > MOTION_HINT_FLOOR_MPS
         val pointPropsJson = propsJson
         val result = locationIngestCoordinator.ingest(
             trackId = selectedTrackerId,
@@ -931,6 +930,33 @@ class TrackingService : Service() {
                 name = "location_filter",
                 details = "accepted=false reason=${result.rejectReason ?: result.adjustmentReason ?: "none"} " +
                     "accuracy=${result.lastAccuracyMeters ?: -1f}"
+            )
+        }
+        if (result.accepted) {
+            // Committed lat/lon (post-snap for `UNCERTAINTY_SUPPRESSED`,
+            // post-clip for `OUTLIER_CAPPED`) -- matches what lands in the
+            // database, not the raw chipset coords.
+            val committed = result.lastFilteredLocation ?: location
+            val reason = result.policyMetrics?.reason ?: result.adjustmentReason ?: "accept"
+            val source = if (result.adjustmentReason ==
+                TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED) {
+                "snap"
+            } else if (result.adjustmentReason ==
+                TrackPointPolicyEngine.ADJUSTMENT_REASON_OUTLIER_CAPPED) {
+                "clip"
+            } else {
+                "live"
+            }
+            runtimeTelemetry.event(
+                name = "track_point",
+                details = "lat=%.8f lon=%.8f accuracy=%.1f speed=%.2f reason=%s source=%s".format(
+                    committed.latitude,
+                    committed.longitude,
+                    if (committed.hasAccuracy()) committed.accuracy else -1f,
+                    if (committed.hasSpeed()) committed.speed else -1f,
+                    reason,
+                    source,
+                )
             )
         }
         withContext(Dispatchers.Main) { syncRuntimeStateStore() }
@@ -1012,7 +1038,16 @@ class TrackingService : Service() {
         }
         if (!skipAdaptiveTrackingEffects) {
             val stationaryRadius = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS
-            val filterIntervened = result.adjustmentReason != null
+            val adjustmentReason = result.adjustmentReason
+            // `UNCERTAINTY_SUPPRESSED` is positive evidence the device hasn't
+            // moved (filter snapped to anchor because raw displacement was
+            // inside the joint accuracy envelope). Other adjustments
+            // (`OUTLIER_CAPPED`, etc.) are pessimistic: hold the counter
+            // rather than advance it.
+            val filterConfirmedStillness = adjustmentReason ==
+                TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
+            val filterIntervened = adjustmentReason != null && !filterConfirmedStillness
+            val stationaryConfidence = result.policyMetrics?.stationaryConfidence
             val stationaryReferenceLocation = result.lastFilteredLocation ?: location
             val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
                 lastLocation = stationaryAnchorLocation,
@@ -1022,6 +1057,8 @@ class TrackingService : Service() {
                 significantMotionOnly = settings.significantDataOnly,
                 activeMotionHint = activeMotionHint,
                 filterIntervened = filterIntervened,
+                filterConfirmedStillness = filterConfirmedStillness,
+                confidence = stationaryConfidence,
             )
             if (stationaryDecision.reason != "disabled") {
                 runtimeTelemetry.event(
@@ -1029,7 +1066,11 @@ class TrackingService : Service() {
                     details = "from=$consecutiveStationaryPoints to=${stationaryDecision.consecutive} " +
                         "shouldPause=${stationaryDecision.shouldPause} reason=${stationaryDecision.reason} " +
                         "accuracy=${if (stationaryReferenceLocation.hasAccuracy()) stationaryReferenceLocation.accuracy else -1f} " +
-                        "filterIntervened=$filterIntervened"
+                        "adjustmentReason=${adjustmentReason ?: "none"} " +
+                        "confirmedStillness=$filterConfirmedStillness " +
+                        "filterIntervened=$filterIntervened " +
+                        "confidence=${stationaryConfidence?.score ?: -1.0} " +
+                        "oscillating=${stationaryConfidence?.isOscillating ?: false}"
                 )
             }
             consecutiveStationaryPoints = stationaryDecision.consecutive
@@ -1220,6 +1261,15 @@ class TrackingService : Service() {
         }
         lastPausedFreshnessPointAtMs = nowMs
         logPausedFreshnessDecision(eventName = "paused_freshness_emitted", decision = decision, probeLocation = probeLocation)
+        runtimeTelemetry.event(
+            name = "track_point",
+            details = "lat=%.8f lon=%.8f accuracy=%.1f speed=%.2f reason=paused-freshness source=paused_freshness".format(
+                freshnessLocation.latitude,
+                freshnessLocation.longitude,
+                if (freshnessLocation.hasAccuracy()) freshnessLocation.accuracy else -1f,
+                if (freshnessLocation.hasSpeed()) freshnessLocation.speed else -1f,
+            )
+        )
         clearPausedFreshnessProbe(reason = "emitted")
         pauseGpsInternal(force = true)
         runtimeTelemetry.event(

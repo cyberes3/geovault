@@ -7,16 +7,20 @@ import kotlin.math.max
  *
  * One [LocationFilter] instance per stream (e.g. local GPS for the
  * recording user, or per remote-tracker websocket subscription). The
- * orchestrator composes:
+ * pipeline composes:
  *
  *  1. Accuracy threshold gate
  *  2. [LocationMetricsEngine.compute] -> [LocationMetrics] (pure)
- *  3. Outlier policy switch driven by [LocationFilterConfig.policy]
- *  4. Final implied-speed cap (hard ceiling)
- *  5. On accept/adjust only: optional Kalman update + metrics commit +
- *     anchor swap. Rejected fixes never mutate internal state, so a
- *     burst of bad fixes cannot pollute the rolling baseline that
- *     subsequent decisions are made against.
+ *  3. Implied-speed cap (hard ceiling on raw m/s)
+ *  4. Optional 1D Kalman smoothing of the effective displacement,
+ *     evaluated *before* the cap comparison so a single-fix magnitude
+ *     spike rides the prior down rather than being accepted at face
+ *     value
+ *  5. Outlier policy switch driven by [LocationFilterConfig.policy]
+ *     (PassThrough / Adjust clip / Conservative reject)
+ *  6. On accept/adjust only: metrics commit + anchor swap. Rejected
+ *     fixes never mutate the anchor or rolling baseline that subsequent
+ *     decisions are made against.
  *
  * The filter never mutates its input. Adjusted lat/lon are returned in
  * [LocationFilterResult.adjustedLatitude] / [LocationFilterResult.adjustedLongitude]
@@ -41,8 +45,8 @@ class LocationFilter(
      * single bad fix can only poison one frame's metrics.
      *
      * Distinct from [previousAccepted], which remains the snap-to-anchor
-     * target and the basis for committed displacement / Kalman / rolling
-     * window state.
+     * target and the basis for committed displacement / rolling window
+     * state.
      */
     private var lastSeenFix: LocationInput? = null
 
@@ -135,12 +139,20 @@ class LocationFilter(
             return resolveSpeedSpike(input = input, previous = previous, metrics = metrics)
         }
 
+        // Smooth the RSS-corrected effective distance through the 1D
+        // Kalman before comparing against the cap. The smoother absorbs
+        // single-fix magnitude spikes that would otherwise read as
+        // "within cap but feels wrong". The first-fix shortcut above
+        // ensures Kalman state is seeded by an accepted observation, not
+        // an arbitrary first measurement.
+        val decisionDistance = smoothDecisionDistance(metrics, input)
+
         return when (config.policy) {
             LocationFilterPolicy.PassThrough ->
                 commitAccept(input = input, reason = "pass-through", metrics = metrics)
 
             LocationFilterPolicy.Adjust ->
-                if (metrics.rawDistanceMeters <= capCandidate) {
+                if (decisionDistance <= capCandidate) {
                     commitAccept(input = input, reason = "within-cap", metrics = metrics)
                 } else {
                     commitClip(
@@ -157,8 +169,27 @@ class LocationFilter(
                 previous = previous,
                 capCandidate = capCandidate,
                 metrics = metrics,
+                decisionDistance = decisionDistance,
             )
         }
+    }
+
+    /**
+     * 1D Kalman smoothing of the effective (RSS-corrected) displacement,
+     * run before the cap comparison so a single-fix magnitude spike rides
+     * the prior down toward the predicted state instead of being accepted
+     * at face value.
+     *
+     * Outlier detection stays on raw distance (see [isOutlier]); smoothing
+     * a true teleport could otherwise sneak it under cap.
+     */
+    private fun smoothDecisionDistance(metrics: LocationMetrics, input: LocationInput): Double {
+        if (!config.useKalman) return metrics.effectiveDistanceMeters
+        kalmanFilter.configureForSpeed(max(metrics.reportedSpeedMps, metrics.impliedSpeedMps))
+        return kalmanFilter.update(
+            measurement = metrics.effectiveDistanceMeters,
+            accuracyMeters = input.accuracyMeters?.toDouble(),
+        )
     }
 
     private fun resolveConservative(
@@ -166,6 +197,7 @@ class LocationFilter(
         previous: LocationInput,
         capCandidate: Double,
         metrics: LocationMetrics,
+        decisionDistance: Double,
     ): LocationFilterResult {
         // Standstill noise is checked before the outlier gate: a phantom
         // jump while sitting still must snap to anchor (Adjusted), not
@@ -189,12 +221,13 @@ class LocationFilter(
             return LocationFilterResult.rejected(reason = reason, metrics = metrics)
         }
 
-        // Use `effectiveDistanceMeters` (RSS-corrected) for the
-        // within-cap test. `effective` is strictly <= `raw`, so this
-        // is more permissive in the high-noise large-displacement
-        // regime, but those cases are already handled by the snap and
-        // outlier paths above.
-        if (metrics.effectiveDistanceMeters <= capCandidate) {
+        // [decisionDistance] is `effectiveDistanceMeters` smoothed by the
+        // 1D Kalman (see [smoothDecisionDistance]). Strictly <= raw, plus
+        // damped against single-fix magnitude spikes, so a brief multipath
+        // blip rides the prior down toward the predicted state instead of
+        // being accepted at face value. The snap and outlier paths above
+        // already handled the truly egregious cases on raw.
+        if (decisionDistance <= capCandidate) {
             return commitAccept(input = input, reason = "within-cap", metrics = metrics)
         }
 
@@ -226,28 +259,25 @@ class LocationFilter(
      * Ordered cheap-to-expensive; the first path that matches wins.
      *
      *  0. **Linear-sum uncertainty absorption**.
-     *     `raw <= prevAcc + currAcc`. Mirrors the previous (working)
-     *     GeoVault tracker's `effective <= 0` rule from
-     *     `TrackPointPolicyEngine.kt:162-185`. Linear sum over-states
-     *     joint uncertainty relative to RSS (which assumes independent
-     *     gaussian errors), but real GPS error is temporally
-     *     correlated -- so the linear sum is empirically the right
-     *     envelope for "did the user actually move past their own
-     *     uncertainty cloud?" No buffer-state dependency, fires
-     *     immediately on the first fix in a session.
+     *     `raw <= prevAcc + currAcc`. The linear sum over-states joint
+     *     uncertainty relative to RSS (which assumes independent gaussian
+     *     errors), but real GPS error is temporally correlated -- so the
+     *     linear sum is empirically the right envelope for "did the user
+     *     actually move past their own uncertainty cloud?" No buffer-state
+     *     dependency, fires immediately on the first fix in a session.
      *
      *  1. **Multi-signal stationary score**.
      *     [LocationMetrics.stationary] is true (or rubber-band
      *     oscillation flagged). The calculator -- gated by
      *     `effective <= 1 m && bufferCount >= 3` -- weighs reported
      *     speed, bearing/speed stability, jerk, and `rawClose`. Catches
-     *     the 38 m phantom step that previously slipped through as
-     *     "within-cap".
+     *     the multi-tens-of-meters phantom step that the linear-sum path
+     *     can't see when accuracies are tight.
      *
      *  2. **Raw within current-fix accuracy envelope**.
-     *     `raw <= currAcc * 1.5`. Current-fix-only fallback for the
-     *     case where the previous accuracy is missing or zero (e.g.
-     *     mocked / stale anchor) and path 0 cannot evaluate.
+     *     `raw <= currAcc * 1.5`. Current-fix-only fallback for when the
+     *     previous accuracy is missing or zero (e.g. mocked / stale
+     *     anchor) and path 0 cannot evaluate.
      */
     private fun isNoisyStandstill(metrics: LocationMetrics): Boolean {
         if (metrics.rawDistanceMeters <= 0.0) return false
@@ -340,13 +370,9 @@ class LocationFilter(
             metrics = metrics,
             committedDisplacementMeters = committedDisplacement,
         )
-        if (config.useKalman) {
-            kalmanFilter.configureForSpeed(max(metrics.reportedSpeedMps, metrics.impliedSpeedMps))
-            kalmanFilter.update(
-                measurement = committedDisplacement,
-                accuracyMeters = input.accuracyMeters?.toDouble(),
-            )
-        }
+        // Kalman is mutated up-front in [smoothDecisionDistance]; calling
+        // update() again here would double-count the observation and damp
+        // the smoother.
         previousAccepted = input
     }
 

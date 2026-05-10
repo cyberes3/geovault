@@ -672,4 +672,115 @@ class LocationFilterTest {
         filter.onMotionChanged()
         assertEquals(null, filter.lastAcceptedTimestampMs)
     }
+
+    /**
+     * First-fix bypasses the Kalman smoother: the very first observation
+     * is accepted verbatim because [LocationFilter] short-circuits to
+     * `commitAccept` before [smoothDecisionDistance] runs. Otherwise the
+     * smoother would be initialised on a single arbitrary reading.
+     */
+    @Test
+    fun firstFix_bypassesKalmanSmoothing() {
+        val filter = LocationFilter(LocationFilterConfig.Default.copy(useKalman = true))
+        val first = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 1f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Accepted, first.decision)
+        assertEquals("first-fix", first.reason)
+    }
+
+    /**
+     * A true teleport still trips the 1.5x outlier reject because outlier
+     * detection runs on raw distance, not smoothed. Kalman only damps the
+     * within-cap comparison; it cannot rescue a fix that physically
+     * jumped 200 m in 1 second past a 50 m cap.
+     */
+    @Test
+    fun trueTeleport_stillRejectedDespiteKalman() {
+        val filter = LocationFilter(LocationFilterConfig.Default.copy(useKalman = true))
+        var lat = 24.7097
+        val lon = -81.1011
+        var ts = 0L
+        repeat(5) {
+            filter.evaluate(
+                LocationInput(
+                    latitude = lat,
+                    longitude = lon,
+                    timestampMs = ts,
+                    accuracyMeters = 5f,
+                    speedMps = 1f,
+                    bearingDegrees = 0f,
+                )
+            )
+            lat += 0.00001
+            ts += 1_000L
+        }
+        val teleport = filter.evaluate(
+            LocationInput(
+                latitude = 24.8500,
+                longitude = -81.0500,
+                timestampMs = ts,
+                accuracyMeters = 5f,
+                speedMps = 1f,
+                bearingDegrees = 0f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Rejected, teleport.decision)
+    }
+
+    /**
+     * Kalman smoothing: after a series of small steady observations a
+     * single magnitude-spike fix sits just over the cap on raw effective
+     * distance but well under once smoothed against the prior. The Adjust
+     * policy must accept it as `within-cap` rather than clipping.
+     *
+     * Seeds the smoother with steady ~2 m hops so the predicted state
+     * is small, then sends a borderline ~28 m fix against a typical cap
+     * of ~30 m -- but with the kinematic cap shrunk by low speed so the
+     * raw is borderline-above. The smoothed observation sits well below.
+     */
+    @Test
+    fun kalmanSmoothing_rescuesBorderlineMagnitudeSpike() {
+        val filter = LocationFilter(
+            LocationFilterConfig.Default.copy(
+                policy = LocationFilterPolicy.Adjust,
+                useKalman = true,
+            )
+        )
+        var lat = 24.7097
+        val lon = -81.1011
+        var ts = 0L
+        // 6 small steady-state hops to seed Kalman state low.
+        repeat(6) {
+            filter.evaluate(
+                LocationInput(
+                    latitude = lat,
+                    longitude = lon,
+                    timestampMs = ts,
+                    accuracyMeters = 6f,
+                    speedMps = 0.5f,
+                    bearingDegrees = 0f,
+                )
+            )
+            lat += 0.0000180
+            ts += 5_000L
+        }
+        val borderline = filter.evaluate(
+            LocationInput(
+                latitude = lat + 0.00027,
+                longitude = lon,
+                timestampMs = ts + 5_000L,
+                accuracyMeters = 6f,
+                speedMps = 0.5f,
+                bearingDegrees = 0f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Accepted, borderline.decision)
+    }
 }

@@ -1,6 +1,7 @@
 package com.geovault.tracker
 
 import android.location.Location
+import com.geovault.tracker.policy.filter.StationaryConfidence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -146,12 +147,10 @@ class TrackingLocationPolicyTest {
     }
 
     /**
-     * Regression: this is the exact bug observed in the field at 21:14:55.
-     * Three fixes with mediocre 27 m accuracy that the upstream filter
-     * snapped to the anchor (`uncertainty-suppressed`) used to advance the
-     * stationary counter to 3 and pause GPS, leaving the device unable to
-     * recover until the user moved. With the hardened policy these fixes
-     * must hold the counter (no advance, no reset) and never pause.
+     * Generic [filterIntervened] (without [filterConfirmedStillness])
+     * carries no positional information about the user, so the counter
+     * is held -- neither advanced into a false pause nor reset away from
+     * legitimate progress.
      */
     @Test
     fun stationaryUpdate_filterIntervenedFixes_doNotPause() {
@@ -184,8 +183,16 @@ class TrackingLocationPolicyTest {
         }
     }
 
+    /**
+     * There is no separate stationary accuracy gate. If the upstream
+     * filter accepted the fix, the policy uses it. A 50 m indoor-accuracy
+     * fix at the anchor (raw distance 0) is unambiguous stillness
+     * evidence -- the joint accuracy envelope subsumes the displacement,
+     * so the accuracy-defensive radius math reads it as within-radius and
+     * advances the counter.
+     */
     @Test
-    fun stationaryUpdate_poorAccuracy_holdsCounterAndDoesNotPause() {
+    fun stationaryUpdate_indoorAccuracyAtAnchor_advancesCounter() {
         val anchor = Location("test").apply {
             latitude = 0.0
             longitude = 0.0
@@ -205,9 +212,8 @@ class TrackingLocationPolicyTest {
             currentConsecutive = 2,
             significantMotionOnly = true,
         )
-        assertEquals(2, result.consecutive)
-        assertFalse(result.shouldPause)
-        assertEquals("poor_accuracy", result.reason)
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
     }
 
     @Test
@@ -239,13 +245,15 @@ class TrackingLocationPolicyTest {
         }
     }
 
+    /**
+     * Accuracy-defensive radius: the joint accuracy envelope is subtracted
+     * from raw distance before comparing against the radius. A 60 m drift
+     * with 100 m fix accuracy + 8 m anchor accuracy is geometrically
+     * indistinguishable from "didn't move at all", so the counter advances
+     * rather than resetting on what may well be pure uncertainty.
+     */
     @Test
-    fun stationaryUpdate_radiusNotInflatedByAccuracy() {
-        // A 60 m drift between anchor and fix must reset the counter even
-        // though the fix has 100 m accuracy. The old policy inflated the
-        // radius to max(50, 100) = 100 m, swallowing real movement; the
-        // hardened policy rejects the fix entirely (poor_accuracy) and
-        // holds the counter without falsely affirming stationarity.
+    fun stationaryUpdate_accuracyEatenRadius_advancesCounter() {
         val anchor = Location("test").apply {
             latitude = 0.0
             longitude = 0.0
@@ -253,7 +261,7 @@ class TrackingLocationPolicyTest {
             accuracy = 8f
         }
         val drifted = Location("test").apply {
-            latitude = 0.00054 // ~60 m
+            latitude = 0.00054
             longitude = 0.0
             time = 20_000L
             accuracy = 100f
@@ -265,8 +273,138 @@ class TrackingLocationPolicyTest {
             currentConsecutive = 2,
             significantMotionOnly = true,
         )
-        assertEquals(2, result.consecutive)
-        assertFalse(result.shouldPause)
-        assertEquals("poor_accuracy", result.reason)
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+    }
+
+    /**
+     * `filterConfirmedStillness` (filter snapped to anchor as
+     * `uncertainty-suppressed`) is positive evidence the device hasn't
+     * moved. It must advance the counter regardless of `activeMotionHint`
+     * stickiness from a prior drive's smoothed speed.
+     */
+    @Test
+    fun stationaryUpdate_filterConfirmedStillness_advancesEvenWithActiveMotionHint() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val confirmed = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 12f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = confirmed,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+            activeMotionHint = true,
+            filterConfirmedStillness = true,
+        )
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("pause_threshold_reached", result.reason)
+    }
+
+    /**
+     * Phantom 0.9 m/s reported speed (within the 1.0 m/s motion floor)
+     * with no geometric displacement must not reset the stationary
+     * counter. Tightened from the old 0.75 m/s floor that let typical
+     * indoor multipath bursts permanently block pause.
+     */
+    @Test
+    fun stationaryUpdate_phantomNinePointZeroSpeed_belowFloor_doesNotReset() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val phantom = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 5_000L
+            accuracy = 8f
+            speed = 0.9f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = phantom,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 2,
+            significantMotionOnly = true,
+        )
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+    }
+
+    /**
+     * Multi-signal confidence above 0.6 fast-advances the counter past
+     * the 3-tick threshold so we don't waste a minute of polling proving
+     * what we already know.
+     */
+    @Test
+    fun stationaryUpdate_highConfidence_fastAdvancesToPause() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val close = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 8f
+        }
+        val confidence = StationaryConfidence(score = 0.85, isStationary = true, isOscillating = false)
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = close,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 0,
+            significantMotionOnly = true,
+            confidence = confidence,
+        )
+        assertTrue(result.consecutive >= 3)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    /**
+     * Confident rubber-band oscillation (score > 0.5, isOscillating
+     * true) is the textbook indoor-multipath signature -- jump straight
+     * to pause rather than waiting for raw geometry to confirm.
+     */
+    @Test
+    fun stationaryUpdate_oscillatingConfidence_fastAdvancesToPause() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 12f
+        }
+        val close = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 12f
+        }
+        val confidence = StationaryConfidence(score = 0.55, isStationary = true, isOscillating = true)
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = close,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 0,
+            significantMotionOnly = true,
+            confidence = confidence,
+        )
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
     }
 }

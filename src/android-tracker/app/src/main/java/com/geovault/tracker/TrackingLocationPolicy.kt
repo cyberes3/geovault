@@ -1,9 +1,10 @@
 package com.geovault.tracker
 
 import android.location.Location
+import com.geovault.tracker.policy.filter.StationaryConfidence
 
 /**
- * Pure logic for accepting locations and stationary detection.
+ * Pure logic for stationary detection and motion-profile selection.
  * Extracted so it can be unit tested without Service/Context.
  */
 object TrackingLocationPolicy {
@@ -11,12 +12,12 @@ object TrackingLocationPolicy {
     const val DEFAULT_STATIONARY_RADIUS_METERS = 50f
 
     /**
-     * Maximum fix accuracy (meters) at which the stationary counter is allowed
-     * to advance. Beyond this, a fix is too noisy to be evidence of being
-     * still: a "tight" cluster of bad-accuracy fixes has nothing to do with
-     * the user actually standing in one place.
+     * Maximum fix accuracy (meters) at which a paused-state freshness fix
+     * may be committed to the database. Used by [com.geovault.tracker.location.PausedFreshnessPolicy]
+     * to skip emit when the chipset is too noisy to draw a confident dot.
      */
     const val STATIONARY_ACCURACY_CEILING_METERS = 35f
+
     const val AUTO_START_PROFILE_INDEX = 0
     const val WALKING_INTERVAL_SEC = 20L
     const val WALKING_DISTANCE_FILTER_METERS = 7f
@@ -24,49 +25,6 @@ object TrackingLocationPolicy {
     const val BIKING_DISTANCE_FILTER_METERS = 30f
     const val DRIVING_INTERVAL_SEC = 10L
     const val DRIVING_DISTANCE_FILTER_METERS = 100f
-
-    @JvmStatic
-    fun getAutoStartProfileIndex(): Int = AUTO_START_PROFILE_INDEX
-
-    /**
-     * Returns true if the location passes the accuracy filter (should be queued).
-     * Accept when location has no accuracy or when accuracy <= threshold.
-     */
-    @JvmStatic
-    fun acceptByAccuracy(location: Location, accuracyFilter: Float): Boolean {
-        if (!location.hasAccuracy()) return true
-        return location.accuracy <= accuracyFilter
-    }
-
-    /**
-     * Returns true if the change in location implies an unrealistic speed (> 100 m/s / ~223 mph).
-     */
-    @JvmStatic
-    fun isJump(lastLocation: Location?, newLocation: Location): Boolean {
-        if (lastLocation == null) return false
-        val dist = lastLocation.distanceTo(newLocation)
-        val timeDiff = (newLocation.time - lastLocation.time) / 1000.0 // seconds
-        if (timeDiff <= 0) return false
-        val speed = dist / timeDiff
-        return speed > 100.0
-    }
-
-    /**
-     * Applies Exponential Weighted Moving Average to smooth the coordinates.
-     * alpha = 0.5 means 50% last, 50% new.
-     */
-    @JvmStatic
-    @JvmOverloads
-    fun smooth(lastLocation: Location?, newLocation: Location, alpha: Float = 0.5f): Location {
-        if (lastLocation == null) return newLocation
-        val smoothed = Location(newLocation)
-        smoothed.latitude = (alpha * newLocation.latitude) + ((1 - alpha) * lastLocation.latitude)
-        smoothed.longitude = (alpha * newLocation.longitude) + ((1 - alpha) * lastLocation.longitude)
-        if (newLocation.hasAltitude() && lastLocation.hasAltitude()) {
-            smoothed.altitude = (alpha * newLocation.altitude) + ((1 - alpha) * lastLocation.altitude)
-        }
-        return smoothed
-    }
 
     /**
      * Outcome of a single [stationaryUpdate] call. [consecutive] is the next
@@ -86,23 +44,27 @@ object TrackingLocationPolicy {
     /**
      * Updates stationary state from a single accepted fix.
      *
-     * Pause requires three independent pieces of evidence to all agree on
-     * "stationary":
+     * The upstream [com.geovault.tracker.policy.filter.LocationFilter]
+     * already enforces a single accuracy threshold
+     * (`trackingAccuracyThresholdMeters`); a fix that survived that is
+     * eligible for stationary detection regardless of its absolute
+     * accuracy number. A 40 m indoor fix with `raw=0` for 21 seconds is
+     * unambiguous evidence the device hasn't moved.
+     *
+     * Pause evidence:
      *
      *  1. The user has opted into GPS-pause behavior ([significantMotionOnly]).
-     *  2. The fix was not adjusted by the upstream filter
-     *     ([filterIntervened] = false). A snap-to-anchor adjustment carries
-     *     no positional information about the user, only about fix quality.
-     *  3. The fix is sufficiently accurate ([accuracyCeilingMeters]) that
-     *     "no displacement against the anchor" is meaningful. A tight cluster
-     *     of bad-accuracy fixes is *not* evidence of stationarity.
-     *
-     * When (2) or (3) fails the counter is held (not reset, not advanced):
-     * a transient noisy fix should neither erase legitimate progress nor
-     * push us into a false pause.
+     *  2. The fix was either accepted unchanged, or adjusted in a way that
+     *     positively confirms stillness ([filterConfirmedStillness] -- e.g.
+     *     `uncertainty-suppressed` snap to anchor). Generic filter
+     *     intervention ([filterIntervened] without confirmed stillness)
+     *     holds the counter rather than advancing it.
+     *  3. Multi-signal [confidence] can fast-advance the counter past the
+     *     usual 3-tick floor: `score > 0.6` (confident stillness) or
+     *     `isOscillating && score > 0.5` (confident rubber-banding) jump
+     *     straight to the pause threshold so we don't waste a minute of
+     *     polling proving what we already know.
      */
-    @JvmStatic
-    @JvmOverloads
     fun stationaryUpdate(
         lastLocation: Location?,
         location: Location,
@@ -111,66 +73,86 @@ object TrackingLocationPolicy {
         significantMotionOnly: Boolean,
         activeMotionHint: Boolean = false,
         filterIntervened: Boolean = false,
-        accuracyCeilingMeters: Float = STATIONARY_ACCURACY_CEILING_METERS,
+        filterConfirmedStillness: Boolean = false,
+        confidence: StationaryConfidence? = null,
     ): StationaryDecision {
         if (!significantMotionOnly) {
             return StationaryDecision(consecutive = 0, shouldPause = false, reason = "disabled")
         }
-        if (activeMotionHint) {
-            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_motion_hint")
-        }
-        if (filterIntervened) {
-            return StationaryDecision(
-                consecutive = currentConsecutive,
-                shouldPause = false,
-                reason = "filter_intervened",
-            )
-        }
-        if (location.hasAccuracy() && location.accuracy > accuracyCeilingMeters) {
-            return StationaryDecision(
-                consecutive = currentConsecutive,
-                shouldPause = false,
-                reason = "poor_accuracy",
-            )
+        // `filterConfirmedStillness` is positive evidence the device hasn't
+        // moved (filter snapped to anchor because the displacement was
+        // inside the joint accuracy envelope). It supersedes both
+        // `activeMotionHint` (which can be sticky from a prior drive's
+        // smoothed speed) and `filterIntervened` (which is the same event
+        // viewed pessimistically).
+        if (!filterConfirmedStillness) {
+            if (activeMotionHint) {
+                return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_motion_hint")
+            }
+            if (filterIntervened) {
+                return StationaryDecision(
+                    consecutive = currentConsecutive,
+                    shouldPause = false,
+                    reason = "filter_intervened",
+                )
+            }
         }
 
         val anchor = lastLocation
             ?: return StationaryDecision(consecutive = 1, shouldPause = false, reason = "first_anchor")
-        val radius = stationaryRadiusMeters.coerceAtLeast(MIN_STATIONARY_RADIUS_METERS)
-        val dist = anchor.distanceTo(location)
-        val withinRadius = dist <= radius
 
-        // Motion is only credited when *both* the chipset reports
-        // measurable speed *and* the geometry shows displacement past
-        // the stationary radius. A multipath burst (phantom speed with
-        // no real geometry change) while sitting still is exactly the
-        // failure pattern we are filtering out -- the user reported it
-        // as "still logging points while I was still". Real motion
-        // produces both signals within one or two fixes.
+        // Accuracy-defensive radius: subtract the joint accuracy envelope
+        // from the raw anchor-to-fix distance before comparing against the
+        // radius. Honours the [MIN_STATIONARY_RADIUS_METERS] floor on the
+        // radius itself so a tiny configured radius cannot punch through.
+        val radius = stationaryRadiusMeters.coerceAtLeast(MIN_STATIONARY_RADIUS_METERS)
+        val rawDist = anchor.distanceTo(location)
+        val anchorAccuracy = if (anchor.hasAccuracy()) anchor.accuracy else 0f
+        val locationAccuracy = if (location.hasAccuracy()) location.accuracy else 0f
+        val effectiveDist = (rawDist - anchorAccuracy - locationAccuracy).coerceAtLeast(0f)
+        val withinRadius = effectiveDist <= radius
+
         val gpsSpeedMps = if (location.hasSpeed()) location.speed else 0f
         val movedByGpsSpeed = gpsSpeedMps > GPS_MOTION_FLOOR_MPS
         val movedByGeometry = !withinRadius
-        if (movedByGpsSpeed && movedByGeometry) {
+        // `filterConfirmedStillness` overrides phantom speed bursts: the
+        // filter already proved the lat/lon didn't change.
+        if (!filterConfirmedStillness && movedByGpsSpeed && movedByGeometry) {
             return StationaryDecision(consecutive = 0, shouldPause = false, reason = "gps_motion_corroborated")
         }
 
-        val newConsecutive = if (withinRadius) currentConsecutive + 1 else 1
-        val shouldPause = newConsecutive >= 3
+        val baseAdvance = if (withinRadius || filterConfirmedStillness) currentConsecutive + 1 else 1
+        val confidenceFastAdvance = when {
+            confidence == null -> false
+            confidence.score > FAST_ADVANCE_SCORE -> true
+            confidence.isOscillating && confidence.score > OSCILLATING_FAST_ADVANCE_SCORE -> true
+            else -> false
+        }
+        val newConsecutive = if (confidenceFastAdvance) {
+            maxOf(baseAdvance, PAUSE_THRESHOLD)
+        } else {
+            baseAdvance
+        }
+        val shouldPause = newConsecutive >= PAUSE_THRESHOLD
         val reason = when {
+            shouldPause && confidenceFastAdvance -> "confidence_fast_advance"
             shouldPause -> "pause_threshold_reached"
+            filterConfirmedStillness -> "advance_confirmed_stillness"
             withinRadius -> "advance_within_radius"
             else -> "reset_outside_radius"
         }
         return StationaryDecision(consecutive = newConsecutive, shouldPause = shouldPause, reason = reason)
     }
 
-    private const val GPS_MOTION_FLOOR_MPS = 0.75f
+    private const val GPS_MOTION_FLOOR_MPS = 1.0f
+    private const val PAUSE_THRESHOLD = 3
+    private const val FAST_ADVANCE_SCORE = 0.6
+    private const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
 
     /**
-     * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest from interval in seconds.
-     * Used so we can unit test that prefs interval is correctly converted.
+     * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest
+     * from interval in seconds.
      */
-    @JvmStatic
     fun locationRequestIntervalFromSec(intervalSec: Long): Pair<Long, Long> {
         val intervalMs = intervalSec * 1000L
         val minUpdateMs = intervalMs / 2
@@ -180,12 +162,11 @@ object TrackingLocationPolicy {
     /**
      * Profile indexes: 0: Walking, 1: Biking, 2: Driving.
      *
-     * Profiles drive only the [android.location.LocationRequest] cadence and
-     * distance filter. The positioning filter accuracy gate is owned by the
-     * user setting (`accuracyFilterMeters`) and is profile-independent so
-     * mode flips never mutate the filter pipeline state.
+     * Profiles drive only the [android.location.LocationRequest] cadence
+     * and distance filter. The positioning filter accuracy gate is owned
+     * by the user setting (`accuracyFilterMeters`) and is profile-
+     * independent so mode flips never mutate the filter pipeline state.
      */
-    @JvmStatic
     fun getProfileParams(profileIndex: Int): Pair<Long, Float> {
         return when (profileIndex) {
             0 -> WALKING_INTERVAL_SEC to WALKING_DISTANCE_FILTER_METERS
@@ -204,7 +185,6 @@ object TrackingLocationPolicy {
      * Driving -> Biking: < 6.0 (21.6 km/h)
      * Biking -> Walking: < 1.5 (5.4 km/h)
      */
-    @JvmStatic
     fun getRecommendedProfile(speedMps: Float, currentProfile: Int): Int {
         return when (currentProfile) {
             0 -> if (speedMps > 2.0f) 1 else 0
@@ -214,7 +194,7 @@ object TrackingLocationPolicy {
                 else -> 1
             }
             2 -> if (speedMps < 6.0f) 1 else 2
-            else -> 1 // Default to Biking if unknown
+            else -> 1
         }
     }
 }
