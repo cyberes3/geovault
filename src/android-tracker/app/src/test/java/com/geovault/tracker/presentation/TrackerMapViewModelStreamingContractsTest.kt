@@ -329,27 +329,12 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun displayedRosterHasLoadedTrails_groupModeWithPartialRoster_returnsFalse() {
+    fun displayedRosterHasServerHistory_groupModeWithPartialRoster_returnsFalse() {
         val partial = mapOf(
-            "a" to listOf(
-                com.geovault.tracker.db.QueuedLocation(
-                    id = 0L,
-                    trackerId = "a",
-                    time = 1L,
-                    latitude = 0.0,
-                    longitude = 0.0,
-                    altitude = null,
-                    speed = null,
-                    bearing = null,
-                    accuracy = null,
-                    sat = null,
-                    prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
-                    dist = null,
-                )
-            ),
+            "a" to listOf(serverPoint("a", time = 1L)),
             "b" to emptyList(),
         )
-        val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
+        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = partial,
@@ -358,12 +343,12 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun displayedRosterHasLoadedTrails_groupModeWithFullRoster_returnsTrue() {
+    fun displayedRosterHasServerHistory_groupModeWithFullRoster_returnsTrue() {
         val populated = mapOf(
-            "a" to listOf(queuedPoint("a", time = 1L)),
-            "b" to listOf(queuedPoint("b", time = 2L)),
+            "a" to listOf(serverPoint("a", time = 1L)),
+            "b" to listOf(serverPoint("b", time = 2L)),
         )
-        val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
+        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = populated,
@@ -372,11 +357,28 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun displayedRosterHasLoadedTrails_groupModeAllEmpty_returnsFalse() {
-        val ready = TrackerMapViewModel.displayedRosterHasLoadedTrails(
+    fun displayedRosterHasServerHistory_groupModeAllEmpty_returnsFalse() {
+        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             rosterIds = setOf("a", "b"),
             allQueueTrailsByTracker = mapOf("a" to emptyList(), "b" to emptyList()),
+        )
+        assertEquals(false, ready)
+    }
+
+    @Test
+    fun displayedRosterHasServerHistory_localQueueOnly_returnsFalse() {
+        // Resume short-circuit: roster must include at least one PROVENANCE_SERVER_GEOMETRY point
+        // per tracker. Overlay-only rows (e.g. local GPS / stream) must not count as "loaded"
+        // or background resume skips the reload that restores full geometry.
+        val queueOnly = mapOf(
+            "a" to listOf(queuedPoint("a", time = 1L)),
+            "b" to listOf(queuedPoint("b", time = 2L)),
+        )
+        val ready = TrackerMapViewModel.displayedRosterHasServerHistory(
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            rosterIds = setOf("a", "b"),
+            allQueueTrailsByTracker = queueOnly,
         )
         assertEquals(false, ready)
     }
@@ -581,7 +583,24 @@ class TrackerMapViewModelStreamingContractsTest {
             bearing = null,
             accuracy = null,
             sat = null,
-            prov = TrackerMapPointProvenancePolicy.PROVENANCE_REMOTE_STREAM,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+        )
+    }
+
+    private fun serverPoint(trackerId: String, time: Long): com.geovault.tracker.db.QueuedLocation {
+        return com.geovault.tracker.db.QueuedLocation(
+            id = time,
+            trackerId = trackerId,
+            time = time,
+            latitude = time.toDouble(),
+            longitude = time.toDouble(),
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
             dist = null,
         )
     }

@@ -7,7 +7,7 @@ import org.junit.Test
 class HomeLayoutSizingPolicyTest {
 
     @Test
-    fun requiredNormalHeight_scalesPastLegacyRawIntegerSum() {
+    fun requiredNormalHeight_scalesPastUnscaledRawDpSum() {
         val density = Density(3f, 1f)
         val input = HomeLayoutSizingInput(
             density = density,
@@ -16,10 +16,10 @@ class HomeLayoutSizingPolicyTest {
             occlusionPx = 0,
         )
         val required = HomeLayoutSizingPolicy.requiredNormalHeightPxForTesting(input)
-        val legacyBuggyPxSum = 420 + 180 + 24 + 32 + 16 + 12
+        val naiveUnscaledPxSum = 420 + 180 + 24 + 32 + 16 + 12
         assertTrue(
-            "expected density-scaled px ($required) > legacy raw sum ($legacyBuggyPxSum)",
-            required > legacyBuggyPxSum,
+            "expected density-scaled px ($required) > naive unscaled px sum ($naiveUnscaledPxSum)",
+            required > naiveUnscaledPxSum,
         )
     }
 }

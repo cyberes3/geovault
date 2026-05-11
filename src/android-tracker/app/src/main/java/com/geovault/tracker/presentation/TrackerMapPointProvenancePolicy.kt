@@ -16,4 +16,14 @@ object TrackerMapPointProvenancePolicy {
             else -> false
         }
     }
+
+    /**
+     * Server-side history is the authoritative trail for a tracker. The streaming-resume
+     * short-circuit uses this to decide whether the in-memory roster has a real loaded trail
+     * (vs only a sliver of local-queue or live-stream rows that a prior reload happened to
+     * leave behind). Only [PROVENANCE_SERVER_GEOMETRY] qualifies; everything else is overlay.
+     */
+    fun isServerHistory(point: QueuedLocation): Boolean {
+        return point.prov?.trim() == PROVENANCE_SERVER_GEOMETRY
+    }
 }

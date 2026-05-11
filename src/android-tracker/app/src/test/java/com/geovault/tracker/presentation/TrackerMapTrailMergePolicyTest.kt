@@ -126,10 +126,9 @@ class TrackerMapTrailMergePolicyTest {
     }
 
     @Test
-    fun mergeServerTrailWithLiveOverlay_keepsLegacyNullStartOverlayWhenSessionSet() {
-        // BACKWARDS-DATA TOLERANCE: legacy queue rows (startTimestampMs == null) predate the
-        // session-stamping change and must continue to flow through the merge — the new
-        // filter only rejects overlay points with a *non-null but mismatching* session.
+    fun mergeServerTrailWithLiveOverlay_keepsNullStartOverlayWhenSessionSet() {
+        // Queue rows without session metadata (startTimestampMs == null) must still merge when
+        // an active session is set; only non-null mismatching sessions are dropped.
         val activeStart = 5_000L
         val serverGeometry = listOf(
             point("local", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
@@ -181,6 +180,60 @@ class TrackerMapTrailMergePolicyTest {
 
         assertEquals(listOf(100L, 300L), merged.getValue("local").map { it.time })
         assertEquals(listOf(100L, 250L), merged.getValue("remote").map { it.time })
+    }
+
+    @Test
+    fun mergeServerTrailsWithLiveOverlays_extraQueueOverlay_doesNotReplaceServerHistory() {
+        // MULTI_SERVER: queue overlays must splice onto server geometry via
+        // [extraLiveOverlaysByTracker], not replace the server trunk (which would strip under
+        // filterNot(isLiveOverlay) and drop history from the group view).
+        val serverGeometry = listOf(
+            point("me", time = 50L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
+            point("me", time = 60L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
+            point("me", time = 70L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
+        )
+        val freshlyLoadedQueue = listOf(
+            point("me", time = 80L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
+            point("me", time = 90L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
+        )
+
+        val merged = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
+            serverTrails = mapOf("me" to serverGeometry),
+            currentTrails = emptyMap(),
+            allowedLiveOverlayTrackerIds = setOf("me"),
+            trailPointLimit = 10,
+            extraLiveOverlaysByTracker = mapOf("me" to freshlyLoadedQueue),
+        )
+
+        assertEquals(setOf("me"), merged.keys)
+        assertEquals(listOf(50L, 60L, 70L, 80L, 90L), merged.getValue("me").map { it.time })
+    }
+
+    @Test
+    fun mergeServerTrailsWithLiveOverlays_extraQueueOverlay_combinesWithLiveAppendsInCurrentTrails() {
+        // The reducer keeps appending live LOCAL_GPS rows into latest.allQueueTrailsByTracker
+        // while the reload IO is in flight. Both the in-memory live appends (currentTrails)
+        // AND the freshly-loaded DB queue (extraLiveOverlaysByTracker) need to splice on top
+        // of server geometry, deduped by time-ordering.
+        val serverGeometry = listOf(
+            point("me", time = 50L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
+        )
+        val liveAppends = listOf(
+            point("me", time = 90L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
+        )
+        val freshlyLoadedQueue = listOf(
+            point("me", time = 70L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
+        )
+
+        val merged = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
+            serverTrails = mapOf("me" to serverGeometry),
+            currentTrails = mapOf("me" to liveAppends),
+            allowedLiveOverlayTrackerIds = setOf("me"),
+            trailPointLimit = 10,
+            extraLiveOverlaysByTracker = mapOf("me" to freshlyLoadedQueue),
+        )
+
+        assertEquals(listOf(50L, 70L, 90L), merged.getValue("me").map { it.time })
     }
 
     private fun point(

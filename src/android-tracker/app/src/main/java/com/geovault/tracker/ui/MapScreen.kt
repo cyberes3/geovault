@@ -300,9 +300,8 @@ private fun TrackerMapAuthenticatedContent(
     var didInitialBounds by remember { mutableStateOf(false) }
     // INITIAL-FRAME GATE: covers the map view with a loading overlay until the very
     // first camera directive at this viewport context has been applied (or, as a
-    // safety net, until a short timeout has elapsed). This is the same pattern the
-    // legacy fragment-based tracker app used (`mapLoadingOverlay` hidden inside
-    // `onMapReady` AFTER the camera was positioned). Without this, the user briefly
+    // safety net, until a short timeout has elapsed). The overlay stays until
+    // `onMapReady` has run and the camera is positioned. Without this, the user briefly
     // sees the map at MapLibre's default camera (around 0,0) for the time it takes
     // the directive `LaunchedEffect` to schedule + run after `phase` flips to Ready.
     var mapInitialFrameReady by remember { mutableStateOf(false) }
@@ -805,11 +804,10 @@ private fun TrackerMapAuthenticatedContent(
             // INITIAL-FRAME LOADING SHIELD: drawn last so it occludes everything in
             // the map area (map view, FABs, chips, indicators) until the very first
             // camera directive for the current viewport context has been applied.
-            // This is the same pattern the legacy fragment-based tracker app used —
-            // see `MapFragment.onMapReady` which hides `mapLoadingOverlay` only AFTER
-            // the camera position is set. Without it, the user briefly sees the map
-            // at MapLibre's default camera (~0,0) before the LaunchedEffect that
-            // consumes the directive can run on the same frame `phase` flips Ready.
+            // The shield stays until the first position is set after map ready; otherwise
+            // the user briefly sees MapLibre's default camera (~0,0) before the
+            // LaunchedEffect that consumes the directive can run on the same frame
+            // `phase` flips Ready.
             // Touch is swallowed so the user can't pan the still-loading map.
             if (!mapInitialFrameReady) {
                 Box(

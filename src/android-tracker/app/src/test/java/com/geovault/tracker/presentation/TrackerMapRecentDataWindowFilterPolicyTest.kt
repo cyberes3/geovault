@@ -181,7 +181,7 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
         val filtered = apply(points, key = "session")
         // With only two distinct sessions both segments are kept; null-start points
         // attribute to the latest segment whose start <= point.time, with the first
-        // segment swallowing pre-boundary points (defensible default for legacy data).
+        // segment swallowing pre-boundary points (reasonable default when some rows omit session metadata).
         assertEquals(5, filtered.size)
         assertTrue(filtered.any { it.time == 500L })
         assertTrue(filtered.any { it.time == 1_500L })

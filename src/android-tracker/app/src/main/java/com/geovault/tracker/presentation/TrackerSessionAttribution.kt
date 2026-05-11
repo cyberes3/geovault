@@ -39,7 +39,7 @@ data class TrackerSessionAttributionContext(
  *    materialized (possibly empty). This is what lets the "current_session" filter hide
  *    a previous session immediately after the user starts a new one, even before the
  *    first point of the new session arrives. The downstream filter's
- *    `_with_latest_point_fallback` then preserves the last legacy point so the marker
+ *    `_with_latest_point_fallback` then preserves the last attributable tail point so the marker
  *    has a position.
  *
  * Within each segment the input order is preserved.

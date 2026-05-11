@@ -352,7 +352,7 @@ object TrackerMapStateTransforms {
         var currentGroup = mutableListOf<QueuedLocation>().apply { add(points.first()) }
         for (i in 1 until points.size) {
             val point = points[i]
-            // Adjacent null-start points group together as a single "legacy" session; any
+            // Adjacent null-start points group together as one session bucket; any
             // change between null and non-null, or between two different non-null values,
             // starts a new group.
             if (point.startTimestampMs == currentKey) {

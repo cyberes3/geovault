@@ -50,7 +50,6 @@ import kotlinx.coroutines.withContext
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Tells the map's `fitTrailEvents` consumer how to apply a bounds fit.
@@ -124,7 +123,7 @@ data class TrackerMapSelectionCard(
  *    one-shot server fetch (entering a new mode/group, loading a tracker for the first time,
  *    streaming starting, or returning to the selected tracker after group streaming ends).
  */
-private enum class TrackerMapTrailReloadReason(
+internal enum class TrackerMapTrailReloadReason(
     val allowServerHistoryFetch: Boolean,
     val allowMultiServerHistoryFetch: Boolean = allowServerHistoryFetch,
 ) {
@@ -134,6 +133,32 @@ private enum class TrackerMapTrailReloadReason(
     ExplicitTrackerLoad(allowServerHistoryFetch = true),
     StreamingStart(allowServerHistoryFetch = true),
     RestoreSelectedAfterStreaming(allowServerHistoryFetch = true),
+    ;
+
+    /**
+     * Strength score used to merge coalesced reload requests:
+     *   2 = forces a server history fetch (single + multi)
+     *   1 = forces a multi-server fetch only
+     *   0 = render-only refresh
+     */
+    fun strength(): Int = when {
+        allowServerHistoryFetch -> 2
+        allowMultiServerHistoryFetch -> 1
+        else -> 0
+    }
+}
+
+/**
+ * Returns the stronger of the receiver and [incoming] under [TrackerMapTrailReloadReason.strength].
+ * `null` is treated as "nothing pending"; any non-null incoming wins. When two non-null reasons
+ * tie on strength, the receiver wins so a previously-recorded request is not displaced by a
+ * later equivalent one (stable / minimum churn). Used by the reload coalescing loop.
+ */
+internal fun TrackerMapTrailReloadReason?.mergedWith(
+    incoming: TrackerMapTrailReloadReason,
+): TrackerMapTrailReloadReason {
+    val current = this ?: return incoming
+    return if (incoming.strength() > current.strength()) incoming else current
 }
 
 private fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = copy(
@@ -304,7 +329,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             // session fix at >= runtimeTs, the trail tail is the authoritative live point.
             // Synthesizing a runtime overlay on top would paint a phantom point ahead of
             // the bus-driven marker (the chevron-vs-line lag bug). For different sessions
-            // (or null-start legacy tails) we always synthesize so the active session has
+            // (or null-start tails without session metadata) we always synthesize so the active session has
             // a head and the line builder can split it from prior data.
             val tailSession = last?.startTimestampMs
             val tailMatchesActiveSession = last != null &&
@@ -339,7 +364,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         /**
-         * STREAMING-RESUME GUARD (Bug 3): pure helper for evaluateResumeAfterBackground's
+         * STREAMING-RESUME GUARD: pure helper for evaluateResumeAfterBackground's
          * short-circuit. Returns true when the live-stream runtime is currently subscribed to
          * exactly the trackers the displayed mode wants, after applying the streaming exclusion
          * for the locally-recorded tracker.
@@ -367,12 +392,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         /**
-         * STREAMING-RESUME GUARD (Bug 3): pure helper for evaluateResumeAfterBackground's
-         * short-circuit. Returns true when at least one displayed roster tracker has a populated
-         * trail in the multi-trail map (so a fresh reload would be cosmetic churn).
+         * STREAMING-RESUME GUARD: pure helper for evaluateResumeAfterBackground's short-circuit.
+         * Returns true only when EVERY displayed roster tracker has at least one
+         * `PROVENANCE_SERVER_GEOMETRY` point. A loose "is the entry non-empty?" check is
+         * insufficient because a sliver of local-queue or live-stream rows looks "loaded" but
+         * is missing the historical geometry the user expects — which causes the resume path
+         * to skip the very reload that would heal a previously-broken state.
          */
         @JvmStatic
-        internal fun displayedRosterHasLoadedTrails(
+        internal fun displayedRosterHasServerHistory(
             mode: TrackerMapDisplayMode,
             rosterIds: Set<String>,
             allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
@@ -382,7 +410,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             }
             val normalizedRosterIds = rosterIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
             if (normalizedRosterIds.isEmpty()) return false
-            return normalizedRosterIds.all { id -> !allQueueTrailsByTracker[id].isNullOrEmpty() }
+            return normalizedRosterIds.all { id ->
+                allQueueTrailsByTracker[id].orEmpty().any(TrackerMapPointProvenancePolicy::isServerHistory)
+            }
         }
 
         @JvmStatic
@@ -472,8 +502,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var mapSurfaceVisible: Boolean = false
     private var pendingInitialTrackerForMap: Boolean = true
     private var runtimeTrailReloadJob: Job? = null
-    private var runtimeTrailReloadPending: Boolean = false
-    private var runtimeTrailReloadPendingReason: TrackerMapTrailReloadReason = TrackerMapTrailReloadReason.GenericMapRefresh
+    /**
+     * COALESCING: holds the strongest reload reason requested while a reload was already in
+     * flight. `null` means nothing pending. The merge in [TrackerMapTrailReloadReason.mergedWith]
+     * picks force > multi-server > non-force, so a non-force request landing during a
+     * forced reload never silently downgrades the next iteration.
+     */
+    private var runtimeTrailReloadPendingReason: TrackerMapTrailReloadReason? = null
     private val trailReloadMutex = Mutex()
     private var lastTrailLoadSeed: String? = null
     private var pendingReopenSingleTrackerLoadId: String? = null
@@ -482,12 +517,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var lastObservedTrackingRunning: Boolean? = null
     private var lastObservedLocalRecordingActive: Boolean? = null
 
-    /**
-     * STREAM-STATE-MACHINE: tracks whether the previous snapshot represented an active streaming
-     * session (intent expressed and orchestrator not yet terminal). Used to detect the
-     * active -> ended transition that triggers map-lease cleanup. Replaces the legacy
-     * `isRunning` boolean — derived from the new `wantsSubscription` / `subscriptionEnded` axes.
-     */
+        /**
+         * STREAM-STATE-MACHINE: tracks whether the previous snapshot represented an active streaming
+         * session (intent expressed and orchestrator not yet terminal). Used to detect the
+         * active -> ended transition that triggers map-lease cleanup. Supersedes the older
+         * single `isRunning` signal — derived from `wantsSubscription` / `subscriptionEnded`.
+         */
     private var lastObservedStreamingSessionActive: Boolean = false
     private var lastObservedStreamingFailureReason: String? = null
 
@@ -504,6 +539,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private val sessionRequestDeduper = TrackerMapSessionRequestDeduper()
     private val geometryLoadingTracker = TrackerMapGeometryLoadingTracker(
         onLoadingChanged = ::setGeometryLoading
+    )
+    private val trailLoaderOps = TrackerMapTrailLoaderOps(
+        loadSingleServer = { trackerId, existingTrailMinTimeMs ->
+            loadSingleTrackerTrailFromServer(trackerId, existingTrailMinTimeMs)
+        },
+        loadMultiServer = { trackerIds, existingMultiMinTimes ->
+            loadTrailsForTrackerIds(trackerIds, existingMultiMinTimes)
+        },
+        loadQueue = { trackerId -> loadQueueTrail(trackerId) },
     )
 
     init {
@@ -597,7 +641,21 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     }
                 )
                 lastObservedTrackingRunning = snap.isRunning
-                requestRuntimeTrailReload(TrackerMapTrailReloadReason.GenericMapRefresh)
+                // RECORDING-DELTA RELOAD: a localRecordingActive transition flips the
+                // streaming exclusion (locally-recorded id is added/removed from
+                // remoteSubscriptionIds) AND the trail merge plan (overlayTrackerId set
+                // becomes non-empty/empty). Both demand a forced server refetch so the
+                // multi-trail's locally-recorded entry is rebuilt with real geometry instead
+                // of relying on `refreshStreamTargets`'s subscription-set delta firing
+                // StreamingStart as a side effect. Cosmetic ticks remain GenericMapRefresh.
+                val recordingTransitioned = prevLocalRecording != null &&
+                    prevLocalRecording != snap.localRecordingActive
+                val reloadReason = if (recordingTransitioned) {
+                    TrackerMapTrailReloadReason.StreamingStart
+                } else {
+                    TrackerMapTrailReloadReason.GenericMapRefresh
+                }
+                requestRuntimeTrailReload(reloadReason)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
                     bumpReconcileToken()
@@ -1231,7 +1289,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER ||
                 state.mode == TrackerMapDisplayMode.ALL_QUEUE) &&
             streamingActiveTargetsMatchDisplayed(state, streamRuntime, groupSelection) &&
-            displayedRosterHasLoadedTrails(state, groupSelection)
+            displayedRosterHasServerHistory(state, groupSelection)
         ) {
             lastBackgroundAtElapsedMs = 0L
             pendingResumeEvaluation = false
@@ -1309,11 +1367,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    private fun displayedRosterHasLoadedTrails(
+    private fun displayedRosterHasServerHistory(
         state: TrackerMapUiState,
         groupSelection: TrackerMapGroupModeSelection,
     ): Boolean {
-        return displayedRosterHasLoadedTrails(
+        return displayedRosterHasServerHistory(
             mode = state.mode,
             rosterIds = when (state.mode) {
                 TrackerMapDisplayMode.GROUP_PLACEHOLDER -> groupSelection.trackerIds
@@ -1976,33 +2034,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             .filterValues { it != null }
             .mapValues { it.value!! }
         // SINGLE_SERVER + LOCAL OVERLAY: when the displayed tracker is the locally-recorded one,
-        // server geometry alone can lag the live recording (uploads are async). We pair the
-        // server fetch with the local DB queue so the merge has authoritative recent fixes to
-        // splice on top of server history. Without this, returning to the local tracker from a
-        // group stream shows only the server's last-uploaded snapshot and the recently-recorded
-        // tail is missing.
-        val (trail, allQueueTrailsByTracker, singleQueueOverlay) = when (plan.source) {
-            TrackerMapTrailSource.SINGLE_SERVER -> {
-                val server = loadSingleTrackerTrailFromServer(plan.singleTrackerId, existingTrailMinTimeMs)
-                val overlay = plan.overlayTrackerId?.let { loadQueueTrail(it) }.orEmpty()
-                Triple(server, emptyMap<String, List<QueuedLocation>>(), overlay)
-            }
-            TrackerMapTrailSource.MULTI_SERVER -> {
-                val multiTrails = loadTrailsForTrackerIds(plan.trackerIds, existingMultiMinTimes).toMutableMap()
-                plan.overlayTrackerId?.let { overlayTrackerId ->
-                    multiTrails[overlayTrackerId] = loadQueueTrail(overlayTrackerId)
-                }
-                val fallbackTrail = multiTrails[plan.activeTrackerId].orEmpty()
-                Triple(fallbackTrail, multiTrails.toMap(), emptyList())
-            }
-            TrackerMapTrailSource.SINGLE_QUEUE -> {
-                Triple(loadQueueTrail(plan.activeTrackerId), emptyMap<String, List<QueuedLocation>>(), emptyList())
-            }
-        }
-        if (trailSeedForState(_uiState.value) != seed) {
-            lastTrailLoadSeed = null
-            return
-        }
+        // server geometry alone can lag the live recording (uploads are async). The loader pairs
+        // the server fetch with the local DB queue (returned in queueOverlaysByTracker) so the
+        // merge has authoritative recent fixes to splice on top of server history.
+        // MULTI_SERVER mirrors this: server geometry is loaded for every group/roster member and
+        // returned untouched in serverTrails; the locally-recorded tracker's queue rows arrive in
+        // queueOverlaysByTracker and are spliced as live-overlay candidates by the merge. They
+        // never replace the server entry, so the multi view always retains real history for every
+        // member — including the recording user.
+        val loaded = TrackerMapTrailLoader.load(
+            plan = plan,
+            existingTrailMinTimeMs = existingTrailMinTimeMs,
+            existingMultiMinTimes = existingMultiMinTimes,
+            ops = trailLoaderOps,
+        )
         // RACE-FREE COMMIT: re-merge against the LATEST live trail at write time. The IO above
         // (loadQueueTrail / loadTrailsForTrackerIds / loadSingleTrackerTrailFromServer) suspends,
         // and the bus collector is free to append fresh fixes via handleTrackPointEvent during
@@ -2010,16 +2055,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         // .copy(...) silently overwrites those bus updates, causing the rendered marker to
         // regress one or two fixes (the "double-back while walking" symptom). _uiState.update
         // re-applies the merge against the latest state, preserving any newly-arrived live points.
-        val mergeResult = AtomicReference<MergedTrailResult?>(null)
+        //
+        // STALE-MODE GUARD: re-check the trail seed inside the atomic update so a context flip
+        // (mode/displayed change) that lands between IO completion and the commit cannot apply a
+        // wrong-mode result. The check inside the update closes the race window that an earlier
+        // pre-commit check would still leave open.
+        var mergeCommitted: MergedTrailResult? = null
         _uiState.update { latest ->
-            // Seed the merge's live-overlay input with the freshly-loaded local DB queue (when
-            // the active tracker is the locally-recorded one). Queue rows have PROVENANCE_LOCAL_GPS
-            // which the merge policy treats as live overlay; the merge keeps any with time >
-            // latestServerTime so locally-recorded fixes that haven't been uploaded yet survive.
-            val liveOverlayInput = if (singleQueueOverlay.isNotEmpty()) {
-                latest.trail + singleQueueOverlay
-            } else {
-                latest.trail
+            if (trailSeedForState(latest) != seed) {
+                return@update latest
             }
             // SESSION-SAFE OVERLAY: only honor active-session overlay points when the local
             // tracker is currently recording. The runtime carries the active session start;
@@ -2039,21 +2083,28 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 activeLocalTrackerId.isNotEmpty() &&
                     activeLocalTrackerId == plan.activeTrackerId.trim()
             }
+            val singleQueueOverlay = loaded.queueOverlaysByTracker[plan.activeTrackerId].orEmpty()
+            val singleLiveOverlayInput = if (singleQueueOverlay.isEmpty()) {
+                latest.trail
+            } else {
+                latest.trail + singleQueueOverlay
+            }
             val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
-                serverTrail = trail,
-                currentTrail = liveOverlayInput,
+                serverTrail = loaded.singleTrailSeed,
+                currentTrail = singleLiveOverlayInput,
                 allowedLiveOverlayTrackerIds = setOfNotBlank(plan.activeTrackerId),
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 activeSessionStartMs = singleSessionStart,
             )
             val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
-                serverTrails = allQueueTrailsByTracker,
+                serverTrails = loaded.serverTrails,
                 currentTrails = latest.allQueueTrailsByTracker,
                 allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotBlank(plan.overlayTrackerId),
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 activeSessionStartByTracker = activeSessionStartByTracker,
+                extraLiveOverlaysByTracker = loaded.queueOverlaysByTracker,
             )
-            mergeResult.set(MergedTrailResult(mergedTrail, mergedMultiTrails))
+            mergeCommitted = MergedTrailResult(mergedTrail, mergedMultiTrails)
             latest.copy(
                 trail = mergedTrail,
                 allQueueTrailsByTracker = mergedMultiTrails,
@@ -2069,8 +2120,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 },
             )
         }
-        val finalMerge = mergeResult.get()
-        if (pendingFitAfterReload && finalMerge != null &&
+        val finalMerge = mergeCommitted ?: run {
+            // The update bailed because the seed flipped while IO was in flight. Reset the
+            // cached seed so the next reload is not suppressed by lastTrailLoadSeed == seed.
+            lastTrailLoadSeed = null
+            return
+        }
+        if (pendingFitAfterReload &&
             (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
         ) {
             pendingFitAfterReload = false
@@ -2091,20 +2147,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun requestRuntimeTrailReload(reason: TrackerMapTrailReloadReason) {
         if (runtimeTrailReloadJob?.isActive == true) {
-            runtimeTrailReloadPending = true
-            if (reason.canForceReload()) {
-                runtimeTrailReloadPendingReason = reason
-            }
+            runtimeTrailReloadPendingReason = runtimeTrailReloadPendingReason.mergedWith(reason)
             return
         }
         runtimeTrailReloadJob = viewModelScope.launch {
-            var nextReason = reason
-            do {
-                runtimeTrailReloadPending = false
-                runtimeTrailReloadPendingReason = TrackerMapTrailReloadReason.GenericMapRefresh
-                reloadTrailFromDatabase(nextReason)
+            var nextReason: TrackerMapTrailReloadReason? = reason
+            while (nextReason != null) {
+                val current = nextReason
+                runtimeTrailReloadPendingReason = null
+                reloadTrailFromDatabase(current)
                 nextReason = runtimeTrailReloadPendingReason
-            } while (runtimeTrailReloadPending)
+            }
         }
     }
 
@@ -2120,10 +2173,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             source == TrackerMapTrailSource.SINGLE_QUEUE -> true
             else -> false
         }
-    }
-
-    private fun TrackerMapTrailReloadReason.canForceReload(): Boolean {
-        return allowServerHistoryFetch || allowMultiServerHistoryFetch
     }
 
     private suspend fun loadQueueTrail(trackerId: String): List<QueuedLocation> {
