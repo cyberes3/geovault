@@ -212,11 +212,9 @@
     <string name="map_selection_accuracy_meters">Accuracy: %1$.1f m</string>
     <string name="map_selection_lock_active">Selection lock is active</string>
     <string name="map_updated_ago">Updated %1$d %2$s ago</string>
-    <string name="map_updated_sec">sec</string>
+    <string name="map_updated_just_now">Just updated</string>
     <string name="map_updated_secs">sec</string>
-    <string name="map_updated_min">min</string>
     <string name="map_updated_mins">min</string>
-    <string name="map_updated_hr">hr</string>
     <string name="map_updated_hrs">hr</string>
     <string name="map_updated_day_short">day</string>
     <string name="map_updated_days_short">days</string>

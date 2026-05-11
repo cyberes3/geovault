@@ -101,6 +101,16 @@ data class TrackerMapSelectionCard(
     val trackerName: String,
     val latitude: Double,
     val longitude: Double,
+    /**
+     * "Last reported at" timestamp routed through [TrackerLastReportedAtPolicy] in
+     * `buildSelectionCard`. For the device's own actively-recording tracker this is
+     * `TrackingRuntimeSnapshot.lastPointSentAtMs` (last successful upload); for every
+     * other tracker it is the resolver's freshest data-point timestamp. This is the
+     * correct input for both the map info box "Updated ... ago" text and
+     * [com.geovault.tracker.policy.ActiveButDeadTrackerPolicy.isActiveButDead] stale
+     * coloring. `null` means "no reported timestamp known yet" -- renderers should show
+     * "Waiting for data" rather than fabricate a value.
+     */
     val lastUpdatedMs: Long?,
     val accuracyMeters: Float?,
     val isOwned: Boolean,
@@ -1123,7 +1133,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             trackerName = trackerName,
             latitude = point.latitude,
             longitude = point.longitude,
-            lastUpdatedMs = point.lastUpdatedMs,
+            lastUpdatedMs = TrackerLastReportedAtPolicy.resolve(
+                trackerId = trackerId,
+                runtime = state.runtime,
+                resolverLastUpdatedMs = point.lastUpdatedMs,
+            ),
             accuracyMeters = point.accuracyMeters,
             isOwned = tracker?.isOwner() == true,
             serverMetadataUpdatedAtMs = tracker?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs),

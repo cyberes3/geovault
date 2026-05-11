@@ -23,15 +23,14 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.geovault.common.ui.time.rememberNowMs
 import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
 import com.geovault.tracker.ui.TrackerListDateTimeFormat
 import com.geovault.tracker.ui.TrackerPointTimestamps
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -99,14 +98,7 @@ private fun GroupMemberCard(
     onViewInList: (() -> Unit)?,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    var staleEvalTick by remember(row.trackerId) { mutableStateOf(0) }
-    LaunchedEffect(row.trackerId) {
-        while (true) {
-            delay(20_000L)
-            staleEvalTick++
-        }
-    }
-    val nowMs = System.currentTimeMillis() + (staleEvalTick and 0)
+    val nowMs by rememberNowMs()
     val t = row.tracker
     val lastDataMs = t?.let(TrackerPointTimestamps::lastPointDataMs)
     val serverUpdatedAtMs = t?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs)

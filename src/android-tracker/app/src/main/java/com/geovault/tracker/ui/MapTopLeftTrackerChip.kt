@@ -18,7 +18,6 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,11 +40,12 @@ import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultInstallLongPressTooltip
 import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.time.rememberNowMs
 import com.geovault.tracker.R
 import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipText
 import com.geovault.tracker.presentation.TrackerMapTopLeftChipUiModel
-import kotlinx.coroutines.delay
+import com.geovault.tracker.ui.time.mapElapsedAgoText
 
 @Composable
 fun MapTopLeftTrackerChip(
@@ -146,16 +146,7 @@ fun MapTopLeftTrackerChip(
                     model.subtitle?.let { subtitle ->
                         when (subtitle) {
                             is TrackerMapTopLeftChipText.RelativeLastData -> {
-                                var staleEvalTick by remember(subtitle.lastDataEpochMs) {
-                                    mutableStateOf(0)
-                                }
-                                LaunchedEffect(subtitle.lastDataEpochMs) {
-                                    while (true) {
-                                        delay(20_000L)
-                                        staleEvalTick++
-                                    }
-                                }
-                                val nowMs = System.currentTimeMillis() + (staleEvalTick and 0)
+                                val nowMs by rememberNowMs()
                                 val warnStale = ActiveButDeadTrackerPolicy.isActiveButDead(
                                     nowMs = nowMs,
                                     updatedAtMs = subtitle.serverMetadataUpdatedAtMs,
@@ -167,7 +158,7 @@ fun MapTopLeftTrackerChip(
                                     MaterialTheme.colors.onPrimary
                                 }
                                 Text(
-                                    text = MapFormatLastUpdatedText(subtitle.lastDataEpochMs),
+                                    text = mapElapsedAgoText(subtitle.lastDataEpochMs, nowMs),
                                     color = subtitleColor,
                                     fontSize = 12.sp,
                                     lineHeight = subtitleLineHeight,

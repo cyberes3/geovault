@@ -5,7 +5,6 @@ import android.graphics.Rect
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,9 +31,9 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +70,7 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.time.rememberNowMs
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.TrackerParamsSeed
 import com.geovault.tracker.R
@@ -81,7 +81,7 @@ import com.geovault.tracker.presentation.HomeLayoutSizingPolicy
 import com.geovault.tracker.presentation.HomeUiState
 import com.geovault.tracker.presentation.HomeViewModel
 import com.geovault.tracker.services.TrackingUiStatus
-import kotlinx.coroutines.delay
+import com.geovault.tracker.ui.time.HomeElapsedTimeFormat
 
 private const val FEET_PER_METER = 3.28084f
 private const val MAX_DISPLAY_ACCURACY_FEET = 1500f
@@ -350,7 +350,7 @@ private fun TrackingContainer(
     onParams: () -> Unit,
     onManualPoint: () -> Unit,
 ) {
-    val nowMs by rememberHomeTicker(isEnabled = state.isTracking)
+    val nowMs by rememberNowMs()
     val statusText = if (isPreparingToTrack) stringResource(R.string.preparing) else stringResource(homeStatusLabelRes(state.trackingUiStatus))
     val trackerName = if (state.selectedTrackerDisplayName.isBlank()) {
         stringResource(R.string.no_tracker_selected).uppercase()
@@ -425,11 +425,11 @@ private fun TrackingContainer(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_elapsed), formatDurationMs(state.isTracking, state.sessionStartTimeMs))
+                    StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_elapsed), formatDurationMs(state.isTracking, state.sessionStartTimeMs, nowMs))
                     StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_sent), if (state.isTracking) state.pointsSentThisSession.toString() else "\u2014")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_last), formatLastSentAgo(state, nowMs))
+                    StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_last), formatHomeLastAgo(state, nowMs))
                     StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_queued), if (state.isTracking) state.queuedPointsVisible.toString() else "\u2014")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -608,22 +608,6 @@ private fun ServerFailureOverlay(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun rememberHomeTicker(isEnabled: Boolean): androidx.compose.runtime.State<Long> {
-    val now = remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(isEnabled) {
-        if (!isEnabled) {
-            now.value = System.currentTimeMillis()
-            return@LaunchedEffect
-        }
-        while (true) {
-            now.value = System.currentTimeMillis()
-            delay(1000L)
-        }
-    }
-    return now
-}
-
 private fun openLocationPermissionSettings(context: android.content.Context) {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
         data = Uri.parse("package:${context.packageName}")
@@ -676,28 +660,18 @@ private fun homeStatusColor(status: TrackingUiStatus, isPreparingToTrack: Boolea
     }
 }
 
-private fun formatDurationMs(isTracking: Boolean, sessionStartTimeMs: Long): String {
+private fun formatDurationMs(isTracking: Boolean, sessionStartTimeMs: Long, nowMs: Long): String {
     if (!isTracking || sessionStartTimeMs <= 0L) return "\u2014"
-    val totalSec = ((System.currentTimeMillis() - sessionStartTimeMs) / 1000L).coerceAtLeast(0L)
+    val totalSec = ((nowMs - sessionStartTimeMs) / 1000L).coerceAtLeast(0L)
     val hours = totalSec / 3600L
     val minutes = (totalSec % 3600L) / 60L
     val seconds = totalSec % 60L
     return "%02d:%02d:%02d".format(hours, minutes, seconds)
 }
 
-private fun formatLastSentAgo(state: HomeUiState, nowMs: Long): String {
+private fun formatHomeLastAgo(state: HomeUiState, nowMs: Long): String {
     if (!state.isTracking) return "\u2014"
-    val lastPointSentAtMs = state.lastPointSentAtMs
-    if (lastPointSentAtMs <= 0L) return "now"
-    val elapsedMs = nowMs - lastPointSentAtMs
-    val raw = when {
-        elapsedMs < 10_000L -> "now"
-        elapsedMs < DateUtils.MINUTE_IN_MILLIS -> "${elapsedMs / DateUtils.SECOND_IN_MILLIS}s"
-        elapsedMs < DateUtils.HOUR_IN_MILLIS -> "${elapsedMs / DateUtils.MINUTE_IN_MILLIS}m"
-        elapsedMs < DateUtils.DAY_IN_MILLIS -> "${elapsedMs / DateUtils.HOUR_IN_MILLIS}h"
-        else -> "${elapsedMs / DateUtils.DAY_IN_MILLIS}d"
-    }
-    return if (raw == "now") raw else "-$raw"
+    return HomeElapsedTimeFormat.format(state.lastPointSentAtMs.takeIf { it > 0L }, nowMs)
 }
 
 private fun formatDistanceText(

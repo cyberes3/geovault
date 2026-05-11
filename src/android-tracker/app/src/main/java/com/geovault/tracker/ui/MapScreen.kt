@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.geovault.common.ui.time.rememberNowMs
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
 import com.geovault.common.maps.core.GeoVaultMapPaddingDp
@@ -112,6 +113,7 @@ import com.geovault.tracker.presentation.TrackerMapMyLocationFabPolicy
 import com.geovault.tracker.presentation.TrackerMapUserLocationInput
 import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
 import com.geovault.tracker.presentation.TrackerMapViewModel
+import com.geovault.tracker.ui.time.mapElapsedAgoText
 import org.maplibre.android.geometry.LatLng
 import java.util.Locale
 
@@ -945,15 +947,8 @@ private fun MapTrackerSelectionPanel(
                     clipboardHelper.copyText(latLon, label = "Coordinates")
                 },
             )
-            var staleEvalTick by remember(model.trackerId) { mutableStateOf(0) }
-            LaunchedEffect(model.trackerId) {
-                while (true) {
-                    delay(20_000L)
-                    staleEvalTick++
-                }
-            }
-            val nowMs = System.currentTimeMillis() + (staleEvalTick and 0)
-            val lastUpdatedText = MapFormatLastUpdatedTextOrWaiting(model.lastUpdatedMs)
+            val nowMs by rememberNowMs()
+            val lastUpdatedText = mapElapsedAgoText(model.lastUpdatedMs, nowMs)
             val warnStale = model.lastUpdatedMs != null &&
                 ActiveButDeadTrackerPolicy.isActiveButDead(
                     nowMs = nowMs,
