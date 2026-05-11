@@ -106,13 +106,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                         return@withLock false
                     }
                     val ok = measureLaunchTransportReachable()
-                    if (ok) {
-                        _state.update { it.copy(isServerAccessible = true) }
-                        Log.d(TAG, "transport_probe_validated_network reachable=true")
-                        true
-                    } else {
-                        false
+                    if (!ok) return@withLock false
+                    _state.update { it.copy(isServerAccessible = true) }
+                    Log.d(TAG, "transport_probe_validated_network reachable=true")
+                    // Launch bootstrap already runs resume-scale I/O; avoid doubling work mid-flight.
+                    if (activeLaunchBootstrap?.isActive == true) {
+                        Log.d(TAG, "transport_probe_validated_network skip_resume launch_bootstrap_active")
+                        return@withLock false
                     }
+                    true
                 }
                 if (runBootstrap) {
                     sessionBootstrap.runResumeBootstrap()
@@ -377,8 +379,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 try {
                     val transportReachable = measureLaunchTransportReachableExclusive()
                     Log.d(TAG, "transport_probe_launch reachable=$transportReachable")
-                    val outcome = sessionBootstrap.runLaunchBootstrap()
+                    // Apply immediately so offline overlay / notifier match transport (do not wait for launch I/O).
                     _state.update { it.copy(isServerAccessible = transportReachable) }
+                    val outcome = sessionBootstrap.runLaunchBootstrap()
                     outcome
                 } finally {
                     launchBootstrapMutex.withLock {
@@ -401,9 +404,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         resumeBootstrapJob = viewModelScope.launch {
             startupRefreshJob?.join()
             logConfiguredServerHost("transport_probe_on_resume_pre")
-            val reachable = measureLaunchTransportReachableExclusive()
-            _state.update { it.copy(isServerAccessible = reachable) }
-            Log.d(TAG, "transport_probe_on_resume reachable=$reachable")
+            if (!_state.value.isServerAccessible) {
+                val reachable = measureLaunchTransportReachableExclusive()
+                _state.update { it.copy(isServerAccessible = reachable) }
+                Log.d(TAG, "transport_probe_on_resume reachable=$reachable")
+            } else {
+                // Avoid a flaky probe undoing a validated-network recovery that beat this coroutine.
+                Log.d(TAG, "transport_probe_on_resume skip_probe already_accessible")
+            }
             sessionBootstrap.runResumeBootstrap()
         }
     }
