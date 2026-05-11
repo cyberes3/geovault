@@ -126,6 +126,7 @@ fun MapScreen(
     modifier: Modifier = Modifier,
     isActive: Boolean = true,
     isAuthenticated: Boolean,
+    isServerAccessible: Boolean,
     serverUrl: String,
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
@@ -167,6 +168,7 @@ fun MapScreen(
                     map = map,
                     viewModel = mapViewModel,
                     isActive = isActive,
+                    isServerAccessible = isServerAccessible,
                     onHostNavigationRequested = onHostNavigationRequested,
                     onRequestTrackerParams = onRequestTrackerParams,
                 )
@@ -181,6 +183,7 @@ private fun TrackerMapAuthenticatedContent(
     map: GeoVaultMainMap,
     viewModel: TrackerMapViewModel,
     isActive: Boolean,
+    isServerAccessible: Boolean,
     onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
@@ -539,6 +542,7 @@ private fun TrackerMapAuthenticatedContent(
                 showDefaultSourceToggle = false,
                 includeDefaultFabColumnPadding = false,
                 mapPaddingDp = GeoVaultMapPaddingDp(),
+                suppressMapLoadErrorDialog = !isServerAccessible,
             )
 
             val effectiveDisplayedTrackerId = state.displayedTrackerId

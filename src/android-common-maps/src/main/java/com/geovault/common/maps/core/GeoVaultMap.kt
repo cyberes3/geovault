@@ -67,6 +67,7 @@ fun GeoVaultStandardMapView(
     mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
     popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx = GeoVaultMapPopupAvoidanceInsetsPx(),
     showScaleBar: Boolean = false,
+    suppressMapLoadErrorDialog: Boolean = false,
 ) {
     GeoVaultMapHost(
         modifier = modifier,
@@ -77,6 +78,7 @@ fun GeoVaultStandardMapView(
         mapPaddingDp = mapPaddingDp,
         popupAvoidanceInsetsPx = popupAvoidanceInsetsPx,
         showScaleBar = showScaleBar,
+        suppressMapLoadErrorDialog = suppressMapLoadErrorDialog,
     )
 }
 
@@ -89,6 +91,7 @@ fun GeoVaultMainMapView(
     mapPaddingDp: GeoVaultMapPaddingDp = GeoVaultMapPaddingDp(),
     popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx = GeoVaultMapPopupAvoidanceInsetsPx(),
     showScaleBar: Boolean = false,
+    suppressMapLoadErrorDialog: Boolean = false,
 ) {
     GeoVaultMapHost(
         modifier = modifier,
@@ -99,6 +102,7 @@ fun GeoVaultMainMapView(
         mapPaddingDp = mapPaddingDp,
         popupAvoidanceInsetsPx = popupAvoidanceInsetsPx,
         showScaleBar = showScaleBar,
+        suppressMapLoadErrorDialog = suppressMapLoadErrorDialog,
     )
 }
 
@@ -117,6 +121,7 @@ private fun GeoVaultMapHost(
     mapPaddingDp: GeoVaultMapPaddingDp,
     popupAvoidanceInsetsPx: GeoVaultMapPopupAvoidanceInsetsPx,
     showScaleBar: Boolean,
+    suppressMapLoadErrorDialog: Boolean,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
@@ -132,6 +137,7 @@ private fun GeoVaultMapHost(
     val currentMap by rememberUpdatedState(map)
     val mapStateBundle = remember { Bundle() }
     val baselineStreetNight = remember { mutableStateOf<Boolean?>(null) }
+    var previousSuppressMapLoadErrorDialog by remember { mutableStateOf<Boolean?>(null) }
 
     val effectivePaddingPx = remember(density, includeDefaultFabColumnPadding, mapPaddingDp) {
         GeoVaultMapPaddingPolicy(
@@ -164,6 +170,20 @@ private fun GeoVaultMapHost(
         if (previous != streetNightForBasemap) {
             baselineStreetNight.value = streetNightForBasemap
             currentMap.reapplyBasemapAfterUiModeChange()
+        }
+    }
+
+    LaunchedEffect(suppressMapLoadErrorDialog, currentMap) {
+        val wasSuppressed = previousSuppressMapLoadErrorDialog
+        previousSuppressMapLoadErrorDialog = suppressMapLoadErrorDialog
+
+        if (suppressMapLoadErrorDialog) {
+            currentMap.dismissMapErrorNotice()
+        } else if (wasSuppressed == true) {
+            // Server just became reachable again; avoid showing a stale load-error dialog before
+            // the map has a chance to fetch tiles over the restored transport.
+            currentMap.dismissMapErrorNotice()
+            currentMap.retryMapSourceLoad()
         }
     }
 
@@ -221,7 +241,7 @@ private fun GeoVaultMapHost(
     }
 
     val currentMapErrorNotice = mapErrorNotice
-    if (currentMapErrorNotice != null) {
+    if (!suppressMapLoadErrorDialog && currentMapErrorNotice != null) {
         GeoVaultMapErrorDialog(
             notice = currentMapErrorNotice,
             onDismiss = { currentMap.dismissMapErrorNotice() },

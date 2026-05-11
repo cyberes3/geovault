@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.net.GeoVaultValidatedInternetNotifier
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.tracker.BuildConfig
@@ -35,6 +36,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -71,6 +73,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     )
 
     private val launchBootstrapMutex = Mutex()
+    private val transportProbeMutex = Mutex()
     private var activeLaunchBootstrap: Deferred<TrackerBootstrapOutcome>? = null
 
     private val _state = MutableStateFlow(MainScreenState())
@@ -92,8 +95,30 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var startupRefreshJob: Job? = null
     private var startupSelectedTrackerGeometryHandled = false
     private var startupSelectedTrackerGeometryJob: Job? = null
-    private var serverAccessibilityRefreshJob: Job? = null
+    private var resumeBootstrapJob: Job? = null
     private var preparingStartJob: Job? = null
+
+    private val validatedInternetNotifier =
+        GeoVaultValidatedInternetNotifier(app) {
+            viewModelScope.launch {
+                val runBootstrap = transportProbeMutex.withLock {
+                    if (!_state.value.isAuthenticated || _state.value.isServerAccessible) {
+                        return@withLock false
+                    }
+                    val ok = measureLaunchTransportReachable()
+                    if (ok) {
+                        _state.update { it.copy(isServerAccessible = true) }
+                        Log.d(TAG, "transport_probe_validated_network reachable=true")
+                        true
+                    } else {
+                        false
+                    }
+                }
+                if (runBootstrap) {
+                    sessionBootstrap.runResumeBootstrap()
+                }
+            }
+        }
 
     init {
         viewModelScope.launch {
@@ -102,6 +127,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     StartTrackingPreparationPolicy.shouldClearForRuntime(runtime)
                 ) {
                     _state.update { it.copy(isPreparingToTrack = false) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            state.collect { s ->
+                if (s.isAuthenticated && !s.isServerAccessible) {
+                    validatedInternetNotifier.start()
+                } else {
+                    validatedInternetNotifier.stop()
                 }
             }
         }
@@ -182,7 +216,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (!_state.value.isAuthenticated) {
             launchVersionCheckIfNeeded()
         }
-        refreshServerAccessibilityOnResume()
+        scheduleResumeBootstrapAfterStartup()
     }
 
     fun onAuthServerUrlChanged(url: String) {
@@ -328,7 +362,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Runs user status refresh plus launch-scale bootstrap once; concurrent callers await the same work.
+     * Runs launch-time transport reachability (unauthenticated `/api/health/`) plus launch-scale
+     * bootstrap once; concurrent callers await the same work.
      * Safe to call from [com.geovault.tracker.ui.MainScreen] and from internal startup paths.
      */
     suspend fun runAuthenticatedLaunchBootstrap(): TrackerBootstrapOutcome = coroutineScope {
@@ -340,9 +375,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             val created = async {
                 try {
-                    val userStatusReachable = refreshUserStatusEndpointReachable()
+                    val transportReachable = measureLaunchTransportReachableExclusive()
+                    Log.d(TAG, "transport_probe_launch reachable=$transportReachable")
                     val outcome = sessionBootstrap.runLaunchBootstrap()
-                    _state.update { it.copy(isServerAccessible = userStatusReachable) }
+                    _state.update { it.copy(isServerAccessible = transportReachable) }
                     outcome
                 } finally {
                     launchBootstrapMutex.withLock {
@@ -359,27 +395,38 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         deferred.await()
     }
 
-    private fun refreshServerAccessibilityOnResume() {
+    private fun scheduleResumeBootstrapAfterStartup() {
         if (!_state.value.isAuthenticated) return
-        if (serverAccessibilityRefreshJob?.isActive == true) return
-        serverAccessibilityRefreshJob = viewModelScope.launch {
+        resumeBootstrapJob?.cancel()
+        resumeBootstrapJob = viewModelScope.launch {
             startupRefreshJob?.join()
-            val userStatusReachable = refreshUserStatusEndpointReachable()
+            logConfiguredServerHost("transport_probe_on_resume_pre")
+            val reachable = measureLaunchTransportReachableExclusive()
+            _state.update { it.copy(isServerAccessible = reachable) }
+            Log.d(TAG, "transport_probe_on_resume reachable=$reachable")
             sessionBootstrap.runResumeBootstrap()
-            _state.update { it.copy(isServerAccessible = userStatusReachable) }
         }
     }
 
     /**
-     * Mirrors SPA health against `/api/user/status/` via [GeovaultAuthManager.fetchUserStatusWithResult].
-     * HTTP 401 still counts as reachable (host answered); [refreshAuthState] may flip signed-in state afterward.
+     * Unauthenticated GET to `/api/health/` — any HTTP response means the host was reached.
+     * Runs once during authenticated launch bootstrap only (see [runAuthenticatedLaunchBootstrap]).
      */
-    private suspend fun refreshUserStatusEndpointReachable(): Boolean =
+    private suspend fun measureLaunchTransportReachable(): Boolean =
         suspendCancellableCoroutine { continuation ->
-            GeovaultAuthManager.fetchUserStatusWithResult(app) { result ->
-                continuation.resume(result.isUserStatusEndpointReachable)
+            GeovaultAuthManager.probeServerTransportReachable(app) { reachable ->
+                continuation.resume(reachable)
             }
         }
+
+    private suspend fun measureLaunchTransportReachableExclusive(): Boolean =
+        transportProbeMutex.withLock { measureLaunchTransportReachable() }
+
+    private fun logConfiguredServerHost(reason: String) {
+        val raw = authController.getConfiguredServerUrlOrPeerDefault().trim()
+        val host = runCatching { java.net.URI(raw).host }.getOrNull().orEmpty()
+        Log.d(TAG, "$reason configuredHost=$host len=${raw.length}")
+    }
 
     private suspend fun tryStartTrackingOnLaunch() {
         if (!ensureStartupTrackingPreflight()) return
@@ -442,12 +489,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         startupRefreshJob = null
         startupSelectedTrackerGeometryJob?.cancel()
         startupSelectedTrackerGeometryJob = null
-        serverAccessibilityRefreshJob?.cancel()
-        serverAccessibilityRefreshJob = null
+        resumeBootstrapJob?.cancel()
+        resumeBootstrapJob = null
         preparingStartJob?.cancel()
         preparingStartJob = null
         _state.update {
             it.copy(
+                isServerAccessible = true,
                 updatePrompt = null,
                 updateReleaseUrl = null,
                 mapRecoveryRequestToken = 0L,
@@ -478,5 +526,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         trackerManagementRepository.loadTrackers(forceRefresh = true)
         _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
         return false
+    }
+
+    override fun onCleared() {
+        validatedInternetNotifier.stop()
+        super.onCleared()
+    }
+
+    private companion object {
+        private const val TAG = "MainScreenViewModel"
     }
 }

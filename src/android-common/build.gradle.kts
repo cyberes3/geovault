@@ -111,6 +111,7 @@ dependencies {
     // Plain JVM unit tests hit android.util.Log from auth code; Robolectric provides a shadowed
     // Android environment (same pattern as :android-common-maps unit tests).
     testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

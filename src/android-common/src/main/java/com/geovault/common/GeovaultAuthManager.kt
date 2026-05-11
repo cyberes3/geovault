@@ -7,6 +7,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsIntent
 import com.geovault.common.auth.GeoVaultAuthStore
+import com.geovault.common.net.GeoVaultServerTransportProbe
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -460,6 +461,14 @@ object GeovaultAuthManager {
                 }
             }
         })
+    }
+
+    /**
+     * Plain HTTP/TLS reachability to the configured server URL (no auth headers, no token refresh).
+     * For launch-time connectivity UX only; session/auth flows use other APIs.
+     */
+    fun probeServerTransportReachable(context: Context, callback: (Boolean) -> Unit) {
+        GeoVaultServerTransportProbe.probe(getServerUrl(context), callback)
     }
 
     private fun decodeAuthTokenPayload(payload: String): AuthTokenPayload? {

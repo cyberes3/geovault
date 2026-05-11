@@ -376,6 +376,7 @@ fun MainScreen(
                                 .zIndex(if (mapActive) 1f else 0f),
                             isActive = mapActive,
                             isAuthenticated = state.isAuthenticated,
+                            isServerAccessible = state.isServerAccessible,
                             serverUrl = state.serverUrl,
                             onAuthServerUrlChanged = onAuthServerUrlChanged,
                             onAuthConnect = onAuthConnect,
