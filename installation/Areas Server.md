@@ -65,7 +65,7 @@ Then, set up the Python server:
 
 ```shell
 cd src/areas-server
-python3 -m venv venv
+python3.13 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 

@@ -5,12 +5,12 @@ Create or update the OAuth2 Applications used by the GeoVault Android apps
 Run after migrations so the Android apps can use the authorization code + PKCE flow.
 Idempotent: creates/updates one app per Android app so the Authorized OAuth Applications list
 lists each app by name.
+
+Applications are always stored with no owner user (null). Existing rows that still have an owner
+are updated to clear it.
 """
 from django.core.management.base import BaseCommand
-from django.contrib.auth import get_user_model
 from oauth2_provider.models import Application
-
-User = get_user_model()
 
 ANDROID_APPS = (
     {
@@ -56,10 +56,13 @@ ANDROID_APPS = (
 )
 
 
-def _ensure_app(user, client_id, name, redirect_uris):
+def _ensure_app(client_id, name, redirect_uris):
     app = Application.objects.filter(client_id=client_id).first()
     if app:
         updated = []
+        if app.user_id is not None:
+            app.user = None
+            updated.append("user")
         if app.redirect_uris.strip() != redirect_uris.strip():
             app.redirect_uris = redirect_uris
             updated.append("redirect_uris")
@@ -75,7 +78,7 @@ def _ensure_app(user, client_id, name, redirect_uris):
         return False, "up to date"
     Application.objects.create(
         name=name,
-        user=user,
+        user=None,
         client_id=client_id,
         client_type=Application.CLIENT_PUBLIC,
         authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
@@ -89,18 +92,8 @@ class Command(BaseCommand):
     help = "Create or update OAuth2 applications for GeoVault Android (places, uploader, tracker, survey, NGS)."
 
     def handle(self, *args, **options):
-        user = User.objects.filter(is_superuser=True).order_by("pk").first()
-        if not user:
-            user = User.objects.order_by("pk").first()
-        if not user:
-            self.stdout.write(
-                self.style.ERROR("No user found. Create a user (e.g. run migrations and create a superuser) first.")
-            )
-            return
-
         for spec in ANDROID_APPS:
             changed, msg = _ensure_app(
-                user,
                 spec["client_id"],
                 spec["name"],
                 spec["redirect_uris"],

@@ -26,7 +26,7 @@ systemctl enable --now postgresql
 ## Install Required Packages
 
 ```shell
-sudo apt install python3.13 python3.13-dev python3-venv python3-gdal git
+sudo apt install python3.13 python3.13-dev python3.13-venv python3-gdal git
 ```
 
 If your system doesn't provide Python 3.13, add this repo:
@@ -51,16 +51,30 @@ adduser --system geovault --home /srv/geovault
 ```shell
 cd /srv/geovault
 git clone https://git.evulid.cc/cyberes/geovault.git
+cd geovault/src
 ```
 
-```shell
-cd geovault/src/backend
-python3 -m venv venv
-./venv/bin/pip install -r requirements.txt
-```
+From here on, run the remaining shell commands in this guide from the repository `src/` directory (`geovault/src` inside the clone).
 
 ```shell
-./generate-map-fonts.sh
+python3.13 -m venv backend/venv
+backend/venv/bin/pip install -r backend/requirements.txt
+```
+
+If you get errors such as this when creating the venv:
+
+```
+Error processing line 1 of /usr/lib/python3/dist-packages/distutils-precedence.pth:
+  Traceback (most recent call last):
+    File "<frozen site>", line 213, in addpackage
+    File "<string>", line 1, in <module>
+  ModuleNotFoundError: No module named '_distutils_hack'
+```
+
+Ignore it and then run:
+```shell
+curl -sS https://bootstrap.pypa.io/get-pip.py | backend/venv/bin/python3.13
+backend/venv/bin/python3.13 -m pip install --upgrade pip setuptools wheel
 ```
 
 ## NodeJS
@@ -74,13 +88,21 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-ge
 Install the GeoJSON parser:
 
 ```shell
-cd src/backend/geo_lib/processing/togeojson/ && npm install
+npm install --prefix backend/geo_lib/processing/togeojson
 ```
 
 Build the frontend:
 
 ```shell
-cd src/ && ./build-frontend.sh
+./build-frontend.sh
+```
+
+The `build-frontend.sh` script changes into each frontend directory on its own.
+
+Generate fonts for the vector map styles:
+
+```shell
+./backend/generate-map-fonts.sh
 ```
 
 ## MaxMind
@@ -94,7 +116,7 @@ required, but see [MaxMind.md](https://git.evulid.cc/cyberes/geovault/src/branch
 Copy the default config file:
 
 ```shell
-cp config.example.yaml config.yaml
+cp backend/config.example.yaml backend/config.yaml
 ```
 
 Then fill in your values in the config. Important values:
@@ -102,12 +124,13 @@ Then fill in your values in the config. Important values:
 - `site.domain`
 - `security.secret_key`
 - `security.additional_allowed_hosts` (if using an intermediate reverse proxy)
+- If you see **CSRF verification failed (403)** on plain HTTP (for example `http://your-server:8000` with `debug: false`), set `security.secure_cookies: false` until you terminate TLS in front of Django, and list any non-default browser URL under `security.additional_csrf_trusted_origins` (for example `http://203.0.113.4:8000`).
 - Database password
 - Email settings
 
 ## Database
 
-1. Generate a secure password via `pwgen 32 1`
+1. Generate a secure password via `pwgen 64 1`
 2. `sudo -u postgres psql`
 3. `CREATE DATABASE geovault WITH ENCODING 'UTF8' LC_COLLATE='C.utf8' LC_CTYPE='C.utf8' TEMPLATE=template0;`
     - If you have locale issues, find the ones available on your system via: `locale -a`
@@ -126,8 +149,8 @@ To exit the SQL console, enter `\q`.
 Once the database is ready, create the tables:
 
 ```shell
-./venv/bin/python manage.py migrate --noinput
-./venv/bin/python manage.py ensure_oauth2_app
+backend/venv/bin/python backend/manage.py migrate --noinput
+backend/venv/bin/python backend/manage.py ensure_oauth2_app
 ```
 
 If you get the error `django.db.utils.ProgrammingError: permission denied to create extension "postgis"` then you forgot
@@ -136,8 +159,8 @@ to create the PostGIS extension in the database.
 Finally, set the correct permissions:
 
 ```shell
-sudo chown geovault:nogroup /srv/geovault
-sudo chmod 600 /srv/geovault
+sudo chown -R geovault:nogroup /srv/geovault
+sudo chmod 700 /srv/geovault
 ```
 
 ## Nginx
@@ -147,14 +170,14 @@ Example Nginx config file is located at `geovault nginx.conf`.
 ## Systemd
 
 ```shell
-cp installation/geovault.service /etc/systemd/system/geovault.service
-cp installation/geovault-celery.service /etc/systemd/system/geovault-celery.service
-cp installation/geovault-celery-beat.service /etc/systemd/system/geovault-celery-beat.service
+cp ../installation/geovault.service /etc/systemd/system/geovault.service
+cp ../installation/geovault-celery.service /etc/systemd/system/geovault-celery.service
+cp ../installation/geovault-celery-beat.service /etc/systemd/system/geovault-celery-beat.service
 systemctl daemon-reload
 systemctl enable --now geovault-celery geovault-celery-beat geovault
-systemctl status geovault-celery
-systemctl status geovault-celery-beat
-systemctl status geovault
+systemctl status --no-pager geovault-celery
+systemctl status --no-pager geovault-celery-beat
+systemctl status --no-pager geovault
 ```
 
 ## Areas Server
@@ -193,4 +216,4 @@ the first user will be automatically set as the admin and given the appropriate 
 
 ## Android App
 
-See README in `src/android`
+See README in `android`

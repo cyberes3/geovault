@@ -60,13 +60,20 @@ class ConfigLoader:
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 self.config = yaml.safe_load(f) or {}
-            logger.info(f"Loaded configuration from {self.config_path}")
-        except yaml.YAMLError as e:
-            logger.error(f"Error parsing YAML config file {self.config_path}: {e}")
-            self.config = {}
-        except Exception as e:
-            logger.error(f"Error loading config file {self.config_path}: {e}")
-            self.config = {}
+        except yaml.YAMLError:
+            logger.exception(
+                "Error parsing YAML config file %s; fix the file before starting the server.",
+                self.config_path,
+            )
+            raise
+        except OSError:
+            logger.exception(
+                "Error reading config file %s; fix permissions or path before starting the server.",
+                self.config_path,
+            )
+            raise
+
+        logger.info(f"Loaded configuration from {self.config_path}")
 
     def get(self, key_path: str, default: Any = None) -> Any:
         """

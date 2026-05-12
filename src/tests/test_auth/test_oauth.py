@@ -661,7 +661,7 @@ class TestEnsureOAuth2AppCommand(TestCase):
 
         out = StringIO()
         call_command("ensure_oauth2_app", stdout=out)
-        self.assertEqual(Application.objects.count(), 4)
+        self.assertEqual(Application.objects.count(), 5)
         places = Application.objects.get(client_id="geovault-android-places")
         self.assertEqual(places.name, "GeoVault Android Places")
         self.assertEqual(
@@ -686,8 +686,18 @@ class TestEnsureOAuth2AppCommand(TestCase):
             set(survey.redirect_uris.strip().split()),
             {"com.geovault.survey://oauth/callback", "com.geovault.survey.debug://oauth/callback"},
         )
-        for app in (places, uploader, tracker, survey):
+        ngs = Application.objects.get(client_id="geovault-android-ngs")
+        self.assertEqual(ngs.name, "GeoVault Android NGS Navigator")
+        self.assertEqual(
+            set(ngs.redirect_uris.strip().split()),
+            {
+                "com.geovault.ngsnavigator://oauth/callback",
+                "com.geovault.ngsnavigator.debug://oauth/callback",
+            },
+        )
+        for app in (places, uploader, tracker, survey, ngs):
             self.assertFalse(app.skip_authorization, f"{app.client_id} should show authorize screen")
+            self.assertIsNone(app.user)
         out_val = out.getvalue()
         self.assertTrue(
             "created" in out_val or "Created" in out_val or "up to date" in out_val,
@@ -700,11 +710,12 @@ class TestEnsureOAuth2AppCommand(TestCase):
 
         call_command("ensure_oauth2_app")
         call_command("ensure_oauth2_app")
-        self.assertEqual(Application.objects.count(), 4)
+        self.assertEqual(Application.objects.count(), 5)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-places").count(), 1)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-uploader").count(), 1)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-tracker").count(), 1)
         self.assertEqual(Application.objects.filter(client_id="geovault-android-survey").count(), 1)
+        self.assertEqual(Application.objects.filter(client_id="geovault-android-ngs").count(), 1)
 
     def test_updates_redirect_uris_if_changed(self):
         """If app exists but redirect_uris differ, command updates them."""
@@ -725,17 +736,48 @@ class TestEnsureOAuth2AppCommand(TestCase):
         self.assertIn("com.geovault.places://oauth/callback", app.redirect_uris)
         self.assertIn("com.geovault.places.debug://oauth/callback", app.redirect_uris)
         self.assertFalse(app.skip_authorization, "Command should set skip_authorization=False")
+        self.assertIsNone(app.user)
 
-    def test_fails_without_user(self):
-        """Command reports error when no user exists in the database."""
+    def test_creates_without_user(self):
+        """Command creates OAuth applications when no user exists (owner user is null)."""
+        from django.core.management import call_command
+
+        User.objects.all().delete()
+        call_command("ensure_oauth2_app")
+        self.assertEqual(Application.objects.count(), 5)
+        for client_id in (
+            "geovault-android-places",
+            "geovault-android-uploader",
+            "geovault-android-tracker",
+            "geovault-android-survey",
+            "geovault-android-ngs",
+        ):
+            app = Application.objects.get(client_id=client_id)
+            self.assertIsNone(app.user)
+
+    def test_clears_existing_owner_when_other_fields_already_match(self):
+        """If an app already matches name/redirects but has an owner, command clears the owner."""
         from django.core.management import call_command
         from io import StringIO
 
-        User.objects.all().delete()
+        from users.management.commands.ensure_oauth2_app import ANDROID_APPS
+
+        spec = ANDROID_APPS[0]
+        Application.objects.create(
+            name=spec["name"],
+            user=self.user,
+            client_id=spec["client_id"],
+            client_type=Application.CLIENT_PUBLIC,
+            authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+            redirect_uris=spec["redirect_uris"],
+            skip_authorization=False,
+        )
         out = StringIO()
         call_command("ensure_oauth2_app", stdout=out)
-        self.assertEqual(Application.objects.count(), 0)
-        self.assertIn("No user found", out.getvalue())
+        self.assertEqual(Application.objects.count(), 5)
+        places = Application.objects.get(client_id=spec["client_id"])
+        self.assertIsNone(places.user)
+        self.assertIn("updated", out.getvalue())
 
 
 class TestProtectedOAuthApplications(TestCase):

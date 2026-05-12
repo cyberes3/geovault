@@ -430,23 +430,37 @@ SECURE_HSTS_PRELOAD = True
 # When behind a reverse proxy, Django should use the X-Forwarded-Host header
 # to determine the correct host for building absolute URLs (e.g., in emails)
 USE_X_FORWARDED_HOST = True
-# Use X-Forwarded-Proto to determine if the original request was HTTPS
-USE_X_FORWARDED_PROTO = True
+# When true, request.is_secure() respects X-Forwarded-Proto (set nginx:
+# proxy_set_header X-Forwarded-Proto $scheme;). Only use when clients cannot reach Django
+# directly with a spoofed header. Default: on when not DEBUG (typical production behind nginx).
+if config.get_bool('security.trust_x_forwarded_proto', not DEBUG):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # CSRF Protection Settings
-# CSRF_TRUSTED_ORIGINS is required in Django 4.0+ for HTTPS sites
-# Automatically derive from ALLOWED_HOSTS
-# Use https:// protocol for production (when not DEBUG), http:// for development
-protocol = 'https' if not DEBUG else 'http'
-CSRF_TRUSTED_ORIGINS = [f"{protocol}://{host}" for host in ALLOWED_HOSTS if host != '*']
+# CSRF_TRUSTED_ORIGINS must include the scheme+host (+ non-default port) browsers use
+# (Django 4.0+). Derive from ALLOWED_HOSTS using http vs https from security.secure_cookies
+# (defaults to HTTPS-only cookies when not DEBUG — fine behind TLS; use secure_cookies: false
+# for plain-HTTP bootstrap, e.g. http://server:8000).
+_secure_cookies = config.get_bool('security.secure_cookies', not DEBUG)
+CSRF_COOKIE_SECURE = _secure_cookies
+SESSION_COOKIE_SECURE = _secure_cookies
+
+if _secure_cookies:
+    _csrf_schemes = ('https',)
+else:
+    _csrf_schemes = ('http',)
+
+CSRF_TRUSTED_ORIGINS = [
+    f"{scheme}://{host}"
+    for scheme in _csrf_schemes
+    for host in ALLOWED_HOSTS
+    if host != '*'
+]
+CSRF_TRUSTED_ORIGINS += config.get_list('security.additional_csrf_trusted_origins', [])
 # In DEBUG, also trust Vite dev server origin (host:5173) so accessing via http://HOST:5173 works
 if DEBUG:
     CSRF_TRUSTED_ORIGINS += [f"http://{host}:5173" for host in ALLOWED_HOSTS if host != '*']
 
-# Cookie Security Settings (for production with HTTPS)
-# In production (when DEBUG=False), cookies should only be sent over HTTPS
-CSRF_COOKIE_SECURE = not DEBUG  # True in production, False in development
-SESSION_COOKIE_SECURE = not DEBUG  # True in production, False in development
 # SameSite prevents CSRF attacks while allowing normal usage
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'

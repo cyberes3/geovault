@@ -17,6 +17,18 @@ security:
   # Debug mode for development (set to false in production)
   debug: false
 
+  # When true (default: same as not debug), session/CSRF cookies use Secure (HTTPS only).
+  # Set to false for plain-HTTP installs (e.g. http://server:8000) to avoid CSRF failures.
+  # secure_cookies: true
+
+  # Trust X-Forwarded-Proto from your reverse proxy (nginx: proxy_set_header X-Forwarded-Proto $scheme;).
+  # Default: true when debug is false. Disable if Django is exposed directly to untrusted clients.
+  # trust_x_forwarded_proto: true
+
+  # Extra CSRF trusted origins (scheme+host[:port]) if the browser URL does not match site.domain
+  # additional_csrf_trusted_origins:
+  #   - http://192.168.1.10:8000
+
   # Additional hosts that can access the Django server
   # The primary host is always site.domain (see above).
   # Use this list for extra domains or reverse proxy IPs. For example, if
@@ -251,11 +263,6 @@ extensions:
     # URL of the self-hosted pwabuilder-google-play container.
     # If running in Docker, use the service name (e.g., http://pwabuilder:5858)
     pwa_builder_url: "http://pwabuilder:5858"
-
-  ngs_data:
-    # Serves NGS per-region .sqlite files for the NGS Navigator app (no website UI).
-    # Files are read from {BASE_DIR}/data/ngs_data (see ngs-navigator-android/server for generator).
-    enabled: true
 
   live_track:
     # Location tracking server for devices to publish live location tracks to.
