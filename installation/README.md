@@ -124,7 +124,6 @@ Then fill in your values in the config. Important values:
 - `site.domain`
 - `security.secret_key`
 - `security.additional_allowed_hosts` (if using an intermediate reverse proxy)
-- If you see **CSRF verification failed (403)** on plain HTTP (for example `http://your-server:8000` with `debug: false`), set `security.secure_cookies: false` until you terminate TLS in front of Django, and list any non-default browser URL under `security.additional_csrf_trusted_origins` (for example `http://203.0.113.4:8000`).
 - Database password
 - Email settings
 

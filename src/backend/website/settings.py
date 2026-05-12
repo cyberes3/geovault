@@ -39,7 +39,7 @@ DEBUG = config.get_bool('security.debug', False)
 
 # Site Framework Configuration
 # These settings control the Site model used by django.contrib.sites
-SITE_DOMAIN = config.get_str('site.domain', 'geovault.example.com')
+SITE_DOMAIN = config.get_str('site.domain', 'geovault.example.com').strip()
 SITE_NAME = config.get_str('site.name', 'GeoVault')
 
 # Allowed hosts (required when DEBUG is False)
@@ -47,7 +47,12 @@ SITE_NAME = config.get_str('site.name', 'GeoVault')
 # To add more, set security.additional_allowed_hosts in config.yaml to a list
 # of additional domains or proxy IPs. extensions.live_track.hauk_domain is
 # automatically added when set (so the Hauk-compatible API host is allowed).
-_additional_allowed_hosts = config.get_list('security.additional_allowed_hosts', [])
+_additional_allowed_hosts = []
+for h in config.get_list('security.additional_allowed_hosts', []):
+    if isinstance(h, str):
+        t = h.strip()
+        if t:
+            _additional_allowed_hosts.append(t)
 ALLOWED_HOSTS = [SITE_DOMAIN] + _additional_allowed_hosts
 _hauk_domain = config.get_str('extensions.live_track.hauk_domain', '').strip()
 if _hauk_domain and _hauk_domain not in ALLOWED_HOSTS:
@@ -456,7 +461,11 @@ CSRF_TRUSTED_ORIGINS = [
     for host in ALLOWED_HOSTS
     if host != '*'
 ]
-CSRF_TRUSTED_ORIGINS += config.get_list('security.additional_csrf_trusted_origins', [])
+CSRF_TRUSTED_ORIGINS += [
+    o.strip()
+    for o in config.get_list('security.additional_csrf_trusted_origins', [])
+    if isinstance(o, str) and o.strip()
+]
 # In DEBUG, also trust Vite dev server origin (host:5173) so accessing via http://HOST:5173 works
 if DEBUG:
     CSRF_TRUSTED_ORIGINS += [f"http://{host}:5173" for host in ALLOWED_HOSTS if host != '*']
