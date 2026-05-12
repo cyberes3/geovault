@@ -411,7 +411,11 @@ class TestNgsDatasheetImport(TestCase):
         self.assertEqual(count, 2)
 
     def test_import_command_downloads_to_temp_then_imports(self):
-        from extensions.ngs_data.src.backend.datasheet_text import DatasheetImportResult
+        from extensions.ngs_data.src.backend.datasheet_text import (
+            DatasheetImportResult,
+            NgsDatasheetArchiveDownloadOutcome,
+        )
+        from extensions.ngs_data.src.backend.region_files import ALLOWED_REGION_KEYS
 
         test_case = self
         captured_paths = []
@@ -423,8 +427,9 @@ class TestNgsDatasheetImport(TestCase):
             archive_path = destination_dir / "AA.ZIP"
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr("aa.txt", "fake")
-            progress(1)
-            return [archive_path]
+            for _ in ALLOWED_REGION_KEYS:
+                progress(1)
+            return NgsDatasheetArchiveDownloadOutcome((archive_path,), ())
 
         def fake_import_paths(_service, inputs, progress=None, station_progress=None):
             test_case.assertIsNotNone(progress)

@@ -1,4 +1,4 @@
-package com.geovault.tracker.policy.filter
+package com.geovault.common.geo
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -18,7 +18,7 @@ class GeoMathTest {
 
     @Test
     fun haversine_handlesPolarLine_lengthMatchesSphereGeometry() {
-        // Two points 1 deg of latitude apart at the equator -> ~111 km
+        // Two points 1 deg of latitude apart at the equator -> ~111 km.
         val d = GeoMath.haversineMeters(0.0, 0.0, 1.0, 0.0)
         assertEquals(111_195.0, d, 100.0)
     }
@@ -32,7 +32,6 @@ class GeoMathTest {
 
     @Test
     fun haversine_doesNotProduceNaNForBarelyOverflowingFloatingPointError() {
-        // Same coordinate triggers a == 0.0 exactly; the implementation must clamp.
         val d = GeoMath.haversineMeters(0.5, 0.5, 0.5, 0.5)
         assertEquals(0.0, d, 1e-12)
     }

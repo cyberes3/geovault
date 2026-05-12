@@ -32,6 +32,15 @@ package com.geovault.tracker.policy.filter
  * @property rollingWindowSeconds window over which the metrics engine
  *   tracks the rolling average step distance, used to derive the third
  *   uncertainty cap (`rollingCap`). Anything below 3 s makes the cap noisy.
+ * @property resumeConfirmationMinDistanceMeters post-pause raw displacement
+ *   that must be confirmed by a second consistent fix before becoming the
+ *   new anchor.
+ * @property resumeConfirmationConsistencyMeters maximum distance between
+ *   the held resume candidate and a follow-up fix for confirmation.
+ * @property resumeConfirmationMaxAccuracyMeters maximum reported accuracy
+ *   for fixes that can participate in substantial resume confirmation.
+ * @property resumeConfirmationWindowMs candidate lifetime. A late follow-up
+ *   starts a new candidate instead of promoting stale evidence.
  * @property maxFutureSkewMs reject fixes whose normalized event time is
  *   more than this far in the future (clock skew protection).
  * @property freshnessTtlMs reject fixes that are older than this at ingest
@@ -48,6 +57,10 @@ data class LocationFilterConfig(
     val burstWindowSeconds: Double = 10.0,
     val trackingAccuracyThresholdMeters: Double = 100.0,
     val rollingWindowSeconds: Double = 5.0,
+    val resumeConfirmationMinDistanceMeters: Double = 150.0,
+    val resumeConfirmationConsistencyMeters: Double = 75.0,
+    val resumeConfirmationMaxAccuracyMeters: Double = 50.0,
+    val resumeConfirmationWindowMs: Long = 20_000L,
     val maxFutureSkewMs: Long = 60_000L,
     val freshnessTtlMs: Long = 30_000L,
     val normalizeSecondsTimestamps: Boolean = true,
@@ -75,7 +88,11 @@ data class LocationFilterConfig(
             rollingWindowSeconds != other.rollingWindowSeconds ||
             maxImpliedSpeedMps != other.maxImpliedSpeedMps ||
             maxBurstDistanceMeters != other.maxBurstDistanceMeters ||
-            burstWindowSeconds != other.burstWindowSeconds
+            burstWindowSeconds != other.burstWindowSeconds ||
+            resumeConfirmationMinDistanceMeters != other.resumeConfirmationMinDistanceMeters ||
+            resumeConfirmationConsistencyMeters != other.resumeConfirmationConsistencyMeters ||
+            resumeConfirmationMaxAccuracyMeters != other.resumeConfirmationMaxAccuracyMeters ||
+            resumeConfirmationWindowMs != other.resumeConfirmationWindowMs
     }
 
     companion object {

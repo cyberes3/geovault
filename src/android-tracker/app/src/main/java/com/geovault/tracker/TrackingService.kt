@@ -916,6 +916,10 @@ class TrackingService : Service() {
             },
         )
         result.policyMetrics?.let { metrics ->
+            val rawLat = metrics.rawLatitude ?: location.latitude
+            val rawLon = metrics.rawLongitude ?: location.longitude
+            val committedLat = metrics.committedLatitude?.toString() ?: "none"
+            val committedLon = metrics.committedLongitude?.toString() ?: "none"
             runtimeTelemetry.decision(
                 name = "location_filter",
                 details = "raw=${metrics.rawDistanceMeters} effective=${metrics.effectiveDistanceMeters} " +
@@ -923,7 +927,8 @@ class TrackingService : Service() {
                     "accuracy=${metrics.accuracyMeters ?: -1f} rollingAverage=${metrics.rollingAverageStepMeters} " +
                     "capCandidate=${metrics.capCandidateMeters} decision=${metrics.decision} " +
                     "reason=${metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"} " +
-                    "lat=${location.latitude} lon=${location.longitude}"
+                    "rawLat=$rawLat rawLon=$rawLon " +
+                    "committedLat=$committedLat committedLon=$committedLon"
             )
         }
         if (!result.accepted && result.policyMetrics == null) {

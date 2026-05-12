@@ -247,6 +247,7 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 shouldForceLocalStallReanchor(
                     streamKey = streamKey,
                     reason = decision.rejectReason,
+                    policyReason = decision.metrics?.reason,
                     previousByTrack = effectivePreviousByTrack,
                     nowMs = nowMs
                 )
@@ -291,10 +292,12 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
     private fun shouldForceLocalStallReanchor(
         streamKey: String,
         reason: TrackPointRejectReason?,
+        policyReason: String?,
         previousByTrack: TrackPointEvent?,
         nowMs: Long
     ): Boolean {
         if (reason != TrackPointRejectReason.JUMP) return false
+        if (policyReason == "resume-unconfirmed") return false
         val previous = previousByTrack ?: return false
         val anchorAgeMs = nowMs - previous.timestampMs
         if (anchorAgeMs < TrackingPolicyProfiles.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return false

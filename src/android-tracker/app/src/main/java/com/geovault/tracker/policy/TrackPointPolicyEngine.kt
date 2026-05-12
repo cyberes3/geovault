@@ -39,6 +39,10 @@ data class TrackPointDecisionMetrics(
     val capCandidateMeters: Double,
     val decision: String,
     val reason: String?,
+    val rawLatitude: Double? = null,
+    val rawLongitude: Double? = null,
+    val committedLatitude: Double? = null,
+    val committedLongitude: Double? = null,
     val stationaryConfidence: StationaryConfidence? = null,
 )
 
@@ -193,6 +197,10 @@ object TrackPointPolicyEngine {
                 else -> "accepted"
             },
             reason = result.reason,
+            rawLatitude = event.lat,
+            rawLongitude = event.lon,
+            committedLatitude = result.committedLatitude(event),
+            committedLongitude = result.committedLongitude(event),
         )
         return when (result.decision) {
             LocationFilterResult.Decision.Rejected -> {
@@ -272,16 +280,40 @@ object TrackPointPolicyEngine {
                 capCandidateMeters = 0.0,
                 decision = "rejected",
                 reason = reason,
+                rawLatitude = null,
+                rawLongitude = null,
+                committedLatitude = null,
+                committedLongitude = null,
             ),
         )
     }
 
     private fun streamKey(source: TrackPointSource, trackId: String): String = "${source.name}:${trackId.trim()}"
 
+    private fun LocationFilterResult.committedLatitude(event: TrackPointEvent): Double? {
+        return when (decision) {
+            LocationFilterResult.Decision.Accepted -> event.lat
+            LocationFilterResult.Decision.Adjusted -> adjustedLatitude ?: event.lat
+            LocationFilterResult.Decision.Rejected -> null
+        }
+    }
+
+    private fun LocationFilterResult.committedLongitude(event: TrackPointEvent): Double? {
+        return when (decision) {
+            LocationFilterResult.Decision.Accepted -> event.lon
+            LocationFilterResult.Decision.Adjusted -> adjustedLongitude ?: event.lon
+            LocationFilterResult.Decision.Rejected -> null
+        }
+    }
+
     private fun LocationMetrics.toDecisionMetrics(
         accuracyMeters: Float?,
         decision: String,
         reason: String?,
+        rawLatitude: Double?,
+        rawLongitude: Double?,
+        committedLatitude: Double?,
+        committedLongitude: Double?,
     ): TrackPointDecisionMetrics = TrackPointDecisionMetrics(
         rawDistanceMeters = rawDistanceMeters,
         effectiveDistanceMeters = effectiveDistanceMeters,
@@ -292,6 +324,10 @@ object TrackPointPolicyEngine {
         capCandidateMeters = capCandidate,
         decision = decision,
         reason = reason,
+        rawLatitude = rawLatitude,
+        rawLongitude = rawLongitude,
+        committedLatitude = committedLatitude,
+        committedLongitude = committedLongitude,
         stationaryConfidence = stationary,
     )
 }

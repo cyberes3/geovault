@@ -5,7 +5,9 @@ import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.policy.TrackPointCrossSourceState
+import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,6 +26,7 @@ class LocationIngestCoordinatorTest {
     @Before
     fun setUp() {
         TrackPointCrossSourceState.resetForTests()
+        TrackPointPolicyEngine.resetAll()
     }
 
     @Test
@@ -368,6 +371,74 @@ class LocationIngestCoordinatorTest {
         assertEquals(anchor.latitude, row.latitude, 0.0)
         assertEquals(anchor.longitude, row.longitude, 0.0)
         assertEquals("paused_freshness:gps", row.prov)
+    }
+
+    @Test
+    fun ingest_resumeUnconfirmedRejects_doNotForceLocalReanchor() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        val trackId = "tracker-1"
+        val anchorTimeMs = 1_700_000_000_000L
+        val anchor = Location("gps").apply {
+            latitude = 10.0
+            longitude = 20.0
+            accuracy = 5f
+            time = anchorTimeMs
+        }
+        val seed = coordinator.ingest(
+            trackId = trackId,
+            location = anchor,
+            settings = settings,
+            motionMode = TrackingMotionMode.DRIVING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = anchorTimeMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+        assertTrue(seed.accepted)
+
+        TrackPointPolicyEngine.notifyMotionChanged(TrackPointSource.LOCAL_GPS, trackId)
+
+        var previousAccepted = seed.lastFilteredLocation
+        var lastResult: LocationIngestResult? = null
+        repeat(TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
+            val nowMs = anchorTimeMs + 4 * 60_000L + idx * 1_000L
+            val candidate = Location("gps").apply {
+                latitude = 10.010 + idx * 0.002
+                longitude = 20.0
+                accuracy = 5f
+                time = nowMs
+            }
+            val result = coordinator.ingest(
+                trackId = trackId,
+                location = candidate,
+                settings = settings,
+                motionMode = TrackingMotionMode.DRIVING,
+                previousAcceptedLocation = previousAccepted,
+                sessionVisibleBoundaryId = 0L,
+                bypassFilters = false,
+                propsJson = null,
+                totalDistanceMeters = 0f,
+                queuedTrackerId = trackId,
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = idx.toLong() * 1_000_000_000L,
+                isMockLocation = false
+            )
+            lastResult = result
+            previousAccepted = result.lastFilteredLocation
+        }
+
+        val result = checkNotNull(lastResult)
+        assertFalse(result.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
+        assertEquals("resume-unconfirmed", result.policyMetrics?.reason)
+        assertEquals(1, dao.getCount())
     }
 }
 

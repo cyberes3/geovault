@@ -673,15 +673,8 @@ class LocationFilterTest {
         assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
-    /**
-     * Resume-from-pause scenario: after a long stationary window the device
-     * starts driving and the next fix lands hundreds of meters away. With
-     * `onMotionChanged()` invoked on resume, the post-resume fix takes the
-     * motion-resume path and is accepted verbatim instead of being
-     * capped/rejected against a 30-minute-old position.
-     */
     @Test
-    fun motionChangeReset_postResumeMovementIsAcceptedVerbatim() {
+    fun motionChangeReset_singleFarResumeFixIsNotCommitted() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -696,8 +689,8 @@ class LocationFilterTest {
 
         filter.onMotionChanged()
 
-        // ~530m east of the pre-pause anchor; would be hard-rejected as a
-        // teleport without the motion-change reset.
+        // ~530m east of the pre-pause anchor. A single substantial resume
+        // fix is not enough evidence to replace the preserved anchor.
         val postResume = filter.evaluate(
             LocationInput(
                 latitude = 24.7097,
@@ -707,9 +700,89 @@ class LocationFilterTest {
                 speedMps = 15f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, postResume.decision)
-        assertEquals("motion-resume", postResume.reason)
-        assertEquals(30L * 60L * 1000L, filter.lastAcceptedTimestampMs)
+        assertEquals(LocationFilterResult.Decision.Rejected, postResume.decision)
+        assertEquals("resume-unconfirmed", postResume.reason)
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
+    }
+
+    @Test
+    fun motionChangeReset_twoConsistentFarResumeFixesPromoteAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 0f,
+            )
+        )
+
+        filter.onMotionChanged()
+
+        val first = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.0959,
+                timestampMs = 30L * 60L * 1000L,
+                accuracyMeters = 8f,
+                speedMps = 15f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Rejected, first.decision)
+        assertEquals("resume-unconfirmed", first.reason)
+
+        val second = filter.evaluate(
+            LocationInput(
+                latitude = 24.70972,
+                longitude = -81.09586,
+                timestampMs = 30L * 60L * 1000L + 1_000L,
+                accuracyMeters = 8f,
+                speedMps = 15f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Accepted, second.decision)
+        assertEquals("motion-resume-confirmed", second.reason)
+        assertEquals(30L * 60L * 1000L + 1_000L, filter.lastAcceptedTimestampMs)
+    }
+
+    @Test
+    fun motionChangeReset_inconsistentResumeCandidateDoesNotMoveAnchor() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 0f,
+            )
+        )
+
+        filter.onMotionChanged()
+
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.0959,
+                timestampMs = 30L * 60L * 1000L,
+                accuracyMeters = 8f,
+                speedMps = 15f,
+            )
+        )
+        val inconsistent = filter.evaluate(
+            LocationInput(
+                latitude = 24.7147,
+                longitude = -81.0909,
+                timestampMs = 30L * 60L * 1000L + 1_000L,
+                accuracyMeters = 8f,
+                speedMps = 15f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Rejected, inconsistent.decision)
+        assertEquals("resume-unconfirmed", inconsistent.reason)
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
     @Test

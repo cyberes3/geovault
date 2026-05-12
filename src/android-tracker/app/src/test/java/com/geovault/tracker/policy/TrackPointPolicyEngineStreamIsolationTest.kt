@@ -159,14 +159,8 @@ class TrackPointPolicyEngineStreamIsolationTest {
         assertNotEquals(true, keepRejection.accepted)
     }
 
-    /**
-     * Resume-from-pause: notifying motion-change on the live stream marks
-     * the next fix as a resume boundary so a driving fix several hundred
-     * meters away is accepted instead of being rejected as a teleport
-     * against a 30-minute-old position. Sibling streams must be untouched.
-     */
     @Test
-    fun notifyMotionChanged_dropsStaleAnchorForTargetedStreamOnly() {
+    fun notifyMotionChanged_confirmsSubstantialResumeForTargetedStreamOnly() {
         TrackPointPolicyEngine.evaluate(
             event = makeEvent(track = "live", lat = 24.7097, lon = -81.1011, ts = 1_000L),
             nowMs = 1_000L,
@@ -180,13 +174,22 @@ class TrackPointPolicyEngineStreamIsolationTest {
 
         TrackPointPolicyEngine.notifyMotionChanged(TrackPointSource.LOCAL_GPS, "live")
 
-        // ~530m east, 30 minutes later: would normally be capped/rejected.
-        val postResume = TrackPointPolicyEngine.evaluate(
+        // ~530m east, 30 minutes later: held until a consistent follow-up arrives.
+        val firstPostResume = TrackPointPolicyEngine.evaluate(
             event = makeEvent(track = "live", lat = 24.7097, lon = -81.0959, ts = 31L * 60_000L),
             nowMs = 31L * 60_000L,
             config = baseConfig,
         )
-        assertTrue("post-resume fix must take the motion-resume path", postResume.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, firstPostResume.rejectReason)
+        assertEquals("resume-unconfirmed", firstPostResume.metrics?.reason)
+
+        val confirmedPostResume = TrackPointPolicyEngine.evaluate(
+            event = makeEvent(track = "live", lat = 24.70972, lon = -81.09586, ts = 31L * 60_000L + 1_000L),
+            nowMs = 31L * 60_000L + 1_000L,
+            config = baseConfig,
+        )
+        assertTrue("consistent post-resume fix must be accepted", confirmedPostResume.accepted)
+        assertEquals("motion-resume-confirmed", confirmedPostResume.metrics?.reason)
 
         // Sibling anchor preserved: an earlier-ts fix is still rejected as
         // out-of-order.

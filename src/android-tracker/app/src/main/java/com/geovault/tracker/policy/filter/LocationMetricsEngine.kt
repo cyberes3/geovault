@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy.filter
 
+import com.geovault.common.geo.GeoMath
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
