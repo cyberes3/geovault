@@ -443,11 +443,9 @@ fun GeoVaultToggle(
     enabled: Boolean = true,
     /**
      * Optional override for the label text colour. Defaults to [Color.Unspecified] which
-     * means "inherit whatever the surrounding MaterialTheme content colour is" — preserving
-     * the long-standing toggle appearance everywhere this control is already used. Callers
-     * that want an accent label (e.g. primary-blue on the map display-settings dialog) pass
-     * an explicit colour here rather than wrapping the toggle in `CompositionLocalProvider`
-     * or replacing it with a hand-rolled Row.
+     * means "inherit [LocalContentColor]" (e.g. [GeoVaultInfoDialog] supplies [MaterialTheme.colors.onSurface]
+     * for dialog bodies, so labels stay correct in dark mode). Pass an explicit colour only
+     * for rare accent labels — do not use [Color.Black], which breaks night mode.
      */
     labelColor: Color = Color.Unspecified,
 ) {
