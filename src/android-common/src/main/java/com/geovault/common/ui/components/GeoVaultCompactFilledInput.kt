@@ -14,6 +14,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.TextFieldDefaults.indicatorLine
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultInputPlaceholderColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 import androidx.compose.runtime.Composable
@@ -58,6 +59,9 @@ fun GeoVaultCompactFilledInput(
         backgroundColor = Color.Transparent,
         placeholderColor = geoVaultInputPlaceholderColor(),
         disabledPlaceholderColor = geoVaultInputPlaceholderColor().copy(alpha = 0.5f),
+        focusedIndicatorColor = GeoVaultColorTokens.MainBlue,
+        unfocusedIndicatorColor = GeoVaultColorTokens.MainBlue,
+        disabledIndicatorColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.5f),
     )
     val textColor by colors.textColor(enabled)
     val cursorColor by colors.cursorColor(isError = false)

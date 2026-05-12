@@ -21,8 +21,10 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
  * Shared card chrome for map-drawer-style lists (survey points, NGS stations, etc.): 12dp
  * rounded corners, 1dp primary-blue stroke, surface fill, full-width row click.
  *
- * When [highlighted] is `true`, light mode uses purple fill/border; dark mode uses a blue tint
- * on black with a [GeoVaultColorTokens.MainBlue] border.
+ * When [highlighted] is `true`, light mode uses a [GeoVaultColorTokens.Purple200] fill (stronger
+ * than [GeoVaultColorTokens.Purple100], which blended into white card surfaces) with a
+ * [GeoVaultColorTokens.Purple500] border. Dark mode uses a translucent purple wash plus
+ * [GeoVaultColorTokens.MainPurple] border so selection reads clearly on black, not a faint blue.
  */
 @Composable
 fun GeoVaultPointFeatureCard(
@@ -35,12 +37,13 @@ fun GeoVaultPointFeatureCard(
     val shape = RoundedCornerShape(CardCornerRadius)
     val isLight = MaterialTheme.colors.isLight
     val fillColor: Color = when {
-        highlighted && isLight -> GeoVaultColorTokens.Purple100
-        highlighted -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
+        highlighted && isLight -> GeoVaultColorTokens.Purple200
+        highlighted -> GeoVaultColorTokens.MainPurple.copy(alpha = 0.26f)
         else -> MaterialTheme.colors.surface
     }
     val borderColor: Color = when {
         highlighted && isLight -> GeoVaultColorTokens.Purple500
+        highlighted -> GeoVaultColorTokens.MainPurple
         else -> GeoVaultColorTokens.MainBlue
     }
     Row(

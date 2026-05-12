@@ -1,6 +1,7 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,7 +32,6 @@ import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
 import com.geovault.common.ui.theme.geoVaultDialogTitleColor
-import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
  * Case-insensitive search filter for [GeoVaultMultiSelectDialog] with `searchable = true`.
@@ -60,6 +60,11 @@ fun <T> filterItemsByLabel(
  * [labelFor] (same idea as [GeoVaultSingleSelectDialog]).
  *
  * [searchNoResultsLabel] is shown when the query filters out all rows but [items] is not empty.
+ *
+ * When [selectNoneLabel] is non-null and [items] is not empty, a button with that label is shown
+ * on the same row as Cancel and Apply, aligned to the start of the dialog; it clears the in-dialog
+ * selection to an empty set; the caller decides the meaning on confirm (e.g. empty may mean
+ * "no restriction" in some filters).
  */
 @Composable
 fun <T> GeoVaultMultiSelectDialog(
@@ -77,6 +82,7 @@ fun <T> GeoVaultMultiSelectDialog(
     searchPlaceholder: String = "Search\u2026",
     searchNoResultsLabel: String = "No matches",
     keyOf: (T) -> Any = { it as Any },
+    selectNoneLabel: String? = null,
 ) {
     var selection by remember(initialSelection) { mutableStateOf(initialSelection) }
     var query by remember { mutableStateOf("") }
@@ -87,6 +93,7 @@ fun <T> GeoVaultMultiSelectDialog(
             items
         }
     }
+    val showSelectNone = selectNoneLabel != null && items.isNotEmpty()
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
@@ -168,13 +175,39 @@ fun <T> GeoVaultMultiSelectDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(selection) }) {
-                Text(text = confirmText, color = geoVaultDialogAccentButtonColor())
+            if (showSelectNone) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = { selection = emptySet() },
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    ) {
+                        Text(text = selectNoneLabel, color = geoVaultDialogAccentButtonColor())
+                    }
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(text = cancelText, color = geoVaultDialogAccentButtonColor())
+                        }
+                        TextButton(onClick = { onConfirm(selection) }) {
+                            Text(text = confirmText, color = geoVaultDialogAccentButtonColor())
+                        }
+                    }
+                }
+            } else {
+                TextButton(onClick = { onConfirm(selection) }) {
+                    Text(text = confirmText, color = geoVaultDialogAccentButtonColor())
+                }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = cancelText, color = geoVaultDialogAccentButtonColor())
+        dismissButton = if (showSelectNone) {
+            null
+        } else {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text(text = cancelText, color = geoVaultDialogAccentButtonColor())
+                }
             }
         },
     )

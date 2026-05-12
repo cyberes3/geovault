@@ -18,9 +18,10 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 /**
- * 40dp circular leading tile: blue-100 disk with a tinted icon. Optional [onClick] makes the
- * tile a separate hit target from the enclosing row. [tileClickEnabled] mirrors row-level
- * chrome enablement (e.g. map not ready).
+ * 40dp circular leading tile: in light theme, a [GeoVaultColorTokens.Blue100] disk behind a
+ * tinted icon; in dark theme the disk is transparent so only the icon shows. Optional [onClick]
+ * makes the tile a separate hit target from the enclosing row. [tileClickEnabled] mirrors row-
+ * level chrome enablement (e.g. map not ready).
  */
 @Composable
 fun GeoVaultLeadingIconTile(
@@ -93,7 +94,7 @@ private fun GeoVaultLeadingIconTileImpl(
     val diskFill = if (MaterialTheme.colors.isLight) {
         GeoVaultColorTokens.Blue100
     } else {
-        GeoVaultColorTokens.MainBlue.copy(alpha = 0.22f)
+        Color.Transparent
     }
     val base = modifier
         .size(TileSize)

@@ -128,6 +128,28 @@ object GeoVaultMapScaffoldDefaults {
     /** Title text color for drawer headers. */
     val HeaderTitleColor: Color get() = GeoVaultColorTokens.MainBlue
     val HeaderActionColor: Color get() = GeoVaultColorTokens.MainBlue
-    val TitleChipBackgroundColor: Color get() = GeoVaultColorTokens.Blue100
-    val TitleChipContentColor: Color get() = GeoVaultColorTokens.MainBlue
+
+    /**
+     * File-scope title chip (icon + truncated name). Light mode uses the pale blue pill from
+     * the legacy survey app; dark mode uses [GeoVaultColorTokens.Dark.BorderLight] (a medium
+     * dark grey) so the chip is clearly separated from the near-black drawer without reading as
+     * a bright near-white slab.
+     */
+    val TitleChipBackgroundColor: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (MaterialTheme.colors.isLight) {
+            GeoVaultColorTokens.Blue100
+        } else {
+            GeoVaultColorTokens.Dark.BorderLight
+        }
+
+    val TitleChipContentColor: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (MaterialTheme.colors.isLight) {
+            GeoVaultColorTokens.MainBlue
+        } else {
+            GeoVaultColorTokens.Blue300
+        }
 }
