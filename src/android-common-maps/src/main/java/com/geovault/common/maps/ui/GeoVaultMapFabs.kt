@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -191,7 +192,10 @@ fun GeoVaultMapFabColumn(
                         )
                     }
                     is GeoVaultMapFabIcon.Spinner -> {
-                        Box(modifier = iconModifier) {
+                        Box(
+                            modifier = iconModifier,
+                            contentAlignment = Alignment.Center,
+                        ) {
                             GeoVaultLoadingSpinner(
                                 spinnerSize = icon.spinnerSize,
                                 color = icon.spinnerColor,

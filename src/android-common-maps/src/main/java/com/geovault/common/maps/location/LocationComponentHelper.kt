@@ -56,11 +56,13 @@ object LocationComponentHelper {
     }
 
     fun applyStyle(map: MapLibreMap, context: Context, config: Config) {
+        if (!isActivated(map)) return
         map.locationComponent.applyStyle(buildOptions(context, config))
         map.locationComponent.renderMode = config.renderMode
     }
 
     fun setEnabled(map: MapLibreMap, enabled: Boolean) {
+        if (!isActivated(map)) return
         map.locationComponent.isLocationComponentEnabled = enabled
         if (!enabled) {
             map.locationComponent.cameraMode = CameraMode.NONE
@@ -68,6 +70,7 @@ object LocationComponentHelper {
     }
 
     fun setCameraTracking(map: MapLibreMap, enabled: Boolean) {
+        if (!isActivated(map)) return
         map.locationComponent.cameraMode = if (enabled) CameraMode.TRACKING else CameraMode.NONE
     }
 
@@ -77,13 +80,18 @@ object LocationComponentHelper {
      * re-activating the location component.
      */
     fun setCameraMode(map: MapLibreMap, cameraMode: Int) {
+        if (!isActivated(map)) return
         map.locationComponent.cameraMode = cameraMode
     }
 
     @SuppressLint("MissingPermission")
     fun forceLocation(map: MapLibreMap, location: Location) {
+        if (!isActivated(map)) return
         map.locationComponent.forceLocationUpdate(location)
     }
+
+    private fun isActivated(map: MapLibreMap): Boolean =
+        map.locationComponent.isLocationComponentActivated
 
     private fun buildOptions(context: Context, config: Config): LocationComponentOptions {
         val optionsBuilder = LocationComponentOptions.builder(context)

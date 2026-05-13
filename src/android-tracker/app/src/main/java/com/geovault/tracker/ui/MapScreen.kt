@@ -65,6 +65,7 @@ import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
 import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
+import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
@@ -354,7 +355,8 @@ private fun TrackerMapAuthenticatedContent(
                     val lon = runtime.lastTrackedLongitude
                     if (lat != null && lon != null) LatLng(lat, lon) else null
                 } else {
-                    null
+                    locationPlugin.getLastLocation()
+                        ?.let { latLngOrNull(it.latitude, it.longitude) }
                 }
             },
         )

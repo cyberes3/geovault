@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,7 +23,6 @@ import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
 import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.location.GeoVaultMapLocationPermission
 import com.geovault.common.maps.location.GeoVaultUserLocationCapability
-import com.geovault.common.maps.location.LocationUpdates
 import com.geovault.common.maps.location.MapLocationRendererPlugin
 import com.geovault.common.maps.location.geoVaultMapHasFineOrCoarseLocation
 import com.geovault.common.maps.ui.GeoVaultMapCameraFollowMachine
@@ -32,7 +30,6 @@ import com.geovault.common.maps.ui.GeoVaultMapCameraFollowState
 import com.geovault.common.maps.R
 import com.geovault.common.maps.ui.GeoVaultMapFabAction
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
-import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.maps.MapLibreMap
 
@@ -102,7 +99,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     val context = LocalContext.current
     var positionFollowDesired by rememberSaveable { mutableStateOf(false) }
     var headingFollowDesired by rememberSaveable { mutableStateOf(false) }
-    var gpsRecenterRequestId by rememberSaveable { mutableIntStateOf(0) }
+    var waitingForInitialLock by rememberSaveable { mutableStateOf(false) }
     fun followState(): GeoVaultMapCameraFollowState =
         GeoVaultMapCameraFollowState(positionFollowDesired, headingFollowDesired)
     val lastLogicalRef = remember {
@@ -117,6 +114,21 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             camera = GeoVaultBaseMapFollowCamera(map),
             minimumRecenterZoom = GPS_FOLLOW_MIN_ZOOM,
         )
+    }
+    fun snapToCurrentPuckLocation(positionDesired: Boolean, headingDesired: Boolean): Boolean {
+        val location = plugin?.getLastLocation()
+        if (!positionDesired || !allowFollowCamera || location == null) return false
+        followController.updateFollowState(
+            positionFollowDesired = positionDesired,
+            headingFollowDesired = headingDesired,
+            allowFollowCamera = allowFollowCamera,
+        )
+        val target = latLngOrNull(location.latitude, location.longitude)
+        if (target != null) {
+            followController.recenter(target)
+            return true
+        }
+        return false
     }
     var headingFabBearingDeg by remember { mutableFloatStateOf(0f) }
     /** True after first smoothed bearing while heading follow is on (compass may rotate). */
@@ -152,11 +164,13 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
                     val next = GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(followState())
                     positionFollowDesired = next.positionFollowDesired
                     headingFollowDesired = next.headingFollowDesired
-                    gpsRecenterRequestId += 1
+                    waitingForInitialLock = next.positionFollowDesired &&
+                        !snapToCurrentPuckLocation(next.positionFollowDesired, next.headingFollowDesired)
                 }
                 null -> Unit
             }
         } else {
+            waitingForInitialLock = false
             onPermissionDenied?.invoke()
         }
     }
@@ -173,6 +187,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             if (next != prev) {
                 positionFollowDesired = next.positionFollowDesired
                 headingFollowDesired = next.headingFollowDesired
+                waitingForInitialLock = false
             }
         }
     }
@@ -222,28 +237,17 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         }
         val listener: (android.location.Location) -> Unit = listener@{ loc ->
             val latLng = latLngOrNull(loc.latitude, loc.longitude) ?: return@listener
+            waitingForInitialLock = false
             followController.onLocationFix(latLng)
         }
         plugin.addLocationListener(listener)
         onDispose { plugin.removeLocationListener(listener) }
     }
 
-    LaunchedEffect(positionFollowDesired, allowFollowCamera, gpsRecenterRequestId) {
-        if (!positionFollowDesired || !allowFollowCamera) return@LaunchedEffect
-        if (plugin == null) return@LaunchedEffect
-        followController.updateFollowState(
-            positionFollowDesired = positionFollowDesired,
-            headingFollowDesired = headingFollowDesired,
-            allowFollowCamera = allowFollowCamera,
-        )
-        val target: LatLng = LocationUpdates.getFreshCurrentLatLngOnce(context, timeoutMs = 4000L)
-            ?: return@LaunchedEffect
-        followController.recenter(target)
-    }
-
     val clearForProgrammaticCameraMove: () -> Unit = {
         positionFollowDesired = false
         headingFollowDesired = false
+        waitingForInitialLock = false
         followController.clearFollow()
     }
 
@@ -263,8 +267,10 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             val next = GeoVaultMapCameraFollowMachine.enablePositionFollowOnGpsTap(followState())
             positionFollowDesired = next.positionFollowDesired
             headingFollowDesired = next.headingFollowDesired
-            gpsRecenterRequestId += 1
+            waitingForInitialLock = next.positionFollowDesired &&
+                !snapToCurrentPuckLocation(next.positionFollowDesired, next.headingFollowDesired)
         } else {
+            waitingForInitialLock = false
             pendingGrant = GeoVaultMapHeadingFollowPendingGrant.GpsPositionFollow
             permissionLauncher.launch(GeoVaultMapLocationPermission.FINE_AND_COARSE)
         }
@@ -273,10 +279,10 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     val gpsPositionFab = GeoVaultMapFabAction(
         id = gpsPositionFollowFabId,
         order = gpsPositionFollowFabOrder,
-        icon = if (positionFollowDesired) {
-            GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
-        } else {
-            GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
+        icon = when {
+            waitingForInitialLock -> GeoVaultMapFabIcon.Spinner()
+            positionFollowDesired -> GeoVaultMapFabIcon.Vector(Icons.Filled.GpsFixed)
+            else -> GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
         },
         contentDescription = gpsPositionFollowContentDescription,
         onTap = onGpsPositionFollowTap,

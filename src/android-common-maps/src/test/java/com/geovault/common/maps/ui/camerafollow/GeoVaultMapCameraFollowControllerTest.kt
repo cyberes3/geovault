@@ -1,11 +1,9 @@
 package com.geovault.common.maps.ui.camerafollow
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
 
 class GeoVaultMapCameraFollowControllerTest {
     @Test
@@ -49,11 +47,11 @@ class GeoVaultMapCameraFollowControllerTest {
         assertEquals(12.5, camera.current.zoom, 0.0)
         assertEquals(33.0, camera.current.bearing, 0.0)
         assertEquals(12.0, camera.current.tilt, 0.0)
-        assertEquals(1, camera.animateCount)
+        assertEquals(1, camera.moveCount)
     }
 
     @Test
-    fun locationFixDuringRecenterMovesAfterAnimationFinishes() {
+    fun locationFixAfterRecenterAppliesImmediately() {
         val camera = FakeFollowCamera(
             CameraPosition.Builder()
                 .target(LatLng(0.0, 0.0))
@@ -70,19 +68,37 @@ class GeoVaultMapCameraFollowControllerTest {
         controller.recenter(LatLng(45.0, -120.0))
         controller.onLocationFix(LatLng(45.1, -120.1))
 
-        assertEquals(LatLng(45.0, -120.0), camera.current.target)
-        assertEquals(10.0, camera.current.zoom, 0.0)
-        assertEquals(0, camera.moveCount)
-
-        camera.finishLatestAnimation()
-
         assertEquals(LatLng(45.1, -120.1), camera.current.target)
+        assertEquals(10.0, camera.current.zoom, 0.0)
+        assertEquals(2, camera.moveCount)
+    }
+
+    @Test
+    fun sameLocationFixAfterRecenterDoesNotMoveTwice() {
+        val camera = FakeFollowCamera(
+            CameraPosition.Builder()
+                .target(LatLng(0.0, 0.0))
+                .zoom(6.0)
+                .build(),
+        )
+        val controller = GeoVaultMapCameraFollowController(camera, minimumRecenterZoom = 10.0)
+        controller.updateFollowState(
+            positionFollowDesired = true,
+            headingFollowDesired = false,
+            allowFollowCamera = true,
+        )
+
+        val target = LatLng(45.0, -120.0)
+        controller.recenter(target)
+        controller.onLocationFix(target)
+
+        assertEquals(target, camera.current.target)
         assertEquals(10.0, camera.current.zoom, 0.0)
         assertEquals(1, camera.moveCount)
     }
 
     @Test
-    fun staleRecenterCallbackCannotStopLaterFollowHandoff() {
+    fun secondRecenterReplacesFirstThenLocationFixUpdates() {
         val camera = FakeFollowCamera()
         val controller = GeoVaultMapCameraFollowController(camera, minimumRecenterZoom = 10.0)
         controller.updateFollowState(
@@ -92,19 +108,11 @@ class GeoVaultMapCameraFollowControllerTest {
         )
 
         controller.recenter(LatLng(45.0, -120.0))
-        val staleCallback = camera.latestCallback
         controller.recenter(LatLng(46.0, -121.0))
         controller.onLocationFix(LatLng(46.1, -121.1))
 
-        staleCallback?.onFinish()
-
-        assertEquals(LatLng(46.0, -121.0), camera.current.target)
-        assertEquals(0, camera.moveCount)
-
-        camera.finishLatestAnimation()
-
         assertEquals(LatLng(46.1, -121.1), camera.current.target)
-        assertEquals(1, camera.moveCount)
+        assertEquals(3, camera.moveCount)
     }
 
     @Test
@@ -142,8 +150,6 @@ class GeoVaultMapCameraFollowControllerTest {
 
         assertEquals(LatLng(0.0, 0.0), camera.current.target)
         assertEquals(0, camera.moveCount)
-        assertEquals(0, camera.animateCount)
-        assertNull(camera.latestCallback)
     }
 
     private class FakeFollowCamera(
@@ -156,11 +162,7 @@ class GeoVaultMapCameraFollowControllerTest {
     ) : GeoVaultMapCameraFollowController.Camera {
         var current: CameraPosition = initial
             private set
-        var latestCallback: MapLibreMap.CancelableCallback? = null
-            private set
         var moveCount: Int = 0
-            private set
-        var animateCount: Int = 0
             private set
         var ensureInteractiveGestureCount: Int = 0
             private set
@@ -172,21 +174,8 @@ class GeoVaultMapCameraFollowControllerTest {
             current = position
         }
 
-        override fun animateTo(
-            position: CameraPosition,
-            callback: MapLibreMap.CancelableCallback,
-        ) {
-            animateCount += 1
-            current = position
-            latestCallback = callback
-        }
-
         override fun ensureInteractiveGestures() {
             ensureInteractiveGestureCount += 1
-        }
-
-        fun finishLatestAnimation() {
-            latestCallback?.onFinish()
         }
     }
 }

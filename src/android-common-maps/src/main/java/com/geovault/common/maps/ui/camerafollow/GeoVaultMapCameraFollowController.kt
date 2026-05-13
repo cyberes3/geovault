@@ -6,7 +6,6 @@ import com.geovault.common.maps.core.geoVaultRetargetCameraPositionWithMinimumZo
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
 
 internal class GeoVaultMapCameraFollowController(
     private val camera: Camera,
@@ -15,10 +14,6 @@ internal class GeoVaultMapCameraFollowController(
     interface Camera {
         fun currentPosition(): CameraPosition?
         fun moveTo(position: CameraPosition)
-        fun animateTo(
-            position: CameraPosition,
-            callback: MapLibreMap.CancelableCallback,
-        )
         fun ensureInteractiveGestures()
     }
 
@@ -32,16 +27,12 @@ internal class GeoVaultMapCameraFollowController(
         val positionAndHeading: Boolean = allowed && position && heading
     }
 
-    private data class Recentering(val requestId: Int)
-
     private var followState = FollowState(
         position = false,
         heading = false,
         allowed = false,
     )
     private var latestLocation: LatLng? = null
-    private var nextRecenterRequestId: Int = 0
-    private var recentering: Recentering? = null
 
     fun updateFollowState(
         positionFollowDesired: Boolean,
@@ -53,9 +44,6 @@ internal class GeoVaultMapCameraFollowController(
             heading = headingFollowDesired,
             allowed = allowFollowCamera,
         )
-        if (!followState.position) {
-            recentering = null
-        }
         if (followState.active) {
             camera.ensureInteractiveGestures()
         }
@@ -67,7 +55,6 @@ internal class GeoVaultMapCameraFollowController(
             heading = false,
             allowed = false,
         )
-        recentering = null
     }
 
     fun recenter(target: LatLng) {
@@ -81,30 +68,18 @@ internal class GeoVaultMapCameraFollowController(
         )
         if (followState.heading) {
             camera.moveTo(next)
-            applyLatestLocationAfterRecenter()
             return
         }
-        val request = Recentering(++nextRecenterRequestId)
-        recentering = request
-        camera.animateTo(
-            position = next,
-            callback = object : MapLibreMap.CancelableCallback {
-                override fun onCancel() {
-                    finishRecenter(request)
-                }
-
-                override fun onFinish() {
-                    finishRecenter(request)
-                }
-            },
-        )
+        // Position-only follow: snap immediately on FAB recenter (no ease animation).
+        camera.moveTo(next)
     }
 
     fun onLocationFix(target: LatLng) {
+        val previousLocation = latestLocation
         latestLocation = target
-        if (recentering != null) return
         if (!followState.positionOnly) return
         val current = camera.currentPosition() ?: return
+        if (previousLocation == target && current.target == target) return
         camera.moveTo(
             geoVaultRetargetCameraPositionPreserveViewport(
                 current = current,
@@ -125,27 +100,6 @@ internal class GeoVaultMapCameraFollowController(
         )
     }
 
-    private fun finishRecenter(request: Recentering) {
-        if (recentering != request) return
-        recentering = null
-        applyLatestLocationAfterRecenter()
-    }
-
-    private fun applyLatestLocationAfterRecenter() {
-        val target = latestLocation ?: return
-        when {
-            followState.positionOnly -> {
-                val current = camera.currentPosition() ?: return
-                camera.moveTo(
-                    geoVaultRetargetCameraPositionPreserveViewport(
-                        current = current,
-                        target = target,
-                    ),
-                )
-            }
-            followState.positionAndHeading -> Unit
-        }
-    }
 }
 
 internal class GeoVaultBaseMapFollowCamera(
@@ -157,18 +111,6 @@ internal class GeoVaultBaseMapFollowCamera(
     override fun moveTo(position: CameraPosition) {
         val libre = map.maplibreMap ?: return
         libre.moveCamera(CameraUpdateFactory.newCameraPosition(position))
-    }
-
-    override fun animateTo(
-        position: CameraPosition,
-        callback: MapLibreMap.CancelableCallback,
-    ) {
-        val libre = map.maplibreMap ?: return
-        libre.animateCamera(
-            CameraUpdateFactory.newCameraPosition(position),
-            300,
-            callback,
-        )
     }
 
     override fun ensureInteractiveGestures() {
