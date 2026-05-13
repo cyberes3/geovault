@@ -8,7 +8,6 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.maplibre.android.location.LocationComponentConstants
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
@@ -36,21 +35,15 @@ import kotlin.math.sqrt
  * @param lineLayerRenderBelowId When set (e.g. the host's `\*-points-icon-layer` id) and the
  *   layer exists, the nav dash is inserted with [Style.addLayerBelow] so it draws **under**
  *   point symbols but **over** KML/GeoJSON line and polygon layers.
- * @param overlayStackAnchorAboveId When set (e.g. the host's top `\*-points-label-layer` id) and
- *   the layer exists, the user text label is inserted with
- *   [Style.addLayerAbove] so it draws **on top of** the point symbol stack.
- *
- * **Layer ordering note:** the user-coordinate label is preferentially anchored above
- * [LocationComponentConstants.FOREGROUND_LAYER] when that layer exists at style-load time, so
- * that the LocationComponent's accuracy ring (rendered inside that same indicator layer when
- * `useSpecializedLocationLayer = true`) draws **beneath** the navigation text — matching the
- * android-common-maps layer stack. Hosts must therefore register the user-location plugin
- * **before** this plugin so the foreground layer is present when [onStyleLoaded] runs.
+ * @param overlayStackAnchorAboveId Retained for binary/API compatibility with existing call sites;
+ *   label z-order is no longer derived from this id. The label [SymbolLayer] is appended with
+ *   [Style.addLayer] so it stays the topmost style layer (above GeoJSON symbols, basemap paint,
+ *   and MapLibre's specialized location-indicator puck + accuracy).
  */
 class GeoVaultNavigationToPointPlugin(
     @Suppress("unused") context: Context,
     private val lineLayerRenderBelowId: String? = null,
-    private val overlayStackAnchorAboveId: String? = null,
+    @Suppress("unused") private val overlayStackAnchorAboveId: String? = null,
 ) : GeoVaultMapPlugin {
     private var map: MapLibreMap? = null
     private var style: Style? = null
@@ -154,11 +147,9 @@ class GeoVaultNavigationToPointPlugin(
     }
 
     /**
-     * Builds the navigation-text [SymbolLayer] and inserts it at the highest available anchor —
-     * preferring [LocationComponentConstants.FOREGROUND_LAYER] (so MapLibre's accuracy ring,
-     * drawn inside that same indicator layer when `useSpecializedLocationLayer = true`, sits
-     * beneath the text), then the host's point-symbol stack anchor,
-     * then unanchored at the top of the layer stack (`addLayerAbove(navTargetNameLayer, FOREGROUND_LAYER)`).
+     * Builds the navigation-text [SymbolLayer] and appends it with [Style.addLayer] so it is
+     * the topmost layer in the style (above basemap content, GeoVault GeoJSON symbols, and
+     * MapLibre’s location indicator including accuracy when using the specialized indicator layer).
      */
     private fun addLabelLayer(style: Style) {
         val textLayer = SymbolLayer(LABEL_LAYER_ID, LABEL_SOURCE_ID)
@@ -174,35 +165,22 @@ class GeoVaultNavigationToPointPlugin(
                 PropertyFactory.textAllowOverlap(true),
                 PropertyFactory.textIgnorePlacement(false),
             )
-        if (style.getLayer(LocationComponentConstants.FOREGROUND_LAYER) != null) {
-            style.addLayerAbove(textLayer, LocationComponentConstants.FOREGROUND_LAYER)
-        } else if (overlayStackAnchorAboveId != null && style.getLayer(overlayStackAnchorAboveId) != null) {
-            style.addLayerAbove(textLayer, overlayStackAnchorAboveId)
-        } else {
-            style.addLayer(textLayer)
-        }
+        style.addLayer(textLayer)
     }
 
     /**
-     * Re-anchors the navigation label above [LocationComponentConstants.FOREGROUND_LAYER] when
-     * MapLibre has re-added the LocationComponent's indicator layer on top of us (happens on
-     * basemap / style swaps because the LocationComponent maintains its own
-     * `OnDidFinishLoadingStyleListener` whose firing order vs our plugin chain isn't
-     * guaranteed). Without this defense, the accuracy ring ends up rendering on top of the
-     * label and tints its white halo blue.
+     * Ensures the navigation label remains the topmost style layer. MapLibre or other plugins
+     * can insert layers after ours (e.g. style reload listener ordering); if [LABEL_LAYER_ID] is
+     * not last in [Style.layers], we remove and re-append via [addLabelLayer].
      *
-     * Cheap when there's nothing to do: we only walk the layer list and only call
-     * `removeLayer` + `addLayerAbove` when the order is actually wrong, so steady-state
-     * `applyToStyle` calls (every nav update / tick) are essentially free.
+     * Cheap when there is nothing to do: a single list walk and no work when the label is
+     * already last.
      */
-    private fun ensureLabelAboveLocationLayer(style: Style) {
-        val foregroundLayerId = LocationComponentConstants.FOREGROUND_LAYER
-        if (style.getLayer(foregroundLayerId) == null) return
+    private fun ensureLabelTopmost(style: Style) {
         if (style.getLayer(LABEL_LAYER_ID) == null) return
         val layers = style.layers
-        val foregroundIdx = layers.indexOfFirst { it.id == foregroundLayerId }
-        val labelIdx = layers.indexOfFirst { it.id == LABEL_LAYER_ID }
-        if (foregroundIdx < 0 || labelIdx < 0 || labelIdx > foregroundIdx) return
+        if (layers.isEmpty()) return
+        if (layers.last().id == LABEL_LAYER_ID) return
         style.removeLayer(LABEL_LAYER_ID)
         addLabelLayer(style)
     }
@@ -219,7 +197,7 @@ class GeoVaultNavigationToPointPlugin(
 
     private fun applyToStyle() {
         val style = style ?: return
-        ensureLabelAboveLocationLayer(style)
+        ensureLabelTopmost(style)
         ensureLineBelowLabelLayer(style)
         val navSource = style.getSource(SOURCE_ID) as? GeoJsonSource
         val labelSource = style.getSource(LABEL_SOURCE_ID) as? GeoJsonSource
