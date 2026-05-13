@@ -21,7 +21,11 @@ fun rememberGeoVaultMapBoundsFitPaddingPx(): IntArray {
     return remember(density) { computeGeoVaultMapBoundsFitPaddingPx(density) }
 }
 
-fun GeoVaultBaseMap.moveCameraToFitLatLngBounds(bounds: LatLngBounds, paddingPx: IntArray) {
+fun GeoVaultBaseMap.moveCameraToFitLatLngBounds(
+    bounds: LatLngBounds,
+    paddingPx: IntArray,
+    maxZoom: Double = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
+) {
     require(paddingPx.size == 4)
     moveCameraWithPadding(
         CameraUpdateFactory.newLatLngBounds(
@@ -32,7 +36,7 @@ fun GeoVaultBaseMap.moveCameraToFitLatLngBounds(bounds: LatLngBounds, paddingPx:
             paddingPx[3],
         ),
         padding = paddingPx.toCameraPaddingDouble(),
-        maxZoom = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
+        maxZoom = maxZoom,
     )
 }
 
@@ -40,6 +44,7 @@ fun GeoVaultBaseMap.animateCameraToFitLatLngBounds(
     bounds: LatLngBounds,
     paddingPx: IntArray,
     durationMs: Int = 300,
+    maxZoom: Double = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
 ) {
     require(paddingPx.size == 4)
     animateCameraWithPadding(
@@ -52,7 +57,7 @@ fun GeoVaultBaseMap.animateCameraToFitLatLngBounds(
         ),
         padding = paddingPx.toCameraPaddingDouble(),
         durationMs = durationMs,
-        maxZoom = MapLibreManager.BOUNDS_FIT_MAX_ZOOM,
+        maxZoom = maxZoom,
     )
 }
 
