@@ -363,15 +363,17 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     DisposableEffect(map) {
-        map.registerPlugin(renderPlugin)
+        // App-specific marker images must be in the style before GeoJsonRenderPlugin reapplies
+        // its current render state during basemap reloads.
         map.registerPlugin(markerIconPlugin)
+        map.registerPlugin(renderPlugin)
         map.registerPlugin(locationPlugin)
         onDispose {
             renderPlugin.onRenderedMapHitSelected = null
             renderPlugin.onRenderedMapBackgroundTapped = null
+            map.unregisterPlugin(locationPlugin)
             map.unregisterPlugin(renderPlugin)
             map.unregisterPlugin(markerIconPlugin)
-            map.unregisterPlugin(locationPlugin)
         }
     }
 
@@ -446,7 +448,7 @@ private fun TrackerMapAuthenticatedContent(
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         delay(RENDER_COALESCE_MS)
-        val resolvedState = markerIconPlugin.resolveRenderStateWithFallback(renderPackage.renderState)
+        val resolvedState = markerIconPlugin.prepareForRender(renderPackage.renderState)
         renderPlugin.setRenderState(resolvedState)
     }
 

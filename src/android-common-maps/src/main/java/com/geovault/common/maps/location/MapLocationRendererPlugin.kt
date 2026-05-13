@@ -3,7 +3,9 @@ package com.geovault.common.maps.location
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
+import android.util.Log
 import com.geovault.common.maps.core.GeoVaultMapPlugin
+import org.maplibre.android.location.LocationComponentConstants.FOREGROUND_LAYER
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 
@@ -22,6 +24,7 @@ class MapLocationRendererPlugin(
     private var accuracyCircleVisible: Boolean = config.accuracyAlpha > 0f
     private var lastLocation: Location? = null
     private var puckBackgroundTranslucent: Boolean = false
+    private val renderState = LocationComponentRenderState()
     private val locationListeners: MutableList<(Location) -> Unit> = mutableListOf()
     private val bearingListeners: MutableList<(Float) -> Unit> = mutableListOf()
     private val headingCompassEngine = GeoVaultHeadingCompassEngine()
@@ -35,23 +38,30 @@ class MapLocationRendererPlugin(
         map = null
     }
 
+    override fun onStyleWillChange(map: MapLibreMap, currentStyle: Style?) {
+        renderState.markStyleBindingStale()
+    }
+
     override fun onStyleLoaded(map: MapLibreMap, style: Style) {
         this.map = map
         if (!autoEnableLocationComponent) return
-        activateOrApply(map, style)
+        bindToStyle(map, style)
     }
 
     override fun setEnabled(enabled: Boolean) {
+        renderState.setEnabled(enabled)
         val mapValue = map ?: return
         LocationComponentHelper.setEnabled(mapValue, enabled)
     }
 
     override fun setCameraTracking(enabled: Boolean) {
+        renderState.setCameraTracking(enabled)
         val mapValue = map ?: return
         LocationComponentHelper.setCameraTracking(mapValue, enabled)
     }
 
     override fun setCameraMode(cameraMode: Int) {
+        renderState.setCameraMode(cameraMode)
         val mapValue = map ?: return
         LocationComponentHelper.setCameraMode(mapValue, cameraMode)
     }
@@ -183,9 +193,14 @@ class MapLocationRendererPlugin(
     }
 
     @SuppressLint("MissingPermission")
-    private fun activateOrApply(map: MapLibreMap, style: Style) {
+    private fun bindToStyle(map: MapLibreMap, style: Style) {
         val locationComponent = map.locationComponent
-        if (locationComponent.isLocationComponentActivated) {
+        val componentActivated = locationComponent.isLocationComponentActivated
+        if (!renderState.shouldBindStyle(componentActivated)) {
+            renderState.applyTo(map)
+            return
+        }
+        if (componentActivated) {
             LocationComponentHelper.applyStyle(map, appContext, effectiveConfig())
         } else {
             LocationComponentHelper.activate(map, style, appContext, effectiveConfig())
@@ -196,6 +211,34 @@ class MapLocationRendererPlugin(
         // [GeoVaultHeadingCompassEngine.pushHeading]. Idempotent: re-installing the same
         // engine instance is a no-op on MapLibre's side beyond a listener re-attach.
         locationComponent.compassEngine = headingCompassEngine
+        renderState.applyTo(map)
+        renderState.markStyleBindingCurrent()
+        logStyleBindResult(map, style)
+    }
+
+    private fun logStyleBindResult(map: MapLibreMap, style: Style) {
+        val foregroundLayerPresent = style.hasLocationForegroundLayer()
+        val message = "Location puck style bind complete. ${renderState.describe()} " +
+            "component=${map.describeLocationComponent()} " +
+            "foregroundLayerPresent=$foregroundLayerPresent"
+        if (renderState.isEnabled && !foregroundLayerPresent) {
+            Log.w(TAG, "$message; expected visible puck but MapLibre foreground layer is missing.")
+        }
+    }
+
+    private fun Style.hasLocationForegroundLayer(): Boolean = getLayer(FOREGROUND_LAYER) != null
+
+    private fun MapLibreMap.describeLocationComponent(): String {
+        val locationComponent = locationComponent
+        val activated = locationComponent.isLocationComponentActivated
+        val enabled = if (activated) {
+            runCatching { locationComponent.isLocationComponentEnabled }.getOrElse { error ->
+                "error:${error.javaClass.simpleName}"
+            }
+        } else {
+            "not-activated"
+        }
+        return "activated=$activated enabled=$enabled"
     }
 
     private fun effectiveConfig(): LocationComponentHelper.Config {
@@ -206,4 +249,7 @@ class MapLocationRendererPlugin(
         )
     }
 
+    private companion object {
+        private const val TAG = "MapLocationRenderer"
+    }
 }

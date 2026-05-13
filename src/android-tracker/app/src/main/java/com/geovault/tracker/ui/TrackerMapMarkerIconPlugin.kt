@@ -20,6 +20,7 @@ class TrackerMapMarkerIconPlugin(
     }
 
     private var map: MapLibreMap? = null
+    private var renderState: MapRenderState = MapRenderState()
 
     override fun onMapAttached(map: MapLibreMap) {
         this.map = map
@@ -34,17 +35,23 @@ class TrackerMapMarkerIconPlugin(
         ensureIcon(style, TrackerMapIconIds.SELECTED_DEFAULT)
         ensureIcon(style, TrackerMapIconIds.selectedForColor(defaultColorHex))
         ensureIcon(style, TrackerMapIconIds.simpleForColor(defaultColorHex))
+        ensureIconsForRenderState(style, renderState)
     }
 
-    fun ensureIconsForRenderState(renderState: MapRenderState) {
-        val style = map?.style ?: return
+    fun prepareForRender(renderState: MapRenderState): MapRenderState {
+        val resolvedState = resolveRenderStateWithFallback(renderState)
+        this.renderState = resolvedState
+        return resolvedState
+    }
+
+    private fun ensureIconsForRenderState(style: Style, renderState: MapRenderState) {
         renderState.points
             .mapNotNull { it.iconImageId }
             .distinct()
             .forEach { ensureIcon(style, it) }
     }
 
-    fun resolveRenderStateWithFallback(renderState: MapRenderState): MapRenderState {
+    private fun resolveRenderStateWithFallback(renderState: MapRenderState): MapRenderState {
         val style = map?.style ?: return renderState
         val resolvedPoints = renderState.points.map { point ->
             val iconId = point.iconImageId ?: return@map point
@@ -85,7 +92,10 @@ class TrackerMapMarkerIconPlugin(
                 foregroundStrokeResId = R.drawable.ic_track_direction_arrow_chevron_stroke,
                 tintColor = tint,
             )
-        } ?: return false
+        } ?: run {
+            Log.w(TAG, "Failed to build map icon bitmap imageId=$imageId")
+            return false
+        }
         return try {
             style.addImage(imageId, bitmap, false)
             style.getImage(imageId) != null
