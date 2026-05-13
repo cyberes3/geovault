@@ -100,6 +100,7 @@ import com.geovault.tracker.R
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.presentation.LiveActiveFitInput
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
+import com.geovault.tracker.presentation.TrackerMapFitTrailMode
 import com.geovault.tracker.presentation.TrackerMapGpsAccuracyIndicatorPolicy
 import com.geovault.tracker.presentation.TrackerMapLiveActiveFitPolicy
 import com.geovault.tracker.presentation.TrackerMapRenderContract
@@ -116,6 +117,7 @@ import com.geovault.tracker.presentation.TrackerMapUserLocationPolicy
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.ui.time.mapElapsedAgoText
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import java.util.Locale
 
 private const val RENDER_COALESCE_MS = 120L
@@ -471,10 +473,20 @@ private fun TrackerMapAuthenticatedContent(
                         mapInitialFrameReady = true
                         return@LaunchedEffect
                     }
-                    map.moveCameraToFitLatLngBounds(directive.bounds, boundsFitPaddingPx)
+                    fitTrackerMapBounds(
+                        map = map,
+                        bounds = directive.bounds,
+                        boundsFitPaddingPx = boundsFitPaddingPx,
+                        mode = TrackerMapFitTrailMode.Instant,
+                    )
                     didInitialBounds = true
                 } else {
-                    map.moveCameraToFitLatLngBounds(directive.bounds, boundsFitPaddingPx)
+                    fitTrackerMapBounds(
+                        map = map,
+                        bounds = directive.bounds,
+                        boundsFitPaddingPx = boundsFitPaddingPx,
+                        mode = TrackerMapFitTrailMode.Instant,
+                    )
                 }
             }
         }
@@ -512,12 +524,12 @@ private fun TrackerMapAuthenticatedContent(
                 else -> bounds
             }
             if (effective != null) {
-                when (mode) {
-                    com.geovault.tracker.presentation.TrackerMapFitTrailMode.Animated ->
-                        map.animateCameraToFitLatLngBounds(effective, boundsFitPaddingPx)
-                    com.geovault.tracker.presentation.TrackerMapFitTrailMode.Instant ->
-                        map.moveCameraToFitLatLngBounds(effective, boundsFitPaddingPx)
-                }
+                fitTrackerMapBounds(
+                    map = map,
+                    bounds = effective,
+                    boundsFitPaddingPx = boundsFitPaddingPx,
+                    mode = mode,
+                )
             }
         }
     }
@@ -588,7 +600,6 @@ private fun TrackerMapAuthenticatedContent(
                     onTap = {
                         clearMapLocks()
                         if (phase == GeoVaultMapPhase.Ready) {
-                            geoVaultResetCameraBearingAndTilt(map)
                             viewModel.requestFitTrail()
                         }
                     },
@@ -848,6 +859,23 @@ private data class MapSelectionPanelUiModel(
     val isLocked: Boolean,
     val showFocusAction: Boolean,
 )
+
+private fun fitTrackerMapBounds(
+    map: GeoVaultMainMap,
+    bounds: LatLngBounds,
+    boundsFitPaddingPx: IntArray,
+    mode: TrackerMapFitTrailMode,
+) {
+    geoVaultResetCameraBearingAndTilt(map)
+    when (mode) {
+        TrackerMapFitTrailMode.Animated -> {
+            map.animateCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
+        }
+        TrackerMapFitTrailMode.Instant -> {
+            map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
+        }
+    }
+}
 
 private fun TrackerMapUiState.toSelectionPanelUiModel(): MapSelectionPanelUiModel? {
     val selection = selectedMapTracker ?: return null

@@ -50,6 +50,7 @@ class MapLibreManager(
 
     var defaultPadding: DoubleArray? = null
         set(value) {
+            if (field.contentEqualsOrBothNull(value)) return
             field = value
             applyViewportPadding(value)
         }
@@ -199,5 +200,13 @@ class MapLibreManager(
         const val BOUNDS_FIT_MAX_ZOOM = 15.0
         const val DEFAULT_POINT_ZOOM = 12.0
         val DEFAULT_WORLD_CENTER = LatLng(0.0, 0.0)
+    }
+}
+
+private fun DoubleArray?.contentEqualsOrBothNull(other: DoubleArray?): Boolean {
+    return when {
+        this == null && other == null -> true
+        this == null || other == null -> false
+        else -> contentEquals(other)
     }
 }
