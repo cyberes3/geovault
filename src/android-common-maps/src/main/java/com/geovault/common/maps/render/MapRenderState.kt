@@ -7,6 +7,12 @@ data class MapRenderPoint(
     val latitude: Double,
     val longitude: Double,
     val title: String? = null,
+    /**
+     * User-facing id/name for the overlapping-points picker only. Must not mirror [id].
+     * When null, the map render pipeline may copy a non-blank [title] into GeoJSON for
+     * callers that only set map labels.
+     */
+    val overlapListLabel: String? = null,
     val iconImageId: String? = null,
     /** Clockwise degrees for [org.maplibre.android.style.layers.PropertyFactory.iconRotate]. */
     val iconRotationDegrees: Float? = null,

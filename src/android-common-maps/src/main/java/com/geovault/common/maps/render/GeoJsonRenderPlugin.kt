@@ -62,6 +62,7 @@ private data class PreparedGeoJsonRenderState(
 
 private const val PROPERTY_ID: String = "id"
 private const val PROPERTY_TITLE: String = "title"
+private const val PROPERTY_OVERLAP_LIST_LABEL: String = "overlapListLabel"
 private const val POINT_HIT_HALF_DP: Float = 24f
 private const val OVERLAY_HIT_HALF_DP: Float = 36f
 
@@ -244,7 +245,7 @@ class GeoJsonRenderPlugin(
                 activePopup = OverlappingPointsPopup(
                     context = anchor.context,
                     anchor = anchor,
-                    pointNames = resolution.hits.map { it.title.ifBlank { it.id } },
+                    pointNames = resolution.hits.map { it.overlapListLabel },
                     tapX = screenPoint.x.toInt(),
                     tapY = screenPoint.y.toInt(),
                     onSelect = { index ->
@@ -276,12 +277,15 @@ class GeoJsonRenderPlugin(
         kind: GeoVaultRenderedMapHitKind,
     ): GeoVaultRenderedMapHitCandidate? {
         val id = getStringProperty(PROPERTY_ID) ?: return null
-        val title = getStringProperty(PROPERTY_TITLE)?.takeIf { it.isNotBlank() } ?: id
+        val mapTitle = getStringProperty(PROPERTY_TITLE)?.takeIf { it.isNotBlank() } ?: ""
+        val overlapListLabel = getStringProperty(PROPERTY_OVERLAP_LIST_LABEL)?.takeIf { it.isNotBlank() }
+            ?: mapTitle
         val coordinate = representativeCoordinate(geometry())
         return GeoVaultRenderedMapHitCandidate(
             hit = GeoVaultRenderedMapHit(
                 id = id,
-                title = title,
+                title = mapTitle,
+                overlapListLabel = overlapListLabel,
                 kind = kind,
                 latitude = coordinate?.first,
                 longitude = coordinate?.second,
@@ -1131,6 +1135,10 @@ private fun buildPointsFeatureCollectionJson(points: List<MapRenderPoint>): Stri
     validPoints.forEach { point ->
         encoder.pointFeature(longitude = point.longitude, latitude = point.latitude) {
             string(PROPERTY_ID, point.id)
+            val overlapForJson = point.overlapListLabel?.takeIf { it.isNotBlank() }
+                ?: point.title?.takeIf { it.isNotBlank() }
+                ?: ""
+            string(PROPERTY_OVERLAP_LIST_LABEL, overlapForJson)
             point.title?.let { string(PROPERTY_TITLE, it) }
             point.iconImageId?.let { string("iconImageId", it) }
             point.pointRadius?.let { number("pointRadius", it) }

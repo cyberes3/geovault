@@ -7,7 +7,10 @@ enum class GeoVaultRenderedMapHitKind {
 
 data class GeoVaultRenderedMapHit(
     val id: String,
+    /** Map label text from GeoJSON `title`; empty when omitted. Never the internal feature [id]. */
     val title: String,
+    /** Picker row text for overlapping points; user-facing only, never the internal [id]. */
+    val overlapListLabel: String,
     val kind: GeoVaultRenderedMapHitKind,
     val latitude: Double?,
     val longitude: Double?,

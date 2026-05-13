@@ -45,10 +45,11 @@ class GeoVaultRenderedMapHitResolverTest {
         )
     }
 
-    private fun hit(id: String, title: String): GeoVaultRenderedMapHit =
+    private fun hit(id: String, title: String, overlapListLabel: String = title): GeoVaultRenderedMapHit =
         GeoVaultRenderedMapHit(
             id = id,
             title = title,
+            overlapListLabel = overlapListLabel,
             kind = GeoVaultRenderedMapHitKind.Point,
             latitude = 1.0,
             longitude = 2.0,
