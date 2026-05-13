@@ -17,13 +17,14 @@ fun geoVaultLayerToggleFabAction(
     map: GeoVaultBaseMap,
     id: String = "layers",
     order: Int = 10,
-    contentDescription: String = "Toggle map source",
+    contentDescription: String = "Change the map style or layers you use for this view.",
 ): GeoVaultMapFabAction {
     return GeoVaultMapFabAction(
         id = id,
         order = order,
         icon = GeoVaultMapFabIcon.Vector(Icons.Default.Layers),
         contentDescription = contentDescription,
+        tooltip = contentDescription,
         onTap = { map.cycleSource() },
     )
 }
@@ -32,13 +33,14 @@ fun geoVaultZoomInFabAction(
     map: GeoVaultBaseMap,
     id: String = "zoom_in",
     order: Int = 40,
-    contentDescription: String = "Zoom in",
+    contentDescription: String = "Zoom the map in.",
 ): GeoVaultMapFabAction {
     return GeoVaultMapFabAction(
         id = id,
         order = order,
         icon = GeoVaultMapFabIcon.Vector(Icons.Default.Add),
         contentDescription = contentDescription,
+        tooltip = contentDescription,
         onTap = {
             val mapLibreMap = map.maplibreMap
             if (mapLibreMap != null) {
@@ -52,13 +54,14 @@ fun geoVaultZoomOutFabAction(
     map: GeoVaultBaseMap,
     id: String = "zoom_out",
     order: Int = 50,
-    contentDescription: String = "Zoom out",
+    contentDescription: String = "Zoom the map out.",
 ): GeoVaultMapFabAction {
     return GeoVaultMapFabAction(
         id = id,
         order = order,
         icon = GeoVaultMapFabIcon.Vector(Icons.Default.Remove),
         contentDescription = contentDescription,
+        tooltip = contentDescription,
         onTap = {
             val mapLibreMap = map.maplibreMap
             if (mapLibreMap != null) {

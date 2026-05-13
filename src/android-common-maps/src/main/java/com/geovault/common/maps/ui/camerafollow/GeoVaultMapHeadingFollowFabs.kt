@@ -90,7 +90,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     allowFollowCamera: Boolean = true,
     gpsPositionFollowFabId: String = "gps_position_follow",
     gpsPositionFollowFabOrder: Int = 30,
-    gpsPositionFollowContentDescription: String = "Follow my location",
+    gpsPositionFollowContentDescription: String = "Show your live GPS location on the map.",
     orientationFollowFabId: String = "orientation_lock",
     orientationFollowFabOrder: Int = 35,
     orientationFollowContentDescription: String = "Follow my heading",
@@ -285,6 +285,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             else -> GeoVaultMapFabIcon.Vector(Icons.Outlined.GpsNotFixed)
         },
         contentDescription = gpsPositionFollowContentDescription,
+        tooltip = gpsPositionFollowContentDescription,
         onTap = onGpsPositionFollowTap,
     )
 
@@ -299,6 +300,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
             else -> GeoVaultMapFabIcon.Spinner()
         },
         contentDescription = orientationFollowContentDescription,
+        tooltip = orientationFollowContentDescription,
         onTap = onHeadingTap,
         iconRotationDegrees = if (showHeadingCompass) -headingFabBearingDeg else 0f,
         useIntrinsicIconColors = showHeadingCompass,

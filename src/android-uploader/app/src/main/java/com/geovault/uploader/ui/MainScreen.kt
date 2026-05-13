@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +35,7 @@ import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
 import com.geovault.uploader.presentation.MainScreenState
+import com.geovault.uploader.R
 
 @Composable
 fun MainScreen(
@@ -58,6 +60,7 @@ fun MainScreen(
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,
                         visibility = GeoVaultTopBarMenuVisibility.Always,
+                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                     )
                 }
             )

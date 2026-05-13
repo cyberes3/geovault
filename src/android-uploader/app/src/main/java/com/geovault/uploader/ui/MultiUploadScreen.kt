@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultInput
@@ -77,7 +78,10 @@ fun MultiUploadScreen(
             GeoVaultTopTitleBar(
                 title = state.fileCountLabel,
                 actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(onOpenSettings = onOpenSettings)
+                    GeoVaultTopBarSettingsMenuAction(
+                        onOpenSettings = onOpenSettings,
+                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
+                    )
                 }
             )
         }

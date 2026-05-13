@@ -209,6 +209,7 @@ fun PlacesMapScreen(
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,
                         visibility = GeoVaultTopBarMenuVisibility.Always,
+                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                     )
                 },
             )
@@ -240,14 +241,16 @@ fun PlacesMapScreen(
                     id = "source",
                     order = 10,
                     icon = layerFabAction.icon,
-                    contentDescription = "Toggle map source",
+                    contentDescription = "Change the map style or layers you use for this view.",
+                    tooltip = "Change the map style or layers you use for this view.",
                     onTap = layerFabAction.onTap,
                 )
                 action(
                     id = "home",
                     order = 20,
                     icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
-                    contentDescription = "Home extent",
+                    contentDescription = "Fit all map content in view.",
+                    tooltip = "Fit all map content in view.",
                     onTap = {
                         val mapLibreMap = map.maplibreMap
                         if (mapLibreMap != null) {
@@ -274,6 +277,7 @@ fun PlacesMapScreen(
                     order = gpsFabAction.order,
                     icon = gpsFabAction.icon,
                     contentDescription = gpsFabAction.contentDescription,
+                    tooltip = gpsFabAction.contentDescription,
                     onTap = gpsFabAction.onTap,
                 )
                 action(
@@ -290,14 +294,16 @@ fun PlacesMapScreen(
                     id = "zoom_in",
                     order = 40,
                     icon = zoomInFabAction.icon,
-                    contentDescription = "Zoom in",
+                    contentDescription = "Zoom the map in.",
+                    tooltip = "Zoom the map in.",
                     onTap = zoomInFabAction.onTap,
                 )
                 action(
                     id = "zoom_out",
                     order = 50,
                     icon = zoomOutFabAction.icon,
-                    contentDescription = "Zoom out",
+                    contentDescription = "Zoom the map out.",
+                    tooltip = "Zoom the map out.",
                     onTap = zoomOutFabAction.onTap,
                 )
             }

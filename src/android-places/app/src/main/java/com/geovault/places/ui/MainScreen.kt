@@ -119,6 +119,7 @@ fun MainScreen(
                     actionsContent = {
                         GeoVaultTopBarSettingsMenuAction(
                             onOpenSettings = onOpenSettings,
+                            overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                         )
                     }
                 )

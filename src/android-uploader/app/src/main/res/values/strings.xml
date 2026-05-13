@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Uploader</string>
     <string name="app_title">GeoVault Uploader</string>
+    <string name="tooltip_nav_settings">Open account, sign-in, and app preferences.</string>
     <string name="settings_title">Settings</string>
     <string name="upload_button">Upload</string>
     <string name="cancel_button">Cancel</string>

@@ -74,7 +74,7 @@ fun GeoVaultBaseButton(
     centeredContent: (@Composable () -> Unit)? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
 ) {
-    val tooltipText = tooltip?.takeIf { it.isNotBlank() }
+    val tooltipText = tooltip?.takeIf { it.isNotBlank() } ?: text.takeIf { it.isNotBlank() }
 
     val baseModifier = if (fitToContent) {
         modifier.widthIn(min = minWidthWhenFitToContent)

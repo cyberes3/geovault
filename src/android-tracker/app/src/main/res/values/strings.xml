@@ -218,12 +218,12 @@
     <string name="map_updated_hrs">hr</string>
     <string name="map_updated_day_short">day</string>
     <string name="map_updated_days_short">days</string>
-    <string name="map_fab_toggle_source">Toggle map source</string>
+    <string name="map_fab_toggle_source">Change the map style or layers you use for this view.</string>
     <string name="map_fab_fit_trail">Fit queued trail and reset bearing</string>
-    <string name="map_fab_live_gps_puck">Show live GPS location</string>
+    <string name="map_fab_live_gps_puck">Show your live GPS location on the map.</string>
     <string name="map_fab_follow_lock">Follow my location</string>
-    <string name="map_fab_zoom_in">Zoom in</string>
-    <string name="map_fab_zoom_out">Zoom out</string>
+    <string name="map_fab_zoom_in">Zoom the map in.</string>
+    <string name="map_fab_zoom_out">Zoom the map out.</string>
     <string name="map_status_streaming_off">Streaming off</string>
     <string name="map_status_streaming_live">Streaming live</string>
     <string name="map_status_streaming_count">Streaming %1$d</string>

@@ -22,6 +22,9 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
  * tinted icon; in dark theme the disk is transparent so only the icon shows. Optional [onClick]
  * makes the tile a separate hit target from the enclosing row. [tileClickEnabled] mirrors row-
  * level chrome enablement (e.g. map not ready).
+ *
+ * When [onClick] is set, long-press tooltip text is [tooltip] if non-blank, otherwise
+ * [contentDescription] when non-blank (vector/painter overloads only).
  */
 @Composable
 fun GeoVaultLeadingIconTile(
@@ -31,11 +34,15 @@ fun GeoVaultLeadingIconTile(
     modifier: Modifier = Modifier,
     iconTint: Color = GeoVaultColorTokens.MainBlue,
     tileClickEnabled: Boolean = true,
+    tooltip: String? = null,
 ) {
+    val tooltipHint = tooltip?.takeIf { it.isNotBlank() }
+        ?: contentDescription?.takeIf { it.isNotBlank() }
     GeoVaultLeadingIconTileImpl(
         modifier = modifier,
         onClick = onClick,
         tileClickEnabled = tileClickEnabled,
+        tooltipHint = tooltipHint,
     ) {
         Icon(
             imageVector = icon,
@@ -54,11 +61,15 @@ fun GeoVaultLeadingIconTile(
     modifier: Modifier = Modifier,
     iconTint: Color = GeoVaultColorTokens.MainBlue,
     tileClickEnabled: Boolean = true,
+    tooltip: String? = null,
 ) {
+    val tooltipHint = tooltip?.takeIf { it.isNotBlank() }
+        ?: contentDescription?.takeIf { it.isNotBlank() }
     GeoVaultLeadingIconTileImpl(
         modifier = modifier,
         onClick = onClick,
         tileClickEnabled = tileClickEnabled,
+        tooltipHint = tooltipHint,
     ) {
         Icon(
             painter = painter,
@@ -74,12 +85,14 @@ fun GeoVaultLeadingIconTile(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     tileClickEnabled: Boolean = true,
+    tooltip: String? = null,
     content: @Composable () -> Unit,
 ) {
     GeoVaultLeadingIconTileImpl(
         modifier = modifier,
         onClick = onClick,
         tileClickEnabled = tileClickEnabled,
+        tooltipHint = tooltip?.takeIf { it.isNotBlank() },
         icon = content,
     )
 }
@@ -89,6 +102,7 @@ private fun GeoVaultLeadingIconTileImpl(
     modifier: Modifier,
     onClick: (() -> Unit)?,
     tileClickEnabled: Boolean,
+    tooltipHint: String?,
     icon: @Composable () -> Unit,
 ) {
     val diskFill = if (MaterialTheme.colors.isLight) {
@@ -100,16 +114,31 @@ private fun GeoVaultLeadingIconTileImpl(
         .size(TileSize)
         .clip(CircleShape)
         .background(color = diskFill, shape = CircleShape)
-    val tile = if (onClick != null) {
-        base.clickable(enabled = tileClickEnabled, onClick = onClick)
-    } else {
-        base
-    }
-    Box(
-        modifier = tile,
-        contentAlignment = Alignment.Center,
-    ) {
-        icon()
+    when {
+        onClick == null -> {
+            Box(modifier = base, contentAlignment = Alignment.Center) {
+                icon()
+            }
+        }
+        tooltipHint.isNullOrBlank() -> {
+            Box(
+                modifier = base.clickable(enabled = tileClickEnabled, onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                icon()
+            }
+        }
+        else -> {
+            GeoVaultClickableWithTooltip(
+                onClick = onClick,
+                modifier = base,
+                enabled = tileClickEnabled,
+                tooltip = tooltipHint,
+                contentAlignment = Alignment.Center,
+            ) {
+                icon()
+            }
+        }
     }
 }
 

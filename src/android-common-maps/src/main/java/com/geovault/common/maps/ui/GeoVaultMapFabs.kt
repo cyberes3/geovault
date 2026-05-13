@@ -126,6 +126,7 @@ fun GeoVaultMapFabColumn(
             val interactionSource = remember(action.id) { MutableInteractionSource() }
             var anchorBounds by remember { mutableStateOf<Rect?>(null) }
             val tooltipText = action.tooltip?.takeIf { it.isNotBlank() }
+                ?: action.contentDescription.takeIf { it.isNotBlank() }
             val suppressNextClickAfterTooltip = if (tooltipText != null) {
                 remember(action.id) { mutableStateOf(false) }
             } else {

@@ -133,7 +133,10 @@ fun GeoVaultInstallLongPressTooltip(
         }
     }
 
-    LaunchedEffect(isPressed, tooltipText, enabled, anchorBounds, anchorProxyView) {
+    // Do not key this effect on [anchorBounds]: [trackGeoVaultTooltipBounds] updates bounds on
+    // every layout pass while pressed (e.g. map camera / drawer motion). Restarting here would
+    // cancel the long-press [delay] repeatedly so the tooltip never fires — especially on map FABs.
+    LaunchedEffect(isPressed, tooltipText, enabled, anchorProxyView) {
         if (!enabled || !isPressed) return@LaunchedEffect
         suppressNextClickAfterTooltip?.value = false
         delay(android.view.ViewConfiguration.getLongPressTimeout().toLong())
