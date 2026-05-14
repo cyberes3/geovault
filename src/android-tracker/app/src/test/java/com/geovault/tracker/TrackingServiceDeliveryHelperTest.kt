@@ -38,16 +38,16 @@ class TrackingServiceDeliveryHelperTest {
     }
 
     @Test
-    fun deliver_startServiceRejectedWhileTracking_escalatesWithForegroundDeadlineExtra() {
+    fun deliver_locationUpdateStartServiceRejectedWhileTracking_escalatesWithForegroundDeadlineExtra() {
         val context: Context = ApplicationProvider.getApplicationContext()
         val starter = RecordingStarter(rejectStartService = true)
 
         val result = TrackingServiceDeliveryHelper.deliver(
             context = context,
             intent = Intent(context, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_IDLE_PROBE
+                action = TrackingService.ACTION_LOCATION_UPDATE
             },
-            source = TrackingServiceDeliverySource.IdleProbe,
+            source = TrackingServiceDeliverySource.FusedLocationUpdate,
             starter = starter,
             runtimeSnapshot = TrackingRuntimeSnapshot(isRunning = true),
         )
@@ -57,7 +57,7 @@ class TrackingServiceDeliveryHelperTest {
         val escalated = starter.foregroundStarted.single()
         assertTrue(escalated.requiresForegroundServiceStart())
         assertEquals(
-            TrackingServiceDeliverySource.IdleProbe.logName,
+            TrackingServiceDeliverySource.FusedLocationUpdate.logName,
             escalated.getStringExtra(TrackingService.EXTRA_BACKGROUND_WAKEUP_SOURCE)
         )
     }
@@ -86,12 +86,6 @@ class TrackingServiceDeliveryHelperTest {
         assertTrue(
             TrackingService.requiresForegroundPromotion(
                 TrackingService.Companion.StartupCommandPath.LocationUpdate,
-                foregroundStartRequired = true,
-            )
-        )
-        assertTrue(
-            TrackingService.requiresForegroundPromotion(
-                TrackingService.Companion.StartupCommandPath.IdleProbe,
                 foregroundStartRequired = true,
             )
         )

@@ -10,7 +10,6 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 
 internal enum class TrackingServiceDeliverySource(val logName: String) {
     FusedLocationUpdate("fused_location_update"),
-    IdleProbe("idle_probe"),
 }
 
 internal sealed class TrackingServiceDeliveryResult {

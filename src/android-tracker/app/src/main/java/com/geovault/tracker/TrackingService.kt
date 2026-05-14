@@ -31,13 +31,14 @@ import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingEngineOutput
-import com.geovault.tracker.location.IdleProbeScheduler
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.PausedFreshnessDecision
 import com.geovault.tracker.location.PausedFreshnessDecisionReason
 import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.location.PausedFreshnessPolicy
+import com.geovault.tracker.location.StationaryPingActions
+import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
@@ -164,7 +165,7 @@ class TrackingService : Service() {
     private var sigMotionSensorStartTime: Long = 0L
     private var watchdogJob: Job? = null
     private var significantMotionBridge: SignificantMotionResumeBridge? = null
-    private var idleProbeScheduler: IdleProbeScheduler? = null
+    private var stationaryPingController: StationaryPingController? = null
     private var pausedFreshnessProbeActive: Boolean = false
     private var pausedFreshnessProbeStartedAtMs: Long = 0L
     private var lastPausedFreshnessPointAtMs: Long = 0L
@@ -227,7 +228,6 @@ class TrackingService : Service() {
         const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
         const val ACTION_SEND_MANUAL_POINT = "com.geovault.tracker.ACTION_SEND_MANUAL_POINT"
         const val ACTION_LOCATION_UPDATE = "com.geovault.tracker.ACTION_LOCATION_UPDATE"
-        const val ACTION_IDLE_PROBE = IdleProbeScheduler.ACTION_IDLE_PROBE
         const val EXTRA_FOREGROUND_SERVICE_START_REQUIRED = "extra_foreground_service_start_required"
         const val EXTRA_BACKGROUND_WAKEUP_SOURCE = "extra_background_wakeup_source"
         const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
@@ -277,7 +277,6 @@ class TrackingService : Service() {
             ReshowForeground,
             ManualSendPoint,
             LocationUpdate,
-            IdleProbe,
             StopUnknown
         }
 
@@ -289,7 +288,6 @@ class TrackingService : Service() {
                 ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
                 ACTION_SEND_MANUAL_POINT -> StartupCommandPath.ManualSendPoint
                 ACTION_LOCATION_UPDATE -> StartupCommandPath.LocationUpdate
-                ACTION_IDLE_PROBE -> StartupCommandPath.IdleProbe
                 null -> {
                     if (shouldRestartTrackingAfterProcessDeath()) {
                         StartupCommandPath.StartTracking
@@ -314,8 +312,7 @@ class TrackingService : Service() {
             if (path == StartupCommandPath.StartTracking) return true
             if (!foregroundStartRequired) return false
             return when (path) {
-                StartupCommandPath.LocationUpdate,
-                StartupCommandPath.IdleProbe -> true
+                StartupCommandPath.LocationUpdate -> true
                 StartupCommandPath.StartTracking,
                 StartupCommandPath.StopNoRestart,
                 StartupCommandPath.ReshowForeground,
@@ -332,9 +329,20 @@ class TrackingService : Service() {
                 ACTION_RESHOW_FOREGROUND -> "reshow_foreground"
                 ACTION_SEND_MANUAL_POINT -> "manual_send_point"
                 ACTION_LOCATION_UPDATE -> "location_update"
-                ACTION_IDLE_PROBE -> "idle_probe"
                 null -> "process_restart"
                 else -> "unknown_action"
+            }
+        }
+
+        @JvmStatic
+        internal fun mapRuntimeTrigger(trigger: String): RuntimeTrigger {
+            return when (trigger) {
+                "explicit_start" -> RuntimeTrigger.EXPLICIT_START
+                "process_restart" -> RuntimeTrigger.PROCESS_RESTART
+                "watchdog_tick" -> RuntimeTrigger.WATCHDOG_TICK
+                "main_resume_after_kill" -> RuntimeTrigger.MAIN_RESUME_AFTER_KILL
+                "main_start_on_launch" -> RuntimeTrigger.MAIN_START_ON_LAUNCH
+                else -> RuntimeTrigger.UNKNOWN
             }
         }
 
@@ -348,15 +356,6 @@ class TrackingService : Service() {
                     EXTRA_LOCATION_UPDATES,
                     ArrayList(locations.map { Location(it) })
                 )
-            }
-        }
-
-        @JvmStatic
-        fun buildIdleProbeIntent(context: Context): Intent {
-            val appContext = context.applicationContext
-            return Intent(appContext, TrackingService::class.java).apply {
-                action = ACTION_IDLE_PROBE
-                setPackage(appContext.packageName)
             }
         }
 
@@ -402,7 +401,18 @@ class TrackingService : Service() {
                 trigger = SensorManagerSignificantMotionTrigger(applicationContext),
                 onResume = { resumeGps() }
             )
-            idleProbeScheduler = IdleProbeScheduler(applicationContext)
+            stationaryPingController = StationaryPingController(
+                scope = serviceScope,
+                actions = object : StationaryPingActions {
+                    override fun requestProbe(reason: String) {
+                        requestStationaryFreshnessProbe(reason = reason)
+                    }
+
+                    override fun logEvent(name: String, details: String) {
+                        runtimeTelemetry.event(name, details)
+                    }
+                }
+            )
             SelectedTrackerManager.syncRuntimeSelectedTracker(this)
             TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
             syncRuntimeStateStore()
@@ -493,14 +503,6 @@ class TrackingService : Service() {
                     START_NOT_STICKY
                 }
             }
-            StartupCommandPath.IdleProbe -> {
-                if (handleIdleProbeCommand()) {
-                    START_STICKY
-                } else {
-                    stopSelfSafelyAfterStartup(reason = "idle_probe_not_tracking")
-                    START_NOT_STICKY
-                }
-            }
             StartupCommandPath.StopUnknown -> {
                 if (intent?.action == ACTION_STOP) {
                     stopTracking(reason = "action_stop")
@@ -522,7 +524,6 @@ class TrackingService : Service() {
     ) {
         if (
             path != StartupCommandPath.LocationUpdate &&
-            path != StartupCommandPath.IdleProbe &&
             !foregroundStartRequired
         ) {
             return
@@ -580,8 +581,8 @@ class TrackingService : Service() {
         cleanupServiceResources(reason = "on_destroy")
         significantMotionBridge?.cancel()
         significantMotionBridge = null
-        idleProbeScheduler?.cancel()
-        idleProbeScheduler = null
+        stationaryPingController?.onStopped(reason = "on_destroy")
+        stationaryPingController = null
         serviceJob.cancel()
         TrackingServiceLifecycleGate.markDestroyed()
         super.onDestroy()
@@ -750,6 +751,7 @@ class TrackingService : Service() {
         transitionGpsState(GpsRuntimeEvent.TRACKING_STOPPED, "transition_to_stopped_state")
         lastFilteredLocation = null
         latestObservedRawLocation = null
+        stationaryPingController?.onStopped(reason = "tracking_stopped")
         clearPausedFreshnessProbe(reason = "tracking_stopped", clearLastFreshnessTimestamp = true)
         lowAccuracyFallbackCandidate = null
         stopAutoModeTick()
@@ -777,6 +779,7 @@ class TrackingService : Service() {
         stopFastGpsLockWindow(reason = "cleanup")
         unregisterGpsProviderReceiverIfNeeded()
         cancelLowAccuracyFallbackTimer(clearCandidate = true)
+        stationaryPingController?.onStopped(reason = "cleanup_$reason")
         clearPausedFreshnessProbe(reason = "cleanup_$reason", clearLastFreshnessTimestamp = true)
         significantMotionBridge?.cancel()
         watchdogJob?.cancel()
@@ -1166,44 +1169,37 @@ class TrackingService : Service() {
     }
 
     /**
-     * Periodic idle probe fired by [IdleProbeScheduler]. The probe wakes
-     * GPS while we are paused for stationarity so the system can verify
-     * the user is still still (or recover when accuracy degraded into a
-     * false-stationary). Resume reuses the standard machinery: if the
-     * incoming fixes confirm stationarity at good accuracy, the natural
-     * stationary detector will re-pause and reschedule the next probe.
-     * If accuracy is poor or the user has moved, GPS stays hot and the
-     * recording resumes.
-     *
-     * Returns false when the service is no longer tracking (so the caller
-     * stops the service); returns true otherwise (including when we are
-     * not paused, in which case the probe is a harmless no-op and any
-     * stale alarm is cancelled).
+     * Service-owned stationary probe timer. While GPS is paused for
+     * stationarity, this wakes GPS inside the active foreground service so
+     * the tracker can verify the device is still still and emit the anchored
+     * freshness point. Significant-motion resume uses the same GPS resume
+     * machinery, but this path marks the next fixes as paused-freshness
+     * candidates before resuming.
      */
-    private fun handleIdleProbeCommand(): Boolean {
+    private fun requestStationaryFreshnessProbe(reason: String): Boolean {
         if (!isTracking) {
-            idleProbeScheduler?.cancel()
+            stationaryPingController?.onStopped(reason = "not_tracking")
             runtimeTelemetry.event(
-                "idle_probe_dropped",
-                "reason=not_tracking gpsState=$gpsRuntimeState"
+                "stationary_ping_dropped",
+                "reason=$reason notTracking=true gpsState=$gpsRuntimeState"
             )
             return false
         }
         if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
             gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
         ) {
-            idleProbeScheduler?.cancel()
-            clearPausedFreshnessProbe(reason = "idle_probe_not_paused")
-            runtimeTelemetry.event("idle_probe_skipped", "reason=not_paused state=$gpsRuntimeState")
+            stationaryPingController?.onResumed(reason = "not_paused")
+            clearPausedFreshnessProbe(reason = "stationary_ping_not_paused")
+            runtimeTelemetry.event("stationary_ping_skipped", "reason=$reason state=$gpsRuntimeState")
             return true
         }
         runtimeTelemetry.event(
-            "idle_probe_received",
-            "state=$gpsRuntimeState lastRaw=${summarizeLocationForTelemetry(latestObservedRawLocation)} " +
+            "stationary_ping_received",
+            "reason=$reason state=$gpsRuntimeState lastRaw=${summarizeLocationForTelemetry(latestObservedRawLocation)} " +
                 "lastAccepted=${summarizeLocationForTelemetry(lastFilteredLocation)}"
         )
         markPausedFreshnessProbeStarted(nowMs = System.currentTimeMillis())
-        resumeGps()
+        resumeGps(reason = "stationary_ping_resume")
         return true
     }
 
@@ -1221,7 +1217,7 @@ class TrackingService : Service() {
             candidateLocation = probeLocation,
             stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             accuracyCeilingMeters = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
-            freshnessIntervalMs = IdleProbeScheduler.DEFAULT_INTERVAL_MS,
+            freshnessIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS,
             nowMs = nowMs,
             lastFreshnessPointAtMs = lastPausedFreshnessPointAtMs,
         )
@@ -1281,7 +1277,7 @@ class TrackingService : Service() {
         pauseGpsInternal(force = true)
         runtimeTelemetry.event(
             "paused_freshness_repaused",
-            "intervalMs=${IdleProbeScheduler.DEFAULT_INTERVAL_MS}"
+            "intervalMs=${StationaryPingController.DEFAULT_INTERVAL_MS}"
         )
         return true
     }
@@ -1860,6 +1856,11 @@ class TrackingService : Service() {
             return
         }
         transitionGpsState(GpsRuntimeEvent.PROVIDER_DISABLED, reason)
+        if (gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
+            stationaryPingController?.onProviderPaused(reason = reason)
+        } else {
+            stationaryPingController?.onResumed(reason = "provider_disabled")
+        }
         resetElasticDistanceOverride(reason = "gps_provider_disabled", reapplyRequest = false)
         stopFastGpsLockWindow(reason = "gps_provider_disabled")
         cancelLowAccuracyFallbackTimer(clearCandidate = true)
@@ -1881,6 +1882,10 @@ class TrackingService : Service() {
         }
         transitionGpsState(GpsRuntimeEvent.PROVIDER_ENABLED, reason)
         if (gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION) {
+            stationaryPingController?.onProviderRestored(reason = reason)
+            if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION) {
+                return
+            }
             Log.i(TAG, "GPS provider re-enabled while paused reason=$reason")
             syncRuntimeStateStore()
             updateNotificationFromDb(broadcastStats = true)
@@ -2301,10 +2306,9 @@ class TrackingService : Service() {
         significantMotionBridge?.request()
         sigMotionSensorStartTime = System.currentTimeMillis()
         startSensorWatchdog()
-        idleProbeScheduler?.schedule()
-        runtimeTelemetry.event(
-            "idle_probe_scheduled",
-            "intervalMs=${IdleProbeScheduler.DEFAULT_INTERVAL_MS}"
+        stationaryPingController?.onPaused(
+            reason = "pause_for_motion",
+            providerAvailable = isLocationServicesEnabled()
         )
         syncRuntimeStateStore()
         updateNotificationFromDb(broadcastStats = true)
@@ -2329,7 +2333,7 @@ class TrackingService : Service() {
         }
     }
 
-    private fun resumeGps() {
+    private fun resumeGps(reason: String = "significant_motion_resume") {
         if (
             !isTracking ||
             (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
@@ -2337,7 +2341,7 @@ class TrackingService : Service() {
         ) {
             return
         }
-        transitionGpsState(GpsRuntimeEvent.RESUME_FROM_MOTION, "significant_motion_resume")
+        transitionGpsState(GpsRuntimeEvent.RESUME_FROM_MOTION, reason)
         transitionControlState(TrackingControlEvent.ResumeRequested)
         // Mark the next fix as a resume boundary. Real movement should be
         // accepted, but a false motion wakeup while stationary should still
@@ -2351,7 +2355,7 @@ class TrackingService : Service() {
         resetElasticDistanceOverride(reason = "gps_resumed", reapplyRequest = false)
         stopFastGpsLockWindow(reason = "gps_resumed")
         cancelLowAccuracyFallbackTimer(clearCandidate = false)
-        idleProbeScheduler?.cancel()
+        stationaryPingController?.onResumed(reason = reason)
         consecutiveStationaryPoints = 0
         stationaryAnchorLocation = null
         if (settingsRepository.getSettings().autoTrackingMode) {
@@ -2837,17 +2841,6 @@ class TrackingService : Service() {
                 "keyguardLocked=${keyguardManager?.isKeyguardLocked} " +
                 "deviceLocked=${keyguardManager?.isDeviceLocked} userUnlocked=${userManager?.isUserUnlocked}"
         )
-    }
-
-    private fun mapRuntimeTrigger(trigger: String): RuntimeTrigger {
-        return when (trigger) {
-            "explicit_start" -> RuntimeTrigger.EXPLICIT_START
-            "process_restart" -> RuntimeTrigger.PROCESS_RESTART
-            "watchdog_tick" -> RuntimeTrigger.WATCHDOG_TICK
-            "main_resume_after_kill" -> RuntimeTrigger.MAIN_RESUME_AFTER_KILL
-            "main_start_on_launch" -> RuntimeTrigger.MAIN_START_ON_LAUNCH
-            else -> RuntimeTrigger.UNKNOWN
-        }
     }
 
     private fun transitionGpsState(event: GpsRuntimeEvent, reason: String) {

@@ -34,9 +34,6 @@ class TrackingServiceProcessRestartTest {
     }
 
     private fun invokeMapRuntimeTrigger(trigger: String): RuntimeTrigger {
-        val service = TrackingService()
-        val method = service.javaClass.getDeclaredMethod("mapRuntimeTrigger", String::class.java)
-        method.isAccessible = true
-        return method.invoke(service, trigger) as RuntimeTrigger
+        return TrackingService.mapRuntimeTrigger(trigger)
     }
 }
