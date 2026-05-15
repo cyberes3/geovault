@@ -1,6 +1,6 @@
 package com.geovault.tracker.db
 
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -69,7 +69,7 @@ object DatabaseMigrations {
             )
             val dropped = beforeCount - attributableBefore
             if (dropped > 0) {
-                Log.i(
+                GeoVaultCaptureLog.i(
                     TAG,
                     "MIGRATION_3_4 dropped $dropped unattributable queued_locations row(s); " +
                         "selectedTrackerId=${if (selectedTrackerId.isNullOrBlank()) "absent" else "present"}"

@@ -2,7 +2,7 @@ package com.geovault.tracker
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
@@ -64,7 +64,7 @@ internal object TrackingServiceDeliveryHelper {
         }
         val action = serviceIntent.action ?: "none"
         return try {
-            Log.d(TAG, "deliver source=${source.logName} action=$action path=startService")
+            GeoVaultCaptureLog.d(TAG, "deliver source=${source.logName} action=$action path=startService")
             starter.startService(appContext, serviceIntent)
             telemetry.decision(
                 "tracking_service_delivery",
@@ -72,7 +72,7 @@ internal object TrackingServiceDeliveryHelper {
             )
             TrackingServiceDeliveryResult.Started(source, foregroundEscalated = false)
         } catch (startRejected: IllegalStateException) {
-            Log.w(
+            GeoVaultCaptureLog.w(
                 TAG,
                 "startService rejected source=${source.logName} action=$action; evaluating FGS escalation",
                 startRejected
@@ -124,7 +124,7 @@ internal object TrackingServiceDeliveryHelper {
             putExtra(TrackingService.EXTRA_BACKGROUND_WAKEUP_SOURCE, source.logName)
         }
         return try {
-            Log.i(TAG, "deliver source=${source.logName} action=$action path=startForegroundService")
+            GeoVaultCaptureLog.i(TAG, "deliver source=${source.logName} action=$action path=startForegroundService")
             starter.startForegroundService(context, foregroundIntent)
             telemetry.decision(
                 "tracking_service_delivery",
@@ -153,7 +153,7 @@ internal object TrackingServiceDeliveryHelper {
         reason: String,
         error: Throwable,
     ) {
-        Log.e(TAG, "delivery failed source=${source.logName} action=$action reason=$reason", error)
+        GeoVaultCaptureLog.e(TAG, "delivery failed source=${source.logName} action=$action reason=$reason", error)
         telemetry.decision(
             "tracking_service_delivery",
             "source=${source.logName} action=$action result=failed reason=$reason " +

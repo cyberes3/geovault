@@ -1,7 +1,7 @@
 package com.geovault.tracker.data
 
 import android.content.Context
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.NaturalSort
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
@@ -104,7 +104,7 @@ class ApiTrackerManagementRepository(
     override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> {
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("tracker:$trackerId") {
-            Log.d(TAG, "Loading tracker details trackerId=$trackerId")
+            GeoVaultCaptureLog.d(TAG, "Loading tracker details trackerId=$trackerId")
             val networkResult = executeApiCall { api -> api.getTracker(trackerId).execute() }
             if (networkResult is RepositoryResult.Success) {
                 val tracker = networkResult.data.toDomainModel()
@@ -117,13 +117,13 @@ class ApiTrackerManagementRepository(
                         .let(stateStore::canonicalizeTrackers)
                 }
                 stateStore.publishTracker(tracker)
-                Log.d(
+                GeoVaultCaptureLog.d(
                     TAG,
                     "Loaded tracker details trackerId=$trackerId recentDataWindow=${tracker.settings?.get("recent_data_window")} hidden=${tracker.settings?.get("hidden")}"
                 )
                 return@run RepositoryResult.Success(tracker) as Any
             } else if (networkResult is RepositoryResult.Failure) {
-                Log.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${networkResult.error}")
+                GeoVaultCaptureLog.e(TAG, "Failed loading tracker details trackerId=$trackerId error=${networkResult.error}")
             }
             networkResult as Any
         } as RepositoryResult<Tracker>
@@ -229,7 +229,7 @@ class ApiTrackerManagementRepository(
         request: TrackerSettingsRequest,
         publishToStore: Boolean
     ): RepositoryResult<Tracker> {
-        Log.d(TAG, "Updating tracker settings trackerId=$trackerId request=$request")
+        GeoVaultCaptureLog.d(TAG, "Updating tracker settings trackerId=$trackerId request=$request")
         val networkResult = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }
         if (networkResult is RepositoryResult.Success) {
             val tracker = networkResult.data.toDomainModel()
@@ -240,13 +240,13 @@ class ApiTrackerManagementRepository(
                 availableToAddCache = null
             }
             stateStore.publishTracker(tracker, emitEvent = publishToStore)
-            Log.d(
+            GeoVaultCaptureLog.d(
                 TAG,
                 "Updated tracker settings trackerId=$trackerId persistedRecentDataWindow=${tracker.settings?.get("recent_data_window")} persistedHidden=${tracker.settings?.get("hidden")}"
             )
             return RepositoryResult.Success(tracker)
         } else if (networkResult is RepositoryResult.Failure) {
-            Log.e(TAG, "Failed updating tracker settings trackerId=$trackerId error=${networkResult.error}")
+            GeoVaultCaptureLog.e(TAG, "Failed updating tracker settings trackerId=$trackerId error=${networkResult.error}")
         }
         return when (networkResult) {
             is RepositoryResult.Success -> error("Unexpected success branch")
@@ -567,14 +567,14 @@ class ApiTrackerManagementRepository(
                     if (body != null) {
                         RepositoryResult.Success(body)
                     } else {
-                        Log.w(TAG, "Successful API response had no body code=${response.code()}")
+                        GeoVaultCaptureLog.w(TAG, "Successful API response had no body code=${response.code()}")
                         RepositoryResult.Failure(AppError.Unknown)
                     }
                 } else {
                     RepositoryResult.Failure(mapError(response.code(), response.errorBody()?.string()))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "API call failed with transport exception", e)
+                GeoVaultCaptureLog.e(TAG, "API call failed with transport exception", e)
                 RepositoryResult.Failure(AppError.Network)
             }
         }
@@ -594,7 +594,7 @@ class ApiTrackerManagementRepository(
                     RepositoryResult.Failure(mapError(response.code(), response.errorBody()?.string()))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "API no-body call failed with transport exception", e)
+                GeoVaultCaptureLog.e(TAG, "API no-body call failed with transport exception", e)
                 RepositoryResult.Failure(AppError.Network)
             }
         }
@@ -641,7 +641,7 @@ class ApiTrackerManagementRepository(
             val json = JSONObject(errorBody)
             json.optString("detail", json.optString("error", json.optString("name", errorBody.take(200))))
         } catch (e: Exception) {
-            Log.w(TAG, "Could not parse validation error body", e)
+            GeoVaultCaptureLog.w(TAG, "Could not parse validation error body", e)
             errorBody.take(200)
         }
     }

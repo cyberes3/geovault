@@ -8,7 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.core.app.NotificationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
@@ -93,11 +93,11 @@ class LiveTrackStreamingService : Service() {
             // reconstructed via START_STICKY.
             val (restoredTrackerIds, restoredTrackerName) = MapStreamingServiceHelper.persistedTargets(this)
             if (restoredTrackerIds.isEmpty()) {
-                Log.w(TAG, "Null intent received with no persisted stream targets; stopping streaming service")
+                GeoVaultCaptureLog.w(TAG, "Null intent received with no persisted stream targets; stopping streaming service")
                 stopSelf()
                 return START_NOT_STICKY
             }
-            Log.i(TAG, "Null intent restored live streaming targets count=${restoredTrackerIds.size}")
+            GeoVaultCaptureLog.i(TAG, "Null intent restored live streaming targets count=${restoredTrackerIds.size}")
             startStreamingTargets(restoredTrackerIds, restoredTrackerName)
             return START_STICKY
         }
@@ -135,7 +135,7 @@ class LiveTrackStreamingService : Service() {
             }
 
             else -> {
-                Log.w(TAG, "Unexpected onStartCommand action=${intent.action}; stopping service")
+                GeoVaultCaptureLog.w(TAG, "Unexpected onStartCommand action=${intent.action}; stopping service")
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -227,7 +227,7 @@ class LiveTrackStreamingService : Service() {
             client.connectionPool.evictAll()
             client.cache?.close()
         }.exceptionOrNull()?.let { error ->
-            Log.w(TAG, "Failed to shut down streaming OkHttpClient cleanly", error)
+            GeoVaultCaptureLog.w(TAG, "Failed to shut down streaming OkHttpClient cleanly", error)
         }
     }
 
@@ -313,7 +313,7 @@ class LiveTrackStreamingService : Service() {
                 return
             }
         } catch (e: Exception) {
-            Log.e(TAG, "WebSocket connect failed", e)
+            GeoVaultCaptureLog.e(TAG, "WebSocket connect failed", e)
             scheduleReconnect(
                 sessionId = sessionId,
                 failureClass = StreamingFailureClass.TRANSIENT,
@@ -357,7 +357,7 @@ class LiveTrackStreamingService : Service() {
         // Protocols. Any other code means OkHttp delivered onOpen for a non-upgrade response (rare
         // server misconfig); treat it as a permanent failure rather than pretending we are RUNNING.
         if (response.code != WS_UPGRADE_HTTP_CODE) {
-            Log.w(TAG, "Unexpected onOpen response code=${response.code}; closing")
+            GeoVaultCaptureLog.w(TAG, "Unexpected onOpen response code=${response.code}; closing")
             runCatching { socket.close(1002, "bad_upgrade") }
             handleSocketDisconnected(
                 sessionId = sessionId,
@@ -574,7 +574,7 @@ class LiveTrackStreamingService : Service() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
             )
         } catch (e: Exception) {
-            Log.e(TAG, "startForeground failed; using minimal FGS notification", e)
+            GeoVaultCaptureLog.e(TAG, "startForeground failed; using minimal FGS notification", e)
             runCatching {
                 startForeground(
                     NOTIFICATION_ID,
@@ -582,7 +582,7 @@ class LiveTrackStreamingService : Service() {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
                 )
             }.exceptionOrNull()?.let { inner ->
-                Log.e(TAG, "Minimal startForeground also failed", inner)
+                GeoVaultCaptureLog.e(TAG, "Minimal startForeground also failed", inner)
                 throw inner
             }
         }
@@ -694,13 +694,13 @@ class LiveTrackStreamingService : Service() {
                     .filter { it.trackId in liveFilter }
                     .forEach { point -> onPoint(webSocket, point) }
             } catch (e: Exception) {
-                Log.e(TAG, "Parse track_updated failed", e)
+                GeoVaultCaptureLog.e(TAG, "Parse track_updated failed", e)
             }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             val code = response?.code
-            Log.w(TAG, "WebSocket failed: ${t.message} code=$code")
+            GeoVaultCaptureLog.w(TAG, "WebSocket failed: ${t.message} code=$code")
             val failureClass = classifyHttpCode(code)
             val reason = code?.let { "HTTP $it: ${t.message ?: ""}".trim() } ?: t.message
             onDisconnect(webSocket, failureClass, reason)

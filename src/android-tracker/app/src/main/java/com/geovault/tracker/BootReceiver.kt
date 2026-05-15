@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
 import android.os.UserManager
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.runtime.RuntimeCommand
@@ -21,13 +21,13 @@ class BootReceiver : BroadcastReceiver() {
         val bootAction = intent.action
         val app = context.applicationContext as? android.app.Application
         if (app == null) {
-            Log.e(TAG, "Boot handling ignored because application context was not Application")
+            GeoVaultCaptureLog.e(TAG, "Boot handling ignored because application context was not Application")
             return
         }
         val settingsRepository = TrackerAppServices.from(app).trackerSettingsRepository()
         val settingsState = settingsRepository.getState()
         if (!shouldProcessSettingsState(settingsState.loadState)) {
-            Log.w(
+            GeoVaultCaptureLog.w(
                 TAG,
                 "Boot handling skipped action=$bootAction reason=settings_${settingsState.loadState.name.lowercase()}"
             )
@@ -40,7 +40,7 @@ class BootReceiver : BroadcastReceiver() {
         val hasRequiredPermissions = TrackingPermissionGate.hasRequiredPermissionsForTracking(context)
         val gpsProviderEnabled = isGpsProviderEnabled(context)
         val userUnlocked = isUserUnlocked(context)
-        Log.i(
+        GeoVaultCaptureLog.i(
             TAG,
             "Boot signal action=$bootAction userUnlocked=$userUnlocked " +
                 "startOnBoot=$startOnBoot wasTrackingBeforeExit=$wasTrackingBeforeExit " +
@@ -61,14 +61,14 @@ class BootReceiver : BroadcastReceiver() {
         )
 
         if (!decision.shouldStartTracking) {
-            Log.w(
+            GeoVaultCaptureLog.w(
                 TAG,
                 "Skipping tracking start action=$bootAction blockers=${decision.blockers.joinToString(",") { it.logLabel }}"
             )
             return
         }
 
-        Log.i(TAG, "Starting TrackingService from action=$bootAction")
+        GeoVaultCaptureLog.i(TAG, "Starting TrackingService from action=$bootAction")
         val launchDecision = TrackingRuntimeController.get(app).handle(
             RuntimeCommand(
                 type = RuntimeCommandType.START,
@@ -76,7 +76,7 @@ class BootReceiver : BroadcastReceiver() {
                 reason = "boot:${bootAction ?: "unknown"}"
             )
         )
-        Log.i(
+        GeoVaultCaptureLog.i(
             TAG,
             "Boot launch decision action=${launchDecision.action} reason=${launchDecision.reason} gate=${launchDecision.startGateDecision}"
         )

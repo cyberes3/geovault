@@ -1,7 +1,7 @@
 package com.geovault.tracker.settings
 
 import android.content.Context
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
@@ -33,7 +33,7 @@ class TrackerSettingsDataStore(context: Context) {
     private val appContext = context.applicationContext
     private val store: DataStore<Preferences> = PreferenceDataStoreFactory.create(
         corruptionHandler = ReplaceFileCorruptionHandler { corruption ->
-            Log.e(
+            GeoVaultCaptureLog.e(
                 TAG,
                 "settings_datastore_corruption_recovered reason=replace_file_corruption",
                 corruption
@@ -83,7 +83,7 @@ class TrackerSettingsDataStore(context: Context) {
         store.edit { prefs ->
             val current = toRecord(prefs)
             val next = transform(current)
-            Log.i(
+            GeoVaultCaptureLog.i(
                 TAG,
                 "datastore_write reason=$reason schema=${next.schemaVersion} wasTrackingBeforeExit=${next.wasTrackingBeforeExit} settings=${settingsSummary(next.settings)}"
             )
@@ -92,7 +92,7 @@ class TrackerSettingsDataStore(context: Context) {
     }
 
     suspend fun resetToDefaults(schemaVersion: Int) {
-        Log.w(TAG, "datastore_reset_to_defaults schema=$schemaVersion")
+        GeoVaultCaptureLog.w(TAG, "datastore_reset_to_defaults schema=$schemaVersion")
         val defaults = TrackerSettingsDefaults.baseline
         store.edit { prefs ->
             writeRecordToPrefs(

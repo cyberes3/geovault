@@ -2,7 +2,7 @@ package com.geovault.tracker
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.policy.StreamingTargetPolicy
 
@@ -47,11 +47,11 @@ internal object MapStreamingServiceHelper {
         try {
             app.startService(intent)
         } catch (e: IllegalStateException) {
-            Log.w("MapStreamingServiceHelper", "startService rejected; escalating to FGS start", e)
+            GeoVaultCaptureLog.w("MapStreamingServiceHelper", "startService rejected; escalating to FGS start", e)
             runCatching { ContextCompat.startForegroundService(app, intent) }
                 .exceptionOrNull()
                 ?.let { inner ->
-                    Log.e("MapStreamingServiceHelper", "FGS start also failed", inner)
+                    GeoVaultCaptureLog.e("MapStreamingServiceHelper", "FGS start also failed", inner)
                     clearPersistedTargets(app)
                     return MapStreamingStartResult.Failed(
                         inner.message ?: "Unable to start live streaming service"
@@ -77,11 +77,11 @@ internal object MapStreamingServiceHelper {
         try {
             app.startService(intent)
         } catch (e: IllegalStateException) {
-            Log.w("MapStreamingServiceHelper", "stopService command rejected; escalating to FGS start", e)
+            GeoVaultCaptureLog.w("MapStreamingServiceHelper", "stopService command rejected; escalating to FGS start", e)
             runCatching { ContextCompat.startForegroundService(app, intent) }
                 .exceptionOrNull()
                 ?.let { inner ->
-                    Log.e("MapStreamingServiceHelper", "FGS stop command also failed", inner)
+                    GeoVaultCaptureLog.e("MapStreamingServiceHelper", "FGS stop command also failed", inner)
                     return MapStreamingStopResult.Failed(
                         inner.message ?: "Unable to stop live streaming service"
                     )

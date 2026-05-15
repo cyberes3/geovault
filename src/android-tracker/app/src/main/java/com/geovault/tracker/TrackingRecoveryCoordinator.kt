@@ -4,7 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.media.AudioAttributes
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingRuntimeController
@@ -50,13 +50,13 @@ object TrackingRecoveryCoordinator {
 
     fun ensureWatchdogScheduled(context: Context) {
         TrackingRuntimeController.get(context).ensureWatchdogScheduled()
-        Log.d(TAG, "watchdog_scheduled")
+        GeoVaultCaptureLog.d(TAG, "watchdog_scheduled")
         recordTelemetry(context, "watchdog_scheduled")
     }
 
     fun cancelWatchdog(context: Context) {
         TrackingRuntimeController.get(context).cancelWatchdog()
-        Log.d(TAG, "watchdog_canceled")
+        GeoVaultCaptureLog.d(TAG, "watchdog_canceled")
         recordTelemetry(context, "watchdog_canceled")
     }
 
@@ -66,13 +66,13 @@ object TrackingRecoveryCoordinator {
             .lineSequence()
             .filter { it.isNotBlank() }
             .toList()
-        Log.i(TAG, "Telemetry dump requested reason=$reason entries=${entries.size}")
+        GeoVaultCaptureLog.i(TAG, "Telemetry dump requested reason=$reason entries=${entries.size}")
         if (entries.isEmpty()) {
-            Log.i(TAG, "Telemetry dump is empty")
+            GeoVaultCaptureLog.i(TAG, "Telemetry dump is empty")
             return
         }
         entries.forEachIndexed { index, entry ->
-            Log.i(TAG, "Telemetry[${index + 1}/${entries.size}] $entry")
+            GeoVaultCaptureLog.i(TAG, "Telemetry[${index + 1}/${entries.size}] $entry")
         }
     }
 

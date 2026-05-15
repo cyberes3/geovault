@@ -1,7 +1,7 @@
 package com.geovault.tracker.services
 
 import android.content.Context
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.BinaryPayloadBuilder
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
@@ -144,7 +144,7 @@ class QueueUploadEngine(
             }
         }
         if (!lockAcquired) {
-            Log.d(TAG, "Push already in progress for scope=$scope")
+            GeoVaultCaptureLog.d(TAG, "Push already in progress for scope=$scope")
             return@withContext SyncFailureClass.SKIPPED
         }
 
@@ -213,7 +213,7 @@ class QueueUploadEngine(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Exception pushing locations", e)
+                    GeoVaultCaptureLog.e(TAG, "Exception pushing locations", e)
                     releaseClaimedBatch(batch)
                     locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
                     interruptedByFailure = true

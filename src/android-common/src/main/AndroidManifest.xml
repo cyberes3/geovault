@@ -9,4 +9,13 @@
     <permission
         android:name="com.geovault.common.permission.READ_SERVER_URL"
         android:protectionLevel="signature" />
+    <application>
+        <receiver
+            android:name=".logging.GeoVaultCaptureLogExportReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.geovault.common.EXPORT_CAPTURE_LOG" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

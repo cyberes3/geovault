@@ -21,7 +21,7 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.os.UserManager
 import android.provider.Settings
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationCompat
@@ -382,7 +382,7 @@ class TrackingService : Service() {
         super.onCreate()
         TrackingServiceLifecycleGate.markStarting()
         try {
-            Log.d(TAG, "onCreate")
+            GeoVaultCaptureLog.d(TAG, "onCreate")
             settingsRepository = settingsRepositoryLazy
             database = AppDatabase.getDatabase(this)
             locationSessionCoordinator = LocationSessionCoordinator(this)
@@ -430,7 +430,7 @@ class TrackingService : Service() {
             EXTRA_FOREGROUND_SERVICE_START_REQUIRED,
             false
         ) == true
-        Log.i(
+        GeoVaultCaptureLog.i(
             TAG,
             "onStartCommand action=${intent?.action} path=$commandPath startId=$startId " +
                 "trigger=$startupTrigger isTracking=$isTracking foregroundStartRequired=$foregroundStartRequired"
@@ -549,7 +549,7 @@ class TrackingService : Service() {
             "incomingCount=${incomingLocations.size} " +
             "lastRawAgeMs=${locationAgeMs ?: -1L} lastRawAccuracy=${locationAccuracyMeters ?: -1f} " +
             "provider=${diagnosticLocation?.provider ?: "none"}"
-        Log.i(TAG, "Background wakeup diagnostics $details")
+        GeoVaultCaptureLog.i(TAG, "Background wakeup diagnostics $details")
         runtimeTelemetry.event("background_wakeup", details)
     }
 
@@ -572,7 +572,7 @@ class TrackingService : Service() {
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy isTracking=$isTracking")
+        GeoVaultCaptureLog.d(TAG, "onDestroy isTracking=$isTracking")
         TrackingServiceLifecycleGate.markDestroying()
         if (isTracking) {
             TrackingRecoveryCoordinator.markUnexpectedDestroy(applicationContext, wasTracking = true)
@@ -591,11 +591,11 @@ class TrackingService : Service() {
     private fun requestStartTracking(path: StartupCommandPath, trigger: String): Boolean {
         synchronized(startupStateLock) {
             if (isTracking) {
-                Log.i(TAG, "Ignoring start request; tracking already active")
+                GeoVaultCaptureLog.i(TAG, "Ignoring start request; tracking already active")
                 return true
             }
             if (startupInProgress) {
-                Log.i(TAG, "Ignoring start request; startup already in progress")
+                GeoVaultCaptureLog.i(TAG, "Ignoring start request; startup already in progress")
                 return true
             }
             setStartupInProgress(true)
@@ -604,7 +604,7 @@ class TrackingService : Service() {
         transitionControlState(TrackingControlEvent.StartRequested)
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(selectedTrackerId)) {
-            Log.w(TAG, "Start blocked: invalid selected tracker id")
+            GeoVaultCaptureLog.w(TAG, "Start blocked: invalid selected tracker id")
             setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.no_tracker_selected_go_to_settings),
@@ -615,7 +615,7 @@ class TrackingService : Service() {
             return false
         }
         if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
-            Log.w(TAG, "Start blocked: required tracking permissions missing")
+            GeoVaultCaptureLog.w(TAG, "Start blocked: required tracking permissions missing")
             setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.location_permissions_required),
@@ -626,7 +626,7 @@ class TrackingService : Service() {
             return false
         }
         if (!isLocationServicesEnabled()) {
-            Log.w(TAG, "Start blocked: location services disabled")
+            GeoVaultCaptureLog.w(TAG, "Start blocked: location services disabled")
             setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.gps_provider_required),
@@ -641,7 +641,7 @@ class TrackingService : Service() {
                 performStartTracking(trigger = trigger)
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
-                Log.e(TAG, "Start failed during startup pipeline", t)
+                GeoVaultCaptureLog.e(TAG, "Start failed during startup pipeline", t)
                 failStartup(
                     message = getString(R.string.unable_to_start_location_updates),
                     path = path,
@@ -722,9 +722,9 @@ class TrackingService : Service() {
                 pushQueuedLocations(scope = QueueUploadScope.ALL, updateFailureCounters = false)
             }
             updateNotificationFromDb(broadcastStats = true)
-            Log.i(TAG, "Tracking session started boundary=$sessionVisibleBoundaryId")
+            GeoVaultCaptureLog.i(TAG, "Tracking session started boundary=$sessionVisibleBoundaryId")
         } catch (e: SecurityException) {
-            Log.e(TAG, "Location updates security failure", e)
+            GeoVaultCaptureLog.e(TAG, "Location updates security failure", e)
             failActiveTrackingAndStop(getString(R.string.unable_to_start_location_updates))
         } finally {
             TrackPointBus.resumeLocalDelivery()
@@ -732,7 +732,7 @@ class TrackingService : Service() {
     }
 
     private fun stopTracking(reason: String, failureReason: String? = null) {
-        Log.d(TAG, "Stopping tracking reason=$reason wasRunning=$isTracking")
+        GeoVaultCaptureLog.d(TAG, "Stopping tracking reason=$reason wasRunning=$isTracking")
         transitionControlState(TrackingControlEvent.StopRequested, failureReason = failureReason)
         transitionToStoppedState(failureReason = failureReason)
         settingsRepository.clearWasTrackingBeforeExit()
@@ -770,7 +770,7 @@ class TrackingService : Service() {
     }
 
     private fun cleanupServiceResources(reason: String) {
-        Log.d(TAG, "Cleaning service resources reason=$reason")
+        GeoVaultCaptureLog.d(TAG, "Cleaning service resources reason=$reason")
         stopRecoveryHeartbeat()
         stopRetryJob()
         stopPreflightMonitor()
@@ -793,7 +793,7 @@ class TrackingService : Service() {
     }
 
     private fun stopServiceInstance(reason: String) {
-        Log.d(TAG, "Stopping service instance reason=$reason")
+        GeoVaultCaptureLog.d(TAG, "Stopping service instance reason=$reason")
         stopSelf()
     }
 
@@ -1415,11 +1415,11 @@ class TrackingService : Service() {
         }
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (!hasValidSelectedTrackerId(selectedTrackerId)) {
-            Log.w(TAG, "Manual send ignored: invalid selected tracker id")
+            GeoVaultCaptureLog.w(TAG, "Manual send ignored: invalid selected tracker id")
             return false
         }
         val candidate = getManualSendCandidateLocation() ?: run {
-            Log.w(TAG, "Manual send ignored: no candidate location available")
+            GeoVaultCaptureLog.w(TAG, "Manual send ignored: no candidate location available")
             return false
         }
         val manualLocation = buildManualSendLocation(candidate)
@@ -1444,7 +1444,7 @@ class TrackingService : Service() {
     }
 
     private fun failStartup(message: String, path: StartupCommandPath, trigger: String, reason: String) {
-        Log.w(TAG, "Tracking start failed: $reason path=$path trigger=$trigger")
+        GeoVaultCaptureLog.w(TAG, "Tracking start failed: $reason path=$path trigger=$trigger")
         TrackPointBus.resumeLocalDelivery()
         transitionControlState(TrackingControlEvent.StartFailed, failureReason = message)
         transitionToStoppedState(failureReason = message)
@@ -1494,7 +1494,7 @@ class TrackingService : Service() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
             startupForegroundPromoted = true
-            Log.i(TAG, "Foreground promotion succeeded trigger=$trigger")
+            GeoVaultCaptureLog.i(TAG, "Foreground promotion succeeded trigger=$trigger")
             logNotificationSurfaceDiagnostics(
                 trigger = trigger,
                 action = action,
@@ -1504,9 +1504,9 @@ class TrackingService : Service() {
             true
         } catch (e: Exception) {
             if (e is ForegroundServiceStartNotAllowedException) {
-                Log.e(TAG, "Foreground start not allowed for trigger=$trigger", e)
+                GeoVaultCaptureLog.e(TAG, "Foreground start not allowed for trigger=$trigger", e)
             } else {
-                Log.e(TAG, "Foreground promotion failed for trigger=$trigger", e)
+                GeoVaultCaptureLog.e(TAG, "Foreground promotion failed for trigger=$trigger", e)
             }
             if (path == StartupCommandPath.StartTracking) {
                 TrackingRecoveryCoordinator.markIntentionalStop(
@@ -1866,7 +1866,7 @@ class TrackingService : Service() {
         cancelLowAccuracyFallbackTimer(clearCandidate = true)
         clearPausedFreshnessProbe(reason = "gps_provider_disabled")
         stopLocationUpdates()
-        Log.w(TAG, "GPS provider disabled while tracking reason=$reason")
+        GeoVaultCaptureLog.w(TAG, "GPS provider disabled while tracking reason=$reason")
         runtimeTelemetry.event("gps_provider_disabled", "reason=$reason")
         syncRuntimeStateStore()
         updateNotificationFromDb(broadcastStats = true)
@@ -1886,7 +1886,7 @@ class TrackingService : Service() {
             if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION) {
                 return
             }
-            Log.i(TAG, "GPS provider re-enabled while paused reason=$reason")
+            GeoVaultCaptureLog.i(TAG, "GPS provider re-enabled while paused reason=$reason")
             syncRuntimeStateStore()
             updateNotificationFromDb(broadcastStats = true)
             return
@@ -1900,7 +1900,7 @@ class TrackingService : Service() {
             failActiveTrackingAndStop(resolveLocationRequestFailureMessage())
             return
         }
-        Log.i(TAG, "GPS provider re-enabled, resumed updates reason=$reason")
+        GeoVaultCaptureLog.i(TAG, "GPS provider re-enabled, resumed updates reason=$reason")
         syncRuntimeStateStore()
         updateNotificationFromDb(broadcastStats = true)
     }
@@ -2174,7 +2174,7 @@ class TrackingService : Service() {
             )
             true
         } catch (security: SecurityException) {
-            Log.e(TAG, "Location request failed reason=$reason", security)
+            GeoVaultCaptureLog.e(TAG, "Location request failed reason=$reason", security)
             false
         }
     }
@@ -2413,7 +2413,7 @@ class TrackingService : Service() {
                 startFastGpsLockBurst(measuredAccuracyMeters = measuredAccuracyMeters, accuracyFilterMeters = accuracyFilterMeters)
             },
             onFailure = { error ->
-                Log.e(TAG, "Fast-lock last location lookup failed", error)
+                GeoVaultCaptureLog.e(TAG, "Fast-lock last location lookup failed", error)
                 isFastGpsLockPriming = false
                 if (!isTracking || isFastGpsLockWindowActive) return@getLastLocation
                 startFastGpsLockBurst(measuredAccuracyMeters = measuredAccuracyMeters, accuracyFilterMeters = accuracyFilterMeters)
@@ -2830,7 +2830,7 @@ class TrackingService : Service() {
             notificationManager?.activeNotifications?.map { it.id } ?: emptyList()
         }.getOrElse { emptyList() }
         val appImportance = runCatching { notificationManager?.importance }.getOrNull()
-        Log.i(
+        GeoVaultCaptureLog.i(
             TAG,
             "Notification diagnostics stage=$stage trigger=$trigger action=$action path=$path " +
                 "notificationsEnabled=${notificationManager?.areNotificationsEnabled()} appImportance=$appImportance " +
@@ -2847,7 +2847,7 @@ class TrackingService : Service() {
         val previous = gpsRuntimeState
         val next = GpsRuntimeStateMachine.transition(previous, event)
         if (next != previous) {
-            Log.d(TAG, "GPS runtime state $previous -> $next event=$event reason=$reason")
+            GeoVaultCaptureLog.d(TAG, "GPS runtime state $previous -> $next event=$event reason=$reason")
             runtimeTelemetry.event(
                 name = "gps_state",
                 details = "from=$previous to=$next event=$event reason=$reason"
@@ -2957,7 +2957,7 @@ class TrackingService : Service() {
             }
             props.toString()
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to build extended tracking point payload", e)
+            GeoVaultCaptureLog.w(TAG, "Failed to build extended tracking point payload", e)
             null
         }
     }

@@ -2,7 +2,7 @@ package com.geovault.tracker.services
 
 import android.content.Context
 import android.location.Location
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.location.UnifiedLocationClient
 import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.google.android.gms.location.LocationRequest
@@ -24,7 +24,7 @@ class LocationSessionCoordinator(
         return unifiedLocationClient.startSession(
             sessionRequest = UnifiedLocationSessionRequest(request),
             onError = { error ->
-                Log.e(TAG, "Unable to start fused location session", error)
+                GeoVaultCaptureLog.e(TAG, "Unable to start fused location session", error)
             }
         )
     }

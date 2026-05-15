@@ -1,7 +1,7 @@
 package com.geovault.tracker.runtime
 
 import android.content.Context
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 
 class RuntimeTelemetry(context: Context) {
     private val appContext = context.applicationContext
@@ -19,7 +19,7 @@ class RuntimeTelemetry(context: Context) {
             val trimmed = if (entries.size > MAX_ENTRIES) entries.takeLast(MAX_ENTRIES) else entries
             prefs.edit().putString(KEY_RING, trimmed.joinToString("\n")).apply()
         }
-        Log.i(TAG, "$name $details")
+        GeoVaultCaptureLog.i(TAG, "$name $details")
     }
 
     fun decision(name: String, details: String) {
@@ -39,9 +39,9 @@ class RuntimeTelemetry(context: Context) {
             .lineSequence()
             .filter { it.isNotBlank() }
             .toList()
-        Log.i(TAG, "dump reason=$reason entries=${entries.size}")
+        GeoVaultCaptureLog.i(TAG, "dump reason=$reason entries=${entries.size}")
         entries.forEachIndexed { index, entry ->
-            Log.i(TAG, "entry[${index + 1}/${entries.size}] $entry")
+            GeoVaultCaptureLog.i(TAG, "entry[${index + 1}/${entries.size}] $entry")
         }
     }
 

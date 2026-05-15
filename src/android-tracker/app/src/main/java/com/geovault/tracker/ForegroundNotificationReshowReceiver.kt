@@ -3,7 +3,7 @@ package com.geovault.tracker
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
@@ -47,10 +47,10 @@ class ForegroundNotificationReshowReceiver : BroadcastReceiver() {
         try {
             app.startService(intent)
         } catch (e: IllegalStateException) {
-            Log.w(TAG, "startService rejected for streaming reshow; escalating to FGS", e)
+            GeoVaultCaptureLog.w(TAG, "startService rejected for streaming reshow; escalating to FGS", e)
             runCatching { ContextCompat.startForegroundService(app, intent) }
                 .exceptionOrNull()
-                ?.let { Log.e(TAG, "FGS streaming reshow start also failed", it) }
+                ?.let { GeoVaultCaptureLog.e(TAG, "FGS streaming reshow start also failed", it) }
         }
     }
 

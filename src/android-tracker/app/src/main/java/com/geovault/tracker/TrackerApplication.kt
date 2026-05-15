@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.tracker.BuildConfig
@@ -14,6 +15,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
 
     override fun onCreate() {
         super.onCreate()
+        GeoVaultCaptureLog.init(this)
         GeovaultAuthManager.init(
             context = this,
             redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",

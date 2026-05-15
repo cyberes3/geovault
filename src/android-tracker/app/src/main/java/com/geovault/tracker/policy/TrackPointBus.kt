@@ -1,6 +1,6 @@
 package com.geovault.tracker.policy
 
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -164,7 +164,7 @@ object TrackPointBus {
         val previous = lastWarningAtMs.get()
         if (nowMs - previous < WARNING_INTERVAL_MS) return
         if (lastWarningAtMs.compareAndSet(previous, nowMs)) {
-            runCatching { Log.w(TAG, message) }
+            runCatching { GeoVaultCaptureLog.w(TAG, message) }
         }
     }
 }

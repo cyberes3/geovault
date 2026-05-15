@@ -5,7 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.location.Location
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.google.android.gms.location.LocationResult
 
 class TrackingLocationUpdateReceiver : BroadcastReceiver() {
@@ -23,12 +23,12 @@ class TrackingLocationUpdateReceiver : BroadcastReceiver() {
             source = TrackingServiceDeliverySource.FusedLocationUpdate,
         )
         when (result) {
-            is TrackingServiceDeliveryResult.Started -> Log.d(
+            is TrackingServiceDeliveryResult.Started -> GeoVaultCaptureLog.d(
                 TAG,
                 "Delivered fused location update count=${locations.size} " +
                     "foregroundEscalated=${result.foregroundEscalated}"
             )
-            is TrackingServiceDeliveryResult.Failed -> Log.e(
+            is TrackingServiceDeliveryResult.Failed -> GeoVaultCaptureLog.e(
                 TAG,
                 "Dropped fused location update count=${locations.size} reason=${result.reason}"
             )

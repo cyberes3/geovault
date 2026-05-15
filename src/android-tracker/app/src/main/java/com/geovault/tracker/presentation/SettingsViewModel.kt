@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorManager
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.AppResetFlow
@@ -216,7 +216,7 @@ class SettingsViewModel(
             val trackers = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> {
-                    Log.w(TAG, "refreshHiddenTrackerItems: failed to load trackers")
+                    GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load trackers")
                     _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
                     return@launch
                 }
@@ -224,7 +224,7 @@ class SettingsViewModel(
             val groups = when (val result = groupManagementRepository.loadGroups(forceRefresh = true)) {
                 is RepositoryResult.Success -> result.data
                 is RepositoryResult.Failure -> {
-                    Log.w(TAG, "refreshHiddenTrackerItems: failed to load groups")
+                    GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load groups")
                     _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
                     return@launch
                 }
@@ -245,7 +245,7 @@ class SettingsViewModel(
                     val tracker = when (val loadResult = trackerManagementRepository.loadTracker(item.id)) {
                         is RepositoryResult.Success -> loadResult.data
                         is RepositoryResult.Failure -> {
-                            Log.w(TAG, "unhideTrackerItem: failed to load tracker ${item.id}")
+                            GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load tracker ${item.id}")
                             return@launch
                         }
                     }
@@ -257,7 +257,7 @@ class SettingsViewModel(
                         )
                     )
                     if (result is RepositoryResult.Failure) {
-                        Log.w(TAG, "unhideTrackerItem: failed to update tracker ${item.id}")
+                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update tracker ${item.id}")
                         return@launch
                     }
                 }
@@ -265,7 +265,7 @@ class SettingsViewModel(
                     val group = when (val loadResult = groupManagementRepository.loadGroup(item.id)) {
                         is RepositoryResult.Success -> loadResult.data
                         is RepositoryResult.Failure -> {
-                            Log.w(TAG, "unhideTrackerItem: failed to load group ${item.id}")
+                            GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load group ${item.id}")
                             return@launch
                         }
                     }
@@ -274,7 +274,7 @@ class SettingsViewModel(
                         request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
                     )
                     if (result is RepositoryResult.Failure) {
-                        Log.w(TAG, "unhideTrackerItem: failed to update group ${item.id}")
+                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update group ${item.id}")
                         return@launch
                     }
                 }
@@ -297,7 +297,7 @@ class SettingsViewModel(
                     refreshHiddenTrackerItems()
                 }
                 is RepositoryResult.Failure -> {
-                    Log.w(TAG, "unhideAllTrackerItems: failed to clear hidden items")
+                    GeoVaultCaptureLog.w(TAG, "unhideAllTrackerItems: failed to clear hidden items")
                     _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
                 }
             }

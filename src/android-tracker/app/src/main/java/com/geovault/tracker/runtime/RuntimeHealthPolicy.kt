@@ -2,7 +2,7 @@ package com.geovault.tracker.runtime
 
 import android.content.Context
 import android.location.LocationManager
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingService
 import com.geovault.tracker.location.TrackingPermissionGate
@@ -20,7 +20,7 @@ class RuntimeHealthPolicy(private val context: Context) {
         val now = System.currentTimeMillis()
         if (isServiceRunning) {
             if (current.lifecycleState == RuntimeLifecycleState.IDLE || !current.shouldBeRunning) {
-                Log.i(TAG, "reconcile promote_to_active reason=$reason")
+                GeoVaultCaptureLog.i(TAG, "reconcile promote_to_active reason=$reason")
                 return current.copy(
                     lifecycleState = RuntimeLifecycleState.ACTIVE,
                     shouldBeRunning = true,
@@ -36,7 +36,7 @@ class RuntimeHealthPolicy(private val context: Context) {
             current.lifecycleState == RuntimeLifecycleState.RECOVERING
         if (!serviceExpected) return current
 
-        Log.w(TAG, "reconcile reset_stale_active_state reason=$reason lifecycle=${current.lifecycleState}")
+        GeoVaultCaptureLog.w(TAG, "reconcile reset_stale_active_state reason=$reason lifecycle=${current.lifecycleState}")
         return current.copy(
             lifecycleState = RuntimeLifecycleState.IDLE,
             shouldBeRunning = false,

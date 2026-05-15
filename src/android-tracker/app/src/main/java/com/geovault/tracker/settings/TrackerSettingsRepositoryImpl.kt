@@ -1,6 +1,6 @@
 package com.geovault.tracker.settings
 
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -62,7 +62,7 @@ class TrackerSettingsRepositoryImpl(
                     )
                 }
                 .onFailure { error ->
-                    Log.e(TAG, "settings_event name=debug_dump_durable_failed reason=$reason", error)
+                    GeoVaultCaptureLog.e(TAG, "settings_event name=debug_dump_durable_failed reason=$reason", error)
                 }
         }
     }
@@ -177,7 +177,7 @@ class TrackerSettingsRepositoryImpl(
                 }
                 .onFailure { error ->
                     logEvent(name = "command_failed", reason = command.name, opId = command.opId)
-                    Log.e(TAG, "settings_event name=command_failed reason=${command.name} opId=${command.opId}", error)
+                    GeoVaultCaptureLog.e(TAG, "settings_event name=command_failed reason=${command.name} opId=${command.opId}", error)
                 }
         }
     }
@@ -213,7 +213,7 @@ class TrackerSettingsRepositoryImpl(
             if (!initializationComplete.isCompleted) {
                 initializationComplete.complete(Unit)
             }
-            Log.e(TAG, "settings_event name=observer_failed reason=observe_store", error)
+            GeoVaultCaptureLog.e(TAG, "settings_event name=observer_failed reason=observe_store", error)
         }
     }
 
@@ -243,7 +243,7 @@ class TrackerSettingsRepositoryImpl(
     ) {
         val opPart = if (opId == null) "" else " opId=$opId"
         val extraPart = if (extra.isBlank()) "" else " $extra"
-        Log.i(TAG, "settings_event name=$name reason=$reason$opPart$extraPart")
+        GeoVaultCaptureLog.i(TAG, "settings_event name=$name reason=$reason$opPart$extraPart")
     }
 
     private fun settingsSummary(settings: TrackerSettings): String {

@@ -3,7 +3,7 @@ package com.geovault.tracker
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.services.TrackingRuntimeStateStore
@@ -22,7 +22,7 @@ object SelectedTrackerManager {
     ) {
         val persisted = SelectedTrackerPrefs.setSelectedTracker(context, trackerId, trackerName)
         if (!persisted) {
-            Log.w(TAG, "Failed to persist selected tracker id=$trackerId before restart")
+            GeoVaultCaptureLog.w(TAG, "Failed to persist selected tracker id=$trackerId before restart")
         }
         syncRuntimeSelectedTracker(context)
         if (restartTrackingIfRunning) {
@@ -41,7 +41,7 @@ object SelectedTrackerManager {
         clearSelectedTracker(context)
         val application = context.applicationContext as? android.app.Application
         if (application == null) {
-            Log.w(TAG, "Unable to clear caches: application context unavailable")
+            GeoVaultCaptureLog.w(TAG, "Unable to clear caches: application context unavailable")
             return
         }
         TrackerAppServices.from(application).trackerManagementRepository().clearSelectedTrackerCaches()

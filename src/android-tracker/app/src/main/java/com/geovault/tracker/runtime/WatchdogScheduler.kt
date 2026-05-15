@@ -5,7 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.TrackingRecoveryCoordinator
 import com.geovault.tracker.TrackingRecoveryReceiver
 
@@ -16,14 +16,14 @@ class WatchdogScheduler(context: Context) {
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val triggerAt = SystemClock.elapsedRealtime() + delayMs
         if (canScheduleExactAlarms(alarmManager)) {
-            Log.d(TAG, "schedule mode=exact delayMs=$delayMs triggerAtElapsed=$triggerAt")
+            GeoVaultCaptureLog.d(TAG, "schedule mode=exact delayMs=$delayMs triggerAtElapsed=$triggerAt")
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 triggerAt,
                 pendingIntent()
             )
         } else {
-            Log.d(TAG, "schedule mode=inexact delayMs=$delayMs triggerAtElapsed=$triggerAt")
+            GeoVaultCaptureLog.d(TAG, "schedule mode=inexact delayMs=$delayMs triggerAtElapsed=$triggerAt")
             alarmManager.setAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 triggerAt,
@@ -35,7 +35,7 @@ class WatchdogScheduler(context: Context) {
     fun cancel() {
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(pendingIntent())
-        Log.d(TAG, "cancel watchdog alarm")
+        GeoVaultCaptureLog.d(TAG, "cancel watchdog alarm")
     }
 
     fun canScheduleExact(): Boolean {

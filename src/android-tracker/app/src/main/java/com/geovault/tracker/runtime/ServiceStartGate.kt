@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.TrackingService
 import kotlin.math.min
 
@@ -29,7 +29,7 @@ class ServiceStartGate(private val context: Context) {
             blockedUntil = persistedBlockedUntil,
             lastAttempt = persistedLastAttempt
         )
-        Log.i(
+        GeoVaultCaptureLog.i(
             TAG,
             "dispatchStart trigger=$trigger reason=$reason now=$now blockedUntil=$blockedUntil lastAttempt=$lastAttempt"
         )
@@ -38,7 +38,7 @@ class ServiceStartGate(private val context: Context) {
             if (retryInMs > 0L) {
                 scheduleRetry(retryInMs)
             }
-            Log.w(TAG, "dispatchStart blocked by backoff retryInMs=${blockedUntil - now}")
+            GeoVaultCaptureLog.w(TAG, "dispatchStart blocked by backoff retryInMs=${blockedUntil - now}")
             return StartGateDecision(
                 allowed = false,
                 retryInMs = retryInMs,
@@ -50,7 +50,7 @@ class ServiceStartGate(private val context: Context) {
             if (retryInMs > 0L) {
                 scheduleRetry(retryInMs)
             }
-            Log.w(TAG, "dispatchStart blocked by min gap retryInMs=$retryInMs")
+            GeoVaultCaptureLog.w(TAG, "dispatchStart blocked by min gap retryInMs=$retryInMs")
             return StartGateDecision(
                 allowed = false,
                 retryInMs = retryInMs,
@@ -69,7 +69,7 @@ class ServiceStartGate(private val context: Context) {
         return try {
             appContext.startForegroundService(intent)
             prefs.edit().putInt(KEY_FAILURE_COUNT, 0).putLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, 0L).apply()
-            Log.i(TAG, "dispatchStart success trigger=$trigger reason=$reason")
+            GeoVaultCaptureLog.i(TAG, "dispatchStart success trigger=$trigger reason=$reason")
             StartGateDecision(allowed = true, reason = "start_dispatched:$reason")
         } catch (error: Exception) {
             val failureCount = (prefs.getInt(KEY_FAILURE_COUNT, 0) + 1).coerceAtMost(MAX_RETRY_ATTEMPTS)
@@ -83,7 +83,7 @@ class ServiceStartGate(private val context: Context) {
                 scheduleRetry(retryDelay)
             }
             val suffix = if (error is ForegroundServiceStartNotAllowedException) "fgs_denied" else error::class.java.simpleName
-            Log.e(
+            GeoVaultCaptureLog.e(
                 TAG,
                 "dispatchStart failed trigger=$trigger reason=$reason failureCount=$failureCount retryDelay=$retryDelay blockedUntil=$blocked suffix=$suffix",
                 error
@@ -123,7 +123,7 @@ class ServiceStartGate(private val context: Context) {
                 .putLong(KEY_BLOCKED_UNTIL_ELAPSED_MS, sanitizedBlockedUntil)
                 .putInt(KEY_FAILURE_COUNT, 0)
                 .apply()
-            Log.w(
+            GeoVaultCaptureLog.w(
                 TAG,
                 "reset invalid elapsed state now=$now blockedUntil=$blockedUntil lastAttempt=$lastAttempt"
             )
@@ -153,7 +153,7 @@ class ServiceStartGate(private val context: Context) {
             SystemClock.elapsedRealtime() + retryInMs,
             pendingIntent
         )
-        Log.i(TAG, "scheduleRetry retryInMs=$retryInMs")
+        GeoVaultCaptureLog.i(TAG, "scheduleRetry retryInMs=$retryInMs")
     }
 
     companion object {

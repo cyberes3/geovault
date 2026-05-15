@@ -39,6 +39,9 @@ abstract class GeoVaultSharedModuleCompileLockService :
     }
 }
 
+val geoVaultCaptureLoggingEnabled =
+    project.findProperty("GEOVAULT_ADD_LOGGING")?.toString() == "true"
+
 val geoVaultSharedModuleCompileLock = gradle.sharedServices.registerIfAbsent(
     "geoVaultSharedModuleCompileLock",
     GeoVaultSharedModuleCompileLockService::class,
@@ -69,6 +72,14 @@ android {
         consumerProguardFiles("proguard-rules.pro")
     }
 
+    buildTypes.configureEach {
+        buildConfigField(
+            "boolean",
+            "GEOVAULT_CAPTURE_LOGGING_ENABLED",
+            if (geoVaultCaptureLoggingEnabled) "true" else "false",
+        )
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -86,6 +97,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -108,6 +120,7 @@ dependencies {
     implementation(libs.androidx.datastore)
 
     testImplementation(libs.junit)
+    testImplementation("androidx.test:core:1.7.0")
     // Plain JVM unit tests hit android.util.Log from auth code; Robolectric provides a shadowed
     // Android environment (same pattern as :android-common-maps unit tests).
     testImplementation("org.robolectric:robolectric:4.16.1")

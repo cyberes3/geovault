@@ -1,7 +1,7 @@
 package com.geovault.tracker.ui
 
 import android.content.Context
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.render.MapRenderState
@@ -93,14 +93,14 @@ class TrackerMapMarkerIconPlugin(
                 tintColor = tint,
             )
         } ?: run {
-            Log.w(TAG, "Failed to build map icon bitmap imageId=$imageId")
+            GeoVaultCaptureLog.w(TAG, "Failed to build map icon bitmap imageId=$imageId")
             return false
         }
         return try {
             style.addImage(imageId, bitmap, false)
             style.getImage(imageId) != null
         } catch (t: Throwable) {
-            Log.e(TAG, "Failed to add map icon imageId=$imageId", t)
+            GeoVaultCaptureLog.e(TAG, "Failed to add map icon imageId=$imageId", t)
             false
         }
     }

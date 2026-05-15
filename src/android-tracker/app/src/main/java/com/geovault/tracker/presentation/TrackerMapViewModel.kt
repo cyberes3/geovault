@@ -2,7 +2,7 @@ package com.geovault.tracker.presentation
 
 import android.app.Application
 import android.os.SystemClock
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.MapStreamingServiceHelper
@@ -1352,7 +1352,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         outcome.invariants
             .filter { !it.satisfied }
             .forEach { invariant ->
-                Log.w(TAG, "Reopen invariant violation ${invariant.invariant}: ${invariant.details}")
+                GeoVaultCaptureLog.w(TAG, "Reopen invariant violation ${invariant.invariant}: ${invariant.details}")
             }
         viewModelScope.launch {
             applyReopenDecision(outcome.decision)

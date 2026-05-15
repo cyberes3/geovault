@@ -1,7 +1,7 @@
 package com.geovault.tracker.startup
 
 import android.app.Application
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.TrackingRecoveryCoordinator
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.runtime.TrackingRuntimeController
@@ -58,7 +58,7 @@ class WatchdogColdStartArmer internal constructor(
             val state = settings.observeState()
                 .first { it.loadState != TrackerSettingsLoadState.Loading }
             val decision = ColdStartArmPolicy.decide(state, isServiceRunning())
-            Log.i(TAG, "Cold-start arm decision=${decision.logLabel}")
+            GeoVaultCaptureLog.i(TAG, "Cold-start arm decision=${decision.logLabel}")
             if (decision == ColdStartArmDecision.Rearm) {
                 schedule()
             }

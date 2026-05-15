@@ -2,7 +2,7 @@ package com.geovault.tracker.presentation
 
 import android.app.Application
 import android.content.Intent
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
@@ -108,10 +108,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     val ok = measureLaunchTransportReachable()
                     if (!ok) return@withLock false
                     _state.update { it.copy(isServerAccessible = true) }
-                    Log.d(TAG, "transport_probe_validated_network reachable=true")
+                    GeoVaultCaptureLog.d(TAG, "transport_probe_validated_network reachable=true")
                     // Launch bootstrap already runs resume-scale I/O; avoid doubling work mid-flight.
                     if (activeLaunchBootstrap?.isActive == true) {
-                        Log.d(TAG, "transport_probe_validated_network skip_resume launch_bootstrap_active")
+                        GeoVaultCaptureLog.d(TAG, "transport_probe_validated_network skip_resume launch_bootstrap_active")
                         return@withLock false
                     }
                     true
@@ -320,7 +320,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             when (val result = trackerManagementRepository.loadTrackerGeometry(selectedId)) {
                 is RepositoryResult.Success -> Unit
                 is RepositoryResult.Failure ->
-                    Log.w(
+                    GeoVaultCaptureLog.w(
                         "MainScreenViewModel",
                         "Selected tracker geometry preload failed trackerId=$selectedId error=${result.error}"
                     )
@@ -378,7 +378,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val created = async {
                 try {
                     val transportReachable = measureLaunchTransportReachableExclusive()
-                    Log.d(TAG, "transport_probe_launch reachable=$transportReachable")
+                    GeoVaultCaptureLog.d(TAG, "transport_probe_launch reachable=$transportReachable")
                     // Apply immediately so offline overlay / notifier match transport (do not wait for launch I/O).
                     _state.update { it.copy(isServerAccessible = transportReachable) }
                     val outcome = sessionBootstrap.runLaunchBootstrap()
@@ -407,10 +407,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             if (!_state.value.isServerAccessible) {
                 val reachable = measureLaunchTransportReachableExclusive()
                 _state.update { it.copy(isServerAccessible = reachable) }
-                Log.d(TAG, "transport_probe_on_resume reachable=$reachable")
+                GeoVaultCaptureLog.d(TAG, "transport_probe_on_resume reachable=$reachable")
             } else {
                 // Avoid a flaky probe undoing a validated-network recovery that beat this coroutine.
-                Log.d(TAG, "transport_probe_on_resume skip_probe already_accessible")
+                GeoVaultCaptureLog.d(TAG, "transport_probe_on_resume skip_probe already_accessible")
             }
             sessionBootstrap.runResumeBootstrap()
         }
@@ -433,7 +433,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private fun logConfiguredServerHost(reason: String) {
         val raw = authController.getConfiguredServerUrlOrPeerDefault().trim()
         val host = runCatching { java.net.URI(raw).host }.getOrNull().orEmpty()
-        Log.d(TAG, "$reason configuredHost=$host len=${raw.length}")
+        GeoVaultCaptureLog.d(TAG, "$reason configuredHost=$host len=${raw.length}")
     }
 
     private suspend fun tryStartTrackingOnLaunch() {
@@ -529,7 +529,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             is RepositoryResult.Failure -> false
         }
         if (isValid) return true
-        Log.w("MainScreenViewModel", "selected tracker invalid on start, clearing selection")
+        GeoVaultCaptureLog.w("MainScreenViewModel", "selected tracker invalid on start, clearing selection")
         SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
         trackerManagementRepository.loadTrackers(forceRefresh = true)
         _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }

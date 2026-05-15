@@ -1,6 +1,6 @@
 package com.geovault.tracker.policy
 
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import java.util.concurrent.atomic.AtomicLong
 
@@ -80,7 +80,7 @@ object RemoteTrackPointIngress {
         val previous = lastDropWarningAtMs.get()
         if (nowMs - previous < WARNING_INTERVAL_MS) return
         if (lastDropWarningAtMs.compareAndSet(previous, nowMs)) {
-            runCatching { Log.w(TAG, message) }
+            runCatching { GeoVaultCaptureLog.w(TAG, message) }
         }
     }
 }

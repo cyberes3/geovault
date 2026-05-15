@@ -3,7 +3,7 @@ package com.geovault.tracker
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.startup.RecoveryStartupPolicy
@@ -15,7 +15,7 @@ class TrackingRecoveryReceiver : BroadcastReceiver() {
         val action = intent?.action ?: return
         val app = context.applicationContext as? android.app.Application
         if (app == null) {
-            Log.e(TAG, "Recovery receiver ignored because application context was not Application")
+            GeoVaultCaptureLog.e(TAG, "Recovery receiver ignored because application context was not Application")
             return
         }
         val settingsState = TrackerAppServices.from(app).trackerSettingsRepository().getState()
@@ -30,22 +30,22 @@ class TrackingRecoveryReceiver : BroadcastReceiver() {
         when (outcome) {
             is RecoveryTickOutcome.Handle -> {
                 val strict = controller.evaluateStrictPrerequisites()
-                Log.d(
+                GeoVaultCaptureLog.d(
                     TAG,
                     "Recovery handle action=$action wasTrackingBeforeExit=${settingsState.wasTrackingBeforeExit} strictReady=${strict.isReady}"
                 )
                 val result = controller.handleWatchdogTick(outcome.request)
-                Log.i(
+                GeoVaultCaptureLog.i(
                     TAG,
                     "Runtime recovery decision action=${result.action} reason=${result.reason} gate=${result.startGateDecision}"
                 )
             }
             is RecoveryTickOutcome.Defer -> {
-                Log.w(TAG, "Recovery deferred action=$action reason=${outcome.reason} delayMs=${outcome.delayMs}")
+                GeoVaultCaptureLog.w(TAG, "Recovery deferred action=$action reason=${outcome.reason} delayMs=${outcome.delayMs}")
                 controller.ensureWatchdogScheduledIn(outcome.delayMs, reason = outcome.reason)
             }
             is RecoveryTickOutcome.Stop -> {
-                Log.w(TAG, "Recovery stopped action=$action reason=${outcome.reason}")
+                GeoVaultCaptureLog.w(TAG, "Recovery stopped action=$action reason=${outcome.reason}")
             }
         }
     }
