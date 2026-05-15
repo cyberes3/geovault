@@ -76,8 +76,15 @@ for arg in "$@"; do
     esac
 done
 
+remove_android_build_outputs() {
+    ./gradlew clean --quiet 2>/dev/null || true
+    rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" \
+        "$SCRIPT_DIR/../android-common/build" "$SCRIPT_DIR/../android-common-maps/build"
+}
+
 if [ "$BUILD_TYPE" = "clean" ]; then
-    ./gradlew clean
+    echo "Cleaning build outputs..."
+    remove_android_build_outputs
     echo "Clean complete."
     exit 0
 fi
@@ -140,12 +147,6 @@ if [ "$OLD_VERSION" = true ]; then
     fi
     GRADLE_ARGS+=("-PGIT_COMMIT_SHA_OVERRIDE=$OLD_VERSION_SHA")
 fi
-
-remove_android_build_outputs() {
-    ./gradlew clean --quiet 2>/dev/null || true
-    rm -rf "$SCRIPT_DIR/build" "$SCRIPT_DIR/app/build" \
-        "$SCRIPT_DIR/../android-common/build" "$SCRIPT_DIR/../android-common-maps/build"
-}
 
 stage_built_apk() {
     local apk_path="$1"
@@ -217,8 +218,10 @@ echo "To install on a connected device:"
 echo "  adb install -r $SCRIPT_DIR/$INSTALL_APK_PATH"
 
 if [ "$INSTALL" = true ]; then
+    echo "Gradle cleanup before install..."
+    remove_android_build_outputs
     echo "Installing APK..."
-    adb install -r "$SCRIPT_DIR/$INSTALL_APK_PATH"
+    adb install -r "$STAGED_APK_TMP"
 fi
 
 echo "Removing Gradle build outputs..."
