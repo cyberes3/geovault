@@ -2,6 +2,7 @@ package com.geovault.common.bootstrap
 
 import android.content.Context
 import android.util.Log
+import com.geovault.common.update.GeoVaultApkUpdateDownloadCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +52,7 @@ class GeoVaultColdStart(
      */
     fun boot(context: Context) {
         if (readyState.value) return
+        GeoVaultApkUpdateDownloadCache.clearAll(context)
         runBlocking {
             gates.map { task ->
                 async(Dispatchers.IO) { runTaskSafely(task, context) }

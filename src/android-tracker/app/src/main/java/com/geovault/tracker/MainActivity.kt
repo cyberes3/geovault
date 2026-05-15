@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
                     onAuthConnect = viewModel::connectAuth,
                     onClearInfoMessage = viewModel::clearInfoMessage,
-                    onClearUpdatePrompt = viewModel::clearUpdatePrompt,
+                    onClearUpdateAvailable = viewModel::clearUpdateAvailable,
                     onRequestStartTracking = viewModel::requestStartTracking,
                     onRequestStopTracking = viewModel::requestStopTracking,
                     onRequestManualPoint = viewModel::requestManualPoint,

@@ -12,7 +12,12 @@ sealed class VersionCheckResult {
         val releaseUrl: String,
         val releaseTag: String,
         val releaseCommitSha: String,
-        val localCommitSha: String
+        val localCommitSha: String,
+        val apkDownloadUrl: String,
+        val apkAssetName: String,
+        val apkSizeBytes: Long?,
+        val releasePublishedAtIso: String,
+        val releaseTitle: String,
     ) : VersionCheckResult()
 
     data class UpToDate(

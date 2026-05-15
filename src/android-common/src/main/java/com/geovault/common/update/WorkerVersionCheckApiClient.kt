@@ -21,7 +21,12 @@ data class WorkerCheckPayload(
     val releasePageUrl: String,
     val releaseTag: String,
     val releaseCommitSha: String,
-    val localCommitSha: String
+    val localCommitSha: String,
+    val latestApkUrl: String,
+    val apkAssetName: String,
+    val apkSizeBytes: Long?,
+    val releasePublishedAt: String,
+    val releaseTitle: String,
 )
 
 sealed class WorkerCheckApiResult {
@@ -91,7 +96,12 @@ open class WorkerVersionCheckApiClient(
                     releasePageUrl = payload.releasePageUrl.trim(),
                     releaseTag = payload.releaseTag.trim(),
                     releaseCommitSha = payload.releaseCommitSha.trim().lowercase(),
-                    localCommitSha = payload.localCommitSha.trim().lowercase()
+                    localCommitSha = payload.localCommitSha.trim().lowercase(),
+                    latestApkUrl = payload.latestApkUrl.trim(),
+                    apkAssetName = payload.apkAssetName.trim(),
+                    apkSizeBytes = payload.apkSizeBytes,
+                    releasePublishedAt = payload.releasePublishedAt.trim(),
+                    releaseTitle = payload.releaseTitle.trim(),
                 )
             )
         } catch (e: Exception) {
@@ -138,7 +148,12 @@ open class WorkerVersionCheckApiClient(
         val releasePageUrl: String = "",
         val releaseTag: String = "",
         val releaseCommitSha: String = "",
-        val localCommitSha: String = ""
+        val localCommitSha: String = "",
+        val latestApkUrl: String = "",
+        val apkAssetName: String = "",
+        val apkSizeBytes: Long? = null,
+        val releasePublishedAt: String = "",
+        val releaseTitle: String = "",
     )
 
     @Serializable

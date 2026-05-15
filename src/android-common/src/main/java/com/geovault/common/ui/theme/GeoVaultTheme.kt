@@ -91,12 +91,12 @@ fun geoVaultDialogSurfaceColor(): Color =
         GeoVaultColorTokens.Dark.BlueLight
     }
 
-/** Dialog title text: muted light grey on [geoVaultDialogSurfaceColor] in both themes. */
+/** Dialog title text: brand blue in light theme; light grey on dark dialog panels. */
 @Composable
 @ReadOnlyComposable
 fun geoVaultDialogTitleColor(): Color =
     if (MaterialTheme.colors.isLight) {
-        GeoVaultColorTokens.Gray600
+        GeoVaultColorTokens.MainBlue
     } else {
         GeoVaultColorTokens.Gray300
     }

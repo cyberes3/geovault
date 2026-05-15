@@ -50,7 +50,7 @@ fun MainScreen(
     onCloseClick: () -> Unit,
     onDismissImportant: () -> Unit,
     onDismissInvalidFiles: () -> Unit,
-    onDismissUpdatePrompt: () -> Unit
+    onDismissUpdateAvailable: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -107,9 +107,8 @@ fun MainScreen(
                     onAction = { },
                 )
                 GeoVaultUpdateAvailableSnackbarHost(
-                    model = state.updatePrompt,
-                    releaseUrl = state.updateReleaseUrl,
-                    onDismiss = onDismissUpdatePrompt,
+                    update = state.updateAvailable,
+                    onDismiss = onDismissUpdateAvailable,
                     stackBottomInset = if (state.importantSnackbar != null) 72.dp else 0.dp,
                 )
                 invalidFilesDialogNames?.let { names ->

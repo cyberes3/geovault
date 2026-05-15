@@ -101,7 +101,7 @@ fun MainScreen(
     onCopyCoordinates: (String) -> Unit,
     onCancelRefresh: () -> Unit,
     onDismissSnackbar: () -> Unit,
-    onClearUpdatePrompt: () -> Unit,
+    onClearUpdateAvailable: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val showSearchDivider by remember(listState) {
@@ -188,9 +188,8 @@ fun MainScreen(
             onAction = { _ -> onDismissSnackbar() },
         )
         GeoVaultUpdateAvailableSnackbarHost(
-            model = state.updatePrompt,
-            releaseUrl = state.updateReleaseUrl,
-            onDismiss = onClearUpdatePrompt,
+            update = state.updateAvailable,
+            onDismiss = onClearUpdateAvailable,
             stackBottomInset = if (state.snackbar != null) 72.dp else 0.dp,
         )
     }

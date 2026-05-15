@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.VersionCheckResult
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
 import com.geovault.uploader.data.ValidationOutcome
@@ -40,8 +41,7 @@ data class MainScreenState(
     val isUploading: Boolean = false,
     val statusMessage: String = "",
     val importantSnackbar: GeoVaultSnackbarModel? = null,
-    val updatePrompt: GeoVaultSnackbarModel? = null,
-    val updateReleaseUrl: String? = null
+    val updateAvailable: VersionCheckResult.UpdateAvailable? = null
 )
 
 class MainScreenViewModel(
@@ -187,8 +187,8 @@ class MainScreenViewModel(
         _state.update { it.copy(importantSnackbar = null) }
     }
 
-    fun clearUpdatePrompt() {
-        _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
+    fun clearUpdateAvailable() {
+        _state.update { it.copy(updateAvailable = null) }
     }
 
     fun validate() {
@@ -286,8 +286,8 @@ class MainScreenViewModel(
     }
 
     private fun launchVersionCheckIfNeeded() {
-        versionCheckSession.launchIfNeeded(viewModelScope) { model, url ->
-            _state.update { it.copy(updatePrompt = model, updateReleaseUrl = url) }
+        versionCheckSession.launchIfNeeded(viewModelScope) { available ->
+            _state.update { it.copy(updateAvailable = available) }
         }
     }
 
@@ -302,8 +302,7 @@ class MainScreenViewModel(
             it.copy(
                 isAuthenticated = nowAuthenticated,
                 serverUrl = resolvedServer,
-                updatePrompt = if (nowAuthenticated) it.updatePrompt else null,
-                updateReleaseUrl = if (nowAuthenticated) it.updateReleaseUrl else null,
+                updateAvailable = if (nowAuthenticated) it.updateAvailable else null,
             )
         }
     }

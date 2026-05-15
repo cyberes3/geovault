@@ -9,6 +9,7 @@ import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
 import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.VersionCheckResult
 import com.geovault.places.BuildConfig
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.domain.SnapshotFetchResult
@@ -46,8 +47,7 @@ data class MainScreenState(
     val syncOverlayTitle: String = "Syncing...",
     val syncOverlaySubtext: String = "Tap to cancel",
     val snackbar: GeoVaultSnackbarModel? = null,
-    val updatePrompt: GeoVaultSnackbarModel? = null,
-    val updateReleaseUrl: String? = null,
+    val updateAvailable: VersionCheckResult.UpdateAvailable? = null,
 )
 
 class MainScreenViewModel(
@@ -275,8 +275,8 @@ class MainScreenViewModel(
         _state.update { it.copy(snackbar = null) }
     }
 
-    fun clearUpdatePrompt() {
-        _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
+    fun clearUpdateAvailable() {
+        _state.update { it.copy(updateAvailable = null) }
     }
 
     fun showExternalError(message: String) {
@@ -305,7 +305,7 @@ class MainScreenViewModel(
         if (wasAuthenticated && !loggedIn) {
             initialRefreshTriggered = false
             versionCheckSession.reset()
-            _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
+            _state.update { it.copy(updateAvailable = null) }
         }
         val authenticatedAfterLaunch = !initialRefreshTriggered && loggedIn
         val becameAuthenticated = !wasAuthenticated && loggedIn
@@ -319,8 +319,8 @@ class MainScreenViewModel(
     }
 
     private fun launchVersionCheckIfNeeded() {
-        versionCheckSession.launchIfNeeded(viewModelScope) { prompt, releaseUrl ->
-            _state.update { it.copy(updatePrompt = prompt, updateReleaseUrl = releaseUrl) }
+        versionCheckSession.launchIfNeeded(viewModelScope) { available ->
+            _state.update { it.copy(updateAvailable = available) }
         }
     }
 

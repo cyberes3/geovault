@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gv_update_snackbar_message">A newer %1$s version is available (%2$s).</string>
+    <string name="gv_update_snackbar_action_details">Details</string>
+    <string name="gv_update_dialog_title">Update Available</string>
+    <string name="gv_update_download_dialog_title">Download Update</string>
+    <string name="gv_update_label_published">Published</string>
+    <string name="gv_update_label_release_name">Release name</string>
+    <string name="gv_update_published_unknown">Unknown</string>
+    <string name="gv_update_install">Install</string>
+    <string name="gv_update_view">View</string>
+    <string name="gv_update_close">Close</string>
+    <string name="gv_update_cancel_download">Cancel download</string>
+    <string name="gv_update_retry">Retry</string>
+    <string name="gv_update_install_permission_still_denied">Install from this source is still turned off for this app. Tap Install to open Settings again.</string>
+    <string name="gv_update_size_about">About %1$s</string>
+    <string name="gv_update_size_unknown_hint">Size will appear once the download starts.</string>
+    <string name="gv_update_status_downloading">Downloading update…</string>
+    <string name="gv_update_status_connecting">Connecting…</string>
+    <string name="gv_update_status_receiving">Receiving update…</string>
+    <string name="gv_update_status_download_complete">Download complete</string>
+    <string name="gv_update_status_opening_installer">Opening installer…</string>
+    <string name="gv_update_progress_downloaded_of_total">%1$s of %2$s</string>
+    <string name="gv_update_progress_downloaded_only">%1$s downloaded</string>
+    <string name="gv_update_progress_percent">%1$d%%</string>
+    <string name="gv_update_progress_speed">%1$s/s</string>
+    <string name="gv_update_progress_eta">About %1$s left</string>
+    <string name="gv_update_eta_min_sec">%1$dm %2$ds</string>
+    <string name="gv_update_eta_sec">%1$ds</string>
+    <string name="gv_update_progress_estimating_time">Estimating time…</string>
+    <string name="gv_update_progress_em_dash">—</string>
+    <string name="gv_update_progress_a11y">Download progress %1$d percent</string>
+    <string name="gv_update_progress_a11y_indeterminate">Download in progress</string>
+    <string name="gv_update_error_network">Could not reach the download server. Check your connection and try again.</string>
+    <string name="gv_update_error_disk">Not enough storage space to save the update.</string>
+    <string name="gv_update_error_http">Download failed (%1$d).</string>
+    <string name="gv_update_error_generic">Download failed.</string>
+    <string name="gv_update_error_no_install_handler">No app can install this package. Open the release page to download manually.</string>
+    <string name="gv_update_error_version_downgrade">This release was built with a lower Android version number than the app you have installed, so the system will not install it as an upgrade. Use View to open the release page, or wait for a build whose version number is higher than your current install.</string>
+    <string name="gv_update_error_apk_package_mismatch">This APK is not built for this app (package name does not match). Use View to open the release page and pick the correct variant.</string>
+    <string name="gv_update_error_apk_parse">Could not read the downloaded APK. Try downloading again.</string>
+    <string name="gv_update_error_cancelled">Download cancelled.</string>
+</resources>

@@ -270,7 +270,7 @@ class MainActivity : ComponentActivity() {
                                             viewModel.cancelRefresh()
                                         },
                                         onDismissSnackbar = viewModel::clearSnackbar,
-                                        onClearUpdatePrompt = viewModel::clearUpdatePrompt,
+                                        onClearUpdateAvailable = viewModel::clearUpdateAvailable,
                                     )
                                 }
                             }

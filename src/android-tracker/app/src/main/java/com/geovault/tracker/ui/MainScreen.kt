@@ -59,7 +59,7 @@ fun MainScreen(
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
     onClearInfoMessage: () -> Unit = {},
-    onClearUpdatePrompt: () -> Unit = {},
+    onClearUpdateAvailable: () -> Unit = {},
     onRequestStartTracking: () -> Unit = {},
     onRequestStopTracking: () -> Unit = {},
     onRequestManualPoint: () -> Unit = {},
@@ -553,9 +553,8 @@ fun MainScreen(
             )
         }
         GeoVaultUpdateAvailableSnackbarHost(
-            model = state.updatePrompt,
-            releaseUrl = state.updateReleaseUrl,
-            onDismiss = onClearUpdatePrompt,
+            update = state.updateAvailable,
+            onDismiss = onClearUpdateAvailable,
             stackBottomInset = if (globalInfoModel != null) 72.dp else 0.dp,
         )
     }

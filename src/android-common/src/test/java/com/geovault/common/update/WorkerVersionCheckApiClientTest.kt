@@ -1,6 +1,7 @@
 package com.geovault.common.update
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,7 +23,12 @@ class WorkerVersionCheckApiClientTest {
                       "releasePageUrl": "https://example.test/release",
                       "releaseTag": "v3",
                       "releaseCommitSha": "ABC",
-                      "localCommitSha": "DEF"
+                      "localCommitSha": "DEF",
+                      "latestApkUrl": "https://example.test/app.apk",
+                      "apkAssetName": "GeoVault Uploader v3.apk",
+                      "apkSizeBytes": 12345678,
+                      "releasePublishedAt": "2024-01-02T15:04:05Z",
+                      "releaseTitle": "January drop"
                     }
                 """.trimIndent()
             )
@@ -37,6 +43,11 @@ class WorkerVersionCheckApiClientTest {
         assertEquals(uploaderAppName, payload.appName)
         assertEquals("abc", payload.releaseCommitSha)
         assertEquals("def", payload.localCommitSha)
+        assertEquals("https://example.test/app.apk", payload.latestApkUrl)
+        assertEquals("GeoVault Uploader v3.apk", payload.apkAssetName)
+        assertEquals(12345678L, payload.apkSizeBytes)
+        assertEquals("2024-01-02T15:04:05Z", payload.releasePublishedAt)
+        assertEquals("January drop", payload.releaseTitle)
         assertTrue(client.lastBody?.contains("\"appName\":\"$uploaderAppName\"") == true)
     }
 
@@ -73,6 +84,37 @@ class WorkerVersionCheckApiClientTest {
         )
 
         assertTrue(result is WorkerCheckApiResult.Failed)
+    }
+
+    @Test
+    fun `checkForUpdate maps null apkSizeBytes`() {
+        val client = FakeClient(
+            response = WorkerVersionCheckApiClient.HttpResult(
+                code = 200,
+                message = "OK",
+                body = """
+                    {
+                      "isLatest": true,
+                      "appName": "$uploaderAppName",
+                      "versionLabel": "v3",
+                      "releasePageUrl": "https://example.test/release",
+                      "releaseTag": "v3",
+                      "releaseCommitSha": "abc",
+                      "localCommitSha": "abc",
+                      "latestApkUrl": "https://example.test/app.apk",
+                      "apkAssetName": "a.apk",
+                      "apkSizeBytes": null,
+                      "releasePublishedAt": "",
+                      "releaseTitle": ""
+                    }
+                """.trimIndent()
+            )
+        )
+        val result = client.checkForUpdate(
+            VersionCheckRequest(appName = uploaderAppName, localFullCommitSha = "a".repeat(40))
+        )
+        assertTrue(result is WorkerCheckApiResult.Success)
+        assertNull((result as WorkerCheckApiResult.Success).payload.apkSizeBytes)
     }
 
     private class FakeClient(

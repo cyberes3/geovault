@@ -2,7 +2,6 @@ package com.geovault.common.update
 
 import android.app.Application
 import android.content.Context
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,7 +36,7 @@ class GeoVaultVersionCheckSession(
 
     fun launchIfNeeded(
         scope: CoroutineScope,
-        onUpdatePrompt: (GeoVaultSnackbarModel, String) -> Unit,
+        onUpdatePrompt: (VersionCheckResult.UpdateAvailable) -> Unit,
     ) {
         if (launchedThisSession) return
         launchedThisSession = true
@@ -53,9 +52,9 @@ class GeoVaultVersionCheckSession(
                     ),
                 )
             }
-            val (model, url) = VersionCheckSnackbarPresenter.snackbarAndReleaseUrl(result)
-            if (model != null && url != null) {
-                onUpdatePrompt(model, url)
+            val update = VersionCheckSnackbarPresenter.updateAvailableOrNull(result)
+            if (update != null) {
+                onUpdatePrompt(update)
             }
         }
     }

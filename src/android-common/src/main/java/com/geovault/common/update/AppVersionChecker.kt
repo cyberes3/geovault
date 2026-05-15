@@ -93,17 +93,29 @@ class AppVersionChecker(
                             detail = "Local build commit is the latest release commit"
                         )
                     } else {
+                        val apkUrl = payload.latestApkUrl.trim()
+                        if (apkUrl.isBlank()) {
+                            Log.w(UpdateCheckLog.TAG, "checkForUpdate result=CheckFailed reason=no_apk_url")
+                            return VersionCheckResult.CheckFailed("Release worker returned no APK download URL")
+                        }
                         Log.i(
                             UpdateCheckLog.TAG,
                             "checkForUpdate result=UpdateAvailable app=${payload.appName} version=${payload.versionLabel}"
                         )
+                        val tag = payload.releaseTag.trim()
+                        val assetName = payload.apkAssetName.ifBlank { "$tag.apk" }
                         VersionCheckResult.UpdateAvailable(
                             appName = payload.appName,
                             versionLabel = payload.versionLabel,
                             releaseUrl = payload.releasePageUrl,
-                            releaseTag = payload.releaseTag,
+                            releaseTag = tag,
                             releaseCommitSha = payload.releaseCommitSha,
-                            localCommitSha = payload.localCommitSha
+                            localCommitSha = payload.localCommitSha,
+                            apkDownloadUrl = apkUrl,
+                            apkAssetName = assetName,
+                            apkSizeBytes = payload.apkSizeBytes?.takeIf { it > 0L },
+                            releasePublishedAtIso = payload.releasePublishedAt,
+                            releaseTitle = payload.releaseTitle,
                         )
                     }
                 }

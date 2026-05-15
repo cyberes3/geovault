@@ -167,7 +167,7 @@ restore_staged_apk() {
 
 echo "Building Android app ($BUILD_TYPE)..."
 if [ "$ADD_LOGGING" = true ]; then
-    echo "Capture logging is enabled for this build (debug and release; pass -PGEOVAULT_ADD_LOGGING=true from Gradle / Android Studio for the same effect)."
+    echo "Capture logging is enabled for this build"
 fi
 if ! ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"; then
     echo "Removing Gradle build outputs after failed build..."

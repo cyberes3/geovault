@@ -27,6 +27,9 @@ export async function findLatestMatchForApp(env, appName, releasesRepoHint) {
       const tagName = release.tag_name != null ? String(release.tag_name).trim() : '';
       if (!tagName) continue;
       const htmlUrl = release.html_url != null ? String(release.html_url).trim() : '';
+      const releasePublishedAt =
+        release.published_at != null ? String(release.published_at).trim() : '';
+      const releaseTitle = release.name != null ? String(release.name).trim() : '';
       const assets = Array.isArray(release.assets) ? release.assets : [];
       const ref = extractCommitRefFromTag(tagName);
       if (!ref) continue;
@@ -38,6 +41,9 @@ export async function findLatestMatchForApp(env, appName, releasesRepoHint) {
         const parsed = parseApkName(name);
         if (!parsed || parsed.appName !== target) continue;
 
+        const rawSize = asset.size != null ? Number(asset.size) : NaN;
+        const apkSizeBytes = Number.isFinite(rawSize) && rawSize >= 0 ? Math.trunc(rawSize) : null;
+
         const codeRepoPath = deriveCodeRepoPath(cfg.owner, cfg.repo);
         const [codeOwner, codeRepoName] = codeRepoPath.split('/');
         const releasePageUrl =
@@ -48,6 +54,10 @@ export async function findLatestMatchForApp(env, appName, releasesRepoHint) {
           appName: parsed.appName,
           versionLabel: parsed.versionLabel,
           assetName: name,
+          apkAssetName: name,
+          apkSizeBytes,
+          releasePublishedAt,
+          releaseTitle,
           latestApkUrl: url,
           releasePageUrl,
           releaseTag: tagName,

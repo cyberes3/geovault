@@ -113,7 +113,10 @@ fun GeoVaultBaseButton(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (text.isNotBlank()) {
-                                Text(text = text)
+                                Text(
+                                    text = text,
+                                    color = LocalContentColor.current,
+                                )
                             }
                             if (trailingContent != null) {
                                 if (text.isNotBlank()) {
@@ -125,12 +128,19 @@ fun GeoVaultBaseButton(
                     }
                 }
                 trailingContent != null -> {
-                    Text(text = text, modifier = Modifier.weight(1f))
+                    Text(
+                        text = text,
+                        modifier = Modifier.weight(1f),
+                        color = LocalContentColor.current,
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     trailingContent()
                 }
                 else -> {
-                    Text(text = text)
+                    Text(
+                        text = text,
+                        color = LocalContentColor.current,
+                    )
                 }
             }
         }

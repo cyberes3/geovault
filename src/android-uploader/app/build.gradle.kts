@@ -50,6 +50,17 @@ fun epochVersionCode(): Int {
     return (System.currentTimeMillis() / 1000L).toInt()
 }
 
+/**
+ * With [gitCommitShaOverride] (--old-version), use that commit's Unix time as [versionCode] so the
+ * APK is not stamped with "now" and blocked as a downgrade when installing a newer release APK.
+ */
+fun versionCodeForBuild(): Int {
+    val sha = gitCommitShaOverride() ?: return epochVersionCode()
+    val ct = runGit("show", "-s", "--format=%ct", sha).trim()
+    val unix = ct.toLongOrNull() ?: return epochVersionCode()
+    return unix.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
+}
+
 android {
     namespace = "com.geovault.uploader"
     compileSdk = 36
@@ -58,7 +69,7 @@ android {
         applicationId = "com.geovault.uploader"
         minSdk = 34
         targetSdk = 36
-        versionCode = epochVersionCode()
+        versionCode = versionCodeForBuild()
         versionName = versionNameForBuild()
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitFullForBuild()}\"")
 

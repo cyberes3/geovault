@@ -1,34 +1,32 @@
 package com.geovault.common.update
 
 import android.util.Log
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 
 object VersionCheckSnackbarPresenter {
 
     /**
-     * Maps a version-check result to an optional snackbar plus release URL for the Open action.
-     * Applies the same logging semantics as the previous View snackbar `showIfUpdateAvailable` flow.
+     * Returns [VersionCheckResult.UpdateAvailable] when the user should see an update prompt;
+     * otherwise null. Applies the same logging semantics as the previous snackbar flow.
      */
-    fun snackbarAndReleaseUrl(result: VersionCheckResult): Pair<GeoVaultSnackbarModel?, String?> {
+    fun updateAvailableOrNull(result: VersionCheckResult): VersionCheckResult.UpdateAvailable? {
         when (result) {
             is VersionCheckResult.CheckFailed -> {
                 Log.i(
                     UpdateCheckLog.TAG,
-                    "snackbar: version check unavailable (${result.detail}); no user prompt shown"
+                    "update prompt: version check unavailable (${result.detail}); no user prompt shown"
                 )
-                return Pair(null, null)
+                return null
             }
 
             is VersionCheckResult.UpdateAvailable -> {
                 Log.i(
                     UpdateCheckLog.TAG,
-                    "snackbar: showing update prompt for ${result.appName} ${result.versionLabel}"
+                    "update prompt: showing update prompt for ${result.appName} ${result.versionLabel}"
                 )
-                val model = UpdateAvailablePromptComposer.snackbarModelOrNull(result) ?: return Pair(null, null)
-                return Pair(model, result.releaseUrl)
+                return result
             }
 
-            else -> return Pair(null, null)
+            else -> return null
         }
     }
 }

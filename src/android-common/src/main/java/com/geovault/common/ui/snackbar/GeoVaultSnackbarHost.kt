@@ -47,6 +47,11 @@ private const val DISMISS_SWIPE_ANIM_MS = 180
 private const val SWIPE_RESET_ANIM_MS = 160
 private const val SWIPE_ALPHA_FRACTION = 0.35f
 
+/**
+ * Bottom snackbar overlay. [onDismiss] runs after the auto-dismiss timer, swipe dismiss, or when
+ * the host leaves composition; it is **not** invoked when the user taps [GeoVaultSnackbarModel.action]
+ * — call [onDismiss] from [onAction] if that tap should clear the same state as dismiss.
+ */
 @Composable
 fun GeoVaultSnackbarHost(
     model: GeoVaultSnackbarModel?,
@@ -246,7 +251,6 @@ fun GeoVaultSnackbarHost(
                             .padding(start = 12.dp)
                             .clickable {
                                 onActionUpdated(action.actionId)
-                                onDismissUpdated()
                             }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     )

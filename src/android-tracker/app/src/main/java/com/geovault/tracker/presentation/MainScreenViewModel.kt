@@ -10,6 +10,7 @@ import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.net.GeoVaultValidatedInternetNotifier
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.VersionCheckResult
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
@@ -50,8 +51,7 @@ data class MainScreenState(
     val isConnecting: Boolean = false,
     val oauthUrl: String? = null,
     val infoMessage: String? = null,
-    val updatePrompt: GeoVaultSnackbarModel? = null,
-    val updateReleaseUrl: String? = null,
+    val updateAvailable: VersionCheckResult.UpdateAvailable? = null,
     val mapRecoveryRequestToken: Long = 0L,
     val isPreparingToTrack: Boolean = false,
 )
@@ -262,8 +262,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         _state.update { it.copy(infoMessage = null) }
     }
 
-    fun clearUpdatePrompt() {
-        _state.update { it.copy(updatePrompt = null, updateReleaseUrl = null) }
+    fun clearUpdateAvailable() {
+        _state.update { it.copy(updateAvailable = null) }
     }
 
     fun requestMapRecoveryAfterStreamingStop() {
@@ -480,8 +480,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun launchVersionCheckIfNeeded() {
-        versionCheckSession.launchIfNeeded(viewModelScope) { prompt, releaseUrl ->
-            _state.update { it.copy(updatePrompt = prompt, updateReleaseUrl = releaseUrl) }
+        versionCheckSession.launchIfNeeded(viewModelScope) { available ->
+            _state.update { it.copy(updateAvailable = available) }
         }
     }
 
@@ -504,8 +504,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         _state.update {
             it.copy(
                 isServerAccessible = true,
-                updatePrompt = null,
-                updateReleaseUrl = null,
+                updateAvailable = null,
                 mapRecoveryRequestToken = 0L,
                 isPreparingToTrack = false
             )

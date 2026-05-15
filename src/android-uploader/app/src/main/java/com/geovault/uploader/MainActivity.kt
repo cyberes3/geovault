@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
                         onCloseClick = { finish() },
                         onDismissImportant = viewModel::clearImportantMessage,
                         onDismissInvalidFiles = { invalidFilesDialogNamesState.value = null },
-                        onDismissUpdatePrompt = viewModel::clearUpdatePrompt
+                        onDismissUpdateAvailable = viewModel::clearUpdateAvailable
                     )
                     GeoVaultShellSettingsOverlayHost(
                         visible = isSettingsOpen,
