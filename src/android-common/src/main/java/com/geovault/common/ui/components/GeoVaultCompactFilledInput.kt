@@ -3,6 +3,9 @@ package com.geovault.common.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,11 +71,20 @@ fun GeoVaultCompactFilledInput(
     val mergedTextStyle = textStyle.merge(
         TextStyle(color = textStyle.color.takeOrElse { textColor })
     )
+    val themeSmall = MaterialTheme.shapes.small
+    val backgroundShape = remember(themeSmall) {
+        RoundedCornerShape(
+            topStart = themeSmall.topStart,
+            topEnd = themeSmall.topEnd,
+            bottomEnd = CornerSize(0.dp),
+            bottomStart = CornerSize(0.dp),
+        )
+    }
 
     Box(
         modifier = modifier
             .height(44.dp)
-            .background(fill, MaterialTheme.shapes.small),
+            .background(fill, backgroundShape),
     ) {
         BasicTextField(
             value = value,
@@ -80,6 +92,7 @@ fun GeoVaultCompactFilledInput(
             readOnly = readOnly,
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .indicatorLine(
                     enabled = enabled,
                     isError = false,
