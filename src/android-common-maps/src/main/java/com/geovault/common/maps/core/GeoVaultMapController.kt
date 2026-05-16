@@ -80,6 +80,10 @@ sealed class GeoVaultBaseMap(
     val manager: MapLibreManager
         get() = requireNotNull(_mapManager) { "Map manager unavailable until map view is attached." }
 
+    init {
+        registerPlugin(GeoVaultMapLongPressCopyCoordinatesPlugin())
+    }
+
     internal fun attachMapView(view: MapView) {
         if (mapView === view && _mapManager != null) {
             return
