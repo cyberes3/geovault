@@ -123,13 +123,17 @@ fi
 
 OLD_VERSION_SHA=""
 OLD_VERSION_DATE=""
+REPO_DIR="$SCRIPT_DIR/.."
 if [ "$OLD_VERSION" = true ]; then
     LOOKBACK_DAYS="${OLD_VERSION_LOOKBACK_DAYS:-30}"
-    REPO_DIR="$SCRIPT_DIR/.."
     OLD_VERSION_SHA=$(git -C "$REPO_DIR" log --before="$LOOKBACK_DAYS days ago" --format=%H -n 1 2>/dev/null || true)
     if [ -z "$OLD_VERSION_SHA" ]; then
-        echo "Error: unable to find a commit from about $LOOKBACK_DAYS days ago."
-        exit 1
+        OLD_VERSION_SHA=$(git -C "$REPO_DIR" rev-list --max-parents=0 HEAD 2>/dev/null | sed -n '1p' || true)
+        if [ -z "$OLD_VERSION_SHA" ]; then
+            echo "Error: unable to find any commit in repo: $REPO_DIR."
+            exit 1
+        fi
+        echo "Note: no commit from $LOOKBACK_DAYS+ days ago; falling back to the repo's first commit."
     fi
     OLD_VERSION_DATE=$(git -C "$REPO_DIR" show -s --format=%cd --date=short "$OLD_VERSION_SHA" 2>/dev/null || true)
     echo "Using old version commit for BuildConfig.GIT_COMMIT_SHA:"
