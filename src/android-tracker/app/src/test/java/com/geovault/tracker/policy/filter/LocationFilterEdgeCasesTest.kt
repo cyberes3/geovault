@@ -31,7 +31,7 @@ class LocationFilterEdgeCasesTest {
                 speedMps = 1f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Adjusted, r.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, r.decision)
         val adjLat = requireNotNull(r.adjustedLatitude)
         val adjLon = requireNotNull(r.adjustedLongitude)
         // Adjusted point sits on the segment 10..10.05 in lat and 20..20.05 in lon.
@@ -69,7 +69,7 @@ class LocationFilterEdgeCasesTest {
                 speedMps = 1f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, r.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, r.decision)
     }
 
     @Test
@@ -96,7 +96,7 @@ class LocationFilterEdgeCasesTest {
                 accuracyMeters = 80f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, rejected.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, rejected.decision)
         assertEquals(anchorBefore, filter.lastAcceptedLatLon)
     }
 
@@ -112,6 +112,6 @@ class LocationFilterEdgeCasesTest {
                 accuracyMeters = null,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, r.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, r.decision)
     }
 }

@@ -1,13 +1,13 @@
 package com.geovault.tracker.services
 
 import com.geovault.tracker.policy.filter.LocationFilterConfig
+import com.geovault.tracker.policy.filter.MotionProfileTuning
 
 /**
- * The motion-mode profile only affects the [android.location.LocationRequest]
- * (interval / distance-filter) and the user-facing accuracy threshold. The
- * positioning filter pipeline (RSS distance, accCap, kinCap, Kalman,
- * outlier policy) is profile-independent so the same physics-based
- * filter runs at every speed.
+ * Motion-mode profiles affect both the [android.location.LocationRequest]
+ * and the physical plausibility limits used by the positioning filter.
+ * Slow on-foot tracking cannot safely share the same speed/burst envelope
+ * as biking or driving.
  */
 object TrackingPolicyProfiles {
     private const val MAX_FUTURE_SKEW_MS = 5L * 60L * 1000L
@@ -20,10 +20,16 @@ object TrackingPolicyProfiles {
 
     fun ingestConfig(
         maxAccuracyMeters: Float,
-        @Suppress("UNUSED_PARAMETER") motionMode: TrackingMotionMode,
+        motionMode: TrackingMotionMode,
         @Suppress("UNUSED_PARAMETER") isMockLocation: Boolean,
     ): LocationFilterConfig {
-        return LocationFilterConfig.Default.copy(
+        val tuning = when (motionMode) {
+            TrackingMotionMode.WALKING -> MotionProfileTuning.Walking
+            TrackingMotionMode.BIKING -> MotionProfileTuning.Biking
+            TrackingMotionMode.DRIVING -> MotionProfileTuning.Driving
+        }
+        return LocationFilterConfig.fromTuning(
+            tuning = tuning,
             trackingAccuracyThresholdMeters = maxAccuracyMeters.toDouble(),
             maxFutureSkewMs = MAX_FUTURE_SKEW_MS,
             freshnessTtlMs = LOCAL_FRESHNESS_TTL_MS,

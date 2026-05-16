@@ -20,6 +20,93 @@ import org.junit.Test
 class LocationFilterPipelineRubberBandReplayTest {
 
     @Test
+    fun walkingProfile_holdsRepeatedForestAnchorInsteadOfCommittingStickySnapPoint() {
+        val filter = LocationFilter(walkingConfig())
+        val anchor = LocationInput(
+            latitude = 39.96754381,
+            longitude = -105.91159184,
+            timestampMs = 1_000L,
+            accuracyMeters = 12f,
+            speedMps = 0.4f,
+            bearingDegrees = 15f,
+        )
+        assertEquals(LocationFilterResult.Decision.Commit, filter.evaluate(anchor).decision)
+
+        val replay = listOf(
+            Triple(21_000L, 39.9665899225 to -105.9096088375, 47.3f),
+            Triple(42_000L, 39.96586973313242 to -105.91121784411371, 8.2f),
+            Triple(205_000L, 39.966577525 to -105.909610745, 47.5f),
+            Triple(292_000L, 39.96657561666667 to -105.90961201666667, 48.9f),
+            Triple(500_000L, 39.96656799 to -105.90960693, 47.0f),
+        )
+
+        val decisions = replay.map { (ts, latLon, accuracy) ->
+            filter.evaluate(
+                LocationInput(
+                    latitude = latLon.first,
+                    longitude = latLon.second,
+                    timestampMs = ts,
+                    accuracyMeters = accuracy,
+                    speedMps = 0.5f,
+                    bearingDegrees = 20f,
+                )
+            )
+        }
+
+        assertTrue(
+            "walking profile must not commit the repeated forest anchor cluster",
+            decisions.none { it.decision == LocationFilterResult.Decision.Commit },
+        )
+        assertTrue(
+            "the repeated cluster should be handled as held or internal snap state",
+            decisions.any {
+                it.decision == LocationFilterResult.Decision.Hold ||
+                    it.decision == LocationFilterResult.Decision.SnapInternal
+            },
+        )
+    }
+
+    @Test
+    fun walkingProfile_rejectsFastUpDownLineJumps() {
+        val filter = LocationFilter(walkingConfig())
+        filter.evaluate(
+            LocationInput(
+                latitude = 39.969585724174976,
+                longitude = -105.90756492689252,
+                timestampMs = 1_000L,
+                accuracyMeters = 10.7f,
+                speedMps = 0.8f,
+                bearingDegrees = 180f,
+            )
+        )
+
+        val jump = filter.evaluate(
+            LocationInput(
+                latitude = 39.96894232928753,
+                longitude = -105.90661785565317,
+                timestampMs = 21_000L,
+                accuracyMeters = 8.2f,
+                speedMps = 10.0f,
+                bearingDegrees = 5f,
+            )
+        )
+
+        assertNotEquals(
+            "walking profile must not commit a 100m+ line jump in 20s as normal motion",
+            LocationFilterResult.Decision.Commit,
+            jump.decision,
+        )
+    }
+
+    @Test
+    fun appProfileTuning_keepsWalkingTighterThanBikingAndDriving() {
+        assertTrue(MotionProfileTuning.Walking.maxImpliedSpeedMps < MotionProfileTuning.Biking.maxImpliedSpeedMps)
+        assertTrue(MotionProfileTuning.Biking.maxImpliedSpeedMps < MotionProfileTuning.Driving.maxImpliedSpeedMps)
+        assertTrue(MotionProfileTuning.Walking.maxBurstDistanceMeters < MotionProfileTuning.Biking.maxBurstDistanceMeters)
+        assertTrue(MotionProfileTuning.Biking.maxBurstDistanceMeters < MotionProfileTuning.Driving.maxBurstDistanceMeters)
+    }
+
+    @Test
     fun walkCluster_clipsOrRejectsRubberBanding_andAcceptsSubsequentDrivingBurst() {
         val filter = LocationFilter(LocationFilterConfig.Default)
 
@@ -38,7 +125,7 @@ class LocationFilterPipelineRubberBandReplayTest {
                     bearingDegrees = ((idx * 47) % 360).toFloat(),
                 )
             )
-            if (result.decision != LocationFilterResult.Decision.Accepted) {
+            if (result.decision != LocationFilterResult.Decision.Commit) {
                 rubberBandClippedOrRejected++
             }
         }
@@ -68,9 +155,10 @@ class LocationFilterPipelineRubberBandReplayTest {
                 )
             )
             when (result.decision) {
-                LocationFilterResult.Decision.Rejected -> rejectionsDuringDrive++
-                LocationFilterResult.Decision.Adjusted -> adjustedDuringDrive++
-                LocationFilterResult.Decision.Accepted -> Unit
+                LocationFilterResult.Decision.Reject -> rejectionsDuringDrive++
+                LocationFilterResult.Decision.Commit -> if (result.adjustedLatitude != null) adjustedDuringDrive++
+                LocationFilterResult.Decision.Hold,
+                LocationFilterResult.Decision.SnapInternal -> adjustedDuringDrive++
             }
         }
         assertEquals(
@@ -104,7 +192,7 @@ class LocationFilterPipelineRubberBandReplayTest {
                     bearingDegrees = 0f,
                 )
             )
-            if (r.decision == LocationFilterResult.Decision.Rejected) rejections++
+            if (r.decision == LocationFilterResult.Decision.Reject) rejections++
         }
         assertEquals(
             "deliberate slow walk with accurate fixes must not be filtered",
@@ -157,7 +245,7 @@ class LocationFilterPipelineRubberBandReplayTest {
             )
             assertNotEquals(
                 "driving fix idx=$idx after a motion-change reset should not be rejected",
-                LocationFilterResult.Decision.Rejected,
+                LocationFilterResult.Decision.Reject,
                 r.decision,
             )
         }
@@ -168,6 +256,15 @@ class LocationFilterPipelineRubberBandReplayTest {
         private const val WALK_SPEED_MPS = 0.4f
         private const val DRIVE_ACCURACY_METERS = 5f
         private const val DRIVE_SPEED_MPS = 18f
+
+        private fun walkingConfig(): LocationFilterConfig =
+            LocationFilterConfig.fromTuning(
+                tuning = MotionProfileTuning.Walking,
+                trackingAccuracyThresholdMeters = 50.0,
+                maxFutureSkewMs = 0L,
+                freshnessTtlMs = 0L,
+                normalizeSecondsTimestamps = false,
+            )
 
         private val WALK_CLUSTER: List<Pair<Double, Double>> = listOf(
             24.709689015876428 to -81.10107621486452,

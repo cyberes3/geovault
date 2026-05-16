@@ -18,7 +18,7 @@ class LocationFilterTest {
                 accuracyMeters = 5f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
     }
 
     @Test
@@ -32,7 +32,7 @@ class LocationFilterTest {
                 accuracyMeters = 250f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, result.decision)
         assertEquals("low-accuracy", result.reason)
     }
 
@@ -57,7 +57,7 @@ class LocationFilterTest {
                 speedMps = 1f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, result.decision)
     }
 
     @Test
@@ -83,7 +83,7 @@ class LocationFilterTest {
                 speedMps = 1f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
         assertNotNull(result.adjustedLatitude)
         assertNotNull(result.adjustedLongitude)
     }
@@ -111,7 +111,7 @@ class LocationFilterTest {
                 speedMps = 1f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
     }
 
     @Test
@@ -141,7 +141,7 @@ class LocationFilterTest {
                 )
             )
         }
-        assertEquals(LocationFilterResult.Decision.Accepted, lastDecision?.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, lastDecision?.decision)
     }
 
     @Test
@@ -180,7 +180,7 @@ class LocationFilterTest {
                     bearingDegrees = 45f,
                 )
             )
-            if (r.decision == LocationFilterResult.Decision.Rejected) rejections++
+            if (r.decision == LocationFilterResult.Decision.Reject) rejections++
         }
         assertEquals(0, rejections)
     }
@@ -217,7 +217,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
     }
 
     @Test
@@ -245,7 +245,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
     }
 
     @Test
@@ -278,7 +278,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
         assertEquals("uncertainty-suppressed", result.reason)
         assertEquals(24.7097, result.adjustedLatitude ?: 0.0, 0.0000001)
         assertEquals(-81.1011, result.adjustedLongitude ?: 0.0, 0.0000001)
@@ -314,7 +314,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
     }
 
     @Test
@@ -348,7 +348,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
         assertEquals("uncertainty-suppressed", result.reason)
     }
 
@@ -385,7 +385,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
         assertEquals("uncertainty-suppressed", result.reason)
     }
 
@@ -430,7 +430,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, result.decision)
         assertEquals("implied-speed", result.reason)
     }
 
@@ -465,7 +465,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, result.decision)
         assertEquals("outlier-capped", result.reason)
     }
 
@@ -497,7 +497,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
         assertEquals("uncertainty-suppressed", result.reason)
     }
 
@@ -528,7 +528,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Adjusted, result.decision)
+        assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
         assertEquals("uncertainty-suppressed", result.reason)
     }
 
@@ -564,7 +564,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Accepted, result.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
         assertEquals("within-cap", result.reason)
     }
 
@@ -605,7 +605,7 @@ class LocationFilterTest {
                     bearingDegrees = 0f,
                 )
             )
-            if (r.decision == LocationFilterResult.Decision.Rejected) rejects++
+            if (r.decision == LocationFilterResult.Decision.Reject) rejects++
         }
         assertEquals(0, rejects)
     }
@@ -628,7 +628,7 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, first.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, first.decision)
 
         val garbage = filter.evaluate(
             LocationInput(
@@ -640,7 +640,7 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, garbage.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, garbage.decision)
         assertEquals("low-accuracy", garbage.reason)
 
         val recovered = filter.evaluate(
@@ -653,7 +653,7 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, recovered.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, recovered.decision)
     }
 
     @Test
@@ -700,7 +700,7 @@ class LocationFilterTest {
                 speedMps = 15f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, postResume.decision)
+        assertEquals(LocationFilterResult.Decision.Hold, postResume.decision)
         assertEquals("resume-unconfirmed", postResume.reason)
         assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
@@ -729,7 +729,7 @@ class LocationFilterTest {
                 speedMps = 15f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, first.decision)
+        assertEquals(LocationFilterResult.Decision.Hold, first.decision)
         assertEquals("resume-unconfirmed", first.reason)
 
         val second = filter.evaluate(
@@ -741,7 +741,7 @@ class LocationFilterTest {
                 speedMps = 15f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, second.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, second.decision)
         assertEquals("motion-resume-confirmed", second.reason)
         assertEquals(30L * 60L * 1000L + 1_000L, filter.lastAcceptedTimestampMs)
     }
@@ -780,7 +780,7 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Rejected, inconsistent.decision)
+        assertEquals(LocationFilterResult.Decision.Hold, inconsistent.decision)
         assertEquals("resume-unconfirmed", inconsistent.reason)
         assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
@@ -809,7 +809,7 @@ class LocationFilterTest {
                 speedMps = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Adjusted, postResume.decision)
+        assertEquals(LocationFilterResult.Decision.SnapInternal, postResume.decision)
         assertEquals("uncertainty-suppressed", postResume.reason)
         assertEquals(24.7097, postResume.adjustedLatitude ?: 0.0, 0.0)
         assertEquals(-81.1011, postResume.adjustedLongitude ?: 0.0, 0.0)
@@ -834,7 +834,7 @@ class LocationFilterTest {
                 speedMps = 1f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, first.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, first.decision)
         assertEquals("first-fix", first.reason)
     }
 
@@ -874,7 +874,7 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, teleport.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, teleport.decision)
     }
 
     /**
@@ -924,6 +924,6 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, borderline.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, borderline.decision)
     }
 }

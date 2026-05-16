@@ -50,6 +50,7 @@ import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingSyncPolicy
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
 import com.geovault.tracker.policy.TrackPointBus
+import com.geovault.tracker.policy.TrackPointEmissionDecision
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointQuality
@@ -2657,7 +2658,7 @@ class TrackingService : Service() {
             nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
             config = config,
         )
-        return decision.accepted
+        return decision.accepted || decision.emissionDecision == TrackPointEmissionDecision.SNAP_INTERNAL
     }
 
     private fun trackPointEventFromLocation(location: Location, trackId: String): TrackPointEvent {

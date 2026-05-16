@@ -19,9 +19,21 @@ enum class TrackPointRejectReason {
     JUMP,
 }
 
+enum class TrackPointEmissionDecision {
+    COMMIT,
+    HOLD,
+    SNAP_INTERNAL,
+    REJECT,
+}
+
 data class TrackPointDecision(
     val accepted: Boolean,
     val canonicalEvent: TrackPointEvent?,
+    val emissionDecision: TrackPointEmissionDecision = if (accepted) {
+        TrackPointEmissionDecision.COMMIT
+    } else {
+        TrackPointEmissionDecision.REJECT
+    },
     val quality: TrackPointQuality = TrackPointQuality.HIGH_CONFIDENCE,
     val rejectReason: TrackPointRejectReason? = null,
     val adjusted: Boolean = false,
@@ -193,8 +205,10 @@ object TrackPointPolicyEngine {
         val translatedMetrics = result.metrics.toDecisionMetrics(
             accuracyMeters = event.accuracyMeters,
             decision = when (result.decision) {
-                LocationFilterResult.Decision.Rejected -> "rejected"
-                else -> "accepted"
+                LocationFilterResult.Decision.Commit -> "accepted"
+                LocationFilterResult.Decision.Hold -> "held"
+                LocationFilterResult.Decision.SnapInternal -> "snap-internal"
+                LocationFilterResult.Decision.Reject -> "rejected"
             },
             reason = result.reason,
             rawLatitude = event.lat,
@@ -203,7 +217,7 @@ object TrackPointPolicyEngine {
             committedLongitude = result.committedLongitude(event),
         )
         return when (result.decision) {
-            LocationFilterResult.Decision.Rejected -> {
+            LocationFilterResult.Decision.Reject -> {
                 val rejectReason = when (result.reason) {
                     "low-accuracy" -> TrackPointRejectReason.BAD_ACCURACY
                     else -> TrackPointRejectReason.JUMP
@@ -211,18 +225,42 @@ object TrackPointPolicyEngine {
                 TrackPointDecision(
                     accepted = false,
                     canonicalEvent = null,
+                    emissionDecision = TrackPointEmissionDecision.REJECT,
                     rejectReason = rejectReason,
                     metrics = translatedMetrics,
                 )
             }
 
-            LocationFilterResult.Decision.Adjusted -> {
+            LocationFilterResult.Decision.Hold -> {
+                TrackPointDecision(
+                    accepted = false,
+                    canonicalEvent = null,
+                    emissionDecision = TrackPointEmissionDecision.HOLD,
+                    rejectReason = TrackPointRejectReason.JUMP,
+                    metrics = translatedMetrics,
+                )
+            }
+
+            LocationFilterResult.Decision.SnapInternal -> {
+                TrackPointDecision(
+                    accepted = false,
+                    canonicalEvent = null,
+                    emissionDecision = TrackPointEmissionDecision.SNAP_INTERNAL,
+                    adjusted = true,
+                    adjustmentReason = ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED,
+                    metrics = translatedMetrics,
+                )
+            }
+
+            LocationFilterResult.Decision.Commit -> {
                 val adjustedLat = result.adjustedLatitude ?: event.lat
                 val adjustedLon = result.adjustedLongitude ?: event.lon
                 val quality = qualityFromMetrics(event.accuracyMeters, config)
-                val adjustmentReason = when (result.reason) {
-                    "uncertainty-suppressed" -> ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
-                    else -> ADJUSTMENT_REASON_OUTLIER_CAPPED
+                val adjusted = result.adjustedLatitude != null && result.adjustedLongitude != null
+                val adjustmentReason = if (adjusted) {
+                    ADJUSTMENT_REASON_OUTLIER_CAPPED
+                } else {
+                    null
                 }
                 TrackPointDecision(
                     accepted = true,
@@ -232,23 +270,10 @@ object TrackPointPolicyEngine {
                         timestampMs = normalizedTimestampMs,
                         quality = quality,
                     ),
+                    emissionDecision = TrackPointEmissionDecision.COMMIT,
                     quality = quality,
-                    adjusted = true,
+                    adjusted = adjusted,
                     adjustmentReason = adjustmentReason,
-                    metrics = translatedMetrics,
-                )
-            }
-
-            LocationFilterResult.Decision.Accepted -> {
-                val quality = qualityFromMetrics(event.accuracyMeters, config)
-                val canonical = event.copy(
-                    timestampMs = normalizedTimestampMs,
-                    quality = quality,
-                )
-                TrackPointDecision(
-                    accepted = true,
-                    canonicalEvent = canonical,
-                    quality = quality,
                     metrics = translatedMetrics,
                 )
             }
@@ -292,17 +317,19 @@ object TrackPointPolicyEngine {
 
     private fun LocationFilterResult.committedLatitude(event: TrackPointEvent): Double? {
         return when (decision) {
-            LocationFilterResult.Decision.Accepted -> event.lat
-            LocationFilterResult.Decision.Adjusted -> adjustedLatitude ?: event.lat
-            LocationFilterResult.Decision.Rejected -> null
+            LocationFilterResult.Decision.Commit -> adjustedLatitude ?: event.lat
+            LocationFilterResult.Decision.SnapInternal -> adjustedLatitude
+            LocationFilterResult.Decision.Hold,
+            LocationFilterResult.Decision.Reject -> null
         }
     }
 
     private fun LocationFilterResult.committedLongitude(event: TrackPointEvent): Double? {
         return when (decision) {
-            LocationFilterResult.Decision.Accepted -> event.lon
-            LocationFilterResult.Decision.Adjusted -> adjustedLongitude ?: event.lon
-            LocationFilterResult.Decision.Rejected -> null
+            LocationFilterResult.Decision.Commit -> adjustedLongitude ?: event.lon
+            LocationFilterResult.Decision.SnapInternal -> adjustedLongitude
+            LocationFilterResult.Decision.Hold,
+            LocationFilterResult.Decision.Reject -> null
         }
     }
 

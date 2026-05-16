@@ -13,7 +13,7 @@ class TrackingPolicyProfilesTest {
     }
 
     @Test
-    fun ingestConfig_isProfileIndependent_andOnlyAdjustsAccuracyThreshold() {
+    fun ingestConfig_appliesProfileSpecificPhysicsAndSharedAccuracyThreshold() {
         val walking = TrackingPolicyProfiles.ingestConfig(
             maxAccuracyMeters = 25f,
             motionMode = TrackingMotionMode.WALKING,
@@ -29,9 +29,13 @@ class TrackingPolicyProfilesTest {
             motionMode = TrackingMotionMode.DRIVING,
             isMockLocation = false,
         )
-        assertEquals(walking, biking)
-        assertEquals(walking, driving)
+        assertTrue(walking.maxImpliedSpeedMps < biking.maxImpliedSpeedMps)
+        assertTrue(biking.maxImpliedSpeedMps < driving.maxImpliedSpeedMps)
+        assertTrue(walking.maxBurstDistanceMeters < biking.maxBurstDistanceMeters)
+        assertTrue(biking.maxBurstDistanceMeters < driving.maxBurstDistanceMeters)
         assertEquals(25.0, walking.trackingAccuracyThresholdMeters, 1e-9)
+        assertEquals(25.0, biking.trackingAccuracyThresholdMeters, 1e-9)
+        assertEquals(25.0, driving.trackingAccuracyThresholdMeters, 1e-9)
     }
 
     @Test

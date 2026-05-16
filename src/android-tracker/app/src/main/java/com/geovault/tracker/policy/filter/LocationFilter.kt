@@ -1,9 +1,10 @@
 package com.geovault.tracker.policy.filter
 
+import com.geovault.common.geo.GeoMath
 import kotlin.math.max
 
 /**
- * Profile-independent positioning filter.
+ * Profile-tuned positioning filter.
  *
  * One [LocationFilter] instance per stream (e.g. local GPS for the
  * recording user, or per remote-tracker websocket subscription). The
@@ -22,7 +23,7 @@ import kotlin.math.max
  *     value
  *  6. Outlier policy switch driven by [LocationFilterConfig.policy]
  *     (PassThrough / Adjust clip / Conservative reject)
- *  7. On accept/adjust only: metrics commit + anchor swap. Rejected
+ *  7. On commit/snap only: metrics commit + anchor swap. Rejected and held
  *     fixes never mutate the anchor or rolling baseline that subsequent
  *     decisions are made against.
  *
@@ -42,6 +43,8 @@ class LocationFilter(
     private var kalmanFilter: KalmanFilter = buildKalmanFilter(config)
     private var previousAccepted: LocationInput? = null
     private var resumeAnchorGate: ResumeAnchorGate = ResumeAnchorGate()
+    private var anchorHealthTracker: AnchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
+    private var movementCandidateGate: MovementCandidateGate = MovementCandidateGate(config.movementCandidate)
 
     /**
      * Last fix the filter saw whose accuracy passed the gate, regardless
@@ -64,6 +67,8 @@ class LocationFilter(
     fun reset() {
         metricsEngine = buildMetricsEngine(config)
         kalmanFilter = buildKalmanFilter(config)
+        anchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
+        movementCandidateGate = MovementCandidateGate(config.movementCandidate)
         previousAccepted = null
         lastSeenFix = null
         resumeAnchorGate.clear()
@@ -90,6 +95,9 @@ class LocationFilter(
         config = newConfig
         if (oldConfig.requiresFilterStateReset(newConfig)) {
             reset()
+        } else {
+            anchorHealthTracker.applyConfig(newConfig.anchorHealth)
+            movementCandidateGate.applyConfig(newConfig.movementCandidate)
         }
     }
 
@@ -105,6 +113,7 @@ class LocationFilter(
     fun onMotionChanged() {
         kalmanFilter.reset()
         lastSeenFix = null
+        movementCandidateGate.reset()
         if (previousAccepted != null) {
             resumeAnchorGate.start()
         }
@@ -131,7 +140,8 @@ class LocationFilter(
             // Skip lastSeenFix update: a 24 km / network-fallback fix
             // is not a usable reference for the next frame's anomaly
             // calculation.
-            return LocationFilterResult.rejected(reason = "low-accuracy", metrics = metrics)
+            anchorHealthTracker.onReject(metrics)
+            return LocationFilterResult.reject(reason = "low-accuracy", metrics = metrics)
         }
 
         val result = resolveDecision(input = input, metrics = metrics)
@@ -173,6 +183,16 @@ class LocationFilter(
     ): LocationFilterResult {
         if (metrics.dtSeconds > 0.0 && metrics.impliedSpeedMps > config.maxImpliedSpeedMps) {
             return resolveSpeedSpike(input = input, previous = previous, metrics = metrics)
+        }
+
+        if (movementCandidateGate.assess(
+                input = input,
+                previousAnchor = previous,
+                metrics = metrics,
+                anchorSuspect = anchorHealthTracker.suspect,
+            ) == MovementCandidateGate.Decision.Hold
+        ) {
+            return LocationFilterResult.hold(reason = "candidate-unconfirmed", metrics = metrics)
         }
 
         // Smooth the RSS-corrected effective distance through the 1D
@@ -229,7 +249,7 @@ class LocationFilter(
                 capCandidate = capCandidate,
             )
             ResumeAnchorGate.Decision.Hold ->
-                LocationFilterResult.rejected(reason = "resume-unconfirmed", metrics = metrics)
+                LocationFilterResult.hold(reason = "resume-unconfirmed", metrics = metrics)
             ResumeAnchorGate.Decision.Confirmed ->
                 commitAccept(input = input, reason = "motion-resume-confirmed", metrics = metrics)
         }
@@ -274,7 +294,7 @@ class LocationFilter(
         // slow-but-far fixes.
         if (isOutlier(metrics, capCandidate)) {
             val reason = if (metrics.impliedAnomaly) "implied-speed" else "outlier-capped"
-            return LocationFilterResult.rejected(reason = reason, metrics = metrics)
+            return reject(reason = reason, metrics = metrics)
         }
 
         // [decisionDistance] is `effectiveDistanceMeters` smoothed by the
@@ -361,7 +381,7 @@ class LocationFilter(
                 metrics = metrics,
             )
             LocationFilterPolicy.Conservative ->
-                LocationFilterResult.rejected(reason = "speed-cap-exceeded", metrics = metrics)
+                reject(reason = "speed-cap-exceeded", metrics = metrics)
         }
     }
 
@@ -370,8 +390,8 @@ class LocationFilter(
         reason: String,
         metrics: LocationMetrics,
     ): LocationFilterResult {
-        commit(input = input, metrics = metrics, committedDisplacement = metrics.rawDistanceMeters)
-        return LocationFilterResult.accepted(reason = reason, metrics = metrics)
+        commit(input = input, metrics = metrics, committedDisplacement = distanceFromCommittedAnchor(input))
+        return LocationFilterResult.commit(reason = reason, metrics = metrics)
     }
 
     /**
@@ -398,11 +418,11 @@ class LocationFilter(
     ): LocationFilterResult {
         val acceptedInput = input.copy(latitude = previous.latitude, longitude = previous.longitude)
         commit(input = acceptedInput, metrics = metrics, committedDisplacement = 0.0)
-        return LocationFilterResult.adjusted(
+        anchorHealthTracker.onSnap(metrics)
+        return LocationFilterResult.snapInternal(
             reason = reason,
             adjustedLatitude = previous.latitude,
             adjustedLongitude = previous.longitude,
-            cappedDistanceMeters = 0.0,
             metrics = metrics,
         )
     }
@@ -423,7 +443,7 @@ class LocationFilter(
         val adjLon = previous.longitude + (input.longitude - previous.longitude) * scale
         val acceptedInput = input.copy(latitude = adjLat, longitude = adjLon)
         commit(input = acceptedInput, metrics = metrics, committedDisplacement = capMeters)
-        return LocationFilterResult.adjusted(
+        return LocationFilterResult.commitAdjusted(
             reason = reason,
             adjustedLatitude = adjLat,
             adjustedLongitude = adjLon,
@@ -442,10 +462,29 @@ class LocationFilter(
             metrics = metrics,
             committedDisplacementMeters = committedDisplacement,
         )
+        if (committedDisplacement > 0.0) {
+            anchorHealthTracker.onCommit(metrics.rawDistanceMeters)
+            movementCandidateGate.reset()
+        }
         // Kalman is mutated up-front in [smoothDecisionDistance]; calling
         // update() again here would double-count the observation and damp
         // the smoother.
         previousAccepted = input
+    }
+
+    private fun reject(reason: String, metrics: LocationMetrics): LocationFilterResult {
+        anchorHealthTracker.onReject(metrics)
+        return LocationFilterResult.reject(reason = reason, metrics = metrics)
+    }
+
+    private fun distanceFromCommittedAnchor(input: LocationInput): Double {
+        val previous = previousAccepted ?: return 0.0
+        return GeoMath.haversineMeters(
+            previous.latitude,
+            previous.longitude,
+            input.latitude,
+            input.longitude,
+        )
     }
 
     private fun inflateCapForAnchorTrust(cap: Double, anchorTrust: Double): Double {
@@ -472,6 +511,7 @@ class LocationFilter(
                 burstWindowSeconds = config.burstWindowSeconds,
                 maxImpliedSpeedMps = config.maxImpliedSpeedMps,
                 maxBurstDistanceMeters = config.maxBurstDistanceMeters,
+                kinematicCapPolicy = KinematicCapPolicy(config.kinematicCap),
             )
 
         private fun buildKalmanFilter(config: LocationFilterConfig): KalmanFilter =

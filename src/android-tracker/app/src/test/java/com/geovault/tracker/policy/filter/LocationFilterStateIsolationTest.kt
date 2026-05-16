@@ -46,7 +46,7 @@ class LocationFilterStateIsolationTest {
             speedMps = 1f,
         )
         val rejection = filter.evaluate(teleport)
-        assertEquals(LocationFilterResult.Decision.Rejected, rejection.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, rejection.decision)
         assertEquals(anchorAfterFirst, filter.lastAcceptedLatLon)
     }
 
@@ -85,7 +85,7 @@ class LocationFilterStateIsolationTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, teleport.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, teleport.decision)
 
         // First post-teleport fix is still measured against the bad
         // lastSeenFix (the teleport position) so it is rejected too --
@@ -103,7 +103,7 @@ class LocationFilterStateIsolationTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Rejected, firstAfter.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, firstAfter.decision)
 
         // Second post-teleport fix sees lastSeenFix back at the real
         // path; metrics are clean and the fix accepts. The accepted
@@ -121,7 +121,7 @@ class LocationFilterStateIsolationTest {
                 bearingDegrees = 0f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, recovery.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, recovery.decision)
     }
 
     @Test
@@ -169,7 +169,7 @@ class LocationFilterStateIsolationTest {
                     bearingDegrees = 45f,
                 )
             )
-            if (r.decision == LocationFilterResult.Decision.Rejected) rejections++
+            if (r.decision == LocationFilterResult.Decision.Reject) rejections++
         }
         assertEquals("standstill noise must not poison the burst window", 0, rejections)
     }
@@ -277,7 +277,7 @@ class LocationFilterStateIsolationTest {
             speedMps = 1f,
         )
         val result = filter.evaluate(teleport)
-        assertEquals(LocationFilterResult.Decision.Rejected, result.decision)
+        assertEquals(LocationFilterResult.Decision.Reject, result.decision)
     }
 
     @Test
@@ -375,7 +375,7 @@ class LocationFilterStateIsolationTest {
                 accuracyMeters = 5f,
             )
         )
-        assertEquals(LocationFilterResult.Decision.Accepted, r.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, r.decision)
         assertEquals("first-fix", r.reason)
     }
 }

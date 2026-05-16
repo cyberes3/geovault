@@ -17,8 +17,9 @@ package com.geovault.tracker.policy.filter
  * @property kalmanProfile preset for [KalmanTuning].
  * @property policy outlier handling strategy. See [LocationFilterPolicy].
  * @property maxImpliedSpeedMps absolute upper bound on `raw / dt` between
- *   two consecutive seen fixes (m/s). Default 60 m/s (216 km/h) gives
- *   comfortable highway headroom while still catching teleports.
+ *   two consecutive seen fixes (m/s). This is intentionally supplied by
+ *   the active motion profile; on-foot tracking must not inherit highway
+ *   headroom.
  * @property maxBurstDistanceMeters raw-distance threshold for the burst
  *   term of the implied-anomaly check. A fix with `raw > maxBurst` AND
  *   `dt <= burstWindow` is flagged as anomalous.
@@ -52,11 +53,14 @@ data class LocationFilterConfig(
     val useKalman: Boolean = true,
     val kalmanProfile: KalmanProfile = KalmanProfile.Default,
     val policy: LocationFilterPolicy = LocationFilterPolicy.Conservative,
-    val maxImpliedSpeedMps: Double = 60.0,
-    val maxBurstDistanceMeters: Double = 300.0,
-    val burstWindowSeconds: Double = 10.0,
+    val maxImpliedSpeedMps: Double = MotionProfileTuning.Driving.maxImpliedSpeedMps,
+    val maxBurstDistanceMeters: Double = MotionProfileTuning.Driving.maxBurstDistanceMeters,
+    val burstWindowSeconds: Double = MotionProfileTuning.Driving.burstWindowSeconds,
     val trackingAccuracyThresholdMeters: Double = 100.0,
-    val rollingWindowSeconds: Double = 5.0,
+    val rollingWindowSeconds: Double = MotionProfileTuning.Driving.rollingWindowSeconds,
+    val kinematicCap: KinematicCapConfig = MotionProfileTuning.Driving.kinematicCap,
+    val movementCandidate: MovementCandidateConfig = MotionProfileTuning.Driving.movementCandidate,
+    val anchorHealth: AnchorHealthConfig = MotionProfileTuning.Driving.anchorHealth,
     val resumeConfirmationMinDistanceMeters: Double = 150.0,
     val resumeConfirmationConsistencyMeters: Double = 75.0,
     val resumeConfirmationMaxAccuracyMeters: Double = 50.0,
@@ -89,6 +93,9 @@ data class LocationFilterConfig(
             maxImpliedSpeedMps != other.maxImpliedSpeedMps ||
             maxBurstDistanceMeters != other.maxBurstDistanceMeters ||
             burstWindowSeconds != other.burstWindowSeconds ||
+            kinematicCap != other.kinematicCap ||
+            movementCandidate != other.movementCandidate ||
+            anchorHealth != other.anchorHealth ||
             resumeConfirmationMinDistanceMeters != other.resumeConfirmationMinDistanceMeters ||
             resumeConfirmationConsistencyMeters != other.resumeConfirmationConsistencyMeters ||
             resumeConfirmationMaxAccuracyMeters != other.resumeConfirmationMaxAccuracyMeters ||
@@ -97,5 +104,25 @@ data class LocationFilterConfig(
 
     companion object {
         val Default: LocationFilterConfig = LocationFilterConfig()
+
+        fun fromTuning(
+            tuning: MotionProfileTuning,
+            trackingAccuracyThresholdMeters: Double,
+            maxFutureSkewMs: Long,
+            freshnessTtlMs: Long,
+            normalizeSecondsTimestamps: Boolean,
+        ): LocationFilterConfig = LocationFilterConfig(
+            maxImpliedSpeedMps = tuning.maxImpliedSpeedMps,
+            maxBurstDistanceMeters = tuning.maxBurstDistanceMeters,
+            burstWindowSeconds = tuning.burstWindowSeconds,
+            trackingAccuracyThresholdMeters = trackingAccuracyThresholdMeters,
+            rollingWindowSeconds = tuning.rollingWindowSeconds,
+            kinematicCap = tuning.kinematicCap,
+            movementCandidate = tuning.movementCandidate,
+            anchorHealth = tuning.anchorHealth,
+            maxFutureSkewMs = maxFutureSkewMs,
+            freshnessTtlMs = freshnessTtlMs,
+            normalizeSecondsTimestamps = normalizeSecondsTimestamps,
+        )
     }
 }

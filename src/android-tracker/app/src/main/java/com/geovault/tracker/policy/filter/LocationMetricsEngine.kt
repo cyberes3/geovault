@@ -40,6 +40,7 @@ class LocationMetricsEngine(
     private val burstWindowSeconds: Double = 10.0,
     private val maxImpliedSpeedMps: Double = 60.0,
     private val maxBurstDistanceMeters: Double = 300.0,
+    private val kinematicCapPolicy: KinematicCapPolicy = KinematicCapPolicy(KinematicCapConfig.Default),
 ) {
     private data class Sample(
         val timestampMs: Long,
@@ -109,13 +110,18 @@ class LocationMetricsEngine(
         val effectiveCurrentSpeed = if (currentReportedSpeed.isNaN()) 0.0 else currentReportedSpeed
         val effectivePreviousSpeed = if (previousReportedSpeed.isNaN()) 0.0 else previousReportedSpeed
 
+        val jerk = computeJerk(current = effectiveCurrentSpeed, previous = lastReportedSpeedMps, dtSeconds = dtSeconds)
+
+        val (bearingStability, speedStability) = computeStability()
         val accCap = max(previousAccuracy, accuracy) * 3.0
-        val speedForKinematicCap = resolveSpeedForKinematicCap(
+        val speedForKinematicCap = kinematicCapPolicy.resolve(
             reportedSpeedMps = max(effectivePreviousSpeed, effectiveCurrentSpeed),
             impliedSpeedMps = impliedSpeed,
             maxAccuracyMeters = max(previousAccuracy, accuracy),
             dtSeconds = dtSeconds,
-        )
+            speedStability = speedStability,
+            bearingStability = bearingStability,
+        ).trustedSpeedMps
         val kinCap = if (dtSeconds > 0.0) speedForKinematicCap * 2.0 * dtSeconds else 0.0
 
         val rollingAvgStep = computeRollingAverageStepMeters()
@@ -123,9 +129,6 @@ class LocationMetricsEngine(
 
         val capCandidate = maxOf(MIN_CAP_FLOOR_METERS, accCap, kinCap, rollingCap)
 
-        val jerk = computeJerk(current = effectiveCurrentSpeed, previous = lastReportedSpeedMps, dtSeconds = dtSeconds)
-
-        val (bearingStability, speedStability) = computeStability()
         val headingQuality = computeHeadingQuality(
             bearingStability = bearingStability,
             accuracyMeters = accuracy,
@@ -243,19 +246,6 @@ class LocationMetricsEngine(
         return if (count > 0) total / count else DEFAULT_ROLLING_FALLBACK_METERS
     }
 
-    private fun resolveSpeedForKinematicCap(
-        reportedSpeedMps: Double,
-        impliedSpeedMps: Double,
-        maxAccuracyMeters: Double,
-        dtSeconds: Double,
-    ): Double {
-        val safeReported = reportedSpeedMps.coerceAtLeast(0.0)
-        val canTrustImplied = dtSeconds >= IMPLIED_SPEED_FALLBACK_MIN_DT_SECONDS &&
-            impliedSpeedMps >= IMPLIED_SPEED_FALLBACK_MIN_SPEED_MPS &&
-            maxAccuracyMeters <= IMPLIED_SPEED_FALLBACK_MAX_ACCURACY_METERS
-        return if (canTrustImplied) max(safeReported, impliedSpeedMps) else safeReported
-    }
-
     private fun computeJerk(current: Double, previous: Double, dtSeconds: Double): Double {
         if (dtSeconds <= 0.0) return 0.0
         return abs(current - previous) / dtSeconds
@@ -360,8 +350,5 @@ class LocationMetricsEngine(
         private const val MIN_CAP_FLOOR_METERS = 5.0
         private const val DEFAULT_ROLLING_FALLBACK_METERS = 6.0
         private const val DEFAULT_ACCURACY_FALLBACK_METERS = 65.0
-        private const val IMPLIED_SPEED_FALLBACK_MAX_ACCURACY_METERS = 15.0
-        private const val IMPLIED_SPEED_FALLBACK_MIN_DT_SECONDS = 1.0
-        private const val IMPLIED_SPEED_FALLBACK_MIN_SPEED_MPS = 1.5
     }
 }

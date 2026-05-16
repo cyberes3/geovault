@@ -134,10 +134,11 @@ class TrackPointPolicyEngineInvariantTest {
             nowMs = 5_000L,
             config = config,
         )
-        assertTrue(decision.accepted)
+        assertFalse(decision.accepted)
+        assertEquals(TrackPointEmissionDecision.SNAP_INTERNAL, decision.emissionDecision)
         assertEquals(TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED, decision.adjustmentReason)
-        assertEquals(10.0, decision.canonicalEvent?.lat)
-        assertEquals(10.0, decision.canonicalEvent?.lon)
+        assertEquals(10.0, decision.metrics?.committedLatitude)
+        assertEquals(10.0, decision.metrics?.committedLongitude)
     }
 
     @Test

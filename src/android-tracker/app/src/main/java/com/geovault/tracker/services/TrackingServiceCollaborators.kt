@@ -96,34 +96,6 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             if (canonical.elapsedRealtimeNanos != null) {
                 location.elapsedRealtimeNanos = canonical.elapsedRealtimeNanos
             }
-            if (decision.adjustmentReason == TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED) {
-                val visible = locationDao.getCurrentSessionCountForTracker(
-                    trackerId = queuedTrackerId,
-                    sessionBoundaryId = sessionVisibleBoundaryId
-                )
-                val nextSessionDistanceMeters = computeNextSessionDistanceMeters(
-                    currentSessionDistanceMeters = totalDistanceMeters,
-                    previousAcceptedLocation = previousAcceptedLocation,
-                    acceptedLocation = location
-                )
-                return LocationIngestResult(
-                    accepted = true,
-                    rejectReason = null,
-                    adjustmentReason = decision.adjustmentReason,
-                    trackPointQuality = canonical.quality,
-                    pointPersisted = false,
-                    persistedRowId = null,
-                    nextSessionDistanceMeters = nextSessionDistanceMeters,
-                    lastFilteredLocation = Location(location),
-                    queuedPointsVisible = visible,
-                    lastAccuracyMeters = accuracy,
-                    lastTrackedLatitude = location.latitude,
-                    lastTrackedLongitude = location.longitude,
-                    lastTrackedTimestampMs = location.time,
-                    lastTrackedPropsJson = propsJson,
-                    policyMetrics = decision.metrics,
-                )
-            }
         }
 
         val bypassCanonical = if (bypassFilters) {
