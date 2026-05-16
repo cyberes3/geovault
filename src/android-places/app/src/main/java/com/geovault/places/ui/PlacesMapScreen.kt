@@ -236,21 +236,25 @@ fun PlacesMapScreen(
                     includeDefaultFabColumnPadding = true,
                 )
 
+            val layersTooltip = stringResource(R.string.tooltip_map_layers)
+            val fitContentTooltip = stringResource(R.string.tooltip_map_fit_content)
+            val zoomInTooltip = stringResource(R.string.tooltip_map_zoom_in)
+            val zoomOutTooltip = stringResource(R.string.tooltip_map_zoom_out)
             val mapFabActions = buildGeoVaultMapFabActions {
                 action(
                     id = "source",
                     order = 10,
                     icon = layerFabAction.icon,
-                    contentDescription = "Change the map style or layers you use for this view.",
-                    tooltip = "Change the map style or layers you use for this view.",
+                    contentDescription = layersTooltip,
+                    tooltip = layersTooltip,
                     onTap = layerFabAction.onTap,
                 )
                 action(
                     id = "home",
                     order = 20,
                     icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
-                    contentDescription = "Fit all map content in view.",
-                    tooltip = "Fit all map content in view.",
+                    contentDescription = fitContentTooltip,
+                    tooltip = fitContentTooltip,
                     onTap = {
                         val mapLibreMap = map.maplibreMap
                         if (mapLibreMap != null) {
@@ -294,16 +298,16 @@ fun PlacesMapScreen(
                     id = "zoom_in",
                     order = 40,
                     icon = zoomInFabAction.icon,
-                    contentDescription = "Zoom the map in.",
-                    tooltip = "Zoom the map in.",
+                    contentDescription = zoomInTooltip,
+                    tooltip = zoomInTooltip,
                     onTap = zoomInFabAction.onTap,
                 )
                 action(
                     id = "zoom_out",
                     order = 50,
                     icon = zoomOutFabAction.icon,
-                    contentDescription = "Zoom the map out.",
-                    tooltip = "Zoom the map out.",
+                    contentDescription = zoomOutTooltip,
+                    tooltip = zoomOutTooltip,
                     onTap = zoomOutFabAction.onTap,
                 )
             }
@@ -349,6 +353,7 @@ fun PlacesMapScreen(
                             text = "View in List",
                             onClick = { selectedFeature?.let(onViewInList) },
                             enabled = selectedFeature?.properties?.database_id != null,
+                            tooltip = stringResource(R.string.tooltip_map_view_in_list),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Row(
@@ -359,12 +364,14 @@ fun PlacesMapScreen(
                                 text = "Edit",
                                 onClick = { selectedFeature?.let(onOpenEdit) },
                                 enabled = selectedFeature?.properties?.database_id != null,
+                                tooltip = stringResource(R.string.tooltip_place_edit),
                                 modifier = Modifier.weight(1f),
                             )
                             GeoVaultSecondaryButton(
                                 text = "Navigate",
                                 onClick = { selectedFeature?.let(onNavigate) },
                                 enabled = selectedFeature?.properties?.database_id != null,
+                                tooltip = stringResource(R.string.tooltip_place_navigate),
                                 modifier = Modifier.weight(1f),
                             )
                         }

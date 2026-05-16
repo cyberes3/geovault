@@ -93,7 +93,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     gpsPositionFollowContentDescription: String = "Show your live GPS location on the map.",
     orientationFollowFabId: String = "orientation_lock",
     orientationFollowFabOrder: Int = 35,
-    orientationFollowContentDescription: String = "Follow my heading",
+    orientationFollowContentDescription: String = "Rotate the map to match the direction you are facing.",
     onPermissionDenied: (() -> Unit)? = null,
 ): GeoVaultMapHeadingFollowFabBundle {
     val context = LocalContext.current

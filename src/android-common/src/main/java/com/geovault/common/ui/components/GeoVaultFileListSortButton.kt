@@ -10,6 +10,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.geovault.common.R
 import com.geovault.common.sort.GeoVaultFileListSortMode
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 
@@ -24,15 +26,16 @@ fun GeoVaultFileListSortButton(
     val options = GeoVaultFileListSortMode.entries.map { mode ->
         GeoVaultSelectOption(value = mode, label = mode.label)
     }
+    val sortTooltip = stringResource(R.string.gv_common_tooltip_sort)
 
     GeoVaultIconButton(
         onClick = { showDialog = true },
         modifier = modifier,
-        tooltip = "Sort",
+        tooltip = sortTooltip,
     ) {
         Icon(
             imageVector = Icons.Filled.SwapVert,
-            contentDescription = "Sort",
+            contentDescription = sortTooltip,
             tint = GeoVaultColorTokens.MainBlue,
         )
     }

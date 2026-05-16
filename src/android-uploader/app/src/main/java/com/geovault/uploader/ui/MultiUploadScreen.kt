@@ -143,6 +143,7 @@ fun MultiUploadScreen(
                         GeoVaultPrimaryButton(
                             text = "Upload All",
                             onClick = onUploadClick,
+                            tooltip = stringResource(R.string.tooltip_upload_all),
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -151,6 +152,7 @@ fun MultiUploadScreen(
                         GeoVaultSecondaryButton(
                             text = "Cancel",
                             onClick = onCancelClick,
+                            tooltip = stringResource(R.string.tooltip_cancel_upload),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

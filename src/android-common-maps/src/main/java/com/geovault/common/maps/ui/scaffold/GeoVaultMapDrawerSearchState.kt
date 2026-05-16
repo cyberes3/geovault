@@ -18,4 +18,5 @@ data class GeoVaultMapDrawerSearchState(
     val isLoading: Boolean = false,
     val showClearAction: Boolean = query.isNotEmpty(),
     val clearContentDescription: String = "Clear search",
+    val clearTooltip: String? = null,
 )

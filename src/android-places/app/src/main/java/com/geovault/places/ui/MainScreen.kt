@@ -469,6 +469,7 @@ private fun PlaceRow(
                 GeoVaultPrimaryButton(
                     text = "Navigate",
                     onClick = { onNavigatePlace(feature) },
+                    tooltip = stringResource(R.string.tooltip_place_navigate),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp),
@@ -476,6 +477,7 @@ private fun PlaceRow(
                 )
                 GeoVaultSecondaryButton(
                     text = "Edit",
+                    tooltip = stringResource(R.string.tooltip_place_edit),
                     onClick = {
                         if (item.isOffline && item.offlineFeature != null) {
                             onEditOfflinePlace(item.offlineFeature, item.offlineIndex)

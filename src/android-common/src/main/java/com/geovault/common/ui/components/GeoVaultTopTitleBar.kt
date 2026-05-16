@@ -1,7 +1,6 @@
 package com.geovault.common.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
@@ -36,7 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
+import com.geovault.common.R
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -324,7 +325,9 @@ internal fun GeoVaultCompactDismissTitleBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     closeContentDescription: String = "Close",
+    closeTooltip: String? = null,
 ) {
+    val resolvedCloseTooltip = closeTooltip ?: stringResource(R.string.gv_common_subview_close_tooltip)
     val backgroundColor = if (MaterialTheme.colors.isLight) {
         GeoVaultColorTokens.Gray300.copy(alpha = 0.58f)
     } else {
@@ -361,15 +364,10 @@ internal fun GeoVaultCompactDismissTitleBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        Box(
-            // Clipping to CircleShape before `.clickable` bounds the Material ripple to a
-            // circle inside the 48dp hit target — the layout box stays square so the icon
-            // still sits on a 48dp minimum tap target, only the highlight is round.
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
+        GeoVaultIconButton(
+            onClick = onClose,
+            tooltip = resolvedCloseTooltip,
+            modifier = Modifier.size(48.dp),
         ) {
             Icon(
                 imageVector = Icons.Filled.Close,

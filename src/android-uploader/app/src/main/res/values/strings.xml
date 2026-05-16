@@ -12,4 +12,8 @@
     <string name="settings_required">Server URL is required. Connect your account to sign in.</string>
     <string name="settings_saved">Settings Saved</string>
     <string name="oauth_connected">Connected successfully</string>
+    <string name="tooltip_upload">Upload the selected file to your GeoVault server.</string>
+    <string name="tooltip_cancel">Close this screen without uploading.</string>
+    <string name="tooltip_upload_all">Upload all pending files to your GeoVault server.</string>
+    <string name="tooltip_cancel_upload">Stop the upload in progress.</string>
 </resources>

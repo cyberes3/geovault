@@ -45,6 +45,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.geovault.places.R
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -450,7 +452,7 @@ private fun PlaceEditScreen(
                                 GeoVaultSecondaryButton(
                                     text = "{ }",
                                     onClick = { state.parseCoordinatesFromInput() },
-                                    tooltip = "Normalize coordinates",
+                                    tooltip = stringResource(R.string.tooltip_place_normalize_coordinates),
                                     fitToContent = true,
                                     modifier = Modifier.fillMaxHeight(),
                                 )
@@ -464,7 +466,7 @@ private fun PlaceEditScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 enabled = !gpsOneShotController.isWaitingForFix,
-                                tooltip = "Use my location",
+                                tooltip = stringResource(R.string.tooltip_place_use_my_location),
                                 centeredContent = {
                                     val locationButtonTint = LocalContentColor.current
                                     Row(
@@ -504,6 +506,7 @@ private fun PlaceEditScreen(
                                         onSave(built)
                                     },
                                     enabled = state.name.trim().isNotEmpty() && state.coordinatesInput.trim().isNotEmpty(),
+                                    tooltip = stringResource(R.string.tooltip_place_save),
                                     modifier = Modifier.weight(1f),
                                 )
                                 GeoVaultSecondaryButton(
@@ -511,6 +514,7 @@ private fun PlaceEditScreen(
                                     onClick = {
                                         if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
                                     },
+                                    tooltip = stringResource(R.string.tooltip_place_cancel),
                                     modifier = Modifier.weight(1f),
                                 )
                             }

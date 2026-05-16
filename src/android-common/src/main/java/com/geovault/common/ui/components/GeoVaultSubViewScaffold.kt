@@ -77,6 +77,7 @@ fun GeoVaultSubViewScaffold(
     dismissOnHostInactive: Boolean = true,
     modifier: Modifier = Modifier,
     closeContentDescription: String = "Close",
+    closeTooltip: String? = null,
     headerExtras: (@Composable ColumnScope.() -> Unit)? = null,
     bottomBar: @Composable () -> Unit = {},
     backgroundColor: Color = MaterialTheme.colors.background,
@@ -99,6 +100,7 @@ fun GeoVaultSubViewScaffold(
                     title = title,
                     onClose = onClose,
                     closeContentDescription = closeContentDescription,
+                    closeTooltip = closeTooltip,
                 )
                 headerExtras?.invoke(this)
             }

@@ -3,13 +3,15 @@ package com.geovault.common.ui.components
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.geovault.common.R
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 /**
  * Compact search field using the filled drawer-input style.
@@ -28,7 +30,9 @@ fun GeoVaultCompactFilledSearchField(
     showClearAction: Boolean = value.isNotEmpty(),
     onClear: (() -> Unit)? = null,
     clearContentDescription: String = "Clear search",
+    clearTooltip: String? = null,
 ) {
+    val resolvedClearTooltip = clearTooltip ?: stringResource(R.string.gv_common_search_clear_tooltip)
     val clearAction = onClear ?: { onValueChange("") }
     GeoVaultCompactFilledInput(
         value = value,
@@ -48,14 +52,16 @@ fun GeoVaultCompactFilledSearchField(
                         )
                     }
                     if (showClearAction) {
-                        IconButton(
+                        GeoVaultIconButton(
                             onClick = clearAction,
                             enabled = enabled,
+                            tooltip = resolvedClearTooltip,
                             modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Clear,
                                 contentDescription = clearContentDescription,
+                                tint = geoVaultContentSecondaryColor(),
                                 modifier = Modifier.size(18.dp),
                             )
                         }

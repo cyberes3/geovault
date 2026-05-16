@@ -12,7 +12,9 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.geovault.common.R
 import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import androidx.compose.ui.unit.dp
@@ -59,6 +61,8 @@ fun GeoVaultInitialAuthView(
         isConnecting = isConnecting,
         onConnect = onConnect,
     )
+    val resolvedConnectTooltip = connectButtonTooltip
+        ?: stringResource(R.string.gv_common_auth_connect_tooltip)
 
     val containerModifier = if (captureOutsideTapAcrossParent) {
         Modifier.fillMaxSize().then(modifier)
@@ -95,7 +99,7 @@ fun GeoVaultInitialAuthView(
                 onClick = { connectState.onClick() },
                 enabled = connectEnabled,
                 visuallyDisabled = connectState.isEffectivelyConnecting,
-                tooltip = connectButtonTooltip,
+                tooltip = resolvedConnectTooltip,
                 modifier = Modifier.fillMaxWidth()
             )
             extraActions.forEach { action ->

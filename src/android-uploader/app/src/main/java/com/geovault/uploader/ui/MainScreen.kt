@@ -160,12 +160,14 @@ private fun UploadContent(
             text = "Upload",
             enabled = !isUploading && !isUploadSuccess,
             onClick = onUploadClick,
+            tooltip = stringResource(R.string.tooltip_upload),
             modifier = Modifier.fillMaxWidth()
         )
         GeoVaultSecondaryButton(
             text = "Cancel",
             enabled = !isUploading,
             onClick = onCloseClick,
+            tooltip = stringResource(R.string.tooltip_cancel),
             modifier = Modifier.fillMaxWidth()
         )
         Box(

@@ -10,7 +10,9 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.geovault.common.R
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 
 /**
@@ -30,8 +32,9 @@ fun GeoVaultSearchField(
     showClearAction: Boolean = value.isNotEmpty(),
     onClear: (() -> Unit)? = null,
     clearContentDescription: String = "Clear",
-    clearTooltip: String? = clearContentDescription,
+    clearTooltip: String? = null,
 ) {
+    val resolvedClearTooltip = clearTooltip ?: stringResource(R.string.gv_common_search_clear_tooltip)
     val clearAction = onClear ?: { onValueChange("") }
     GeoVaultCompactInput(
         value = value,
@@ -61,7 +64,7 @@ fun GeoVaultSearchField(
                         GeoVaultIconButton(
                             onClick = clearAction,
                             enabled = enabled,
-                            tooltip = clearTooltip,
+                            tooltip = resolvedClearTooltip,
                             modifier = Modifier.size(40.dp),
                         ) {
                             Icon(

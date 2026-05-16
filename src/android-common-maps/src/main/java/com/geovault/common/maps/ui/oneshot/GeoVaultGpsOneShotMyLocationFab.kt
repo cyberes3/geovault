@@ -6,6 +6,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.outlined.GpsNotFixed
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.geovault.common.maps.R
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -233,6 +235,7 @@ fun rememberGeoVaultGpsOneShotMyLocationFabAction(
     id: String = "gps_one_shot_my_location",
     order: Int = 30,
     contentDescription: String = "Recenter on my location",
+    tooltip: String? = null,
     onLocationResolved: ((LatLng) -> Unit)? = null,
     onPermissionDenied: (() -> Unit)? = null,
     showUserLocationPuck: Boolean = true,
@@ -248,11 +251,14 @@ fun rememberGeoVaultGpsOneShotMyLocationFabAction(
         positionFollowActive = positionFollowActive,
         coordinateOverride = coordinateOverride,
     )
+    val resolvedTooltip = tooltip?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.gv_common_map_gps_one_shot_tooltip)
     return GeoVaultMapFabAction(
         id = id,
         order = order,
         icon = controller.fabIcon,
         contentDescription = contentDescription,
+        tooltip = resolvedTooltip,
         onTap = controller.onJumpToMyLocation,
     )
 }

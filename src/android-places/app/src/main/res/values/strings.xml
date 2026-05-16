@@ -3,4 +3,17 @@
     <string name="app_title_bar">GeoVault Places</string>
     <string name="tooltip_nav_settings">Open account, sign-in, and app preferences.</string>
     <string name="map_screen_subtitle">Map</string>
+    <string name="tooltip_map_layers">Change the map style or layers you use for this view.</string>
+    <string name="tooltip_map_fit_content">Fit all saved places and your location in view.</string>
+    <string name="tooltip_map_zoom_in">Zoom the map in.</string>
+    <string name="tooltip_map_zoom_out">Zoom the map out.</string>
+    <string name="tooltip_nav_list">Open the list of saved and offline places.</string>
+    <string name="tooltip_nav_map">Open the map to view your places.</string>
+    <string name="tooltip_place_normalize_coordinates">Parse latitude and longitude from the text field.</string>
+    <string name="tooltip_place_use_my_location">Fill the coordinate fields from your current GPS location.</string>
+    <string name="tooltip_place_navigate">Start navigation to this place.</string>
+    <string name="tooltip_place_edit">Edit this place\'s details.</string>
+    <string name="tooltip_place_save">Save this place to your GeoVault account.</string>
+    <string name="tooltip_place_cancel">Close the editor without saving changes.</string>
+    <string name="tooltip_map_view_in_list">Open this place in the list view.</string>
 </resources>

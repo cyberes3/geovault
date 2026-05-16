@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.zIndex
 import com.geovault.common.GeovaultAuthManager
@@ -111,17 +112,21 @@ class MainActivity : ComponentActivity() {
                 var mapLaunchArgs by remember {
                     mutableStateOf(PlacesMapLaunchArgs())
                 }
-                val bottomDestinations = remember {
+                val listNavTooltip = stringResource(R.string.tooltip_nav_list)
+                val mapNavTooltip = stringResource(R.string.tooltip_nav_map)
+                val bottomDestinations = remember(listNavTooltip, mapNavTooltip) {
                     listOf(
                         GeoVaultBottomNavDestination(
                             id = PlacesTab.LIST.name,
                             label = "List",
                             icon = Icons.AutoMirrored.Filled.List,
+                            tooltip = listNavTooltip,
                         ),
                         GeoVaultBottomNavDestination(
                             id = PlacesTab.MAP.name,
                             label = "Map",
                             icon = Icons.Default.Map,
+                            tooltip = mapNavTooltip,
                         ),
                     )
                 }

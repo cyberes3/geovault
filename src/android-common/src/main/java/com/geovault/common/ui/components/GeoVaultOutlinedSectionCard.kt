@@ -35,6 +35,7 @@ fun GeoVaultOutlinedSectionCard(
     modifier: Modifier = Modifier,
     trailingIcon: ImageVector? = null,
     trailingContentDescription: String? = null,
+    trailingTooltip: String? = null,
     onTrailingClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -63,10 +64,12 @@ fun GeoVaultOutlinedSectionCard(
                 modifier = Modifier.weight(1f),
             )
             if (trailingIcon != null && onTrailingClick != null) {
+                val trailingTooltipText = trailingTooltip?.takeIf { it.isNotBlank() }
+                    ?: trailingContentDescription
                 GeoVaultIconButton(
                     onClick = onTrailingClick,
                     modifier = Modifier.size(36.dp),
-                    tooltip = trailingContentDescription,
+                    tooltip = trailingTooltipText,
                 ) {
                     Icon(
                         imageVector = trailingIcon,

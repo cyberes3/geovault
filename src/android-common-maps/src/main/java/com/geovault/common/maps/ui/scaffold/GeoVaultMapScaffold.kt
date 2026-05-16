@@ -36,8 +36,10 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.geovault.common.maps.R
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
 import com.geovault.common.ui.components.GeoVaultCompactFilledSearchField
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
@@ -93,7 +95,7 @@ fun GeoVaultMapScaffold(
     drawerTitleChip: GeoVaultMapDrawerTitleChip? = null,
     onDrawerClose: (() -> Unit)? = null,
     drawerCloseContentDescription: String = "Close",
-    drawerCloseTooltip: String? = "Close",
+    drawerCloseTooltip: String? = null,
     drawerSearch: GeoVaultMapDrawerSearchState,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
     drawerBody: @Composable ColumnScope.() -> Unit,
@@ -313,6 +315,7 @@ private fun GeoVaultMapDrawerSearchBar(
         showClearAction = search.showClearAction,
         onClear = search.onClear,
         clearContentDescription = search.clearContentDescription,
+        clearTooltip = search.clearTooltip,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -432,6 +435,8 @@ private fun DrawerHeaderRow(
     drawerCloseTooltip: String?,
     drawerHeader: @Composable GeoVaultMapDrawerHeaderScope.() -> Unit,
 ) {
+    val resolvedDrawerCloseTooltip = drawerCloseTooltip
+        ?: stringResource(R.string.gv_common_map_drawer_close_tooltip)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -450,7 +455,7 @@ private fun DrawerHeaderRow(
                 CloseAction(
                     onClick = close,
                     contentDescription = drawerCloseContentDescription,
-                    tooltip = drawerCloseTooltip,
+                    tooltip = resolvedDrawerCloseTooltip,
                 )
             }
             val titleModifier = if (drawerTitleCentered || drawerTitleChip != null) {

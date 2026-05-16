@@ -40,4 +40,11 @@
     <string name="gv_update_error_apk_package_mismatch">This APK is not built for this app (package name does not match). Use View to open the release page and pick the correct variant.</string>
     <string name="gv_update_error_apk_parse">Could not read the downloaded APK. Try downloading again.</string>
     <string name="gv_update_error_cancelled">Download cancelled.</string>
+
+    <string name="gv_common_tooltip_sort">Choose how to order this list (for example by name or date).</string>
+    <string name="gv_common_tooltip_info">Open detailed information for this item.</string>
+    <string name="gv_common_search_clear_tooltip">Clear the search field.</string>
+    <string name="gv_common_subview_close_tooltip">Close this screen and return to the previous view.</string>
+    <string name="gv_common_auth_connect_tooltip">Sign in with your GeoVault account using the server URL above.</string>
+    <string name="gv_common_auth_disconnect_tooltip">Sign out on this device.</string>
 </resources>

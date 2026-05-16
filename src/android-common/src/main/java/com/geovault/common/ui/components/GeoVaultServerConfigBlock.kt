@@ -14,7 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import com.geovault.common.R
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 
@@ -29,6 +31,8 @@ fun GeoVaultServerConfigBlock(
     disconnectButtonTooltip: String? = null,
 ) {
     var showDisconnectConfirm by remember { mutableStateOf(false) }
+    val resolvedDisconnectTooltip = disconnectButtonTooltip
+        ?: stringResource(R.string.gv_common_auth_disconnect_tooltip)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Divider(
@@ -60,7 +64,7 @@ fun GeoVaultServerConfigBlock(
         GeoVaultSecondaryButton(
             text = disconnectButtonText,
             onClick = { showDisconnectConfirm = true },
-            tooltip = disconnectButtonTooltip,
+            tooltip = resolvedDisconnectTooltip,
             modifier = Modifier.fillMaxWidth()
         )
     }
