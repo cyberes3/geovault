@@ -2730,6 +2730,82 @@ class TestLiveTrackAPI(TestCase):
         if returned_coords:
             self.assertEqual(returned_coords[-1][2], coords[-1][2], "Newest point should be retained")
 
+    def test_geometry_bulk_respects_response_size_limit_per_tracker(self):
+        """POST trackers/geometry/ trims each track payload to configured byte limit."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Bulk Limited Geometry"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
+        params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
+        track.geometry = {"type": "LineString", "coordinates": coords}
+        track.point_params = params
+        track.save(update_fields=["geometry", "point_params", "updated_at"])
+
+        with _patch_live_track_enabled():
+            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
+                mock_cfg.return_value.get_int.return_value = 1200
+                response = self.client.post(
+                    "/api/extensions/live-track/trackers/geometry/",
+                    data=json.dumps({"tracker_ids": [track_id]}),
+                    content_type="application/json",
+                )
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertEqual(len(result), 1)
+        entry = result[0]
+        entry_bytes = len(
+            json.dumps(entry, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        )
+        self.assertLessEqual(entry_bytes, 1200)
+        returned_coords = entry["geometry"].get("coordinates", [])
+        returned_params = entry.get("point_params", [])
+        self.assertLess(len(returned_coords), len(coords))
+        self.assertEqual(len(returned_coords), len(returned_params))
+        if returned_coords:
+            self.assertEqual(returned_coords[-1][2], coords[-1][2], "Newest point should be retained")
+
+    def test_geometry_bulk_and_get_match_bounded_output(self):
+        """POST bulk geometry and GET geometry return the same bounded trail for one track."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Bulk GET Parity"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        track = LiveTrack.objects.get(id=track_id)
+        coords = [[-122.0 + i * 0.001, 37.0 + i * 0.001, 1705312800000 + i] for i in range(20)]
+        params = [{"desc": "x" * 120, "acc": 5.0} for _ in range(20)]
+        track.geometry = {"type": "LineString", "coordinates": coords}
+        track.point_params = params
+        track.save(update_fields=["geometry", "point_params", "updated_at"])
+
+        with _patch_live_track_enabled():
+            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
+                mock_cfg.return_value.get_int.return_value = 1200
+                get_response = self.client.get(
+                    f"/api/extensions/live-track/trackers/{track_id}/geometry/"
+                )
+                bulk_response = self.client.post(
+                    "/api/extensions/live-track/trackers/geometry/",
+                    data=json.dumps({"tracker_ids": [track_id]}),
+                    content_type="application/json",
+                )
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(bulk_response.status_code, 200)
+        get_data = get_response.json()
+        bulk_entry = bulk_response.json()[0]
+        get_coords = get_data["geometry"].get("coordinates", [])
+        bulk_coords = bulk_entry["geometry"].get("coordinates", [])
+        self.assertEqual(len(get_coords), len(bulk_coords))
+        if get_coords:
+            self.assertEqual(get_coords[-1], bulk_coords[-1])
+
     def test_get_track_404_other_user(self):
         """GET trackers/<id>/ for another user's track returns 404."""
         with _patch_live_track_enabled():

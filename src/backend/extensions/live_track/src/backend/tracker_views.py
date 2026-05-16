@@ -270,6 +270,82 @@ def _bbox_from_normalized_coords(coords: list) -> list | None:
     return [round(min(lons), 5), round(min(lats), 5), round(max(lons), 5), round(max(lats), 5)]
 
 
+def _bounded_track_geometry_payload(track: LiveTrack, is_owner: bool, max_bytes: int) -> dict:
+    """Build tracker geometry response trimmed to max_bytes (newest points retained)."""
+    geom = track.geometry or {"type": "LineString", "coordinates": []}
+    coords = list(geom.get("coordinates") or [])
+    point_params = list(track.point_params or [])
+
+    window_key = (track.settings or {}).get("recent_data_window")
+    if window_key:
+        coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
+
+    if not is_owner:
+        if not getattr(track, "share_params_with_recipients", False):
+            point_params = []
+        else:
+            point_params = [dict(p) if isinstance(p, dict) else {} for p in point_params]
+            _strip_ser_from_params(point_params)
+
+    response_payload = {
+        "id": str(track.id),
+        "name": track.name,
+        "color": _color_from_settings(track),
+        "settings": normalize_track_settings_for_api(track.settings),
+        "visibility": getattr(track, "visibility", "private"),
+        "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
+        "is_owner": is_owner,
+        "created_at": int(track.created_at.timestamp()) if track.created_at else None,
+        "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
+    }
+    if not is_owner:
+        owner_email = (
+            (getattr(track.user, "email", "") or "")
+            if getattr(track, "user_id", None)
+            else ""
+        )
+        response_payload["owner_email"] = owner_email.strip()
+    if is_owner and getattr(track, "hauk_password", None):
+        response_payload["hauk_password"] = track.hauk_password
+        emails = list(
+            LiveTrackShare.objects.filter(track=track).values_list("shared_with__email", flat=True)
+        )
+        response_payload["shared_with_emails"] = [e for e in emails if e]
+
+    params_align_with_coords = len(point_params) == len(coords)
+    take_last = _fit_tail_count_to_max_bytes(
+        response_payload,
+        coords,
+        point_params,
+        max_bytes,
+        params_align_with_coords,
+    )
+    selected_coords = coords[-take_last:] if take_last > 0 else []
+    if params_align_with_coords:
+        selected_params = point_params[-take_last:] if take_last > 0 else []
+    else:
+        selected_params = point_params
+
+    normalized_coords = _normalize_coords_for_response(selected_coords)
+    normalized_params = _normalize_point_params_for_response(selected_params)
+    response_payload["geometry"] = {"type": "LineString", "coordinates": normalized_coords}
+    response_payload["point_params"] = normalized_params
+    response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
+
+    while (
+        normalized_coords
+        and _json_size_bytes(response_payload) > max_bytes
+    ):
+        normalized_coords.pop(0)
+        if params_align_with_coords and normalized_params:
+            normalized_params.pop(0)
+        response_payload["geometry"]["coordinates"] = normalized_coords
+        response_payload["point_params"] = normalized_params
+        response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
+
+    return response_payload
+
+
 def _get_track_for_user_or_404(user, tracker_id):
     """Return LiveTrack for owners, track subscribers (direct/public), or accepted group shares; raise Http404 otherwise."""
     from django.http import Http404
@@ -616,81 +692,11 @@ def tracker_get_geometry(request, tracker_id):
             all_data=True,
         )
     else:
-        geom = track.geometry or {"type": "LineString", "coordinates": []}
-        coords = list(geom.get("coordinates") or [])
-        point_params = list(track.point_params or [])
-
-        window_key = (track.settings or {}).get("recent_data_window")
-        if window_key:
-            coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
-
-        if not is_owner:
-            if not getattr(track, "share_params_with_recipients", False):
-                point_params = []
-            else:
-                point_params = [dict(p) if isinstance(p, dict) else {} for p in point_params]
-                _strip_ser_from_params(point_params)
-
-        response_payload = {
-            "id": str(track.id),
-            "name": track.name,
-            "color": _color_from_settings(track),
-            "settings": normalize_track_settings_for_api(track.settings),
-            "visibility": getattr(track, "visibility", "private"),
-            "share_params_with_recipients": getattr(track, "share_params_with_recipients", False),
-            "is_owner": is_owner,
-            "created_at": int(track.created_at.timestamp()) if track.created_at else None,
-            "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
-        }
-        if not is_owner:
-            owner_email = (
-                (getattr(track.user, "email", "") or "")
-                if getattr(track, "user_id", None)
-                else ""
-            )
-            response_payload["owner_email"] = owner_email.strip()
-        if is_owner and getattr(track, "hauk_password", None):
-            response_payload["hauk_password"] = track.hauk_password
-            emails = list(
-                LiveTrackShare.objects.filter(track=track).values_list("shared_with__email", flat=True)
-            )
-            response_payload["shared_with_emails"] = [e for e in emails if e]
-
         max_bytes = get_config_loader().get_int(
             "extensions.live_track.geometry_max_response_bytes",
             1048576,
         )
-        params_align_with_coords = len(point_params) == len(coords)
-        take_last = _fit_tail_count_to_max_bytes(
-            response_payload,
-            coords,
-            point_params,
-            max_bytes,
-            params_align_with_coords,
-        )
-        selected_coords = coords[-take_last:] if take_last > 0 else []
-        if params_align_with_coords:
-            selected_params = point_params[-take_last:] if take_last > 0 else []
-        else:
-            selected_params = point_params
-
-        normalized_coords = _normalize_coords_for_response(selected_coords)
-        normalized_params = _normalize_point_params_for_response(selected_params)
-        response_payload["geometry"] = {"type": "LineString", "coordinates": normalized_coords}
-        response_payload["point_params"] = normalized_params
-        response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
-
-        # Final exact guard against edge cases in estimation.
-        while (
-            normalized_coords
-            and _json_size_bytes(response_payload) > max_bytes
-        ):
-            normalized_coords.pop(0)
-            if params_align_with_coords and normalized_params:
-                normalized_params.pop(0)
-            response_payload["geometry"]["coordinates"] = normalized_coords
-            response_payload["point_params"] = normalized_params
-            response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
+        response_payload = _bounded_track_geometry_payload(track, is_owner, max_bytes)
 
     return JsonResponse(
         response_payload,
@@ -729,6 +735,10 @@ def tracker_get_geometry_bulk(request):
         if len(ordered_ids) >= 200:
             break
 
+    max_bytes = get_config_loader().get_int(
+        "extensions.live_track.geometry_max_response_bytes",
+        1048576,
+    )
     result = []
     for tracker_id in ordered_ids:
         try:
@@ -737,15 +747,12 @@ def tracker_get_geometry_bulk(request):
             # Omit trackers that are inaccessible, invalid, or missing.
             continue
         is_owner = track.user_id == request.user.id
-        result.append(
-            track_to_response(
-                track,
-                include_secret=False,
-                is_owner=is_owner,
-                all_data=False,
-            )
-        )
-    return JsonResponse(result, safe=False)
+        result.append(_bounded_track_geometry_payload(track, is_owner, max_bytes))
+    return JsonResponse(
+        result,
+        safe=False,
+        json_dumps_params={"separators": (",", ":"), "ensure_ascii": True},
+    )
 
 
 @api_or_login_required_401()

@@ -267,7 +267,8 @@ extensions:
   live_track:
     # Location tracking server for devices to publish live location tracks to.
     enabled: true
-    # Maximum response size for GET trackers/<id>/geometry/ in bytes when all=true is not set.
+    # Maximum geometry payload size per tracker in bytes (newest points retained when trimmed).
+    # Applies to GET trackers/<id>/geometry/ (when all=true is not set) and POST trackers/geometry/.
     # Set to 1048576 (1 MB) by default.
     geometry_max_response_bytes: 1048576
     # Domain used for the Hauk-compatible API (e.g. hauk.geovault.example.com).
