@@ -129,9 +129,10 @@ data class TrackerMapSelectionCard(
  *    `updated_at` advanced or its cached geometry grew. This was historically wired to a
  *    multi-server reload, which caused the entire group's history to re-download every time a
  *    single live point arrived.
- *  - The remaining four reasons are explicit context-change triggers that legitimately need a
- *    one-shot server fetch (entering a new mode/group, loading a tracker for the first time,
- *    streaming starting, or returning to the selected tracker after group streaming ends).
+ *  - [RecentDataWindowChange]: forced server geometry fetch after `recent_data_window` changes.
+ *  - The remaining explicit context-change triggers need a one-shot server fetch (entering a
+ *    new mode/group, loading a tracker for the first time, streaming starting, or returning to
+ *    the selected tracker after group streaming ends).
  */
 internal enum class TrackerMapTrailReloadReason(
     val allowServerHistoryFetch: Boolean,
@@ -139,6 +140,7 @@ internal enum class TrackerMapTrailReloadReason(
 ) {
     GenericMapRefresh(allowServerHistoryFetch = false, allowMultiServerHistoryFetch = false),
     MetadataMapRefresh(allowServerHistoryFetch = false, allowMultiServerHistoryFetch = false),
+    RecentDataWindowChange(allowServerHistoryFetch = true, allowMultiServerHistoryFetch = true),
     MapContextChange(allowServerHistoryFetch = true),
     ExplicitTrackerLoad(allowServerHistoryFetch = true),
     StreamingStart(allowServerHistoryFetch = true),
@@ -258,29 +260,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 return HistoryClearRefreshAction.REFRESH_SELECTED_SINGLE
             }
             return HistoryClearRefreshAction.NO_OP
-        }
-
-        @JvmStatic
-        internal fun shouldReloadForRecentDataWindowChange(
-            oldWindow: String?,
-            newWindow: String?,
-            mode: TrackerMapDisplayMode,
-            selectedTrackerId: String,
-            displayedTrackerId: String,
-            runtimeRunning: Boolean,
-            activeStreamedTrackerIds: Set<String>,
-            changedTrackerId: String,
-        ): Boolean {
-            if (oldWindow == null || oldWindow == newWindow) return false
-            if (mode != TrackerMapDisplayMode.SINGLE_SESSION) return false
-            val selected = selectedTrackerId.trim()
-            val displayed = displayedTrackerId.trim()
-            val changed = changedTrackerId.trim()
-            if (changed.isEmpty()) return false
-            // Filter-driven reloads should only target the selected tracker.
-            if (selected.isEmpty() || changed != selected) return false
-            if (displayed.isNotEmpty() && changed != displayed) return false
-            return changed !in activeStreamedTrackerIds
         }
 
         /**
@@ -523,7 +502,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var lastTrailLoadSeed: String? = null
     private var pendingReopenSingleTrackerLoadId: String? = null
     private var pendingFitAfterReload: Boolean = false
-    private val recentDataWindowByTracker = mutableMapOf<String, String?>()
+    private var lastRenderMetadata: TrackerMapRenderMetadataSnapshot? = null
     private var lastObservedTrackingRunning: Boolean? = null
     private var lastObservedLocalRecordingActive: Boolean? = null
 
@@ -742,33 +721,46 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             combine(
                 trackerManagementStateStore.trackers,
                 trackerManagementStateStore.groups,
-                trackerManagementStateStore.mapVisibility
+                trackerManagementStateStore.mapVisibility,
             ) { trackers, groups, visibility ->
-                // METADATA SIGNATURE: only structural/cosmetic fields that affect rendering and
-                // streaming target sets. We deliberately do NOT include tracker.updated_at,
-                // tracker.geometry coordinates, or per-group updated_at — those advance with every
-                // live data point and would otherwise fire a MetadataMapRefresh on every WS tick.
-                // The live data itself flows through state updates (remoteLastPoints,
-                // allQueueTrailsByTracker) which already drive a render package refresh; we don't
-                // need a metadata-tier reload to surface them.
-                val trackerFingerprint = trackers.joinToString(separator = "|") { tracker ->
-                    "${tracker.id}:${tracker.name}:${tracker.color}"
+                TrackerMapRenderMetadataPolicy.capture(
+                    trackers = trackers,
+                    groups = groups,
+                    mapVisibility = visibility,
+                )
+            }.distinctUntilChangedBy { it.fingerprint }
+                .collectLatest { nextMetadata ->
+                    val previousMetadata = lastRenderMetadata
+                    lastRenderMetadata = nextMetadata
+                    val diff = TrackerMapRenderMetadataPolicy.diff(previousMetadata, nextMetadata)
+                    if (!diff.fingerprintChanged) return@collectLatest
+
+                    _uiState.value = _uiState.value.copy(renderMetadataSignature = nextMetadata.fingerprint)
+
+                    if (diff.recentDataWindowChangedTrackerIds.isNotEmpty()) {
+                        val state = _uiState.value
+                        val groupSelection = resolveGroupModeSelection(state)
+                        val action = TrackerMapRecentDataWindowChangePolicy.resolve(
+                            changedTrackerIds = diff.recentDataWindowChangedTrackerIds,
+                            mode = state.mode,
+                            displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
+                            selectedTrackerId = state.runtime.selectedTrackerId,
+                            rosterTrackerIds = visibleMapRosterTrackerIds(),
+                            groupTrackerIds = groupSelection.trackerIds,
+                        )
+                        if (action.reprojectImmediately) {
+                            publishRenderPackage()
+                        }
+                        if (action.serverRefreshTrackerIds.isNotEmpty()) {
+                            stripGeometryInStore(action.invalidateGeometryCache)
+                            lastTrailLoadSeed = null
+                            requestRuntimeTrailReload(TrackerMapTrailReloadReason.RecentDataWindowChange)
+                        }
+                    } else {
+                        requestRuntimeTrailReload(TrackerMapTrailReloadReason.MetadataMapRefresh)
+                    }
+                    refreshStreamTargets()
                 }
-                val groupFingerprint = groups.joinToString(separator = "|") { group ->
-                    val memberIds = group.track_ids.orEmpty().sorted().joinToString(",")
-                    "${group.id}:$memberIds"
-                }
-                val visibilityFingerprint = if (visibility == null) {
-                    "none"
-                } else {
-                    "${visibility.hidden_group_ids.orEmpty().sorted()}|${visibility.hidden_track_ids.orEmpty().sorted()}"
-                }
-                "$trackerFingerprint#$groupFingerprint#$visibilityFingerprint"
-            }.distinctUntilChanged().collectLatest { metadataSignature ->
-                _uiState.value = _uiState.value.copy(renderMetadataSignature = metadataSignature)
-                requestRuntimeTrailReload(TrackerMapTrailReloadReason.MetadataMapRefresh)
-                refreshStreamTargets()
-            }
         }
         viewModelScope.launch {
             trackerManagementStateStore.events.collectLatest { event ->
@@ -791,33 +783,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                                 clearRenderedTrailsAfterHistoryCleared()
                             }
                             HistoryClearRefreshAction.NO_OP -> Unit
-                        }
-                    }
-                    is com.geovault.tracker.data.TrackerManagementEvent.TrackerUpserted -> {
-                        val trackerId = event.tracker.id
-                        val newWindow = event.tracker.settingString("recent_data_window")
-                        val oldWindow = recentDataWindowByTracker.put(trackerId, newWindow)
-                        val state = _uiState.value
-                        val windowChanged = oldWindow != newWindow
-                        if (shouldReloadForRecentDataWindowChange(
-                                oldWindow = oldWindow,
-                                newWindow = newWindow,
-                                mode = state.mode,
-                                selectedTrackerId = state.runtime.selectedTrackerId,
-                                displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state),
-                                runtimeRunning = state.runtime.localRecordingActive,
-                                activeStreamedTrackerIds = state.activeStreamedTrackerIds,
-                                changedTrackerId = trackerId,
-                            )
-                        ) {
-                            requestRuntimeTrailReload(TrackerMapTrailReloadReason.GenericMapRefresh)
-                        } else if (windowChanged) {
-                            // RECENT-DATA-WINDOW-LIVE: when the server reload path declines a
-                            // refetch (narrow change, non-displayed tracker, etc.) the engine must
-                            // still re-project so the new window is applied to whatever points the
-                            // client already holds. _uiState itself didn't change, so nudge the
-                            // render package directly.
-                            publishRenderPackage()
                         }
                     }
                     else -> Unit
@@ -1627,17 +1592,29 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 state = state,
                 plan = plan,
                 localRuntimeOverlayTrails = renderTrails,
-                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                recentDataWindowByTracker = recentDataWindowByTrackerForRender(),
                 currentSessionStartByTracker = currentSessionStartByTracker(state),
                 nowMs = nowMs,
             )
         )
     }
 
-    private fun currentRecentDataWindowByTracker(): Map<String, String?> {
-        return trackerManagementStateStore.trackers.value.associate { tracker ->
-            tracker.id to tracker.settingString("recent_data_window")
-        }
+    private fun recentDataWindowByTrackerForRender(): Map<String, String?> {
+        return lastRenderMetadata?.recentDataWindowByTracker
+            ?: TrackerMapRenderMetadataPolicy.capture(
+                trackers = trackerManagementStateStore.trackers.value,
+                groups = trackerManagementStateStore.groups.value,
+                mapVisibility = trackerManagementStateStore.mapVisibility.value,
+            ).recentDataWindowByTracker
+    }
+
+    private fun stripGeometryInStore(trackerIds: Set<String>) {
+        if (trackerIds.isEmpty()) return
+        val stripped = TrackerMapGeometryCachePolicy.stripGeometry(
+            trackers = trackerManagementStateStore.trackers.value,
+            trackerIds = trackerIds,
+        )
+        trackerManagementStateStore.publishTrackers(stripped)
     }
 
     /**
@@ -1989,10 +1966,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         // preload on those reasons leaves the selected tracker's trail blank until a different
         // server-fetching reason fires (often never, on a quiet launch). The preload itself is
         // a pure in-memory copy, so it's safe and cheap to run for every reload.
-        val preloadedTrail = preloadedSingleTrackerTrailFromCacheOrNull(
-            mode = state.mode,
-            activeTrackerId = activeTrackerId
-        )
+        val preloadedTrail = if (reason == TrackerMapTrailReloadReason.RecentDataWindowChange) {
+            null
+        } else {
+            preloadedSingleTrackerTrailFromCacheOrNull(
+                mode = state.mode,
+                activeTrackerId = activeTrackerId,
+            )
+        }
         if (preloadedTrail != null) {
             _uiState.update { latest ->
                 val restored = TrackerMapLocalTrailRestorePolicy.restore(
@@ -2409,7 +2390,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 snapshot = snapshot,
                 point = point,
                 trailPointLimit = TRAIL_POINT_LIMIT,
-                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                recentDataWindowByTracker = recentDataWindowByTrackerForRender(),
                 currentSessionStartByTracker = currentSessionStartByTracker(snapshot.uiState),
                 nowMs = nowMs,
             )
