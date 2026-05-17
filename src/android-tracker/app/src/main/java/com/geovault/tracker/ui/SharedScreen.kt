@@ -1168,7 +1168,7 @@ private fun DiscoverOnMapGroupCard(
         name = group.name,
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
-        iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+        iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
         flags = GeoVaultAddRemoveRowFlags(
             isPendingRemove = isPendingRemove,
             isAdded = !isPendingRemove,
@@ -1345,7 +1345,7 @@ private fun DiscoverIncomingGroupCard(
         name = group.name,
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
-        iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+        iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
         flags = GeoVaultAddRemoveRowFlags(
             isPendingAdd = isPendingAccept,
             isPendingRemove = isPendingRemove,
@@ -1409,7 +1409,7 @@ private fun PublicAddGroupCard(
         name = group.name,
         ownerEmail = group.owner_email,
         iconRes = R.drawable.ic_groups,
-        iconTint = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+        iconTint = TrackerChevronStylePolicy.DefaultAddRowTint,
         flags = GeoVaultAddRemoveRowFlags(
             isPendingAdd = isPendingAdd,
             isPendingRemove = isPendingRemove,
