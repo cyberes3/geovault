@@ -17,7 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.auth.GeoVaultAuthExtras
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
@@ -58,18 +58,14 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
-                LaunchedEffect(state.oauthUrl) {
-                    val oauthUrl = state.oauthUrl
-                    if (!oauthUrl.isNullOrBlank()) {
-                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, oauthUrl)
-                    }
-                }
-                LaunchedEffect(settingsState.oauthUrl) {
-                    val oauthUrl = settingsState.oauthUrl
-                    if (!oauthUrl.isNullOrBlank()) {
-                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, oauthUrl)
-                    }
-                }
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = state.oauthUrl,
+                    onConsumed = viewModel::onOauthUrlConsumed,
+                )
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = settingsState.oauthUrl,
+                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                )
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainScreen(
                         state = state,

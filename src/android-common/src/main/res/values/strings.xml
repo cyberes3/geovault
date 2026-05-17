@@ -45,6 +45,6 @@
     <string name="gv_common_tooltip_info">Open detailed information for this item.</string>
     <string name="gv_common_search_clear_tooltip">Clear the search field.</string>
     <string name="gv_common_subview_close_tooltip">Close this screen and return to the previous view.</string>
-    <string name="gv_common_auth_connect_tooltip">Sign in with your GeoVault account using the server URL above.</string>
+    <string name="gv_common_auth_connect_tooltip">Sign in with your GeoVault account using the server URL above. While connecting, tap again to cancel and retry.</string>
     <string name="gv_common_auth_disconnect_tooltip">Sign out on this device.</string>
 </resources>

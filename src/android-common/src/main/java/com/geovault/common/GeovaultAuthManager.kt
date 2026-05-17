@@ -1,5 +1,6 @@
 package com.geovault.common
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -12,9 +13,12 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
+import okhttp3.Call
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.concurrent.Executors
@@ -109,15 +113,22 @@ object GeovaultAuthManager {
         return normalized
     }
 
-    fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit) {
+    fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
         val base = url.trimEnd('/')
         if (base.startsWith("https://")) {
             callback(Result.success(base))
-            return
+            return {}
         }
         if (!base.startsWith("http://")) {
             callback(Result.failure(IllegalArgumentException("Server URL must be http/https")))
-            return
+            return {}
+        }
+        val callRef = AtomicReference<Call?>(null)
+        val delivered = AtomicBoolean(false)
+        fun deliver(result: Result<String>) {
+            if (delivered.compareAndSet(false, true)) {
+                callback(result)
+            }
         }
         resolveExecutor.execute {
             val client = OkHttpClient.Builder()
@@ -126,17 +137,28 @@ object GeovaultAuthManager {
                 .followRedirects(true)
                 .build()
             val request = Request.Builder().url("$base/").head().build()
+            val call = client.newCall(request)
+            callRef.set(call)
             try {
-                client.newCall(request).execute().use { response ->
+                call.execute().use { response ->
+                    if (call.isCanceled()) {
+                        return@execute
+                    }
                     val finalUrl = response.request.url
                     val defaultPort = if (finalUrl.scheme == "https") 443 else 80
                     val resolved = "${finalUrl.scheme}://${finalUrl.host}" +
                         if (finalUrl.port != defaultPort) ":${finalUrl.port}" else ""
-                    callback(Result.success(resolved))
+                    deliver(Result.success(resolved))
                 }
             } catch (e: Exception) {
-                callback(Result.failure(e))
+                if (call.isCanceled()) {
+                    return@execute
+                }
+                deliver(Result.failure(e))
             }
+        }
+        return {
+            callRef.get()?.cancel()
         }
     }
 
@@ -484,13 +506,20 @@ object GeovaultAuthManager {
     fun launchOAuthInBrowser(context: Context, authorizeUrl: String) {
         Log.i(TAG, "launchOAuthInBrowser: host=${Uri.parse(authorizeUrl).host}")
         val uri = Uri.parse(authorizeUrl)
+        val launchInNewTask = context !is Activity
         try {
             val customTabsIntent = CustomTabsIntent.Builder().build()
-            customTabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (launchInNewTask) {
+                customTabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             customTabsIntent.launchUrl(context, uri)
         } catch (e: Exception) {
             Log.w(TAG, "launchOAuthInBrowser: CustomTabs failed, falling back to ACTION_VIEW — ${e.message}")
-            context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val intent = Intent(Intent.ACTION_VIEW, uri)
+            if (launchInNewTask) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
         }
     }
 

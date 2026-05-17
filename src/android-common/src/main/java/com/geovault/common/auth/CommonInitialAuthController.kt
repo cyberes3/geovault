@@ -50,11 +50,12 @@ class CommonInitialAuthController(
         }
         Log.d(TAG, "prepareOAuthConnection: normalized=$normalized, resolving to canonical…")
         val resolvedResult = suspendCancellableCoroutine<Result<String>> { continuation ->
-            serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
+            val cancelResolve = serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
             }
+            continuation.invokeOnCancellation { cancelResolve() }
         }
         return resolvedResult.fold(
             onSuccess = { resolved ->

@@ -21,6 +21,7 @@
 -->
 <resources>
     <color name="gv_common_main_blue">#163D8A</color>
+    <color name="gv_common_list_background">#F3F6FA</color>
     <color name="gv_common_main_yellow">#F4AC45</color>
     <color name="gv_common_surface">#FFFFFF</color>
     <color name="gv_common_border_light">#C4D2ED</color>

@@ -12,7 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.auth.GeoVaultAuthExtras
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.common.ui.system.GeoVaultSystemBars
@@ -68,16 +68,14 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
 
-                LaunchedEffect(state.oauthUrl) {
-                    state.oauthUrl?.let {
-                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it)
-                    }
-                }
-                LaunchedEffect(settingsState.oauthUrl) {
-                    settingsState.oauthUrl?.let {
-                        GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it)
-                    }
-                }
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = state.oauthUrl,
+                    onConsumed = viewModel::onOauthUrlConsumed,
+                )
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = settingsState.oauthUrl,
+                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                )
 
                 LaunchedEffect(Unit) {
                     intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->

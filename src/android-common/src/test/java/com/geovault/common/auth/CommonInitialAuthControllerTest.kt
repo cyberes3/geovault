@@ -1,7 +1,12 @@
 package com.geovault.common.auth
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -55,6 +60,32 @@ class CommonInitialAuthControllerTest {
     }
 
     @Test
+    fun `prepareOAuthConnection cancels in-flight resolution`() = runSuspend {
+        val serverConfig = FakeServerConfigService(
+            normalizedUrl = "http://example.test",
+            canonicalResult = Result.success("https://canonical.example"),
+        ).apply { deferCanonicalCallback = true }
+        val controller = newController(serverConfig = serverConfig)
+
+        val job = coroutineScope {
+            async {
+                controller.prepareOAuthConnection("http://example.test")
+            }
+        }
+        delay(50)
+        job.cancel()
+        try {
+            job.await()
+            fail("Expected CancellationException")
+        } catch (_: CancellationException) {
+            // expected
+        }
+        serverConfig.cancelPendingResolve?.invoke()
+        serverConfig.pendingCanonicalCallback?.invoke(Result.success("https://late.example"))
+        assertTrue(job.isCancelled)
+    }
+
+    @Test
     fun `configured server wins over peer fallback`() {
         val serverConfig = FakeServerConfigService(normalizedUrl = "https://kept.example").also {
             it.savedUrl = "https://configured.example"
@@ -83,9 +114,12 @@ class CommonInitialAuthControllerTest {
 
     private class FakeServerConfigService(
         private val normalizedUrl: String,
-        private val canonicalResult: Result<String> = Result.success("https://example.test")
+        private val canonicalResult: Result<String> = Result.success("https://example.test"),
     ) : ServerConfigService {
         var savedUrl: String = ""
+        var deferCanonicalCallback: Boolean = false
+        var pendingCanonicalCallback: ((Result<String>) -> Unit)? = null
+        var cancelPendingResolve: (() -> Unit)? = null
 
         override fun getServerUrl(): String = savedUrl
 
@@ -97,8 +131,16 @@ class CommonInitialAuthControllerTest {
 
         override fun getNormalizedServerUrl(): String = normalizedUrl
 
-        override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit) {
+        override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
+            if (deferCanonicalCallback) {
+                pendingCanonicalCallback = callback
+                cancelPendingResolve = {
+                    pendingCanonicalCallback = null
+                }
+                return cancelPendingResolve!!
+            }
             callback(canonicalResult)
+            return {}
         }
     }
 

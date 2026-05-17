@@ -82,8 +82,9 @@ class AuthRepositoryTest {
 
         override fun getNormalizedServerUrl(): String = normalizedUrl
 
-        override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit) {
+        override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
             callback(canonicalResult)
+            return {}
         }
     }
 

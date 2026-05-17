@@ -161,16 +161,27 @@ fun GeoVaultTheme(
     val activity = LocalContext.current as? ComponentActivity
     SideEffect {
         if (activity != null) {
+            val statusBarColor = GeoVaultColorTokens.MainBlue.toArgb()
             val navigationBarColor = if (darkTheme) {
                 GeoVaultColorTokens.Dark.ListBackground.toArgb()
             } else {
                 GeoVaultColorTokens.ListBackground.toArgb()
             }
-            GeoVaultSystemBars.applyAppChrome(
-                activity = activity,
-                navigationBarColor = navigationBarColor,
-                useDarkNavigationBarIcons = !darkTheme,
-            )
+            val useDarkNavigationBarIcons = !darkTheme
+            if (GeoVaultSystemBars.shouldApplyChrome(
+                    statusBarColor = statusBarColor,
+                    navigationBarColor = navigationBarColor,
+                    useDarkStatusBarText = false,
+                    useDarkNavigationBarIcons = useDarkNavigationBarIcons,
+                )
+            ) {
+                GeoVaultSystemBars.applyAppChrome(
+                    activity = activity,
+                    statusBarColor = statusBarColor,
+                    navigationBarColor = navigationBarColor,
+                    useDarkNavigationBarIcons = useDarkNavigationBarIcons,
+                )
+            }
         }
     }
 

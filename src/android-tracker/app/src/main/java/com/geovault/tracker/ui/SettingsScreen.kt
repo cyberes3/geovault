@@ -670,7 +670,8 @@ fun SettingsScreen(
             GeoVaultPrimaryButton(
                 text = if (connectState.isEffectivelyConnecting) "Connecting..." else stringResource(R.string.connect_account),
                 onClick = { connectState.onClick() },
-                enabled = !connectState.isEffectivelyConnecting,
+                enabled = true,
+                visuallyDisabled = connectState.isEffectivelyConnecting,
                 tooltip = stringResource(R.string.tooltip_settings_connect),
                 modifier = Modifier
                     .fillMaxWidth()

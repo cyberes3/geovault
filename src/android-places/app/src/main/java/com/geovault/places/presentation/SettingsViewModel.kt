@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.AppResetFlow
+import com.geovault.common.auth.AuthConnectCoordinator
 import com.geovault.common.auth.CommonInitialAuthController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,7 @@ data class SettingsState(
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val authController = com.geovault.places.di.PlacesAppServices.from(application).initialAuthController()
+    private val authConnect = AuthConnectCoordinator(viewModelScope, authController)
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
 
@@ -43,33 +45,37 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun connect() {
-        _state.update { it.copy(isConnecting = true, infoMessage = null) }
-        viewModelScope.launch {
-            when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
-                is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                    _state.update {
-                        it.copy(
-                            serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
-                            oauthUrl = result.oauthUrl,
-                            isConnecting = false,
-                            infoMessage = null,
-                        )
-                    }
-                }
+        authConnect.launch(
+            rawServerUrl = _state.value.serverUrl,
+            onConnecting = {
+                _state.update { it.copy(isConnecting = true, infoMessage = null) }
+            },
+            onResult = ::applyOAuthPreparationResult,
+        )
+    }
 
-                is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                    _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
+    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
+        when (result) {
+            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
+                _state.update {
+                    it.copy(
+                        serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
+                        oauthUrl = result.oauthUrl,
+                        infoMessage = null,
+                    )
                 }
-
-                is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                    _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
-                }
+            }
+            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
+                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
+            }
+            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
+                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
             }
         }
     }
 
     fun onOauthUrlConsumed() {
-        _state.update { it.copy(oauthUrl = null, isConnecting = false) }
+        _state.update { it.copy(oauthUrl = null) }
     }
 
     fun disconnect(mainActivityClass: Class<*>) {

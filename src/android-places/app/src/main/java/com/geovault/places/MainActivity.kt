@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.zIndex
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.maps.core.GeoVaultMainMapPreloadHost
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
@@ -153,12 +154,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 val preloadTarget = resolveGeoVaultMainMapPreloadCameraTarget(preloadPoints)
-                LaunchedEffect(state.oauthUrl) {
-                    state.oauthUrl?.let { GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it) }
-                }
-                LaunchedEffect(settingsState.oauthUrl) {
-                    settingsState.oauthUrl?.let { GeovaultAuthManager.launchOAuthInBrowser(this@MainActivity, it) }
-                }
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = state.oauthUrl,
+                    onConsumed = viewModel::onOauthUrlConsumed,
+                )
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = settingsState.oauthUrl,
+                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                )
                 LaunchedEffect(Unit) {
                     intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
                         viewModel.showExternalError(error)

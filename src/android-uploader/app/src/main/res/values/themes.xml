@@ -2,5 +2,7 @@
 <resources>
 
     <!-- Platform has no android:Theme.Material.DayNight.*; AppCompat provides DayNight + NoActionBar. -->
-    <style name="Theme.Uploader" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <style name="Theme.Uploader" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/gv_common_list_background</item>
+    </style>
 </resources>

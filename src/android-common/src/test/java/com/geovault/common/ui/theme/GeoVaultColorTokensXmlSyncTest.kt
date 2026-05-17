@@ -33,6 +33,7 @@ class GeoVaultColorTokensXmlSyncTest {
         "gv_common_text_primary" to { GeoVaultColorTokens.Hex.TextPrimary },
         "gv_common_text_secondary" to { GeoVaultColorTokens.Hex.TextSecondary },
         "gv_common_map_heading_north" to { GeoVaultColorTokens.Hex.MapHeadingNorth },
+        "gv_common_list_background" to { GeoVaultColorTokens.Hex.ListBackground },
     )
 
     /**
@@ -93,7 +94,7 @@ class GeoVaultColorTokensXmlSyncTest {
         // Hard cap to catch accidental re-introduction of the old 50+ name palette.
         assertTrue(
             "values/colors.xml has grown past its minimal surface (${xml.size} names): ${xml.keys}",
-            xml.size <= 10,
+            xml.size <= 11,
         )
     }
 

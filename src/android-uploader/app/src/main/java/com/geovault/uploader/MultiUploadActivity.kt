@@ -15,7 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
@@ -52,12 +52,10 @@ class MultiUploadActivity : ComponentActivity() {
                         finish()
                     }
                 }
-                LaunchedEffect(settingsState.oauthUrl) {
-                    val oauthUrl = settingsState.oauthUrl
-                    if (!oauthUrl.isNullOrBlank()) {
-                        GeovaultAuthManager.launchOAuthInBrowser(this@MultiUploadActivity, oauthUrl)
-                    }
-                }
+                GeoVaultOAuthBrowserEffect(
+                    oauthUrl = settingsState.oauthUrl,
+                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                )
                 Box(modifier = Modifier.fillMaxSize()) {
                     MultiUploadScreen(
                         state = state,

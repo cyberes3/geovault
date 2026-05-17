@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.common.auth.AuthConnectCoordinator
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
@@ -59,6 +60,7 @@ class MainScreenViewModel(
     private val validationRepository = services.validationRepository()
     private val uploadRepository = services.uploadRepository()
     private val authController: CommonInitialAuthController = services.initialAuthController()
+    private val authConnect = AuthConnectCoordinator(viewModelScope, authController)
     private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Uploader.versionCheckSession(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
@@ -121,53 +123,57 @@ class MainScreenViewModel(
     }
 
     fun connectAuth() {
-        _state.update {
-            it.copy(
-                isConnecting = true,
-                importantSnackbar = null,
-            )
-        }
-        viewModelScope.launch {
-            when (val result = authController.prepareOAuthConnection(_state.value.serverUrl)) {
-                is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                    _state.update {
-                        it.copy(
-                            oauthUrl = result.oauthUrl,
-                            isConnecting = false,
-                            importantSnackbar = null
-                        )
-                    }
+        authConnect.launch(
+            rawServerUrl = _state.value.serverUrl,
+            onConnecting = {
+                _state.update {
+                    it.copy(
+                        isConnecting = true,
+                        importantSnackbar = null,
+                    )
                 }
+            },
+            onResult = ::applyOAuthPreparationResult,
+        )
+    }
 
-                is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                    _state.update {
-                        it.copy(
-                            isConnecting = false,
-                            importantSnackbar = GeoVaultSnackbarModel(
-                                id = newImportantId(),
-                                message = result.message
-                            )
-                        )
-                    }
+    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
+        when (result) {
+            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
+                _state.update {
+                    it.copy(
+                        oauthUrl = result.oauthUrl,
+                        importantSnackbar = null,
+                    )
                 }
-
-                is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                    _state.update {
-                        it.copy(
-                            isConnecting = false,
-                            importantSnackbar = GeoVaultSnackbarModel(
-                                id = newImportantId(),
-                                message = result.message
-                            )
-                        )
-                    }
+            }
+            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
+                _state.update {
+                    it.copy(
+                        isConnecting = false,
+                        importantSnackbar = GeoVaultSnackbarModel(
+                            id = newImportantId(),
+                            message = result.message,
+                        ),
+                    )
+                }
+            }
+            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
+                _state.update {
+                    it.copy(
+                        isConnecting = false,
+                        importantSnackbar = GeoVaultSnackbarModel(
+                            id = newImportantId(),
+                            message = result.message,
+                        ),
+                    )
                 }
             }
         }
     }
 
     fun onOauthUrlConsumed() {
-        _state.update { it.copy(oauthUrl = null, isConnecting = false) }
+        _state.update { it.copy(oauthUrl = null) }
     }
 
     fun onFilenameChanged(newName: String) {

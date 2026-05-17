@@ -35,7 +35,9 @@ data class GeoVaultAuthExtraAction(
  * Signed-out server URL entry and connect action.
  *
  * While [isConnecting] is true, the primary button shows [connectingButtonText] with disabled styling but remains
- * tappable so users can restart OAuth flow if needed. Callers should
+ * tappable so users can restart OAuth flow if needed. [isConnecting] should stay true from connect through
+ * browser handoff until the host clears it on resume (see [com.geovault.common.auth.AuthConnectUiLifecycle]).
+ * Callers should
  * not also show a separate “connecting to server” snackbar or toast for the same flow; reserve overlays for errors or
  * unrelated notices.
  */

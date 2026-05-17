@@ -47,11 +47,12 @@ class AuthRepository(
             )
         }
         val resolvedResult = suspendCancellableCoroutine<Result<String>> { continuation ->
-            serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
+            val cancelResolve = serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
             }
+            continuation.invokeOnCancellation { cancelResolve() }
         }
         return resolvedResult.fold(
             onSuccess = { resolved ->

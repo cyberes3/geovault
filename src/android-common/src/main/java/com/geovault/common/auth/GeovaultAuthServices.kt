@@ -8,7 +8,11 @@ interface ServerConfigService {
     fun setServerUrl(url: String, commit: Boolean = false)
     fun normalizeServerUrl(url: String): String
     fun getNormalizedServerUrl(): String
-    fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit)
+    /**
+     * Resolves [url] to a canonical HTTPS base. Invokes [callback] at most once.
+     * Returns a cancel function that aborts an in-flight HTTP probe, if any.
+     */
+    fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit
 }
 
 interface OAuthPreparationService {
@@ -53,8 +57,8 @@ class GeovaultAuthServices(context: Context) :
         return normalizeServerUrl(getServerUrl())
     }
 
-    override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit) {
-        GeovaultAuthManager.resolveServerUrlToCanonical(url, callback)
+    override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
+        return GeovaultAuthManager.resolveServerUrlToCanonical(url, callback)
     }
 
     override fun generatePkcePair(): Pair<String, String> = GeovaultAuthManager.generatePkcePair()
