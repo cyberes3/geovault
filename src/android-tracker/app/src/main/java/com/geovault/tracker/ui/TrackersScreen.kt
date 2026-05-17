@@ -354,8 +354,11 @@ fun TrackersScreen(
     val dismissGroupEditDialog: () -> Unit = {
         editFlowHasUnsaved = false
         vm.dismissDialog()
-        groupEditReturnOverlay?.let { overlay ->
-            groupActionsDialog = overlay
+    }
+
+    LaunchedEffect(activeGroupEditDialog, groupEditReturnOverlay) {
+        if (activeGroupEditDialog == null && groupEditReturnOverlay != null) {
+            groupActionsDialog = groupEditReturnOverlay
             groupEditReturnOverlay = null
         }
     }
@@ -483,7 +486,7 @@ fun TrackersScreen(
                 },
                 onOpenGroupActions = { group, highlightedTrackerId ->
                     groupActionsDialog = GroupMembersOverlayState(
-                        group = group,
+                        groupId = group.id,
                         highlightedTrackerId = highlightedTrackerId,
                     )
                 },
@@ -495,40 +498,47 @@ fun TrackersScreen(
             // across open/close. `else if` enforces mutual exclusion between overlays.
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
-                Box(modifier = Modifier.fillMaxSize()) {
-                    GroupActionsScreen(
-                        group = dialog.group,
-                        allTrackers = state.trackers,
-                        highlightedTrackerId = dialog.highlightedTrackerId,
-                        onDismiss = { groupActionsDialog = null },
-                        onViewTrackerOnMap = { trackerId ->
-                            onOpenTrackerOnMap(trackerId, null)
-                        },
-                        onViewTrackerParams = { tracker ->
-                            onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
-                        },
-                        onViewTrackerInList = { trackerId ->
-                            groupActionsDialog = null
-                            val tracker = state.trackers.firstOrNull { it.id == trackerId }
-                            if (tracker?.isOwner() == true) {
-                                localNavigationRequest = TrackersHostNavigationRequest(
-                                    subTab = TrackersGroupsSubTab.TRACKERS,
-                                    trackerId = trackerId,
-                                    focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
-                                )
-                            } else {
-                                onOpenSharedListToTracker(trackerId)
-                            }
-                        },
-                        onEditGroup = { group ->
-                            groupEditReturnOverlay = dialog.copy(group = group)
-                            groupActionsDialog = null
-                            vm.openEditGroupDialog(group)
-                        },
-                        onViewGroupOnMap = { groupId ->
-                            onOpenGroupOnMap(groupId)
-                        },
-                    )
+                val group = state.groups.find { it.id == dialog.groupId }
+                if (group == null) {
+                    LaunchedEffect(dialog.groupId) {
+                        groupActionsDialog = null
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        GroupActionsScreen(
+                            group = group,
+                            allTrackers = state.trackers,
+                            highlightedTrackerId = dialog.highlightedTrackerId,
+                            onDismiss = { groupActionsDialog = null },
+                            onViewTrackerOnMap = { trackerId ->
+                                onOpenTrackerOnMap(trackerId, null)
+                            },
+                            onViewTrackerParams = { tracker ->
+                                onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
+                            },
+                            onViewTrackerInList = { trackerId ->
+                                groupActionsDialog = null
+                                val tracker = state.trackers.firstOrNull { it.id == trackerId }
+                                if (tracker?.isOwner() == true) {
+                                    localNavigationRequest = TrackersHostNavigationRequest(
+                                        subTab = TrackersGroupsSubTab.TRACKERS,
+                                        trackerId = trackerId,
+                                        focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+                                    )
+                                } else {
+                                    onOpenSharedListToTracker(trackerId)
+                                }
+                            },
+                            onEditGroup = { editedGroup ->
+                                groupEditReturnOverlay = dialog
+                                groupActionsDialog = null
+                                vm.openEditGroupDialog(editedGroup)
+                            },
+                            onViewGroupOnMap = { groupId ->
+                                onOpenGroupOnMap(groupId)
+                            },
+                        )
+                    }
                 }
             } else if (activeCreateTrackerDialog != null) {
                 val createDialog = activeCreateTrackerDialog

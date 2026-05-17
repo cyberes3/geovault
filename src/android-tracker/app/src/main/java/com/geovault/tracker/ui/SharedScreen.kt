@@ -275,7 +275,7 @@ fun SharedScreen(
                 },
                 onOpenGroupActions = { group, highlightedTrackerId ->
                     groupActionsDialog = GroupMembersOverlayState(
-                        group = group,
+                        groupId = group.id,
                         highlightedTrackerId = highlightedTrackerId,
                     )
                 },
@@ -284,33 +284,40 @@ fun SharedScreen(
         tabOverlay = {
             if (groupActionsDialog != null) {
                 val dialog = groupActionsDialog!!
-                Box(modifier = Modifier.fillMaxSize()) {
-                    GroupActionsScreen(
-                        group = dialog.group,
-                        allTrackers = state.trackers,
-                        highlightedTrackerId = dialog.highlightedTrackerId,
-                        onDismiss = { groupActionsDialog = null },
-                        onViewTrackerOnMap = { trackerId ->
-                            onOpenTrackerOnMap(trackerId, null)
-                        },
-                        onViewTrackerParams = { tracker ->
-                            onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
-                        },
-                        onViewTrackerInList = { trackerId ->
-                            groupActionsDialog = null
-                            vm.clearSharedListQuery()
-                            vm.openFromNavigationSubTab(SharedSubTab.SHARED)
-                            pendingNavigationRequest = SharedHostNavigationRequest(
-                                subTab = SharedSubTab.SHARED,
-                                trackerId = trackerId,
-                                focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
-                            )
-                        },
-                        onEditGroup = { _ -> },
-                        onViewGroupOnMap = { groupId ->
-                            onOpenGroupOnMap(groupId)
-                        },
-                    )
+                val group = state.groups.find { it.id == dialog.groupId }
+                if (group == null) {
+                    LaunchedEffect(dialog.groupId) {
+                        groupActionsDialog = null
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        GroupActionsScreen(
+                            group = group,
+                            allTrackers = state.trackers,
+                            highlightedTrackerId = dialog.highlightedTrackerId,
+                            onDismiss = { groupActionsDialog = null },
+                            onViewTrackerOnMap = { trackerId ->
+                                onOpenTrackerOnMap(trackerId, null)
+                            },
+                            onViewTrackerParams = { tracker ->
+                                onRequestTrackerParams(tracker.toTrackerParamsRouteArgs())
+                            },
+                            onViewTrackerInList = { trackerId ->
+                                groupActionsDialog = null
+                                vm.clearSharedListQuery()
+                                vm.openFromNavigationSubTab(SharedSubTab.SHARED)
+                                pendingNavigationRequest = SharedHostNavigationRequest(
+                                    subTab = SharedSubTab.SHARED,
+                                    trackerId = trackerId,
+                                    focus = MapHostNavigationFocus.SCROLL_TO_ITEM,
+                                )
+                            },
+                            onEditGroup = { _ -> },
+                            onViewGroupOnMap = { groupId ->
+                                onOpenGroupOnMap(groupId)
+                            },
+                        )
+                    }
                 }
             } else if (editSharedGroup != null) {
                 val group = editSharedGroup!!
