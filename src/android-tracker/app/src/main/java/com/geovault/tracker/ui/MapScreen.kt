@@ -39,7 +39,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -192,7 +191,6 @@ private fun TrackerMapAuthenticatedContent(
 ) {
     val state by viewModel.uiState.collectAsState()
     val renderPackage by viewModel.renderPackage.collectAsState()
-    val latestRenderPackage by rememberUpdatedState(renderPackage)
     val mapPaddingPolicy = remember { TrackerMapPaddingPolicy() }
     val topLeftChipMapper = remember { TrackerMapTopLeftChipMapper() }
     val topLeftChipModel = topLeftChipMapper.map(
@@ -517,7 +515,7 @@ private fun TrackerMapAuthenticatedContent(
             // _uiState.collect, so when a fit is requested in the same tick that flipped
             // _uiState.value (e.g. immediately after a server reload completes) the cached
             // bounds can still reflect the previous frame and the camera animates to stale data.
-            val bounds = viewModel.trailBoundsOrNull() ?: latestRenderPackage.bounds
+            val bounds = viewModel.trailBoundsOrNull()
             val anchor = gpsHomeAnchor
             val effective = when {
                 bounds != null && anchor != null -> geoVaultLatLngBoundsUnion(bounds, listOf(anchor))

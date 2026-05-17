@@ -47,7 +47,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 
@@ -614,6 +613,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             _uiState.update {
                                 it.withAllMapLocksDisabled().copy(liveActiveFitEnabled = true)
                             }
+                            publishRenderPackage()
                             requestFitTrail()
                         }
                         TrackerMapAutoLockOnRecordingResult.None -> Unit
@@ -1461,6 +1461,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             state.copy(liveActiveFitEnabled = false)
         }
         if (enabled) {
+            publishRenderPackage()
             requestFitTrail()
         }
     }
@@ -1695,94 +1696,27 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val s = snapshot.uiState
         if (s.mode == TrackerMapDisplayMode.ALL_QUEUE || s.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             val sessionPlan = snapshot.plan
-            val renderAllQueueTrailsByTracker = snapshot.renderTrailsByTracker
-            if (s.liveActiveFitEnabled) {
-                val trackers = trackerManagementStateStore.trackers.value
-                val multiBounds = TrackerMapStateTransforms.multiTrailBounds(renderAllQueueTrailsByTracker)
-                val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(snapshot.acceptedRemoteLastPoints)
-                val rosterBounds = visibleRosterLastPointBounds(s.mode, sessionPlan)
-                val filterActiveOnly = trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers
-                val bounds = TrackerMapLiveActiveFitPolicy.resolveGroupLiveFitBounds(
-                    filterToActiveOnly = filterActiveOnly,
-                    allQueueTrailsByTracker = renderAllQueueTrailsByTracker,
+            val visibleTrackerIds = when (s.mode) {
+                TrackerMapDisplayMode.GROUP_PLACEHOLDER -> sessionPlan.groupTrackerIds
+                TrackerMapDisplayMode.ALL_QUEUE -> sessionPlan.visibleRosterTrackerIds
+                TrackerMapDisplayMode.SINGLE_SESSION -> emptySet()
+            }
+            return TrackerMapGroupBoundsResolver.resolve(
+                TrackerMapGroupBoundsInput(
+                    visibleTrackerIds = visibleTrackerIds,
+                    liveActiveFitEnabled = s.liveActiveFitEnabled,
+                    fitOnlyActiveTrackers = trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers,
+                    trailsByTracker = snapshot.renderTrailsByTracker,
                     remoteLastPoints = snapshot.acceptedRemoteLastPoints,
                     acceptedRemoteTrackerIds = sessionPlan.acceptedRemoteTrackerIds,
-                    trackers = trackers,
+                    trackers = trackerManagementStateStore.trackers.value,
                     nowMs = nowMs,
-                    multiTrailBounds = multiBounds,
-                    remotePointBounds = remoteBounds,
-                    rosterLastPointBounds = rosterBounds,
-                )
-                return bounds
-                    ?: TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
-                    ?: singlePointBoundsFromRuntime(s.runtime)
-            }
-            // GROUP/ALL-QUEUE FIT: union three independent sources so the camera reflects every
-            // tracker that *should* be on screen, not just the ones whose trail / live head we've
-            // received so far. Without (3), entering a group while tracking would frame only the
-            // user's own trail because A/B/C still have empty trails and no live head has arrived
-            // yet — the map then sticks on self until the user pans, which the user sees as
-            // "bbox fits only my tracker".
-            //  1) trail history we already loaded (per-tracker server geometry / queue overlay)
-            //  2) live remote heads accepted for this session
-            //  3) cached `last_point` from the trackers store for every member of the visible
-            //     group / roster — this is the server-truth for "where this tracker last was"
-            //     and is the same coordinate the markers render on before WS catches up.
-            val multiBounds = TrackerMapStateTransforms.multiTrailBounds(renderAllQueueTrailsByTracker)
-            val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(snapshot.acceptedRemoteLastPoints)
-            val rosterBounds = visibleRosterLastPointBounds(s.mode, sessionPlan)
-            val combined = TrackerMapStateTransforms.mergeBounds(
-                TrackerMapStateTransforms.mergeBounds(multiBounds, remoteBounds),
-                rosterBounds,
+                ),
             )
-            return combined
-                ?: TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
-                ?: singlePointBoundsFromRuntime(s.runtime)
         }
         val sessionPlan = snapshot.plan
         return TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
             ?: singlePointBoundsFromRuntime(s.runtime, sessionPlan)
-    }
-
-    /**
-     * GROUP/ALL-QUEUE FIT: build bounds from the cached `last_point` of every tracker the user
-     * expects to see on screen (group members in GROUP mode, full visible roster in ALL_QUEUE).
-     * This is the server-side "where is each tracker right now" answer and is available before
-     * any WS data has been received, which is exactly when the camera-fit is most likely to
-     * misframe the scene to a single tracker.
-     */
-    private fun visibleRosterLastPointBounds(
-        mode: TrackerMapDisplayMode,
-        sessionPlan: TrackerMapStreamingPlan,
-    ): LatLngBounds? {
-        if (mode != TrackerMapDisplayMode.ALL_QUEUE && mode != TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-            return null
-        }
-        val visibleIds = when (mode) {
-            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> sessionPlan.groupTrackerIds
-            TrackerMapDisplayMode.ALL_QUEUE -> sessionPlan.visibleRosterTrackerIds
-            TrackerMapDisplayMode.SINGLE_SESSION -> emptySet()
-        }
-        if (visibleIds.isEmpty()) return null
-        val latLngs = trackerManagementStateStore.trackers.value
-            .asSequence()
-            .filter { it.id.trim() in visibleIds }
-            .mapNotNull { tracker ->
-                val coord = tracker.last_point ?: return@mapNotNull null
-                val lon = coord.getOrNull(0) ?: return@mapNotNull null
-                val lat = coord.getOrNull(1) ?: return@mapNotNull null
-                if (!isValidMapLibreGeographicLatLng(lat, lon)) return@mapNotNull null
-                LatLng(lat, lon)
-            }
-            .toList()
-        if (latLngs.isEmpty()) return null
-        if (latLngs.size == 1) {
-            val p = latLngs.first()
-            return LatLngBounds.from(p.latitude, p.longitude, p.latitude, p.longitude)
-        }
-        val builder = LatLngBounds.Builder()
-        latLngs.forEach(builder::include)
-        return builder.build()
     }
 
     private fun singlePointBoundsFromRuntime(
