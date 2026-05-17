@@ -34,12 +34,29 @@ object TrackerPointTimestamps {
     fun lastPointDataMs(tracker: Tracker): Long? {
         val coord = tracker.last_point ?: return null
         if (coord.size < 3) return null
-        val value = coord[2].toLong()
-        return if (value < 1_000_000_000_000L) value * 1000L else value
+        return normalizeEpochMs(coord[2])
     }
 
     fun serverMetadataUpdatedAtMs(tracker: Tracker): Long? {
         val u = tracker.updated_at ?: return null
-        return if (u < 1_000_000_000_000L) u * 1000L else u
+        return normalizeEpochMs(u)
+    }
+
+    fun lastPointParamsMs(tracker: Tracker): Long? {
+        val params = tracker.point_params?.lastOrNull() ?: return null
+        return params.entries
+            .asSequence()
+            .filter { it.key.contains("timestamp", ignoreCase = true) }
+            .mapNotNull { normalizeEpochMs(it.value) }
+            .maxOrNull()
+    }
+
+    private fun normalizeEpochMs(value: Any?): Long? {
+        val raw = when (value) {
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull()
+            else -> null
+        } ?: return null
+        return if (raw < 1_000_000_000_000L) raw * 1000L else raw
     }
 }

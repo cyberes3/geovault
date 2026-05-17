@@ -12,6 +12,7 @@ sealed interface TrackerMapTopLeftChipText {
     data class RelativeLastData(
         val lastDataEpochMs: Long,
         val serverMetadataUpdatedAtMs: Long?,
+        val lastPointParamsMs: Long?,
     ) : TrackerMapTopLeftChipText
 }
 
@@ -111,6 +112,7 @@ class TrackerMapTopLeftChipMapper {
                     TrackerMapTopLeftChipText.RelativeLastData(
                         lastDataEpochMs = lastMs,
                         serverMetadataUpdatedAtMs = serverAt,
+                        lastPointParamsMs = tracker?.let(TrackerPointTimestamps::lastPointParamsMs),
                     )
                 }
             }

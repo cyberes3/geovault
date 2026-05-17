@@ -151,6 +151,7 @@ fun MapTopLeftTrackerChip(
                                     nowMs = nowMs,
                                     updatedAtMs = subtitle.serverMetadataUpdatedAtMs,
                                     lastDataMs = subtitle.lastDataEpochMs,
+                                    lastParamsMs = subtitle.lastPointParamsMs,
                                 )
                                 val subtitleColor = if (warnStale) {
                                     GeoVaultColorTokens.Error

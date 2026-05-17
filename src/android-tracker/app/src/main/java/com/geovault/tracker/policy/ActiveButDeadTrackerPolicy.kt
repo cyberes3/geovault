@@ -15,11 +15,13 @@ object ActiveButDeadTrackerPolicy {
         nowMs: Long,
         updatedAtMs: Long?,
         lastDataMs: Long?,
+        lastParamsMs: Long? = null,
     ): Boolean {
         if (lastDataMs == null || updatedAtMs == null) return false
         if (nowMs - lastDataMs <= STALE_DATA_THRESHOLD_MS) return false
         if (nowMs - updatedAtMs >= RECENT_METADATA_WINDOW_MS) return false
         if (nowMs < updatedAtMs) return false
+        if (lastParamsMs != null && lastParamsMs <= lastDataMs) return false
         if (updatedAtMs - lastDataMs <= MIN_METADATA_AHEAD_OF_LAST_DATA_MS) return false
         return true
     }

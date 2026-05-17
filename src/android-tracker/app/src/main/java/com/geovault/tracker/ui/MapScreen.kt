@@ -853,6 +853,7 @@ private data class MapSelectionPanelUiModel(
     val longitude: Double,
     val lastUpdatedMs: Long?,
     val serverMetadataUpdatedAtMs: Long?,
+    val lastPointParamsMs: Long?,
     val accuracyMeters: Float?,
     val isLocked: Boolean,
     val showFocusAction: Boolean,
@@ -886,6 +887,7 @@ private fun TrackerMapUiState.toSelectionPanelUiModel(): MapSelectionPanelUiMode
         longitude = selection.longitude,
         lastUpdatedMs = selection.lastUpdatedMs,
         serverMetadataUpdatedAtMs = selection.serverMetadataUpdatedAtMs,
+        lastPointParamsMs = selection.lastPointParamsMs,
         accuracyMeters = selection.accuracyMeters,
         isLocked = selectionLockTrackerId == selection.trackerId,
         showFocusAction = TrackerMapViewModel.resolveFocusActionVisible(mode),
@@ -902,6 +904,7 @@ private fun MapSelectionPanelUiModel.toTrackerParamsRouteArgs(): TrackerParamsRo
         accuracyMeters = accuracyMeters,
         isOwned = isOwned,
         serverMetadataUpdatedAtMs = serverMetadataUpdatedAtMs,
+        lastPointParamsMs = lastPointParamsMs,
     ).toTrackerParamsRouteArgs()
 }
 
@@ -988,6 +991,7 @@ private fun MapTrackerSelectionPanel(
                     nowMs = nowMs,
                     updatedAtMs = model.serverMetadataUpdatedAtMs,
                     lastDataMs = model.lastUpdatedMs,
+                    lastParamsMs = model.lastPointParamsMs,
                 )
             val lastUpdatedColor = if (warnStale) {
                 GeoVaultColorTokens.Error

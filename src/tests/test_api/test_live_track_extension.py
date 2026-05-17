@@ -106,6 +106,15 @@ class TestLiveTrackAPI(TestCase):
         )
         self.client.force_login(self.user)
 
+    def _create_track(self, name="Track"):
+        response = self.client.post(
+            "/api/extensions/live-track/trackers/",
+            data=json.dumps({"name": name}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.json()["id"]
+
     def test_list_trackers_empty(self):
         """GET /api/extensions/live-track/trackers/ returns 200 and [] when user has no tracks."""
         with _patch_live_track_enabled():
@@ -397,6 +406,107 @@ class TestLiveTrackAPI(TestCase):
         self.assertTrue(data["share_params_with_recipients"])
         self.assertTrue(data["is_owner"])
         self.assertNotIn("owner_email", data)
+
+    def test_post_settings_does_not_advance_tracker_activity_time(self):
+        """Metadata-only settings saves must not make stale GPS data look freshly active."""
+        with _patch_live_track_enabled():
+            track_id = self._create_track("Activity Time Settings")
+        old_updated_at = timezone.now() - timedelta(hours=2)
+        LiveTrack.objects.filter(id=track_id).update(
+            geometry={"type": "LineString", "coordinates": [[-122.0, 37.0, 1705312800000]]},
+            point_params=[{"starttimestamp": 1705312800000}],
+            updated_at=old_updated_at,
+        )
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"name": "Activity Time Settings Renamed", "color": "#336699"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertEqual(track.name, "Activity Time Settings Renamed")
+        self.assertEqual(track.settings.get("color"), "#336699")
+        self.assertEqual(track.updated_at, old_updated_at)
+
+    def test_hidden_items_clear_does_not_advance_tracker_activity_time(self):
+        """Bulk unhide is metadata-only and should not affect tracker freshness."""
+        with _patch_live_track_enabled():
+            track_id = self._create_track("Hidden Activity Time")
+        old_updated_at = timezone.now() - timedelta(hours=2)
+        LiveTrack.objects.filter(id=track_id).update(
+            settings={"hidden": True, "color": "#123456"},
+            updated_at=old_updated_at,
+        )
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                "/api/extensions/live-track/hidden-items/clear/",
+                data=json.dumps({"target_types": ["trackers"]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 204)
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertNotIn("hidden", track.settings)
+        self.assertEqual(track.settings.get("color"), "#123456")
+        self.assertEqual(track.updated_at, old_updated_at)
+
+    def test_clear_history_does_not_advance_tracker_activity_time(self):
+        """Trimming history keeps the newest GPS point but does not report new GPS activity."""
+        with _patch_live_track_enabled():
+            track_id = self._create_track("Clear History Activity Time")
+        old_updated_at = timezone.now() - timedelta(hours=2)
+        LiveTrack.objects.filter(id=track_id).update(
+            geometry={
+                "type": "LineString",
+                "coordinates": [
+                    [-122.0, 37.0, 1705312800000],
+                    [-121.9, 37.1, 1705312860000],
+                ],
+            },
+            point_params=[
+                {"starttimestamp": 1705312800000},
+                {"starttimestamp": 1705312800000},
+            ],
+            updated_at=old_updated_at,
+        )
+
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/clear-history/",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertEqual(track.geometry["coordinates"], [[-121.9, 37.1, 1705312860000]])
+        self.assertEqual(track.point_params, [{"starttimestamp": 1705312800000}])
+        self.assertEqual(track.updated_at, old_updated_at)
+
+    def test_credential_regeneration_does_not_advance_tracker_activity_time(self):
+        """Credential-only rotations should not make stale GPS data look freshly active."""
+        with _patch_live_track_enabled():
+            track_id = self._create_track("Credential Activity Time")
+        old_updated_at = timezone.now() - timedelta(hours=2)
+        LiveTrack.objects.filter(id=track_id).update(updated_at=old_updated_at)
+
+        with _patch_live_track_enabled():
+            hauk_response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/regenerate-hauk-password/",
+            )
+        self.assertEqual(hauk_response.status_code, 200)
+        track = LiveTrack.objects.get(id=track_id)
+        self.assertEqual(track.updated_at, old_updated_at)
+
+        with _patch_live_track_enabled():
+            token_response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/regenerate-tokens/",
+            )
+        self.assertEqual(token_response.status_code, 200)
+        track.refresh_from_db()
+        self.assertEqual(track.updated_at, old_updated_at)
 
     def test_post_settings_shared_with_emails_sync(self):
         """POST settings with visibility=shared and shared_with_emails syncs LiveTrackShare."""

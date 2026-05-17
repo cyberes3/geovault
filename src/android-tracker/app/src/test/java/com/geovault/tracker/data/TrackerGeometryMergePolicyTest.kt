@@ -34,6 +34,8 @@ class TrackerGeometryMergePolicyTest {
             color = "#112233",
             ownerEmail = "owner@example.com",
             updatedAt = 100L,
+            pointParams = listOf(mapOf("starttimestamp" to 90L)),
+            lastPoint = listOf(10.0, 20.0, 100.0),
         )
         val incoming = tracker(
             id = "t1",
@@ -50,6 +52,8 @@ class TrackerGeometryMergePolicyTest {
         assertEquals("#112233", merged.color)
         assertEquals("owner@example.com", merged.owner_email)
         assertEquals(100L, merged.updated_at)
+        assertEquals(listOf(mapOf("starttimestamp" to 90L)), merged.point_params)
+        assertEquals(listOf(10.0, 20.0, 100.0), merged.last_point)
         assertNotNull(merged.geometry)
         assertEquals(listOf(listOf(30.0, 40.0)), merged.geometry?.coordinates)
     }
@@ -63,6 +67,8 @@ class TrackerGeometryMergePolicyTest {
             color = "#000000",
             ownerEmail = "old@example.com",
             updatedAt = 10L,
+            pointParams = listOf(mapOf("starttimestamp" to 1L)),
+            lastPoint = listOf(1.0, 1.0, 10.0),
         )
         val incoming = tracker(
             id = "t1",
@@ -71,6 +77,8 @@ class TrackerGeometryMergePolicyTest {
             color = "#ABCDEF",
             ownerEmail = "new@example.com",
             updatedAt = 20L,
+            pointParams = listOf(mapOf("starttimestamp" to 2L)),
+            lastPoint = listOf(2.0, 2.0, 20.0),
         )
 
         val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
@@ -79,6 +87,8 @@ class TrackerGeometryMergePolicyTest {
         assertEquals("#ABCDEF", merged.color)
         assertEquals("new@example.com", merged.owner_email)
         assertEquals(20L, merged.updated_at)
+        assertEquals(listOf(mapOf("starttimestamp" to 2L)), merged.point_params)
+        assertEquals(listOf(2.0, 2.0, 20.0), merged.last_point)
         assertEquals(listOf(listOf(2.0, 2.0)), merged.geometry?.coordinates)
     }
 
@@ -89,6 +99,8 @@ class TrackerGeometryMergePolicyTest {
         color: String?,
         ownerEmail: String? = null,
         updatedAt: Long? = null,
+        pointParams: List<Map<String, Any?>>? = null,
+        lastPoint: List<Double>? = null,
     ): Tracker {
         return Tracker(
             id = id,
@@ -96,8 +108,8 @@ class TrackerGeometryMergePolicyTest {
             color = color,
             settings = null,
             geometry = geometryCoords?.let { GeoJsonLineString(type = "LineString", coordinates = it) },
-            point_params = null,
-            last_point = null,
+            point_params = pointParams,
+            last_point = lastPoint,
             bbox = null,
             tracker_secret = null,
             created_at = null,

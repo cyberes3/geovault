@@ -103,16 +103,14 @@ def hidden_items_clear(request):
     target_types = set(body.target_types or ["trackers", "groups"])
 
     if "trackers" in target_types:
-        tracks = LiveTrack.objects.filter(user=request.user).only("id", "settings", "updated_at")
-        now = timezone.now()
+        tracks = LiveTrack.objects.filter(user=request.user).only("id", "settings")
         for track in tracks:
             settings = normalize_track_settings_for_api({**(track.settings or {})})
             if "hidden" not in settings:
                 continue
             settings.pop("hidden", None)
             track.settings = normalize_track_settings_for_api(settings)
-            track.updated_at = now
-            track.save(update_fields=["settings", "updated_at"])
+            track.save(update_fields=["settings"])
 
     if "groups" in target_types:
         LiveTrackGroup.objects.filter(user=request.user, hidden=True).update(
@@ -640,7 +638,6 @@ def tracker_post_settings(request, tracker_id):
         else:
             LiveTrackWorldShare.objects.filter(track=track).delete()
     if update_fields:
-        update_fields.append("updated_at")
         track.save(update_fields=update_fields)
     internal_share = sync_track_internal_share(track)
     resp = track_to_response_metadata_only(track, include_secret=True, is_owner=True)
@@ -769,7 +766,7 @@ def tracker_clear_history(request, tracker_id):
     new_params = [point_params[-1]] if point_params else []
     track.geometry = {"type": "LineString", "coordinates": new_coords}
     track.point_params = new_params
-    track.save(update_fields=["geometry", "point_params", "updated_at"])
+    track.save(update_fields=["geometry", "point_params"])
     return JsonResponse(track_to_response_metadata_only(track, include_secret=False), status=200)
 
 
@@ -783,7 +780,7 @@ def tracker_regenerate_hauk_password(request, tracker_id):
     if track.user_id != request.user.id:
         return error_response("Only the owner can regenerate Hauk password", 403)
     track.hauk_password = generate_hauk_password()
-    track.save(update_fields=["hauk_password", "updated_at"])
+    track.save(update_fields=["hauk_password"])
     return JsonResponse({"hauk_password": track.hauk_password}, status=200)
 
 
@@ -798,7 +795,7 @@ def tracker_regenerate_tokens(request, tracker_id):
         return error_response("Only the owner can regenerate tracker tokens", 403)
     track.tracker_secret = secrets.token_urlsafe(32)
     track.hauk_password = generate_hauk_password()
-    track.save(update_fields=["tracker_secret", "hauk_password", "updated_at"])
+    track.save(update_fields=["tracker_secret", "hauk_password"])
     response = RegenerateTrackerTokensResponse(
         tracker_secret=track.tracker_secret,
         hauk_password=track.hauk_password,

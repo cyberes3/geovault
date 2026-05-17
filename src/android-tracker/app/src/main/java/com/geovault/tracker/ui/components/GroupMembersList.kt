@@ -102,11 +102,13 @@ private fun GroupMemberCard(
     val t = row.tracker
     val lastDataMs = t?.let(TrackerPointTimestamps::lastPointDataMs)
     val serverUpdatedAtMs = t?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs)
+    val lastParamsMs = t?.let(TrackerPointTimestamps::lastPointParamsMs)
     val warnStaleData = t != null &&
         ActiveButDeadTrackerPolicy.isActiveButDead(
             nowMs = nowMs,
             updatedAtMs = serverUpdatedAtMs,
             lastDataMs = lastDataMs,
+            lastParamsMs = lastParamsMs,
         )
     val lastLineText = if (lastDataMs != null) {
         TrackerListDateTimeFormat.formatLocal(lastDataMs)

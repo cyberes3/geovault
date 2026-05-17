@@ -114,6 +114,7 @@ data class TrackerMapSelectionCard(
     val accuracyMeters: Float?,
     val isOwned: Boolean,
     val serverMetadataUpdatedAtMs: Long? = null,
+    val lastPointParamsMs: Long? = null,
 )
 
 /**
@@ -1106,6 +1107,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             accuracyMeters = point.accuracyMeters,
             isOwned = tracker?.isOwner() == true,
             serverMetadataUpdatedAtMs = tracker?.let(TrackerPointTimestamps::serverMetadataUpdatedAtMs),
+            lastPointParamsMs = tracker?.let(TrackerPointTimestamps::lastPointParamsMs),
         )
     }
 

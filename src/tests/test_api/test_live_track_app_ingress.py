@@ -7,10 +7,12 @@ import gzip
 import json
 import struct
 import uuid
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from extensions.live_track.src.backend.models import LiveTrack
 
@@ -765,3 +767,48 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertAlmostEqual(coords[1][0], -121.8, places=4)
         self.assertAlmostEqual(coords[1][1], 37.2, places=4)
         self.assertEqual(coords[1][2], ts + 2000)
+
+    def test_app_ingress_duplicate_only_batch_does_not_advance_updated_at(self):
+        """Retrying an already-accepted batch must not make stale GPS data look active."""
+        ts = 1705312800000
+        payload = encode_gvl2_extended(
+            self.tracker_uuid,
+            [{"lat": 37.0, "lon": -122.0, "timestamp": ts}],
+        )
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                first_response = self._ingress_post(payload)
+        self.assertEqual(first_response.status_code, 200)
+
+        old_updated_at = timezone.now() - timedelta(hours=2)
+        LiveTrack.objects.filter(id=self.track_id).update(updated_at=old_updated_at)
+
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                duplicate_response = self._ingress_post(payload)
+
+        self.assertEqual(duplicate_response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        coords = (track.geometry or {}).get("coordinates", [])
+        self.assertEqual(coords, [[-122.0, 37.0, ts]])
+        self.assertEqual(track.updated_at, old_updated_at)
+
+    def test_app_ingress_new_point_advances_updated_at(self):
+        """Only real location inserts should advance tracker activity time."""
+        old_updated_at = timezone.now() - timedelta(hours=2)
+        LiveTrack.objects.filter(id=self.track_id).update(updated_at=old_updated_at)
+        payload = encode_gvl2_extended(
+            self.tracker_uuid,
+            [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
+        )
+
+        with _patch_live_track_enabled():
+            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                response = self._ingress_post(payload)
+
+        self.assertEqual(response.status_code, 200)
+        track = LiveTrack.objects.get(id=self.track_id)
+        self.assertGreater(track.updated_at, old_updated_at)

@@ -522,16 +522,15 @@ def app_ingress(request):
             last_inserted_point = new_point
             last_inserted_extra = extra
 
-        track_locked.geometry = {"type": "LineString", "coordinates": coords}
-        track_locked.point_params = point_params
-        track_locked.updated_at = timezone.now()
-        track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
-
         if last_inserted_point is None:
             broadcast_idx = None
             last_new_point = None
             last_extra = None
         else:
+            track_locked.geometry = {"type": "LineString", "coordinates": coords}
+            track_locked.point_params = point_params
+            track_locked.updated_at = timezone.now()
+            track_locked.save(update_fields=["geometry", "point_params", "updated_at"])
             last_new_point = last_inserted_point
             last_extra = last_inserted_extra or {}
             try:

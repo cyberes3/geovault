@@ -232,12 +232,16 @@ class ApiTrackerManagementRepository(
         GeoVaultCaptureLog.d(TAG, "Updating tracker settings trackerId=$trackerId request=$request")
         val networkResult = executeApiCall { api -> api.postTrackerSettings(trackerId, request).execute() }
         if (networkResult is RepositoryResult.Success) {
-            val tracker = networkResult.data.toDomainModel()
-            cacheMutex.withLock {
+            val incoming = networkResult.data.toDomainModel()
+            val tracker = cacheMutex.withLock {
+                val existing = trackersCache?.firstOrNull { it.id == trackerId }
+                    ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
+                val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
                 trackersCache = trackersCache
-                    ?.map { if (it.id == trackerId) tracker else it }
+                    ?.map { if (it.id == trackerId) merged else it }
                     ?.let(stateStore::canonicalizeTrackers)
                 availableToAddCache = null
+                merged
             }
             stateStore.publishTracker(tracker, emitEvent = publishToStore)
             GeoVaultCaptureLog.d(

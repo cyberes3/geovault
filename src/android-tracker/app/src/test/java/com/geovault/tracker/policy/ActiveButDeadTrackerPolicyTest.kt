@@ -45,4 +45,38 @@ class ActiveButDeadTrackerPolicyTest {
         val updated = lastData
         assertFalse(ActiveButDeadTrackerPolicy.isActiveButDead(now, updated, lastData))
     }
+
+    @Test
+    fun isActiveButDead_false_whenLatestParamsDidNotAdvancePastLastData() {
+        val now = t0
+        val lastData = now - 20L * 60L * 1000L
+        val updated = now - 5L * 60L * 1000L
+        val lastParams = lastData
+
+        assertFalse(
+            ActiveButDeadTrackerPolicy.isActiveButDead(
+                nowMs = now,
+                updatedAtMs = updated,
+                lastDataMs = lastData,
+                lastParamsMs = lastParams,
+            )
+        )
+    }
+
+    @Test
+    fun isActiveButDead_true_whenLatestParamsAdvancedPastLastData() {
+        val now = t0
+        val lastData = now - 20L * 60L * 1000L
+        val updated = now - 5L * 60L * 1000L
+        val lastParams = lastData + 2L * 60L * 1000L
+
+        assertTrue(
+            ActiveButDeadTrackerPolicy.isActiveButDead(
+                nowMs = now,
+                updatedAtMs = updated,
+                lastDataMs = lastData,
+                lastParamsMs = lastParams,
+            )
+        )
+    }
 }
