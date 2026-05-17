@@ -247,6 +247,11 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun performSharedMutation(operation: SharedAddRemoveOperation) {
         var startResult: SharedMutationStartResult? = null
+        val incomingTrackersSnapshot = if (operation is SharedAddRemoveOperation.IncomingGroupAccept) {
+            _uiState.value.incomingTrackers
+        } else {
+            emptyList()
+        }
         _uiState.update { state ->
             val result = addRemoveCoordinator.beginSharedMutation(
                 state = state,
@@ -262,25 +267,56 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
         val started = startResult ?: return
         viewModelScope.launch {
-            when (
-                val result = addRemoveCoordinator.executeSharedMutation(
-                    operation = operation,
-                    trackerResolver = { trackerId ->
-                        _uiState.value.trackers.firstOrNull { it.id == trackerId }
-                    },
-                )
-            ) {
-                is RepositoryResult.Success -> {
-                    refreshStateFromServerSerialized(feedbackMessage = null)
-                    _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
+            when (operation) {
+                is SharedAddRemoveOperation.IncomingGroupAccept -> {
+                    when (val result = addRemoveCoordinator.executeIncomingGroupAccept(operation.groupId)) {
+                        is RepositoryResult.Success -> {
+                            val overlapCount = countOverlappingIncomingShares(
+                                incomingTrackersSnapshot,
+                                result.data.track_ids,
+                            )
+                            refreshStateFromServerSerialized(
+                                feedbackMessage = resolveAlsoAcceptedSharesMessage(overlapCount),
+                            )
+                            _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
+                        }
+                        is RepositoryResult.Failure -> {
+                            _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
+                            emitSnackbar(appErrorMessage(result.error))
+                        }
+                    }
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
-                    emitSnackbar(appErrorMessage(result.error))
+                else -> {
+                    when (
+                        val result = addRemoveCoordinator.executeSharedMutation(
+                            operation = operation,
+                            trackerResolver = { trackerId ->
+                                _uiState.value.trackers.firstOrNull { it.id == trackerId }
+                            },
+                        )
+                    ) {
+                        is RepositoryResult.Success -> {
+                            refreshStateFromServerSerialized(feedbackMessage = null)
+                            _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
+                        }
+                        is RepositoryResult.Failure -> {
+                            _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
+                            emitSnackbar(appErrorMessage(result.error))
+                        }
+                    }
                 }
             }
             _uiState.update { state -> addRemoveCoordinator.clearPendingMutation(state, started.key) }
         }
+    }
+
+    private fun resolveAlsoAcceptedSharesMessage(overlapCount: Int): String? {
+        if (overlapCount <= 0) return null
+        return getApplication<Application>().resources.getQuantityString(
+            R.plurals.shared_group_also_accepted_shares,
+            overlapCount,
+            overlapCount,
+        )
     }
 
     fun requestIncomingGroupAccept(groupId: String) {

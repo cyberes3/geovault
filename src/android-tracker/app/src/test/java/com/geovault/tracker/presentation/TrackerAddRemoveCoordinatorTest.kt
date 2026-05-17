@@ -16,6 +16,7 @@ import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -111,6 +112,27 @@ class TrackerAddRemoveCoordinatorTest {
         assertEquals(setOf("t-1"), first.second)
         assertEquals(emptySet<String>(), coordinator.settleGroupPickerAdd(first.second, "t-1"))
     }
+
+    @Test
+    fun executeIncomingGroupAccept_returnsAcceptedGroupFromRepository() = runBlocking {
+        val acceptedGroup = Group(
+            id = "g-1",
+            name = "Shared Group",
+            visibility = "shared",
+            is_owner = false,
+            is_accepted = true,
+            track_ids = listOf("t-1", "t-2"),
+        )
+        val coordinatorWithAccept = TrackerAddRemoveCoordinator(
+            trackerRepository = FakeTrackerManagementRepository(),
+            groupRepository = FakeGroupManagementRepository(acceptGroupResult = RepositoryResult.Success(acceptedGroup)),
+        )
+
+        val result = coordinatorWithAccept.executeIncomingGroupAccept("g-1")
+
+        assertTrue(result is RepositoryResult.Success)
+        assertEquals(acceptedGroup, (result as RepositoryResult.Success).data)
+    }
 }
 
 private class FakeTrackerManagementRepository : TrackerManagementRepository {
@@ -137,7 +159,9 @@ private class FakeTrackerManagementRepository : TrackerManagementRepository {
     override suspend fun clearHiddenItems(targetTypes: List<String>?): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
 }
 
-private class FakeGroupManagementRepository : GroupManagementRepository {
+private class FakeGroupManagementRepository(
+    private val acceptGroupResult: RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown),
+) : GroupManagementRepository {
     override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> = RepositoryResult.Failure(AppError.Unknown)
     override suspend fun loadGroup(groupId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
     override suspend fun createGroup(name: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
@@ -146,6 +170,6 @@ private class FakeGroupManagementRepository : GroupManagementRepository {
     override suspend fun addGroupTrack(groupId: String, trackId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
     override suspend fun removeGroupTrack(groupId: String, trackId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
     override suspend fun leaveGroup(groupId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun acceptGroupShare(groupId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
+    override suspend fun acceptGroupShare(groupId: String): RepositoryResult<Group> = acceptGroupResult
 }
 

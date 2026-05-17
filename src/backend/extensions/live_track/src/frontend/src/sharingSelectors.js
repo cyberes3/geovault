@@ -87,3 +87,8 @@ export function isSharedGroupNotOwned(group) {
   return !isOwned(group);
 }
 
+export function countOverlappingIncomingShares(incomingTrackers, groupTrackIds) {
+  const incomingIds = toIdSet((incomingTrackers || []).map((t) => t.id));
+  return (groupTrackIds || []).filter((id) => incomingIds.has(normalizeId(id))).length;
+}
+

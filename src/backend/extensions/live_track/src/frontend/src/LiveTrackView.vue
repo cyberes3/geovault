@@ -569,6 +569,7 @@ import {
 import {
   computeVisibleSharedGroups,
   computeVisibleSharedTrackers,
+  countOverlappingIncomingShares,
   isAcceptedOrOwnedGroup,
   isHiddenOwnedGroup,
   isHiddenOwnedTracker,
@@ -2424,6 +2425,7 @@ export default {
       addingIncomingGroupId.value = group.id;
       const isSharedIncoming = incomingSharedGroups.value.some((g) => String(g.id) === String(group.id));
       const subscribedTrackIds = [];
+      let alsoAcceptedCount = 0;
       let success = true;
       try {
         if (isSharedIncoming) {
@@ -2435,6 +2437,10 @@ export default {
             is_accepted: true,
           };
           upsertGroupInLocalState(acceptedGroup, { updateMap: false });
+          alsoAcceptedCount = countOverlappingIncomingShares(
+            incomingSharedTrackers.value,
+            acceptedGroup.track_ids
+          );
           for (const trackId of acceptedGroup.track_ids || []) {
             subscribedTrackIds.push(trackId);
           }
@@ -2462,6 +2468,13 @@ export default {
         }
         if (success && window.gv_core?.GeoVault?.toast) {
           window.gv_core.GeoVault.toast.success(isSharedIncoming ? 'Group accepted' : 'Group added');
+          if (isSharedIncoming && alsoAcceptedCount > 0) {
+            window.gv_core.GeoVault.toast.success(
+              alsoAcceptedCount === 1
+                ? '1 share was also accepted'
+                : `${alsoAcceptedCount} shares were also accepted`
+            );
+          }
         }
       } catch (e) {
         const err = api.handleError?.(e);

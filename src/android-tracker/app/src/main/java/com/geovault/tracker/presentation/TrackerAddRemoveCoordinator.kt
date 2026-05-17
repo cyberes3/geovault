@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.AppError
+import com.geovault.tracker.Group
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
@@ -102,6 +103,9 @@ class TrackerAddRemoveCoordinator(
             -> state
         }
     }
+
+    suspend fun executeIncomingGroupAccept(groupId: String): RepositoryResult<Group> =
+        groupRepository.acceptGroupShare(groupId)
 
     suspend fun executeSharedMutation(
         operation: SharedAddRemoveOperation,

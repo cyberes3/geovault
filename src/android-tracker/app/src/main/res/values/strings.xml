@@ -447,6 +447,10 @@
     <string name="shared_bulk_subscribe_partial_failure">Added %1$d trackers, %2$d failed.</string>
     <string name="shared_bulk_unsubscribe_success">Unsubscribed %1$d trackers.</string>
     <string name="shared_bulk_unsubscribe_partial_failure">Unsubscribed %1$d trackers, %2$d failed.</string>
+    <plurals name="shared_group_also_accepted_shares">
+        <item quantity="one">%d share was also accepted</item>
+        <item quantity="other">%d shares were also accepted</item>
+    </plurals>
     <string name="shared_badge_public">Public</string>
     <string name="shared_public_group_track_count">%1$d trackers in group</string>
     <string name="shared_error_public_group_no_tracks">This group has no addable trackers.</string>
