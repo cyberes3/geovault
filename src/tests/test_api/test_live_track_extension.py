@@ -1583,6 +1583,75 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(allowed.status_code, 200)
         self.client.force_login(self.user)
 
+    def test_unsubscribe_blocked_when_track_in_accepted_group_share(self):
+        """Recipient cannot per-track unsubscribe while track is in an accepted shared group."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Group Only Unsub Block"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Block Unsub Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+            self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            accept_resp = self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/accept-share/",
+                content_type="application/json",
+            )
+        self.assertEqual(accept_resp.status_code, 201)
+        LiveTrackSubscription.objects.get_or_create(user=self.other_user, track_id=track_id)
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            blocked = self.client.delete(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/"
+            )
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn(
+            "Leave the shared group to remove this tracker.",
+            blocked.json().get("error", ""),
+        )
+        self.assertTrue(
+            LiveTrackSubscription.objects.filter(
+                user=self.other_user, track_id=track_id
+            ).exists()
+        )
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            leave_resp = self.client.delete(
+                f"/api/extensions/live-track/groups/{group_id}/leave/"
+            )
+        self.assertEqual(leave_resp.status_code, 204)
+        self.assertFalse(
+            LiveTrackGroupShare.objects.filter(
+                group_id=group_id, shared_with=self.other_user
+            ).exists()
+        )
+        self.client.force_login(self.user)
+
     def test_group_owner_can_get_group_member_track_without_subscription(self):
         """Group owner can still fetch a track in their group when subscription row is missing."""
         self.client.force_login(self.other_user)

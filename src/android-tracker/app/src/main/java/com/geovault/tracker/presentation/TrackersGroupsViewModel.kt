@@ -944,8 +944,12 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     }
                 }
             }
+            val feedbackMessage = resolveBulkUnsubscribeMessage(outcome, firstFailure)
+            if (outcome.failedCount > 0) {
+                _toastEvents.tryEmit(feedbackMessage)
+            }
             refreshStateFromServer(
-                userMessage = resolveBulkUnsubscribeMessage(outcome, firstFailure),
+                userMessage = feedbackMessage,
                 forceRefresh = true
             )
         }
@@ -1117,7 +1121,9 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     forceRefresh = true
                 )
                 is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = appErrorMessage(result.error)) }
+                    val message = appErrorMessage(result.error)
+                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = message) }
+                    _toastEvents.tryEmit(message)
                 }
             }
         }

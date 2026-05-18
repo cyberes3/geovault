@@ -957,6 +957,11 @@ def tracker_subscribe_delete(request, tracker_id):
     if request.method == "DELETE":
         if track.user_id == request.user.id:
             return error_response("Cannot unsubscribe from your own tracker", 400)
+        if can_user_see_track_via_accepted_group_share(request.user, track):
+            return error_response(
+                "Leave the shared group to remove this tracker.",
+                400,
+            )
         sub = LiveTrackSubscription.objects.filter(user=request.user, track=track).first()
         if not sub:
             return error_response("Not subscribed", 404)
