@@ -151,6 +151,8 @@ private class FakeTrackerManagementRepository : TrackerManagementRepository {
     override suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
     override suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean> = RepositoryResult.Failure(AppError.Unknown)
     override fun getTrackerFromCache(trackerId: String): Tracker? = null
+    override fun stripCachedGeometry(trackerIds: Set<String>) = Unit
+    override fun invalidateGeometryRequests(trackerIds: Set<String>) = Unit
     override fun clearSelectedTrackerCaches() = Unit
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> = RepositoryResult.Failure(AppError.Unknown)
     override suspend fun loadUsers(): RepositoryResult<UsersResponse> = RepositoryResult.Failure(AppError.Unknown)

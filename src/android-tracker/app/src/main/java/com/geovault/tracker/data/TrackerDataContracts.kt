@@ -36,6 +36,8 @@ interface TrackerManagementRepository {
     suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker>
     suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean>
     fun getTrackerFromCache(trackerId: String): Tracker?
+    fun stripCachedGeometry(trackerIds: Set<String>)
+    fun invalidateGeometryRequests(trackerIds: Set<String>)
     fun clearSelectedTrackerCaches()
     suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray>
     suspend fun loadUsers(): RepositoryResult<UsersResponse>

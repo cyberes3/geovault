@@ -31,11 +31,13 @@ object TrackerMapRenderMetadataPolicy {
         }
         val trackerFingerprint = trackers.joinToString(separator = "|") { tracker ->
             val window = recentDataWindowByTracker[tracker.id].orEmpty()
-            "${tracker.id}:${tracker.name}:${tracker.color}:$window"
+            val hidden = ownerHiddenFingerprint(tracker)
+            "${tracker.id}:${tracker.name}:${tracker.color}:$window:$hidden"
         }
         val groupFingerprint = groups.joinToString(separator = "|") { group ->
             val memberIds = group.track_ids.orEmpty().sorted().joinToString(",")
-            "${group.id}:$memberIds"
+            val hidden = if (group.hidden == true) "1" else "0"
+            "${group.id}:$memberIds:$hidden"
         }
         val visibilityFingerprint = if (mapVisibility == null) {
             "none"
@@ -79,6 +81,21 @@ object TrackerMapRenderMetadataPolicy {
         return when (raw) {
             is String -> raw.trim().ifEmpty { null }
             else -> raw.toString().trim().ifEmpty { null }
+        }
+    }
+
+    private fun ownerHiddenFingerprint(tracker: Tracker): String {
+        if (!tracker.isOwner()) return "-"
+        return if (tracker.settingBoolean("hidden") == true) "1" else "0"
+    }
+
+    private fun Tracker.settingBoolean(key: String): Boolean? {
+        val raw = settings?.get(key) ?: return null
+        return when (raw) {
+            is Boolean -> raw
+            is String -> raw.equals("true", ignoreCase = true)
+            is Number -> raw.toInt() != 0
+            else -> null
         }
     }
 }

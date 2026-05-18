@@ -503,6 +503,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private var pendingReopenSingleTrackerLoadId: String? = null
     private var pendingFitAfterReload: Boolean = false
     private var lastRenderMetadata: TrackerMapRenderMetadataSnapshot? = null
+    private var recentDataWindowRefreshTrackerIds: Set<String> = emptySet()
     private var lastObservedTrackingRunning: Boolean? = null
     private var lastObservedLocalRecordingActive: Boolean? = null
 
@@ -755,9 +756,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         if (action.serverRefreshTrackerIds.isNotEmpty()) {
                             stripGeometryInStore(action.invalidateGeometryCache)
                             lastTrailLoadSeed = null
+                            recentDataWindowRefreshTrackerIds = action.serverRefreshTrackerIds
                             requestRuntimeTrailReload(TrackerMapTrailReloadReason.RecentDataWindowChange)
                         }
                     } else {
+                        publishRenderPackage()
                         requestRuntimeTrailReload(TrackerMapTrailReloadReason.MetadataMapRefresh)
                     }
                     refreshStreamTargets()
@@ -1618,6 +1621,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             trackerIds = trackerIds,
         )
         trackerManagementStateStore.publishTrackers(stripped)
+        trackerManagementRepository.stripCachedGeometry(trackerIds)
+        trackerManagementRepository.invalidateGeometryRequests(trackerIds)
     }
 
     /**
@@ -1876,6 +1881,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun reloadTrailFromDatabaseLocked(reason: TrackerMapTrailReloadReason) {
+        if (reason == TrackerMapTrailReloadReason.RecentDataWindowChange) {
+            sessionRequestDeduper.clear()
+        }
         val state = _uiState.value
         val groupSelection = resolveGroupModeSelection(state)
         val rosterTrackerIds = visibleMapRosterTrackerIds()
@@ -1954,16 +1962,29 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         if (!reason.allowServerHistoryFetch && lastTrailLoadSeed == seed) return
         lastTrailLoadSeed = seed
         val planSourceState = _uiState.value
+        val preReloadSnapshot = if (TrackerMapTrailCommitPolicy.shouldCapturePreReloadSnapshot(reason)) {
+            buildSessionSnapshotForState(planSourceState)
+        } else {
+            null
+        }
         val plan = projectSession(
             state = planSourceState,
             groupSelection = groupSelection,
             visibleRosterTrackerIds = rosterTrackerIds,
         ).trailReloadPlan
-        val existingTrailMinTimeMs = planSourceState.trail.minOfOrNull { it.time }
-        val existingMultiMinTimes = planSourceState.allQueueTrailsByTracker
-            .mapValues { (_, pts) -> pts.minOfOrNull { it.time } }
-            .filterValues { it != null }
-            .mapValues { it.value!! }
+        val existingTrailMinTimeMs = if (reason == TrackerMapTrailReloadReason.RecentDataWindowChange) {
+            null
+        } else {
+            planSourceState.trail.minOfOrNull { it.time }
+        }
+        val existingMultiMinTimes = if (TrackerMapTrailCommitPolicy.shouldCapturePreReloadSnapshot(reason)) {
+            emptyMap()
+        } else {
+            planSourceState.allQueueTrailsByTracker
+                .mapValues { (_, pts) -> pts.minOfOrNull { it.time } }
+                .filterValues { it != null }
+                .mapValues { it.value!! }
+        }
         // SINGLE_SERVER + LOCAL OVERLAY: when the displayed tracker is the locally-recorded one,
         // server geometry alone can lag the live recording (uploads are async). The loader pairs
         // the server fetch with the local DB queue (returned in queueOverlaysByTracker) so the
@@ -1978,6 +1999,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             existingTrailMinTimeMs = existingTrailMinTimeMs,
             existingMultiMinTimes = existingMultiMinTimes,
             ops = trailLoaderOps,
+        )
+        val queueOverlayTrackerIds = if (reason == TrackerMapTrailReloadReason.RecentDataWindowChange) {
+            recentDataWindowRefreshTrackerIds
+        } else {
+            emptySet()
+        }
+        val queueOverlaysByTracker = TrackerMapTrailCommitPolicy.expandQueueOverlays(
+            reloadReason = reason,
+            overlayTrackerIds = queueOverlayTrackerIds,
+            loadedOverlays = loaded.queueOverlaysByTracker,
+            loadQueue = { trackerId -> loadQueueTrail(trackerId) },
         )
         // RACE-FREE COMMIT: re-merge against the LATEST live trail at write time. The IO above
         // (loadQueueTrail / loadTrailsForTrackerIds / loadSingleTrackerTrailFromServer) suspends,
@@ -2014,26 +2046,37 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 activeLocalTrackerId.isNotEmpty() &&
                     activeLocalTrackerId == plan.activeTrackerId.trim()
             }
-            val singleQueueOverlay = loaded.queueOverlaysByTracker[plan.activeTrackerId].orEmpty()
+            val singleQueueOverlay = queueOverlaysByTracker[plan.activeTrackerId].orEmpty()
             val singleLiveOverlayInput = if (singleQueueOverlay.isEmpty()) {
                 latest.trail
             } else {
                 latest.trail + singleQueueOverlay
             }
-            val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
+            val serverMergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
                 serverTrail = loaded.singleTrailSeed,
                 currentTrail = singleLiveOverlayInput,
                 allowedLiveOverlayTrackerIds = setOfNotBlank(plan.activeTrackerId),
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 activeSessionStartMs = singleSessionStart,
             )
-            val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
+            val serverMergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
                 serverTrails = loaded.serverTrails,
                 currentTrails = latest.allQueueTrailsByTracker,
                 allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotBlank(plan.overlayTrackerId),
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 activeSessionStartByTracker = activeSessionStartByTracker,
-                extraLiveOverlaysByTracker = loaded.queueOverlaysByTracker,
+                extraLiveOverlaysByTracker = queueOverlaysByTracker,
+            )
+            val mergedTrail = TrackerMapTrailCommitPolicy.resolveSingleTrail(
+                reloadReason = reason,
+                serverMergedTrail = serverMergedTrail,
+                preReloadFilteredTrail = preReloadSnapshot?.singleTrail.orEmpty(),
+            )
+            val mergedMultiTrails = TrackerMapTrailCommitPolicy.resolveMultiTrails(
+                reloadReason = reason,
+                serverMergedTrails = serverMergedMultiTrails,
+                preReloadFilteredTrails = preReloadSnapshot?.renderTrailsByTracker.orEmpty(),
+                refreshedTrackerIds = recentDataWindowRefreshTrackerIds,
             )
             mergeCommitted = MergedTrailResult(mergedTrail, mergedMultiTrails)
             latest.copy(
@@ -2068,6 +2111,9 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             // snaps to the final framing in one frame, which is the right semantics for a
             // re-fit the user did not initiate.
             requestFitTrail(TrackerMapFitTrailMode.Instant)
+        }
+        if (reason == TrackerMapTrailReloadReason.RecentDataWindowChange) {
+            recentDataWindowRefreshTrackerIds = emptySet()
         }
     }
 

@@ -352,6 +352,28 @@ class ApiTrackerManagementRepository(
             ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
     }
 
+    override fun stripCachedGeometry(trackerIds: Set<String>) {
+        if (trackerIds.isEmpty()) return
+        val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (normalizedIds.isEmpty()) return
+        cacheMutex.withLock {
+            trackersCache = trackersCache?.map { tracker ->
+                if (tracker.id in normalizedIds) {
+                    tracker.copy(geometry = null, point_params = null, bbox = null)
+                } else {
+                    tracker
+                }
+            }
+        }
+    }
+
+    override fun invalidateGeometryRequests(trackerIds: Set<String>) {
+        if (trackerIds.isEmpty()) return
+        // Filter changes can invalidate single- and multi-tracker geometry fetches. Clearing
+        // the gate ensures no in-flight response filtered under a previous window is merged.
+        readRequestGate.clear()
+    }
+
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("tracker-kml:$trackerId") {

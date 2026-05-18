@@ -39,6 +39,22 @@ class TrackerMapGroupModePolicyTest {
     }
 
     @Test
+    fun resolveSelection_excludesOwnerHiddenGroupFlag() {
+        val hiddenByFlag = group(id = "gh", name = "HiddenFlag", trackIds = listOf("x"), hidden = true)
+        val visible = group(id = "gv", name = "Visible", trackIds = listOf("v1"))
+        val selection = TrackerMapGroupModePolicy.resolveSelection(
+            groups = listOf(hiddenByFlag, visible),
+            hiddenGroupIds = emptySet(),
+            hiddenTrackIds = emptySet(),
+            hiddenOwnerTrackerIds = emptySet(),
+            preferredGroupId = null,
+            preferredTrackerId = "x",
+        )
+        assertEquals("gv", selection.groupId)
+        assertEquals(setOf("v1"), selection.trackerIds)
+    }
+
+    @Test
     fun resolveSelection_filtersHiddenAndUnacceptedGroups() {
         val acceptedHidden = group(id = "gh", name = "Hidden", trackIds = listOf("x"))
         val unaccepted = group(id = "gu", name = "Unaccepted", trackIds = listOf("y"), isAccepted = false)
@@ -90,11 +106,13 @@ class TrackerMapGroupModePolicyTest {
         id: String,
         name: String,
         trackIds: List<String>,
-        isAccepted: Boolean = true
+        isAccepted: Boolean = true,
+        hidden: Boolean = false,
     ) = Group(
         id = id,
         name = name,
         track_ids = trackIds,
-        is_accepted = isAccepted
+        is_accepted = isAccepted,
+        hidden = hidden,
     )
 }
