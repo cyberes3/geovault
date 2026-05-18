@@ -649,7 +649,11 @@ class LiveTrackStreamingService : Service() {
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_popup_sync)
             .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.stop_streaming), stopPendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.streaming_notification_action_stop),
+                stopPendingIntent,
+            )
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(Notification.CATEGORY_SERVICE)

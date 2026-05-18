@@ -17,13 +17,14 @@
     <string name="tracking_notification_counts_line">%1$d sent · %2$d queued</string>
     <string name="tracking_notification_channel_name">Live tracking</string>
     <string name="tracking_notification_channel_description">Foreground notification while location is recorded</string>
+    <string name="tracking_notification_action_stop">Stop Tracking</string>
     <string name="live_track_streaming_title">Streaming Tracker</string>
     <string name="live_track_streaming_text">%1$s</string>
     <string name="live_track_streaming_text_many">%1$d trackers</string>
     <string name="live_track_streaming_text_anon">Tracker updates</string>
     <string name="live_track_streaming_channel">Tracker streaming</string>
     <string name="live_track_streaming_channel_description">Foreground notification while live tracker updates stream</string>
-    <string name="stop_streaming">Stop Streaming</string>
+    <string name="streaming_notification_action_stop">Stop Streaming</string>
     <string name="error_server_unreachable">Could not reach server. Check URL and connection.</string>
     <string name="error_streaming_auth_failed">Streaming sign-in expired. Sign in again in settings.</string>
     <string name="recovery_channel_name">Tracking recovery</string>

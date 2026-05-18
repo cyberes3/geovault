@@ -53,7 +53,7 @@ class TrackingNotificationPresenter(private val context: Context) {
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pendingIntent)
-            .addAction(0, context.getString(R.string.stop_tracking), stopPendingIntent)
+            .addAction(0, context.getString(R.string.tracking_notification_action_stop), stopPendingIntent)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
