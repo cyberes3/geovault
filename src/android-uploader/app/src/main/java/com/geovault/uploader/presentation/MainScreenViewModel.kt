@@ -5,8 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.auth.AuthConnectCoordinator
-import com.geovault.common.auth.CommonInitialAuthController
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.common.update.VersionCheckResult
@@ -59,8 +58,6 @@ class MainScreenViewModel(
     private val fileMetadataRepository = services.fileMetadataRepository()
     private val validationRepository = services.validationRepository()
     private val uploadRepository = services.uploadRepository()
-    private val authController: CommonInitialAuthController = services.initialAuthController()
-    private val authConnect = AuthConnectCoordinator(viewModelScope, authController)
     private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Uploader.versionCheckSession(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
@@ -84,7 +81,6 @@ class MainScreenViewModel(
     }
 
     fun initialize(intent: Intent?, handleFileIntent: Boolean = true) {
-        refreshAuthState()
         if (handleFileIntent) {
             handleIntent(intent)
         }
@@ -93,87 +89,32 @@ class MainScreenViewModel(
                 it.copy(importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = msg))
             }
         }
-        if (_state.value.isAuthenticated && _state.value.isValidationMode) {
-            validate()
-        }
-        if (_state.value.isAuthenticated) {
-            launchVersionCheckIfNeeded()
-        }
     }
 
-    fun onHostResumed() {
+    fun onHostResumed() = Unit
+
+    fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
         val wasAuthenticated = _state.value.isAuthenticated
-        refreshAuthState()
-        val isAuthenticated = _state.value.isAuthenticated
-        if (!isAuthenticated) {
-            _state.update { it.copy(isConnecting = false) }
+        val isAuthenticated = accountState.isLoggedIn
+        if (wasAuthenticated && !isAuthenticated) {
+            versionCheckSession.reset()
+        }
+        _state.update {
+            it.copy(
+                isAuthenticated = isAuthenticated,
+                serverUrl = accountState.serverUrl,
+                isConnecting = accountState.isConnecting,
+                oauthUrl = null,
+                updateAvailable = if (isAuthenticated) it.updateAvailable else null,
+            )
         }
         if (!wasAuthenticated && isAuthenticated) {
-            _state.update { it.copy(isConnecting = false, oauthUrl = null, importantSnackbar = null) }
+            _state.update { it.copy(importantSnackbar = null) }
             if (_state.value.isValidationMode) {
                 validate()
             }
             launchVersionCheckIfNeeded()
         }
-    }
-
-    fun onAuthServerUrlChanged(url: String) {
-        _state.update { it.copy(serverUrl = url) }
-        authController.setServerUrl(url)
-    }
-
-    fun connectAuth() {
-        authConnect.launch(
-            rawServerUrl = _state.value.serverUrl,
-            onConnecting = {
-                _state.update {
-                    it.copy(
-                        isConnecting = true,
-                        importantSnackbar = null,
-                    )
-                }
-            },
-            onResult = ::applyOAuthPreparationResult,
-        )
-    }
-
-    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
-        when (result) {
-            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                _state.update {
-                    it.copy(
-                        oauthUrl = result.oauthUrl,
-                        importantSnackbar = null,
-                    )
-                }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                _state.update {
-                    it.copy(
-                        isConnecting = false,
-                        importantSnackbar = GeoVaultSnackbarModel(
-                            id = newImportantId(),
-                            message = result.message,
-                        ),
-                    )
-                }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                _state.update {
-                    it.copy(
-                        isConnecting = false,
-                        importantSnackbar = GeoVaultSnackbarModel(
-                            id = newImportantId(),
-                            message = result.message,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    fun onOauthUrlConsumed() {
-        _state.update { it.copy(oauthUrl = null) }
     }
 
     fun onFilenameChanged(newName: String) {
@@ -294,22 +235,6 @@ class MainScreenViewModel(
     private fun launchVersionCheckIfNeeded() {
         versionCheckSession.launchIfNeeded(viewModelScope) { available ->
             _state.update { it.copy(updateAvailable = available) }
-        }
-    }
-
-    private fun refreshAuthState() {
-        val wasAuthenticated = _state.value.isAuthenticated
-        val resolvedServer = authController.getConfiguredServerUrlOrPeerDefault()
-        val nowAuthenticated = authController.isLoggedIn()
-        if (wasAuthenticated && !nowAuthenticated) {
-            versionCheckSession.reset()
-        }
-        _state.update {
-            it.copy(
-                isAuthenticated = nowAuthenticated,
-                serverUrl = resolvedServer,
-                updateAvailable = if (nowAuthenticated) it.updateAvailable else null,
-            )
         }
     }
 

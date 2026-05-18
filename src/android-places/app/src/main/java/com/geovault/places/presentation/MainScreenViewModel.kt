@@ -3,8 +3,7 @@ package com.geovault.places.presentation
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.auth.AuthConnectCoordinator
-import com.geovault.common.auth.CommonInitialAuthController
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.sync.GeoVaultQueuedSyncMessageFormatter
 import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
 import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
@@ -58,8 +57,6 @@ class MainScreenViewModel(
     private val cache = services.cacheStore()
     private val repository = services.placesRepository()
     private val offlineSyncCoordinator = services.offlineSyncCoordinator()
-    private val authController = services.initialAuthController()
-    private val authConnect = AuthConnectCoordinator(viewModelScope, authController)
     private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Places.versionCheckSession(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
@@ -73,76 +70,20 @@ class MainScreenViewModel(
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
 
     fun initialize() {
-        refreshAuthAndCache()
+        publishFromCache()
     }
 
     fun onHostResumed() {
-        refreshAuthAndCache()
+        publishFromCache()
+    }
+
+    fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
+        refreshAuthAndCache(accountState)
     }
 
     fun onSearchChanged(query: String) {
         _state.update { it.copy(searchQuery = query) }
         publishFromCache()
-    }
-
-    fun onAuthServerUrlChanged(url: String) {
-        _state.update { it.copy(serverUrl = url) }
-        authController.setServerUrl(url)
-    }
-
-    fun connectAuth() {
-        authConnect.launch(
-            rawServerUrl = _state.value.serverUrl,
-            onConnecting = {
-                _state.update {
-                    it.copy(
-                        isConnecting = true,
-                        snackbar = null,
-                    )
-                }
-            },
-            onResult = ::applyOAuthPreparationResult,
-        )
-    }
-
-    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
-        when (result) {
-            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                _state.update {
-                    it.copy(
-                        serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
-                        oauthUrl = result.oauthUrl,
-                        snackbar = null,
-                    )
-                }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                _state.update {
-                    it.copy(
-                        isConnecting = false,
-                        snackbar = GeoVaultSnackbarModel(
-                            id = "connect_error_${System.currentTimeMillis()}",
-                            message = result.message,
-                        ),
-                    )
-                }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                _state.update {
-                    it.copy(
-                        isConnecting = false,
-                        snackbar = GeoVaultSnackbarModel(
-                            id = "connect_error_${System.currentTimeMillis()}",
-                            message = result.message,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    fun onOauthUrlConsumed() {
-        _state.update { it.copy(oauthUrl = null) }
     }
 
     fun refreshNow(
@@ -293,16 +234,15 @@ class MainScreenViewModel(
         _state.update { it.copy(selectedPlaceId = id) }
     }
 
-    private fun refreshAuthAndCache() {
+    private fun refreshAuthAndCache(accountState: GeoVaultAccountUiState) {
         val wasAuthenticated = _state.value.isAuthenticated
-        val serverUrl = authController.getConfiguredServerUrlOrPeerDefault()
-        val loggedIn = serverUrl.isNotBlank() && authController.isLoggedIn()
+        val loggedIn = accountState.isLoggedIn
         _state.update {
             it.copy(
-                serverUrl = serverUrl,
+                serverUrl = accountState.serverUrl,
                 isAuthenticated = loggedIn,
-                isConnecting = false,
-                oauthUrl = if (loggedIn) null else it.oauthUrl,
+                isConnecting = accountState.isConnecting,
+                oauthUrl = null,
                 lastSyncMillis = cache.getLastSyncTime(),
                 lastSyncLabel = formatLastSyncLabel(cache.getLastSyncTime()),
             )

@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.ui.components.GeoVaultInitialAuthView
 import com.geovault.common.ui.components.GeoVaultServerConfigBlock
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
@@ -24,6 +25,7 @@ import com.geovault.places.presentation.SettingsState
 @Composable
 fun SettingsScreen(
     state: SettingsState,
+    accountState: GeoVaultAccountUiState,
     onServerUrlChanged: (String) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
@@ -50,26 +52,27 @@ fun SettingsScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
-                if (!state.isLoggedIn) {
+                if (!accountState.isLoggedIn) {
                     GeoVaultInitialAuthView(
-                        serverUrl = state.serverUrl,
+                        serverUrl = accountState.serverUrl,
                         onServerUrlChanged = onServerUrlChanged,
                         onConnect = onConnect,
-                        isConnecting = state.isConnecting,
+                        isConnecting = accountState.isConnecting,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    val email = state.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
+                    val email = accountState.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
                     GeoVaultServerConfigBlock(
-                        serverUrl = state.serverUrl,
+                        serverUrl = accountState.serverUrl,
                         loggedInEmail = email,
                         onDisconnectConfirmed = onDisconnect,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (!state.infoMessage.isNullOrBlank()) {
+                val accountInfoMessage = accountState.infoMessage
+                if (!accountInfoMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(state.infoMessage)
+                    Text(accountInfoMessage)
                 }
             }
         }

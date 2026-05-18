@@ -19,6 +19,7 @@ import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.SettingsViewModel
+import com.geovault.tracker.presentation.TrackerAccountViewModel
 import com.geovault.tracker.presentation.LiveTrackStreamingTargetCoordinator
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingRuntimeStateStore
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainScreenViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
+    private val accountViewModel: TrackerAccountViewModel by viewModels()
     private var streamingErrorReceiverRegistered = false
     private var trackingErrorReceiverRegistered = false
     private val trackingErrorReceiver = object : BroadcastReceiver() {
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
         consumeOpenAllTrackersMapIntentIfPresent(intent)
         GeoVaultSystemBars.applyAppChrome(activity = this)
         syncRuntimeSelectedTracker()
+        accountViewModel.initialize()
         viewModel.initialize()
         settingsViewModel.initialize()
 
@@ -67,38 +70,45 @@ class MainActivity : ComponentActivity() {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
+                val accountState by accountViewModel.state.collectAsState()
+                val accountMainState = state.copy(
+                    isAuthenticated = accountState.isLoggedIn,
+                    serverUrl = accountState.serverUrl,
+                    isConnecting = accountState.isConnecting,
+                    oauthUrl = null,
+                )
+                LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
+                    viewModel.onAccountStateChanged(accountState)
+                }
 
                 GeoVaultOAuthBrowserEffect(
-                    oauthUrl = state.oauthUrl,
-                    onConsumed = viewModel::onOauthUrlConsumed,
-                )
-                GeoVaultOAuthBrowserEffect(
-                    oauthUrl = settingsState.oauthUrl,
-                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                    oauthUrl = accountState.oauthUrl,
+                    onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
 
                 LaunchedEffect(Unit) {
                     intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-                        viewModel.showExternalError(error)
+                        accountViewModel.showExternalError(error)
                         intent?.removeExtra(EXTRA_OAUTH_ERROR)
                     }
                 }
                 MainScreen(
                     mainScreenViewModel = viewModel,
-                    state = state,
+                    state = accountMainState,
                     mapRecoveryRequestToken = state.mapRecoveryRequestToken,
                     onMapRecoveryRequestConsumed = viewModel::consumeMapRecoveryRequest,
-                    onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                    onAuthConnect = viewModel::connectAuth,
+                    onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
+                    onAuthConnect = accountViewModel::connect,
                     onClearInfoMessage = viewModel::clearInfoMessage,
                     onClearUpdateAvailable = viewModel::clearUpdateAvailable,
                     onRequestStartTracking = viewModel::requestStartTracking,
                     onRequestStopTracking = viewModel::requestStopTracking,
                     onRequestManualPoint = viewModel::requestManualPoint,
                     settingsState = settingsState,
-                    onSettingsServerUrlChanged = settingsViewModel::onServerUrlChanged,
-                    onSettingsConnect = settingsViewModel::connect,
-                    onSettingsDisconnect = { settingsViewModel.disconnect(MainActivity::class.java) },
+                    accountState = accountState,
+                    onSettingsServerUrlChanged = accountViewModel::onServerUrlChanged,
+                    onSettingsConnect = accountViewModel::connect,
+                    onSettingsDisconnect = { accountViewModel.disconnect(MainActivity::class.java) },
                     onSettingsTrackingProfileSelected = settingsViewModel::setTrackingProfile,
                     onSettingsLoggingIntervalInput = settingsViewModel::setLoggingIntervalSecFromInput,
                     onSettingsDistanceFilterInput = settingsViewModel::setDistanceFilterMetersFromInput,
@@ -126,13 +136,14 @@ class MainActivity : ComponentActivity() {
         handleIntentAction(intent)
         consumeOpenAllTrackersMapIntentIfPresent(intent)
         intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-            viewModel.showExternalError(error)
+            accountViewModel.showExternalError(error)
             intent.removeExtra(EXTRA_OAUTH_ERROR)
         }
     }
 
     override fun onResume() {
         super.onResume()
+        accountViewModel.onHostResumed()
         viewModel.onHostResumed()
         settingsViewModel.onHostResumed()
     }
@@ -221,7 +232,6 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(streamingErrorReceiver)
             streamingErrorReceiverRegistered = false
         }
-        viewModel.onOauthUrlConsumed()
-        settingsViewModel.onOauthUrlConsumed()
+        accountViewModel.onOauthUrlConsumed()
     }
 }

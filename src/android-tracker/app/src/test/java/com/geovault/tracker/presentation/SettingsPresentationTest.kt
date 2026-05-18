@@ -12,7 +12,7 @@ class SettingsPresentationTest {
 
     @Test
     fun withTrackerState_mergesLoadStateSettingsAndRevision() {
-        val base = SettingsState(serverUrl = "https://example.com", isLoggedIn = true)
+        val base = SettingsState()
         val tracker = TrackerSettingsState(
             loadState = TrackerSettingsLoadState.Ready,
             settings = TrackerSettings(
@@ -30,7 +30,6 @@ class SettingsPresentationTest {
         assertEquals(TrackerTrackingProfile.WALKING, merged.trackerSettings.trackingProfile)
         assertEquals(false, merged.trackerSettings.sendExtendedData)
         assertEquals(7L, merged.trackerRevision)
-        assertEquals("https://example.com", merged.serverUrl)
-        assertEquals(true, merged.isLoggedIn)
+        assertEquals(base.infoMessage, merged.infoMessage)
     }
 }

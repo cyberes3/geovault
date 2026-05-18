@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
@@ -64,6 +65,7 @@ fun MainScreen(
     onRequestStopTracking: () -> Unit = {},
     onRequestManualPoint: () -> Unit = {},
     settingsState: SettingsState,
+    accountState: GeoVaultAccountUiState,
     onSettingsServerUrlChanged: (String) -> Unit,
     onSettingsConnect: () -> Unit,
     onSettingsDisconnect: () -> Unit,
@@ -510,6 +512,7 @@ fun MainScreen(
             ) { padding ->
                 SettingsScreen(
                     state = settingsState,
+                    accountState = accountState,
                     onServerUrlChanged = onSettingsServerUrlChanged,
                     onConnect = onSettingsConnect,
                     onDisconnect = onSettingsDisconnect,

@@ -2,7 +2,6 @@ package com.geovault.tracker.presentation
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsDefaults
 import com.geovault.tracker.settings.TrackerSettingsLoadState
@@ -24,8 +23,7 @@ class SettingsViewModelTrackerDispatchTest {
     fun setSendExtendedData_delegatesToRepository() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
-        val auth = TrackerAppServices.from(app).initialAuthController()
-        val vm = SettingsViewModel(app, auth, recording)
+        val vm = SettingsViewModel(app, recording)
         vm.setSendExtendedData(false)
         assertEquals(listOf("setSendExtendedData(false)"), recording.calls)
     }
@@ -34,8 +32,7 @@ class SettingsViewModelTrackerDispatchTest {
     fun setTrackingProfile_delegatesToRepository() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
-        val auth = TrackerAppServices.from(app).initialAuthController()
-        val vm = SettingsViewModel(app, auth, recording)
+        val vm = SettingsViewModel(app, recording)
         vm.setTrackingProfile(TrackerTrackingProfile.DRIVING)
         assertEquals(listOf("setTrackingProfile(DRIVING)"), recording.calls)
     }
@@ -44,8 +41,7 @@ class SettingsViewModelTrackerDispatchTest {
     fun setLoggingIntervalSecFromInput_ignoresNonNumeric() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
-        val auth = TrackerAppServices.from(app).initialAuthController()
-        val vm = SettingsViewModel(app, auth, recording)
+        val vm = SettingsViewModel(app, recording)
         vm.setLoggingIntervalSecFromInput("abc")
         assertEquals(emptyList<String>(), recording.calls)
     }
@@ -54,8 +50,7 @@ class SettingsViewModelTrackerDispatchTest {
     fun setLoggingIntervalSecFromInput_parsesAndDispatches() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
-        val auth = TrackerAppServices.from(app).initialAuthController()
-        val vm = SettingsViewModel(app, auth, recording)
+        val vm = SettingsViewModel(app, recording)
         vm.setLoggingIntervalSecFromInput("33")
         assertEquals(listOf("setLoggingIntervalSec(33)"), recording.calls)
     }

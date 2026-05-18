@@ -28,12 +28,14 @@ import com.geovault.uploader.domain.PickerSelectionRouter
 import com.geovault.uploader.navigation.MultiUploadNavigation
 import com.geovault.uploader.presentation.MainScreenViewModel
 import com.geovault.uploader.presentation.SettingsViewModel
+import com.geovault.uploader.presentation.UploaderAccountViewModel
 import com.geovault.uploader.ui.MainScreen
 import com.geovault.uploader.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainScreenViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
+    private val accountViewModel: UploaderAccountViewModel by viewModels()
     private val fileMetadataRepository: FileMetadataRepository by lazy {
         FileMetadataRepository(contentResolver)
     }
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
         }
         GeoVaultSystemBars.applyAppChrome(activity = this)
         val incomingRoute = routeIncomingIntentToUploadTarget(intent)
+        accountViewModel.initialize()
         viewModel.initialize(intent, handleFileIntent = !incomingRoute.handled)
         settingsViewModel.initialize()
         if (incomingRoute.finishedActivity) return
@@ -57,22 +60,28 @@ class MainActivity : ComponentActivity() {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
+                val accountState by accountViewModel.state.collectAsState()
+                val accountMainState = state.copy(
+                    isAuthenticated = accountState.isLoggedIn,
+                    serverUrl = accountState.serverUrl,
+                    isConnecting = accountState.isConnecting,
+                    oauthUrl = null,
+                )
+                LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
+                    viewModel.onAccountStateChanged(accountState)
+                }
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
                 GeoVaultOAuthBrowserEffect(
-                    oauthUrl = state.oauthUrl,
-                    onConsumed = viewModel::onOauthUrlConsumed,
-                )
-                GeoVaultOAuthBrowserEffect(
-                    oauthUrl = settingsState.oauthUrl,
-                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                    oauthUrl = accountState.oauthUrl,
+                    onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainScreen(
-                        state = state,
+                        state = accountMainState,
                         invalidFilesDialogNames = invalidFilesDialogNamesState.value,
                         onOpenSettings = { isSettingsOpen = true },
-                        onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                        onAuthConnect = viewModel::connectAuth,
+                        onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
+                        onAuthConnect = accountViewModel::connect,
                         onChooseFileClick = {
                             chooseFilesLauncher.launch(arrayOf("*/*"))
                         },
@@ -91,10 +100,11 @@ class MainActivity : ComponentActivity() {
                     ) {
                         SettingsScreen(
                             state = settingsState,
-                            onServerUrlChanged = settingsViewModel::onServerUrlChanged,
+                            accountState = accountState,
+                            onServerUrlChanged = accountViewModel::onServerUrlChanged,
                             onSuffixChanged = settingsViewModel::onSuffixChanged,
-                            onConnect = settingsViewModel::connect,
-                            onDisconnect = { settingsViewModel.disconnect(MainActivity::class.java) },
+                            onConnect = accountViewModel::connect,
+                            onDisconnect = { accountViewModel.disconnect(MainActivity::class.java) },
                             onClose = { isSettingsOpen = false },
                         )
                     }
@@ -112,14 +122,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        accountViewModel.onHostResumed()
         viewModel.onHostResumed()
         settingsViewModel.onHostResumed()
     }
 
     override fun onStop() {
         super.onStop()
-        viewModel.onOauthUrlConsumed()
-        settingsViewModel.onOauthUrlConsumed()
+        accountViewModel.onOauthUrlConsumed()
     }
 
     companion object {

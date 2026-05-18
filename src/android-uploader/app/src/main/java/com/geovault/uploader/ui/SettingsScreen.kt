@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import com.geovault.uploader.R
 import com.geovault.uploader.presentation.SettingsState
@@ -26,6 +27,7 @@ import com.geovault.uploader.presentation.SettingsState
 @Composable
 fun SettingsScreen(
     state: SettingsState,
+    accountState: GeoVaultAccountUiState,
     onServerUrlChanged: (String) -> Unit,
     onSuffixChanged: (Boolean) -> Unit,
     onConnect: () -> Unit,
@@ -53,19 +55,19 @@ fun SettingsScreen(
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
                     .then(
-                        if (state.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
+                        if (accountState.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
                     )
             ) {
-                if (!state.isLoggedIn) {
+                if (!accountState.isLoggedIn) {
                     GeoVaultInitialAuthView(
-                        serverUrl = state.serverUrl,
+                        serverUrl = accountState.serverUrl,
                         onServerUrlChanged = onServerUrlChanged,
                         onConnect = onConnect,
                         title = "Connect Account",
                         helpText = "Enter your GeoVault server URL and connect your account.",
                         connectButtonText = "Connect Account",
                         connectingButtonText = "Connecting...",
-                        isConnecting = state.isConnecting,
+                        isConnecting = accountState.isConnecting,
                         connectEnabled = true,
                         inputEnabled = true,
                         modifier = Modifier.fillMaxWidth()
@@ -78,18 +80,19 @@ fun SettingsScreen(
                         helpText = "Append '_android_upload' to uploaded filenames."
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    val loggedInEmail = state.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
+                    val loggedInEmail = accountState.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
                     GeoVaultServerConfigBlock(
-                        serverUrl = state.serverUrl,
+                        serverUrl = accountState.serverUrl,
                         loggedInEmail = loggedInEmail,
                         onDisconnectConfirmed = onDisconnect,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                if (!state.infoMessage.isNullOrBlank()) {
+                val accountInfoMessage = accountState.infoMessage
+                if (!accountInfoMessage.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(state.infoMessage)
+                    Text(accountInfoMessage)
                 }
             }
         }

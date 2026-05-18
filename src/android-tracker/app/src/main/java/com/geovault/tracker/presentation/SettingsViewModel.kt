@@ -7,10 +7,7 @@ import android.hardware.SensorManager
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.AppResetFlow
 import com.geovault.common.UnitUtils
-import com.geovault.common.auth.AuthConnectCoordinator
-import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.di.TrackerAppServices
@@ -27,12 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsState(
-    val serverUrl: String = "",
-    val isLoggedIn: Boolean = false,
-    val loggedInText: String = "",
-    val isConnecting: Boolean = false,
     val infoMessage: String? = null,
-    val oauthUrl: String? = null,
     val trackerLoadState: TrackerSettingsLoadState = TrackerSettingsLoadState.Loading,
     val trackerSettings: TrackerSettings = TrackerSettings(),
     val trackerRevision: Long = 0L,
@@ -44,8 +36,6 @@ data class SettingsState(
 
 class SettingsViewModel(
     application: Application,
-    private val authController: CommonInitialAuthController =
-        TrackerAppServices.from(application).initialAuthController(),
     private val trackerSettingsRepository: TrackerSettingsRepository =
         TrackerAppServices.from(application).trackerSettingsRepository(),
     private val trackerManagementRepository: TrackerManagementRepository =
@@ -60,14 +50,12 @@ class SettingsViewModel(
 
     constructor(application: Application) : this(
         application,
-        TrackerAppServices.from(application).initialAuthController(),
         TrackerAppServices.from(application).trackerSettingsRepository(),
         TrackerAppServices.from(application).trackerManagementRepository(),
         TrackerAppServices.from(application).groupManagementRepository(),
     )
 
     private val appContext = application.applicationContext
-    private val authConnect = AuthConnectCoordinator(viewModelScope, authController)
 
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()
@@ -82,67 +70,14 @@ class SettingsViewModel(
 
     fun initialize() {
         enforceMotionSensorSupport()
-        refreshAuthState()
+        refreshMeasurementDefaults()
         refreshHiddenTrackerItems()
     }
 
     fun onHostResumed() {
         enforceMotionSensorSupport()
-        refreshAuthState()
-        if (!_state.value.isLoggedIn) {
-            _state.update { it.copy(isConnecting = false, oauthUrl = null) }
-        }
+        refreshMeasurementDefaults()
         refreshHiddenTrackerItems()
-    }
-
-    fun onServerUrlChanged(url: String) {
-        _state.update { it.copy(serverUrl = url) }
-        authController.setServerUrl(url)
-    }
-
-    fun connect() {
-        authConnect.launch(
-            rawServerUrl = _state.value.serverUrl,
-            onConnecting = {
-                _state.update { it.copy(isConnecting = true, infoMessage = null) }
-            },
-            onResult = ::applyOAuthPreparationResult,
-        )
-    }
-
-    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
-        when (result) {
-            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                _state.update {
-                    it.copy(
-                        serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
-                        oauthUrl = result.oauthUrl,
-                        infoMessage = null,
-                    )
-                }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
-            }
-        }
-    }
-
-    fun onOauthUrlConsumed() {
-        _state.update { it.copy(oauthUrl = null) }
-    }
-
-    fun disconnect(mainActivityClass: Class<*>) {
-        viewModelScope.launch {
-            authController.revokeCurrentSessionTokens()
-            AppResetFlow.execute(
-                context = appContext,
-                reason = AppResetFlow.Reason.MANUAL_SIGN_OUT,
-                mainActivityClass = mainActivityClass,
-            )
-        }
     }
 
     fun setTrackingProfile(profile: TrackerTrackingProfile) {
@@ -312,30 +247,9 @@ class SettingsViewModel(
         }
     }
 
-    private fun refreshAuthState() {
-        val server = authController.getConfiguredServerUrlOrPeerDefault()
-        val loggedIn = server.isNotBlank() && authController.isLoggedIn()
-        val cachedEmail = authController.getCachedUserEmail().orEmpty()
-        val motionSensorAvailable = isSignificantMotionSensorAvailable()
+    private fun refreshMeasurementDefaults() {
         _state.update {
-            it.copy(
-                serverUrl = server,
-                isLoggedIn = loggedIn,
-                usesImperialUnits = UnitUtils.usesImperialUnitsDefault(appContext),
-                significantMotionSensorAvailable = motionSensorAvailable,
-                loggedInText = if (loggedIn && cachedEmail.isNotBlank()) {
-                    "Logged in as $cachedEmail"
-                } else {
-                    if (loggedIn) "Logged in" else ""
-                },
-            )
-        }
-        if (loggedIn && cachedEmail.isBlank()) {
-            authController.fetchUserEmail { email ->
-                if (!email.isNullOrBlank()) {
-                    _state.update { current -> current.copy(loggedInText = "Logged in as $email") }
-                }
-            }
+            it.copy(usesImperialUnits = UnitUtils.usesImperialUnitsDefault(appContext))
         }
     }
 

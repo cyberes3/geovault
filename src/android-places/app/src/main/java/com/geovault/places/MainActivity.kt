@@ -45,6 +45,7 @@ import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.MainScreenViewModel
 import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
 import com.geovault.places.presentation.PlacesMapViewModel
+import com.geovault.places.presentation.PlacesAccountViewModel
 import com.geovault.places.presentation.SettingsViewModel
 import com.geovault.places.ui.MainScreen
 import com.geovault.places.ui.PlacesMapLaunchArgs
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainScreenViewModel by viewModels()
     private val mapViewModel: PlacesMapViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
+    private val accountViewModel: PlacesAccountViewModel by viewModels()
     private val clipboardCopyHelper: ClipboardCopyHelper by lazy { ClipboardCopyHelper(this) }
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -98,12 +100,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         GeoVaultSystemBars.applyAppChrome(this)
         clipboardCopyHelper.prewarm()
+        accountViewModel.initialize()
         viewModel.initialize()
         settingsViewModel.initialize()
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
+                val accountState by accountViewModel.state.collectAsState()
+                val accountMainState = state.copy(
+                    isAuthenticated = accountState.isLoggedIn,
+                    serverUrl = accountState.serverUrl,
+                    isConnecting = accountState.isConnecting,
+                    oauthUrl = null,
+                )
+                LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
+                    viewModel.onAccountStateChanged(accountState)
+                }
                 val mainMap = rememberGeoVaultMainMap(PLACES_MAIN_MAP_KEY)
                 var selectedTab by rememberSaveable { mutableStateOf(PlacesTab.LIST.name) }
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -132,7 +145,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 val preloadPoints = buildList {
-                    state.saved.forEach { feature ->
+                    accountMainState.saved.forEach { feature ->
                         val coords = feature.geometry.coordinates
                         if (coords.size >= 2) {
                             val lat = coords[1]
@@ -142,7 +155,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    state.offlineItems.forEach { offline ->
+                    accountMainState.offlineItems.forEach { offline ->
                         val coords = offline.feature.geometry.coordinates
                         if (coords.size >= 2) {
                             val lat = coords[1]
@@ -155,23 +168,19 @@ class MainActivity : ComponentActivity() {
                 }
                 val preloadTarget = resolveGeoVaultMainMapPreloadCameraTarget(preloadPoints)
                 GeoVaultOAuthBrowserEffect(
-                    oauthUrl = state.oauthUrl,
-                    onConsumed = viewModel::onOauthUrlConsumed,
-                )
-                GeoVaultOAuthBrowserEffect(
-                    oauthUrl = settingsState.oauthUrl,
-                    onConsumed = settingsViewModel::onOauthUrlConsumed,
+                    oauthUrl = accountState.oauthUrl,
+                    onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
                 LaunchedEffect(Unit) {
                     intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-                        viewModel.showExternalError(error)
+                        accountViewModel.showExternalError(error)
                         intent?.removeExtra(EXTRA_OAUTH_ERROR)
                     }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                     GeoVaultMainMapPreloadHost(
                         mainMapKey = PLACES_MAIN_MAP_KEY,
-                        enabled = state.isAuthenticated && !hasOpenedMapTab,
+                        enabled = accountMainState.isAuthenticated && !hasOpenedMapTab,
                         cameraTarget = preloadTarget,
                         surfaceMapInHost = selectedTab != PlacesTab.MAP.name && !hasOpenedMapTab,
                     )
@@ -206,10 +215,10 @@ class MainActivity : ComponentActivity() {
                                         .zIndex(if (active) 1f else 0f),
                                 ) {
                                     MainScreen(
-                                        state = state,
+                                        state = accountMainState,
                                         onSearchChanged = viewModel::onSearchChanged,
-                                        onAuthServerUrlChanged = viewModel::onAuthServerUrlChanged,
-                                        onAuthConnect = viewModel::connectAuth,
+                                        onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
+                                        onAuthConnect = accountViewModel::connect,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onRefresh = viewModel::refreshNow,
                                         onAddPlace = {
@@ -331,9 +340,10 @@ class MainActivity : ComponentActivity() {
                     ) {
                         SettingsScreen(
                             state = settingsState,
-                            onServerUrlChanged = settingsViewModel::onServerUrlChanged,
-                            onConnect = settingsViewModel::connect,
-                            onDisconnect = { settingsViewModel.disconnect(MainActivity::class.java) },
+                            accountState = accountState,
+                            onServerUrlChanged = accountViewModel::onServerUrlChanged,
+                            onConnect = accountViewModel::connect,
+                            onDisconnect = { accountViewModel.disconnect(MainActivity::class.java) },
                             onClose = { isSettingsOpen = false },
                         )
                     }
@@ -347,6 +357,7 @@ class MainActivity : ComponentActivity() {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
             Toast.makeText(this, "Offline data saved to Files -> Downloads", Toast.LENGTH_SHORT).show()
         }
+        accountViewModel.onHostResumed()
         viewModel.onHostResumed()
         settingsViewModel.onHostResumed()
         mapViewModel.loadFromCache()
@@ -354,8 +365,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        viewModel.onOauthUrlConsumed()
-        settingsViewModel.onOauthUrlConsumed()
+        accountViewModel.onOauthUrlConsumed()
     }
 
     private fun launchMapIntent(uri: Uri): Boolean =

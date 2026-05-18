@@ -1,0 +1,123 @@
+package com.geovault.common.auth
+
+import android.content.Context
+import com.geovault.common.AppResetFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class GeoVaultAccountUiState(
+    val serverUrl: String = "",
+    val isLoggedIn: Boolean = false,
+    val loggedInText: String = "",
+    val isConnecting: Boolean = false,
+    val infoMessage: String? = null,
+    val oauthUrl: String? = null,
+)
+
+class GeoVaultAccountController(
+    private val scope: CoroutineScope,
+    private val appContext: Context,
+    private val authController: CommonInitialAuthController,
+) {
+    private val authConnect = AuthConnectCoordinator(scope, authController)
+    private val _state = MutableStateFlow(GeoVaultAccountUiState())
+    val state: StateFlow<GeoVaultAccountUiState> = _state.asStateFlow()
+
+    fun initialize() {
+        refreshAuthState()
+    }
+
+    fun onHostResumed() {
+        refreshAuthState()
+        if (!_state.value.isLoggedIn) {
+            _state.update { it.copy(isConnecting = false, oauthUrl = null) }
+        }
+    }
+
+    fun onServerUrlChanged(url: String) {
+        _state.update { it.copy(serverUrl = url) }
+        authController.setServerUrl(url)
+    }
+
+    fun connect() {
+        authConnect.launch(
+            rawServerUrl = _state.value.serverUrl,
+            onConnecting = {
+                _state.update { it.copy(isConnecting = true, infoMessage = null) }
+            },
+            onResult = ::applyOAuthPreparationResult,
+        )
+    }
+
+    fun onOauthUrlConsumed() {
+        _state.update { it.copy(oauthUrl = null) }
+    }
+
+    fun showExternalError(message: String) {
+        _state.update { it.copy(isConnecting = false, oauthUrl = null, infoMessage = message) }
+    }
+
+    fun clearInfoMessage() {
+        _state.update { it.copy(infoMessage = null) }
+    }
+
+    fun disconnect(mainActivityClass: Class<*>) {
+        scope.launch {
+            authController.revokeCurrentSessionTokens()
+            AppResetFlow.execute(
+                context = appContext,
+                reason = AppResetFlow.Reason.MANUAL_SIGN_OUT,
+                mainActivityClass = mainActivityClass,
+            )
+        }
+    }
+
+    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
+        when (result) {
+            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
+                _state.update {
+                    it.copy(
+                        serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
+                        oauthUrl = result.oauthUrl,
+                        infoMessage = null,
+                    )
+                }
+            }
+            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
+                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
+            }
+            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
+                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
+            }
+        }
+    }
+
+    private fun refreshAuthState() {
+        val server = authController.getConfiguredServerUrlOrPeerDefault()
+        val loggedIn = server.isNotBlank() && authController.isLoggedIn()
+        val cachedEmail = authController.getCachedUserEmail().orEmpty()
+        _state.update {
+            it.copy(
+                serverUrl = server,
+                isLoggedIn = loggedIn,
+                loggedInText = when {
+                    loggedIn && cachedEmail.isNotBlank() -> "Logged in as $cachedEmail"
+                    loggedIn -> "Logged in"
+                    else -> ""
+                },
+                oauthUrl = if (loggedIn) null else it.oauthUrl,
+            )
+        }
+        if (loggedIn && cachedEmail.isBlank()) {
+            authController.fetchUserEmail { email ->
+                if (!email.isNullOrBlank()) {
+                    _state.update { current -> current.copy(loggedInText = "Logged in as $email") }
+                }
+            }
+        }
+    }
+}

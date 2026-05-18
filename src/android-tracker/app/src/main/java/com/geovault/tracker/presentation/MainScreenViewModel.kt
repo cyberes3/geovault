@@ -5,9 +5,8 @@ import android.content.Intent
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.auth.AuthConnectCoordinator
-import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.net.GeoVaultValidatedInternetNotifier
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
@@ -60,9 +59,6 @@ data class MainScreenState(
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application
-    private val authController: CommonInitialAuthController =
-        TrackerAppServices.from(application).initialAuthController()
-    private val authConnect = AuthConnectCoordinator(viewModelScope, authController)
     private val trackerSettingsRepository: TrackerSettingsRepository =
         TrackerAppServices.from(application).trackerSettingsRepository()
     private val trackerManagementRepository: TrackerManagementRepository =
@@ -146,7 +142,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun initialize() {
-        refreshAuthState()
+        launchPostAuthStartupFlowsIfNeeded()
+        if (!_state.value.isAuthenticated) {
+            launchVersionCheckIfNeeded()
+        }
+    }
+
+    fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
+        syncAccountState(accountState)
         launchPostAuthStartupFlowsIfNeeded()
         if (!_state.value.isAuthenticated) {
             launchVersionCheckIfNeeded()
@@ -212,54 +215,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun onHostResumed() {
-        refreshAuthState()
-        if (!_state.value.isAuthenticated) {
-            _state.update { it.copy(isConnecting = false, oauthUrl = null) }
-        }
         launchPostAuthStartupFlowsIfNeeded()
         if (!_state.value.isAuthenticated) {
             launchVersionCheckIfNeeded()
         }
         scheduleResumeBootstrapAfterStartup()
-    }
-
-    fun onAuthServerUrlChanged(url: String) {
-        _state.update { it.copy(serverUrl = url) }
-        authController.setServerUrl(url)
-    }
-
-    fun connectAuth() {
-        authConnect.launch(
-            rawServerUrl = _state.value.serverUrl,
-            onConnecting = {
-                _state.update { it.copy(isConnecting = true, infoMessage = null) }
-            },
-            onResult = ::applyOAuthPreparationResult,
-        )
-    }
-
-    private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
-        when (result) {
-            is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
-                _state.update {
-                    it.copy(
-                        serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
-                        oauthUrl = result.oauthUrl,
-                        infoMessage = null,
-                    )
-                }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
-            }
-            is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
-            }
-        }
-    }
-
-    fun onOauthUrlConsumed() {
-        _state.update { it.copy(oauthUrl = null) }
     }
 
     fun showExternalError(message: String) {
@@ -284,14 +244,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun refreshAuthState() {
+    private fun syncAccountState(accountState: GeoVaultAccountUiState) {
         val wasAuthenticated = _state.value.isAuthenticated
-        val server = authController.getConfiguredServerUrlOrPeerDefault()
-        val loggedIn = server.isNotBlank() && authController.isLoggedIn()
+        val loggedIn = accountState.isLoggedIn
         _state.update {
             it.copy(
                 isAuthenticated = loggedIn,
-                serverUrl = server,
+                serverUrl = accountState.serverUrl,
+                isConnecting = accountState.isConnecting,
+                oauthUrl = null,
             )
         }
         if (wasAuthenticated != loggedIn) {
@@ -439,7 +400,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         transportProbeMutex.withLock { measureLaunchTransportReachable() }
 
     private fun logConfiguredServerHost(reason: String) {
-        val raw = authController.getConfiguredServerUrlOrPeerDefault().trim()
+        val raw = _state.value.serverUrl.trim()
         val host = runCatching { java.net.URI(raw).host }.getOrNull().orEmpty()
         GeoVaultCaptureLog.d(TAG, "$reason configuredHost=$host len=${raw.length}")
     }

@@ -6,6 +6,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +64,7 @@ class AuthConnectCoordinatorTest {
             onConnecting = { connectingCount++ },
             onResult = { results.add(it) },
         )
+        yield()
         coordinator.launch(
             rawServerUrl = "second",
             onConnecting = { connectingCount++ },

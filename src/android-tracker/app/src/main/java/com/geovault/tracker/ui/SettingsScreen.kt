@@ -64,6 +64,7 @@ import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
+import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.tracker.R
 import com.geovault.tracker.presentation.HiddenTrackerItem
 import com.geovault.tracker.presentation.HiddenTrackerItemType
@@ -75,6 +76,7 @@ import com.geovault.tracker.settings.TrackerTrackingProfile
 @Composable
 fun SettingsScreen(
     state: SettingsState,
+    accountState: GeoVaultAccountUiState,
     onServerUrlChanged: (String) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
@@ -642,7 +644,7 @@ fun SettingsScreen(
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
 
-        if (!state.isLoggedIn) {
+        if (!accountState.isLoggedIn) {
             Divider(
                 color = geoVaultHairlineDividerColor(),
                 thickness = 1.dp,
@@ -654,7 +656,7 @@ fun SettingsScreen(
                 modifier = Modifier.padding(bottom = 8.dp),
             )
             GeoVaultInput(
-                value = state.serverUrl,
+                value = accountState.serverUrl,
                 onValueChange = onServerUrlChanged,
                 placeholder = "geovault.example.com",
                 enabled = true,
@@ -664,7 +666,7 @@ fun SettingsScreen(
                     .padding(bottom = 24.dp),
             )
             val connectState = rememberConnectingButtonState(
-                isConnecting = state.isConnecting,
+                isConnecting = accountState.isConnecting,
                 onConnect = onConnect,
             )
             GeoVaultPrimaryButton(
@@ -677,21 +679,22 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
             )
-            if (!state.infoMessage.isNullOrBlank() && !connectState.isEffectivelyConnecting) {
+            val accountInfoMessage = accountState.infoMessage
+            if (!accountInfoMessage.isNullOrBlank() && !connectState.isEffectivelyConnecting) {
                 Text(
-                    text = state.infoMessage,
+                    text = accountInfoMessage,
                     color = geoVaultContentSecondaryColor(),
                     style = MaterialTheme.typography.body2,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
             }
         } else {
-            val loggedInEmail = state.loggedInText
+            val loggedInEmail = accountState.loggedInText
                 .removePrefix("Logged in as")
                 .trim()
                 .ifBlank { "Authenticated User" }
             GeoVaultServerConfigBlock(
-                serverUrl = state.serverUrl,
+                serverUrl = accountState.serverUrl,
                 loggedInEmail = loggedInEmail,
                 onDisconnectConfirmed = onDisconnect,
                 modifier = Modifier
