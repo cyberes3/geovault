@@ -351,6 +351,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
+            accountViewModel.showExternalError(error)
+            intent.removeExtra(EXTRA_OAUTH_ERROR)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true) {

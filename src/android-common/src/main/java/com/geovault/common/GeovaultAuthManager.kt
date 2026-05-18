@@ -74,6 +74,11 @@ object GeovaultAuthManager {
     }
 
     fun handleAuthFailure(context: Context) {
+        if (!isLoggedIn(context)) {
+            Log.w(TAG, "handleAuthFailure ignored; no active auth session")
+            return
+        }
+        Log.w(TAG, "handleAuthFailure dispatching auth reset")
         authFailureListener?.onAuthFailure(context)
     }
 
@@ -504,9 +509,9 @@ object GeovaultAuthManager {
     }
 
     fun launchOAuthInBrowser(context: Context, authorizeUrl: String) {
-        Log.i(TAG, "launchOAuthInBrowser: host=${Uri.parse(authorizeUrl).host}")
         val uri = Uri.parse(authorizeUrl)
         val launchInNewTask = context !is Activity
+        Log.i(TAG, "launchOAuthInBrowser: host=${uri.host}")
         try {
             val customTabsIntent = CustomTabsIntent.Builder().build()
             if (launchInNewTask) {

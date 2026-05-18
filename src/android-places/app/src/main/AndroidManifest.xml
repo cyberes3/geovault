@@ -55,7 +55,7 @@
             android:name=".OAuthCallbackActivity"
             android:exported="true"
             android:theme="@style/Theme.Places"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:noHistory="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

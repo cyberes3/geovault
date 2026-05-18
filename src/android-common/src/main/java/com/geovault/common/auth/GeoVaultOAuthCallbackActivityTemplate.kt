@@ -12,7 +12,7 @@ import androidx.activity.ComponentActivity
  * app-specific navigation.
  *
  * Default behaviour:
- * - On success, starts [mainActivityClass] with `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP`
+ * - On success, starts [mainActivityClass] with `FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_SINGLE_TOP`
  *   and finishes this activity.
  * - On error, starts [mainActivityClass] with the same flags plus
  *   [GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY] set to the message, and finishes this activity.
@@ -63,7 +63,7 @@ abstract class GeoVaultOAuthCallbackActivityTemplate : ComponentActivity() {
         if (isDestroyed) return
         startActivity(
             Intent(this, mainActivityClass).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             },
         )
         finish()
@@ -77,7 +77,7 @@ abstract class GeoVaultOAuthCallbackActivityTemplate : ComponentActivity() {
     protected open fun onOAuthError(message: String) {
         if (isDestroyed) return
         val next = Intent(this, mainActivityClass).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY, message)
         }
         startActivity(next)
