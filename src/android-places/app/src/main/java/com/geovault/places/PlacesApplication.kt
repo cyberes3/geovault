@@ -7,6 +7,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.places.BuildConfig
 import com.geovault.places.di.PlacesAppServices
@@ -24,6 +25,7 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
 
     override fun onCreate() {
         super.onCreate()
+        GeoVaultAppVersionLog.log(this, BuildConfig.GIT_COMMIT_SHA)
         GeovaultAuthManager.init(
             context = this,
             redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",

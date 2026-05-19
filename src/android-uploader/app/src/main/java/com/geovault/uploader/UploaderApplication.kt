@@ -3,12 +3,14 @@ package com.geovault.uploader
 import android.app.Application
 import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.data.UploaderPreferences
 
 class UploaderApplication : Application(), GeovaultAuthManager.AuthFailureListener {
     override fun onCreate() {
         super.onCreate()
+        GeoVaultAppVersionLog.log(this, BuildConfig.GIT_COMMIT_SHA)
         GeovaultAuthManager.init(
             context = this,
             redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
