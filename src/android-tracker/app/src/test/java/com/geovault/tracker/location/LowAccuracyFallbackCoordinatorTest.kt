@@ -85,6 +85,18 @@ class LowAccuracyFallbackCoordinatorTest {
     }
 
     @Test
+    fun fallbackTimerStopped_preservesLastEmittedFingerprint() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
+        coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
+
+        coordinator.onFallbackTimerStopped()
+        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
+
+        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+    }
+
+    @Test
     fun fallbackEmitted_withoutMeaningfulChange_doesNotReemit() {
         val coordinator = LowAccuracyFallbackCoordinator()
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)

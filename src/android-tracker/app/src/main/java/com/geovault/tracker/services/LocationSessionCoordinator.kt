@@ -8,7 +8,8 @@ import com.geovault.tracker.location.UnifiedLocationSessionRequest
 import com.google.android.gms.location.LocationRequest
 
 class LocationSessionCoordinator(
-    context: Context
+    context: Context,
+    private val onSessionError: (Throwable) -> Unit = {},
 ) {
     private companion object {
         private const val TAG = "LocationSessionCoordinator"
@@ -25,6 +26,7 @@ class LocationSessionCoordinator(
             sessionRequest = UnifiedLocationSessionRequest(request),
             onError = { error ->
                 GeoVaultCaptureLog.e(TAG, "Unable to start fused location session", error)
+                onSessionError(error)
             }
         )
     }

@@ -76,7 +76,9 @@ data class LocationFilterConfig(
     /**
      * True when transitioning from `this` config to [other] requires the
      * [LocationFilter] to rebuild internal physics state (kalman, metrics
-     * engine ring buffer) and clear the anchor.
+     * engine ring buffer). The committed anchor is preserved by
+     * [LocationFilter.applyConfig]; explicit stream resets are responsible
+     * for clearing anchors.
      *
      * Only fields that change the filter's *physics* qualify. Pure per-fix
      * gates ([trackingAccuracyThresholdMeters], [maxFutureSkewMs],

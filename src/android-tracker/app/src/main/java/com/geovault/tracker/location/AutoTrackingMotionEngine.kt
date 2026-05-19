@@ -17,6 +17,10 @@ data class AutoTrackingEngineOutput(
     val modeChanged: Boolean
 )
 
+enum class AutoTrackingMotionEvidenceConfidence {
+    High,
+}
+
 /**
  * Classifies the user's motion mode (WALKING / BIKING / DRIVING) from a
  * stream of *vetted* speed samples and drives the [LocationRequest]
@@ -81,6 +85,25 @@ class AutoTrackingMotionEngine(
     }
 
     /**
+     * Feed high-confidence movement evidence that was not persisted as a
+     * track point. This is intentionally separate from [onRejectedFix]: only
+     * callers that have already applied strict continuity/accuracy gates may
+     * use it to break a filter/profile deadlock.
+     */
+    fun onMotionEvidence(
+        speedMps: Float,
+        eventTimeMs: Long,
+        confidence: AutoTrackingMotionEvidenceConfidence,
+    ): AutoTrackingEngineOutput {
+        return when (confidence) {
+            AutoTrackingMotionEvidenceConfidence.High -> onAcceptedFix(
+                speedMps = speedMps,
+                eventTimeMs = eventTimeMs,
+            )
+        }
+    }
+
+    /**
      * A rejected fix is by definition not motion evidence: the position
      * filter has already classified it as a teleport, low-accuracy, or
      * stale. We update [AutoTrackingMotionState.lastEvidenceAtMs] so the
@@ -88,7 +111,10 @@ class AutoTrackingMotionEngine(
      * chipset), but the smoothed speed itself is not mutated.
      */
     fun onRejectedFix(eventTimeMs: Long): AutoTrackingEngineOutput {
-        state = state.copy(lastEvidenceAtMs = eventTimeMs)
+        state = state.copy(
+            lastEvidenceAtMs = eventTimeMs,
+            consecutiveAboveUpper = 0,
+        )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
     }
 

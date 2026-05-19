@@ -1,7 +1,11 @@
 package com.geovault.tracker.runtime
 
+import android.Manifest
+import android.app.Application
 import android.content.Context
+import android.location.LocationManager
 import androidx.test.core.app.ApplicationProvider
+import com.geovault.tracker.SelectedTrackerPrefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.Shadows
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], manifest = Config.NONE)
@@ -85,5 +90,38 @@ class RuntimeHealthPolicyParityTest {
 
         assertEquals(current.lifecycleState, reconciled.lifecycleState)
         assertEquals(current.shouldBeRunning, reconciled.shouldBeRunning)
+    }
+
+    @Test
+    fun evaluateRecoveryHealth_staleHeartbeatServiceAlive_doesNotDispatchRecovery() {
+        enableRecoveryPrerequisites()
+        val health = policy.evaluateRecoveryHealth(
+            state = RuntimeState(
+                lifecycleState = RuntimeLifecycleState.ACTIVE,
+                shouldBeRunning = true,
+                lastHeartbeatAtMs = 0L,
+            ),
+            isServiceRunning = true,
+        )
+
+        assertFalse(health.isHealthy)
+        assertFalse(health.shouldRecover)
+        assertEquals("heartbeat_stale_service_alive", health.reason)
+    }
+
+    private fun enableRecoveryPrerequisites() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context as Application).grantPermissions(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
+        SelectedTrackerPrefs.setSelectedTracker(
+            context,
+            trackerId = "11111111-1111-1111-1111-111111111111",
+            trackerName = "Test Tracker",
+        )
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        Shadows.shadowOf(locationManager).setProviderEnabled(LocationManager.GPS_PROVIDER, true)
     }
 }

@@ -174,7 +174,10 @@ class RuntimeCommandHandler(
             )
         }
         val stateForHealth = repository.readState()
-        val health = healthPolicy.evaluateRecoveryHealth(stateForHealth)
+        val health = healthPolicy.evaluateRecoveryHealth(
+            state = stateForHealth,
+            isServiceRunning = repository.isServiceRunning()
+        )
         telemetry.event(
             "watchdog",
             "healthy=${health.isHealthy} shouldRecover=${health.shouldRecover} reason=${health.reason}"

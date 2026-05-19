@@ -510,6 +510,142 @@ class LocationIngestCoordinatorTest {
         assertEquals("resume-unconfirmed", result.policyMetrics?.reason)
         assertEquals(1, dao.getCount())
     }
+
+    @Test
+    fun ingest_speedCapRecoveryRejects_doNotForceLocalReanchor() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 50f)
+        val trackId = "tracker-1"
+        val anchorTimeMs = 1_700_000_000_000L
+        val seed = seedAcceptedPoint(
+            coordinator = coordinator,
+            settings = settings,
+            trackId = trackId,
+            timeMs = anchorTimeMs,
+        )
+
+        var previousAccepted = seed.lastFilteredLocation
+        var lastResult: LocationIngestResult? = null
+        repeat(TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
+            val nowMs = anchorTimeMs + 4 * 60_000L + (idx + 1) * 20_000L
+            val candidate = Location("gps").apply {
+                latitude = 12.0000
+                longitude = -45.0000 + (idx + 1) * 0.0040
+                accuracy = 8f
+                speed = 22f
+                bearing = 90f
+                time = nowMs
+            }
+            val result = coordinator.ingest(
+                trackId = trackId,
+                location = candidate,
+                settings = settings,
+                motionMode = TrackingMotionMode.WALKING,
+                previousAcceptedLocation = previousAccepted,
+                sessionVisibleBoundaryId = 0L,
+                bypassFilters = false,
+                propsJson = null,
+                totalDistanceMeters = 0f,
+                queuedTrackerId = trackId,
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = (idx + 1).toLong() * 20_000_000_000L,
+                isMockLocation = false
+            )
+            lastResult = result
+            previousAccepted = result.lastFilteredLocation
+        }
+
+        val result = checkNotNull(lastResult)
+        assertFalse(result.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
+        assertEquals("speed-cap-exceeded", result.policyMetrics?.reason)
+        assertEquals(1, dao.getCount())
+    }
+
+    @Test
+    fun ingest_candidateUnconfirmedRejects_doNotForceLocalReanchor() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 50f)
+        val trackId = "tracker-1"
+        val anchorTimeMs = 1_700_000_000_000L
+        val seed = seedAcceptedPoint(
+            coordinator = coordinator,
+            settings = settings,
+            trackId = trackId,
+            timeMs = anchorTimeMs,
+        )
+
+        var previousAccepted = seed.lastFilteredLocation
+        var lastResult: LocationIngestResult? = null
+        repeat(TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
+            val nowMs = anchorTimeMs + 4 * 60_000L + (idx + 1) * 30_000L
+            val candidate = Location("gps").apply {
+                latitude = 12.00052
+                longitude = -45.0000
+                accuracy = 35f
+                speed = 2f
+                bearing = 0f
+                time = nowMs
+            }
+            val result = coordinator.ingest(
+                trackId = trackId,
+                location = candidate,
+                settings = settings,
+                motionMode = TrackingMotionMode.WALKING,
+                previousAcceptedLocation = previousAccepted,
+                sessionVisibleBoundaryId = 0L,
+                bypassFilters = false,
+                propsJson = null,
+                totalDistanceMeters = 0f,
+                queuedTrackerId = trackId,
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = (idx + 1).toLong() * 30_000_000_000L,
+                isMockLocation = false
+            )
+            lastResult = result
+            previousAccepted = result.lastFilteredLocation
+        }
+
+        val result = checkNotNull(lastResult)
+        assertFalse(result.accepted)
+        assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
+        assertEquals("candidate-unconfirmed", result.policyMetrics?.reason)
+        assertEquals(1, dao.getCount())
+    }
+
+    private fun seedAcceptedPoint(
+        coordinator: LocationIngestCoordinator,
+        settings: TrackerSettings,
+        trackId: String,
+        timeMs: Long,
+    ): LocationIngestResult {
+        val anchor = Location("gps").apply {
+            latitude = 12.0000
+            longitude = -45.0000
+            accuracy = 5f
+            speed = 0f
+            time = timeMs
+        }
+        val seed = coordinator.ingest(
+            trackId = trackId,
+            location = anchor,
+            settings = settings,
+            motionMode = TrackingMotionMode.WALKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = timeMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false
+        )
+        assertTrue(seed.accepted)
+        return seed
+    }
 }
 
 private class FakeLocationDao : LocationDao {

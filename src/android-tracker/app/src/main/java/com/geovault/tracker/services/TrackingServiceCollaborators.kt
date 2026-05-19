@@ -19,6 +19,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 
+data class LocalReanchorEvent(
+    val streamKey: String,
+    val policyReason: String?,
+    val rejectStreak: Long,
+    val anchorAgeMs: Long,
+)
+
 data class LocationIngestResult(
     val accepted: Boolean,
     val rejectReason: TrackPointRejectReason? = null,
@@ -37,7 +44,10 @@ data class LocationIngestResult(
     val policyMetrics: TrackPointDecisionMetrics? = null,
 )
 
-class LocationIngestCoordinator(private val locationDao: LocationDao) {
+class LocationIngestCoordinator(
+    private val locationDao: LocationDao,
+    private val onForcedLocalReanchor: (LocalReanchorEvent) -> Unit = {},
+) {
     private val lastAcceptedByStream = ConcurrentHashMap<String, TrackPointEvent>()
     private val jumpRejectStreakByStream = ConcurrentHashMap<String, AtomicLong>()
 
@@ -158,6 +168,13 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         val insertedId = locationDao.insert(queued)
         if (bypassCanonical != null) {
             updateAcceptedStateForLocalStream(trackId = trackId, canonical = bypassCanonical)
+            seedPolicyFilterFromBypass(
+                trackId = trackId,
+                canonical = bypassCanonical,
+                maxAccuracyMeters = effectiveAccuracyFilterMeters,
+                motionMode = motionMode,
+                isMockLocation = isMockLocation,
+            )
         }
         val visible = locationDao.getCurrentSessionCountForTracker(
             trackerId = queuedTrackerId,
@@ -227,15 +244,19 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 config = config,
             )
             var effectivePreviousByTrack = currentPreviousByTrack
-            if (!decision.accepted &&
-                shouldForceLocalStallReanchor(
+            val reanchorEvent = if (!decision.accepted) {
+                forcedLocalStallReanchorEvent(
                     streamKey = streamKey,
                     reason = decision.rejectReason,
                     policyReason = decision.metrics?.reason,
                     previousByTrack = effectivePreviousByTrack,
                     nowMs = nowMs
                 )
-            ) {
+            } else {
+                null
+            }
+            if (reanchorEvent != null) {
+                onForcedLocalReanchor(reanchorEvent)
                 resetLocalSession(trackId)
                 effectivePreviousByTrack = null
                 decision = TrackPointPolicyEngine.evaluate(
@@ -273,20 +294,26 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         }
     }
 
-    private fun shouldForceLocalStallReanchor(
+    private fun forcedLocalStallReanchorEvent(
         streamKey: String,
         reason: TrackPointRejectReason?,
         policyReason: String?,
         previousByTrack: TrackPointEvent?,
         nowMs: Long
-    ): Boolean {
-        if (reason != TrackPointRejectReason.JUMP) return false
-        if (policyReason == "resume-unconfirmed") return false
-        val previous = previousByTrack ?: return false
+    ): LocalReanchorEvent? {
+        if (reason != TrackPointRejectReason.JUMP) return null
+        if (isExpectedRecoveryReason(policyReason)) return null
+        val previous = previousByTrack ?: return null
         val anchorAgeMs = nowMs - previous.timestampMs
-        if (anchorAgeMs < TrackingPolicyProfiles.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return false
+        if (anchorAgeMs < TrackingPolicyProfiles.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return null
         val nextStreak = (jumpRejectStreakByStream[streamKey]?.get() ?: 0L) + 1L
-        return nextStreak >= TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD
+        if (nextStreak < TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD) return null
+        return LocalReanchorEvent(
+            streamKey = streamKey,
+            policyReason = policyReason,
+            rejectStreak = nextStreak,
+            anchorAgeMs = anchorAgeMs,
+        )
     }
 
     private fun updateJumpRejectStreak(streamKey: String, reason: TrackPointRejectReason?) {
@@ -295,6 +322,13 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
         } else {
             jumpRejectStreakByStream.remove(streamKey)
         }
+    }
+
+    private fun isExpectedRecoveryReason(policyReason: String?): Boolean {
+        return policyReason == "resume-unconfirmed" ||
+            policyReason == "candidate-unconfirmed" ||
+            policyReason == "speed-cap-unconfirmed" ||
+            policyReason == "speed-cap-exceeded"
     }
 
     private fun isOutOfOrderAgainstTrack(previousByTrack: TrackPointEvent?, canonical: TrackPointEvent): Boolean {
@@ -331,6 +365,26 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             TrackPointCrossSourceState.update(trackId, canonical)
             jumpRejectStreakByStream.remove(streamKey)
         }
+    }
+
+    private fun seedPolicyFilterFromBypass(
+        trackId: String,
+        canonical: TrackPointEvent,
+        maxAccuracyMeters: Float,
+        motionMode: TrackingMotionMode,
+        isMockLocation: Boolean,
+    ) {
+        val config = TrackingPolicyProfiles.ingestConfig(
+            maxAccuracyMeters = maxAccuracyMeters,
+            motionMode = motionMode,
+            isMockLocation = isMockLocation,
+        )
+        TrackPointPolicyEngine.seedAccepted(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = trackId,
+            event = canonical,
+            config = config,
+        )
     }
 
     private fun trackPointEventForPolicy(

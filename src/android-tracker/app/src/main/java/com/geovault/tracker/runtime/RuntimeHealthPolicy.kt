@@ -49,7 +49,7 @@ class RuntimeHealthPolicy(private val context: Context) {
         )
     }
 
-    fun evaluateRecoveryHealth(state: RuntimeState): RuntimeHealthEvaluation {
+    fun evaluateRecoveryHealth(state: RuntimeState, isServiceRunning: Boolean = false): RuntimeHealthEvaluation {
         if (!state.shouldBeRunning) {
             return RuntimeHealthEvaluation(
                 isHealthy = true,
@@ -87,6 +87,13 @@ class RuntimeHealthPolicy(private val context: Context) {
                 isHealthy = false,
                 shouldRecover = false,
                 reason = "gps_disabled"
+            )
+        }
+        if (isServiceRunning) {
+            return RuntimeHealthEvaluation(
+                isHealthy = false,
+                shouldRecover = false,
+                reason = "heartbeat_stale_service_alive"
             )
         }
         return RuntimeHealthEvaluation(

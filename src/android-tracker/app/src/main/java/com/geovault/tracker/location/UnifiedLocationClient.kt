@@ -41,12 +41,11 @@ class UnifiedLocationClient(context: Context) {
         sessionRequest: UnifiedLocationSessionRequest,
         onError: (Throwable) -> Unit
     ): Boolean {
-        stopSession()
         return try {
             fusedClient.requestLocationUpdates(
                 sessionRequest.request,
                 sessionPendingIntent
-            )
+            ).addOnFailureListener { error -> onError(error) }
             true
         } catch (t: Throwable) {
             onError(t)

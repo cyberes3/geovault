@@ -221,7 +221,7 @@ class LocationFilterStateIsolationTest {
     }
 
     @Test
-    fun applyConfig_changingPhysicsField_resetsAllInternalState() {
+    fun applyConfig_changingPhysicsField_preservesCommittedAnchor() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -232,12 +232,13 @@ class LocationFilterStateIsolationTest {
             )
         )
         assertEquals(0L, filter.lastAcceptedTimestampMs)
+        val anchorLatLon = filter.lastAcceptedLatLon
 
         filter.applyConfig(
             LocationFilterConfig.Default.copy(policy = LocationFilterPolicy.Adjust)
         )
-        assertEquals(null, filter.lastAcceptedTimestampMs)
-        assertEquals(null, filter.lastAcceptedLatLon)
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
+        assertEquals(anchorLatLon, filter.lastAcceptedLatLon)
     }
 
     @Test
@@ -317,7 +318,7 @@ class LocationFilterStateIsolationTest {
     }
 
     @Test
-    fun applyConfig_changingKalmanProfile_resetsAnchor() {
+    fun applyConfig_changingKalmanProfile_preservesAnchor() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -332,11 +333,11 @@ class LocationFilterStateIsolationTest {
         filter.applyConfig(
             LocationFilterConfig.Default.copy(kalmanProfile = KalmanProfile.Conservative)
         )
-        assertEquals(null, filter.lastAcceptedTimestampMs)
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
     @Test
-    fun applyConfig_changingRollingWindowSeconds_resetsAnchor() {
+    fun applyConfig_changingRollingWindowSeconds_preservesAnchor() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -349,7 +350,7 @@ class LocationFilterStateIsolationTest {
         filter.applyConfig(
             LocationFilterConfig.Default.copy(rollingWindowSeconds = 10.0)
         )
-        assertEquals(null, filter.lastAcceptedTimestampMs)
+        assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
     @Test

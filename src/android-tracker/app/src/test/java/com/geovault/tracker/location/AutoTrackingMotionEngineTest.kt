@@ -56,6 +56,46 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
+    fun rejectedFix_clearsPendingPromotionStreak() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 1_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        engine.onRejectedFix(eventTimeMs = 2_000L)
+        val out = engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 3_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+    }
+
+    @Test
+    fun motionEvidence_twoHighConfidenceSamples_promotesWalkingToBiking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+
+        engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 1_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+        val out = engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 2_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+
+        assertEquals(TrackingMotionMode.BIKING, out.state.mode)
+    }
+
+    @Test
     fun demotion_isSingleSample() {
         // We want to drop to lower-power tracking quickly when motion
         // stops. Demotion is single-sample below the lower bound.

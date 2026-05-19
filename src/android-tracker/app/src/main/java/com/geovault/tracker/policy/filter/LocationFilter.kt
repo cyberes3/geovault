@@ -66,11 +66,7 @@ class LocationFilter(
     val lastAcceptedLatLon: Pair<Double, Double>? get() = previousAccepted?.let { it.latitude to it.longitude }
 
     fun reset() {
-        metricsEngine = buildMetricsEngine(config)
-        kalmanFilter = buildKalmanFilter(config)
-        anchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
-        movementCandidateGate = MovementCandidateGate(config.movementCandidate)
-        speedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
+        rebuildTransientState()
         previousAccepted = null
         lastSeenFix = null
         resumeAnchorGate.clear()
@@ -88,15 +84,18 @@ class LocationFilter(
      * filter's anchor or rolling state.
      *
      * Physics-affecting fields (kalman, policy, rolling window, anomaly
-     * thresholds) require rebuilding the metrics engine and kalman, so a
-     * change there triggers a full [reset]. The classification is owned by
-     * [LocationFilterConfig.requiresFilterStateReset].
+     * thresholds) require rebuilding transient scoring state. The committed
+     * anchor is intentionally preserved so profile changes and request
+     * reapplications cannot turn the next raw fix into an unconditional
+     * `first-fix` accept.
      */
     fun applyConfig(newConfig: LocationFilterConfig) {
         val oldConfig = config
         config = newConfig
         if (oldConfig.requiresFilterStateReset(newConfig)) {
-            reset()
+            rebuildTransientState()
+            lastSeenFix = null
+            resumeAnchorGate.clear()
         } else {
             anchorHealthTracker.applyConfig(newConfig.anchorHealth)
             movementCandidateGate.applyConfig(newConfig.movementCandidate)
@@ -121,6 +120,13 @@ class LocationFilter(
         if (previousAccepted != null) {
             resumeAnchorGate.start()
         }
+    }
+
+    fun seedAccepted(input: LocationInput) {
+        rebuildTransientState()
+        previousAccepted = input
+        lastSeenFix = input
+        resumeAnchorGate.clear()
     }
 
     /**
@@ -517,6 +523,14 @@ class LocationFilter(
      */
     private fun inflateCapForAnomaly(cap: Double, anomaly: Boolean): Double =
         if (anomaly) cap * ANOMALY_CAP_INFLATION else cap
+
+    private fun rebuildTransientState() {
+        metricsEngine = buildMetricsEngine(config)
+        kalmanFilter = buildKalmanFilter(config)
+        anchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
+        movementCandidateGate = MovementCandidateGate(config.movementCandidate)
+        speedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
+    }
 
     companion object {
         private fun buildMetricsEngine(config: LocationFilterConfig): LocationMetricsEngine =

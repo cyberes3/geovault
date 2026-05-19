@@ -186,6 +186,26 @@ object TrackPointPolicyEngine {
         filters[streamKey(source, trackId)]?.onMotionChanged()
     }
 
+    fun seedAccepted(
+        source: TrackPointSource,
+        trackId: String,
+        event: TrackPointEvent,
+        config: LocationFilterConfig,
+    ) {
+        val streamKey = streamKey(source, trackId)
+        val filter = filterFor(streamKey, config)
+        val input = LocationInput(
+            latitude = event.lat,
+            longitude = event.lon,
+            timestampMs = event.timestampMs,
+            elapsedRealtimeNanos = event.elapsedRealtimeNanos,
+            accuracyMeters = event.accuracyMeters,
+            speedMps = event.gpsSpeedMps,
+            bearingDegrees = event.gpsBearingDeg,
+        )
+        filter.seedAccepted(input)
+    }
+
     private fun filterFor(streamKey: String, config: LocationFilterConfig): LocationFilter {
         return filters.compute(streamKey) { _, existing ->
             when {
