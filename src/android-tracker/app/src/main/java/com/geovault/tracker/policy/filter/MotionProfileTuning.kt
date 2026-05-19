@@ -16,6 +16,7 @@ data class MotionProfileTuning(
     val rollingWindowSeconds: Double,
     val kinematicCap: KinematicCapConfig,
     val movementCandidate: MovementCandidateConfig,
+    val speedRecovery: SpeedRecoveryConfig,
     val anchorHealth: AnchorHealthConfig,
 ) {
     companion object {
@@ -41,6 +42,7 @@ data class MotionProfileTuning(
                 requiredPromotableFixes = 2,
                 promotionAccuracyMeters = 30.0,
             ),
+            speedRecovery = SpeedRecoveryConfig.Disabled,
             anchorHealth = AnchorHealthConfig(
                 repeatedSnapLimit = 2,
                 disagreementDistanceMeters = 45.0,
@@ -70,6 +72,20 @@ data class MotionProfileTuning(
                 requiredPromotableFixes = 2,
                 promotionAccuracyMeters = 40.0,
             ),
+            speedRecovery = SpeedRecoveryConfig(
+                enabled = true,
+                maxRecoverableSpeedMps = 42.0,
+                maxAccuracyMeters = 35.0,
+                confirmationWindowMs = 45_000L,
+                requiredConsistentFixes = 3,
+                requiredPromotableFixes = 2,
+                minDtSeconds = 2.0,
+                maxDtSeconds = 45.0,
+                maxSpeedDeltaMps = 12.0,
+                maxCourseDeltaDegrees = 35.0,
+                minContinuityMeters = 35.0,
+                continuitySpeedMultiplier = 1.25,
+            ),
             anchorHealth = AnchorHealthConfig(
                 repeatedSnapLimit = 3,
                 disagreementDistanceMeters = 90.0,
@@ -94,6 +110,7 @@ data class MotionProfileTuning(
                 requiredPromotableFixes = 1,
                 promotionAccuracyMeters = 80.0,
             ),
+            speedRecovery = SpeedRecoveryConfig.Disabled,
             anchorHealth = AnchorHealthConfig.Default,
         )
     }
@@ -137,6 +154,38 @@ data class MovementCandidateConfig(
             requiredConsistentFixes = 1,
             requiredPromotableFixes = 1,
             promotionAccuracyMeters = Double.MAX_VALUE,
+        )
+    }
+}
+
+data class SpeedRecoveryConfig(
+    val enabled: Boolean,
+    val maxRecoverableSpeedMps: Double,
+    val maxAccuracyMeters: Double,
+    val confirmationWindowMs: Long,
+    val requiredConsistentFixes: Int,
+    val requiredPromotableFixes: Int,
+    val minDtSeconds: Double,
+    val maxDtSeconds: Double,
+    val maxSpeedDeltaMps: Double,
+    val maxCourseDeltaDegrees: Double,
+    val minContinuityMeters: Double,
+    val continuitySpeedMultiplier: Double,
+) {
+    companion object {
+        val Disabled: SpeedRecoveryConfig = SpeedRecoveryConfig(
+            enabled = false,
+            maxRecoverableSpeedMps = Double.MAX_VALUE,
+            maxAccuracyMeters = 0.0,
+            confirmationWindowMs = 0L,
+            requiredConsistentFixes = 1,
+            requiredPromotableFixes = 1,
+            minDtSeconds = 0.0,
+            maxDtSeconds = Double.MAX_VALUE,
+            maxSpeedDeltaMps = Double.MAX_VALUE,
+            maxCourseDeltaDegrees = 180.0,
+            minContinuityMeters = Double.MAX_VALUE,
+            continuitySpeedMultiplier = 1.0,
         )
     }
 }

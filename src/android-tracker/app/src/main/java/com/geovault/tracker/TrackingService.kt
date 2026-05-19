@@ -943,10 +943,11 @@ class TrackingService : Service() {
                     "lat=${location.latitude} lon=${location.longitude}"
             )
         }
-        if (result.accepted) {
-            // Committed lat/lon (post-snap for `UNCERTAINTY_SUPPRESSED`,
-            // post-clip for `OUTLIER_CAPPED`) -- matches what lands in the
-            // database, not the raw chipset coords.
+        if (result.accepted && result.pointPersisted) {
+            // Committed lat/lon (post-clip for `OUTLIER_CAPPED`) --
+            // matches what lands in the database, not the raw chipset
+            // coords. Internal snaps advance runtime state without
+            // emitting a duplicate point, so they do not reach this log.
             val committed = result.lastFilteredLocation ?: location
             val reason = result.policyMetrics?.reason ?: result.adjustmentReason ?: "accept"
             val source = if (result.adjustmentReason ==

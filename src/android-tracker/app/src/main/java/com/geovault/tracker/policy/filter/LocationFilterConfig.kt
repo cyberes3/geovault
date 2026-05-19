@@ -33,6 +33,9 @@ package com.geovault.tracker.policy.filter
  * @property rollingWindowSeconds window over which the metrics engine
  *   tracks the rolling average step distance, used to derive the third
  *   uncertainty cap (`rollingCap`). Anything below 3 s makes the cap noisy.
+ * @property speedRecovery profile-tuned confirmation for sustained motion
+ *   above the nominal speed cap. This is generic recovery evidence, not a
+ *   route or activity special case.
  * @property resumeConfirmationMinDistanceMeters post-pause raw displacement
  *   that must be confirmed by a second consistent fix before becoming the
  *   new anchor.
@@ -60,6 +63,7 @@ data class LocationFilterConfig(
     val rollingWindowSeconds: Double = MotionProfileTuning.Driving.rollingWindowSeconds,
     val kinematicCap: KinematicCapConfig = MotionProfileTuning.Driving.kinematicCap,
     val movementCandidate: MovementCandidateConfig = MotionProfileTuning.Driving.movementCandidate,
+    val speedRecovery: SpeedRecoveryConfig = MotionProfileTuning.Driving.speedRecovery,
     val anchorHealth: AnchorHealthConfig = MotionProfileTuning.Driving.anchorHealth,
     val resumeConfirmationMinDistanceMeters: Double = 150.0,
     val resumeConfirmationConsistencyMeters: Double = 75.0,
@@ -95,6 +99,7 @@ data class LocationFilterConfig(
             burstWindowSeconds != other.burstWindowSeconds ||
             kinematicCap != other.kinematicCap ||
             movementCandidate != other.movementCandidate ||
+            speedRecovery != other.speedRecovery ||
             anchorHealth != other.anchorHealth ||
             resumeConfirmationMinDistanceMeters != other.resumeConfirmationMinDistanceMeters ||
             resumeConfirmationConsistencyMeters != other.resumeConfirmationConsistencyMeters ||
@@ -119,6 +124,7 @@ data class LocationFilterConfig(
             rollingWindowSeconds = tuning.rollingWindowSeconds,
             kinematicCap = tuning.kinematicCap,
             movementCandidate = tuning.movementCandidate,
+            speedRecovery = tuning.speedRecovery,
             anchorHealth = tuning.anchorHealth,
             maxFutureSkewMs = maxFutureSkewMs,
             freshnessTtlMs = freshnessTtlMs,

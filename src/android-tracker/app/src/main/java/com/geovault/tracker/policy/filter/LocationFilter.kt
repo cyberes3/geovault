@@ -45,6 +45,7 @@ class LocationFilter(
     private var resumeAnchorGate: ResumeAnchorGate = ResumeAnchorGate()
     private var anchorHealthTracker: AnchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
     private var movementCandidateGate: MovementCandidateGate = MovementCandidateGate(config.movementCandidate)
+    private var speedCapRecoveryGate: SpeedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
 
     /**
      * Last fix the filter saw whose accuracy passed the gate, regardless
@@ -69,6 +70,7 @@ class LocationFilter(
         kalmanFilter = buildKalmanFilter(config)
         anchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
         movementCandidateGate = MovementCandidateGate(config.movementCandidate)
+        speedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
         previousAccepted = null
         lastSeenFix = null
         resumeAnchorGate.clear()
@@ -98,6 +100,7 @@ class LocationFilter(
         } else {
             anchorHealthTracker.applyConfig(newConfig.anchorHealth)
             movementCandidateGate.applyConfig(newConfig.movementCandidate)
+            speedCapRecoveryGate.applyConfig(newConfig.speedRecovery)
         }
     }
 
@@ -114,6 +117,7 @@ class LocationFilter(
         kalmanFilter.reset()
         lastSeenFix = null
         movementCandidateGate.reset()
+        speedCapRecoveryGate.reset()
         if (previousAccepted != null) {
             resumeAnchorGate.start()
         }
@@ -141,6 +145,7 @@ class LocationFilter(
             // is not a usable reference for the next frame's anomaly
             // calculation.
             anchorHealthTracker.onReject(metrics)
+            speedCapRecoveryGate.reset()
             return LocationFilterResult.reject(reason = "low-accuracy", metrics = metrics)
         }
 
@@ -184,6 +189,7 @@ class LocationFilter(
         if (metrics.dtSeconds > 0.0 && metrics.impliedSpeedMps > config.maxImpliedSpeedMps) {
             return resolveSpeedSpike(input = input, previous = previous, metrics = metrics)
         }
+        speedCapRecoveryGate.reset()
 
         if (movementCandidateGate.assess(
                 input = input,
@@ -380,8 +386,14 @@ class LocationFilter(
                 reason = "speed-cap",
                 metrics = metrics,
             )
-            LocationFilterPolicy.Conservative ->
-                reject(reason = "speed-cap-exceeded", metrics = metrics)
+            LocationFilterPolicy.Conservative -> when (speedCapRecoveryGate.evaluate(input = input, metrics = metrics)) {
+                SpeedCapRecoveryGate.Decision.Confirmed ->
+                    commitAccept(input = input, reason = "speed-cap-recovered", metrics = metrics)
+                SpeedCapRecoveryGate.Decision.Hold ->
+                    LocationFilterResult.hold(reason = "speed-cap-unconfirmed", metrics = metrics)
+                SpeedCapRecoveryGate.Decision.Reject ->
+                    reject(reason = "speed-cap-exceeded", metrics = metrics)
+            }
         }
     }
 
@@ -466,6 +478,7 @@ class LocationFilter(
             anchorHealthTracker.onCommit(metrics.rawDistanceMeters)
             movementCandidateGate.reset()
         }
+        speedCapRecoveryGate.reset()
         // Kalman is mutated up-front in [smoothDecisionDistance]; calling
         // update() again here would double-count the observation and damp
         // the smoother.
@@ -474,6 +487,7 @@ class LocationFilter(
 
     private fun reject(reason: String, metrics: LocationMetrics): LocationFilterResult {
         anchorHealthTracker.onReject(metrics)
+        speedCapRecoveryGate.reset()
         return LocationFilterResult.reject(reason = reason, metrics = metrics)
     }
 

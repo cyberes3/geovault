@@ -214,6 +214,76 @@ class LocationIngestCoordinatorTest {
     }
 
     @Test
+    fun ingest_snapInternal_advancesInternalLocationWithoutPersistingDuplicatePoint() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val settings = TrackerSettings(accuracyFilterMeters = 100f)
+        var previousAccepted: Location? = null
+        var totalDistance = 0f
+        val baseNowMs = 1_700_000_000_000L
+
+        repeat(3) { index ->
+            val timeMs = baseNowMs + (index + 1) * 1_000L
+            val location = Location("gps").apply {
+                latitude = 10.0
+                longitude = 20.0
+                accuracy = 50f
+                time = timeMs
+            }
+            val result = coordinator.ingest(
+                trackId = "tracker-1",
+                location = location,
+                settings = settings,
+                motionMode = TrackingMotionMode.BIKING,
+                previousAcceptedLocation = previousAccepted,
+                sessionVisibleBoundaryId = 0L,
+                bypassFilters = false,
+                propsJson = null,
+                totalDistanceMeters = totalDistance,
+                queuedTrackerId = "tracker-1",
+                nowMs = timeMs,
+                nowElapsedRealtimeNanos = location.elapsedRealtimeNanos,
+                isMockLocation = false,
+            )
+            assertTrue("prime idx=$index result=$result", result.accepted)
+            assertTrue("prime idx=$index result=$result", result.pointPersisted)
+            previousAccepted = result.lastFilteredLocation
+            totalDistance = result.nextSessionDistanceMeters
+        }
+
+        val snapLocation = Location("gps").apply {
+            latitude = 10.00001
+            longitude = 20.00001
+            accuracy = 50f
+            time = baseNowMs + 4_000L
+        }
+        val snap = coordinator.ingest(
+            trackId = "tracker-1",
+            location = snapLocation,
+            settings = settings,
+            motionMode = TrackingMotionMode.BIKING,
+            previousAcceptedLocation = previousAccepted,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = totalDistance,
+            queuedTrackerId = "tracker-1",
+            nowMs = baseNowMs + 4_000L,
+            nowElapsedRealtimeNanos = snapLocation.elapsedRealtimeNanos,
+            isMockLocation = false,
+        )
+
+        assertTrue(snap.accepted)
+        assertFalse(snap.pointPersisted)
+        assertEquals(3, dao.getCount())
+        assertEquals(TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED, snap.adjustmentReason)
+        assertEquals(10.0, snap.lastFilteredLocation?.latitude ?: 0.0, 0.0)
+        assertEquals(20.0, snap.lastFilteredLocation?.longitude ?: 0.0, 0.0)
+        assertEquals(baseNowMs + 4_000L, snap.lastFilteredLocation?.time)
+        assertEquals(totalDistance, snap.nextSessionDistanceMeters, 0.0f)
+    }
+
+    @Test
     fun ingest_withoutBypass_rejectsStaleFix() {
         val dao = FakeLocationDao()
         val coordinator = LocationIngestCoordinator(dao)

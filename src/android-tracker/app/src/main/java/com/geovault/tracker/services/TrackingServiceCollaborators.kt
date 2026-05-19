@@ -5,6 +5,7 @@ import androidx.core.location.LocationCompat
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
+import com.geovault.tracker.policy.TrackPointEmissionDecision
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointDecisionMetrics
@@ -14,9 +15,9 @@ import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.settings.TrackerSettings
-import kotlin.math.abs
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.abs
 
 data class LocationIngestResult(
     val accepted: Boolean,
@@ -78,6 +79,17 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             )
             if (!decision.accepted || decision.canonicalEvent == null) {
+                if (decision.emissionDecision == TrackPointEmissionDecision.SNAP_INTERNAL) {
+                    return internalSnap(
+                        rawLocation = location,
+                        previousAcceptedLocation = previousAcceptedLocation,
+                        propsJson = propsJson,
+                        currentSessionDistanceMeters = totalDistanceMeters,
+                        queuedTrackerId = queuedTrackerId,
+                        sessionVisibleBoundaryId = sessionVisibleBoundaryId,
+                        policyMetrics = decision.metrics,
+                    )
+                }
                 return ignored(
                     previousAcceptedLocation = previousAcceptedLocation,
                     accuracy = accuracy,
@@ -370,6 +382,45 @@ class LocationIngestCoordinator(private val locationDao: LocationDao) {
             lastTrackedLatitude = null,
             lastTrackedLongitude = null,
             lastTrackedTimestampMs = 0L,
+            lastTrackedPropsJson = propsJson,
+            policyMetrics = policyMetrics,
+        )
+    }
+
+    private fun internalSnap(
+        rawLocation: Location,
+        previousAcceptedLocation: Location?,
+        propsJson: String?,
+        currentSessionDistanceMeters: Float,
+        queuedTrackerId: String,
+        sessionVisibleBoundaryId: Long,
+        policyMetrics: TrackPointDecisionMetrics?,
+    ): LocationIngestResult {
+        val internalLocation = Location(previousAcceptedLocation ?: rawLocation).apply {
+            policyMetrics?.committedLatitude?.let { latitude = it }
+            policyMetrics?.committedLongitude?.let { longitude = it }
+            time = rawLocation.time
+            elapsedRealtimeNanos = rawLocation.elapsedRealtimeNanos
+            if (rawLocation.hasAccuracy()) accuracy = rawLocation.accuracy
+            if (rawLocation.hasSpeed()) speed = rawLocation.speed
+            if (rawLocation.hasBearing()) bearing = rawLocation.bearing
+        }
+        val visible = locationDao.getCurrentSessionCountForTracker(
+            trackerId = queuedTrackerId,
+            sessionBoundaryId = sessionVisibleBoundaryId,
+        )
+        return LocationIngestResult(
+            accepted = true,
+            rejectReason = null,
+            adjustmentReason = TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED,
+            pointPersisted = false,
+            nextSessionDistanceMeters = currentSessionDistanceMeters,
+            lastFilteredLocation = internalLocation,
+            queuedPointsVisible = visible,
+            lastAccuracyMeters = if (rawLocation.hasAccuracy()) rawLocation.accuracy else null,
+            lastTrackedLatitude = previousAcceptedLocation?.latitude,
+            lastTrackedLongitude = previousAcceptedLocation?.longitude,
+            lastTrackedTimestampMs = previousAcceptedLocation?.time ?: 0L,
             lastTrackedPropsJson = propsJson,
             policyMetrics = policyMetrics,
         )

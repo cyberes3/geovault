@@ -249,6 +249,168 @@ class LocationFilterTest {
     }
 
     @Test
+    fun bikingProfile_anonymizedSustainedSpeedReplay_recoversAfterConfirmation() {
+        val filter = LocationFilter(bikingConfig())
+        filter.evaluate(
+            LocationInput(
+                latitude = 40.45614285555482,
+                longitude = -102.53315143997371,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 34f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val first = filter.evaluate(
+            LocationInput(
+                latitude = 40.46227669038623,
+                longitude = -102.53238416055738,
+                timestampMs = 20_000L,
+                accuracyMeters = 5f,
+                speedMps = 34f,
+                bearingDegrees = 0f,
+            )
+        )
+        val second = filter.evaluate(
+            LocationInput(
+                latitude = 40.46558636867255,
+                longitude = -102.53195802460014,
+                timestampMs = 30_000L,
+                accuracyMeters = 5f,
+                speedMps = 40f,
+                bearingDegrees = 0f,
+            )
+        )
+        val recovered = filter.evaluate(
+            LocationInput(
+                latitude = 40.46693753146380,
+                longitude = -102.53181234712302,
+                timestampMs = 34_000L,
+                accuracyMeters = 5f,
+                speedMps = 40f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Hold, first.decision)
+        assertEquals("speed-cap-unconfirmed", first.reason)
+        assertEquals(LocationFilterResult.Decision.Hold, second.decision)
+        assertEquals(LocationFilterResult.Decision.Commit, recovered.decision)
+        assertEquals("speed-cap-recovered", recovered.reason)
+    }
+
+    @Test
+    fun bikingProfile_isolatedExtremeSpeedSpike_isRejected() {
+        val filter = LocationFilter(bikingConfig())
+        val lon = -81.1011
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = lon,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 25f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val spike = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097 + 0.008100,
+                longitude = lon,
+                timestampMs = 10_000L,
+                accuracyMeters = 5f,
+                speedMps = 90f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Reject, spike.decision)
+        assertEquals("speed-cap-exceeded", spike.reason)
+    }
+
+    @Test
+    fun bikingProfile_zigZagHighSpeedCandidates_doNotRecover() {
+        val filter = LocationFilter(bikingConfig())
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 25f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val first = filter.evaluate(
+            LocationInput(
+                latitude = 24.711945,
+                longitude = -81.1011,
+                timestampMs = 10_000L,
+                accuracyMeters = 5f,
+                speedMps = 25f,
+                bearingDegrees = 0f,
+            )
+        )
+        val turn = filter.evaluate(
+            LocationInput(
+                latitude = 24.711945,
+                longitude = -81.098629,
+                timestampMs = 20_000L,
+                accuracyMeters = 5f,
+                speedMps = 25f,
+                bearingDegrees = 90f,
+            )
+        )
+        val afterTurn = filter.evaluate(
+            LocationInput(
+                latitude = 24.711945,
+                longitude = -81.096158,
+                timestampMs = 30_000L,
+                accuracyMeters = 5f,
+                speedMps = 25f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Hold, first.decision)
+        assertEquals(LocationFilterResult.Decision.Hold, turn.decision)
+        assertEquals(LocationFilterResult.Decision.Hold, afterTurn.decision)
+    }
+
+    @Test
+    fun walkingProfile_speedRecoveryDoesNotLoosenNominalCap() {
+        val filter = LocationFilter(walkingConfig())
+        val lon = -81.1011
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = lon,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 1f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val spike = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097 + 0.001000,
+                longitude = lon,
+                timestampMs = 10_000L,
+                accuracyMeters = 5f,
+                speedMps = 11f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Reject, spike.decision)
+        assertEquals("speed-cap-exceeded", spike.reason)
+    }
+
+    @Test
     fun conservativePolicy_suppressesStationaryJitterWithinAccuracyEnvelope() {
         // Realistic standstill noise: 8.9 m raw step with ~20 m accuracy
         // means RSS-corrected motion is zero -- the chipset is telling us
@@ -926,4 +1088,22 @@ class LocationFilterTest {
         )
         assertEquals(LocationFilterResult.Decision.Commit, borderline.decision)
     }
+
+    private fun bikingConfig(): LocationFilterConfig =
+        LocationFilterConfig.fromTuning(
+            tuning = MotionProfileTuning.Biking,
+            trackingAccuracyThresholdMeters = 50.0,
+            maxFutureSkewMs = 0L,
+            freshnessTtlMs = 0L,
+            normalizeSecondsTimestamps = false,
+        )
+
+    private fun walkingConfig(): LocationFilterConfig =
+        LocationFilterConfig.fromTuning(
+            tuning = MotionProfileTuning.Walking,
+            trackingAccuracyThresholdMeters = 50.0,
+            maxFutureSkewMs = 0L,
+            freshnessTtlMs = 0L,
+            normalizeSecondsTimestamps = false,
+        )
 }
