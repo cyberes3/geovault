@@ -12,12 +12,19 @@ internal object TrackerMapTrailCommitPolicy {
         reloadReason: TrackerMapTrailReloadReason,
         serverMergedTrail: List<QueuedLocation>,
         preReloadFilteredTrail: List<QueuedLocation>,
+        trackerId: String = "",
     ): List<QueuedLocation> {
+        val normalizedTrackerId = trackerId.trim()
+        val fallbackTrail = if (normalizedTrackerId.isEmpty()) {
+            preReloadFilteredTrail
+        } else {
+            preReloadFilteredTrail.filter { it.trackerId.trim() == normalizedTrackerId }
+        }
         if (shouldPreserveTrailOnEmptyMerge(reloadReason) &&
             serverMergedTrail.isEmpty() &&
-            preReloadFilteredTrail.isNotEmpty()
+            fallbackTrail.isNotEmpty()
         ) {
-            return preReloadFilteredTrail
+            return fallbackTrail
         }
         return serverMergedTrail
     }

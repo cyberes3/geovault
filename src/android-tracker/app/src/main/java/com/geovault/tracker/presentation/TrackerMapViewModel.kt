@@ -731,11 +731,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     mapVisibility = visibility,
                 )
             }.distinctUntilChangedBy { it.fingerprint }
-                .collectLatest { nextMetadata ->
+                .collect { nextMetadata ->
                     val previousMetadata = lastRenderMetadata
                     lastRenderMetadata = nextMetadata
                     val diff = TrackerMapRenderMetadataPolicy.diff(previousMetadata, nextMetadata)
-                    if (!diff.fingerprintChanged) return@collectLatest
+                    if (!diff.fingerprintChanged) return@collect
 
                     _uiState.value = _uiState.value.copy(renderMetadataSignature = nextMetadata.fingerprint)
 
@@ -750,13 +750,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             rosterTrackerIds = visibleMapRosterTrackerIds(),
                             groupTrackerIds = groupSelection.trackerIds,
                         )
+                        GeoVaultCaptureLog.i(
+                            TAG,
+                            "recent_data_window_diff changed=${diff.recentDataWindowChangedTrackerIds.sorted()} refresh=${action.serverRefreshTrackerIds.sorted()} mode=${state.mode}"
+                        )
                         if (action.reprojectImmediately) {
                             publishRenderPackage()
                         }
                         if (action.serverRefreshTrackerIds.isNotEmpty()) {
                             stripGeometryInStore(action.invalidateGeometryCache)
                             lastTrailLoadSeed = null
-                            recentDataWindowRefreshTrackerIds = action.serverRefreshTrackerIds
+                            recentDataWindowRefreshTrackerIds =
+                                recentDataWindowRefreshTrackerIds + action.serverRefreshTrackerIds
                             requestRuntimeTrailReload(TrackerMapTrailReloadReason.RecentDataWindowChange)
                         }
                     } else {
@@ -1614,15 +1619,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             ).recentDataWindowByTracker
     }
 
-    private fun stripGeometryInStore(trackerIds: Set<String>) {
+    private suspend fun stripGeometryInStore(trackerIds: Set<String>) {
         if (trackerIds.isEmpty()) return
-        val stripped = TrackerMapGeometryCachePolicy.stripGeometry(
-            trackers = trackerManagementStateStore.trackers.value,
-            trackerIds = trackerIds,
-        )
-        trackerManagementStateStore.publishTrackers(stripped)
         trackerManagementRepository.stripCachedGeometry(trackerIds)
         trackerManagementRepository.invalidateGeometryRequests(trackerIds)
+        sessionRequestDeduper.clear()
+        GeoVaultCaptureLog.i(TAG, "map_geometry_invalidated_for_window_change trackerIds=${trackerIds.sorted()}")
     }
 
     /**
@@ -2071,12 +2073,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 reloadReason = reason,
                 serverMergedTrail = serverMergedTrail,
                 preReloadFilteredTrail = preReloadSnapshot?.singleTrail.orEmpty(),
+                trackerId = plan.activeTrackerId,
             )
+            val refreshedFallbackIds = if (recentDataWindowRefreshTrackerIds.isNotEmpty()) {
+                recentDataWindowRefreshTrackerIds
+            } else {
+                plan.trackerIds
+            }
             val mergedMultiTrails = TrackerMapTrailCommitPolicy.resolveMultiTrails(
                 reloadReason = reason,
                 serverMergedTrails = serverMergedMultiTrails,
                 preReloadFilteredTrails = preReloadSnapshot?.renderTrailsByTracker.orEmpty(),
-                refreshedTrackerIds = recentDataWindowRefreshTrackerIds,
+                refreshedTrackerIds = refreshedFallbackIds,
             )
             mergeCommitted = MergedTrailResult(mergedTrail, mergedMultiTrails)
             latest.copy(
@@ -2100,6 +2108,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             lastTrailLoadSeed = null
             return
         }
+        GeoVaultCaptureLog.i(
+            TAG,
+            "trail_reload_committed reason=$reason singlePoints=${finalMerge.trail.size} multiTrackers=${finalMerge.multiTrails.size} windowRefreshIds=${recentDataWindowRefreshTrackerIds.sorted()}"
+        )
         if (pendingFitAfterReload &&
             (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
         ) {

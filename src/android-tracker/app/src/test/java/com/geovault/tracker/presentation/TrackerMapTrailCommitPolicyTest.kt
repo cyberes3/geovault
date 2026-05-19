@@ -32,6 +32,20 @@ class TrackerMapTrailCommitPolicyTest {
     }
 
     @Test
+    fun resolveSingleTrail_filtersFallbackToActiveTracker() {
+        val resolved = TrackerMapTrailCommitPolicy.resolveSingleTrail(
+            reloadReason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
+            serverMergedTrail = emptyList(),
+            preReloadFilteredTrail = listOf(
+                point(time = 10L, trackerId = "old"),
+                point(time = 20L, trackerId = "new"),
+            ),
+            trackerId = "new",
+        )
+        assertEquals(listOf("new"), resolved.map { it.trackerId })
+    }
+
+    @Test
     fun resolveSingleTrail_mapContextChange_emptyServer_doesNotPreserve() {
         val resolved = TrackerMapTrailCommitPolicy.resolveSingleTrail(
             reloadReason = TrackerMapTrailReloadReason.MapContextChange,
@@ -46,6 +60,18 @@ class TrackerMapTrailCommitPolicyTest {
         val fallback = mapOf("t1" to listOf(point(time = 5L)))
         val resolved = TrackerMapTrailCommitPolicy.resolveMultiTrails(
             reloadReason = TrackerMapTrailReloadReason.RecentDataWindowChange,
+            serverMergedTrails = mapOf("t1" to emptyList()),
+            preReloadFilteredTrails = fallback,
+            refreshedTrackerIds = setOf("t1"),
+        )
+        assertEquals(fallback["t1"], resolved["t1"])
+    }
+
+    @Test
+    fun resolveMultiTrails_explicitLoad_usesFallbackForRefreshScope() {
+        val fallback = mapOf("t1" to listOf(point(time = 5L)))
+        val resolved = TrackerMapTrailCommitPolicy.resolveMultiTrails(
+            reloadReason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
             serverMergedTrails = mapOf("t1" to emptyList()),
             preReloadFilteredTrails = fallback,
             refreshedTrackerIds = setOf("t1"),
@@ -92,10 +118,10 @@ class TrackerMapTrailCommitPolicyTest {
         ))
     }
 
-    private fun point(time: Long): QueuedLocation {
+    private fun point(time: Long, trackerId: String = "t1"): QueuedLocation {
         return QueuedLocation(
             id = time,
-            trackerId = "t1",
+            trackerId = trackerId,
             time = time,
             latitude = 37.0,
             longitude = -122.0,
