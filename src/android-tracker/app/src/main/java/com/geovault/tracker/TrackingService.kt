@@ -150,6 +150,7 @@ class TrackingService : Service() {
     private var lowAccuracyFallbackJob: Job? = null
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
     private val autoTrackingMotionEvidenceGate = AutoTrackingMotionEvidenceGate()
+    private var lastAutoMotionCapEvidenceAtMs: Long = 0L
     private var autoModeTickJob: Job? = null
     private var locationRequestReapplyRetryJob: Job? = null
     private var lastAppliedLocationRequestKey: LocationRequestKey? = null
@@ -282,8 +283,14 @@ class TrackingService : Service() {
         private const val ELASTICITY_SPEED_BUCKET_SIZE_MPS = 5f
         private const val ELASTICITY_MULTIPLIER = 0.35f
         private const val ELASTICITY_MAX_SPEED_BUCKET = 8
-        private const val WALKING_ELASTICITY_MAX_SPEED_BUCKET = 2
         private const val ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS = 0.5f
+        // After the evidence gate has confirmed a cap-exceeded promotion
+        // signal, treat BAD_ACCURACY/STALE rejects in the immediate
+        // aftermath as transient chipset noise instead of streak-clearing
+        // counter-evidence. Tuned against the morning real-drive log,
+        // where genuine cap-exceeded fixes were interleaved with stale
+        // duplicates emitted by FusedLocationProvider.
+        private const val AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS = 10_000L
 
         // Threshold above which observed/smoothed speed counts as "user is
         // really moving". Used to override the conservative location filter
@@ -710,6 +717,7 @@ class TrackingService : Service() {
         latestObservedRawLocation = null
         clearPausedFreshnessProbe(reason = "start_tracking", clearLastFreshnessTimestamp = true)
         lowAccuracyFallbackCandidate = null
+        lastAutoMotionCapEvidenceAtMs = 0L
         lowAccuracyFallbackTimerArmedAtMs = 0L
         lowAccuracyFallbackEmitCountThisSession = 0
         lowAccuracyFallbackArmCountThisSession = 0
@@ -1053,11 +1061,28 @@ class TrackingService : Service() {
                 if (!evidenceConsumed) {
                     // Rejected fixes are not motion evidence unless the
                     // dedicated evidence gate has confirmed an accurate,
-                    // continuous speed-cap sequence.
-                    processAutoTrackingOutput(
-                        output = autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
-                        reason = "rejected_fix"
-                    )
+                    // continuous speed-cap sequence. Within a short window
+                    // of a confirmed cap-exceeded evidence event though,
+                    // ignore BAD_ACCURACY/STALE rejects so a single noisy
+                    // duplicate from FusedLocationProvider cannot wipe out
+                    // the pending promotion streak.
+                    val isTransientReject = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
+                        result.rejectReason == TrackPointRejectReason.STALE
+                    val withinCapWindow = lastAutoMotionCapEvidenceAtMs > 0L &&
+                        (nowMs - lastAutoMotionCapEvidenceAtMs) <=
+                        AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS
+                    if (!(isTransientReject && withinCapWindow)) {
+                        processAutoTrackingOutput(
+                            output = autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
+                            reason = "rejected_fix"
+                        )
+                    } else {
+                        runtimeTelemetry.event(
+                            name = "auto_motion_streak_preserved",
+                            details = "reason=${result.rejectReason} " +
+                                "elapsedSinceCapEvidenceMs=${nowMs - lastAutoMotionCapEvidenceAtMs}"
+                        )
+                    }
                 }
             }
             broadcastSessionStats()
@@ -2386,6 +2411,7 @@ class TrackingService : Service() {
             metrics = metrics,
             eventTimeMs = eventTimeMs,
         ) ?: return false
+        lastAutoMotionCapEvidenceAtMs = eventTimeMs
         val modeBefore = autoTrackingMotionEngine.snapshot().mode
         val output = autoTrackingMotionEngine.onMotionEvidence(
             speedMps = evidence.speedMps,
@@ -2396,7 +2422,8 @@ class TrackingService : Service() {
             name = "auto_motion_evidence",
             details = "modeBefore=$modeBefore modeAfter=${output.state.mode} " +
                 "reason=${metrics.reason ?: "unknown"} speed=${evidence.speedMps} " +
-                "accuracy=${metrics.accuracyMeters ?: -1f} dt=${metrics.elapsedSeconds}"
+                "accuracy=${metrics.accuracyMeters ?: -1f} dt=${metrics.elapsedSeconds} " +
+                "path=${evidence.path}"
         )
         processAutoTrackingOutput(
             output = output,
@@ -2411,7 +2438,7 @@ class TrackingService : Service() {
             reapplyLocationRequestIfActive("auto_mode_$reason")
             runtimeTelemetry.event(
                 name = "auto_mode_changed",
-                details = "mode=${output.state.mode} reason=$reason"
+                details = "mode=${output.state.mode} reason=$reason path=${output.transitionPath}"
             )
         }
         syncRuntimeStateStore()
@@ -2434,8 +2461,7 @@ class TrackingService : Service() {
         if (baseDistanceMeters <= 0f) return
         val accuracyThresholdMeters = resolveCurrentAccuracyFilter()
         if (measuredAccuracyMeters == null || measuredAccuracyMeters > accuracyThresholdMeters) return
-        val nextBucketRaw = computeElasticitySpeedBucket(observedSpeedMps)
-        val nextBucket = computeElasticityModeBoundBucket(nextBucketRaw, autoTrackingMotionEngine.snapshot().mode)
+        val nextBucket = computeElasticitySpeedBucket(observedSpeedMps)
         val nextDistance = computeElasticDistanceFilterMeters(baseDistanceMeters, nextBucket)
         if (!nextDistance.isFinite() || nextDistance < baseDistanceMeters) return
         val currentDistance = elasticDistanceOverrideMeters ?: baseDistanceMeters
@@ -2999,13 +3025,6 @@ class TrackingService : Service() {
         if (speedBucket <= 0 || base <= 0f) return base
         val extra = base * ELASTICITY_MULTIPLIER * speedBucket.toFloat()
         return (base + extra).coerceAtMost(TrackerSettings.MAX_DISTANCE_FILTER_METERS)
-    }
-
-    private fun computeElasticityModeBoundBucket(speedBucket: Int, motionMode: TrackingMotionMode): Int {
-        return when (motionMode) {
-            TrackingMotionMode.WALKING -> speedBucket.coerceIn(0, WALKING_ELASTICITY_MAX_SPEED_BUCKET)
-            TrackingMotionMode.BIKING, TrackingMotionMode.DRIVING -> speedBucket.coerceIn(0, ELASTICITY_MAX_SPEED_BUCKET)
-        }
     }
 
     private fun logNotificationSurfaceDiagnostics(

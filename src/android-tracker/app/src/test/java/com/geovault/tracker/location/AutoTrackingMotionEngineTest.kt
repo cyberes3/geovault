@@ -124,6 +124,48 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
+    fun acceptedFix_twoSamplesWellAboveBikingUpper_skipsDirectlyToDriving() {
+        // When the observed speed is clearly highway-class (well above
+        // 1.5 * BIKING_TO_DRIVING_UPPER_MPS = 13.5 m/s), the WALKING->BIKING
+        // intermediate is wasted cadence. Two samples at 22 m/s skip
+        // straight to DRIVING.
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        // First sample only arms the streak.
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+        val out = engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+        assertEquals(TransitionPath.SKIP_TO_DRIVING, out.transitionPath)
+    }
+
+    @Test
+    fun acceptedFix_borderlineBikingSpeed_doesNotSkipToDriving() {
+        // Bursts around 6 m/s are bicycling-class. The skip only kicks in
+        // strictly above 13.5 m/s; 6 m/s must still go through BIKING.
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 6f, eventTimeMs = 1_000L)
+        val out = engine.onAcceptedFix(speedMps = 6f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.BIKING, out.state.mode)
+        assertEquals(TransitionPath.LADDER, out.transitionPath)
+    }
+
+    @Test
+    fun acceptedFix_observedSpeedAboveEma_drivesPromotionDecision() {
+        // A 22 m/s observation has an EMA contribution of 6.6 m/s on the
+        // first sample (0.30 alpha over a 0 baseline). The decision speed
+        // should use max(EMA, observed) so the promotion path sees 22 m/s,
+        // not 6.6 m/s. Two such samples therefore reach DRIVING via the
+        // skip even though the EMA never crosses 13.5 m/s on sample 1.
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        val out = engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+    }
+
+    @Test
     fun periodicTick_decays_speed() {
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)

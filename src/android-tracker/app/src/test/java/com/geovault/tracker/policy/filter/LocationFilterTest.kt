@@ -250,6 +250,11 @@ class LocationFilterTest {
 
     @Test
     fun bikingProfile_anonymizedSustainedSpeedReplay_recoversAfterConfirmation() {
+        // Biking.speedRecovery.requiredConsistentFixes was relaxed from
+        // 3 to 2 so it now matches requiredPromotableFixes. The second
+        // consistent cap-exceeded fix at sustained highway speed
+        // commits as "speed-cap-recovered"; the first is still held as
+        // "speed-cap-unconfirmed".
         val filter = LocationFilter(bikingConfig())
         filter.evaluate(
             LocationInput(
@@ -272,7 +277,7 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        val second = filter.evaluate(
+        val recovered = filter.evaluate(
             LocationInput(
                 latitude = 40.46558636867255,
                 longitude = -102.53195802460014,
@@ -282,20 +287,9 @@ class LocationFilterTest {
                 bearingDegrees = 0f,
             )
         )
-        val recovered = filter.evaluate(
-            LocationInput(
-                latitude = 40.46693753146380,
-                longitude = -102.53181234712302,
-                timestampMs = 34_000L,
-                accuracyMeters = 5f,
-                speedMps = 40f,
-                bearingDegrees = 0f,
-            )
-        )
 
         assertEquals(LocationFilterResult.Decision.Hold, first.decision)
         assertEquals("speed-cap-unconfirmed", first.reason)
-        assertEquals(LocationFilterResult.Decision.Hold, second.decision)
         assertEquals(LocationFilterResult.Decision.Commit, recovered.decision)
         assertEquals("speed-cap-recovered", recovered.reason)
     }
@@ -364,20 +358,69 @@ class LocationFilterTest {
                 bearingDegrees = 90f,
             )
         )
+        // Reverse course again so each successive sample disagrees with
+        // the previous direction. With requiredConsistentFixes=2 the
+        // recovery gate only accepts a coherent sequence, so a true
+        // back-and-forth zig-zag never commits.
         val afterTurn = filter.evaluate(
             LocationInput(
                 latitude = 24.711945,
-                longitude = -81.096158,
+                longitude = -81.1011,
                 timestampMs = 30_000L,
                 accuracyMeters = 5f,
                 speedMps = 25f,
-                bearingDegrees = 90f,
+                bearingDegrees = 270f,
             )
         )
 
         assertEquals(LocationFilterResult.Decision.Hold, first.decision)
         assertEquals(LocationFilterResult.Decision.Hold, turn.decision)
         assertEquals(LocationFilterResult.Decision.Hold, afterTurn.decision)
+    }
+
+    @Test
+    fun bikingProfile_recoveryCommitsOnSecondConsistentCapExceededFix() {
+        // Direct guard for the relaxed Biking.speedRecovery
+        // requiredConsistentFixes (2). Two consecutive
+        // coherent-direction cap-exceeded fixes at tight accuracy must
+        // be enough to commit on the second sample.
+        val filter = LocationFilter(bikingConfig())
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 4f,
+                speedMps = 25f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val first = filter.evaluate(
+            LocationInput(
+                latitude = 24.711945,
+                longitude = -81.1011,
+                timestampMs = 10_000L,
+                accuracyMeters = 4f,
+                speedMps = 25f,
+                bearingDegrees = 0f,
+            )
+        )
+        val second = filter.evaluate(
+            LocationInput(
+                latitude = 24.71419,
+                longitude = -81.1011,
+                timestampMs = 20_000L,
+                accuracyMeters = 4f,
+                speedMps = 25f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Hold, first.decision)
+        assertEquals("speed-cap-unconfirmed", first.reason)
+        assertEquals(LocationFilterResult.Decision.Commit, second.decision)
+        assertEquals("speed-cap-recovered", second.reason)
     }
 
     @Test

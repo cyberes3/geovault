@@ -26,6 +26,11 @@ class AutoTrackingMotionFilterIntegrationTest {
         val first = evaluate(trackId = trackId, mode = engine.snapshot().mode, lon = -45.0000, timestampMs = 0L)
         assertTrue(first.accepted)
 
+        // Two ~22 m/s cap-exceeded fixes with tight accuracy are enough to
+        // promote straight to DRIVING via the strong-confidence path: the
+        // first fix fast-emits evidence, the second confirms the streak,
+        // and the engine skips WALKING -> BIKING. After promotion the
+        // DRIVING profile accepts the next highway-speed fix.
         val rejectedOne = evaluateAndFeed(
             trackId = trackId,
             lon = -44.9960,
@@ -40,50 +45,15 @@ class AutoTrackingMotionFilterIntegrationTest {
             engine = engine,
             evidenceGate = evidenceGate,
         )
-        val rejectedThree = evaluateAndFeed(
-            trackId = trackId,
-            lon = -44.9880,
-            timestampMs = 60_000L,
-            engine = engine,
-            evidenceGate = evidenceGate,
-        )
 
         assertFalse(rejectedOne.accepted)
         assertFalse(rejectedTwo.accepted)
-        assertFalse(rejectedThree.accepted)
-        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
-
-        val bikingHold = evaluateAndFeed(
-            trackId = trackId,
-            lon = -44.9840,
-            timestampMs = 80_000L,
-            engine = engine,
-            evidenceGate = evidenceGate,
-        )
-        assertFalse(bikingHold.accepted)
-
-        val drivingPromotionHold = evaluateAndFeed(
-            trackId = trackId,
-            lon = -44.9800,
-            timestampMs = 100_000L,
-            engine = engine,
-            evidenceGate = evidenceGate,
-        )
-        assertFalse(drivingPromotionHold.accepted)
-
-        val recoveryHold = evaluateAndFeed(
-            trackId = trackId,
-            lon = -44.9759,
-            timestampMs = 120_000L,
-            engine = engine,
-            evidenceGate = evidenceGate,
-        )
-        assertFalse(recoveryHold.accepted)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
 
         val afterPromotion = evaluateAndFeed(
             trackId = trackId,
-            lon = -44.9719,
-            timestampMs = 140_000L,
+            lon = -44.9880,
+            timestampMs = 60_000L,
             engine = engine,
             evidenceGate = evidenceGate,
         )

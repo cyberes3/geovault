@@ -18,12 +18,29 @@ data class AutoTrackingMotionEvidenceConfig(
     val maxCourseDeltaDegrees: Double = 50.0,
     val minContinuityMeters: Double = 25.0,
     val continuitySpeedMultiplier: Double = 1.5,
+    // When the very first observation is already strong (tight accuracy AND
+    // a speed clearly above the WALKING upper band), the continuity check is
+    // not informative -- there is no prior anchor it could disagree with --
+    // so we emit immediately while still storing the observation for the
+    // *next* fix's continuity check. Set thresholds well above ambient
+    // walking values so a phantom multipath burst cannot fast-emit.
+    val fastEmitAccuracyMeters: Double = 10.0,
+    val fastEmitSpeedMps: Double = 5.0,
 )
 
 data class AutoTrackingMotionEvidence(
     val speedMps: Float,
     val confidence: AutoTrackingMotionEvidenceConfidence,
+    val path: EvidencePath,
 )
+
+enum class EvidencePath {
+    /** First-fix strong-confidence shortcut (no continuity prior available). */
+    FAST_EMIT,
+
+    /** Standard two-fix continuity handshake. */
+    HANDSHAKE,
+}
 
 /**
  * Converts rejected/held filter decisions into auto-mode evidence only when
@@ -60,6 +77,13 @@ class AutoTrackingMotionEvidenceGate(
         val previous = lastObservation
         if (previous == null) {
             lastObservation = observation
+            if (isStrongFirstFix(observation)) {
+                return AutoTrackingMotionEvidence(
+                    speedMps = observation.speedMps.toFloat(),
+                    confidence = AutoTrackingMotionEvidenceConfidence.High,
+                    path = EvidencePath.FAST_EMIT,
+                )
+            }
             return null
         }
         if (!isContinuous(previous = previous, current = observation, metrics = metrics)) {
@@ -70,6 +94,7 @@ class AutoTrackingMotionEvidenceGate(
         return AutoTrackingMotionEvidence(
             speedMps = observation.speedMps.toFloat(),
             confidence = AutoTrackingMotionEvidenceConfidence.High,
+            path = EvidencePath.HANDSHAKE,
         )
     }
 
@@ -138,5 +163,10 @@ class AutoTrackingMotionEvidenceGate(
 
     private fun isSupportedReason(reason: String?): Boolean {
         return reason == "speed-cap-exceeded" || reason == "speed-cap-unconfirmed"
+    }
+
+    private fun isStrongFirstFix(observation: Observation): Boolean {
+        return observation.accuracyMeters <= config.fastEmitAccuracyMeters &&
+            observation.speedMps >= config.fastEmitSpeedMps
     }
 }

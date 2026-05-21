@@ -77,7 +77,7 @@ data class MotionProfileTuning(
                 maxRecoverableSpeedMps = 42.0,
                 maxAccuracyMeters = 35.0,
                 confirmationWindowMs = 45_000L,
-                requiredConsistentFixes = 3,
+                requiredConsistentFixes = 2,
                 requiredPromotableFixes = 2,
                 minDtSeconds = 2.0,
                 maxDtSeconds = 45.0,
@@ -132,6 +132,19 @@ data class KinematicCapConfig(
     }
 }
 
+/**
+ * Per-band fix-counter convention used by both [MovementCandidateConfig]
+ * and [SpeedRecoveryConfig]:
+ *
+ * - [requiredConsistentFixes] counts coherent fixes (continuity, course,
+ *   speed-delta sane) before the gate is willing to promote.
+ * - [requiredPromotableFixes] counts how many of those must also satisfy
+ *   the tighter promotion-accuracy threshold.
+ *
+ * The two should agree per band unless you have a deliberate reason to
+ * require more coherent fixes than promotable ones. Biking unified both
+ * to 2 in the auto-mode driving promotion pass.
+ */
 data class MovementCandidateConfig(
     val enabled: Boolean,
     val suspectDistanceMeters: Double,

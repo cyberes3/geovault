@@ -10,12 +10,27 @@ data class AutoTrackingMotionState(
     val lastEvidenceAtMs: Long = 0L,
     val isGpsPaused: Boolean = false,
     val consecutiveAboveUpper: Int = 0,
+    val lastObservedSpeedMps: Float = 0f,
 )
 
 data class AutoTrackingEngineOutput(
     val state: AutoTrackingMotionState,
-    val modeChanged: Boolean
+    val modeChanged: Boolean,
+    /**
+     * Diagnostic tag describing which selectMode branch drove the most
+     * recent transition. Useful in field logs to tell a normal
+     * WALKING -> BIKING -> DRIVING ladder promotion apart from the
+     * fast WALKING -> DRIVING skip. [TransitionPath.NONE] when no mode
+     * change occurred on this call.
+     */
+    val transitionPath: TransitionPath = TransitionPath.NONE,
 )
+
+enum class TransitionPath {
+    NONE,
+    LADDER,
+    SKIP_TO_DRIVING,
+}
 
 enum class AutoTrackingMotionEvidenceConfidence {
     High,
@@ -49,6 +64,14 @@ class AutoTrackingMotionEngine(
         private const val BIKING_TO_DRIVING_UPPER_MPS = 9.0f
         private const val DRIVING_TO_BIKING_LOWER_MPS = 5.5f
         private const val PROMOTE_CONSECUTIVE_REQUIRED = 2
+        // Skip the WALKING->BIKING->DRIVING ladder when the *observed*
+        // speed clearly exceeds the BIKING upper. The threshold is
+        // intentionally well above the per-sample upper so a phantom
+        // multipath burst cannot trigger a skip; the 2-sample streak
+        // requirement still applies, matching the standard promotion
+        // guard.
+        private const val WALKING_SKIP_TO_DRIVING_MPS =
+            1.5f * BIKING_TO_DRIVING_UPPER_MPS
     }
 
     private var state = AutoTrackingMotionState()
@@ -62,6 +85,7 @@ class AutoTrackingMotionEngine(
             lastEvidenceAtMs = nowMs,
             isGpsPaused = false,
             consecutiveAboveUpper = 0,
+            lastObservedSpeedMps = 0f,
         )
         val changed = state.mode != next.mode
         state = next
@@ -74,13 +98,16 @@ class AutoTrackingMotionEngine(
      * distance over dt), never directly from `Location.speed`.
      */
     fun onAcceptedFix(speedMps: Float, eventTimeMs: Long): AutoTrackingEngineOutput {
-        val nextSpeed = smoothSpeed(state.smoothedSpeedMps, speedMps)
+        val observed = speedMps.coerceAtLeast(0f)
+        val nextSpeed = smoothSpeed(state.smoothedSpeedMps, observed)
         return setStateWithTransition(
             state.copy(
                 smoothedSpeedMps = nextSpeed,
+                lastObservedSpeedMps = observed,
                 lastEvidenceAtMs = eventTimeMs,
                 isGpsPaused = false
-            )
+            ),
+            decisionSpeedMps = max(nextSpeed, observed),
         )
     }
 
@@ -114,6 +141,7 @@ class AutoTrackingMotionEngine(
         state = state.copy(
             lastEvidenceAtMs = eventTimeMs,
             consecutiveAboveUpper = 0,
+            lastObservedSpeedMps = 0f,
         )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
     }
@@ -122,7 +150,8 @@ class AutoTrackingMotionEngine(
         val current = state
         val next = current.copy(
             isGpsPaused = true,
-            lastEvidenceAtMs = max(current.lastEvidenceAtMs, nowMs)
+            lastEvidenceAtMs = max(current.lastEvidenceAtMs, nowMs),
+            lastObservedSpeedMps = 0f,
         )
         state = next
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
@@ -146,21 +175,39 @@ class AutoTrackingMotionEngine(
         val decayFactor = exp(-decayWindowMs.toDouble() / decayHalfLifeMs.toDouble()).toFloat()
         val decayedSpeed = (state.smoothedSpeedMps * decayFactor).coerceAtLeast(0f)
         return setStateWithTransition(
-            state.copy(smoothedSpeedMps = decayedSpeed)
+            state.copy(smoothedSpeedMps = decayedSpeed, lastObservedSpeedMps = 0f),
+            decisionSpeedMps = decayedSpeed,
         )
     }
 
-    private fun setStateWithTransition(nextState: AutoTrackingMotionState): AutoTrackingEngineOutput {
-        val (nextMode, nextStreak) = selectMode(
+    private fun setStateWithTransition(
+        nextState: AutoTrackingMotionState,
+        decisionSpeedMps: Float,
+    ): AutoTrackingEngineOutput {
+        val decision = selectMode(
             current = nextState.mode,
-            speedMps = nextState.smoothedSpeedMps,
+            speedMps = decisionSpeedMps,
             consecutiveAboveUpper = nextState.consecutiveAboveUpper,
         )
-        val resolved = nextState.copy(mode = nextMode, consecutiveAboveUpper = nextStreak)
+        val resolved = nextState.copy(
+            mode = decision.mode,
+            consecutiveAboveUpper = decision.streak,
+        )
         val changed = state.mode != resolved.mode
         state = resolved
-        return AutoTrackingEngineOutput(state = state, modeChanged = changed)
+        val path = if (changed) decision.path else TransitionPath.NONE
+        return AutoTrackingEngineOutput(
+            state = state,
+            modeChanged = changed,
+            transitionPath = path,
+        )
     }
+
+    private data class ModeDecision(
+        val mode: TrackingMotionMode,
+        val streak: Int,
+        val path: TransitionPath,
+    )
 
     /**
      * Returns the next mode and updated streak counter.
@@ -173,18 +220,25 @@ class AutoTrackingMotionEngine(
         current: TrackingMotionMode,
         speedMps: Float,
         consecutiveAboveUpper: Int,
-    ): Pair<TrackingMotionMode, Int> {
+    ): ModeDecision {
         return when (current) {
             TrackingMotionMode.WALKING -> {
                 if (speedMps > WALKING_TO_BIKING_UPPER_MPS) {
                     val streak = consecutiveAboveUpper + 1
                     if (streak >= PROMOTE_CONSECUTIVE_REQUIRED) {
-                        TrackingMotionMode.BIKING to 0
+                        val skip = speedMps > WALKING_SKIP_TO_DRIVING_MPS
+                        val target = if (skip) {
+                            TrackingMotionMode.DRIVING
+                        } else {
+                            TrackingMotionMode.BIKING
+                        }
+                        val path = if (skip) TransitionPath.SKIP_TO_DRIVING else TransitionPath.LADDER
+                        ModeDecision(target, 0, path)
                     } else {
-                        TrackingMotionMode.WALKING to streak
+                        ModeDecision(TrackingMotionMode.WALKING, streak, TransitionPath.NONE)
                     }
                 } else {
-                    TrackingMotionMode.WALKING to 0
+                    ModeDecision(TrackingMotionMode.WALKING, 0, TransitionPath.NONE)
                 }
             }
             TrackingMotionMode.BIKING -> {
@@ -192,20 +246,21 @@ class AutoTrackingMotionEngine(
                     speedMps > BIKING_TO_DRIVING_UPPER_MPS -> {
                         val streak = consecutiveAboveUpper + 1
                         if (streak >= PROMOTE_CONSECUTIVE_REQUIRED) {
-                            TrackingMotionMode.DRIVING to 0
+                            ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.LADDER)
                         } else {
-                            TrackingMotionMode.BIKING to streak
+                            ModeDecision(TrackingMotionMode.BIKING, streak, TransitionPath.NONE)
                         }
                     }
-                    speedMps < BIKING_TO_WALKING_LOWER_MPS -> TrackingMotionMode.WALKING to 0
-                    else -> TrackingMotionMode.BIKING to 0
+                    speedMps < BIKING_TO_WALKING_LOWER_MPS ->
+                        ModeDecision(TrackingMotionMode.WALKING, 0, TransitionPath.LADDER)
+                    else -> ModeDecision(TrackingMotionMode.BIKING, 0, TransitionPath.NONE)
                 }
             }
             TrackingMotionMode.DRIVING -> {
                 if (speedMps < DRIVING_TO_BIKING_LOWER_MPS) {
-                    TrackingMotionMode.BIKING to 0
+                    ModeDecision(TrackingMotionMode.BIKING, 0, TransitionPath.LADDER)
                 } else {
-                    TrackingMotionMode.DRIVING to 0
+                    ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.NONE)
                 }
             }
         }
