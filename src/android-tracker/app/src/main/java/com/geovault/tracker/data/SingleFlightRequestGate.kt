@@ -40,10 +40,4 @@ class SingleFlightRequestGate<K, V>(
             inFlightByKey.clear()
         }
     }
-
-    fun clearMatching(predicate: (K) -> Boolean) {
-        synchronized(lock) {
-            inFlightByKey.keys.removeAll { key -> predicate(key) }
-        }
-    }
 }

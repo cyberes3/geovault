@@ -48,7 +48,6 @@ class ApiTrackerManagementRepository(
     @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
     @Volatile private var cachedApiBaseUrl: String? = null
     @Volatile private var cachedApi: TrackerApi? = null
-    private var geometryGenerationByTrackerId: Map<String, Long> = emptyMap()
     private val readRequestGate = SingleFlightRequestGate<String, Any>()
 
     override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
@@ -68,7 +67,10 @@ class ApiTrackerManagementRepository(
             }
             val networkResult = executeApiCall { api -> api.getTrackers().execute() }
             if (networkResult is RepositoryResult.Success) {
-                val trackers = mergeTrackerListWithCachedGeometry(networkResult.data.toDomainModels())
+                val trackers = stateStore.canonicalizeTrackers(networkResult.data.toDomainModels())
+                cacheMutex.withLock {
+                    trackersCache = trackers
+                }
                 stateStore.publishTrackers(trackers)
                 return@run RepositoryResult.Success(trackers) as Any
             }
@@ -105,8 +107,15 @@ class ApiTrackerManagementRepository(
             GeoVaultCaptureLog.d(TAG, "Loading tracker details trackerId=$trackerId")
             val networkResult = executeApiCall { api -> api.getTracker(trackerId).execute() }
             if (networkResult is RepositoryResult.Success) {
-                val incoming = networkResult.data.toDomainModel()
-                val tracker = upsertMergedTracker(incoming)
+                val tracker = networkResult.data.toDomainModel()
+                cacheMutex.withLock {
+                    trackersCache = trackersCache
+                        ?.filterNot { it.id == trackerId }
+                        .orEmpty()
+                        .plus(tracker)
+                        .distinctBy { it.id }
+                        .let(stateStore::canonicalizeTrackers)
+                }
                 stateStore.publishTracker(tracker)
                 GeoVaultCaptureLog.d(
                     TAG,
@@ -121,40 +130,24 @@ class ApiTrackerManagementRepository(
     }
 
     override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> {
-        val normalizedTrackerId = trackerId.trim()
-        val capturedGeneration = cacheMutex.withLock {
-            TrackerGeometryInvalidationPolicy.capture(listOf(normalizedTrackerId), geometryGenerationByTrackerId)
-        }
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run("tracker-geometry:$trackerId") {
             when (val networkResult = executeApiCall { api -> api.getTrackerGeometry(trackerId).execute() }) {
                 is RepositoryResult.Success -> {
                     val incoming = networkResult.data.toDomainModel()
-                    var shouldPublish = false
                     val merged = cacheMutex.withLock {
-                        if (TrackerGeometryInvalidationPolicy.isCurrent(
-                                trackerId = incoming.id,
-                                captured = capturedGeneration,
-                                generationByTrackerId = geometryGenerationByTrackerId,
-                            )
-                        ) {
-                            shouldPublish = true
-                            upsertMergedTrackerLocked(incoming)
-                        } else {
-                            GeoVaultCaptureLog.i(
-                                TAG,
-                                "geometry_response_ignored_stale trackerId=${incoming.id} captured=${capturedGeneration.byTrackerId[incoming.id] ?: 0L} current=${geometryGenerationByTrackerId[incoming.id] ?: 0L}"
-                            )
-                            incoming
-                        }
+                        val existing = trackersCache?.firstOrNull { it.id == incoming.id }
+                            ?: stateStore.trackers.value.firstOrNull { it.id == incoming.id }
+                        val mergedTracker = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
+                        trackersCache = trackersCache
+                            ?.filterNot { it.id == mergedTracker.id }
+                            .orEmpty()
+                            .plus(mergedTracker)
+                            .distinctBy { it.id }
+                            .let(stateStore::canonicalizeTrackers)
+                        mergedTracker
                     }
-                    if (shouldPublish) {
-                        stateStore.publishTracker(merged)
-                        GeoVaultCaptureLog.d(
-                            TAG,
-                            "geometry_response_accepted trackerId=${merged.id} points=${merged.geometry?.coordinates?.size ?: 0}"
-                        )
-                    }
+                    stateStore.publishTracker(merged)
                     RepositoryResult.Success(merged) as Any
                 }
                 is RepositoryResult.Failure -> networkResult as Any
@@ -177,9 +170,6 @@ class ApiTrackerManagementRepository(
         if (normalizedIds.isEmpty()) {
             return RepositoryResult.Success(emptyList())
         }
-        val capturedGeneration = cacheMutex.withLock {
-            TrackerGeometryInvalidationPolicy.capture(normalizedIds, geometryGenerationByTrackerId)
-        }
         val key = "trackers-geometry:${normalizedIds.sorted().joinToString(",")}"
         @Suppress("UNCHECKED_CAST")
         return readRequestGate.run(key) {
@@ -190,72 +180,31 @@ class ApiTrackerManagementRepository(
             ) {
                 is RepositoryResult.Success -> {
                     val incomingTrackers = networkResult.data.toDomainModels()
-                    val publishableTrackers = mutableListOf<Tracker>()
-                    val resultTrackers = cacheMutex.withLock {
-                        incomingTrackers.map { incoming ->
-                            if (TrackerGeometryInvalidationPolicy.isCurrent(
-                                    trackerId = incoming.id,
-                                    captured = capturedGeneration,
-                                    generationByTrackerId = geometryGenerationByTrackerId,
-                                )
-                            ) {
-                                upsertMergedTrackerLocked(incoming).also { merged ->
-                                    publishableTrackers += merged
-                                }
-                            } else {
-                                GeoVaultCaptureLog.i(
-                                    TAG,
-                                    "bulk_geometry_response_ignored_stale trackerId=${incoming.id} captured=${capturedGeneration.byTrackerId[incoming.id] ?: 0L} current=${geometryGenerationByTrackerId[incoming.id] ?: 0L}"
-                                )
-                                incoming
-                            }
+                    val mergedTrackers = cacheMutex.withLock {
+                        val existingById = trackersCache
+                            ?.associateBy { it.id }
+                            .orEmpty() +
+                            stateStore.trackers.value.associateBy { it.id }
+                        val mergedById = incomingTrackers.associate { incoming ->
+                            incoming.id to TrackerGeometryMergePolicy.merged(
+                                existing = existingById[incoming.id],
+                                incoming = incoming
+                            )
                         }
+                        trackersCache = trackersCache
+                            ?.filterNot { it.id in mergedById.keys }
+                            .orEmpty()
+                            .plus(mergedById.values)
+                            .distinctBy { it.id }
+                            .let(stateStore::canonicalizeTrackers)
+                        mergedById.values.toList()
                     }
-                    publishableTrackers.forEach { tracker ->
-                        stateStore.publishTracker(tracker)
-                        GeoVaultCaptureLog.d(
-                            TAG,
-                            "bulk_geometry_response_accepted trackerId=${tracker.id} points=${tracker.geometry?.coordinates?.size ?: 0}"
-                        )
-                    }
-                    RepositoryResult.Success(resultTrackers) as Any
+                    mergedTrackers.forEach { tracker -> stateStore.publishTracker(tracker) }
+                    RepositoryResult.Success(mergedTrackers) as Any
                 }
                 is RepositoryResult.Failure -> networkResult as Any
             }
         } as RepositoryResult<List<Tracker>>
-    }
-
-    private fun mergeTrackerListWithCachedGeometry(incomingTrackers: List<Tracker>): List<Tracker> {
-        return cacheMutex.withLock {
-            val existingById = trackersCache
-                ?.associateBy { it.id }
-                .orEmpty() +
-                stateStore.trackers.value.associateBy { it.id }
-            val mergedTrackers = incomingTrackers
-                .map { incoming -> TrackerGeometryMergePolicy.merged(existingById[incoming.id], incoming) }
-                .let(stateStore::canonicalizeTrackers)
-            trackersCache = mergedTrackers
-            mergedTrackers
-        }
-    }
-
-    private fun upsertMergedTracker(incoming: Tracker): Tracker {
-        return cacheMutex.withLock {
-            upsertMergedTrackerLocked(incoming)
-        }
-    }
-
-    private fun upsertMergedTrackerLocked(incoming: Tracker): Tracker {
-        val existing = trackersCache?.firstOrNull { it.id == incoming.id }
-            ?: stateStore.trackers.value.firstOrNull { it.id == incoming.id }
-        val mergedTracker = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
-        trackersCache = trackersCache
-            ?.filterNot { it.id == mergedTracker.id }
-            .orEmpty()
-            .plus(mergedTracker)
-            .distinctBy { it.id }
-            .let(stateStore::canonicalizeTrackers)
-        return mergedTracker
     }
 
     override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> {
@@ -394,7 +343,6 @@ class ApiTrackerManagementRepository(
         mapVisibilityCache = null
         cachedApiBaseUrl = null
         cachedApi = null
-        geometryGenerationByTrackerId = emptyMap()
         readRequestGate.clear()
         stateStore.clearAll()
     }
@@ -402,47 +350,6 @@ class ApiTrackerManagementRepository(
     override fun getTrackerFromCache(trackerId: String): Tracker? {
         return cacheMutex.withLock { trackersCache?.firstOrNull { it.id == trackerId } }
             ?: stateStore.trackers.value.firstOrNull { it.id == trackerId }
-    }
-
-    override fun stripCachedGeometry(trackerIds: Set<String>) {
-        if (trackerIds.isEmpty()) return
-        val normalizedIds = trackerIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        if (normalizedIds.isEmpty()) return
-        cacheMutex.withLock {
-            trackersCache = trackersCache?.map { tracker ->
-                if (tracker.id in normalizedIds) {
-                    tracker.copy(geometry = null, point_params = null, bbox = null)
-                } else {
-                    tracker
-                }
-            }
-        }
-        GeoVaultCaptureLog.i(TAG, "geometry_cache_stripped trackerIds=${normalizedIds.sorted()}")
-    }
-
-    override fun invalidateGeometryRequests(trackerIds: Set<String>) {
-        if (trackerIds.isEmpty()) return
-        val normalizedIds = TrackerGeometryInvalidationPolicy.normalizedIds(trackerIds)
-        if (normalizedIds.isEmpty()) return
-        val nextGenerations = cacheMutex.withLock {
-            geometryGenerationByTrackerId = TrackerGeometryInvalidationPolicy.invalidate(
-                trackerIds = normalizedIds,
-                generationByTrackerId = geometryGenerationByTrackerId,
-            )
-            normalizedIds.associateWith { geometryGenerationByTrackerId[it] ?: 0L }
-        }
-        val singleGeometryKeys = normalizedIds.map { "tracker-geometry:$it" }.toSet()
-        readRequestGate.clearMatching { key ->
-            key in singleGeometryKeys ||
-                (key.startsWith("trackers-geometry:") && key
-                    .removePrefix("trackers-geometry:")
-                    .split(",")
-                    .any { it in normalizedIds })
-        }
-        GeoVaultCaptureLog.i(
-            TAG,
-            "geometry_requests_invalidated trackerIds=${normalizedIds.sorted()} generations=$nextGenerations"
-        )
     }
 
     override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> {

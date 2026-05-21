@@ -3,23 +3,22 @@ package com.geovault.tracker.presentation
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.NaturalSort
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerManager
-import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRecentDataWindowOptions
+import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
+import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.common.NaturalSort
 import java.util.Locale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -35,10 +34,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class TrackersGroupsViewModel(application: Application) : AndroidViewModel(application) {
-
-    private companion object {
-        const val TAG = "TrackersGroupsViewModel"
-    }
 
     private val trackerRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
@@ -846,28 +841,15 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             onSuccess = {
                 val app = getApplication<Application>()
                 val selectedTrackerId = selectedTrackerId()
-                val selectionDecision = TrackerEditSelectionPolicy.resolve(
-                    editedTrackerId = d.tracker.id,
-                    selectedTrackerId = selectedTrackerId,
-                    setAsSelectedTracker = d.setAsSelectedTracker,
-                )
-                GeoVaultCaptureLog.i(
-                    TAG,
-                    "edit_tracker_selection_decision editedTrackerId=${d.tracker.id} selectedTrackerId=$selectedTrackerId action=${selectionDecision.action} restart=${selectionDecision.shouldRestartTracking}"
-                )
-                when (selectionDecision.action) {
-                    TrackerEditSelectionAction.SelectEditedTracker -> {
-                        SelectedTrackerManager.setSelectedTracker(
-                            context = app,
-                            trackerId = d.tracker.id,
-                            trackerName = name,
-                            restartTrackingIfRunning = selectionDecision.shouldRestartTracking
-                        )
-                    }
-                    TrackerEditSelectionAction.ClearSelectedTracker -> {
-                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
-                    }
-                    TrackerEditSelectionAction.None -> Unit
+                if (d.setAsSelectedTracker) {
+                    SelectedTrackerManager.setSelectedTracker(
+                        context = app,
+                        trackerId = d.tracker.id,
+                        trackerName = name,
+                        restartTrackingIfRunning = true
+                    )
+                } else if (selectedTrackerId == d.tracker.id) {
+                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
                 }
                 SelectedTrackerManager.updateSelectedTrackerNameIfSelected(
                     context = app,

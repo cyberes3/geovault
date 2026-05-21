@@ -86,7 +86,6 @@ object TrackerMapGroupModePolicy {
         return groups
             .asSequence()
             .filter { it.is_accepted != false }
-            .filter { it.hidden != true }
             .filter { it.id !in hiddenGroupIds }
             .map { group ->
                 val ids = group.track_ids.orEmpty()
