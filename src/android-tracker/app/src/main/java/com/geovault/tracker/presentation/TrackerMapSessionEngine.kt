@@ -14,6 +14,21 @@ data class TrackerMapSessionBuildInput(
      * is inferred from points). See [TrackerSessionAttributionPolicy].
      */
     val currentSessionStartByTracker: Map<String, Long> = emptyMap(),
+    /**
+     * Render-time roster filter. `null` means "no filter, render every tracker we have data
+     * for" (used by SINGLE_SESSION, whose single-trail path is unaffected by this map, and
+     * by unit tests that don't supply a roster). A non-null set — including an *empty* set —
+     * is applied verbatim: only tracker ids in the set produce a track. The empty-set case
+     * is meaningful: it means "the user hid every visible tracker" and the correct output
+     * is no tracks, not all tracks.
+     *
+     * The VM populates this from [TrackerMapStreamingPlan.groupTrackerIds] (intersected with
+     * the hidden-filtered roster) for GROUP_PLACEHOLDER, or `visibleRosterTrackerIds` for
+     * ALL_QUEUE, so hidden trackers, departed group members, and deleted trackers stop
+     * rendering immediately without needing the caller to prune
+     * `_uiState.allQueueTrailsByTracker`.
+     */
+    val visibleTrackerIds: Set<String>? = null,
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -45,7 +60,17 @@ object TrackerMapSessionEngine {
         // must remain visible even when the live stream's accepted set transiently flickers (e.g.
         // service start lag, reconciliation). Marker heads from acceptedRemoteLastPoints are still
         // gated by plan.acceptedRemoteTrackerIds via the filter above.
-        val tracks = (normalizedTrails.keys + acceptedRemoteLastPoints.keys).associateWith { trackerId ->
+        //
+        // ROSTER FILTER: a non-null [visibleTrackerIds] is applied verbatim so trails for
+        // hidden / removed-from-group / deleted trackers stop rendering immediately. A null
+        // value disables the filter (SINGLE_SESSION + unit tests). The empty-set case is
+        // distinct from null and means "render no tracks" — i.e. the user hid every
+        // visible tracker; we must not fall back to rendering everything in that case.
+        val candidateKeys = normalizedTrails.keys + acceptedRemoteLastPoints.keys
+        val rosterFilteredKeys = input.visibleTrackerIds?.let { filter ->
+            candidateKeys.filter { it in filter }.toSet()
+        } ?: candidateKeys
+        val tracks = rosterFilteredKeys.associateWith { trackerId ->
             val rawTrail = normalizedTrails[trackerId].orEmpty()
             val filteredTrail = TrackerMapRecentDataWindowFilterPolicy.apply(
                 points = rawTrail,

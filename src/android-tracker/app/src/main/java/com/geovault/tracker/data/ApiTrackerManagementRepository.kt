@@ -67,12 +67,25 @@ class ApiTrackerManagementRepository(
             }
             val networkResult = executeApiCall { api -> api.getTrackers().execute() }
             if (networkResult is RepositoryResult.Success) {
-                val trackers = stateStore.canonicalizeTrackers(networkResult.data.toDomainModels())
-                cacheMutex.withLock {
-                    trackersCache = trackers
+                // GEOMETRY-PRESERVATION: the trackers list endpoint returns metadata only
+                // (no geometry, point_params, last_point, bbox). If we blindly replaced the
+                // cache after every list refresh — which `runMutationAndRefresh` triggers
+                // after every settings edit — we would strip previously merged geometry from
+                // the store and the next map render would have to refetch every tracker's
+                // points from scratch. Merge each incoming metadata snapshot onto the
+                // existing tracker (when present) so the geometry fields survive the bulk
+                // refresh untouched.
+                val incoming = networkResult.data.toDomainModels()
+                val merged = cacheMutex.withLock {
+                    val existingById = (trackersCache ?: stateStore.trackers.value).associateBy { it.id }
+                    incoming.map { TrackerGeometryMergePolicy.merged(existing = existingById[it.id], incoming = it) }
                 }
-                stateStore.publishTrackers(trackers)
-                return@run RepositoryResult.Success(trackers) as Any
+                val canonical = stateStore.canonicalizeTrackers(merged)
+                cacheMutex.withLock {
+                    trackersCache = canonical
+                }
+                stateStore.publishTrackers(canonical)
+                return@run RepositoryResult.Success(canonical) as Any
             }
             networkResult as Any
         } as RepositoryResult<List<Tracker>>
