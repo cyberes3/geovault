@@ -64,6 +64,7 @@ class TileSourceFetchResultTest {
     @Test
     fun onlySuccessfulSourceFetchesAreCacheable() {
         assertTrue(TileSourceFetchResult.Success(listOf(streetsSource())).isCacheable())
+        assertFalse(TileSourceFetchResult.Success(listOf(streetsSource()), isStale = true).isCacheable())
         assertFalse(TileSourceFetchResult.ConfigurationError("Map setup is incomplete.").isCacheable())
         assertFalse(TileSourceFetchResult.TransientFailure("Network unavailable.").isCacheable())
     }

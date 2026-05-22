@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
+import com.geovault.common.net.GeoVaultValidatedInternetNotifier
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
@@ -34,6 +35,10 @@ data class GeoVaultMapErrorNotice(
     val retryable: Boolean = true,
 )
 
+data class GeoVaultMapDegradedNotice(
+    val message: String,
+)
+
 /**
  * Root map abstraction that owns one active MapLibre session, plugin dispatch, source switching,
  * and camera APIs shared by all map modes.
@@ -48,11 +53,16 @@ sealed class GeoVaultBaseMap(
     private var styleLoadWatchdog: Runnable? = null
     private var styleLoadGeneration: Long = 0L
     private var styleDeliveredForGeneration = false
+    private var currentLoadHadDegradedFallback = false
     private var defaultCameraPadding: DoubleArray? = null
     private val pluginRegistry = GeoVaultMapPluginRegistry()
     private val mapClickListeners = linkedSetOf<MapLibreMap.OnMapClickListener>()
     private val mapLongClickListeners = linkedSetOf<MapLibreMap.OnMapLongClickListener>()
     private val cameraMoveStartedListeners = linkedSetOf<MapLibreMap.OnCameraMoveStartedListener>()
+    private val networkRecoveryGate = MapNetworkRecoveryGate()
+    private val networkRecoveryNotifier = GeoVaultValidatedInternetNotifier(appContext) {
+        retryMapSourceLoadFromNetworkRecovery()
+    }
 
     private val _phase = MutableStateFlow(GeoVaultMapPhase.Initializing)
     val phase: StateFlow<GeoVaultMapPhase> = _phase.asStateFlow()
@@ -62,6 +72,9 @@ sealed class GeoVaultBaseMap(
 
     private val _errorNotice = MutableStateFlow<GeoVaultMapErrorNotice?>(null)
     val errorNotice: StateFlow<GeoVaultMapErrorNotice?> = _errorNotice.asStateFlow()
+
+    private val _degradedNotice = MutableStateFlow<GeoVaultMapDegradedNotice?>(null)
+    val degradedNotice: StateFlow<GeoVaultMapDegradedNotice?> = _degradedNotice.asStateFlow()
 
     var onMapReady: ((MapLibreMap, Style) -> Unit)? = null
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
@@ -105,17 +118,23 @@ sealed class GeoVaultBaseMap(
                     reportMapConfigurationFailed(message)
                 }
             }
+            manager.onMapDegraded = { message ->
+                if (_mapManager === manager && mapView === view) {
+                    reportMapDegraded(message)
+                }
+            }
             manager.onStyleLoaded = { map, style ->
                 // Ignore late style callbacks from stale attach cycles.
                 if (_mapManager === manager && mapView === view) {
                     styleDeliveredForGeneration = true
                     clearStyleLoadWatchdog()
                     _errorNotice.value = null
+                    completeMapLoad()
                     onStyleLoaded?.invoke(map, style)
                     onMapReady?.invoke(map, style)
                     pluginRegistry.onStyleLoaded(map, style)
                     onStyleReady?.invoke(map, style)
-                    _phase.value = GeoVaultMapPhase.Ready
+                    finishReadyPhase()
                 }
             }
         }
@@ -133,6 +152,7 @@ sealed class GeoVaultBaseMap(
             _phase.value = GeoVaultMapPhase.StyleLoading
             attachedManager.setupBaseMapSettings(map)
             pluginRegistry.onMapAttached(map, view)
+            beginNetworkSensitiveMapLoad()
             attachedManager.fetchMapSources { canRenderMap ->
                 if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
                 if (!canRenderMap) {
@@ -143,14 +163,10 @@ sealed class GeoVaultBaseMap(
                 if (!attachedManager.isCurrentSourceApplied(map)) {
                     beginStyleLoad()
                     if (!attachedManager.applySelectedSource(map)) {
-                        styleDeliveredForGeneration = true
-                        clearStyleLoadWatchdog()
-                        _phase.value = GeoVaultMapPhase.Ready
+                        completeReadyWithoutStyleCallback()
                     }
                 } else {
-                    styleDeliveredForGeneration = true
-                    clearStyleLoadWatchdog()
-                    _phase.value = GeoVaultMapPhase.Ready
+                    completeReadyWithoutStyleCallback()
                 }
             }
         }
@@ -168,6 +184,7 @@ sealed class GeoVaultBaseMap(
 
     internal fun detachMapView() {
         clearStyleLoadWatchdog()
+        stopNetworkRecovery()
         mapView?.removeOnDidFailLoadingMapListener(this)
         mapView?.removeOnDidFinishLoadingStyleListener(this)
         mapView = null
@@ -201,6 +218,10 @@ sealed class GeoVaultBaseMap(
         _errorNotice.value = null
     }
 
+    fun dismissMapDegradedNotice() {
+        _degradedNotice.value = null
+    }
+
     fun retryMapSourceLoad() {
         _errorNotice.value = null
         TileSourceCache.invalidate()
@@ -209,6 +230,7 @@ sealed class GeoVaultBaseMap(
         val manager = _mapManager ?: return
         Log.i(TAG, "Retrying map source/style load.")
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginNetworkSensitiveMapLoad()
         manager.fetchMapSources { canRenderMap ->
             if (_mapManager !== manager || maplibreMap !== map) return@fetchMapSources
             if (!canRenderMap) {
@@ -219,11 +241,22 @@ sealed class GeoVaultBaseMap(
             pluginRegistry.onStyleWillChange(map, map.style)
             beginStyleLoad()
             if (!manager.applySelectedSource(map)) {
-                styleDeliveredForGeneration = true
-                clearStyleLoadWatchdog()
-                _phase.value = GeoVaultMapPhase.Ready
+                completeReadyWithoutStyleCallback()
             }
         }
+    }
+
+    private fun retryMapSourceLoadFromNetworkRecovery() {
+        if (!shouldWatchNetworkForRecovery()) {
+            stopNetworkRecovery()
+            return
+        }
+        if (!networkRecoveryGate.shouldRetry(_phase.value, _errorNotice.value)) {
+            Log.d(TAG, "Skipping map network recovery retry; phase=${_phase.value}")
+            return
+        }
+        Log.i(TAG, "Retrying degraded map after validated internet became available.")
+        retryMapSourceLoad()
     }
 
     fun cycleSource() {
@@ -232,11 +265,10 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(manager.sourceManager.getNextSourceId())
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginNetworkSensitiveMapLoad()
         beginStyleLoad()
         if (!manager.applySelectedSource(map)) {
-            styleDeliveredForGeneration = true
-            clearStyleLoadWatchdog()
-            _phase.value = GeoVaultMapPhase.Ready
+            completeReadyWithoutStyleCallback()
         }
     }
 
@@ -251,11 +283,10 @@ sealed class GeoVaultBaseMap(
         if (_phase.value != GeoVaultMapPhase.Ready || !manager.sourcesFetched) return
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginNetworkSensitiveMapLoad()
         beginStyleLoad()
         if (!manager.applySelectedSource(map)) {
-            styleDeliveredForGeneration = true
-            clearStyleLoadWatchdog()
-            _phase.value = GeoVaultMapPhase.Ready
+            completeReadyWithoutStyleCallback()
         }
     }
 
@@ -271,11 +302,10 @@ sealed class GeoVaultBaseMap(
         if (manager.isCurrentSourceApplied(map)) return
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginNetworkSensitiveMapLoad()
         beginStyleLoad()
         if (!manager.applySelectedSource(map)) {
-            styleDeliveredForGeneration = true
-            clearStyleLoadWatchdog()
-            _phase.value = GeoVaultMapPhase.Ready
+            completeReadyWithoutStyleCallback()
         }
     }
 
@@ -285,11 +315,10 @@ sealed class GeoVaultBaseMap(
         manager.sourceManager.setSelectedSourceId(optionId)
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
+        beginNetworkSensitiveMapLoad()
         beginStyleLoad()
         if (!manager.applySelectedSource(map)) {
-            styleDeliveredForGeneration = true
-            clearStyleLoadWatchdog()
-            _phase.value = GeoVaultMapPhase.Ready
+            completeReadyWithoutStyleCallback()
         }
     }
 
@@ -379,6 +408,7 @@ sealed class GeoVaultBaseMap(
         mapLongClickListeners.clear()
         cameraMoveStartedListeners.clear()
         clearStyleLoadWatchdog()
+        stopNetworkRecovery()
         detachMapView()
         onMapDestroyed()
     }
@@ -397,6 +427,11 @@ sealed class GeoVaultBaseMap(
         styleDeliveredForGeneration = true
         clearStyleLoadWatchdog()
         _phase.value = GeoVaultMapPhase.Error
+        updateNetworkRecoveryWatcher()
+    }
+
+    private fun beginNetworkSensitiveMapLoad() {
+        currentLoadHadDegradedFallback = false
     }
 
     private fun beginStyleLoad(): Long {
@@ -416,6 +451,7 @@ sealed class GeoVaultBaseMap(
             styleDeliveredForGeneration = true
             clearStyleLoadWatchdog()
             _phase.value = GeoVaultMapPhase.Error
+            updateNetworkRecoveryWatcher()
         }
         mainHandler.postDelayed(styleLoadWatchdog!!, STYLE_LOAD_TIMEOUT_MS)
     }
@@ -433,6 +469,7 @@ sealed class GeoVaultBaseMap(
             message = "Map style failed to load: $message",
         )
         onStyleLoadFailed?.invoke(message)
+        updateNetworkRecoveryWatcher()
     }
 
     private fun reportMapConfigurationFailed(message: String) {
@@ -443,10 +480,59 @@ sealed class GeoVaultBaseMap(
             message = message,
         )
         onMapConfigurationFailed?.invoke(message)
+        stopNetworkRecovery()
+    }
+
+    private fun reportMapDegraded(message: String) {
+        Log.w(TAG, "Reporting degraded map availability: $message")
+        currentLoadHadDegradedFallback = true
+        _degradedNotice.value = GeoVaultMapDegradedNotice(message = message)
+        if (_phase.value != GeoVaultMapPhase.StyleLoading) {
+            updateNetworkRecoveryWatcher()
+        }
+    }
+
+    private fun completeReadyWithoutStyleCallback() {
+        styleDeliveredForGeneration = true
+        clearStyleLoadWatchdog()
+        completeMapLoad()
+        finishReadyPhase()
+    }
+
+    private fun completeMapLoad() {
+        if (!currentLoadHadDegradedFallback) {
+            _degradedNotice.value = null
+            stopNetworkRecovery()
+        } else {
+            updateNetworkRecoveryWatcher()
+        }
+    }
+
+    private fun finishReadyPhase() {
+        _phase.value = GeoVaultMapPhase.Ready
+        updateNetworkRecoveryWatcher()
+    }
+
+    private fun updateNetworkRecoveryWatcher() {
+        if (shouldWatchNetworkForRecovery()) {
+            networkRecoveryNotifier.start()
+        } else {
+            stopNetworkRecovery()
+        }
+    }
+
+    private fun shouldWatchNetworkForRecovery(): Boolean {
+        if (_phase.value == GeoVaultMapPhase.StyleLoading) return false
+        val error = _errorNotice.value
+        return _degradedNotice.value != null || error?.type == GeoVaultMapErrorNoticeType.StyleLoad
+    }
+
+    private fun stopNetworkRecovery() {
+        networkRecoveryNotifier.stop()
     }
 
     private companion object {
-        const val STYLE_LOAD_TIMEOUT_MS = 5000L
+        const val STYLE_LOAD_TIMEOUT_MS = 30000L
         const val TAG = "GeoVaultBaseMap"
     }
 }

@@ -90,11 +90,17 @@ internal object TileSourceCache {
                 val result = when {
                     !response.isSuccessful -> TileSourceFetchResult.TransientFailure(
                         "Could not load map sources from the GeoVault server (HTTP ${response.code()}).",
-                    )
+                    ).withCachedFallback(context, serverUrl)
                     body == null -> TileSourceFetchResult.TransientFailure(
                         "Could not load map sources from the GeoVault server.",
-                    )
-                    else -> body.toTileSourceFetchResult()
+                    ).withCachedFallback(context, serverUrl)
+                    else -> {
+                        val result = body.toTileSourceFetchResult()
+                        if (result.isCacheable()) {
+                            MapMetadataTempCache.writeTileSources(context, serverUrl, body)
+                        }
+                        result
+                    }
                 }
                 val callbacks: List<(TileSourceFetchResult) -> Unit>
                 synchronized(lock) {
@@ -114,7 +120,7 @@ internal object TileSourceCache {
                 val callbacks: List<(TileSourceFetchResult) -> Unit>
                 val result = TileSourceFetchResult.TransientFailure(
                     "Could not load map sources from the GeoVault server. Check your connection and try again.",
-                )
+                ).withCachedFallback(context, serverUrl)
                 synchronized(lock) {
                     fetchInProgress = false
                     callbacks = pendingCallbacks.toList()
@@ -135,12 +141,32 @@ internal object TileSourceCache {
 }
 
 internal sealed class TileSourceFetchResult {
-    data class Success(val sources: List<TileSource>) : TileSourceFetchResult()
+    data class Success(
+        val sources: List<TileSource>,
+        val isStale: Boolean = false,
+        val fallbackMessage: String? = null,
+    ) : TileSourceFetchResult()
     data class ConfigurationError(val message: String) : TileSourceFetchResult()
     data class TransientFailure(val message: String) : TileSourceFetchResult()
 }
 
-internal fun TileSourceFetchResult.isCacheable(): Boolean = this is TileSourceFetchResult.Success
+internal fun TileSourceFetchResult.isCacheable(): Boolean =
+    this is TileSourceFetchResult.Success && !isStale
+
+internal fun TileSourceFetchResult.TransientFailure.withCachedFallback(
+    context: Context,
+    serverUrl: String,
+): TileSourceFetchResult {
+    val cached = MapMetadataTempCache.readTileSources(context, serverUrl)
+        ?: return this
+    return when (val cachedResult = cached.toTileSourceFetchResult()) {
+        is TileSourceFetchResult.Success -> cachedResult.copy(
+            isStale = true,
+            fallbackMessage = message,
+        )
+        else -> this
+    }
+}
 
 internal fun TileSourceResponse.toTileSourceFetchResult(): TileSourceFetchResult {
     val configurationMessages = map_config_errors.map { it.displayMessage() } + missingExpectedMapMessage()

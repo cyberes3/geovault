@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Route
 import org.maplibre.android.MapLibre
 import org.maplibre.android.module.http.HttpRequestUtil
+import org.maplibre.android.offline.OfflineManager
 import org.maplibre.android.storage.FileSource
 import java.util.concurrent.TimeUnit
 
@@ -34,6 +35,7 @@ object MapLibreInitializer {
     private const val TAG = "MapLibreInitializer"
     private const val HOOK_INVALIDATE_STYLE_CACHE = "geovault_maps_style_cache_invalidate"
     private const val MAPLIBRE_CLIENT_TIMEOUT_SECONDS = 30L
+    private const val AMBIENT_CACHE_SIZE_BYTES = 350L * 1024L * 1024L
 
     private var initialized = false
 
@@ -41,7 +43,10 @@ object MapLibreInitializer {
     fun init(context: Context) {
         if (initialized) return
         val appContext = context.applicationContext
+        MapLibreCacheStorage.configureBeforeMapLibreInit(appContext)
         MapLibre.getInstance(appContext)
+        MapLibreCacheStorage.ensureRuntimeResourceCachePath(appContext)
+        configureAmbientCache(appContext)
         configureMapLibreHttpClient(appContext)
         installResourceTransform(appContext)
         registerStyleCacheResetHook()
@@ -67,6 +72,21 @@ object MapLibreInitializer {
         HttpRequestUtil.setPrintRequestUrlOnFailure(true)
     }
 
+    private fun configureAmbientCache(appContext: Context) {
+        OfflineManager.getInstance(appContext).setMaximumAmbientCacheSize(
+            AMBIENT_CACHE_SIZE_BYTES,
+            object : OfflineManager.FileSourceCallback {
+                override fun onSuccess() {
+                    Log.i(TAG, "MapLibre ambient cache size configured: $AMBIENT_CACHE_SIZE_BYTES bytes")
+                }
+
+                override fun onError(message: String) {
+                    Log.w(TAG, "Failed to configure MapLibre ambient cache size: $message")
+                }
+            },
+        )
+    }
+
     private fun installResourceTransform(appContext: Context) {
         FileSource.getInstance(appContext).setResourceTransform(MapResourceUrlTransform(appContext))
     }
@@ -75,7 +95,11 @@ object MapLibreInitializer {
         AppResetFlow.registerHook(
             key = HOOK_INVALIDATE_STYLE_CACHE,
             phase = AppResetFlow.Phase.BEFORE_TOKEN_CLEAR,
-        ) { _ -> MapStyleCache.invalidate() }
+        ) { context ->
+            MapStyleCache.invalidate()
+            TileSourceCache.invalidate()
+            MapMetadataTempCache.clearAll(context)
+        }
     }
 }
 

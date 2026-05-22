@@ -64,6 +64,10 @@ internal object MapStyleCache {
         }
         scope.launch {
             val json = fetchAndValidate(context, styleUrl, isOurServer)
+                ?: MapMetadataTempCache.readStyleJson(context, styleUrl)?.also { cachedJson ->
+                    cache[styleUrl] = cachedJson
+                    Log.w(TAG, "Using cached map style JSON after fetch failure: styleUrl=$styleUrl")
+                }
             withContext(Dispatchers.Main) { onResult(json) }
         }
     }
@@ -120,6 +124,7 @@ internal object MapStyleCache {
                     }
                     else -> {
                         cache[styleUrl] = normalizedBody
+                        MapMetadataTempCache.writeStyleJson(context, styleUrl, normalizedBody)
                         normalizedBody
                     }
                 }

@@ -45,6 +45,11 @@ class MapLibreManager(
         get() = applier.onStyleLoadFailed
         set(value) { applier.onStyleLoadFailed = value }
 
+    /** Invoked when the map can still render overlays, but the basemap may be stale or blank. */
+    var onMapDegraded: ((String) -> Unit)?
+        get() = applier.onStyleDegraded
+        set(value) { applier.onStyleDegraded = value }
+
     /** Invoked for deterministic server-side map setup problems, not transient network failures. */
     var onMapConfigurationFailed: ((String) -> Unit)? = null
 
@@ -82,11 +87,18 @@ class MapLibreManager(
             val canRenderMap = when (result) {
                 is TileSourceFetchResult.Success -> {
                     sourceManager.setSources(result.sources)
-                    Log.i(
-                        TAG,
-                        "Fetched ${result.sources.size} map sources. " +
-                            "effectiveSource=${sourceManager.getEffectiveSourceId()}",
-                    )
+                    if (result.isStale) {
+                        val message = result.fallbackMessage
+                            ?: "Using cached map sources because the server is unavailable."
+                        Log.w(TAG, "Using stale map sources. effectiveSource=${sourceManager.getEffectiveSourceId()}")
+                        onMapDegraded?.invoke(message)
+                    } else {
+                        Log.i(
+                            TAG,
+                            "Fetched ${result.sources.size} map sources. " +
+                                "effectiveSource=${sourceManager.getEffectiveSourceId()}",
+                        )
+                    }
                     true
                 }
                 is TileSourceFetchResult.ConfigurationError -> {
@@ -96,10 +108,10 @@ class MapLibreManager(
                     false
                 }
                 is TileSourceFetchResult.TransientFailure -> {
-                    Log.e(TAG, "Map source transient failure: ${result.message}")
+                    Log.w(TAG, "Map source transient failure; continuing with empty style: ${result.message}")
                     sourceManager.setSources(emptyList())
-                    onStyleLoadFailed?.invoke(result.message)
-                    false
+                    onMapDegraded?.invoke(result.message)
+                    true
                 }
             }
             sourcesFetched = true

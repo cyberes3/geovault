@@ -33,6 +33,7 @@ internal class BasemapApplier(
 
     var onStyleLoaded: ((MapLibreMap, Style) -> Unit)? = null
     var onStyleLoadFailed: ((String) -> Unit)? = null
+    var onStyleDegraded: ((String) -> Unit)? = null
 
     private var lastAppliedSourceKey: String? = null
     private var pendingSourceKey: String? = null
@@ -89,7 +90,7 @@ internal class BasemapApplier(
                 "Basemap apply failed before style load; applying empty style. effectiveId=${sourceManager.getEffectiveSourceId()}",
                 e,
             )
-            onStyleLoadFailed?.invoke(e.message ?: e.javaClass.simpleName)
+            onStyleDegraded?.invoke(e.message ?: e.javaClass.simpleName)
             applyEmptyStyle(map, requestedKey, generation, restoreCamera)
             true
         }
@@ -131,7 +132,7 @@ internal class BasemapApplier(
                 addRasterLayer(style, RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID))
             } catch (rasterError: Exception) {
                 Log.e(TAG, "Failed applying raster source: sourceKey=$sourceKey", rasterError)
-                onStyleLoadFailed?.invoke(rasterError.message ?: "raster_source_apply_failed")
+                onStyleDegraded?.invoke(rasterError.message ?: "raster_source_apply_failed")
             }
             lastAppliedSourceKey = sourceKey
             pendingSourceKey = null
@@ -168,7 +169,7 @@ internal class BasemapApplier(
                     "Vector style JSON unavailable; applying empty style. " +
                         "styleUrl=$styleUrlString isOurServer=$isOurServer",
                 )
-                onStyleLoadFailed?.invoke("Map style unavailable for $styleUrlString")
+                onStyleDegraded?.invoke("Map style unavailable for $styleUrlString")
                 applyEmptyStyle(map, sourceKey, generation, restoreCamera)
             }
         }
