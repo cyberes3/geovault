@@ -39,6 +39,8 @@ data class TrackerMapSessionPointInput(
     val recentDataWindowByTracker: Map<String, String?> = emptyMap(),
     /** See [TrackerMapSessionBuildInput.currentSessionStartByTracker]. */
     val currentSessionStartByTracker: Map<String, Long> = emptyMap(),
+    /** See [TrackerMapSessionBuildInput.visibleTrackerIds]. */
+    val visibleTrackerIds: Set<String>? = null,
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -135,6 +137,7 @@ object TrackerMapSessionEngine {
                 localRuntimeOverlayTrails = input.snapshot.renderTrailsByTracker + reduction.nextState.allQueueTrailsByTracker,
                 recentDataWindowByTracker = input.recentDataWindowByTracker,
                 currentSessionStartByTracker = input.currentSessionStartByTracker,
+                visibleTrackerIds = input.visibleTrackerIds,
                 nowMs = input.nowMs,
             )
         )

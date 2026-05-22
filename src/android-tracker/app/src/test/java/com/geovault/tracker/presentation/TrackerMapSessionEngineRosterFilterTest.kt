@@ -1,6 +1,8 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.TrackPointSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -85,8 +87,44 @@ class TrackerMapSessionEngineRosterFilterTest {
         assertTrue(snapshot.tracks.isEmpty())
     }
 
+    @Test
+    fun reducePoint_keepsNextSnapshotTracksRosterFiltered() {
+        val initial = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(mode = TrackerMapDisplayMode.ALL_QUEUE),
+                plan = plan(acceptedRemoteTrackerIds = setOf("visible", "hidden")),
+                localRuntimeOverlayTrails = mapOf(
+                    "visible" to listOf(queued("visible", 10L)),
+                ),
+                visibleTrackerIds = setOf("visible"),
+            )
+        )
+
+        val result = TrackerMapSessionEngine.reducePoint(
+            TrackerMapSessionPointInput(
+                snapshot = initial,
+                point = TrackPointEvent(
+                    source = TrackPointSource.REMOTE_STREAM,
+                    trackId = "hidden",
+                    lat = 20.0,
+                    lon = 20.0,
+                    timestampMs = 20L,
+                    accuracyMeters = null,
+                    propsJson = null,
+                ),
+                trailPointLimit = 100,
+                visibleTrackerIds = setOf("visible"),
+            )
+        )
+
+        assertTrue(result.acceptedBySourcePolicy)
+        assertEquals(setOf("visible"), result.nextSnapshot.tracks.keys)
+        assertFalse("hidden" in result.nextSnapshot.tracks)
+    }
+
     private fun plan(
         mode: TrackerMapDisplayMode = TrackerMapDisplayMode.ALL_QUEUE,
+        acceptedRemoteTrackerIds: Set<String> = emptySet(),
     ): TrackerMapStreamingPlan {
         return TrackerMapStreamingPlan(
             mode = mode,
@@ -98,7 +136,7 @@ class TrackerMapSessionEngineRosterFilterTest {
             visibleRosterTrackerIds = emptySet(),
             locallyRecordedTrackerIds = emptySet(),
             remoteSubscriptionIds = emptySet(),
-            acceptedRemoteTrackerIds = emptySet(),
+            acceptedRemoteTrackerIds = acceptedRemoteTrackerIds,
             localOverlayTrackerIds = emptySet(),
             trailReloadPlan = TrackerMapTrailReloadPlan(source = TrackerMapTrailSource.MULTI_SERVER),
         )

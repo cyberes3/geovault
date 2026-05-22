@@ -793,20 +793,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         }
                     }
                     is com.geovault.tracker.data.TrackerManagementEvent.TrackerUpserted -> {
-                        when (val change = filterChangeReactor.observe(event.tracker)) {
-                            is TrackerMapFilterChangeReactor.FilterChange.None -> Unit
-                            is TrackerMapFilterChangeReactor.FilterChange.Refresh -> {
-                                // Filter changed for a tracker we know. Invalidate the geometry
-                                // dedupe entry first so the imminent reload reaches the server
-                                // with the new window; then republish the render package for
-                                // instant client-side re-filter on points we already hold; then
-                                // request the forced reload that will overwrite those with the
-                                // server's window-bounded response.
-                                sessionRequestDeduper.invalidate(change.trackerId)
-                                publishRenderPackage()
-                                requestRuntimeTrailReload(TrackerMapTrailReloadReason.RecentDataWindowChanged)
-                            }
+                        handleFilterChange(filterChangeReactor.observe(event.tracker))
+                    }
+                    is com.geovault.tracker.data.TrackerManagementEvent.TrackersRefreshed -> {
+                        val changes = filterChangeReactor.observeAll(event.trackers)
+                        for (change in changes) {
+                            handleFilterChange(change)
                         }
+                        if (changes.isNotEmpty()) refreshStreamTargets()
                     }
                     else -> Unit
                 }
@@ -1619,34 +1613,55 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 localRuntimeOverlayTrails = renderTrails,
                 recentDataWindowByTracker = currentRecentDataWindowByTracker(),
                 currentSessionStartByTracker = currentSessionStartByTracker(state),
-                // ROSTER FILTER: SINGLE_SESSION passes null so the engine renders every
-                // trail it has (the displayed-tracker logic is single-trail anyway and
-                // doesn't iterate the `tracks` map). ALL_QUEUE passes
-                // `plan.visibleRosterTrackerIds`, which has already been run through
-                // [HiddenMapItemsPolicy.visibleTrackerIdsForMap]. GROUP_PLACEHOLDER takes
-                // the group's raw member list and intersects it with the hidden-filtered
-                // roster here — the projector copies group members verbatim and would
-                // otherwise let a hidden group member render. Passing an empty (but
-                // non-null) set is meaningful: "every group member is hidden, render
-                // nothing", which the engine now honors.
-                visibleTrackerIds = when (state.mode) {
-                    TrackerMapDisplayMode.GROUP_PLACEHOLDER -> HiddenMapItemsPolicy
-                        .visibleTrackerIdsForMap(
-                            rosterTrackerIds = plan.groupTrackerIds,
-                            mapVisibility = trackerManagementStateStore.mapVisibility.value,
-                            trackers = trackerManagementStateStore.trackers.value,
-                        )
-                    TrackerMapDisplayMode.ALL_QUEUE -> plan.visibleRosterTrackerIds
-                    TrackerMapDisplayMode.SINGLE_SESSION -> null
-                },
+                visibleTrackerIds = visibleTrackerIdsForSessionPlan(state, plan),
                 nowMs = nowMs,
             )
         )
     }
 
+    private fun visibleTrackerIdsForSessionPlan(
+        state: TrackerMapUiState,
+        plan: TrackerMapStreamingPlan,
+    ): Set<String>? {
+        // ROSTER FILTER: SINGLE_SESSION passes null so the engine renders every trail it has
+        // (the displayed-tracker logic is single-trail anyway and doesn't iterate the `tracks`
+        // map). ALL_QUEUE passes `plan.visibleRosterTrackerIds`, which has already been run
+        // through [HiddenMapItemsPolicy.visibleTrackerIdsForMap]. GROUP_PLACEHOLDER takes the
+        // group's raw member list and intersects it with the hidden-filtered roster here — the
+        // projector copies group members verbatim and would otherwise let a hidden group member
+        // render. Passing an empty (but non-null) set is meaningful: "every group member is
+        // hidden, render nothing", which the engine honors.
+        return when (state.mode) {
+            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> HiddenMapItemsPolicy
+                .visibleTrackerIdsForMap(
+                    rosterTrackerIds = plan.groupTrackerIds,
+                    mapVisibility = trackerManagementStateStore.mapVisibility.value,
+                    trackers = trackerManagementStateStore.trackers.value,
+                )
+            TrackerMapDisplayMode.ALL_QUEUE -> plan.visibleRosterTrackerIds
+            TrackerMapDisplayMode.SINGLE_SESSION -> null
+        }
+    }
+
     private fun currentRecentDataWindowByTracker(): Map<String, String?> {
         return trackerManagementStateStore.trackers.value.associate { tracker ->
             tracker.id to tracker.settingString("recent_data_window")
+        }
+    }
+
+    private suspend fun handleFilterChange(change: TrackerMapFilterChangeReactor.FilterChange) {
+        when (change) {
+            is TrackerMapFilterChangeReactor.FilterChange.None -> Unit
+            is TrackerMapFilterChangeReactor.FilterChange.Refresh -> {
+                // Filter changed for a tracker we know. Invalidate the geometry dedupe entry
+                // first so the imminent reload reaches the server with the new window; then
+                // republish the render package for instant client-side re-filter on points we
+                // already hold; then request the forced reload that will overwrite those with the
+                // server's window-bounded response.
+                sessionRequestDeduper.invalidate(change.trackerId)
+                publishRenderPackage()
+                requestRuntimeTrailReload(TrackerMapTrailReloadReason.RecentDataWindowChanged)
+            }
         }
     }
 
@@ -2356,6 +2371,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 recentDataWindowByTracker = currentRecentDataWindowByTracker(),
                 currentSessionStartByTracker = currentSessionStartByTracker(snapshot.uiState),
+                visibleTrackerIds = visibleTrackerIdsForSessionPlan(snapshot.uiState, snapshot.plan),
                 nowMs = nowMs,
             )
         )

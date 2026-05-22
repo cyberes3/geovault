@@ -92,4 +92,33 @@ class TrackerMapFilterChangeReactorTest {
         assertEquals(FilterChange.None, reactor.observe(tracker("b", "session")))
         assertEquals(FilterChange.Refresh("b"), reactor.observe(tracker("b", "all")))
     }
+
+    @Test
+    fun `observeAll returns refreshes for changed seeded trackers`() {
+        val reactor = TrackerMapFilterChangeReactor()
+        reactor.seed(listOf(tracker("a", "1h"), tracker("b", "all"), tracker("c", "session")))
+
+        val changes = reactor.observeAll(
+            listOf(
+                tracker("a", "session"),
+                tracker("b", "all"),
+                tracker("c", window = null),
+            )
+        )
+
+        assertEquals(listOf(FilterChange.Refresh("a"), FilterChange.Refresh("c")), changes)
+        assertEquals(FilterChange.None, reactor.observe(tracker("a", "session")))
+        assertEquals(FilterChange.None, reactor.observe(tracker("c", window = null)))
+    }
+
+    @Test
+    fun `observeAll replaces baseline so removed trackers become first observations later`() {
+        val reactor = TrackerMapFilterChangeReactor()
+        reactor.seed(listOf(tracker("a", "1h"), tracker("removed", "1h")))
+
+        val changes = reactor.observeAll(listOf(tracker("a", "1h")))
+
+        assertEquals(emptyList<FilterChange.Refresh>(), changes)
+        assertEquals(FilterChange.None, reactor.observe(tracker("removed", "session")))
+    }
 }

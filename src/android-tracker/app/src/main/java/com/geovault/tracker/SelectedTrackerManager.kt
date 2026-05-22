@@ -20,20 +20,44 @@ object SelectedTrackerManager {
         trackerName: String?,
         restartTrackingIfRunning: Boolean = true
     ) {
-        val persisted = SelectedTrackerPrefs.setSelectedTracker(context, trackerId, trackerName)
+        val normalizedTrackerId = trackerId.trim()
+        val previouslySelectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(context).trim()
+        val selectionUnchanged = normalizedTrackerId.isNotEmpty() && normalizedTrackerId == previouslySelectedTrackerId
+        val persisted = SelectedTrackerPrefs.setSelectedTracker(context, normalizedTrackerId, trackerName)
         if (!persisted) {
-            GeoVaultCaptureLog.w(TAG, "Failed to persist selected tracker id=$trackerId before restart")
+            GeoVaultCaptureLog.w(TAG, "Failed to persist selected tracker id=$normalizedTrackerId before restart")
         }
         syncRuntimeSelectedTracker(context)
+        if (selectionUnchanged) {
+            GeoVaultCaptureLog.i(
+                TAG,
+                "selected_tracker_action action=already_selected_no_restart trackerId=$normalizedTrackerId " +
+                    "restartRequested=$restartTrackingIfRunning"
+            )
+            return
+        }
         if (restartTrackingIfRunning) {
+            GeoVaultCaptureLog.i(
+                TAG,
+                "selected_tracker_action action=changed_restart previousTrackerId=$previouslySelectedTrackerId " +
+                    "trackerId=$normalizedTrackerId"
+            )
             restartTrackingIfRunning(context)
+        } else {
+            GeoVaultCaptureLog.i(
+                TAG,
+                "selected_tracker_action action=changed_no_restart previousTrackerId=$previouslySelectedTrackerId " +
+                    "trackerId=$normalizedTrackerId"
+            )
         }
     }
 
     fun clearSelectedTracker(context: Context) {
+        val previousTrackerId = SelectedTrackerPrefs.selectedTrackerId(context).trim()
         cancelPendingRestart()
         SelectedTrackerPrefs.clearSelectedTracker(context)
         syncRuntimeSelectedTracker(context)
+        GeoVaultCaptureLog.i(TAG, "selected_tracker_action action=cleared_stop previousTrackerId=$previousTrackerId")
         stopTrackingIfRunning(context)
     }
 
@@ -68,6 +92,7 @@ object SelectedTrackerManager {
     fun restartTrackingIfRunning(context: Context, delayMs: Long = RESTART_DELAY_MS) {
         if (!TrackingRuntimeStateStore.state.value.isRunning) {
             cancelPendingRestart()
+            GeoVaultCaptureLog.i(TAG, "selected_tracker_action action=restart_skipped_not_running")
             return
         }
         val appContext = context.applicationContext

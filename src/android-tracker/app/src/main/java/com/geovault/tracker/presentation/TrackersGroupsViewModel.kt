@@ -841,21 +841,35 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             onSuccess = {
                 val app = getApplication<Application>()
                 val selectedTrackerId = selectedTrackerId()
-                if (d.setAsSelectedTracker) {
-                    SelectedTrackerManager.setSelectedTracker(
-                        context = app,
-                        trackerId = d.tracker.id,
-                        trackerName = name,
-                        restartTrackingIfRunning = true
+                when (
+                    TrackerEditSelectionPolicy.resolve(
+                        TrackerEditSelectionInput(
+                            editedTrackerId = d.tracker.id,
+                            selectedTrackerId = selectedTrackerId,
+                            setAsSelectedTracker = d.setAsSelectedTracker,
+                        )
                     )
-                } else if (selectedTrackerId == d.tracker.id) {
-                    SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
+                ) {
+                    TrackerEditSelectionAction.NoSelectionChangeAlreadySelected -> {
+                        SelectedTrackerManager.updateSelectedTrackerNameIfSelected(
+                            context = app,
+                            trackerId = d.tracker.id,
+                            trackerName = name
+                        )
+                    }
+                    TrackerEditSelectionAction.SelectDifferentTracker -> {
+                        SelectedTrackerManager.setSelectedTracker(
+                            context = app,
+                            trackerId = d.tracker.id,
+                            trackerName = name,
+                            restartTrackingIfRunning = true
+                        )
+                    }
+                    TrackerEditSelectionAction.ClearSelectedTracker -> {
+                        SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
+                    }
+                    TrackerEditSelectionAction.NoSelectionChangeUnselected -> Unit
                 }
-                SelectedTrackerManager.updateSelectedTrackerNameIfSelected(
-                    context = app,
-                    trackerId = d.tracker.id,
-                    trackerName = name
-                )
                 _toastEvents.tryEmit(app.getString(R.string.trackers_saved_successfully))
                 dismissDialog()
             }

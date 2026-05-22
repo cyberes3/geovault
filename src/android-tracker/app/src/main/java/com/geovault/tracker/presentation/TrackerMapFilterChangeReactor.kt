@@ -27,6 +27,7 @@ class TrackerMapFilterChangeReactor {
     private val lastSeenWindowByTrackerId = mutableMapOf<String, String?>()
 
     fun seed(trackers: List<Tracker>) {
+        lastSeenWindowByTrackerId.clear()
         for (tracker in trackers) {
             val id = tracker.id.trim()
             if (id.isEmpty()) continue
@@ -46,6 +47,14 @@ class TrackerMapFilterChangeReactor {
         } else {
             FilterChange.None
         }
+    }
+
+    fun observeAll(trackers: List<Tracker>): List<FilterChange.Refresh> {
+        val changes = trackers.mapNotNull { tracker ->
+            observe(tracker) as? FilterChange.Refresh
+        }
+        seed(trackers)
+        return changes
     }
 
     private fun readWindow(tracker: Tracker): String? {
