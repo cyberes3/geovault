@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
-import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -43,7 +43,7 @@ fun SharedTrackerEditScreen(
     onUnsubscribe: () -> Unit,
     onLeaveShare: () -> Unit,
 ) {
-    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
         onBack = {
@@ -112,7 +112,7 @@ fun SharedGroupEditScreen(
     onDismiss: () -> Unit,
     onLeaveGroup: () -> Unit,
 ) {
-    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
     val context = LocalContext.current
     val clipboardHelper = remember(context) { ClipboardCopyHelper(context) }
     GeoVaultRegisterBackHandler(

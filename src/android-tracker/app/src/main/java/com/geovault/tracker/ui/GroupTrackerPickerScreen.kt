@@ -51,7 +51,7 @@ import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
-import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultTab
@@ -97,7 +97,7 @@ fun GroupTrackerPickerScreen(
     dismissOnHostInactive: Boolean = true,
     doneButtonLabel: String = stringResource(R.string.trackers_edit_pick_users_done),
 ) {
-    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
 
     val tabs = remember {
         listOf(

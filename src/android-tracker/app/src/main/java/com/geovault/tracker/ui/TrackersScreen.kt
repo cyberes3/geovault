@@ -75,7 +75,7 @@ import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
-import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
@@ -1422,7 +1422,7 @@ private fun TrackerEditLoadingShell(
     trackerName: String,
     onDismiss: () -> Unit,
 ) {
-    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
     GeoVaultRegisterBackHandler(
         priority = TrackerBackPriorities.FULL_SCREEN_OVERLAY,
         onBack = {

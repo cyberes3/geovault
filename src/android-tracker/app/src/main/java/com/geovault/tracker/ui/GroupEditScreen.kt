@@ -50,7 +50,7 @@ import com.geovault.common.ui.components.GeoVaultFormSection
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
-import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSearchableMultiSelectDialog
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
@@ -98,7 +98,7 @@ fun GroupEditScreen(
     onSave: () -> Unit,
     onUnsavedChangesChanged: (Boolean) -> Unit = {},
 ) {
-    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
 
     var showMembershipPicker by remember { mutableStateOf(false) }
 

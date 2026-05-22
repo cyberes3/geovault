@@ -63,7 +63,7 @@ import com.geovault.common.ui.components.GeoVaultSearchableMultiSelectDialog
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultSelectOption
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
-import com.geovault.common.ui.components.GeoVaultRequestBottomTabsDisabled
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.NaturalSort
@@ -139,7 +139,7 @@ fun TrackerEditorScreen(
     onDismiss: () -> Unit,
     onUnsavedChangesChanged: (Boolean) -> Unit = {},
 ) {
-    GeoVaultRequestBottomTabsDisabled(shouldDisable = true)
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
 
     val context = LocalContext.current
     var showDiscardDialog by remember { mutableStateOf(false) }
