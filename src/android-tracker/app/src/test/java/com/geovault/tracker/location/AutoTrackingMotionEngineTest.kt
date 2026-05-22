@@ -82,12 +82,12 @@ class AutoTrackingMotionEngineTest {
         engine.reset(nowMs = 0L)
 
         engine.onMotionEvidence(
-            speedMps = 12f,
+            speedMps = 6f,
             eventTimeMs = 1_000L,
             confidence = AutoTrackingMotionEvidenceConfidence.High,
         )
         val out = engine.onMotionEvidence(
-            speedMps = 12f,
+            speedMps = 6f,
             eventTimeMs = 2_000L,
             confidence = AutoTrackingMotionEvidenceConfidence.High,
         )
@@ -166,6 +166,44 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
+    fun motionEvidence_drivingClassSpeedFromWalking_skipsDirectlyToDriving() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+
+        engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 1_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+        val out = engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 2_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+        assertEquals(TransitionPath.SKIP_TO_DRIVING, out.transitionPath)
+    }
+
+    @Test
+    fun motionEvidence_drivingClassSpeedFromBiking_promotesImmediatelyToDriving() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 6f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 6f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        val out = engine.onMotionEvidence(
+            speedMps = 12f,
+            eventTimeMs = 3_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+        assertEquals(TransitionPath.SKIP_TO_DRIVING, out.transitionPath)
+    }
+
+    @Test
     fun periodicTick_decays_speed() {
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)
@@ -178,5 +216,33 @@ class AutoTrackingMotionEngineTest {
         engine.onTick(nowMs = 200_000L)
         val after = engine.snapshot().smoothedSpeedMps
         assertTrue(after < before)
+    }
+
+    @Test
+    fun periodicTick_doesNotPromoteWalkingToBiking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 8f, eventTimeMs = 1_000L)
+
+        val out = engine.onTick(nowMs = 200_000L)
+
+        assertFalse(out.modeChanged)
+        assertEquals(TransitionPath.NONE, out.transitionPath)
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+    }
+
+    @Test
+    fun periodicTick_doesNotDemoteDriving() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        val out = engine.onTick(nowMs = 300_000L)
+
+        assertFalse(out.modeChanged)
+        assertEquals(TransitionPath.NONE, out.transitionPath)
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
     }
 }

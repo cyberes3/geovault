@@ -15,7 +15,7 @@ class TrackerEditSelectionPolicyTest {
             )
         )
 
-        assertEquals(TrackerEditSelectionAction.NoSelectionChangeAlreadySelected, action)
+        assertEquals(TrackerEditSelectionAction.SameSelectedTrackerSettingsOnly, action)
     }
 
     @Test

@@ -15,7 +15,7 @@ object TrackerEditSelectionPolicy {
         val isAlreadySelected = selectedTrackerId == trackerId
         return when {
             input.setAsSelectedTracker && isAlreadySelected ->
-                TrackerEditSelectionAction.NoSelectionChangeAlreadySelected
+                TrackerEditSelectionAction.SameSelectedTrackerSettingsOnly
             input.setAsSelectedTracker ->
                 TrackerEditSelectionAction.SelectDifferentTracker
             isAlreadySelected ->
@@ -33,7 +33,7 @@ data class TrackerEditSelectionInput(
 )
 
 sealed class TrackerEditSelectionAction {
-    data object NoSelectionChangeAlreadySelected : TrackerEditSelectionAction()
+    data object SameSelectedTrackerSettingsOnly : TrackerEditSelectionAction()
     data object SelectDifferentTracker : TrackerEditSelectionAction()
     data object ClearSelectedTracker : TrackerEditSelectionAction()
     data object NoSelectionChangeUnselected : TrackerEditSelectionAction()

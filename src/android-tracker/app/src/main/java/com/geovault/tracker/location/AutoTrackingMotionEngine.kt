@@ -123,10 +123,20 @@ class AutoTrackingMotionEngine(
         confidence: AutoTrackingMotionEvidenceConfidence,
     ): AutoTrackingEngineOutput {
         return when (confidence) {
-            AutoTrackingMotionEvidenceConfidence.High -> onAcceptedFix(
-                speedMps = speedMps,
-                eventTimeMs = eventTimeMs,
-            )
+            AutoTrackingMotionEvidenceConfidence.High -> {
+                val observed = speedMps.coerceAtLeast(0f)
+                val nextSpeed = smoothSpeed(state.smoothedSpeedMps, observed)
+                setStateWithTransition(
+                    state.copy(
+                        smoothedSpeedMps = nextSpeed,
+                        lastObservedSpeedMps = observed,
+                        lastEvidenceAtMs = eventTimeMs,
+                        isGpsPaused = false,
+                    ),
+                    decisionSpeedMps = max(nextSpeed, observed),
+                    drivingEvidence = true,
+                )
+            }
         }
     }
 
@@ -174,20 +184,24 @@ class AutoTrackingMotionEngine(
         val decayWindowMs = elapsedMs - decayGraceMs
         val decayFactor = exp(-decayWindowMs.toDouble() / decayHalfLifeMs.toDouble()).toFloat()
         val decayedSpeed = (state.smoothedSpeedMps * decayFactor).coerceAtLeast(0f)
-        return setStateWithTransition(
-            state.copy(smoothedSpeedMps = decayedSpeed, lastObservedSpeedMps = 0f),
-            decisionSpeedMps = decayedSpeed,
+        state = state.copy(
+            smoothedSpeedMps = decayedSpeed,
+            consecutiveAboveUpper = 0,
+            lastObservedSpeedMps = 0f,
         )
+        return AutoTrackingEngineOutput(state = state, modeChanged = false)
     }
 
     private fun setStateWithTransition(
         nextState: AutoTrackingMotionState,
         decisionSpeedMps: Float,
+        drivingEvidence: Boolean = false,
     ): AutoTrackingEngineOutput {
         val decision = selectMode(
             current = nextState.mode,
             speedMps = decisionSpeedMps,
             consecutiveAboveUpper = nextState.consecutiveAboveUpper,
+            drivingEvidence = drivingEvidence,
         )
         val resolved = nextState.copy(
             mode = decision.mode,
@@ -220,13 +234,18 @@ class AutoTrackingMotionEngine(
         current: TrackingMotionMode,
         speedMps: Float,
         consecutiveAboveUpper: Int,
+        drivingEvidence: Boolean,
     ): ModeDecision {
         return when (current) {
             TrackingMotionMode.WALKING -> {
                 if (speedMps > WALKING_TO_BIKING_UPPER_MPS) {
                     val streak = consecutiveAboveUpper + 1
                     if (streak >= PROMOTE_CONSECUTIVE_REQUIRED) {
-                        val skip = speedMps > WALKING_SKIP_TO_DRIVING_MPS
+                        val skip = if (drivingEvidence) {
+                            speedMps > BIKING_TO_DRIVING_UPPER_MPS
+                        } else {
+                            speedMps > WALKING_SKIP_TO_DRIVING_MPS
+                        }
                         val target = if (skip) {
                             TrackingMotionMode.DRIVING
                         } else {
@@ -244,6 +263,9 @@ class AutoTrackingMotionEngine(
             TrackingMotionMode.BIKING -> {
                 when {
                     speedMps > BIKING_TO_DRIVING_UPPER_MPS -> {
+                        if (drivingEvidence) {
+                            return ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.SKIP_TO_DRIVING)
+                        }
                         val streak = consecutiveAboveUpper + 1
                         if (streak >= PROMOTE_CONSECUTIVE_REQUIRED) {
                             ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.LADDER)

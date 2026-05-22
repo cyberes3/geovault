@@ -151,6 +151,8 @@ class TrackingService : Service() {
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
     private val autoTrackingMotionEvidenceGate = AutoTrackingMotionEvidenceGate()
     private var lastAutoMotionCapEvidenceAtMs: Long = 0L
+    private var lastAutoMotionEvidenceAtMs: Long = 0L
+    private var lastAutoModeChangedAtMs: Long = 0L
     private var autoModeTickJob: Job? = null
     private var locationRequestReapplyRetryJob: Job? = null
     private var lastAppliedLocationRequestKey: LocationRequestKey? = null
@@ -291,6 +293,8 @@ class TrackingService : Service() {
         // where genuine cap-exceeded fixes were interleaved with stale
         // duplicates emitted by FusedLocationProvider.
         private const val AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS = 10_000L
+        private const val AUTO_MOTION_FAST_LOCK_SUPPRESS_WINDOW_MS = 15_000L
+        private const val AUTO_MOTION_REQUEST_REAPPLY_DEBOUNCE_MS = 10_000L
 
         // Threshold above which observed/smoothed speed counts as "user is
         // really moving". Used to override the conservative location filter
@@ -718,6 +722,8 @@ class TrackingService : Service() {
         clearPausedFreshnessProbe(reason = "start_tracking", clearLastFreshnessTimestamp = true)
         lowAccuracyFallbackCandidate = null
         lastAutoMotionCapEvidenceAtMs = 0L
+        lastAutoMotionEvidenceAtMs = 0L
+        lastAutoModeChangedAtMs = 0L
         lowAccuracyFallbackTimerArmedAtMs = 0L
         lowAccuracyFallbackEmitCountThisSession = 0
         lowAccuracyFallbackArmCountThisSession = 0
@@ -1031,10 +1037,16 @@ class TrackingService : Service() {
             val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
                 result.rejectReason == TrackPointRejectReason.STALE
             if (rejectedForLock) {
-                maybeStartFastGpsLockWindow(
-                    measuredAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
-                    rejectReason = result.rejectReason
+                val fastLockSuppressed = shouldSuppressFastLockForAutoMotion(
+                    rejectReason = result.rejectReason,
+                    nowMs = nowMs,
                 )
+                if (!fastLockSuppressed) {
+                    maybeStartFastGpsLockWindow(
+                        measuredAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+                        rejectReason = result.rejectReason
+                    )
+                }
                 if (settings.lowAccuracyFallbackEnabled) {
                     transitionGpsState(GpsRuntimeEvent.FIX_REJECTED, "rejected_for_lock:${result.rejectReason}")
                     lowAccuracyFallbackRejectedFixCountThisSession++
@@ -2324,6 +2336,15 @@ class TrackingService : Service() {
         ) {
             return
         }
+        if (shouldDebounceLocationRequestReapply(reason)) {
+            val elapsedMs = System.currentTimeMillis() - lastLocationRequestAppliedAtMs
+            runtimeTelemetry.event(
+                "location_request_reapply_suppressed",
+                "reason=$reason elapsedMs=$elapsedMs"
+            )
+            scheduleLocationRequestReapplyRetry(reason = "debounced_$reason")
+            return
+        }
         val applied = applyCurrentLocationRequest(reason)
         if (!applied) {
             if (!TrackingPermissionGate.hasRequiredPermissionsForTracking(this)) {
@@ -2333,6 +2354,15 @@ class TrackingService : Service() {
             runtimeTelemetry.event("location_request_reapply_deferred", "reason=$reason state=$gpsRuntimeState")
             scheduleLocationRequestReapplyRetry(reason = reason)
         }
+    }
+
+    private fun shouldDebounceLocationRequestReapply(reason: String): Boolean {
+        return AutoMotionStabilityPolicy.shouldDebounceLocationRequestReapply(
+            reason = reason,
+            nowMs = System.currentTimeMillis(),
+            lastAppliedAtMs = lastLocationRequestAppliedAtMs,
+            debounceMs = AUTO_MOTION_REQUEST_REAPPLY_DEBOUNCE_MS,
+        )
     }
 
     private fun scheduleLocationRequestReapplyRetry(reason: String) {
@@ -2412,6 +2442,7 @@ class TrackingService : Service() {
             eventTimeMs = eventTimeMs,
         ) ?: return false
         lastAutoMotionCapEvidenceAtMs = eventTimeMs
+        lastAutoMotionEvidenceAtMs = System.currentTimeMillis()
         val modeBefore = autoTrackingMotionEngine.snapshot().mode
         val output = autoTrackingMotionEngine.onMotionEvidence(
             speedMps = evidence.speedMps,
@@ -2434,6 +2465,7 @@ class TrackingService : Service() {
 
     private fun processAutoTrackingOutput(output: AutoTrackingEngineOutput, reason: String) {
         if (output.modeChanged) {
+            lastAutoModeChangedAtMs = System.currentTimeMillis()
             resetElasticDistanceOverride(reason = "auto_mode_changed_$reason", reapplyRequest = false)
             reapplyLocationRequestIfActive("auto_mode_$reason")
             runtimeTelemetry.event(
@@ -2596,6 +2628,10 @@ class TrackingService : Service() {
         measuredAccuracyMeters: Float?,
         rejectReason: TrackPointRejectReason? = null
     ) {
+        val nowMs = System.currentTimeMillis()
+        if (shouldSuppressFastLockForAutoMotion(rejectReason = rejectReason, nowMs = nowMs)) {
+            return
+        }
         val accuracyFilterMeters = resolveCurrentAccuracyFilter()
         if (
             !TrackingRuntimeOrchestrator.shouldAttemptFastLock(
@@ -2630,6 +2666,35 @@ class TrackingService : Service() {
                 startFastGpsLockBurst(measuredAccuracyMeters = measuredAccuracyMeters, accuracyFilterMeters = accuracyFilterMeters)
             }
         )
+    }
+
+    private fun shouldSuppressFastLockForAutoMotion(
+        rejectReason: TrackPointRejectReason?,
+        nowMs: Long,
+    ): Boolean {
+        val elapsedSinceEvidenceMs = lastAutoMotionEvidenceAtMs
+            .takeIf { it > 0L }
+            ?.let { nowMs - it }
+        val elapsedSinceModeChangeMs = lastAutoModeChangedAtMs
+            .takeIf { it > 0L }
+            ?.let { nowMs - it }
+        if (
+            !AutoMotionStabilityPolicy.shouldSuppressFastLock(
+                rejectReason = rejectReason,
+                nowMs = nowMs,
+                lastMotionEvidenceAtMs = lastAutoMotionEvidenceAtMs,
+                lastModeChangedAtMs = lastAutoModeChangedAtMs,
+                windowMs = AUTO_MOTION_FAST_LOCK_SUPPRESS_WINDOW_MS,
+            )
+        ) {
+            return false
+        }
+        runtimeTelemetry.event(
+            name = "auto_motion_fast_lock_suppressed",
+            details = "reason=$rejectReason elapsedSinceEvidenceMs=${elapsedSinceEvidenceMs ?: -1L} " +
+                "elapsedSinceModeChangeMs=${elapsedSinceModeChangeMs ?: -1L}"
+        )
+        return true
     }
 
     private fun startFastGpsLockBurst(measuredAccuracyMeters: Float?, accuracyFilterMeters: Float) {

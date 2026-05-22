@@ -11,6 +11,8 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 object SelectedTrackerManager {
     private const val TAG = "SelectedTrackerManager"
     private const val RESTART_DELAY_MS = 400L
+    private const val RESTART_START_RETRY_MS = 400L
+    private const val MAX_RESTART_START_ATTEMPTS = 10
     private val restartHandler = Handler(Looper.getMainLooper())
     private var pendingRestart: Runnable? = null
 
@@ -99,20 +101,12 @@ object SelectedTrackerManager {
         cancelPendingRestart()
         val stopGenerationAtRestart = TrackingCommandFacade.stopGeneration()
         TrackingCommandFacade.requestStop(appContext, reason = "selected_tracker_restart_stop")
-        val runnable = Runnable {
-            if (TrackingCommandFacade.stopGeneration() != stopGenerationAtRestart) {
-                pendingRestart = null
-                return@Runnable
-            }
-            TrackingCommandFacade.requestStart(
-                context = appContext,
-                trigger = RuntimeTrigger.EXPLICIT_START,
-                reason = "selected_tracker_restart_start"
-            )
-            pendingRestart = null
-        }
-        pendingRestart = runnable
-        restartHandler.postDelayed(runnable, delayMs)
+        scheduleRestartStart(
+            context = appContext,
+            stopGenerationAtRestart = stopGenerationAtRestart,
+            delayMs = delayMs,
+            attempt = 1,
+        )
     }
 
     private fun stopTrackingIfRunning(context: Context) {
@@ -123,5 +117,41 @@ object SelectedTrackerManager {
     private fun cancelPendingRestart() {
         pendingRestart?.let { restartHandler.removeCallbacks(it) }
         pendingRestart = null
+    }
+
+    private fun scheduleRestartStart(
+        context: Context,
+        stopGenerationAtRestart: Long,
+        delayMs: Long,
+        attempt: Int,
+    ) {
+        val runnable = Runnable {
+            if (TrackingCommandFacade.stopGeneration() != stopGenerationAtRestart) {
+                GeoVaultCaptureLog.i(TAG, "selected_tracker_action action=restart_cancelled_generation_changed")
+                pendingRestart = null
+                return@Runnable
+            }
+            if (TrackingRuntimeStateStore.state.value.isRunning && attempt < MAX_RESTART_START_ATTEMPTS) {
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "selected_tracker_action action=restart_start_waiting_for_stop attempt=$attempt"
+                )
+                scheduleRestartStart(
+                    context = context,
+                    stopGenerationAtRestart = stopGenerationAtRestart,
+                    delayMs = RESTART_START_RETRY_MS,
+                    attempt = attempt + 1,
+                )
+                return@Runnable
+            }
+            TrackingCommandFacade.requestStart(
+                context = context,
+                trigger = RuntimeTrigger.EXPLICIT_START,
+                reason = "selected_tracker_restart_start"
+            )
+            pendingRestart = null
+        }
+        pendingRestart = runnable
+        restartHandler.postDelayed(runnable, delayMs)
     }
 }

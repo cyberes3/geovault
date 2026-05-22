@@ -3,11 +3,13 @@ package com.geovault.tracker.presentation
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerManager
+import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerRecentDataWindowOptions
 import com.geovault.tracker.Tracker
@@ -840,17 +842,24 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             },
             onSuccess = {
                 val app = getApplication<Application>()
-                val selectedTrackerId = selectedTrackerId()
-                when (
-                    TrackerEditSelectionPolicy.resolve(
-                        TrackerEditSelectionInput(
-                            editedTrackerId = d.tracker.id,
-                            selectedTrackerId = selectedTrackerId,
-                            setAsSelectedTracker = d.setAsSelectedTracker,
-                        )
+                val runtimeSelectedTrackerId = selectedTrackerId()
+                val prefsSelectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(app).trim()
+                val selectionAction = TrackerEditSelectionPolicy.resolve(
+                    TrackerEditSelectionInput(
+                        editedTrackerId = d.tracker.id,
+                        selectedTrackerId = prefsSelectedTrackerId,
+                        setAsSelectedTracker = d.setAsSelectedTracker,
                     )
-                ) {
-                    TrackerEditSelectionAction.NoSelectionChangeAlreadySelected -> {
+                )
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "selected_tracker_edit_resolution action=$selectionAction " +
+                        "selected=$prefsSelectedTrackerId edited=${d.tracker.id} " +
+                        "runtimeSelected=$runtimeSelectedTrackerId prefsSelected=$prefsSelectedTrackerId " +
+                        "restartRequired=${selectionAction == TrackerEditSelectionAction.SelectDifferentTracker}"
+                )
+                when (selectionAction) {
+                    TrackerEditSelectionAction.SameSelectedTrackerSettingsOnly -> {
                         SelectedTrackerManager.updateSelectedTrackerNameIfSelected(
                             context = app,
                             trackerId = d.tracker.id,
@@ -992,6 +1001,10 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
 
     private fun selectedTrackerId(): String {
         return TrackingRuntimeStateStore.state.value.selectedTrackerId.trim()
+    }
+
+    private companion object {
+        const val TAG = "TrackersGroupsViewModel"
     }
 
     fun deleteGroup(groupId: String) {

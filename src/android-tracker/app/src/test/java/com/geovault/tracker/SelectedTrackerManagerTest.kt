@@ -105,4 +105,44 @@ class SelectedTrackerManagerTest {
             SelectedTrackerPrefs.clearSelectedTracker(context)
         }
     }
+
+    @Test
+    fun setSelectedTracker_samePersistedIdWithStaleRuntime_updatesInPlace() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val before = TrackingRuntimeStateStore.state.value
+        try {
+            SelectedTrackerPrefs.setSelectedTracker(
+                context = context,
+                trackerId = "tracker-1",
+                trackerName = "Before Name"
+            )
+            TrackingRuntimeStateStore.update {
+                it.copy(
+                    isRunning = true,
+                    recordingRuntime = RecordingRuntime(
+                        sessionActive = true,
+                        selectedTrackerId = "",
+                    ),
+                    selectedTrackerId = "",
+                    selectedTrackerName = "",
+                )
+            }
+
+            SelectedTrackerManager.setSelectedTracker(
+                context = context,
+                trackerId = "tracker-1",
+                trackerName = "After Name",
+                restartTrackingIfRunning = true,
+            )
+
+            assertEquals("tracker-1", SelectedTrackerPrefs.selectedTrackerId(context))
+            assertEquals("After Name", SelectedTrackerPrefs.selectedTrackerName(context))
+            assertEquals("tracker-1", TrackingRuntimeStateStore.state.value.selectedTrackerId)
+            assertEquals("After Name", TrackingRuntimeStateStore.state.value.selectedTrackerName)
+            assertTrue(TrackingRuntimeStateStore.state.value.isRunning)
+        } finally {
+            TrackingRuntimeStateStore.update { before }
+            SelectedTrackerPrefs.clearSelectedTracker(context)
+        }
+    }
 }
