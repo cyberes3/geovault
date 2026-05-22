@@ -14,19 +14,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.geovault.common.ui.theme.GeoVaultColorTokens
-import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
+import com.geovault.common.ui.theme.geoVaultInputPlaceholderColor
 import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 
 /**
  * One tappable row inside a [GeoVaultActionSheetDialog]. Set [destructive] to `true` to tint
- * the label with [GeoVaultColorTokens.Error]; disable with [enabled] = `false`.
+ * the label with [GeoVaultColorTokens.Error]; disable with [enabled] = `false`. When disabled,
+ * [onDisabledClick] runs on tap if provided (e.g. explain why the action is unavailable).
  */
 data class GeoVaultActionSheetOption(
     val label: String,
     val onClick: () -> Unit,
     val destructive: Boolean = false,
     val enabled: Boolean = true,
+    val onDisabledClick: (() -> Unit)? = null,
 )
 
 /**
@@ -58,9 +60,13 @@ fun GeoVaultActionSheetDialog(
                 )
                 options.forEach { option ->
                     val tint = when {
-                        !option.enabled -> geoVaultContentSecondaryColor()
+                        !option.enabled -> geoVaultInputPlaceholderColor()
                         option.destructive -> GeoVaultColorTokens.Error
                         else -> MaterialTheme.colors.onSurface
+                    }
+                    val rowClick = when {
+                        option.enabled -> option.onClick
+                        else -> option.onDisabledClick
                     }
                     Text(
                         text = option.label,
@@ -69,7 +75,7 @@ fun GeoVaultActionSheetDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .let { m ->
-                                if (option.enabled) m.clickable(onClick = option.onClick) else m
+                                if (rowClick != null) m.clickable(onClick = rowClick) else m
                             }
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                     )

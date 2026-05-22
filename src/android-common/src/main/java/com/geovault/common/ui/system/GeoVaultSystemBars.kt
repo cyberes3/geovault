@@ -9,7 +9,7 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 
 object GeoVaultSystemBars {
     @ColorInt val PRIMARY_BLUE: Int = GeoVaultColorTokens.MainBlue.toArgb()
-    @ColorInt val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.ListBackground.toArgb()
+    @ColorInt val DEFAULT_NAV_BG: Int = GeoVaultColorTokens.NavigationBarBackground.toArgb()
     @ColorInt private var lastStatusBarColor: Int = PRIMARY_BLUE
     @ColorInt private var lastNavigationBarColor: Int = DEFAULT_NAV_BG
     private var lastUseDarkStatusBarText: Boolean = false

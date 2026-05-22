@@ -111,6 +111,8 @@ object GeoVaultColorTokens {
     // ── Light semantic tokens ────────────────────────────────────────────
     val Surface = White
     val ListBackground = Blue50
+    /** System navigation bar when tabs are hidden; slightly darker than [ListBackground]. */
+    val NavigationBarBackground = Blue100
     val TextPrimary = Blue800
     val TextSecondary = Gray600
     val BorderLight = Blue200
@@ -163,6 +165,8 @@ object GeoVaultColorTokens {
         /** Card / elevated chrome: OLED black (same as [ListBackground]). */
         val Surface = Black
         val ListBackground = Black
+        /** Nav-bar chrome on OLED content; elevated gray so the gesture area reads distinctly. */
+        val NavigationBarBackground = Gray900
         val TextPrimary = Gray200
         val TextSecondary = Gray400
         val BorderLight = Gray700
@@ -224,6 +228,7 @@ object GeoVaultColorTokens {
 
         val Surface = GeoVaultColorTokens.Surface.toHexRgb()
         val ListBackground = GeoVaultColorTokens.ListBackground.toHexRgb()
+        val NavigationBarBackground = GeoVaultColorTokens.NavigationBarBackground.toHexRgb()
         val TextPrimary = GeoVaultColorTokens.TextPrimary.toHexRgb()
         val TextSecondary = GeoVaultColorTokens.TextSecondary.toHexRgb()
         val BorderLight = GeoVaultColorTokens.BorderLight.toHexRgb()

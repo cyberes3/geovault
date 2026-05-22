@@ -10,11 +10,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.geovault.common.R
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.GeoVaultListCardHighlightColors
 
 @Composable
 fun GeoVaultTrailingListInfoButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
     enabled: Boolean = true,
     tooltip: String? = null,
 ) {
@@ -28,7 +30,10 @@ fun GeoVaultTrailingListInfoButton(
         Icon(
             imageVector = Icons.Outlined.Info,
             contentDescription = resolvedTooltip,
-            tint = GeoVaultColorTokens.MainBlue,
+            tint = GeoVaultListCardHighlightColors.trailingActionTint(
+                highlighted = highlighted,
+                defaultTint = GeoVaultColorTokens.MainBlue,
+            ),
             modifier = Modifier.size(22.dp),
         )
     }

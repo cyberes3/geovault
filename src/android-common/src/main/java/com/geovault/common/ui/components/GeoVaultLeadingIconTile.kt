@@ -16,10 +16,12 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.GeoVaultListCardHighlightColors
 
 /**
- * 40dp circular leading tile: in light theme, a [GeoVaultColorTokens.Blue100] disk behind a
- * tinted icon; in dark theme the disk is transparent so only the icon shows. Optional [onClick]
+ * 40dp circular leading tile: in light theme, a blue or purple disk behind a tinted icon
+ * (purple when [highlighted], matching [GeoVaultPointFeatureCard]); in dark theme the disk is
+ * transparent so only the icon shows. Optional [onClick]
  * makes the tile a separate hit target from the enclosing row. [tileClickEnabled] mirrors row-
  * level chrome enablement (e.g. map not ready).
  *
@@ -32,22 +34,25 @@ fun GeoVaultLeadingIconTile(
     contentDescription: String?,
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    iconTint: Color = GeoVaultColorTokens.MainBlue,
+    highlighted: Boolean = false,
+    iconTint: Color? = null,
     tileClickEnabled: Boolean = true,
     tooltip: String? = null,
 ) {
     val tooltipHint = tooltip?.takeIf { it.isNotBlank() }
         ?: contentDescription?.takeIf { it.isNotBlank() }
+    val resolvedTint = iconTint ?: GeoVaultListCardHighlightColors.iconTint(highlighted)
     GeoVaultLeadingIconTileImpl(
         modifier = modifier,
         onClick = onClick,
         tileClickEnabled = tileClickEnabled,
         tooltipHint = tooltipHint,
+        highlighted = highlighted,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = iconTint,
+            tint = resolvedTint,
             modifier = Modifier.size(IconSize),
         )
     }
@@ -59,22 +64,25 @@ fun GeoVaultLeadingIconTile(
     contentDescription: String?,
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    iconTint: Color = GeoVaultColorTokens.MainBlue,
+    highlighted: Boolean = false,
+    iconTint: Color? = null,
     tileClickEnabled: Boolean = true,
     tooltip: String? = null,
 ) {
     val tooltipHint = tooltip?.takeIf { it.isNotBlank() }
         ?: contentDescription?.takeIf { it.isNotBlank() }
+    val resolvedTint = iconTint ?: GeoVaultListCardHighlightColors.iconTint(highlighted)
     GeoVaultLeadingIconTileImpl(
         modifier = modifier,
         onClick = onClick,
         tileClickEnabled = tileClickEnabled,
         tooltipHint = tooltipHint,
+        highlighted = highlighted,
     ) {
         Icon(
             painter = painter,
             contentDescription = contentDescription,
-            tint = iconTint,
+            tint = resolvedTint,
             modifier = Modifier.size(IconSize),
         )
     }
@@ -84,6 +92,7 @@ fun GeoVaultLeadingIconTile(
 fun GeoVaultLeadingIconTile(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
     tileClickEnabled: Boolean = true,
     tooltip: String? = null,
     content: @Composable () -> Unit,
@@ -93,6 +102,7 @@ fun GeoVaultLeadingIconTile(
         onClick = onClick,
         tileClickEnabled = tileClickEnabled,
         tooltipHint = tooltip?.takeIf { it.isNotBlank() },
+        highlighted = highlighted,
         icon = content,
     )
 }
@@ -103,13 +113,10 @@ private fun GeoVaultLeadingIconTileImpl(
     onClick: (() -> Unit)?,
     tileClickEnabled: Boolean,
     tooltipHint: String?,
+    highlighted: Boolean = false,
     icon: @Composable () -> Unit,
 ) {
-    val diskFill = if (MaterialTheme.colors.isLight) {
-        GeoVaultColorTokens.Blue100
-    } else {
-        Color.Transparent
-    }
+    val diskFill = GeoVaultListCardHighlightColors.iconTileDiskColor(highlighted)
     val base = modifier
         .size(TileSize)
         .clip(CircleShape)

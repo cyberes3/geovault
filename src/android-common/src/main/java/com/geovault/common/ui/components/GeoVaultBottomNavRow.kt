@@ -44,6 +44,7 @@ import androidx.core.graphics.ColorUtils
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultNavigationBarBackgroundColor
 
 @Immutable
 data class GeoVaultBottomNavDestination(
@@ -115,6 +116,11 @@ fun GeoVaultBottomNavScaffold(
     selectedDestinationId: String,
     onDestinationSelected: (GeoVaultBottomNavDestination) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * When `true`, hides the in-app tab row and applies standard theme navigation-bar chrome
+     * (e.g. shell filter/settings overlays composed outside [GeoVaultRequestBottomTabsHidden]).
+     */
+    suppressBottomTabs: Boolean = false,
     content: @Composable (activeDestination: GeoVaultBottomNavDestination) -> Unit,
 ) {
     require(destinations.isNotEmpty()) { "GeoVaultBottomNavScaffold requires at least one destination." }
@@ -145,8 +151,10 @@ fun GeoVaultBottomNavScaffold(
             },
         )
     }
-    val areTabsHidden = hiddenRequests > 0
+    val areTabsHidden = hiddenRequests > 0 || suppressBottomTabs
     val areTabsDisabled = disableRequests > 0
+    val isLightTheme = MaterialTheme.colors.isLight
+    val standardNavBarArgb = geoVaultNavigationBarBackgroundColor().toArgb()
     val navBarBlendSurfaceArgb = MaterialTheme.colors.surface.toArgb()
 
     CompositionLocalProvider(
@@ -190,14 +198,21 @@ fun GeoVaultBottomNavScaffold(
 
     val activity = LocalContext.current as? ComponentActivity
     SideEffect {
-        if (activity != null && !areTabsHidden) {
+        if (activity == null) return@SideEffect
+        if (areTabsHidden) {
+            // Full-screen overlays (import, filter editor, sign-in, etc.): use the standard
+            // nav-bar chrome (slightly darker than app background) instead of blended blue.
+            GeoVaultSystemBars.setNavigationBarBackground(
+                activity = activity,
+                navigationBarColor = standardNavBarArgb,
+                useDarkNavigationBarIcons = isLightTheme,
+            )
+        } else {
             val lighterNavBarBlue = ColorUtils.blendARGB(
                 GeoVaultColorTokens.MainBlue.toArgb(),
                 navBarBlendSurfaceArgb,
                 0.12f,
             )
-            // Keep the Android system navigation bar blue when a bottom nav row is present.
-            // This runs after child content composition so tab screen chrome can't override it.
             GeoVaultSystemBars.setNavigationBarBackground(
                 activity = activity,
                 navigationBarColor = lighterNavBarBlue,

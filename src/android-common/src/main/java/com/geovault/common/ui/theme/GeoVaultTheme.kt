@@ -45,6 +45,16 @@ fun geoVaultContentSecondaryColor(): Color =
         GeoVaultColorTokens.Dark.TextSecondary
     }
 
+/** System navigation-bar fill when using standard (non-blue-tab) chrome. */
+@Composable
+@ReadOnlyComposable
+fun geoVaultNavigationBarBackgroundColor(): Color =
+    if (MaterialTheme.colors.isLight) {
+        GeoVaultColorTokens.NavigationBarBackground
+    } else {
+        GeoVaultColorTokens.Dark.NavigationBarBackground
+    }
+
 /** Hairline separators (search / settings dividers): light blue tint vs dark neutral. */
 @Composable
 @ReadOnlyComposable
@@ -163,9 +173,9 @@ fun GeoVaultTheme(
         if (activity != null) {
             val statusBarColor = GeoVaultColorTokens.MainBlue.toArgb()
             val navigationBarColor = if (darkTheme) {
-                GeoVaultColorTokens.Dark.ListBackground.toArgb()
+                GeoVaultColorTokens.Dark.NavigationBarBackground.toArgb()
             } else {
-                GeoVaultColorTokens.ListBackground.toArgb()
+                GeoVaultColorTokens.NavigationBarBackground.toArgb()
             }
             val useDarkNavigationBarIcons = !darkTheme
             if (GeoVaultSystemBars.shouldApplyChrome(
