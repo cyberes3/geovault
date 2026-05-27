@@ -28,10 +28,7 @@ class GeoVaultCaptureLogExportReceiver : BroadcastReceiver() {
             )
             return
         }
-        val pendingResult = goAsync()
-        GeoVaultCaptureLogEngine.runExport(context.applicationContext) {
-            pendingResult.finish()
-        }
+        GeoVaultCaptureLogEngine.scheduleExport(context.applicationContext)
     }
 
     private companion object {

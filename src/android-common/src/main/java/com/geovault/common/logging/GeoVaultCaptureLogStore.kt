@@ -7,10 +7,23 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.io.Writer
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+
+internal data class GeoVaultCaptureLogSnapshotBounds(
+    val minId: Long,
+    val maxId: Long,
+    val rowCount: Long,
+    val approxBytes: Long,
+)
+
+internal data class GeoVaultCaptureLogStreamResult(
+    val rowsWritten: Long,
+    val lastId: Long,
+)
 
 internal class GeoVaultCaptureLogStore(
     context: Context,
@@ -83,39 +96,82 @@ internal class GeoVaultCaptureLogStore(
 
     fun streamLogsAsText(out: OutputStream) {
         OutputStreamWriter(out, StandardCharsets.UTF_8).use { writer ->
-            val sql =
-                "SELECT wall_time_ms, level, tag, message, throwable FROM capture_log ORDER BY id ASC"
-            readableDatabase.rawQuery(sql, null).use { cursor ->
+            streamLogsAsText(
+                writer = writer,
+                maxIdInclusive = snapshotBounds().maxId,
+            )
+        }
+    }
+
+    fun streamLogsAsText(
+        writer: Writer,
+        maxIdInclusive: Long,
+        pageSize: Int = DEFAULT_EXPORT_PAGE_SIZE,
+        onProgress: (GeoVaultCaptureLogStreamResult) -> Unit = {},
+    ): GeoVaultCaptureLogStreamResult {
+        var lastId = 0L
+        var rowsWritten = 0L
+        if (maxIdInclusive <= 0L) {
+            writer.flush()
+            return GeoVaultCaptureLogStreamResult(rowsWritten = 0L, lastId = 0L)
+        }
+        while (true) {
+            var pageRows = 0
+            readableDatabase.rawQuery(
+                """
+                SELECT id, wall_time_ms, level, tag, message, throwable
+                FROM capture_log
+                WHERE id > ? AND id <= ?
+                ORDER BY id ASC
+                LIMIT ?
+                """.trimIndent(),
+                arrayOf(lastId.toString(), maxIdInclusive.toString(), pageSize.toString()),
+            ).use { cursor ->
+                val ixId = cursor.getColumnIndexOrThrow("id")
                 val ixTime = cursor.getColumnIndexOrThrow("wall_time_ms")
                 val ixLevel = cursor.getColumnIndexOrThrow("level")
                 val ixTag = cursor.getColumnIndexOrThrow("tag")
                 val ixMessage = cursor.getColumnIndexOrThrow("message")
                 val ixThrowable = cursor.getColumnIndexOrThrow("throwable")
                 while (cursor.moveToNext()) {
-                    val t = cursor.getLong(ixTime)
-                    val lvl = cursor.getInt(ixLevel)
-                    val tg = cursor.getString(ixTag)
-                    val msg = cursor.getString(ixMessage)
-                    val thr = cursor.getString(ixThrowable)
-                    val line =
-                        buildString {
-                            append(ISO_INSTANT.format(Instant.ofEpochMilli(t)))
-                            append('\t')
-                            append(levelName(lvl))
-                            append('\t')
-                            append(tg)
-                            append('\t')
-                            append(msg.replace("\n", "\\n"))
-                            if (thr != null) {
-                                append("\n----\n")
-                                append(thr.replace("\n", "\\n"))
-                            }
-                            append('\n')
-                        }
-                    writer.write(line)
+                    lastId = cursor.getLong(ixId)
+                    rowsWritten++
+                    pageRows++
+                    writer.write(
+                        formattedLine(
+                            wallTimeMs = cursor.getLong(ixTime),
+                            level = cursor.getInt(ixLevel),
+                            tag = cursor.getString(ixTag),
+                            message = cursor.getString(ixMessage),
+                            throwable = cursor.getString(ixThrowable),
+                        )
+                    )
                 }
             }
+            writer.flush()
+            val progress = GeoVaultCaptureLogStreamResult(rowsWritten = rowsWritten, lastId = lastId)
+            onProgress(progress)
+            if (pageRows < pageSize || lastId >= maxIdInclusive) {
+                return progress
+            }
         }
+    }
+
+    fun snapshotBounds(db: SQLiteDatabase = readableDatabase): GeoVaultCaptureLogSnapshotBounds {
+        db.rawQuery(
+            "SELECT IFNULL(MIN(id), 0), IFNULL(MAX(id), 0), COUNT(*), IFNULL(SUM(approx_bytes), 0) FROM capture_log",
+            null,
+        ).use { c ->
+            if (c.moveToFirst()) {
+                return GeoVaultCaptureLogSnapshotBounds(
+                    minId = c.getLong(0),
+                    maxId = c.getLong(1),
+                    rowCount = c.getLong(2),
+                    approxBytes = c.getLong(3),
+                )
+            }
+        }
+        return GeoVaultCaptureLogSnapshotBounds(minId = 0L, maxId = 0L, rowCount = 0L, approxBytes = 0L)
     }
 
     fun totalApproxBytes(db: SQLiteDatabase = readableDatabase): Long {
@@ -134,16 +190,51 @@ internal class GeoVaultCaptureLogStore(
         }
         val targetBytes = (maxStoredBytes * PRUNE_TARGET_RATIO).toLong()
         while (total > targetBytes) {
-            val deleted =
-                db.delete(
-                    "capture_log",
-                    "id = (SELECT MIN(id) FROM capture_log)",
-                    null,
-                )
-            if (deleted == 0) {
-                break
-            }
+            val cutoffId = oldestCutoffIdForPrune(db, bytesToRemove = total - targetBytes) ?: break
+            val deleted = db.delete("capture_log", "id <= ?", arrayOf(cutoffId.toString()))
+            if (deleted == 0) break
             total = totalApproxBytes(db)
+        }
+    }
+
+    private fun oldestCutoffIdForPrune(db: SQLiteDatabase, bytesToRemove: Long): Long? {
+        var cutoffId: Long? = null
+        var removedBytes = 0L
+        db.rawQuery(
+            "SELECT id, approx_bytes FROM capture_log ORDER BY id ASC LIMIT ?",
+            arrayOf(PRUNE_BATCH_ROWS.toString()),
+        ).use { c ->
+            val ixId = c.getColumnIndexOrThrow("id")
+            val ixBytes = c.getColumnIndexOrThrow("approx_bytes")
+            while (c.moveToNext()) {
+                cutoffId = c.getLong(ixId)
+                removedBytes += c.getLong(ixBytes)
+                if (removedBytes >= bytesToRemove) break
+            }
+        }
+        return cutoffId
+    }
+
+    private fun formattedLine(
+        wallTimeMs: Long,
+        level: Int,
+        tag: String,
+        message: String,
+        throwable: String?,
+    ): String {
+        return buildString {
+            append(ISO_INSTANT.format(Instant.ofEpochMilli(wallTimeMs)))
+            append('\t')
+            append(levelName(level))
+            append('\t')
+            append(tag)
+            append('\t')
+            append(message.replace("\n", "\\n"))
+            if (throwable != null) {
+                append("\n----\n")
+                append(throwable.replace("\n", "\\n"))
+            }
+            append('\n')
         }
     }
 
@@ -153,6 +244,8 @@ internal class GeoVaultCaptureLogStore(
 
         internal const val MAX_STORED_BYTES = 100L * 1024L * 1024L
         private const val PRUNE_TARGET_RATIO = 0.85
+        private const val DEFAULT_EXPORT_PAGE_SIZE = 2_000
+        private const val PRUNE_BATCH_ROWS = 2_000
 
         internal const val MAX_TAG_CHARS = 256
         internal const val MAX_MESSAGE_CHARS = 16_384

@@ -25,9 +25,10 @@ internal object GeoVaultCaptureLogFilename {
         return collapsed.ifBlank { "app" }
     }
 
-    fun buildExportDisplayName(appLabel: String, instant: Instant): String {
+    fun buildExportDisplayName(appLabel: String, instant: Instant, compressed: Boolean = false): String {
         val safe = sanitizeForFilename(appLabel)
         val ts = TIMESTAMP_FORMATTER.format(instant)
-        return "${safe}_$ts.txt"
+        val suffix = if (compressed) ".txt.gz" else ".txt"
+        return "${safe}_$ts$suffix"
     }
 }

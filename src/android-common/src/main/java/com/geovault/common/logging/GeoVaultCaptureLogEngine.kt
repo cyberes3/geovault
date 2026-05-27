@@ -2,9 +2,12 @@ package com.geovault.common.logging
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import com.geovault.common.BuildConfig
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 internal object GeoVaultCaptureLogEngine {
 
@@ -13,6 +16,9 @@ internal object GeoVaultCaptureLogEngine {
 
     private val executorLock = Any()
     private var executor: ExecutorService? = null
+    private var exportExecutor: ExecutorService? = null
+    private val exportRunning = AtomicBoolean(false)
+    private val nextExportRequestId = AtomicLong(1L)
 
     /** Only touched from the executor thread. */
     private var store: GeoVaultCaptureLogStore? = null
@@ -40,10 +46,14 @@ internal object GeoVaultCaptureLogEngine {
         }
     }
 
-    fun runExport(context: Context, onComplete: () -> Unit) {
+    fun scheduleExport(context: Context): Boolean {
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) {
-            onComplete()
-            return
+            return false
+        }
+        val requestId = nextExportRequestId.getAndIncrement()
+        if (!exportRunning.compareAndSet(false, true)) {
+            Log.w(TAG, "capture_export_already_running requestId=$requestId")
+            return false
         }
         val app = context.applicationContext as Application
         synchronized(executorLock) {
@@ -53,19 +63,26 @@ internal object GeoVaultCaptureLogEngine {
             if (executor == null) {
                 executor = newExecutor()
             }
+            if (exportExecutor == null) {
+                exportExecutor = newExportExecutor()
+            }
         }
-        val ex =
+        val exportEx =
             synchronized(executorLock) {
-                executor!!
+                exportExecutor!!
             }
         val appCtx = context.applicationContext
-        ex.execute {
+        Log.i(TAG, "capture_export_queued requestId=$requestId")
+        exportEx.execute {
             try {
-                GeoVaultCaptureLogDownloadsExport.export(appCtx, ensureStore(app))
+                GeoVaultCaptureLogDownloadsExport.export(appCtx, ensureStore(app), requestId)
+            } catch (t: Throwable) {
+                Log.e(TAG, "capture_export_failed requestId=$requestId error=uncaught", t)
             } finally {
-                onComplete()
+                exportRunning.set(false)
             }
         }
+        return true
     }
 
     private fun ensureStore(app: Application): GeoVaultCaptureLogStore {
@@ -76,4 +93,11 @@ internal object GeoVaultCaptureLogEngine {
         Executors.newSingleThreadExecutor { r ->
             Thread(r, "GeoVaultCaptureLog").apply { isDaemon = true }
         }
+
+    private fun newExportExecutor(): ExecutorService =
+        Executors.newSingleThreadExecutor { r ->
+            Thread(r, "GeoVaultCaptureExport").apply { isDaemon = true }
+        }
+
+    private const val TAG = "GeoVaultCaptureLogEngine"
 }

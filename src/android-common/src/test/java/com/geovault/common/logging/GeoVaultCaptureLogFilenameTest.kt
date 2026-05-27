@@ -25,4 +25,18 @@ class GeoVaultCaptureLogFilenameTest {
         assertFalse(name.contains('\\'))
         assertTrue(name.startsWith("MyApp_"))
     }
+
+    @Test
+    fun buildExportDisplayName_compressedUsesTextGzipSuffix() {
+        val name = GeoVaultCaptureLogFilename.buildExportDisplayName(
+            "MyApp",
+            java.time.Instant.parse("2026-05-14T12:30:45Z"),
+            compressed = true,
+        )
+
+        assertTrue(name.endsWith(".txt.gz"))
+        assertFalse(name.contains('/'))
+        assertFalse(name.contains('\\'))
+        assertTrue(name.startsWith("MyApp_"))
+    }
 }

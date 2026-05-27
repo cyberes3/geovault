@@ -19,100 +19,104 @@ object GeoVaultCaptureLog {
 
     @JvmStatic
     fun v(tag: String, msg: String) {
-        Log.v(tag, msg)
+        logcat { Log.v(tag, msg) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.VERBOSE, tag, msg, null)
     }
 
     @JvmStatic
     fun v(tag: String, msg: String, tr: Throwable) {
-        Log.v(tag, msg, tr)
+        logcat { Log.v(tag, msg, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.VERBOSE, tag, msg, throwableString(tr))
     }
 
     @JvmStatic
     fun d(tag: String, msg: String) {
-        Log.d(tag, msg)
+        logcat { Log.d(tag, msg) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.DEBUG, tag, msg, null)
     }
 
     @JvmStatic
     fun d(tag: String, msg: String, tr: Throwable) {
-        Log.d(tag, msg, tr)
+        logcat { Log.d(tag, msg, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.DEBUG, tag, msg, throwableString(tr))
     }
 
     @JvmStatic
     fun i(tag: String, msg: String) {
-        Log.i(tag, msg)
+        logcat { Log.i(tag, msg) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.INFO, tag, msg, null)
     }
 
     @JvmStatic
     fun i(tag: String, msg: String, tr: Throwable) {
-        Log.i(tag, msg, tr)
+        logcat { Log.i(tag, msg, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.INFO, tag, msg, throwableString(tr))
     }
 
     @JvmStatic
     fun w(tag: String, msg: String) {
-        Log.w(tag, msg)
+        logcat { Log.w(tag, msg) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.WARN, tag, msg, null)
     }
 
     @JvmStatic
     fun w(tag: String, msg: String, tr: Throwable) {
-        Log.w(tag, msg, tr)
+        logcat { Log.w(tag, msg, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.WARN, tag, msg, throwableString(tr))
     }
 
     @JvmStatic
     fun w(tag: String, tr: Throwable) {
-        Log.w(tag, tr)
+        logcat { Log.w(tag, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.WARN, tag, "", throwableString(tr))
     }
 
     @JvmStatic
     fun e(tag: String, msg: String) {
-        Log.e(tag, msg)
+        logcat { Log.e(tag, msg) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.ERROR, tag, msg, null)
     }
 
     @JvmStatic
     fun e(tag: String, msg: String, tr: Throwable) {
-        Log.e(tag, msg, tr)
+        logcat { Log.e(tag, msg, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.ERROR, tag, msg, throwableString(tr))
     }
 
     @JvmStatic
     fun wtf(tag: String, msg: String) {
-        Log.wtf(tag, msg)
+        logcat { Log.wtf(tag, msg) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.ASSERT, tag, msg, null)
     }
 
     @JvmStatic
     fun wtf(tag: String, tr: Throwable) {
-        Log.wtf(tag, tr)
+        logcat { Log.wtf(tag, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.ASSERT, tag, "", throwableString(tr))
     }
 
     @JvmStatic
     fun wtf(tag: String, msg: String, tr: Throwable) {
-        Log.wtf(tag, msg, tr)
+        logcat { Log.wtf(tag, msg, tr) }
         if (!BuildConfig.GEOVAULT_CAPTURE_LOGGING_ENABLED) return
         GeoVaultCaptureLogEngine.enqueue(Log.ASSERT, tag, msg, throwableString(tr))
+    }
+
+    private inline fun logcat(block: () -> Unit) {
+        runCatching { block() }
     }
 
     private fun throwableString(tr: Throwable): String {
