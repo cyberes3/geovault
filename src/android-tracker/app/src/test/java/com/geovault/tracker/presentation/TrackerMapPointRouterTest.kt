@@ -11,6 +11,23 @@ import org.junit.Test
 class TrackerMapPointRouterTest {
 
     @Test
+    fun singleLocalWhileTracking_routesLocalToSingleTrail() {
+        val plan = plan(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "local",
+            displayedTrackerId = "local",
+            runtimeRunning = true,
+        )
+
+        val local = TrackerMapPointRouter.route(event(TrackPointSource.LOCAL_GPS, "local"), plan)
+
+        assertTrue(local.accepted)
+        assertFalse(local.updateRemoteLastPoint)
+        assertTrue(local.appendSingleTrail)
+        assertFalse(local.appendMultiTrail)
+    }
+
+    @Test
     fun singleRemoteWhileTracking_routesRemoteToSingleTrailAndRejectsLocal() {
         val plan = plan(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,

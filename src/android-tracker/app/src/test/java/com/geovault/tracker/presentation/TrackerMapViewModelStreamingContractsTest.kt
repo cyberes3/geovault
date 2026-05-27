@@ -101,13 +101,10 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun resolveLiveHeadCoord_prefersTrailTailFromActiveSession_overFresherRuntime() {
-        // CHEVRON-COHERENCE (Bug 1 root cause): the runtime store collector publishes a new
-        // `runtime.lastTracked*` BEFORE the bus-reducer appends the same fix to `state.trail`.
-        // If the camera reads runtime first, it leads the marker by one fix — the user sees
-        // the world move and the chevron stay put. When the trail tail belongs to the active
-        // recording session it is the authoritative live head and must win, even if the
-        // runtime carries a (briefly) newer timestamp.
+    fun resolveLiveHeadCoord_usesOverlaidRuntimeHeadWhenRuntimeLeadsBus() {
+        // EFFECTIVE-SNAPSHOT COHERENCE: when runtime leads the bus trail, render synthesizes a
+        // runtime overlay. Camera follow must use that same effective head so marker, line, and
+        // camera all move from one datum instead of splitting across raw state sources.
         val sessionStart = 1_000L
         val tail = com.geovault.tracker.db.QueuedLocation(
             id = 0L,
@@ -140,7 +137,7 @@ class TrackerMapViewModelStreamingContractsTest {
 
         val coord = TrackerMapViewModel.resolveLiveHeadCoord(state)
 
-        assertEquals(40.5 to -74.5, coord)
+        assertEquals(41.0 to -75.0, coord)
     }
 
     @Test
@@ -287,6 +284,157 @@ class TrackerMapViewModelStreamingContractsTest {
         )
 
         assertEquals(setOf("local"), trails.keys)
+    }
+
+    @Test
+    fun singleTrailWithLocalRuntimeOverlay_emptyTrail_addsRuntimeHead() {
+        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1234L,
+                lastAccuracyMeters = 4f,
+                sessionStartTimeMs = 500L,
+            ),
+            displayedTrackerId = "local",
+            trail = emptyList(),
+        )
+
+        assertEquals(1, trail.size)
+        assertEquals("local", trail.first().trackerId)
+        assertEquals(TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME, trail.first().prov)
+        assertEquals(500L, trail.first().startTimestampMs)
+    }
+
+    @Test
+    fun singleTrailWithLocalRuntimeOverlay_priorSessionTail_addsRuntimeHeadAndKeepsSplit() {
+        val priorTail = com.geovault.tracker.db.QueuedLocation(
+            id = 0L,
+            trackerId = "local",
+            time = 1000L,
+            latitude = 1.0,
+            longitude = 2.0,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+            startTimestampMs = 100L,
+        )
+        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1000L,
+                sessionStartTimeMs = 200L,
+            ),
+            displayedTrackerId = "local",
+            trail = listOf(priorTail),
+        )
+
+        assertEquals(2, trail.size)
+        assertEquals(100L, trail.first().startTimestampMs)
+        assertEquals(200L, trail.last().startTimestampMs)
+        assertEquals(20.0, trail.last().latitude, 0.0)
+    }
+
+    @Test
+    fun singleTrailWithLocalRuntimeOverlay_sameSessionTailNewer_doesNotDuplicate() {
+        val sessionStart = 500L
+        val sameSessionTail = com.geovault.tracker.db.QueuedLocation(
+            id = 0L,
+            trackerId = "local",
+            time = 2000L,
+            latitude = 1.0,
+            longitude = 2.0,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS,
+            dist = null,
+            startTimestampMs = sessionStart,
+        )
+        val original = listOf(sameSessionTail)
+
+        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1000L,
+                sessionStartTimeMs = sessionStart,
+            ),
+            displayedTrackerId = "local",
+            trail = original,
+        )
+
+        assertEquals(original, trail)
+    }
+
+    @Test
+    fun singleTrailWithLocalRuntimeOverlay_displayedRemote_doesNotOverlayLocal() {
+        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1000L,
+            ),
+            displayedTrackerId = "remote",
+            trail = emptyList(),
+        )
+
+        assertEquals(emptyList<com.geovault.tracker.db.QueuedLocation>(), trail)
+    }
+
+    @Test
+    fun singleRenderMarker_usesOverlaidRuntimeHeadWhenBusLags() {
+        val trail = TrackerMapViewModel.singleTrailWithLocalRuntimeOverlay(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                selectedTrackerId = "local",
+                selectedTrackerName = "Local",
+                lastTrackedLatitude = 20.0,
+                lastTrackedLongitude = 10.0,
+                lastTrackedTimestampMs = 1000L,
+                sessionStartTimeMs = 500L,
+            ),
+            displayedTrackerId = "local",
+            trail = emptyList(),
+        )
+        val renderState = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = trail,
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "local",
+                selectedTrackerName = "Local",
+            ),
+            displayedTrackerId = "local",
+        )
+
+        assertEquals(1, renderState.points.size)
+        assertEquals(20.0, renderState.points.first().latitude, 0.0)
+        assertEquals(10.0, renderState.points.first().longitude, 0.0)
     }
 
     @Test

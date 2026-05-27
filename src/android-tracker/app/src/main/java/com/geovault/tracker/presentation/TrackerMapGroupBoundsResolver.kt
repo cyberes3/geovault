@@ -52,11 +52,12 @@ object TrackerMapGroupBoundsResolver {
     }
 
     fun resolve(input: TrackerMapGroupBoundsInput): LatLngBounds? {
-        return when (strategy(input)) {
+        val normalizedInput = input.normalizedToVisibleTrackers()
+        return when (strategy(normalizedInput)) {
             TrackerMapGroupBoundsStrategy.AllVisible,
             TrackerMapGroupBoundsStrategy.AllVisibleWhileLocked,
-            -> resolveAllVisible(input)
-            TrackerMapGroupBoundsStrategy.ActiveOnly -> resolveActiveOnly(input)
+            -> resolveAllVisible(normalizedInput)
+            TrackerMapGroupBoundsStrategy.ActiveOnly -> resolveActiveOnly(normalizedInput)
         }
     }
 
@@ -77,7 +78,7 @@ object TrackerMapGroupBoundsResolver {
     private fun resolveActiveOnly(input: TrackerMapGroupBoundsInput): LatLngBounds? {
         val acceptedRemoteIds = input.acceptedRemoteTrackerIds
             .map { it.trim() }
-            .filter { it.isNotEmpty() }
+            .filter { it.isNotEmpty() && it in input.visibleTrackerIds }
             .toSet()
         val filteredRemoteLastPoints = input.remoteLastPoints.filterKeys { it.trim() in acceptedRemoteIds }
         val visibleIds = input.visibleTrackerIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
@@ -157,8 +158,44 @@ object TrackerMapGroupBoundsResolver {
         val remoteMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(remoteLastPoints[trackerId]?.timestampMs)
         val trailMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(trailsByTracker[trackerId]?.lastOrNull()?.time)
         val tracker = trackers.firstOrNull { it.id == trackerId }
-        val trackerMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(tracker?.updated_at)
-        return listOfNotNull(remoteMs, trailMs, trackerMs)
+        val trackerDataMs = tracker?.lastDataTimestampMsOrNull()
+        return listOfNotNull(remoteMs, trailMs, trackerDataMs)
+            .filter { it > 0L }
+            .maxOrNull()
+    }
+
+    private fun TrackerMapGroupBoundsInput.normalizedToVisibleTrackers(): TrackerMapGroupBoundsInput {
+        val visibleIds = visibleTrackerIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        return copy(
+            visibleTrackerIds = visibleIds,
+            trailsByTracker = trailsByTracker
+                .mapKeys { it.key.trim() }
+                .filterKeys { it in visibleIds },
+            remoteLastPoints = remoteLastPoints
+                .mapKeys { it.key.trim() }
+                .filterKeys { it in visibleIds },
+            acceptedRemoteTrackerIds = acceptedRemoteTrackerIds
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it in visibleIds }
+                .toSet(),
+        )
+    }
+
+    private fun Tracker.lastDataTimestampMsOrNull(): Long? {
+        val lastPointMs = last_point
+            ?.getOrNull(2)
+            ?.let(TrackerMapSessionWindowPolicy::normalizeTimestampToMs)
+        val paramsMs = point_params
+            ?.lastOrNull()
+            ?.entries
+            ?.asSequence()
+            ?.filter { it.key.contains("timestamp", ignoreCase = true) }
+            ?.mapNotNull { TrackerMapSessionWindowPolicy.normalizeTimestampToMs(it.value) }
+            ?.maxOrNull()
+        return listOfNotNull(lastPointMs, paramsMs)
             .filter { it > 0L }
             .maxOrNull()
     }

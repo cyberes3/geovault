@@ -312,6 +312,68 @@ class TrackerMapPointEventReducerTest {
     }
 
     @Test
+    fun localGps_usesRecordingTrackerWhenSelectedDiffers() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "recording"),
+                selectedTrackerId = "selected",
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "recording",
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "recording",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 1000L,
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+
+        assertTrue(result.acceptedBySourcePolicy)
+        assertTrue(result.shouldUpdateUiState)
+        assertEquals("recording", result.nextState.trail.first().trackerId)
+    }
+
+    @Test
+    fun localGps_rejectsSelectedTrackerWhenDifferentTrackerIsRecording() {
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "recording"),
+                selectedTrackerId = "selected",
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "selected",
+        )
+        val result = TrackerMapPointEventReducer.reduce(
+            TrackerMapPointReductionInput(
+                state = state,
+                point = TrackPointEvent(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = "selected",
+                    lon = 10.0,
+                    lat = 20.0,
+                    timestampMs = 1000L,
+                ),
+                trailPointLimit = 4000,
+                sessionPlan = sessionPlanFor(state),
+            )
+        )
+
+        assertFalse(result.acceptedBySourcePolicy)
+        assertFalse(result.shouldUpdateUiState)
+        assertTrue(result.nextState.trail.isEmpty())
+    }
+
+    @Test
     fun localGps_stampsStartTimestampFromRuntime_whenPropsJsonAbsent() {
         val sessionStart = 1_700_000_000_000L
         val state = TrackerMapUiState(

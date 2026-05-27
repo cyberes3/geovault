@@ -26,7 +26,8 @@ class TrackerMapTrailDataCoordinatorTest {
             mapCoordinatesToTrail = { _, _, _, _ -> emptyList() }
         )
 
-        assertEquals(emptyList<QueuedLocation>(), result)
+        assertEquals(emptyList<QueuedLocation>(), result.trailsByTracker["t1"])
+        assertEquals(setOf("t1"), result.authoritativeTrackerIds)
     }
 
     @Test
@@ -43,7 +44,8 @@ class TrackerMapTrailDataCoordinatorTest {
             mapCoordinatesToTrail = { _, _, _, _ -> emptyList() }
         )
 
-        assertEquals(fallback, result)
+        assertEquals(fallback, result.trailsByTracker["t1"])
+        assertEquals(emptySet<String>(), result.authoritativeTrackerIds)
     }
 
     @Test
@@ -89,9 +91,10 @@ class TrackerMapTrailDataCoordinatorTest {
             }
         )
 
-        assertEquals(1, result["t1"]?.size)
-        assertEquals(10.0, result["t1"]?.firstOrNull()?.latitude)
-        assertEquals(20.0, result["t1"]?.firstOrNull()?.longitude)
+        assertEquals(1, result.trailsByTracker["t1"]?.size)
+        assertEquals(10.0, result.trailsByTracker["t1"]?.firstOrNull()?.latitude)
+        assertEquals(20.0, result.trailsByTracker["t1"]?.firstOrNull()?.longitude)
+        assertEquals(setOf("t1"), result.authoritativeTrackerIds)
     }
 
     @Test
@@ -108,9 +111,10 @@ class TrackerMapTrailDataCoordinatorTest {
             mapCoordinatesToTrail = { _, _, _, _ -> emptyList() }
         )
 
-        assertEquals(setOf("t1", "t2"), result.keys)
-        assertEquals(3.0, result["t1"]?.firstOrNull()?.latitude)
-        assertEquals(4.0, result["t2"]?.firstOrNull()?.longitude)
+        assertEquals(setOf("t1", "t2"), result.trailsByTracker.keys)
+        assertEquals(3.0, result.trailsByTracker["t1"]?.firstOrNull()?.latitude)
+        assertEquals(4.0, result.trailsByTracker["t2"]?.firstOrNull()?.longitude)
+        assertEquals(emptySet<String>(), result.authoritativeTrackerIds)
     }
 
     @Test
@@ -141,8 +145,9 @@ class TrackerMapTrailDataCoordinatorTest {
             }
         )
 
-        assertEquals(10.0, result["t1"]?.firstOrNull()?.latitude)
-        assertEquals(5.0, result["t2"]?.firstOrNull()?.latitude)
+        assertEquals(10.0, result.trailsByTracker["t1"]?.firstOrNull()?.latitude)
+        assertEquals(5.0, result.trailsByTracker["t2"]?.firstOrNull()?.latitude)
+        assertEquals(setOf("t1"), result.authoritativeTrackerIds)
     }
 
     private fun point(

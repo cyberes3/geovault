@@ -24,15 +24,22 @@ data class TrackerMapTrailLoadResult(
     val serverTrails: Map<String, List<QueuedLocation>>,
     val queueOverlaysByTracker: Map<String, List<QueuedLocation>>,
     val singleTrailSeed: List<QueuedLocation>,
+    val authoritativeServerTrackerIds: Set<String> = emptySet(),
 ) {
     companion object {
         val EMPTY: TrackerMapTrailLoadResult = TrackerMapTrailLoadResult(
             serverTrails = emptyMap(),
             queueOverlaysByTracker = emptyMap(),
             singleTrailSeed = emptyList(),
+            authoritativeServerTrackerIds = emptySet(),
         )
     }
 }
+
+data class TrackerMapServerTrailResult(
+    val trailsByTracker: Map<String, List<QueuedLocation>>,
+    val authoritativeTrackerIds: Set<String>,
+)
 
 /**
  * IO seam for [TrackerMapTrailLoader]. Function-typed so the loader can be exercised as a pure
@@ -40,8 +47,8 @@ data class TrackerMapTrailLoadResult(
  * [TrackerMapTrailDataCoordinator].
  */
 class TrackerMapTrailLoaderOps(
-    val loadSingleServer: suspend (trackerId: String, existingTrailMinTimeMs: Long?) -> List<QueuedLocation>,
-    val loadMultiServer: suspend (trackerIds: Collection<String>, existingMultiMinTimes: Map<String, Long>) -> Map<String, List<QueuedLocation>>,
+    val loadSingleServer: suspend (trackerId: String, existingTrailMinTimeMs: Long?) -> TrackerMapServerTrailResult,
+    val loadMultiServer: suspend (trackerIds: Collection<String>, existingMultiMinTimes: Map<String, Long>) -> TrackerMapServerTrailResult,
     val loadQueue: suspend (trackerId: String) -> List<QueuedLocation>,
 )
 
@@ -69,12 +76,14 @@ object TrackerMapTrailLoader {
         existingTrailMinTimeMs: Long?,
         ops: TrackerMapTrailLoaderOps,
     ): TrackerMapTrailLoadResult {
-        val seed = ops.loadSingleServer(plan.singleTrackerId, existingTrailMinTimeMs)
+        val serverResult = ops.loadSingleServer(plan.singleTrackerId, existingTrailMinTimeMs)
+        val seed = serverResult.trailsByTracker[plan.singleTrackerId].orEmpty()
         val queueOverlays = queueOverlayFor(plan.overlayTrackerId, ops)
         return TrackerMapTrailLoadResult(
             serverTrails = emptyMap(),
             queueOverlaysByTracker = queueOverlays,
             singleTrailSeed = seed,
+            authoritativeServerTrackerIds = serverResult.authoritativeTrackerIds,
         )
     }
 
@@ -83,7 +92,8 @@ object TrackerMapTrailLoader {
         existingMultiMinTimes: Map<String, Long>,
         ops: TrackerMapTrailLoaderOps,
     ): TrackerMapTrailLoadResult {
-        val serverTrails = ops.loadMultiServer(plan.trackerIds, existingMultiMinTimes)
+        val serverResult = ops.loadMultiServer(plan.trackerIds, existingMultiMinTimes)
+        val serverTrails = serverResult.trailsByTracker
         val queueOverlays = queueOverlayFor(plan.overlayTrackerId, ops)
         val activeId = plan.activeTrackerId.trim()
         val singleSeed = if (activeId.isNotEmpty()) serverTrails[activeId].orEmpty() else emptyList()
@@ -91,6 +101,7 @@ object TrackerMapTrailLoader {
             serverTrails = serverTrails,
             queueOverlaysByTracker = queueOverlays,
             singleTrailSeed = singleSeed,
+            authoritativeServerTrackerIds = serverResult.authoritativeTrackerIds,
         )
     }
 
@@ -102,6 +113,7 @@ object TrackerMapTrailLoader {
             serverTrails = emptyMap(),
             queueOverlaysByTracker = emptyMap(),
             singleTrailSeed = ops.loadQueue(plan.activeTrackerId),
+            authoritativeServerTrackerIds = emptySet(),
         )
     }
 

@@ -88,6 +88,36 @@ class TrackerMapSessionEngineRosterFilterTest {
     }
 
     @Test
+    fun visibleSet_thatExcludesRemoteHead_yieldsNoTrackForHiddenRemote() {
+        val snapshot = TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                    remoteLastPoints = mapOf(
+                        "hidden" to TrackPointEvent(
+                            source = TrackPointSource.REMOTE_STREAM,
+                            trackId = "hidden",
+                            lat = 20.0,
+                            lon = 10.0,
+                            timestampMs = 20L,
+                            accuracyMeters = null,
+                            propsJson = null,
+                        )
+                    ),
+                ),
+                plan = plan(
+                    mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                    acceptedRemoteTrackerIds = setOf("hidden"),
+                ),
+                visibleTrackerIds = setOf("visible"),
+            )
+        )
+
+        assertTrue(snapshot.tracks.isEmpty())
+        assertFalse("hidden" in snapshot.tracks)
+    }
+
+    @Test
     fun reducePoint_keepsNextSnapshotTracksRosterFiltered() {
         val initial = TrackerMapSessionEngine.build(
             TrackerMapSessionBuildInput(

@@ -200,8 +200,19 @@ class TrackerMapTrailLoaderTest {
         multiServer: suspend (Collection<String>, Map<String, Long>) -> Map<String, List<QueuedLocation>> = { _, _ -> emptyMap() },
         queue: suspend (String) -> List<QueuedLocation> = { emptyList() },
     ): TrackerMapTrailLoaderOps = TrackerMapTrailLoaderOps(
-        loadSingleServer = singleServer,
-        loadMultiServer = multiServer,
+        loadSingleServer = { id, minTime ->
+            TrackerMapServerTrailResult(
+                trailsByTracker = mapOf(id to singleServer(id, minTime)),
+                authoritativeTrackerIds = setOf(id),
+            )
+        },
+        loadMultiServer = { ids, minTimes ->
+            val trails = multiServer(ids, minTimes)
+            TrackerMapServerTrailResult(
+                trailsByTracker = trails,
+                authoritativeTrackerIds = trails.keys,
+            )
+        },
         loadQueue = queue,
     )
 
