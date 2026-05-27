@@ -20,28 +20,41 @@ object RemoteTrackPointIngress {
     private val lastDropWarningAtMs = AtomicLong(0L)
 
     fun process(event: TrackPointEvent, nowMs: Long = System.currentTimeMillis()): TrackPointEvent? {
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update remote_ingress_received track=${event.trackId.trim()} source=${event.source} " +
+                "ts=${event.timestampMs} lat=${event.lat} lon=${event.lon} quality=${event.quality}"
+        )
         val sanitizedEvent = sanitize(event) ?: run {
             val dropped = droppedInvalidEvents.incrementAndGet()
-            warnRateLimited("Dropped invalid remote track point event dropped=$dropped")
+            warnRateLimited("map_update remote_ingress_drop reason=invalid dropped=$dropped")
             return null
         }
         if (isLocallyRecordedTrack(sanitizedEvent.trackId)) {
             val dropped = droppedLocalEchoEvents.incrementAndGet()
             warnRateLimited(
-                "Dropped local echo remote event track=${sanitizedEvent.trackId.trim()} dropped=$dropped"
+                "map_update remote_ingress_drop reason=local_echo track=${sanitizedEvent.trackId.trim()} dropped=$dropped"
             )
             return null
         }
-        return RemoteStreamIngressPolicy.process(
+        val accepted = RemoteStreamIngressPolicy.process(
             event = sanitizedEvent,
             nowMs = nowMs
         ) ?: run {
             val dropped = droppedRemotePolicyEvents.incrementAndGet()
             warnRateLimited(
-                "Dropped remote event by ingress policy track=${sanitizedEvent.trackId.trim()} dropped=$dropped"
+                "map_update remote_ingress_drop reason=policy track=${sanitizedEvent.trackId.trim()} dropped=$dropped"
             )
             null
         }
+        if (accepted != null) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update remote_ingress_accept track=${accepted.trackId.trim()} " +
+                    "ts=${accepted.timestampMs} lat=${accepted.lat} lon=${accepted.lon}"
+            )
+        }
+        return accepted
     }
 
     fun diagnostics(): RemoteTrackPointIngressDiagnostics {

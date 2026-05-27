@@ -519,7 +519,19 @@ class LiveTrackStreamingService : Service() {
         val acceptedSocket = synchronized(stateLock) {
             sessionId == connectionSessionId.get() && webSocket === socket
         }
-        if (!acceptedSocket) return
+        if (!acceptedSocket) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update stream_point_drop reason=stale_socket track=${point.trackId.trim()} " +
+                    "session=$sessionId currentSession=${connectionSessionId.get()} ts=${point.timestampMs}"
+            )
+            return
+        }
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update stream_point_received track=${point.trackId.trim()} session=$sessionId " +
+                "ts=${point.timestampMs} lat=${point.lat} lon=${point.lon} acc=${point.accuracyMeters}"
+        )
         val acceptedEvent = RemoteTrackPointIngress.process(
             TrackPointEvent(
                 source = TrackPointSource.REMOTE_STREAM,
@@ -531,7 +543,18 @@ class LiveTrackStreamingService : Service() {
                 propsJson = point.propsJson,
                 quality = TrackPointQuality.HIGH_CONFIDENCE
             )
-        ) ?: return
+        ) ?: run {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update stream_point_rejected track=${point.trackId.trim()} session=$sessionId ts=${point.timestampMs}"
+            )
+            return
+        }
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update stream_point_publish track=${acceptedEvent.trackId.trim()} session=$sessionId " +
+                "ts=${acceptedEvent.timestampMs}"
+        )
         TrackPointBus.publish(acceptedEvent)
     }
 

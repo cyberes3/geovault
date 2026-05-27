@@ -2,6 +2,8 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
 
+private const val DEFAULT_AUTHORITATIVE_START_TOLERANCE_MS = 1_000L
+
 /**
  * Ordered, contiguous run of points that all belong to the same recording session.
  * Segments are ordered ascending by [startTimestampMs] within a session list.
@@ -20,16 +22,25 @@ data class TrackerSessionSegment(
 data class TrackerSessionAttributionContext(
     /** Authoritative current-session start for the locally-recorded tracker; null for others. */
     val currentSessionStartMs: Long? = null,
+    /**
+     * Tolerance for reconciling server geometry session starts with the local runtime's
+     * authoritative session start. Server API responses may round millisecond
+     * starttimestamp values through seconds; only apply this when [currentSessionStartMs]
+     * is supplied for the locally-recorded tracker.
+     */
+    val authoritativeStartToleranceMs: Long = DEFAULT_AUTHORITATIVE_START_TOLERANCE_MS,
 )
 
 /**
  * Pure attribution: turns a flat point list into ordered session segments.
  *
  * Boundary rules:
- *  - Distinct `startTimestampMs` values present in the points (plus
+ *  - Distinct canonical `startTimestampMs` values present in the points (plus
  *    [TrackerSessionAttributionContext.currentSessionStartMs] when non-null) form the
  *    segment boundaries, sorted ascending.
- *  - A point with non-null `startTimestampMs` joins the segment with that exact start.
+ *  - A point with non-null `startTimestampMs` joins the segment with that exact start,
+ *    except near-authoritative local starts can be canonicalized to
+ *    [TrackerSessionAttributionContext.currentSessionStartMs].
  *  - A point with null `startTimestampMs` joins the segment whose start is the largest
  *    boundary `<= point.time`; if no such boundary exists it joins the earliest segment.
  *  - If no boundaries exist at all (no per-point starts, no authoritative override) all
@@ -54,7 +65,7 @@ object TrackerSessionAttributionPolicy {
             return listOf(TrackerSessionSegment(startTimestampMs = context.currentSessionStartMs!!, points = emptyList()))
         }
 
-        val boundaries = sortedBoundaries(points, context.currentSessionStartMs)
+        val boundaries = sortedBoundaries(points, context)
         if (boundaries.isEmpty()) {
             return listOf(TrackerSessionSegment(startTimestampMs = points.first().time, points = points))
         }
@@ -63,7 +74,7 @@ object TrackerSessionAttributionPolicy {
             for (start in boundaries) put(start, mutableListOf())
         }
         for (point in points) {
-            val targetStart = resolveTargetStart(point, boundaries)
+            val targetStart = resolveTargetStart(point, boundaries, context)
             bucketsByStart.getValue(targetStart).add(point)
         }
         // Empty segments are preserved when they represent the authoritative current-session
@@ -74,21 +85,27 @@ object TrackerSessionAttributionPolicy {
         }
     }
 
-    private fun sortedBoundaries(points: List<QueuedLocation>, authoritativeStart: Long?): List<Long> {
+    private fun sortedBoundaries(points: List<QueuedLocation>, context: TrackerSessionAttributionContext): List<Long> {
         val starts = sortedSetOf<Long>()
         for (point in points) {
-            point.startTimestampMs?.let(starts::add)
+            point.startTimestampMs
+                ?.let { canonicalizeStartTimestamp(it, context) }
+                ?.let(starts::add)
         }
-        if (authoritativeStart != null) starts.add(authoritativeStart)
+        context.currentSessionStartMs?.let(starts::add)
         return starts.toList()
     }
 
     /**
      * Find the segment a point belongs to. Caller guarantees [boundaries] is non-empty.
      */
-    private fun resolveTargetStart(point: QueuedLocation, boundaries: List<Long>): Long {
+    private fun resolveTargetStart(
+        point: QueuedLocation,
+        boundaries: List<Long>,
+        context: TrackerSessionAttributionContext,
+    ): Long {
         val explicit = point.startTimestampMs
-        if (explicit != null) return explicit
+        if (explicit != null) return canonicalizeStartTimestamp(explicit, context)
         val time = point.time
         var attribution = boundaries.first()
         for (start in boundaries) {
@@ -96,4 +113,18 @@ object TrackerSessionAttributionPolicy {
         }
         return attribution
     }
+
+    private fun canonicalizeStartTimestamp(
+        startTimestampMs: Long,
+        context: TrackerSessionAttributionContext,
+    ): Long {
+        val authoritativeStart = context.currentSessionStartMs ?: return startTimestampMs
+        val toleranceMs = context.authoritativeStartToleranceMs.coerceAtLeast(0L)
+        return if (kotlin.math.abs(startTimestampMs - authoritativeStart) < toleranceMs) {
+            authoritativeStart
+        } else {
+            startTimestampMs
+        }
+    }
+
 }

@@ -267,7 +267,12 @@ def track_to_response(
         if "alt" in p and isinstance(p["alt"], (int, float)):
             p["alt"] = int(round(float(p["alt"])))
         for k, v in list(p.items()):
-            if "timestamp" in k.lower() and isinstance(v, (int, float)):
+            if not isinstance(v, (int, float)):
+                continue
+            key = k.lower()
+            if key == "starttimestamp":
+                p[k] = int(round(v))
+            elif "timestamp" in key:
                 if v > 1e11:
                     p[k] = int(round(v / 1000.0))
                 else:
@@ -351,7 +356,12 @@ def track_to_response_metadata_only(
         if "alt" in p and isinstance(p["alt"], (int, float)):
             p["alt"] = int(round(float(p["alt"])))
         for k, v in list(p.items()):
-            if "timestamp" in k.lower() and isinstance(v, (int, float)):
+            if not isinstance(v, (int, float)):
+                continue
+            key = k.lower()
+            if key == "starttimestamp":
+                p[k] = int(round(v))
+            elif "timestamp" in key:
                 if v > 1e11:
                     p[k] = int(round(v / 1000.0))
                 else:

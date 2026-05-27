@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 
@@ -19,6 +20,8 @@ data class TrackerMapEffectiveSession(
 )
 
 object TrackerMapEffectiveSessionProjector {
+    private const val TAG = "TrackerMapEffectiveSessionProjector"
+
     fun project(input: TrackerMapEffectiveSessionInput): TrackerMapEffectiveSession {
         val state = input.state
         val plan = input.plan
@@ -52,9 +55,18 @@ object TrackerMapEffectiveSessionProjector {
                 nowMs = input.nowMs,
             )
         )
+        val liveHead = resolveLiveHead(snapshot)
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update effective_project mode=${state.mode} displayed=${plan.displayedTrackerId} " +
+                "singleRaw=${state.trail.size} singleEffective=${snapshot.singleTrail.size} " +
+                "multiRaw=${state.allQueueTrailsByTracker.mapValues { it.value.size }} " +
+                "multiEffective=${snapshot.renderTrailsByTracker.mapValues { it.value.size }} " +
+                "visible=${input.visibleTrackerIds?.sorted()} liveHead=$liveHead"
+        )
         return TrackerMapEffectiveSession(
             snapshot = snapshot,
-            liveHead = resolveLiveHead(snapshot),
+            liveHead = liveHead,
         )
     }
 
@@ -91,8 +103,17 @@ object TrackerMapEffectiveSessionProjector {
             trailPointLimit = trailPointLimit,
         )
         if (nextTrail === currentTrail) {
+            GeoVaultCaptureLog.v(
+                TAG,
+                "map_update effective_overlay_multi_skipped mode=$mode tracker=$trackerId current=${currentTrail.size}"
+            )
             return allQueueTrailsByTracker
         }
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update effective_overlay_multi_added mode=$mode tracker=$trackerId " +
+                "from=${currentTrail.size} to=${nextTrail.size} runtimeTs=${runtime.lastTrackedTimestampMs}"
+        )
         return allQueueTrailsByTracker.toMutableMap().apply {
             this[trackerId] = nextTrail
         }
@@ -113,12 +134,25 @@ object TrackerMapEffectiveSessionProjector {
             runtime.selectedTrackerId.trim()
         }
         if (effectiveDisplayedId != trackerId) return trail
-        return trailWithLocalRuntimeOverlay(
+        val nextTrail = trailWithLocalRuntimeOverlay(
             runtime = runtime,
             trackerId = trackerId,
             currentTrail = trail,
             trailPointLimit = trailPointLimit,
         )
+        if (nextTrail !== trail) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update effective_overlay_single_added tracker=$trackerId displayed=$effectiveDisplayedId " +
+                    "from=${trail.size} to=${nextTrail.size} runtimeTs=${runtime.lastTrackedTimestampMs}"
+            )
+        } else {
+            GeoVaultCaptureLog.v(
+                TAG,
+                "map_update effective_overlay_single_skipped tracker=$trackerId displayed=$effectiveDisplayedId current=${trail.size}"
+            )
+        }
+        return nextTrail
     }
 
     private fun resolveSingleLiveHead(snapshot: TrackerMapSessionSnapshot): Pair<Double, Double>? {
@@ -147,7 +181,14 @@ object TrackerMapEffectiveSessionProjector {
                 return it.latitude to it.longitude
             }
         }
-        if (trackerId !in snapshot.renderTrailsByTracker.keys) return null
+        if (trackerId !in snapshot.renderTrailsByTracker.keys) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update effective_live_head_none reason=tracker_not_rendered mode=${snapshot.mode} tracker=$trackerId " +
+                    "rendered=${snapshot.renderTrailsByTracker.keys.sorted()}"
+            )
+            return null
+        }
         val lat = runtime.lastTrackedLatitude
         val lon = runtime.lastTrackedLongitude
         if (lat != null && lon != null && runtime.lastTrackedTimestampMs > 0L) {

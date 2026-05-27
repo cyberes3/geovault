@@ -95,6 +95,47 @@ class TrackerSessionAttributionPolicyTest {
     }
 
     @Test
+    fun authoritativeStart_mergesNearServerRoundedStart() {
+        val authoritative = 1_779_901_252_502L
+        val serverRounded = 1_779_901_253_000L
+        val serverPoint = point(time = authoritative + 100L, startTimestampMs = serverRounded)
+        val runtimePoint = point(time = authoritative + 200L, startTimestampMs = authoritative)
+
+        val out = TrackerSessionAttributionPolicy.segment(
+            points = listOf(serverPoint, runtimePoint),
+            context = TrackerSessionAttributionContext(currentSessionStartMs = authoritative),
+        )
+
+        assertEquals(listOf(authoritative), out.map { it.startTimestampMs })
+        assertEquals(listOf(serverPoint, runtimePoint), out.single().points)
+    }
+
+    @Test
+    fun authoritativeStart_doesNotMergeStartsOutsideTolerance() {
+        val authoritative = 10_000L
+        val farStart = 12_000L
+        val previousPoint = point(time = 9_000L, startTimestampMs = farStart)
+        val runtimePoint = point(time = 10_500L, startTimestampMs = authoritative)
+
+        val out = TrackerSessionAttributionPolicy.segment(
+            points = listOf(previousPoint, runtimePoint),
+            context = TrackerSessionAttributionContext(currentSessionStartMs = authoritative),
+        )
+
+        assertEquals(listOf(authoritative, farStart), out.map { it.startTimestampMs })
+    }
+
+    @Test
+    fun noAuthoritativeStart_keepsNearStartsSeparate() {
+        val first = point(time = 1_000L, startTimestampMs = 10_000L)
+        val second = point(time = 2_000L, startTimestampMs = 10_498L)
+
+        val out = TrackerSessionAttributionPolicy.segment(points = listOf(first, second))
+
+        assertEquals(listOf(10_000L, 10_498L), out.map { it.startTimestampMs })
+    }
+
+    @Test
     fun nullStarts_collapseIntoSyntheticSegment_whenNoBoundariesExist() {
         val p1 = point(time = 100L)
         val p2 = point(time = 200L)

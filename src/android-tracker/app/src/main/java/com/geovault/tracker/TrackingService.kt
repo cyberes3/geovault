@@ -1121,6 +1121,13 @@ class TrackingService : Service() {
                 lastTrackedPropsJson = finalPropsJson
             )
         }
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update local_fix_accepted track=$selectedTrackerId persisted=${result.pointPersisted} " +
+                "runtimeTs=${result.lastTrackedTimestampMs} lat=${result.lastTrackedLatitude} " +
+                "lon=${result.lastTrackedLongitude} acc=${result.lastAccuracyMeters} " +
+                "queuedVisible=${result.queuedPointsVisible} adjustment=${result.adjustmentReason ?: "none"}"
+        )
         val acceptedQuality = result.trackPointQuality ?: resolveTrackPointQuality(acceptedLocation, finalPropsJson)
         if (
             isFastGpsLockWindowActive &&
@@ -1211,11 +1218,23 @@ class TrackingService : Service() {
             )
         }
         if (result.pointPersisted) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update local_fix_publish_requested track=$selectedTrackerId " +
+                    "locationTs=${acceptedLocation.time} lat=${acceptedLocation.latitude} " +
+                    "lon=${acceptedLocation.longitude} quality=$acceptedQuality"
+            )
             publishTrackPoint(
                 trackId = selectedTrackerId,
                 location = acceptedLocation,
                 propsJson = finalPropsJson,
                 quality = acceptedQuality
+            )
+        } else {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update local_fix_no_bus_event track=$selectedTrackerId " +
+                    "runtimeTs=${result.lastTrackedTimestampMs} reason=not_persisted"
             )
         }
         lastSpeedReferenceLocation = Location(location)
@@ -3143,6 +3162,13 @@ class TrackingService : Service() {
         } else {
             localTrackPointOrderingCounter.incrementAndGet()
         }
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update local_bus_publish track=${trackId.trim()} ts=${location.time} " +
+                "order=$orderingKey lat=${location.latitude} lon=${location.longitude} " +
+                "acc=${if (location.hasAccuracy()) location.accuracy else null} quality=$quality " +
+                "manual=${location.extras?.getBoolean(EXTRAS_KEY_MANUAL_SEND, false) == true}"
+        )
         TrackPointBus.publish(
             TrackPointEvent(
                 source = TrackPointSource.LOCAL_GPS,

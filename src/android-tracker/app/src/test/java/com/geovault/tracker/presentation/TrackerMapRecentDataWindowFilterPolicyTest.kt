@@ -33,6 +33,17 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
     }
 
     @Test
+    fun identityKeys_preserveAppendedRuntimeOverlay() {
+        val serverPoint = point(time = NOW - 60_000L, startTimestampMs = NOW - 120_000L)
+        val runtimeOverlay = point(time = NOW, startTimestampMs = NOW - 120_000L)
+        val points = listOf(serverPoint, runtimeOverlay)
+
+        for (key in listOf(null, "", "  ", "all", "unknown")) {
+            assertSame(points, apply(points, key = key))
+        }
+    }
+
+    @Test
     fun emptyTrail_returnsEmpty() {
         assertTrue(apply(emptyList(), key = "1h").isEmpty())
     }
@@ -89,6 +100,19 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
     }
 
     @Test
+    fun rollingWindows_preserveFreshAppendedRuntimeOverlay() {
+        val olderServerPoint = point(time = NOW - 31L * 24L * 3_600_000L, startTimestampMs = NOW - 31L * 24L * 3_600_000L)
+        val runtimeOverlay = point(time = NOW, startTimestampMs = NOW - 60_000L)
+        val points = listOf(olderServerPoint, runtimeOverlay)
+
+        for (key in listOf("1min", "1h", "1d", "1w", "1m")) {
+            val filtered = apply(points, key = key)
+
+            assertEquals(listOf(runtimeOverlay), filtered)
+        }
+    }
+
+    @Test
     fun currentSession_keepsOnlyLatestStartTimestamp() {
         val older = 10_000L
         val newer = 20_000L
@@ -101,6 +125,20 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
         val filtered = apply(points, key = "current_session")
         assertEquals(2, filtered.size)
         assertTrue(filtered.all { it.startTimestampMs == newer })
+    }
+
+    @Test
+    fun currentSession_nearAuthoritativeServerStart_keepsRuntimeOverlayTail() {
+        val sessionStart = 1_779_901_252_502L
+        val roundedServerStart = 1_779_901_253_000L
+        val serverPoint = point(time = sessionStart + 100L, startTimestampMs = roundedServerStart)
+        val runtimeOverlay = point(time = sessionStart + 200L, startTimestampMs = sessionStart)
+        val points = listOf(serverPoint, runtimeOverlay)
+
+        val filtered = apply(points, key = "current_session", currentSessionStartMs = sessionStart)
+
+        assertEquals(listOf(serverPoint, runtimeOverlay), filtered)
+        assertEquals(runtimeOverlay, filtered.last())
     }
 
     @Test
@@ -224,6 +262,24 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
 
         assertEquals(listOf(30L, 40L, 50L), filtered.map { it.time })
         assertTrue(filtered.none { it.startTimestampMs == older })
+    }
+
+    @Test
+    fun session_nearAuthoritativeServerStart_countsAsCurrentAndKeepsPrevious() {
+        val older = 1_000L
+        val previous = 2_000L
+        val current = 10_000L
+        val roundedServerStart = current + 498L
+        val olderPoint = point(time = 100L, startTimestampMs = older)
+        val previousPoint = point(time = 2_500L, startTimestampMs = previous)
+        val serverCurrentPoint = point(time = 10_100L, startTimestampMs = roundedServerStart)
+        val runtimeOverlay = point(time = 10_200L, startTimestampMs = current)
+        val points = listOf(olderPoint, previousPoint, serverCurrentPoint, runtimeOverlay)
+
+        val filtered = apply(points, key = "session", currentSessionStartMs = current)
+
+        assertEquals(listOf(previousPoint, serverCurrentPoint, runtimeOverlay), filtered)
+        assertEquals(runtimeOverlay, filtered.last())
     }
 
     @Test

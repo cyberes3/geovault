@@ -249,7 +249,12 @@ def _normalize_point_params_for_response(point_params: list) -> list:
         if "alt" in entry and isinstance(entry["alt"], (int, float)):
             entry["alt"] = int(round(float(entry["alt"])))
         for k, v in list(entry.items()):
-            if "timestamp" in k.lower() and isinstance(v, (int, float)):
+            if not isinstance(v, (int, float)):
+                continue
+            key = k.lower()
+            if key == "starttimestamp":
+                entry[k] = int(round(v))
+            elif "timestamp" in key:
                 if v > 1e11:
                     entry[k] = int(round(v / 1000.0))
                 else:

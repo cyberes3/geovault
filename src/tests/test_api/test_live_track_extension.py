@@ -2315,6 +2315,56 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual([coords[0][0], coords[0][1]], [-122.0, 37.0])
         self.assertEqual([coords[1][0], coords[1][1]], [-121.0, 38.0])
 
+    def test_geometry_and_detail_preserve_millisecond_starttimestamp(self):
+        """starttimestamp is session identity and must not be rounded to seconds in API responses."""
+        with _patch_live_track_enabled():
+            create_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Session Millisecond Identity"}),
+                content_type="application/json",
+            )
+        track_id = create_resp.json()["id"]
+        tracker_secret = create_resp.json()["tracker_secret"]
+        auth = _basic_auth_header("trackuser@example.com", tracker_secret)
+        now_sec = int(time.time())
+        session_start_ms = (now_sec - 600) * 1000 + 502
+        with _patch_live_track_enabled():
+            with patch.object(ingress_views, "settings") as mock_settings:
+                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+                self.client.post(
+                    "/api/extensions/live-track/ingress/",
+                    data=json.dumps(
+                        {
+                            "lat": 38.0,
+                            "lon": -121.0,
+                            "timestamp": now_sec - 300,
+                            "starttimestamp": session_start_ms,
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_AUTHORIZATION=auth,
+                )
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"recent_data_window": "current_session"}),
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            geometry_response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
+            detail_response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/")
+
+        self.assertEqual(geometry_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(
+            geometry_response.json()["point_params"][0].get("starttimestamp"),
+            session_start_ms,
+        )
+        self.assertEqual(
+            detail_response.json()["point_params"][0].get("starttimestamp"),
+            session_start_ms,
+        )
+
     def test_geometry_filtered_by_recent_data_window_session_keeps_last_and_current_with_missing_starttimestamp(self):
         """GET geometry with recent_data_window=session keeps previous+current sessions and timestamp-fallback points."""
         with _patch_live_track_enabled():

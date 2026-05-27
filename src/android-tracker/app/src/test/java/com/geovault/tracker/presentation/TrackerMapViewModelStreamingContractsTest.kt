@@ -183,6 +183,96 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
+    fun effectiveProject_currentSessionNearServerStart_usesRuntimeOverlayHead() {
+        val trackerId = "tracker-1"
+        val sessionStart = 1_779_901_252_502L
+        val roundedServerStart = 1_779_901_253_000L
+        val serverTail = sessionPoint(
+            trackerId = trackerId,
+            time = sessionStart + 100L,
+            latitude = 40.5,
+            longitude = -74.5,
+            startTimestampMs = roundedServerStart,
+        )
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = trackerId),
+                selectedTrackerId = trackerId,
+                lastTrackedLatitude = 41.0,
+                lastTrackedLongitude = -75.0,
+                lastTrackedTimestampMs = sessionStart + 200L,
+                sessionStartTimeMs = sessionStart,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = trackerId,
+            trail = listOf(serverTail),
+        )
+
+        val projected = TrackerMapEffectiveSessionProjector.project(
+            TrackerMapEffectiveSessionInput(
+                state = state,
+                plan = singlePlan(trackerId),
+                trailPointLimit = 100,
+                recentDataWindowByTracker = mapOf(trackerId to "current_session"),
+                currentSessionStartByTracker = mapOf(trackerId to sessionStart),
+                nowMs = sessionStart + 1_000L,
+            )
+        )
+
+        assertEquals(2, projected.snapshot.singleTrail.size)
+        assertEquals(41.0 to -75.0, projected.liveHead)
+        assertEquals(41.0, projected.snapshot.singleTrail.last().latitude, 0.0)
+        assertEquals(-75.0, projected.snapshot.singleTrail.last().longitude, 0.0)
+    }
+
+    @Test
+    fun effectiveProject_sessionNearServerStart_keepsPreviousAndRuntimeOverlayHead() {
+        val trackerId = "tracker-1"
+        val older = 1_000L
+        val previous = 2_000L
+        val sessionStart = 10_000L
+        val roundedServerStart = 10_498L
+        val olderPoint = sessionPoint(trackerId, time = 1_100L, latitude = 1.0, longitude = 1.0, startTimestampMs = older)
+        val previousPoint = sessionPoint(trackerId, time = 2_100L, latitude = 2.0, longitude = 2.0, startTimestampMs = previous)
+        val serverCurrentPoint = sessionPoint(
+            trackerId = trackerId,
+            time = 10_100L,
+            latitude = 3.0,
+            longitude = 3.0,
+            startTimestampMs = roundedServerStart,
+        )
+        val state = TrackerMapUiState(
+            runtime = TrackingRuntimeSnapshot(
+                isRunning = true,
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = trackerId),
+                selectedTrackerId = trackerId,
+                lastTrackedLatitude = 4.0,
+                lastTrackedLongitude = 4.0,
+                lastTrackedTimestampMs = 10_200L,
+                sessionStartTimeMs = sessionStart,
+            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = trackerId,
+            trail = listOf(olderPoint, previousPoint, serverCurrentPoint),
+        )
+
+        val projected = TrackerMapEffectiveSessionProjector.project(
+            TrackerMapEffectiveSessionInput(
+                state = state,
+                plan = singlePlan(trackerId),
+                trailPointLimit = 100,
+                recentDataWindowByTracker = mapOf(trackerId to "session"),
+                currentSessionStartByTracker = mapOf(trackerId to sessionStart),
+                nowMs = 11_000L,
+            )
+        )
+
+        assertEquals(listOf(previousPoint.time, serverCurrentPoint.time, 10_200L), projected.snapshot.singleTrail.map { it.time })
+        assertEquals(4.0 to 4.0, projected.liveHead)
+    }
+
+    @Test
     fun allQueueTrailsWithLocalRuntimeOverlay_groupWhileTracking_addsSelectedLocalPoint() {
         val trails = TrackerMapViewModel.allQueueTrailsWithLocalRuntimeOverlay(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
@@ -709,6 +799,47 @@ class TrackerMapViewModelStreamingContractsTest {
             sat = null,
             prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
             dist = null,
+        )
+    }
+
+    private fun sessionPoint(
+        trackerId: String,
+        time: Long,
+        latitude: Double,
+        longitude: Double,
+        startTimestampMs: Long,
+    ): com.geovault.tracker.db.QueuedLocation {
+        return com.geovault.tracker.db.QueuedLocation(
+            id = time,
+            trackerId = trackerId,
+            time = time,
+            latitude = latitude,
+            longitude = longitude,
+            altitude = null,
+            speed = null,
+            bearing = null,
+            accuracy = null,
+            sat = null,
+            prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY,
+            dist = null,
+            startTimestampMs = startTimestampMs,
+        )
+    }
+
+    private fun singlePlan(trackerId: String): TrackerMapStreamingPlan {
+        return TrackerMapStreamingPlan(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = trackerId,
+            displayedTrackerId = trackerId,
+            displayedTrackerName = "Tracker",
+            resolvedGroupId = "",
+            groupTrackerIds = emptySet(),
+            visibleRosterTrackerIds = emptySet(),
+            locallyRecordedTrackerIds = setOf(trackerId),
+            remoteSubscriptionIds = emptySet(),
+            acceptedRemoteTrackerIds = emptySet(),
+            localOverlayTrackerIds = setOf(trackerId),
+            trailReloadPlan = TrackerMapTrailReloadPlan(source = TrackerMapTrailSource.SINGLE_QUEUE),
         )
     }
 }

@@ -73,6 +73,13 @@ object TrackPointBus {
 
     fun publish(event: TrackPointEvent) {
         val orderedEvent = event.withOrderingKey()
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update bus_publish source=${orderedEvent.source} track=${orderedEvent.trackId.trim()} " +
+                "ts=${orderedEvent.timestampMs} order=${orderedEvent.orderingKey} " +
+                "lat=${orderedEvent.lat} lon=${orderedEvent.lon} " +
+                "paused=${localDeliveryPaused.get()} quality=${orderedEvent.quality}"
+        )
         if (orderedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
             synchronized(pausedLocalEvents) {
                 if (pausedLocalEvents.size >= PAUSED_BUFFER_CAPACITY) {
@@ -84,10 +91,22 @@ object TrackPointBus {
                     )
                 }
                 pausedLocalEvents.addLast(orderedEvent)
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update bus_buffer_local track=${orderedEvent.trackId.trim()} " +
+                        "ts=${orderedEvent.timestampMs} buffered=${pausedLocalEvents.size}"
+                )
             }
             return
         }
         val sendResult = orderedEmitQueue.trySend(orderedEvent)
+        if (sendResult.isSuccess) {
+            GeoVaultCaptureLog.v(
+                TAG,
+                "map_update bus_enqueued source=${orderedEvent.source} track=${orderedEvent.trackId.trim()} " +
+                    "ts=${orderedEvent.timestampMs} order=${orderedEvent.orderingKey}"
+            )
+        }
         if (!sendResult.isSuccess) {
             // With DROP_OLDEST this should not normally fire (the channel evicts internally), but
             // closed-channel or other failure modes still land here. Treat them like deferred
@@ -98,6 +117,7 @@ object TrackPointBus {
 
     fun pauseLocalDelivery() {
         localDeliveryPaused.set(true)
+        GeoVaultCaptureLog.d(TAG, "map_update bus_pause_local")
     }
 
     fun resumeLocalDelivery() {
@@ -107,6 +127,7 @@ object TrackPointBus {
             pausedLocalEvents.clear()
             drained
         }
+        GeoVaultCaptureLog.d(TAG, "map_update bus_resume_local buffered=${buffered.size}")
         buffered.forEach {
             val sendResult = orderedEmitQueue.trySend(it)
             if (!sendResult.isSuccess) {

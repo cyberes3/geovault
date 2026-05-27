@@ -577,6 +577,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     displayedTrackerId = displayedTrackerId,
                     displayedTrackerName = displayedTrackerName
                 )
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update vm_runtime_snapshot mode=${current.mode} selected=${snap.selectedTrackerId.trim()} " +
+                        "localActive=${snap.localRecordingActive} localId=${snap.locallyRecordedTrackerId.trim()} " +
+                        "sessionStart=${snap.sessionStartTimeMs} lastTs=${snap.lastTrackedTimestampMs} " +
+                        "lat=${snap.lastTrackedLatitude} lon=${snap.lastTrackedLongitude} " +
+                        "displayed=$displayedTrackerId trail=${current.trail.size} multi=${current.allQueueTrailsByTracker.mapSizes()}"
+                )
                 val prevLocalRecording = lastObservedLocalRecordingActive
                 lastObservedLocalRecordingActive = snap.localRecordingActive
                 if (prevLocalRecording != null && !prevLocalRecording && snap.localRecordingActive) {
@@ -628,6 +636,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     TrackerMapTrailReloadReason.GenericMapRefresh
                 }
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update vm_runtime_reload_request reason=$reloadReason recordingTransitioned=$recordingTransitioned " +
+                        "prevLocal=$prevLocalRecording currentLocal=${snap.localRecordingActive}"
+                )
                 requestRuntimeTrailReload(reloadReason)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
@@ -640,6 +653,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             TrackPointBus.events.collect { point ->
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update vm_bus_collect source=${point.source} track=${point.trackId.trim()} " +
+                        "ts=${point.timestampMs} order=${point.orderingKey} lat=${point.lat} lon=${point.lon}"
+                )
                 pointEventChannel.send(point)
             }
         }
@@ -649,6 +667,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         // the combined flow below so reconcile inputs come from a single coherent snapshot.
         viewModelScope.launch {
             LiveStreamRuntimeStateStore.state.collectLatest { snapshot ->
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update vm_stream_snapshot wants=${snapshot.wantsSubscription} ended=${snapshot.subscriptionEnded} " +
+                        "health=${snapshot.health} active=${snapshot.activeTrackerIds.sorted()} failure=${snapshot.failureReason}"
+                )
                 // STREAM-STATE-MACHINE: an active session = the user/app expressed intent AND the
                 // orchestrator hasn't terminated (cleanly stopped or permanently failed). The
                 // active -> ended transition is what triggers lease cleanup below.
@@ -746,6 +769,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 when (event) {
                     is com.geovault.tracker.data.TrackerManagementEvent.HistoryCleared -> {
                         val state = _uiState.value
+                        GeoVaultCaptureLog.i(
+                            TAG,
+                            "map_update vm_history_cleared_event track=${event.trackerId.trim()} " +
+                                "mode=${state.mode} displayed=${state.displayedTrackerId.trim()} selected=${state.runtime.selectedTrackerId.trim()}"
+                        )
                         when (
                             resolveHistoryClearRefreshAction(
                                 mode = state.mode,
@@ -761,6 +789,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                                 if (clearedTrackerId.isNotEmpty()) {
                                     clearedHistoryTrackerIds += clearedTrackerId
                                 }
+                                GeoVaultCaptureLog.i(
+                                    TAG,
+                                    "map_update vm_history_clear_apply track=$clearedTrackerId action=refresh " +
+                                        "barriers=${clearedHistoryTrackerIds.sorted()}"
+                                )
                                 // Defeat the deduper's 4s window so any reload that races a
                                 // post-clear fetch reaches the server and observes the
                                 // trimmed geometry instead of replaying the pre-clear
@@ -1483,6 +1516,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val nextRenderState = buildMapRenderState(snapshot)
         val nextBounds = trailBoundsOrNull(snapshot, nowMs)
         val nextSelectionLockPoint = selectionLockPointOrNull(snapshot)
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update vm_render_package mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
+                "selected=${snapshot.plan.selectedTrackerId} single=${snapshot.singleTrail.trailSummary()} " +
+                "multi=${snapshot.renderTrailsByTracker.mapSizes()} remote=${snapshot.acceptedRemoteLastPoints.keys.sorted()} " +
+                "liveHead=${effectiveSession.liveHead} bounds=${nextBounds.boundsSummary()} " +
+                "selectionLock=${_uiState.value.selectionLockTrackerId.trim()} selectionPoint=$nextSelectionLockPoint"
+        )
         _renderPackage.update { current ->
             // RENDER-COALESCE: every _uiState tick previously bumped `revision`, which made every
             // downstream collector (camera effects, polyline rerenders, marker refreshes) treat
@@ -1537,6 +1578,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 liveActiveFitEnabled = state.liveActiveFitEnabled,
                 bounds = bounds,
             )
+        )
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update vm_camera_resolve mode=${state.mode} follow=${state.followLockEnabled} " +
+                "gpsCollecting=${state.runtime.gpsCollecting} followTarget=$followTarget " +
+                "selectionLock=${state.selectionLockTrackerId.trim()} selectionPoint=$selectionLockPoint " +
+                "liveFit=${state.liveActiveFitEnabled} bounds=${bounds.boundsSummary()} reason=${resolution.reason} " +
+                "center=${resolution.centerLat},${resolution.centerLon}"
         )
         if (resolution == lastCameraResolution) return
         lastCameraResolution = resolution
@@ -1915,6 +1964,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private suspend fun reloadTrailFromDatabaseLocked(reason: TrackerMapTrailReloadReason) {
         val state = _uiState.value
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_update vm_reload_start reason=$reason mode=${state.mode} displayed=${state.displayedTrackerId.trim()} " +
+                "selected=${state.runtime.selectedTrackerId.trim()} localActive=${state.runtime.localRecordingActive} " +
+                "trail=${state.trail.trailSummary()} multi=${state.allQueueTrailsByTracker.mapSizes()} " +
+                "barriers=${clearedHistoryTrackerIds.sorted()}"
+        )
         val groupSelection = resolveGroupModeSelection(state)
         val rosterTrackerIds = visibleMapRosterTrackerIds()
         val sessionPlan = projectSession(
@@ -1931,7 +1987,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             displayedTrackerId = activeTrackerId,
             trailReloadPlan = sessionPlan.trailReloadPlan,
         )
-        if (!TrackerMapTrailReloadGuardPolicy.shouldProceed(guardInput)) return
+        if (!TrackerMapTrailReloadGuardPolicy.shouldProceed(guardInput)) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update vm_reload_guard_skip reason=$reason mode=${state.mode} trailSize=${state.trail.size} " +
+                    "runtimeRunning=${state.runtime.localRecordingActive} source=${sessionPlan.trailReloadPlan.source}"
+            )
+            return
+        }
         // PRELOAD (early): seed an empty single-tracker trail from the in-memory cache as soon as
         // we know which tracker is displayed, BEFORE the allowsSource gate. Cosmetic refresh
         // reasons (MetadataMapRefresh / GenericMapRefresh) deliberately don't fetch from the
@@ -1945,6 +2008,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             activeTrackerId = activeTrackerId
         )
         if (preloadedTrail != null) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update vm_reload_preload tracker=$activeTrackerId points=${preloadedTrail.trailSummary()} reason=$reason"
+            )
             _uiState.update { latest ->
                 val restored = TrackerMapLocalTrailRestorePolicy.restore(
                     localHistoryTrail = preloadedTrail,
@@ -1963,6 +2030,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
         if (!reason.allowsSource(sessionPlan.trailReloadPlan.source)) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update vm_reload_skip_source reason=$reason source=${sessionPlan.trailReloadPlan.source} plan=$sessionPlan"
+            )
             return
         }
         // RE-FIT AFTER FETCH: every reload that legitimately hit the server can move state.trail
@@ -1985,7 +2056,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 renderMetadataSignature = state.renderMetadataSignature,
             )
         )
-        if (!reason.allowServerHistoryFetch && lastTrailLoadSeed == seed) return
+        if (!reason.allowServerHistoryFetch && lastTrailLoadSeed == seed) {
+            GeoVaultCaptureLog.v(TAG, "map_update vm_reload_seed_skip reason=$reason seed=$seed")
+            return
+        }
         lastTrailLoadSeed = seed
         val planSourceState = _uiState.value
         val plan = projectSession(
@@ -1993,6 +2067,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             groupSelection = groupSelection,
             visibleRosterTrackerIds = rosterTrackerIds,
         ).trailReloadPlan
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_update vm_reload_plan reason=$reason source=${plan.source} active=${plan.activeTrackerId} " +
+                "single=${plan.singleTrackerId} trackers=${plan.trackerIds.sorted()} overlay=${plan.overlayTrackerId} seed=$seed"
+        )
         val existingTrailMinTimeMs = planSourceState.trail.minOfOrNull { it.time }
         val existingMultiMinTimes = planSourceState.allQueueTrailsByTracker
             .mapValues { (_, pts) -> pts.minOfOrNull { it.time } }
@@ -2012,6 +2091,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             existingTrailMinTimeMs = existingTrailMinTimeMs,
             existingMultiMinTimes = existingMultiMinTimes,
             ops = trailLoaderOps,
+        )
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_update vm_reload_loaded reason=$reason source=${plan.source} " +
+                "single=${loaded.singleTrailSeed.trailSummary()} server=${loaded.serverTrails.mapSizes()} " +
+                "queueOverlays=${loaded.queueOverlaysByTracker.mapSizes()} authoritative=${loaded.authoritativeServerTrackerIds.sorted()}"
         )
         // RACE-FREE COMMIT: re-merge against the LATEST live trail at write time. The IO above
         // (loadQueueTrail / loadTrailsForTrackerIds / loadSingleTrackerTrailFromServer) suspends,
@@ -2056,6 +2141,12 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 )
             )
             mergeCommitted = MergedTrailResult(commit.trail, commit.multiTrails)
+            GeoVaultCaptureLog.i(
+                TAG,
+                "map_update vm_reload_commit reason=$reason source=${plan.source} " +
+                    "trail=${commit.trail.trailSummary()} multi=${commit.multiTrails.mapSizes()} " +
+                    "barriers=${clearedHistoryTrackerIds.sorted()}"
+            )
             latest.copy(
                 trail = commit.trail,
                 allQueueTrailsByTracker = commit.multiTrails,
@@ -2081,6 +2172,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             loaded.authoritativeServerTrackerIds.isNotEmpty()
         ) {
             clearedHistoryTrackerIds.removeAll(loaded.authoritativeServerTrackerIds)
+            GeoVaultCaptureLog.i(
+                TAG,
+                "map_update vm_history_clear_barrier_released authoritative=${loaded.authoritativeServerTrackerIds.sorted()} " +
+                    "remaining=${clearedHistoryTrackerIds.sorted()}"
+            )
         }
         if (pendingFitAfterReload &&
             (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
@@ -2347,6 +2443,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private fun handleTrackPointEvent(point: TrackPointEvent) {
         val nowMs = System.currentTimeMillis()
         val snapshot = buildCurrentSessionSnapshot(nowMs)
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update vm_point_reduce_start source=${point.source} track=${point.trackId.trim()} " +
+                "ts=${point.timestampMs} mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
+                "acceptedRemote=${snapshot.plan.acceptedRemoteTrackerIds.sorted()} " +
+                "localOverlay=${snapshot.plan.localOverlayTrackerIds.sorted()} " +
+                "singleBefore=${snapshot.singleTrail.trailSummary()} multiBefore=${snapshot.renderTrailsByTracker.mapSizes()}"
+        )
         val reduction = TrackerMapSessionEngine.reducePoint(
             TrackerMapSessionPointInput(
                 snapshot = snapshot,
@@ -2357,6 +2461,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 visibleTrackerIds = visibleTrackerIdsForSessionPlan(snapshot.uiState, snapshot.plan),
                 nowMs = nowMs,
             )
+        )
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update vm_point_reduce_result source=${point.source} track=${point.trackId.trim()} " +
+                "accepted=${reduction.acceptedBySourcePolicy} update=${reduction.shouldUpdate} " +
+                "singleAfter=${reduction.nextSnapshot.singleTrail.trailSummary()} " +
+                "multiAfter=${reduction.nextSnapshot.renderTrailsByTracker.mapSizes()} " +
+                "remoteAfter=${reduction.nextSnapshot.acceptedRemoteLastPoints.keys.sorted()}"
         )
         if (reduction.shouldUpdate) {
             val nextState = stateWithRefreshedSelectionCard(
@@ -2441,7 +2553,29 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private fun setGeometryLoading(isLoading: Boolean) {
         val current = _uiState.value
         if (current.isGeometryLoading == isLoading) return
+        GeoVaultCaptureLog.d(TAG, "map_update vm_geometry_loading from=${current.isGeometryLoading} to=$isLoading")
         _uiState.value = current.copy(isGeometryLoading = isLoading)
+    }
+
+    private fun List<QueuedLocation>.trailSummary(): String {
+        val first = firstOrNull()
+        val last = lastOrNull()
+        return "count=$size first=${first?.time}:${first?.latitude},${first?.longitude}/${first?.prov}/${first?.startTimestampMs} " +
+            "last=${last?.time}:${last?.latitude},${last?.longitude}/${last?.prov}/${last?.startTimestampMs}"
+    }
+
+    private fun Map<String, List<QueuedLocation>>.mapSizes(): String {
+        if (isEmpty()) return "{}"
+        return entries
+            .sortedBy { it.key }
+            .joinToString(prefix = "{", postfix = "}") { (trackerId, points) ->
+                "$trackerId:${points.size}:${points.lastOrNull()?.time}:${points.lastOrNull()?.prov}"
+            }
+    }
+
+    private fun LatLngBounds?.boundsSummary(): String {
+        this ?: return "null"
+        return "sw=${southWest.latitude},${southWest.longitude} ne=${northEast.latitude},${northEast.longitude}"
     }
 
     override fun onCleared() {

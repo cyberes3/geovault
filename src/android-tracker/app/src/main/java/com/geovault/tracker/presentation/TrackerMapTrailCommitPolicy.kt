@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.db.QueuedLocation
 
 internal data class TrackerMapTrailCommitInput(
@@ -18,6 +19,8 @@ internal data class TrackerMapTrailCommitResult(
 )
 
 internal object TrackerMapTrailCommitPolicy {
+    private const val TAG = "TrackerMapTrailCommitPolicy"
+
     fun resolve(input: TrackerMapTrailCommitInput): TrackerMapTrailCommitResult {
         val clearedIds = normalizedIds(input.clearedHistoryTrackerIds)
         val sanitizedLoaded = input.loaded.withClearedHistoryBarrier(
@@ -65,6 +68,15 @@ internal object TrackerMapTrailCommitPolicy {
             previous = input.latestState.allQueueTrailsByTracker,
             loadedServerTrails = sanitizedLoaded.serverTrails,
             clearedHistoryTrackerIds = clearedIds,
+        )
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_update trail_commit reason=${input.reason} source=${input.plan.source} active=${input.plan.activeTrackerId} " +
+                "loadedSingle=${input.loaded.singleTrailSeed.size} loadedServer=${input.loaded.serverTrails.mapValues { it.value.size }} " +
+                "loadedOverlay=${input.loaded.queueOverlaysByTracker.mapValues { it.value.size }} " +
+                "currentSingle=${input.latestState.trail.size} currentMulti=${input.latestState.allQueueTrailsByTracker.mapValues { it.value.size }} " +
+                "resultSingle=${mergedTrail.size} resultMulti=${mergedMultiTrails.mapValues { it.value.size }} " +
+                "cleared=${clearedIds.sorted()} authoritative=${input.loaded.authoritativeServerTrackerIds.sorted()}"
         )
         return TrackerMapTrailCommitResult(
             trail = mergedTrail,
@@ -147,6 +159,10 @@ internal object TrackerMapTrailCommitPolicy {
         if (normalizedId.isNotEmpty() && normalizedId in clearedHistoryTrackerIds) return this
         if (reason != TrackerMapTrailReloadReason.RecentDataWindowChanged) return this
         if (isNotEmpty() || loadedServerTrail.isNotEmpty() || previous.isEmpty()) return this
+        GeoVaultCaptureLog.w(
+            TAG,
+            "map_update trail_commit_preserve_single reason=$reason tracker=$normalizedId previous=${previous.size}"
+        )
         return previous
     }
 
@@ -164,6 +180,10 @@ internal object TrackerMapTrailCommitPolicy {
             if (normalizedId.isEmpty() || normalizedId in clearedHistoryTrackerIds) return@forEach
             val loaded = loadedServerTrails[trackerId].orEmpty()
             if (previousTrail.isNotEmpty() && loaded.isEmpty() && merged[trackerId].orEmpty().isEmpty()) {
+                GeoVaultCaptureLog.w(
+                    TAG,
+                    "map_update trail_commit_preserve_multi reason=$reason tracker=$normalizedId previous=${previousTrail.size}"
+                )
                 merged[trackerId] = previousTrail
             }
         }
