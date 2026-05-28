@@ -33,6 +33,7 @@ object RuntimeAccuracyHoldPolicy {
         incomingAccuracyMeters: Float?,
         effectiveAccuracyThresholdMeters: Float,
         nowElapsedMs: Long,
+        forceCurrentAccuracy: Boolean = false,
     ): Result {
         val isGood = incomingAccuracyMeters != null &&
             !incomingAccuracyMeters.isNaN() &&
@@ -50,7 +51,13 @@ object RuntimeAccuracyHoldPolicy {
         val withinGrace = lastGoodAccuracy != null &&
             lastGoodAt > 0L &&
             nowElapsedMs - lastGoodAt <= ACCURACY_HOLD_GRACE_MS
-        val displayed = if (withinGrace) lastGoodAccuracy else incomingAccuracyMeters
+        val displayed = if (forceCurrentAccuracy) {
+            incomingAccuracyMeters
+        } else if (withinGrace) {
+            lastGoodAccuracy
+        } else {
+            incomingAccuracyMeters
+        }
         return Result(
             displayedAccuracyMeters = displayed,
             lastGoodAccuracyMeters = lastGoodAccuracy,

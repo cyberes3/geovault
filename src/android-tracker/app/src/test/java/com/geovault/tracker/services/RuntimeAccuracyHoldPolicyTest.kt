@@ -62,6 +62,46 @@ class RuntimeAccuracyHoldPolicyTest {
     }
 
     @Test
+    fun badFix_withinGrace_forceCurrentAccuracy_surfacesRawValue() {
+        val previous = TrackingRuntimeSnapshot(
+            lastGoodAccuracyMeters = 9f,
+            lastGoodAccuracyAtElapsedMs = 10_000L,
+        )
+
+        val result = RuntimeAccuracyHoldPolicy.next(
+            previous = previous,
+            incomingAccuracyMeters = 75f,
+            effectiveAccuracyThresholdMeters = threshold,
+            nowElapsedMs = 10_000L + 5_000L,
+            forceCurrentAccuracy = true,
+        )
+
+        assertEquals(75f, result.displayedAccuracyMeters)
+        assertEquals(9f, result.lastGoodAccuracyMeters)
+        assertEquals(10_000L, result.lastGoodAccuracyAtElapsedMs)
+        assertTrue(result.heldLastGoodAccuracy)
+    }
+
+    @Test
+    fun nullAccuracy_forceCurrentAccuracy_surfacesNull() {
+        val previous = TrackingRuntimeSnapshot(
+            lastGoodAccuracyMeters = 7f,
+            lastGoodAccuracyAtElapsedMs = 2_000L,
+        )
+
+        val result = RuntimeAccuracyHoldPolicy.next(
+            previous = previous,
+            incomingAccuracyMeters = null,
+            effectiveAccuracyThresholdMeters = threshold,
+            nowElapsedMs = 2_000L + 1_000L,
+            forceCurrentAccuracy = true,
+        )
+
+        assertNull(result.displayedAccuracyMeters)
+        assertEquals(7f, result.lastGoodAccuracyMeters)
+    }
+
+    @Test
     fun badFix_atGraceBoundary_stillSuppressed() {
         val previous = TrackingRuntimeSnapshot(
             lastGoodAccuracyMeters = 12f,

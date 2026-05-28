@@ -1,6 +1,6 @@
 package com.geovault.tracker.location
 
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,9 +15,10 @@ class LowAccuracyFallbackCoordinatorTest {
             candidateLongitude = 2.0,
             candidateTimestampMs = 1000L
         )
-        assertTrue(shouldStartTimer)
-        assertTrue(
-            coordinator.shouldEmitFallback(
+        assertEquals(LowAccuracyFallbackArmDecision.START_TIMER, shouldStartTimer)
+        assertEquals(
+            LowAccuracyFallbackEmitDecision.EMIT,
+            coordinator.evaluateEmit(
                 fallbackEligible = true,
                 hasCandidate = true
             )
@@ -29,8 +30,9 @@ class LowAccuracyFallbackCoordinatorTest {
         val coordinator = LowAccuracyFallbackCoordinator()
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
         coordinator.onAcceptedFix()
-        assertFalse(
-            coordinator.shouldEmitFallback(
+        assertEquals(
+            LowAccuracyFallbackEmitDecision.WAIT,
+            coordinator.evaluateEmit(
                 fallbackEligible = true,
                 hasCandidate = true
             )
@@ -42,24 +44,24 @@ class LowAccuracyFallbackCoordinatorTest {
         val coordinator = LowAccuracyFallbackCoordinator()
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
         coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
-        assertFalse(coordinator.shouldEmitFallback(true, true))
+        assertEquals(LowAccuracyFallbackEmitDecision.DUPLICATE_CANDIDATE, coordinator.evaluateEmit(true, true))
 
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2500L)
-        assertTrue(coordinator.shouldEmitFallback(true, true))
+        assertEquals(LowAccuracyFallbackEmitDecision.EMIT, coordinator.evaluateEmit(true, true))
     }
 
     @Test
     fun secondRejectWhileAwaitingLock_doesNotRequestNewTimer() {
         val coordinator = LowAccuracyFallbackCoordinator()
-        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
-        assertFalse(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1200L))
+        assertEquals(LowAccuracyFallbackArmDecision.START_TIMER, coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
+        assertEquals(LowAccuracyFallbackArmDecision.KEEP_TIMER, coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1200L))
     }
 
     @Test
     fun ineligibleReject_neverArmsOrEmits() {
         val coordinator = LowAccuracyFallbackCoordinator()
-        assertFalse(coordinator.onRejectedFixForLock(false, 1.0, 2.0, 1000L))
-        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = false, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackArmDecision.INELIGIBLE, coordinator.onRejectedFixForLock(false, 1.0, 2.0, 1000L))
+        assertEquals(LowAccuracyFallbackEmitDecision.DISABLED, coordinator.evaluateEmit(fallbackEligible = false, hasCandidate = true))
     }
 
     @Test
@@ -67,21 +69,21 @@ class LowAccuracyFallbackCoordinatorTest {
         val coordinator = LowAccuracyFallbackCoordinator()
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
         coordinator.onTrackingStopped()
-        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackEmitDecision.WAIT, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
 
-        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2000L))
-        assertTrue(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackArmDecision.START_TIMER, coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2000L))
+        assertEquals(LowAccuracyFallbackEmitDecision.EMIT, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
     }
 
     @Test
     fun fallbackTimerStopped_allowsNewRejectToArmTimer() {
         val coordinator = LowAccuracyFallbackCoordinator()
-        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
+        assertEquals(LowAccuracyFallbackArmDecision.START_TIMER, coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
 
         coordinator.onFallbackTimerStopped()
 
-        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
-        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2000L))
+        assertEquals(LowAccuracyFallbackEmitDecision.WAIT, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackArmDecision.START_TIMER, coordinator.onRejectedFixForLock(true, 1.0, 2.0, 2000L))
     }
 
     @Test
@@ -91,9 +93,9 @@ class LowAccuracyFallbackCoordinatorTest {
         coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
 
         coordinator.onFallbackTimerStopped()
-        assertTrue(coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
+        assertEquals(LowAccuracyFallbackArmDecision.START_TIMER, coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L))
 
-        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackEmitDecision.DUPLICATE_CANDIDATE, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
     }
 
     @Test
@@ -102,7 +104,7 @@ class LowAccuracyFallbackCoordinatorTest {
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
         coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
         coordinator.onRejectedFixForLock(true, 1.000001, 2.000001, 1500L)
-        assertFalse(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackEmitDecision.DUPLICATE_CANDIDATE, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
     }
 
     @Test
@@ -111,6 +113,6 @@ class LowAccuracyFallbackCoordinatorTest {
         coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
         coordinator.onFallbackEmitted(1.0, 2.0, 1000L)
         coordinator.onRejectedFixForLock(true, 1.0001, 2.0001, 1500L)
-        assertTrue(coordinator.shouldEmitFallback(fallbackEligible = true, hasCandidate = true))
+        assertEquals(LowAccuracyFallbackEmitDecision.EMIT, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
     }
 }

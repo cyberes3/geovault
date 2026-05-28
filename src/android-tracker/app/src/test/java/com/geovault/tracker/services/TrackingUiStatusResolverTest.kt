@@ -62,6 +62,36 @@ class TrackingUiStatusResolverTest {
     }
 
     @Test
+    fun resolve_activeAccuracyBlockedEmission_returnsLockingEvenWithHeldGoodAccuracy() {
+        assertEquals(
+            TrackingUiStatus.LOCKING,
+            TrackingUiStatusResolver.resolve(
+                isRunning = true,
+                gpsProviderEnabled = true,
+                gpsPaused = false,
+                lastAccuracyMeters = 5f,
+                effectiveAccuracyThresholdMeters = 10f,
+                activeAccuracyBlockedEmission = true,
+            )
+        )
+    }
+
+    @Test
+    fun resolve_activeAccuracyBlockedEmission_providerDisabledStillWaitsForGps() {
+        assertEquals(
+            TrackingUiStatus.WAITING_FOR_GPS,
+            TrackingUiStatusResolver.resolve(
+                isRunning = true,
+                gpsProviderEnabled = false,
+                gpsPaused = false,
+                lastAccuracyMeters = 5f,
+                effectiveAccuracyThresholdMeters = 10f,
+                activeAccuracyBlockedEmission = true,
+            )
+        )
+    }
+
+    @Test
     fun resolveForGpsState_lockingState_returnsLocking() {
         assertEquals(
             TrackingUiStatus.LOCKING,
@@ -99,6 +129,21 @@ class TrackingUiStatusResolverTest {
                 gpsState = GpsRuntimeState.FALLBACK_PENDING,
                 lastAccuracyMeters = 8f,
                 effectiveAccuracyThresholdMeters = 10f
+            )
+        )
+    }
+
+    @Test
+    fun resolveForGpsState_fallbackPending_accuracyBlockedEmission_returnsLocking() {
+        assertEquals(
+            TrackingUiStatus.LOCKING,
+            TrackingUiStatusResolver.resolveForGpsState(
+                isRunning = true,
+                gpsProviderEnabled = true,
+                gpsState = GpsRuntimeState.FALLBACK_PENDING,
+                lastAccuracyMeters = 8f,
+                effectiveAccuracyThresholdMeters = 10f,
+                activeAccuracyBlockedEmission = true,
             )
         )
     }

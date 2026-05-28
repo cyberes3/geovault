@@ -33,10 +33,12 @@ object TrackingUiStatusResolver {
         gpsProviderEnabled: Boolean,
         gpsPaused: Boolean,
         lastAccuracyMeters: Float?,
-        effectiveAccuracyThresholdMeters: Float
+        effectiveAccuracyThresholdMeters: Float,
+        activeAccuracyBlockedEmission: Boolean = false,
     ): TrackingUiStatus {
         if (!isRunning) return TrackingUiStatus.NOT_TRACKING
         if (!gpsProviderEnabled) return TrackingUiStatus.WAITING_FOR_GPS
+        if (activeAccuracyBlockedEmission) return TrackingUiStatus.LOCKING
         if (gpsPaused) return TrackingUiStatus.PAUSED_FOR_MOTION
         val noGoodFix = lastAccuracyMeters == null || lastAccuracyMeters > effectiveAccuracyThresholdMeters
         return if (noGoodFix) TrackingUiStatus.LOCKING else TrackingUiStatus.TRACKING_ACTIVE
@@ -48,7 +50,8 @@ object TrackingUiStatusResolver {
         gpsProviderEnabled: Boolean,
         gpsState: GpsRuntimeState,
         lastAccuracyMeters: Float?,
-        effectiveAccuracyThresholdMeters: Float
+        effectiveAccuracyThresholdMeters: Float,
+        activeAccuracyBlockedEmission: Boolean = false,
     ): TrackingUiStatus {
         if (!isRunning) return TrackingUiStatus.NOT_TRACKING
         if (
@@ -68,7 +71,8 @@ object TrackingUiStatusResolver {
                     gpsProviderEnabled = true,
                     gpsPaused = gpsState == GpsRuntimeState.PAUSED_FOR_MOTION,
                     lastAccuracyMeters = lastAccuracyMeters,
-                    effectiveAccuracyThresholdMeters = effectiveAccuracyThresholdMeters
+                    effectiveAccuracyThresholdMeters = effectiveAccuracyThresholdMeters,
+                    activeAccuracyBlockedEmission = activeAccuracyBlockedEmission,
                 )
             GpsRuntimeState.INACTIVE -> TrackingUiStatus.LOCKING
             GpsRuntimeState.WAITING_FOR_PROVIDER -> TrackingUiStatus.WAITING_FOR_GPS
@@ -193,6 +197,12 @@ data class TrackingRuntimeSnapshot(
     val lastAccuracyMeters: Float? = null,
     val lastGoodAccuracyMeters: Float? = null,
     val lastGoodAccuracyAtElapsedMs: Long = 0L,
+    val currentFixAccuracyMeters: Float? = null,
+    val activePointEmissionTrouble: Boolean = false,
+    val activePointEmissionAccuracyTrouble: Boolean = false,
+    val pointEmissionTroubleReason: String? = null,
+    val lastLocalPointPersistedAtMs: Long = 0L,
+    val lastUploadSucceededAtMs: Long = 0L,
     val lastTrackedLatitude: Double? = null,
     val lastTrackedLongitude: Double? = null,
     val lastTrackedTimestampMs: Long = 0L,

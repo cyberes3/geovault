@@ -1,16 +1,40 @@
 package com.geovault.tracker.location
 
-internal class LowAccuracyFallbackCoordinator {
+import com.geovault.common.geo.GeoMath
+
+enum class LowAccuracyFallbackArmDecision {
+    START_TIMER,
+    KEEP_TIMER,
+    INELIGIBLE,
+}
+
+enum class LowAccuracyFallbackEmitDecision {
+    EMIT,
+    WAIT,
+    DISABLED,
+    NO_CANDIDATE,
+    DUPLICATE_CANDIDATE,
+}
+
+/**
+ * Timer-backed fallback state while the filter reports `low-accuracy` rejects.
+ *
+ * The timer keeps the recovery loop alive; emission remains gated by service
+ * freshness and duplicate checks rather than by every rejected sample.
+ */
+internal class LowAccuracyFallbackCoordinator(
+    private val configProvider: () -> PositioningRecoveryConfig = {
+        PositioningRecoveryConfig.fromMotionMode(
+            motionMode = com.geovault.tracker.services.TrackingMotionMode.WALKING,
+            maxLocalPointGapMs = 90_000L,
+        )
+    },
+) {
     private data class CandidateFingerprint(
         val latitude: Double,
         val longitude: Double,
         val timestampMs: Long
     )
-
-    private companion object {
-        private const val MIN_NEW_SAMPLE_TIME_DELTA_MS = 1_000L
-        private const val MIN_NEW_SAMPLE_DISTANCE_METERS = 5f
-    }
 
     private var awaitingLock: Boolean = false
     private var latestCandidate: CandidateFingerprint? = null
@@ -22,8 +46,8 @@ internal class LowAccuracyFallbackCoordinator {
         candidateLatitude: Double,
         candidateLongitude: Double,
         candidateTimestampMs: Long
-    ): Boolean {
-        if (!fallbackEligible) return false
+    ): LowAccuracyFallbackArmDecision {
+        if (!fallbackEligible) return LowAccuracyFallbackArmDecision.INELIGIBLE
         latestCandidate = CandidateFingerprint(
             latitude = candidateLatitude,
             longitude = candidateLongitude,
@@ -31,7 +55,11 @@ internal class LowAccuracyFallbackCoordinator {
         )
         val shouldStartTimer = !awaitingLock
         awaitingLock = true
-        return shouldStartTimer
+        return if (shouldStartTimer) {
+            LowAccuracyFallbackArmDecision.START_TIMER
+        } else {
+            LowAccuracyFallbackArmDecision.KEEP_TIMER
+        }
     }
 
     @Synchronized
@@ -55,12 +83,25 @@ internal class LowAccuracyFallbackCoordinator {
     }
 
     @Synchronized
-    fun shouldEmitFallback(fallbackEligible: Boolean, hasCandidate: Boolean): Boolean {
-        if (!fallbackEligible || !hasCandidate || !awaitingLock) return false
-        val latest = latestCandidate ?: return false
-        val emitted = lastEmittedCandidate ?: return true
-        if (latest.timestampMs - emitted.timestampMs >= MIN_NEW_SAMPLE_TIME_DELTA_MS) return true
-        return distanceMeters(latest, emitted) >= MIN_NEW_SAMPLE_DISTANCE_METERS
+    fun evaluateEmit(fallbackEligible: Boolean, hasCandidate: Boolean): LowAccuracyFallbackEmitDecision {
+        if (!fallbackEligible) return LowAccuracyFallbackEmitDecision.DISABLED
+        if (!hasCandidate) return LowAccuracyFallbackEmitDecision.NO_CANDIDATE
+        if (!awaitingLock) return LowAccuracyFallbackEmitDecision.WAIT
+        val latest = latestCandidate ?: return LowAccuracyFallbackEmitDecision.NO_CANDIDATE
+        val emitted = lastEmittedCandidate ?: return LowAccuracyFallbackEmitDecision.EMIT
+        if (latest.timestampMs - emitted.timestampMs >= configProvider().fallbackDuplicateTimeDeltaMs) {
+            return LowAccuracyFallbackEmitDecision.EMIT
+        }
+        return if (distanceMeters(latest, emitted) >= configProvider().fallbackDuplicateDistanceMeters) {
+            LowAccuracyFallbackEmitDecision.EMIT
+        } else {
+            LowAccuracyFallbackEmitDecision.DUPLICATE_CANDIDATE
+        }
+    }
+
+    @Synchronized
+    fun hasPendingCandidate(): Boolean {
+        return awaitingLock && latestCandidate != null
     }
 
     @Synchronized
@@ -77,16 +118,6 @@ internal class LowAccuracyFallbackCoordinator {
     }
 
     private fun distanceMeters(a: CandidateFingerprint, b: CandidateFingerprint): Float {
-        val earthRadiusMeters = 6_371_000.0
-        val dLat = Math.toRadians(b.latitude - a.latitude)
-        val dLon = Math.toRadians(b.longitude - a.longitude)
-        val lat1 = Math.toRadians(a.latitude)
-        val lat2 = Math.toRadians(b.latitude)
-        val sinHalfLat = kotlin.math.sin(dLat / 2.0)
-        val sinHalfLon = kotlin.math.sin(dLon / 2.0)
-        val aHarv = sinHalfLat * sinHalfLat +
-            kotlin.math.cos(lat1) * kotlin.math.cos(lat2) * sinHalfLon * sinHalfLon
-        val c = 2.0 * kotlin.math.atan2(kotlin.math.sqrt(aHarv), kotlin.math.sqrt(1.0 - aHarv))
-        return (earthRadiusMeters * c).toFloat()
+        return GeoMath.haversineMeters(a.latitude, a.longitude, b.latitude, b.longitude).toFloat()
     }
 }
