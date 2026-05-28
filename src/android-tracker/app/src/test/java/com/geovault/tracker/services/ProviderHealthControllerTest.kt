@@ -39,6 +39,40 @@ class ProviderHealthControllerTest {
     }
 
     @Test
+    fun evaluate_silentCallbackCarriesStaleFreshnessSignal() {
+        val controller = ProviderHealthController(staleFixDeliveryMs = 90_000L)
+        controller.markRequestApplied(1_000L)
+
+        val decision = controller.evaluate(
+            nowMs = 100_001L,
+            isTracking = true,
+            expectsActiveFixDelivery = true,
+            gpsProviderAvailable = true,
+            localRecoveryDue = true,
+        )
+
+        assertTrue(decision is ProviderHealthDecision.ReapplyRequest)
+        assertTrue((decision as ProviderHealthDecision.ReapplyRequest).staleFreshness)
+    }
+
+    @Test
+    fun evaluate_recentFixDoesNotCarryStaleFreshnessSignal() {
+        val controller = ProviderHealthController(staleFixDeliveryMs = 90_000L)
+        controller.markRequestApplied(1_000L)
+        controller.markFixDelivered(10_000L)
+
+        val decision = controller.evaluate(
+            nowMs = 20_000L,
+            isTracking = true,
+            expectsActiveFixDelivery = true,
+            gpsProviderAvailable = true,
+            localRecoveryDue = true,
+        )
+
+        assertEquals(ProviderHealthReason.HEALTHY, decision.reason)
+    }
+
+    @Test
     fun evaluate_disabledGpsProviderUsesExplicitProviderReason() {
         val controller = ProviderHealthController(staleFixDeliveryMs = 90_000L)
 

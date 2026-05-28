@@ -37,6 +37,8 @@ data class PositioningRecoveryConfig(
             "candidate-unconfirmed",
             "resume-unconfirmed",
             "speed-cap-unconfirmed",
+            "speed-cap-exceeded",
+            "uncertainty-suppressed",
         )
 
         fun fromMotionMode(

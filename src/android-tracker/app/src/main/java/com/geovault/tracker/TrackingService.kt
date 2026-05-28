@@ -3049,17 +3049,31 @@ class TrackingService : Service() {
             while (isTracking && runGeneration == trackingGeneration) {
                 delay(FIX_DELIVERY_WATCHDOG_INTERVAL_MS)
                 if (!isTracking || runGeneration != trackingGeneration) continue
+                val nowMs = System.currentTimeMillis()
+                val runtimeContext = currentPositioningRuntimeContext(settingsRepository.getSettings())
+                val localRecoveryDue = pointFreshnessTracker.shouldForceLocalRecovery(
+                    nowMs = nowMs,
+                    intervalSec = runtimeContext.pointFreshnessIntervalSec,
+                )
                 val decision = providerHealthController.evaluate(
-                    nowMs = System.currentTimeMillis(),
+                    nowMs = nowMs,
                     isTracking = isTracking,
                     expectsActiveFixDelivery = expectsActiveFixDelivery(),
                     gpsProviderAvailable = isGpsProviderEnabled(),
+                    localRecoveryDue = localRecoveryDue,
                 )
                 if (providerHealthController.shouldLog(decision)) {
                     val (eventName, details) = PositioningDiagnosticEvent.providerHealth(decision)
                     runtimeTelemetry.event(eventName, "$details gpsState=$gpsRuntimeState lastAppliedAt=$lastLocationRequestAppliedAtMs")
                 }
                 if (decision is ProviderHealthDecision.ReapplyRequest) {
+                    if (decision.staleFreshness) {
+                        freshnessRecoveryController.reset()
+                        runtimeTelemetry.event(
+                            "freshness_probe_reset",
+                            "reason=callback_silent_provider_reapply localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L}"
+                        )
+                    }
                     lastAppliedLocationRequestKey = null
                     reapplyLocationRequestIfActive(reason = "fix_delivery_stale")
                 }

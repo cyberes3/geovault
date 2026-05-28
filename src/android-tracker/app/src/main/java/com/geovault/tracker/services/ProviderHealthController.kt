@@ -15,7 +15,10 @@ sealed class ProviderHealthDecision(
 ) {
     data object Healthy : ProviderHealthDecision(ProviderHealthReason.HEALTHY)
     class Wait(reason: ProviderHealthReason) : ProviderHealthDecision(reason)
-    class ReapplyRequest(ageMs: Long) : ProviderHealthDecision(ProviderHealthReason.CALLBACK_SILENT, ageMs)
+    class ReapplyRequest(
+        ageMs: Long,
+        val staleFreshness: Boolean = false,
+    ) : ProviderHealthDecision(ProviderHealthReason.CALLBACK_SILENT, ageMs)
 
     val telemetryValue: String
         get() = ageMs?.let { "${reason.telemetryValue}:ageMs=$it" } ?: reason.telemetryValue
@@ -51,6 +54,7 @@ class ProviderHealthController(
         isTracking: Boolean,
         expectsActiveFixDelivery: Boolean,
         gpsProviderAvailable: Boolean,
+        localRecoveryDue: Boolean = false,
     ): ProviderHealthDecision {
         if (!isTracking) return ProviderHealthDecision.Wait(ProviderHealthReason.NOT_TRACKING)
         if (!gpsProviderAvailable) return ProviderHealthDecision.Wait(ProviderHealthReason.GPS_PROVIDER_UNAVAILABLE)
@@ -59,7 +63,7 @@ class ProviderHealthController(
         if (baselineMs <= 0L) return ProviderHealthDecision.Wait(ProviderHealthReason.NO_REQUEST)
         val ageMs = nowMs - baselineMs
         return if (ageMs > staleFixDeliveryMs) {
-            ProviderHealthDecision.ReapplyRequest(ageMs)
+            ProviderHealthDecision.ReapplyRequest(ageMs, staleFreshness = localRecoveryDue)
         } else {
             ProviderHealthDecision.Healthy
         }

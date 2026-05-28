@@ -78,7 +78,9 @@ object FreshnessRecoveryPolicy {
 
     private fun blockingReason(input: FreshnessRecoveryInput): FreshnessRecoveryDecision.Blocked? {
         if (input.accepted) {
-            return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.ALREADY_ACCEPTED_NOT_PERSISTED)
+            if (input.filterReason != "uncertainty-suppressed") {
+                return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.ALREADY_ACCEPTED_NOT_PERSISTED)
+            }
         }
         val reason = input.filterReason ?: return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.NO_POLICY_REASON)
         if (reason !in input.config.freshnessRecoveryHoldReasons) {

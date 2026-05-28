@@ -59,14 +59,60 @@ class FreshnessRecoveryPolicyTest {
         assertEquals(FreshnessRecoveryReason.NOT_RECOVERABLE_HOLD, decision.reason)
     }
 
+    @Test
+    fun activeProbe_speedCapExceededCanCommitAnchor() {
+        val decision = FreshnessRecoveryPolicy.evaluate(
+            input = input(filterReason = "speed-cap-exceeded"),
+            probeActive = true,
+            probeStartedAtMs = 10_000L,
+            promotableProbeFixes = 1,
+        )
+
+        assertEquals(FreshnessRecoveryReason.COMMIT_ANCHOR, decision.reason)
+    }
+
+    @Test
+    fun activeProbe_uncertaintySuppressedAcceptedNotPersistedCanCommitAnchor() {
+        val decision = FreshnessRecoveryPolicy.evaluate(
+            input = input(
+                filterReason = "uncertainty-suppressed",
+                accepted = true,
+                pointPersisted = false,
+            ),
+            probeActive = true,
+            probeStartedAtMs = 10_000L,
+            promotableProbeFixes = 1,
+        )
+
+        assertEquals(FreshnessRecoveryReason.COMMIT_ANCHOR, decision.reason)
+    }
+
+    @Test
+    fun activeProbe_otherAcceptedNotPersistedStillBlocksCommit() {
+        val decision = FreshnessRecoveryPolicy.evaluate(
+            input = input(
+                filterReason = "within-cap",
+                accepted = true,
+                pointPersisted = false,
+            ),
+            probeActive = true,
+            probeStartedAtMs = 10_000L,
+            promotableProbeFixes = 1,
+        )
+
+        assertEquals(FreshnessRecoveryReason.ALREADY_ACCEPTED_NOT_PERSISTED, decision.reason)
+    }
+
     private fun input(
         filterReason: String = "candidate-unconfirmed",
         accuracyMeters: Float = 12f,
+        accepted: Boolean = false,
+        pointPersisted: Boolean = false,
     ): FreshnessRecoveryInput {
         return FreshnessRecoveryInput(
             localRecoveryDue = true,
-            accepted = false,
-            pointPersisted = false,
+            accepted = accepted,
+            pointPersisted = pointPersisted,
             filterReason = filterReason,
             accuracyMeters = accuracyMeters,
             effectiveAccuracyThresholdMeters = 35f,

@@ -168,6 +168,74 @@ class TrackerMapTrailCommitPolicyTest {
         assertEquals(listOf(11_000L, 12_000L, 13_000L, 14_000L), result.trail.map { it.time })
     }
 
+    @Test
+    fun rosterChanged_partialServerSeed_preservesActiveSessionLocalCoverage() {
+        val activeStart = 10_000L
+        val server = listOf(
+            point("tracker-1", time = 11_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
+            point("tracker-1", time = 13_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY, startTimestampMs = activeStart),
+        )
+        val activeLocal = listOf(
+            point("tracker-1", time = 12_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 14_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+        )
+
+        val result = TrackerMapTrailCommitPolicy.resolve(
+            TrackerMapTrailCommitInput(
+                reason = TrackerMapTrailReloadReason.RosterChanged,
+                plan = TrackerMapTrailReloadPlan(
+                    source = TrackerMapTrailSource.SINGLE_SERVER,
+                    singleTrackerId = "tracker-1",
+                    overlayTrackerId = "tracker-1",
+                    activeTrackerId = "tracker-1",
+                ),
+                loaded = TrackerMapTrailLoadResult(
+                    serverTrails = emptyMap(),
+                    queueOverlaysByTracker = emptyMap(),
+                    singleTrailSeed = server,
+                ),
+                latestState = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                    trail = server + activeLocal,
+                ),
+                trailPointLimit = 10,
+                activeSessionStartByTracker = mapOf("tracker-1" to activeStart),
+            )
+        )
+
+        assertEquals(listOf(11_000L, 12_000L, 13_000L, 14_000L), result.trail.map { it.time })
+    }
+
+    @Test
+    fun rosterChanged_emptyServerSeed_preservesValidActiveSessionTrail() {
+        val activeStart = 10_000L
+        val activeLocal = listOf(
+            point("tracker-1", time = 12_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+            point("tracker-1", time = 14_000L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS, startTimestampMs = activeStart),
+        )
+
+        val result = TrackerMapTrailCommitPolicy.resolve(
+            TrackerMapTrailCommitInput(
+                reason = TrackerMapTrailReloadReason.RosterChanged,
+                plan = TrackerMapTrailReloadPlan(
+                    source = TrackerMapTrailSource.SINGLE_SERVER,
+                    singleTrackerId = "tracker-1",
+                    overlayTrackerId = "tracker-1",
+                    activeTrackerId = "tracker-1",
+                ),
+                loaded = TrackerMapTrailLoadResult.EMPTY,
+                latestState = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.SINGLE_SESSION,
+                    trail = activeLocal,
+                ),
+                trailPointLimit = 10,
+                activeSessionStartByTracker = mapOf("tracker-1" to activeStart),
+            )
+        )
+
+        assertEquals(listOf(12_000L, 14_000L), result.trail.map { it.time })
+    }
+
     private fun point(
         trackerId: String,
         time: Long,

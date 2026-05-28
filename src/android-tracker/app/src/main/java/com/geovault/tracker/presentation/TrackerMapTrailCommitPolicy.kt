@@ -38,13 +38,21 @@ internal object TrackerMapTrailCommitPolicy {
         )
         val singleSessionStart = input.activeSessionStartByTracker[input.plan.activeTrackerId.trim()]
         val singleQueueOverlay = sanitizedLoaded.queueOverlaysByTracker[input.plan.activeTrackerId].orEmpty()
+        val singleServerSeed = sanitizedLoaded.singleTrailSeed.withActiveSessionCoverageFrom(
+            currentTrail = currentSingleTrail,
+            trackerId = input.plan.activeTrackerId,
+            activeSessionStartMs = singleSessionStart,
+            reason = input.reason,
+            clearedHistoryTrackerIds = clearedIds,
+            trailPointLimit = input.trailPointLimit,
+        )
         val singleLiveOverlayInput = if (singleQueueOverlay.isEmpty()) {
             currentSingleTrail
         } else {
             currentSingleTrail + singleQueueOverlay
         }
         val mergedTrail = TrackerMapTrailMergePolicy.mergeServerTrailWithLiveOverlay(
-            serverTrail = sanitizedLoaded.singleTrailSeed,
+            serverTrail = singleServerSeed,
             currentTrail = singleLiveOverlayInput,
             allowedLiveOverlayTrackerIds = setOfNotBlank(input.plan.activeTrackerId),
             trailPointLimit = input.trailPointLimit,
@@ -52,7 +60,7 @@ internal object TrackerMapTrailCommitPolicy {
         ).preserveDuringFilterRefresh(
             reason = input.reason,
             previous = input.latestState.trail,
-            loadedServerTrail = sanitizedLoaded.singleTrailSeed,
+            loadedServerTrail = singleServerSeed,
             trackerId = input.plan.activeTrackerId,
             clearedHistoryTrackerIds = clearedIds,
         )
@@ -166,6 +174,37 @@ internal object TrackerMapTrailCommitPolicy {
         return previous
     }
 
+    private fun List<QueuedLocation>.withActiveSessionCoverageFrom(
+        currentTrail: List<QueuedLocation>,
+        trackerId: String,
+        activeSessionStartMs: Long?,
+        reason: TrackerMapTrailReloadReason,
+        clearedHistoryTrackerIds: Set<String>,
+        trailPointLimit: Int,
+    ): List<QueuedLocation> {
+        val normalizedId = trackerId.trim()
+        if (normalizedId.isEmpty() || normalizedId in clearedHistoryTrackerIds) return this
+        if (activeSessionStartMs == null || reason == TrackerMapTrailReloadReason.HistoryCleared) return this
+        val activeCurrent = currentTrail.filter { point ->
+            point.trackerId.trim() == normalizedId &&
+                point.startTimestampMs == activeSessionStartMs
+        }
+        if (activeCurrent.isEmpty()) return this
+        val loadedKeys = map(::equivalentPointKey).toSet()
+        val missingActive = activeCurrent.filter { point -> equivalentPointKey(point) !in loadedKeys }
+        if (missingActive.isEmpty()) return this
+        val merged = (this + missingActive)
+            .distinctBy(::equivalentPointKey)
+            .sortedBy { it.time }
+        val result = TrackerMapTrailDecimationPolicy.fitToCount(merged, trailPointLimit)
+        GeoVaultCaptureLog.w(
+            TAG,
+            "map_update trail_commit_preserve_active_session reason=$reason tracker=$normalizedId " +
+                "server=${size} currentActive=${activeCurrent.size} carried=${missingActive.size} result=${result.size}"
+        )
+        return result
+    }
+
     private fun Map<String, List<QueuedLocation>>.preserveMultiDuringFilterRefresh(
         reason: TrackerMapTrailReloadReason,
         previous: Map<String, List<QueuedLocation>>,
@@ -197,5 +236,14 @@ internal object TrackerMapTrailCommitPolicy {
     private fun setOfNotBlank(value: String?): Set<String> {
         val normalized = value?.trim().orEmpty()
         return normalized.takeIf { it.isNotEmpty() }?.let(::setOf).orEmpty()
+    }
+
+    private fun equivalentPointKey(point: QueuedLocation): String {
+        return listOf(
+            point.trackerId.trim(),
+            point.time.toString(),
+            point.latitude.toString(),
+            point.longitude.toString(),
+        ).joinToString("|")
     }
 }

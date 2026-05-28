@@ -2167,16 +2167,21 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     clearedHistoryTrackerIds = clearedHistoryTrackerIds,
                 )
             )
-            mergeCommitted = MergedTrailResult(commit.trail, commit.multiTrails)
+            val guardedCommit = commit.withActiveTrailBlankingGuard(
+                latest = latest,
+                plan = plan,
+                activeSessionStartByTracker = activeSessionStartByTracker,
+            )
+            mergeCommitted = MergedTrailResult(guardedCommit.trail, guardedCommit.multiTrails)
             GeoVaultCaptureLog.i(
                 TAG,
                 "map_update vm_reload_commit reason=$reason source=${plan.source} " +
-                    "trail=${commit.trail.trailSummary()} multi=${commit.multiTrails.mapSizes()} " +
+                    "trail=${guardedCommit.trail.trailSummary()} multi=${guardedCommit.multiTrails.mapSizes()} " +
                     "barriers=${clearedHistoryTrackerIds.sorted()}"
             )
             latest.copy(
-                trail = commit.trail,
-                allQueueTrailsByTracker = commit.multiTrails,
+                trail = guardedCommit.trail,
+                allQueueTrailsByTracker = guardedCommit.multiTrails,
                 currentGroupId = if (latest.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     plan.resolvedGroupId
                 } else {
@@ -2217,6 +2222,26 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             // re-fit the user did not initiate.
             requestFitTrail(TrackerMapFitTrailMode.Instant)
         }
+    }
+
+    private fun TrackerMapTrailCommitResult.withActiveTrailBlankingGuard(
+        latest: TrackerMapUiState,
+        plan: TrackerMapTrailReloadPlan,
+        activeSessionStartByTracker: Map<String, Long>,
+    ): TrackerMapTrailCommitResult {
+        if (trail.isNotEmpty()) return this
+        val activeTrackerId = plan.activeTrackerId.trim()
+        val activeStart = activeSessionStartByTracker[activeTrackerId] ?: return this
+        val activeCurrent = latest.trail.filter { point ->
+            point.trackerId.trim() == activeTrackerId &&
+                point.startTimestampMs == activeStart
+        }
+        if (activeCurrent.isEmpty()) return this
+        GeoVaultCaptureLog.w(
+            TAG,
+            "map_update vm_reload_blank_guard source=${plan.source} active=$activeTrackerId preserved=${activeCurrent.size}"
+        )
+        return copy(trail = activeCurrent)
     }
 
     private data class MergedTrailResult(
