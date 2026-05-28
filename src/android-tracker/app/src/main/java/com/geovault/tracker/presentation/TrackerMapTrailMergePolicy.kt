@@ -27,8 +27,14 @@ object TrackerMapTrailMergePolicy {
         val overlayCandidates = currentTrail
             .filter(TrackerMapPointProvenancePolicy::isLiveOverlay)
             .filter { it.trackerId.trim() in allowedOverlayIds }
+        val serverPointKeys = serverTrail.map(::equivalentPointKey).toSet()
         val timeFilteredOverlay = overlayCandidates
-            .filter { latestServerTime == null || it.time > latestServerTime }
+            .filter { point ->
+                latestServerTime == null ||
+                    point.time > latestServerTime ||
+                    (isActiveSessionLocalPoint(point, activeSessionStartMs) &&
+                        equivalentPointKey(point) !in serverPointKeys)
+            }
         val liveBuffer = timeFilteredOverlay
             .filter { point ->
                 activeSessionStartMs == null ||
@@ -89,5 +95,20 @@ object TrackerMapTrailMergePolicy {
 
     private fun normalizedIds(ids: Set<String>): Set<String> {
         return ids.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    private fun isActiveSessionLocalPoint(point: QueuedLocation, activeSessionStartMs: Long?): Boolean {
+        return point.prov?.trim() == TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS &&
+            activeSessionStartMs != null &&
+            point.startTimestampMs == activeSessionStartMs
+    }
+
+    private fun equivalentPointKey(point: QueuedLocation): String {
+        return listOf(
+            point.trackerId.trim(),
+            point.time.toString(),
+            point.latitude.toString(),
+            point.longitude.toString(),
+        ).joinToString("|")
     }
 }

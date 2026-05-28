@@ -1640,6 +1640,29 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         return buildEffectiveSessionForState(state, nowMs).snapshot
     }
 
+    private fun buildRawSessionSnapshotForState(
+        state: TrackerMapUiState,
+        nowMs: Long = System.currentTimeMillis(),
+    ): TrackerMapSessionSnapshot {
+        val groupSelection = resolveGroupModeSelection(state)
+        val plan = projectSession(
+            state = state,
+            groupSelection = groupSelection,
+            visibleRosterTrackerIds = visibleMapRosterTrackerIds(),
+        )
+        return TrackerMapSessionEngine.build(
+            TrackerMapSessionBuildInput(
+                state = state,
+                plan = plan,
+                localRuntimeOverlayTrails = state.allQueueTrailsByTracker,
+                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+                currentSessionStartByTracker = currentSessionStartByTracker(state),
+                visibleTrackerIds = visibleTrackerIdsForSessionPlan(state, plan),
+                nowMs = nowMs,
+            )
+        )
+    }
+
     private fun buildEffectiveSessionForState(
         state: TrackerMapUiState,
         nowMs: Long = System.currentTimeMillis(),
@@ -2030,6 +2053,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
         if (!reason.allowsSource(sessionPlan.trailReloadPlan.source)) {
+            reconcileLocalQueueOverlayForSkippedReload(
+                reason = reason,
+                plan = sessionPlan.trailReloadPlan,
+            )
             GeoVaultCaptureLog.d(
                 TAG,
                 "map_update vm_reload_skip_source reason=$reason source=${sessionPlan.trailReloadPlan.source} plan=$sessionPlan"
@@ -2210,6 +2237,83 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 reloadTrailFromDatabase(current)
                 nextReason = runtimeTrailReloadPendingReason
             }
+        }
+    }
+
+    private suspend fun reconcileLocalQueueOverlayForSkippedReload(
+        reason: TrackerMapTrailReloadReason,
+        plan: TrackerMapTrailReloadPlan,
+    ) {
+        val overlayTrackerId = plan.overlayTrackerId?.trim().orEmpty()
+        if (overlayTrackerId.isEmpty()) return
+        if (!_uiState.value.runtime.localRecordingActive) return
+
+        val initialState = _uiState.value
+        val loaded = TrackerMapTrailLoader.loadLocalOverlay(
+            plan = plan,
+            currentSingleTrail = initialState.trail,
+            currentMultiTrails = initialState.allQueueTrailsByTracker,
+            ops = trailLoaderOps,
+        )
+        val queueOverlay = loaded.queueOverlaysByTracker[overlayTrackerId].orEmpty()
+        if (queueOverlay.isEmpty()) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update vm_local_overlay_skip_empty reason=$reason source=${plan.source} overlay=$overlayTrackerId"
+            )
+            return
+        }
+
+        var committed: MergedTrailResult? = null
+        _uiState.update { latest ->
+            val latestPlan = projectSession(
+                state = latest,
+                groupSelection = resolveGroupModeSelection(latest),
+                visibleRosterTrackerIds = visibleMapRosterTrackerIds(),
+            ).trailReloadPlan
+            val latestOverlayTrackerId = latestPlan.overlayTrackerId?.trim().orEmpty()
+            if (latestOverlayTrackerId != overlayTrackerId || latestPlan.source != plan.source) {
+                return@update latest
+            }
+
+            val latestLoaded = loaded.copy(
+                serverTrails = if (latestPlan.source == TrackerMapTrailSource.MULTI_SERVER) {
+                    latest.allQueueTrailsByTracker
+                } else {
+                    emptyMap()
+                },
+                singleTrailSeed = latest.trail,
+            )
+            val activeSessionStartByTracker = currentSessionStartByTracker(latest)
+            val commit = TrackerMapTrailCommitPolicy.resolve(
+                TrackerMapTrailCommitInput(
+                    reason = reason,
+                    plan = latestPlan,
+                    loaded = latestLoaded,
+                    latestState = latest,
+                    trailPointLimit = TRAIL_POINT_LIMIT,
+                    activeSessionStartByTracker = activeSessionStartByTracker,
+                    clearedHistoryTrackerIds = clearedHistoryTrackerIds,
+                )
+            )
+            committed = MergedTrailResult(commit.trail, commit.multiTrails)
+            GeoVaultCaptureLog.i(
+                TAG,
+                "map_update vm_local_overlay_commit reason=$reason source=${latestPlan.source} overlay=$overlayTrackerId " +
+                    "queue=${queueOverlay.trailSummary()} trail=${commit.trail.trailSummary()} multi=${commit.multiTrails.mapSizes()}"
+            )
+            latest.copy(
+                trail = commit.trail,
+                allQueueTrailsByTracker = commit.multiTrails,
+            )
+        }
+
+        val finalMerge = committed ?: return
+        if (pendingFitAfterReload &&
+            (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
+        ) {
+            pendingFitAfterReload = false
+            requestFitTrail(TrackerMapFitTrailMode.Instant)
         }
     }
 
@@ -2442,7 +2546,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun handleTrackPointEvent(point: TrackPointEvent) {
         val nowMs = System.currentTimeMillis()
-        val snapshot = buildCurrentSessionSnapshot(nowMs)
+        val snapshot = buildRawSessionSnapshotForState(_uiState.value, nowMs)
         GeoVaultCaptureLog.d(
             TAG,
             "map_update vm_point_reduce_start source=${point.source} track=${point.trackId.trim()} " +

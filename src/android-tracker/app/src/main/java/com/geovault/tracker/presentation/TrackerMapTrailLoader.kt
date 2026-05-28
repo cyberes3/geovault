@@ -58,6 +58,25 @@ class TrackerMapTrailLoaderOps(
  * the queue as live-overlay candidates without ever clobbering server history.
  */
 object TrackerMapTrailLoader {
+    suspend fun loadLocalOverlay(
+        plan: TrackerMapTrailReloadPlan,
+        currentSingleTrail: List<QueuedLocation>,
+        currentMultiTrails: Map<String, List<QueuedLocation>>,
+        ops: TrackerMapTrailLoaderOps,
+    ): TrackerMapTrailLoadResult {
+        val queueOverlays = queueOverlayFor(plan.overlayTrackerId, ops)
+        return TrackerMapTrailLoadResult(
+            serverTrails = if (plan.source == TrackerMapTrailSource.MULTI_SERVER) {
+                currentMultiTrails
+            } else {
+                emptyMap()
+            },
+            queueOverlaysByTracker = queueOverlays,
+            singleTrailSeed = currentSingleTrail,
+            authoritativeServerTrackerIds = emptySet(),
+        )
+    }
+
     suspend fun load(
         plan: TrackerMapTrailReloadPlan,
         existingTrailMinTimeMs: Long?,

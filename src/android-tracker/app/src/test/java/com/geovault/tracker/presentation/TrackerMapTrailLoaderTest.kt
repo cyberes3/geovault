@@ -195,6 +195,37 @@ class TrackerMapTrailLoaderTest {
         assertTrue("empty queue should not pollute the overlay map", loaded.queueOverlaysByTracker.isEmpty())
     }
 
+    @Test
+    fun loadLocalOverlay_singleServer_readsQueueWithoutServerFetch() {
+        val currentServer = listOf(point("me", time = 1L))
+        val queue = listOf(point("me", time = 2L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS))
+        val ops = ops(
+            singleServer = { _, _ -> error("local overlay refresh must not fetch single server history") },
+            multiServer = { _, _ -> error("local overlay refresh must not fetch multi server history") },
+            queue = { id -> if (id == "me") queue else emptyList() },
+        )
+        val plan = TrackerMapTrailReloadPlan(
+            source = TrackerMapTrailSource.SINGLE_SERVER,
+            singleTrackerId = "me",
+            overlayTrackerId = "me",
+            activeTrackerId = "me",
+        )
+
+        val loaded = runBlocking {
+            TrackerMapTrailLoader.loadLocalOverlay(
+                plan = plan,
+                currentSingleTrail = currentServer,
+                currentMultiTrails = emptyMap(),
+                ops = ops,
+            )
+        }
+
+        assertEquals(currentServer, loaded.singleTrailSeed)
+        assertEquals(mapOf("me" to queue), loaded.queueOverlaysByTracker)
+        assertTrue(loaded.serverTrails.isEmpty())
+        assertTrue(loaded.authoritativeServerTrackerIds.isEmpty())
+    }
+
     private fun ops(
         singleServer: suspend (String, Long?) -> List<QueuedLocation> = { _, _ -> emptyList() },
         multiServer: suspend (Collection<String>, Map<String, Long>) -> Map<String, List<QueuedLocation>> = { _, _ -> emptyMap() },
