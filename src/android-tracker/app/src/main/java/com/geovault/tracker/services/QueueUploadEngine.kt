@@ -39,18 +39,79 @@ data class QueueUploadConfig(
     val deviceIdentifier: String
 )
 
+enum class QueueUploadSkipReason(val telemetryValue: String) {
+    LOCK_BUSY("lock-busy"),
+    NO_NETWORK("no-network"),
+    INVALID_TRACKER("invalid-tracker"),
+    MISSING_SERVER_URL("missing-server-url"),
+    EMPTY_QUEUE("empty-queue"),
+}
+
+enum class QueueUploadFailureReason(val telemetryValue: String) {
+    HTTP_PERMANENT("http-permanent"),
+    HTTP_TRANSIENT("http-transient"),
+    EXCEPTION("exception"),
+}
+
+data class QueueUploadResult(
+    val failureClass: SyncFailureClass,
+    val batchesAttempted: Int = 0,
+    val batchesSent: Int = 0,
+    val rowsDeleted: Int = 0,
+    val visibleRowsSent: Int = 0,
+    val interruptedByFailure: Boolean = false,
+    val skippedReason: QueueUploadSkipReason? = null,
+    val failureReason: QueueUploadFailureReason? = null,
+    val httpStatusCode: Int? = null,
+    val exceptionClass: String? = null,
+) {
+    val sentAnyRows: Boolean get() = rowsDeleted > 0
+}
+
 internal object QueueUploadOutcomePolicy {
     fun httpFailureClass(code: Int): SyncFailureClass {
         if (code == 408 || code == 429) return SyncFailureClass.TRANSIENT
         return if (code in 400..499) SyncFailureClass.PERMANENT else SyncFailureClass.TRANSIENT
     }
 
-    fun finalOutcome(batchesSent: Int, interruptedByFailure: Boolean): SyncFailureClass {
-        return when {
+    fun skipped(reason: QueueUploadSkipReason): QueueUploadResult {
+        val failureClass = when (reason) {
+            QueueUploadSkipReason.LOCK_BUSY -> SyncFailureClass.SKIPPED
+            QueueUploadSkipReason.NO_NETWORK -> SyncFailureClass.TRANSIENT
+            QueueUploadSkipReason.INVALID_TRACKER,
+            QueueUploadSkipReason.MISSING_SERVER_URL -> SyncFailureClass.PERMANENT
+            QueueUploadSkipReason.EMPTY_QUEUE -> SyncFailureClass.NONE
+        }
+        return QueueUploadResult(failureClass = failureClass, skippedReason = reason)
+    }
+
+    fun finalResult(
+        batchesAttempted: Int,
+        batchesSent: Int,
+        rowsDeleted: Int,
+        visibleRowsSent: Int,
+        interruptedByFailure: Boolean,
+        failureReason: QueueUploadFailureReason? = null,
+        httpStatusCode: Int? = null,
+        exceptionClass: String? = null,
+    ): QueueUploadResult {
+        val failureClass = when {
+            interruptedByFailure && failureReason == QueueUploadFailureReason.HTTP_PERMANENT -> SyncFailureClass.PERMANENT
             interruptedByFailure -> SyncFailureClass.TRANSIENT
             batchesSent > 0 -> SyncFailureClass.NONE
-            else -> SyncFailureClass.TRANSIENT
+            else -> SyncFailureClass.NONE
         }
+        return QueueUploadResult(
+            failureClass = failureClass,
+            batchesAttempted = batchesAttempted,
+            batchesSent = batchesSent,
+            rowsDeleted = rowsDeleted,
+            visibleRowsSent = visibleRowsSent,
+            interruptedByFailure = interruptedByFailure,
+            failureReason = failureReason,
+            httpStatusCode = httpStatusCode,
+            exceptionClass = exceptionClass,
+        )
     }
 }
 
@@ -114,7 +175,7 @@ class QueueUploadEngine(
         serverUrl: String,
         config: QueueUploadConfig,
         onBatchUploaded: suspend (visibleSentCount: Int) -> Unit
-    ): SyncFailureClass = withContext(pushContext) {
+    ): QueueUploadResult = withContext(pushContext) {
         var liveAcquired = false
         var backlogAcquired = false
         val locallyClaimedIds = linkedSetOf<Long>()
@@ -145,23 +206,32 @@ class QueueUploadEngine(
         }
         if (!lockAcquired) {
             GeoVaultCaptureLog.d(TAG, "Push already in progress for scope=$scope")
-            return@withContext SyncFailureClass.SKIPPED
+            return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.LOCK_BUSY)
         }
 
         try {
             if (!NetworkStatusMonitor.hasUsableNetwork(appContext)) {
-                return@withContext SyncFailureClass.TRANSIENT
+                return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.NO_NETWORK)
             }
-            if (trackerId.isBlank() || serverUrl.isBlank()) {
-                return@withContext SyncFailureClass.PERMANENT
+            if (trackerId.isBlank()) {
+                return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.INVALID_TRACKER)
+            }
+            if (serverUrl.isBlank()) {
+                return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.MISSING_SERVER_URL)
             }
             val trackerUuid = runCatching { UUID.fromString(trackerId) }.getOrNull()
-                ?: return@withContext SyncFailureClass.PERMANENT
+                ?: return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.INVALID_TRACKER)
             val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
             val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
+            var batchesAttempted = 0
             var batchesSent = 0
+            var rowsDeleted = 0
+            var visibleRowsSent = 0
             var shouldContinuePush = true
             var interruptedByFailure = false
+            var failureReason: QueueUploadFailureReason? = null
+            var httpStatusCode: Int? = null
+            var exceptionClass: String? = null
             while (batchesSent < config.maxBatchesPerPush && shouldContinuePush) {
                 val batch = claimNextBatch(
                     scope = scope,
@@ -170,6 +240,7 @@ class QueueUploadEngine(
                     limit = config.batchSize,
                 )
                 if (batch.isEmpty()) break
+                batchesAttempted++
                 locallyClaimedIds.addAll(batch.map { it.id })
                 val payload = BinaryPayloadBuilder.build(
                     locations = batch,
@@ -194,19 +265,36 @@ class QueueUploadEngine(
                             withContext(NonCancellable) {
                                 try {
                                     locationDao.delete(batch)
+                                    rowsDeleted += batch.size
                                 } finally {
                                     releaseClaimedBatch(batch)
                                     locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
                                 }
                             }
-                            onBatchUploaded(visibleSentCountForBatchIds(batch.map { it.id }, config.sessionVisibleBoundaryId))
+                            val visibleSentCount = visibleSentCountForBatchIds(batch.map { it.id }, config.sessionVisibleBoundaryId)
+                            visibleRowsSent += visibleSentCount
+                            onBatchUploaded(visibleSentCount)
                             batchesSent++
                         } else {
                             releaseClaimedBatch(batch)
                             locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
                             val failureClass = QueueUploadOutcomePolicy.httpFailureClass(response.code)
+                            httpStatusCode = response.code
+                            failureReason = if (failureClass == SyncFailureClass.PERMANENT) {
+                                QueueUploadFailureReason.HTTP_PERMANENT
+                            } else {
+                                QueueUploadFailureReason.HTTP_TRANSIENT
+                            }
                             if (failureClass == SyncFailureClass.PERMANENT) {
-                                return@withContext SyncFailureClass.PERMANENT
+                                return@withContext QueueUploadOutcomePolicy.finalResult(
+                                    batchesAttempted = batchesAttempted,
+                                    batchesSent = batchesSent,
+                                    rowsDeleted = rowsDeleted,
+                                    visibleRowsSent = visibleRowsSent,
+                                    interruptedByFailure = true,
+                                    failureReason = failureReason,
+                                    httpStatusCode = httpStatusCode,
+                                )
                             }
                             interruptedByFailure = true
                             shouldContinuePush = false
@@ -217,12 +305,20 @@ class QueueUploadEngine(
                     releaseClaimedBatch(batch)
                     locallyClaimedIds.removeAll(batch.map { it.id }.toSet())
                     interruptedByFailure = true
+                    failureReason = QueueUploadFailureReason.EXCEPTION
+                    exceptionClass = e::class.java.simpleName
                     shouldContinuePush = false
                 }
             }
-            return@withContext QueueUploadOutcomePolicy.finalOutcome(
+            return@withContext QueueUploadOutcomePolicy.finalResult(
+                batchesAttempted = batchesAttempted,
                 batchesSent = batchesSent,
-                interruptedByFailure = interruptedByFailure
+                rowsDeleted = rowsDeleted,
+                visibleRowsSent = visibleRowsSent,
+                interruptedByFailure = interruptedByFailure,
+                failureReason = failureReason,
+                httpStatusCode = httpStatusCode,
+                exceptionClass = exceptionClass,
             )
         } finally {
             if (locallyClaimedIds.isNotEmpty()) {

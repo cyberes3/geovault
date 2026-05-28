@@ -72,6 +72,11 @@ class LocationIngestCoordinator(
         nowElapsedRealtimeNanos: Long,
         sessionStartTimeMs: Long = 0L,
         isMockLocation: Boolean = LocationCompat.isMock(location),
+        filterConfig: LocationFilterConfig = TrackingPolicyProfiles.ingestConfig(
+            maxAccuracyMeters = effectiveAccuracyFilterMeters,
+            motionMode = motionMode,
+            isMockLocation = isMockLocation,
+        ),
     ): LocationIngestResult {
         require(queuedTrackerId.isNotBlank()) { "queuedTrackerId must not be blank" }
         val accuracy = if (location.hasAccuracy()) location.accuracy else null
@@ -82,8 +87,7 @@ class LocationIngestCoordinator(
                 trackId = trackId,
                 location = location,
                 previousAcceptedLocation = previousAcceptedLocation,
-                maxAccuracyMeters = effectiveAccuracyFilterMeters,
-                motionMode = motionMode,
+                filterConfig = filterConfig,
                 isMockLocation = isMockLocation,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
@@ -171,9 +175,7 @@ class LocationIngestCoordinator(
             seedPolicyFilterFromBypass(
                 trackId = trackId,
                 canonical = bypassCanonical,
-                maxAccuracyMeters = effectiveAccuracyFilterMeters,
-                motionMode = motionMode,
-                isMockLocation = isMockLocation,
+                filterConfig = filterConfig,
             )
         }
         val visible = locationDao.getCurrentSessionCountForTracker(
@@ -203,8 +205,7 @@ class LocationIngestCoordinator(
         trackId: String,
         location: Location,
         previousAcceptedLocation: Location?,
-        maxAccuracyMeters: Float,
-        motionMode: TrackingMotionMode,
+        filterConfig: LocationFilterConfig,
         isMockLocation: Boolean,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
@@ -212,17 +213,12 @@ class LocationIngestCoordinator(
         val event = trackPointEventForPolicy(trackId = trackId, location = location, isMockLocation = isMockLocation, nowMs = nowMs)
         // Pipeline derives "previous" from pipeline-local accepted state.
         // This intentionally avoids anchoring policy to bypass-only points.
-        val config = TrackingPolicyProfiles.ingestConfig(
-            maxAccuracyMeters = maxAccuracyMeters,
-            motionMode = motionMode,
-            isMockLocation = isMockLocation
-        )
         return evaluateWithState(
             trackId = trackId,
             event = event,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-            config = config,
+            config = filterConfig,
         )
     }
 
@@ -370,20 +366,13 @@ class LocationIngestCoordinator(
     private fun seedPolicyFilterFromBypass(
         trackId: String,
         canonical: TrackPointEvent,
-        maxAccuracyMeters: Float,
-        motionMode: TrackingMotionMode,
-        isMockLocation: Boolean,
+        filterConfig: LocationFilterConfig,
     ) {
-        val config = TrackingPolicyProfiles.ingestConfig(
-            maxAccuracyMeters = maxAccuracyMeters,
-            motionMode = motionMode,
-            isMockLocation = isMockLocation,
-        )
         TrackPointPolicyEngine.seedAccepted(
             source = TrackPointSource.LOCAL_GPS,
             trackId = trackId,
             event = canonical,
-            config = config,
+            config = filterConfig,
         )
     }
 

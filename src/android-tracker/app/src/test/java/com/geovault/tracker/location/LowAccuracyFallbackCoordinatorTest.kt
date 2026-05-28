@@ -115,4 +115,15 @@ class LowAccuracyFallbackCoordinatorTest {
         coordinator.onRejectedFixForLock(true, 1.0001, 2.0001, 1500L)
         assertEquals(LowAccuracyFallbackEmitDecision.EMIT, coordinator.evaluateEmit(fallbackEligible = true, hasCandidate = true))
     }
+
+    @Test
+    fun evaluateLoop_namesEmissionAsAnchoredCommit() {
+        val coordinator = LowAccuracyFallbackCoordinator()
+        coordinator.onRejectedFixForLock(true, 1.0, 2.0, 1000L)
+
+        assertEquals(
+            LowAccuracyFallbackLoopDecision.COMMIT_ANCHOR,
+            coordinator.evaluateLoop(fallbackEligible = true, hasCandidate = true),
+        )
+    }
 }

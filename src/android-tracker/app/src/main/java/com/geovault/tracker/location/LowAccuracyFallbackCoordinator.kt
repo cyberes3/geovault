@@ -16,6 +16,14 @@ enum class LowAccuracyFallbackEmitDecision {
     DUPLICATE_CANDIDATE,
 }
 
+enum class LowAccuracyFallbackLoopDecision(val telemetryValue: String) {
+    COMMIT_ANCHOR("commit-anchor"),
+    WAIT("wait"),
+    DISABLED("disabled"),
+    PROBE("probe"),
+    DUPLICATE_CANDIDATE("duplicate-candidate"),
+}
+
 /**
  * Timer-backed fallback state while the filter reports `low-accuracy` rejects.
  *
@@ -96,6 +104,17 @@ internal class LowAccuracyFallbackCoordinator(
             LowAccuracyFallbackEmitDecision.EMIT
         } else {
             LowAccuracyFallbackEmitDecision.DUPLICATE_CANDIDATE
+        }
+    }
+
+    @Synchronized
+    fun evaluateLoop(fallbackEligible: Boolean, hasCandidate: Boolean): LowAccuracyFallbackLoopDecision {
+        return when (evaluateEmit(fallbackEligible = fallbackEligible, hasCandidate = hasCandidate)) {
+            LowAccuracyFallbackEmitDecision.EMIT -> LowAccuracyFallbackLoopDecision.COMMIT_ANCHOR
+            LowAccuracyFallbackEmitDecision.WAIT -> LowAccuracyFallbackLoopDecision.WAIT
+            LowAccuracyFallbackEmitDecision.DISABLED -> LowAccuracyFallbackLoopDecision.DISABLED
+            LowAccuracyFallbackEmitDecision.NO_CANDIDATE -> LowAccuracyFallbackLoopDecision.PROBE
+            LowAccuracyFallbackEmitDecision.DUPLICATE_CANDIDATE -> LowAccuracyFallbackLoopDecision.DUPLICATE_CANDIDATE
         }
     }
 

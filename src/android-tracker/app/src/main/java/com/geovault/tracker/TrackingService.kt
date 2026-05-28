@@ -34,7 +34,7 @@ import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
-import com.geovault.tracker.location.LowAccuracyFallbackEmitDecision
+import com.geovault.tracker.location.LowAccuracyFallbackLoopDecision
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.PausedFreshnessDecision
 import com.geovault.tracker.location.PausedFreshnessDecisionReason
@@ -47,6 +47,8 @@ import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RecoveryAnchorStore
+import com.geovault.tracker.location.StationaryRegionState
+import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.location.StationaryPingActions
 import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
@@ -71,6 +73,8 @@ import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.runtime.RuntimeServiceEventType
 import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.PositioningDiagnosticEvent
+import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
 import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
 import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
@@ -82,11 +86,17 @@ import com.geovault.tracker.services.GpsRuntimeState
 import com.geovault.tracker.services.GpsRuntimeStateMachine
 import com.geovault.tracker.services.QueueUploadConfig
 import com.geovault.tracker.services.QueueUploadEngine
+import com.geovault.tracker.services.QueueUploadOutcomePolicy
+import com.geovault.tracker.services.QueueUploadResult
 import com.geovault.tracker.services.QueueUploadScope
+import com.geovault.tracker.services.QueueUploadSkipReason
 import com.geovault.tracker.services.PointFreshnessTracker
+import com.geovault.tracker.services.ProviderHealthController
+import com.geovault.tracker.services.ProviderHealthDecision
 import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
 import com.geovault.tracker.services.RuntimeEventPublisher
+import com.geovault.tracker.services.TrackerPositioningRuntimeContext
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
 import com.geovault.tracker.services.TrackingPolicyProfiles
@@ -99,6 +109,7 @@ import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.RuntimeSnapshotProjector
 import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
+import com.geovault.tracker.services.UploadLivenessState
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -135,6 +146,7 @@ class TrackingService : Service() {
     private lateinit var locationSessionCoordinator: LocationSessionCoordinator
     private lateinit var runtimeTelemetry: RuntimeTelemetry
     private lateinit var recoveryAnchorStore: RecoveryAnchorStore
+    private lateinit var stationaryRegionStore: StationaryRegionStore
     private var httpClient: OkHttpClient? = null
     private val locationUpdateMutex = Mutex()
     private val localTrackPointOrderingCounter = AtomicLong(0L)
@@ -163,10 +175,14 @@ class TrackingService : Service() {
     private var lowAccuracyFallbackJob: Job? = null
     private val repeatedOutlierSuppressor = RepeatedOutlierSuppressor { currentPositioningRecoveryConfig() }
     private val freshnessRecoveryController = FreshnessRecoveryController()
+    private val providerHealthController = ProviderHealthController(staleFixDeliveryMs = FIX_DELIVERY_STALE_MS)
     private var recoveryAnchorState: RecoveryAnchorState? = null
+    private var stationaryRegionState: StationaryRegionState = StationaryRegionState()
+    private var uploadLivenessState: UploadLivenessState = UploadLivenessState()
     private val pointFreshnessTracker = PointFreshnessTracker()
     private var lastLoggedPointEmissionTrouble: PointEmissionTrouble = PointEmissionTrouble.None
     private var lastAccuracyHoldLogKey: String? = null
+    private var lastPositioningDiagnosticSnapshotKey: String? = null
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
     private val autoTrackingMotionEvidenceGate = AutoTrackingMotionEvidenceGate()
     private var lastAutoMotionCapEvidenceAtMs: Long = 0L
@@ -216,7 +232,7 @@ class TrackingService : Service() {
 
     private val locationListener: LocationListener = LocationListener { location ->
         if (!isTracking) return@LocationListener
-        if (!isLocationServicesEnabled()) {
+        if (!isGpsProviderEnabled()) {
             enterWaitingForGpsProvider(reason = "location_callback")
             return@LocationListener
         }
@@ -229,6 +245,7 @@ class TrackingService : Service() {
         }
         val locationSnapshot = Location(location)
         lastFixDeliveryAtMs = System.currentTimeMillis()
+        providerHealthController.markFixDelivered(lastFixDeliveryAtMs)
         latestObservedRawLocation = Location(locationSnapshot)
         ingestScope.launch {
             processLocationUpdateSerialized(locationSnapshot)
@@ -243,7 +260,7 @@ class TrackingService : Service() {
     private val gpsProviderReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (!isTracking) return
-            if (isLocationServicesEnabled()) {
+            if (isGpsProviderEnabled()) {
                 resumeFromGpsProviderWait(reason = "provider_broadcast")
             } else {
                 enterWaitingForGpsProvider(reason = "provider_broadcast")
@@ -455,6 +472,7 @@ class TrackingService : Service() {
             runtimeEventPublisher = RuntimeEventPublisher(applicationContext)
             runtimeTelemetry = RuntimeTelemetry(applicationContext)
             recoveryAnchorStore = RecoveryAnchorStore(applicationContext)
+            stationaryRegionStore = StationaryRegionStore(applicationContext)
             locationSessionCoordinator = LocationSessionCoordinator(this) { error ->
                 runtimeTelemetry.event(
                     "location_request_registration_failed",
@@ -703,14 +721,14 @@ class TrackingService : Service() {
             )
             return false
         }
-        if (!isLocationServicesEnabled()) {
-            GeoVaultCaptureLog.w(TAG, "Start blocked: location services disabled")
+        if (!isGpsProviderEnabled()) {
+            GeoVaultCaptureLog.w(TAG, "Start blocked: GPS provider disabled")
             setStartupInProgress(false)
             failStartup(
                 message = getString(R.string.gps_provider_required),
                 path = path,
                 trigger = trigger,
-                reason = "location_services_disabled"
+                reason = "gps_provider_disabled"
             )
             return false
         }
@@ -748,8 +766,14 @@ class TrackingService : Service() {
         val sessionStartedAtMs = System.currentTimeMillis()
         pointFreshnessTracker.reset(sessionStartedAtMs = sessionStartedAtMs)
         repeatedOutlierSuppressor.reset()
+        providerHealthController.reset()
+        lastFixDeliveryAtMs = 0L
+        lastLocationRequestAppliedAtMs = 0L
+        stationaryRegionState = StationaryRegionState()
+        uploadLivenessState = UploadLivenessState()
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
+        lastPositioningDiagnosticSnapshotKey = null
         if (selectedTrackerId.isNotEmpty()) {
             restoreLocalFreshnessFromDatabase(
                 trackerId = selectedTrackerId,
@@ -853,11 +877,18 @@ class TrackingService : Service() {
         lastLowAccuracyFallbackWaitReason = null
         repeatedOutlierSuppressor.reset()
         freshnessRecoveryController.reset()
+        providerHealthController.reset()
+        lastFixDeliveryAtMs = 0L
+        lastLocationRequestAppliedAtMs = 0L
         recoveryAnchorState = null
         recoveryAnchorStore.clear()
+        stationaryRegionState = StationaryRegionState()
+        stationaryRegionStore.clear()
+        uploadLivenessState = UploadLivenessState()
         pointFreshnessTracker.reset(sessionStartedAtMs = 0L)
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
+        lastPositioningDiagnosticSnapshotKey = null
         autoTrackingMotionEvidenceGate.reset()
         stopAutoModeTick()
         stopFastGpsLockWindow(reason = "tracking_stopped")
@@ -961,6 +992,7 @@ class TrackingService : Service() {
             return
         }
         val settings = settingsRepository.getSettings()
+        val runtimeContext = currentPositioningRuntimeContext(settings)
         val previousAcceptedLocation = lastFilteredLocation?.let { Location(it) }
         val nowMs = System.currentTimeMillis()
         val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
@@ -979,7 +1011,7 @@ class TrackingService : Service() {
         syncRuntimeStateStore()
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
-        val motionMode = resolveActiveMotionMode(settings)
+        val motionMode = runtimeContext.activeMotionMode
         if (
             pausedFreshnessProbeActive &&
             !bypassFilters &&
@@ -1009,7 +1041,7 @@ class TrackingService : Service() {
             location = location,
             settings = settings,
             motionMode = motionMode,
-            effectiveAccuracyFilterMeters = resolveCurrentAccuracyFilter(),
+            effectiveAccuracyFilterMeters = runtimeContext.effectiveAccuracyThresholdMeters,
             previousAcceptedLocation = previousAcceptedLocation,
             sessionVisibleBoundaryId = sessionVisibleBoundaryId,
             bypassFilters = bypassFilters,
@@ -1020,23 +1052,24 @@ class TrackingService : Service() {
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
             isMockLocation = LocationCompat.isMock(location),
+            filterConfig = runtimeContext.filterConfig,
         )
         val freshnessRecoveryDecision = freshnessRecoveryController.evaluate(
             FreshnessRecoveryInput(
                 localRecoveryDue = pointFreshnessTracker.shouldForceLocalRecovery(
                     nowMs = nowMs,
-                    intervalSec = resolvePointFreshnessIntervalSec(motionMode),
+                    intervalSec = runtimeContext.pointFreshnessIntervalSec,
                 ),
                 accepted = result.accepted,
                 pointPersisted = result.pointPersisted,
                 filterReason = result.policyMetrics?.reason,
                 accuracyMeters = result.lastAccuracyMeters,
-                effectiveAccuracyThresholdMeters = resolveCurrentAccuracyFilter(),
+                effectiveAccuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters,
                 candidateLocation = location,
                 anchor = recoveryAnchorState,
                 repeatedOutlierSuppressed = false,
                 nowMs = nowMs,
-                config = currentPositioningRecoveryConfig(),
+                config = runtimeContext.recoveryConfig,
             )
         )
         if (freshnessRecoveryDecision == FreshnessRecoveryDecision.CommitAnchor) {
@@ -1060,7 +1093,7 @@ class TrackingService : Service() {
                     location = recoveryLocation,
                     settings = settings,
                     motionMode = motionMode,
-                    effectiveAccuracyFilterMeters = resolveCurrentAccuracyFilter(),
+                    effectiveAccuracyFilterMeters = runtimeContext.effectiveAccuracyThresholdMeters,
                     previousAcceptedLocation = previousAcceptedLocation,
                     sessionVisibleBoundaryId = sessionVisibleBoundaryId,
                     bypassFilters = true,
@@ -1071,6 +1104,7 @@ class TrackingService : Service() {
                     nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
                     sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
                     isMockLocation = LocationCompat.isMock(recoveryLocation),
+                    filterConfig = runtimeContext.filterConfig,
                 )
             }
         } else {
@@ -1086,7 +1120,7 @@ class TrackingService : Service() {
             result = result,
             nowMs = nowMs,
             motionMode = motionMode,
-            effectiveAccuracyThresholdMeters = resolveCurrentAccuracyFilter(),
+            effectiveAccuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters,
         )
         applyAccuracyHoldUpdate(
             incomingAccuracyMeters = result.lastAccuracyMeters,
@@ -1157,7 +1191,7 @@ class TrackingService : Service() {
                 val outlierDecision = repeatedOutlierSuppressor.evaluate(
                     candidate = location,
                     anchor = lastFilteredLocation,
-                    effectiveAccuracyThresholdMeters = resolveCurrentAccuracyFilter(),
+                    effectiveAccuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters,
                     nowMs = nowMs,
                 )
                 if (outlierDecision.suppress) {
@@ -1301,7 +1335,7 @@ class TrackingService : Service() {
             hasRecoveredFastGpsLock(
                 quality = acceptedQuality,
                 measuredAccuracyMeters = result.lastAccuracyMeters,
-                accuracyFilterMeters = resolveCurrentAccuracyFilter()
+                accuracyFilterMeters = runtimeContext.effectiveAccuracyThresholdMeters
             )
         ) {
             stopFastGpsLockWindow(reason = "accepted_fix_lock_recovered")
@@ -1309,7 +1343,7 @@ class TrackingService : Service() {
             cancelLowAccuracyFallbackTimer(clearCandidate = true)
         }
         if (!skipAdaptiveTrackingEffects) {
-            val stationaryRadius = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS
+            val stationaryRadius = runtimeContext.stationaryRadiusMeters
             val adjustmentReason = result.adjustmentReason
             // `UNCERTAINTY_SUPPRESSED` is positive evidence the device hasn't
             // moved (filter snapped to anchor because raw displacement was
@@ -1355,10 +1389,10 @@ class TrackingService : Service() {
                 stationaryPolicyWantsPause = stationaryDecision.shouldPause,
                 localPointFresh = pointFreshnessTracker.isLocalFresh(
                     nowMs = nowMs,
-                    intervalSec = resolvePointFreshnessIntervalSec(motionMode),
+                    intervalSec = runtimeContext.pointFreshnessIntervalSec,
                 ),
                 fallbackPending = lowAccuracyFallbackCoordinator.hasPendingCandidate(),
-                providerAvailable = isLocationServicesEnabled(),
+                providerAvailable = isGpsProviderEnabled(),
             )
             if (stationaryDecision.shouldPause && !pauseEligibility.shouldPause) {
                 runtimeTelemetry.event(
@@ -1369,6 +1403,12 @@ class TrackingService : Service() {
                 )
             }
             if (pauseEligibility.shouldPause) {
+                enterStationaryRegion(
+                    anchorLocation = stationaryAnchorLocation ?: stationaryReferenceLocation,
+                    nowMs = nowMs,
+                    motionMode = motionMode,
+                    radiusMeters = stationaryRadius,
+                )
                 pauseGps()
             }
             if (settings.autoTrackingMode) {
@@ -1513,14 +1553,19 @@ class TrackingService : Service() {
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
     ): Boolean {
+        val runtimeContext = currentPositioningRuntimeContext(settings)
         val decision = PausedFreshnessPolicy.evaluate(
             anchorLocation = anchorLocation,
             candidateLocation = probeLocation,
-            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
-            accuracyCeilingMeters = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
-            freshnessIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS,
+            stationaryRadiusMeters = stationaryRegionState.radiusMeters
+                .takeIf { stationaryRegionState.hasRegion }
+                ?: TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            accuracyCeilingMeters = runtimeContext.stationaryAccuracyCeilingMeters,
+            freshnessIntervalMs = runtimeContext.stationaryProbeIntervalMs,
             nowMs = nowMs,
-            lastFreshnessPointAtMs = lastPausedFreshnessPointAtMs,
+            lastFreshnessPointAtMs = stationaryRegionState.lastFreshnessPointAtMs
+                .takeIf { it > 0L }
+                ?: lastPausedFreshnessPointAtMs,
         )
         if (!decision.shouldEmit) {
             logPausedFreshnessDecision(eventName = "paused_freshness_skipped", decision = decision, probeLocation = probeLocation)
@@ -1535,8 +1580,11 @@ class TrackingService : Service() {
                     return true
                 }
                 PausedFreshnessDecisionReason.POOR_ACCURACY -> {
-                    pausedFreshnessPoorAccuracyFixes += 1
-                    val probeAgeMs = nowMs - pausedFreshnessProbeStartedAtMs
+                    stationaryRegionState = stationaryRegionState.recordPoorAccuracyFix()
+                    stationaryRegionStore.save(stationaryRegionState)
+                    pausedFreshnessPoorAccuracyFixes = stationaryRegionState.poorAccuracyFixes
+                    val probeAgeMs = nowMs - (stationaryRegionState.probeStartedAtMs.takeIf { it > 0L }
+                        ?: pausedFreshnessProbeStartedAtMs)
                     if (
                         pausedFreshnessPoorAccuracyFixes >= PAUSED_FRESHNESS_MAX_POOR_ACCURACY_FIXES ||
                         probeAgeMs >= PAUSED_FRESHNESS_PROBE_TIMEOUT_MS
@@ -1592,6 +1640,8 @@ class TrackingService : Service() {
             return true
         }
         lastPausedFreshnessPointAtMs = nowMs
+        stationaryRegionState = stationaryRegionState.markFreshnessPointPersisted(nowMs)
+        stationaryRegionStore.save(stationaryRegionState)
         logPausedFreshnessDecision(eventName = "paused_freshness_emitted", decision = decision, probeLocation = probeLocation)
         runtimeTelemetry.event(
             name = "track_point",
@@ -1612,6 +1662,8 @@ class TrackingService : Service() {
     }
 
     private fun markPausedFreshnessProbeStarted(nowMs: Long) {
+        stationaryRegionState = stationaryRegionState.startProbe(nowMs)
+        stationaryRegionStore.save(stationaryRegionState)
         pausedFreshnessProbeActive = true
         pausedFreshnessProbeStartedAtMs = nowMs
         pausedFreshnessPoorAccuracyFixes = 0
@@ -1645,6 +1697,8 @@ class TrackingService : Service() {
         pausedFreshnessProbeActive = false
         pausedFreshnessProbeStartedAtMs = 0L
         pausedFreshnessPoorAccuracyFixes = 0
+        stationaryRegionState = stationaryRegionState.clearProbe(clearLastFreshnessTimestamp)
+        stationaryRegionStore.save(stationaryRegionState)
         pausedFreshnessProbeTimeoutJob?.cancel()
         pausedFreshnessProbeTimeoutJob = null
         if (clearLastFreshnessTimestamp) {
@@ -1676,12 +1730,13 @@ class TrackingService : Service() {
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
     ): Boolean {
+        val runtimeContext = currentPositioningRuntimeContext(settings)
         val result = locationIngestCoordinator.ingest(
             trackId = selectedTrackerId,
             location = freshnessLocation,
             settings = settings,
             motionMode = motionMode,
-            effectiveAccuracyFilterMeters = resolveCurrentAccuracyFilter(),
+            effectiveAccuracyFilterMeters = runtimeContext.effectiveAccuracyThresholdMeters,
             previousAcceptedLocation = previousAcceptedLocation,
             sessionVisibleBoundaryId = sessionVisibleBoundaryId,
             bypassFilters = true,
@@ -1692,6 +1747,7 @@ class TrackingService : Service() {
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
             isMockLocation = LocationCompat.isMock(freshnessLocation),
+            filterConfig = runtimeContext.filterConfig,
         )
         if (!result.accepted || !result.pointPersisted) {
             runtimeTelemetry.event(
@@ -1942,7 +1998,7 @@ class TrackingService : Service() {
         pointEmissionTrouble: PointEmissionTrouble = PointEmissionTrouble.None,
         extraTransform: ((TrackingRuntimeSnapshot) -> TrackingRuntimeSnapshot)? = null,
     ): TrackingRuntimeSnapshot {
-        val threshold = resolveCurrentAccuracyFilter()
+        val threshold = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
         val nowElapsedMs = SystemClock.elapsedRealtime()
         return updateRuntimeSnapshot { snapshot ->
             val decision = RuntimeAccuracyHoldPolicy.next(
@@ -2008,13 +2064,24 @@ class TrackingService : Service() {
     }
 
     private fun currentPositioningRecoveryConfig(): PositioningRecoveryConfig {
-        val settings = settingsRepository.getSettings()
+        return currentPositioningRuntimeContext(settingsRepository.getSettings()).recoveryConfig
+    }
+
+    private fun currentPositioningRuntimeContext(
+        settings: TrackerSettings = settingsRepository.getSettings(),
+    ): TrackerPositioningRuntimeContext {
         val motionMode = resolveActiveMotionMode(settings)
-        return PositioningRecoveryConfig.fromMotionMode(
-            motionMode = motionMode,
-            maxLocalPointGapMs = pointFreshnessTracker.maxAllowedPointGapMs(
-                resolvePointFreshnessIntervalSec(motionMode)
-            ),
+        val (_, baseDistance) = if (settings.autoTrackingMode) {
+            TrackingLocationPolicy.getProfileParams(motionMode.profileIndex)
+        } else {
+            settings.loggingIntervalSec to settings.distanceFilterMeters
+        }
+        val pointFreshnessIntervalSec = resolvePointFreshnessIntervalSec(motionMode)
+        return TrackerPositioningRuntimeContext.build(
+            settings = settings,
+            activeMotionMode = motionMode,
+            effectiveDistanceFilterMeters = elasticDistanceOverrideMeters ?: baseDistance,
+            localPointMaxGapMs = pointFreshnessTracker.maxAllowedPointGapMs(pointFreshnessIntervalSec),
         )
     }
 
@@ -2127,7 +2194,11 @@ class TrackingService : Service() {
         source: String,
         motionMode: TrackingMotionMode,
     ) {
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (trackerId.isBlank()) return
         val anchor = RecoveryAnchorState.fromLocation(
+            trackerId = trackerId,
+            sessionBoundaryId = sessionVisibleBoundaryId,
             location = location,
             radiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             source = source,
@@ -2135,6 +2206,28 @@ class TrackingService : Service() {
         )
         recoveryAnchorState = anchor
         recoveryAnchorStore.save(anchor)
+    }
+
+    private fun enterStationaryRegion(
+        anchorLocation: Location,
+        nowMs: Long,
+        motionMode: TrackingMotionMode,
+        radiusMeters: Float,
+    ) {
+        val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
+        if (trackerId.isBlank()) return
+        val anchor = RecoveryAnchorState.fromLocation(
+            trackerId = trackerId,
+            sessionBoundaryId = sessionVisibleBoundaryId,
+            location = anchorLocation,
+            radiusMeters = radiusMeters,
+            source = "stationary_region",
+            motionMode = motionMode,
+        )
+        stationaryRegionState = stationaryRegionState.enter(anchor = anchor, nowMs = nowMs)
+        recoveryAnchorState = anchor
+        recoveryAnchorStore.save(anchor)
+        stationaryRegionStore.save(stationaryRegionState)
     }
 
     private fun buildAccuracyHoldLogKey(
@@ -2154,18 +2247,17 @@ class TrackingService : Service() {
         nowMs: Long,
     ) {
         if (previous.active == current.active && previous.reason == current.reason) return
-        val eventName = if (current.active) {
-            "point_emission_trouble_started"
-        } else {
-            "point_emission_trouble_ended"
-        }
+        val (eventName, details) = PositioningDiagnosticEvent.pointEmissionTrouble(
+            active = current.active,
+            reason = current.reason ?: previous.reason ?: "none",
+            accuracyBlocked = current.accuracyBlocked,
+            localAgeMs = pointFreshnessTracker.localPointAgeMs(nowMs),
+            uploadAgeMs = pointFreshnessTracker.uploadAgeMs(nowMs),
+            gpsState = gpsRuntimeState,
+        )
         runtimeTelemetry.event(
             eventName,
-            "reason=${current.reason ?: previous.reason ?: "none"} " +
-                "accuracyBlocked=${current.accuracyBlocked} " +
-                "localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
-                "uploadAgeMs=${pointFreshnessTracker.uploadAgeMs(nowMs) ?: -1L} " +
-                "gpsState=$gpsRuntimeState"
+            details
         )
     }
 
@@ -2173,13 +2265,27 @@ class TrackingService : Service() {
         trackerId: String,
         sessionStartedAtMs: Long,
     ) {
-        recoveryAnchorState = recoveryAnchorStore.load()
+        recoveryAnchorState = recoveryAnchorStore.load(
+            trackerId = trackerId,
+            sessionBoundaryId = sessionVisibleBoundaryId,
+        )
         recoveryAnchorState?.let { anchor ->
             pointFreshnessTracker.seedLocalPointPersistedAt(anchor.timestampMs)
             runtimeTelemetry.event(
                 "recovery_anchor_restored",
                 "trackerId=$trackerId source=${anchor.source} persistedAtMs=${anchor.timestampMs} " +
                     "localAgeMs=${sessionStartedAtMs - anchor.timestampMs}"
+            )
+        }
+        stationaryRegionStore.load(
+            trackerId = trackerId,
+            sessionBoundaryId = sessionVisibleBoundaryId,
+        )?.let { restored ->
+            stationaryRegionState = restored
+            runtimeTelemetry.event(
+                "stationary_region_restored",
+                "trackerId=$trackerId enteredAtMs=${restored.enteredAtMs} " +
+                    "lastFreshnessPointAtMs=${restored.lastFreshnessPointAtMs}"
             )
         }
         val latestPoint = withContext(Dispatchers.IO) {
@@ -2203,11 +2309,18 @@ class TrackingService : Service() {
     ) {
         val gpsOk = isGpsProviderEnabled()
         val settings = settingsRepository.getSettings()
-        val effectiveAccuracyThreshold = resolveCurrentAccuracyFilter()
+        val positioningContext = currentPositioningRuntimeContext(settings)
+        val effectiveAccuracyThreshold = positioningContext.effectiveAccuracyThresholdMeters
         validateRuntimeInvariant(gpsProviderEnabled = gpsOk)
         val effectiveRunning = isTrackingActiveOrStarting()
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         val snapshotForStatus = synchronized(runtimeSnapshotLock) { runtimeSnapshot }
+        val providerDecision = providerHealthController.evaluate(
+            nowMs = System.currentTimeMillis(),
+            isTracking = isTracking,
+            expectsActiveFixDelivery = expectsActiveFixDelivery(),
+            gpsProviderAvailable = gpsOk,
+        )
         val uiStatus = TrackingUiStatusResolver.resolveForGpsState(
             isRunning = effectiveRunning,
             gpsProviderEnabled = gpsOk,
@@ -2216,11 +2329,7 @@ class TrackingService : Service() {
             effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
             activeAccuracyBlockedEmission = snapshotForStatus.activePointEmissionAccuracyTrouble,
         )
-        val activeMotionMode = if (settings.autoTrackingMode) {
-            autoTrackingMotionEngine.snapshot().mode
-        } else {
-            TrackingMotionMode.fromProfileIndex(settings.trackingProfile.index)
-        }
+        val activeMotionMode = positioningContext.activeMotionMode
         val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
         val next = synchronized(runtimeSnapshotLock) {
             val recordingRuntime = RecordingRuntimeReducer.fromInputs(
@@ -2246,16 +2355,58 @@ class TrackingService : Service() {
                     uiStatus = uiStatus,
                     gpsPaused = recordingRuntime.pausedForMotion,
                     effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
-                    sessionVisibleBoundaryId = sessionVisibleBoundaryId
+                    sessionVisibleBoundaryId = sessionVisibleBoundaryId,
+                    providerHealthReason = providerDecision.reason.telemetryValue,
+                    uploadLastFailureClass = uploadLivenessState.lastFailureClass,
+                    uploadConsecutiveFailures = uploadLivenessState.consecutiveFailures,
+                    currentSessionQueuedCount = uploadLivenessState.currentSessionQueuedCount,
+                    backlogQueuedCount = uploadLivenessState.backlogQueuedCount,
                 )
             ).also { runtimeSnapshot = it }
         }
         TrackingRuntimeStateStore.update { next }
+        maybeLogPositioningDiagnosticSnapshot(next)
         if (startupForegroundPromoted && startupInProgress) {
             serviceScope.launch(Dispatchers.Main) {
                 notificationPresenter.updateForegroundNotification(runtimeSnapshot)
             }
         }
+    }
+
+    private fun maybeLogPositioningDiagnosticSnapshot(snapshot: TrackingRuntimeSnapshot) {
+        val providerDecision = providerHealthController.evaluate(
+            nowMs = System.currentTimeMillis(),
+            isTracking = isTracking,
+            expectsActiveFixDelivery = expectsActiveFixDelivery(),
+            gpsProviderAvailable = snapshot.gpsProviderEnabled,
+        )
+        val diagnosticSnapshot = PositioningDiagnosticSnapshot(
+            gpsState = gpsRuntimeState,
+            motionMode = snapshot.activeMotionMode,
+            providerHealth = providerDecision.reason.telemetryValue,
+            localAgeMs = pointFreshnessTracker.localPointAgeMs(System.currentTimeMillis()),
+            uploadAgeMs = pointFreshnessTracker.uploadAgeMs(System.currentTimeMillis()),
+            recoveryProbe = if (snapshot.activePointEmissionTrouble) {
+                snapshot.pointEmissionTroubleReason ?: "active"
+            } else {
+                "inactive"
+            },
+            stationaryRegion = if (stationaryRegionState.hasRegion) {
+                "active:probe=${stationaryRegionState.probeActive}:poorFixes=${stationaryRegionState.poorAccuracyFixes}"
+            } else {
+                "inactive"
+            },
+            queueCount = uploadLivenessState.currentSessionQueuedCount + uploadLivenessState.backlogQueuedCount,
+            uploadFailureClass = uploadLivenessState.lastFailureClass,
+        )
+        val key = "gps=${diagnosticSnapshot.gpsState}|mode=${diagnosticSnapshot.motionMode}|" +
+            "provider=${diagnosticSnapshot.providerHealth}|recovery=${diagnosticSnapshot.recoveryProbe}|" +
+            "stationary=${diagnosticSnapshot.stationaryRegion}|queue=${diagnosticSnapshot.queueCount}|" +
+            "uploadFailure=${diagnosticSnapshot.uploadFailureClass}"
+        if (key == lastPositioningDiagnosticSnapshotKey) return
+        lastPositioningDiagnosticSnapshotKey = key
+        val (eventName, details) = PositioningDiagnosticEvent.snapshot(diagnosticSnapshot)
+        runtimeTelemetry.event(eventName, details)
     }
 
     private fun transitionControlState(event: TrackingControlEvent, failureReason: String? = null) {
@@ -2292,10 +2443,6 @@ class TrackingService : Service() {
 
     private fun isGpsProviderEnabled(): Boolean {
         return locationSessionCoordinator.isGpsProviderEnabled()
-    }
-
-    private fun isLocationServicesEnabled(): Boolean {
-        return locationSessionCoordinator.isLocationServicesEnabled()
     }
 
     private fun startRecoveryHeartbeat() {
@@ -2402,7 +2549,7 @@ class TrackingService : Service() {
                     }
                     return@launch
                 }
-                if (!isLocationServicesEnabled()) {
+                if (!isGpsProviderEnabled()) {
                     withContext(Dispatchers.Main) {
                         enterWaitingForGpsProvider(reason = "preflight_monitor")
                     }
@@ -2507,12 +2654,12 @@ class TrackingService : Service() {
                     continue
                 }
                 val settings = settingsRepository.getSettings()
-                val emitDecision = lowAccuracyFallbackCoordinator.evaluateEmit(
+                val loopDecision = lowAccuracyFallbackCoordinator.evaluateLoop(
                         fallbackEligible = settings.lowAccuracyFallbackEnabled,
                         hasCandidate = true
                 )
-                if (emitDecision != LowAccuracyFallbackEmitDecision.EMIT) {
-                    logFallbackWait(reason = emitDecision.name.lowercase())
+                if (loopDecision != LowAccuracyFallbackLoopDecision.COMMIT_ANCHOR) {
+                    logFallbackWait(reason = loopDecision.telemetryValue)
                     continue
                 }
                 lastLowAccuracyFallbackWaitReason = null
@@ -2585,7 +2732,8 @@ class TrackingService : Service() {
     private fun logFallbackWait(reason: String) {
         if (lastLowAccuracyFallbackWaitReason == reason) return
         lastLowAccuracyFallbackWaitReason = reason
-        runtimeTelemetry.event("fallback_wait", "reason=$reason")
+        val (eventName, details) = PositioningDiagnosticEvent.fallbackWait(reason)
+        runtimeTelemetry.event(eventName, details)
     }
 
     private suspend fun pushQueuedLocations(
@@ -2595,31 +2743,37 @@ class TrackingService : Service() {
         if (!isTracking) return SyncFailureClass.NONE
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         trimQueuedLocationsRetention(trackerId)
+        updateUploadQueueCounts(trackerId)
         if (!NetworkStatusMonitor.hasUsableNetwork(this)) {
+            val result = QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.NO_NETWORK)
+            applyQueueUploadResult(
+                result = result,
+                scope = scope,
+                settings = settingsRepository.getSettings(),
+                updateFailureCounters = updateFailureCounters,
+            )
             if (scope != QueueUploadScope.BACKLOG_ONLY) {
                 lastSyncFailureClass = SyncFailureClass.TRANSIENT
-            }
-            if (updateFailureCounters && scope != QueueUploadScope.BACKLOG_ONLY) {
-                consecutivePushFailures++
             }
             withContext(Dispatchers.Main) {
                 updateNotificationFromDb(broadcastStats = true)
             }
-            return SyncFailureClass.TRANSIENT
+            return result.failureClass
         }
         if (!hasValidSelectedTrackerId(trackerId)) {
             runtimeTelemetry.event("queue_skip_invalid_tracker", "scope=$scope")
+            val result = QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.INVALID_TRACKER)
             val trackerError = if (trackerId.isBlank()) {
                 getString(R.string.no_tracker_selected_go_to_settings)
             } else {
                 getString(R.string.tracker_validation_failed_go_to_settings)
             }
-            if (scope != QueueUploadScope.BACKLOG_ONLY) {
-                lastSyncFailureClass = SyncFailureClass.PERMANENT
-            }
-            if (updateFailureCounters && scope != QueueUploadScope.BACKLOG_ONLY) {
-                consecutivePushFailures++
-            }
+            applyQueueUploadResult(
+                result = result,
+                scope = scope,
+                settings = settingsRepository.getSettings(),
+                updateFailureCounters = updateFailureCounters,
+            )
             withContext(Dispatchers.Main) {
                 sendBroadcast(
                     Intent(ACTION_TRACKING_ERROR).apply {
@@ -2629,11 +2783,11 @@ class TrackingService : Service() {
                 )
                 updateNotificationFromDb(broadcastStats = true)
             }
-            return SyncFailureClass.PERMANENT
+            return result.failureClass
         }
         val serverUrl = GeovaultAuthManager.getServerUrl(this)
         val settings = settingsRepository.getSettings()
-        val outcome = queueUploadEngine.push(
+        val result = queueUploadEngine.push(
             scope = scope,
             trackerId = trackerId,
             serverUrl = serverUrl,
@@ -2650,49 +2804,82 @@ class TrackingService : Service() {
             onBatchUploaded = { visibleSentCount ->
                 val sentDelta = visibleSentCount.coerceAtLeast(0)
                 if (sentDelta > 0) {
-                    val uploadedAtMs = System.currentTimeMillis()
-                    pointFreshnessTracker.markUploadSucceeded(uploadedAtMs)
                     updateRuntimeSnapshot {
                         it.copy(
                             pointsSentThisSession = it.pointsSentThisSession + sentDelta,
-                            lastPointSentAtMs = uploadedAtMs,
-                            lastUploadSucceededAtMs = pointFreshnessTracker.lastUploadSucceededAtMs
+                            lastPointSentAtMs = System.currentTimeMillis(),
                         )
                     }
                 }
             }
         )
-        if (scope != QueueUploadScope.BACKLOG_ONLY) {
-            lastSyncFailureClass = outcome
-            if (updateFailureCounters && outcome != SyncFailureClass.SKIPPED) {
-                if (outcome == SyncFailureClass.NONE) {
-                    consecutivePushFailures = 0
-                } else {
-                    consecutivePushFailures++
-                    val nowMs = System.currentTimeMillis()
-                    val motionMode = resolveActiveMotionMode(settings)
-                    if (
-                        pointFreshnessTracker.isLocalFresh(
-                            nowMs = nowMs,
-                            intervalSec = resolvePointFreshnessIntervalSec(motionMode),
-                        )
-                    ) {
-                        runtimeTelemetry.event(
-                            "upload_failed_local_fresh",
-                            "failureClass=$outcome " +
-                                "consecutiveFailures=$consecutivePushFailures " +
-                                "localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
-                                "uploadAgeMs=${pointFreshnessTracker.uploadAgeMs(nowMs) ?: -1L}"
-                        )
-                    }
-                }
-            }
-        }
+        applyQueueUploadResult(
+            result = result,
+            scope = scope,
+            settings = settings,
+            updateFailureCounters = updateFailureCounters,
+        )
         trimQueuedLocationsRetention(trackerId)
+        updateUploadQueueCounts(trackerId)
         withContext(Dispatchers.Main) {
             updateNotificationFromDb(broadcastStats = true)
         }
-        return outcome
+        return result.failureClass
+    }
+
+    private fun applyQueueUploadResult(
+        result: QueueUploadResult,
+        scope: QueueUploadScope,
+        settings: TrackerSettings,
+        updateFailureCounters: Boolean,
+    ) {
+        logQueueUploadResult(result = result, scope = scope)
+        if (scope == QueueUploadScope.BACKLOG_ONLY) return
+        val shouldUpdateCounters = updateFailureCounters && result.failureClass != SyncFailureClass.SKIPPED
+        lastSyncFailureClass = result.failureClass
+        uploadLivenessState = uploadLivenessState.onUploadResult(
+            result = result,
+            nowMs = System.currentTimeMillis(),
+            updateFailureCounters = shouldUpdateCounters,
+        )
+        if (result.rowsDeleted > 0) {
+            val uploadedAtMs = System.currentTimeMillis()
+            pointFreshnessTracker.markUploadSucceeded(uploadedAtMs)
+            updateRuntimeSnapshot {
+                it.copy(
+                    lastPointSentAtMs = if (result.visibleRowsSent > 0) uploadedAtMs else it.lastPointSentAtMs,
+                    lastUploadSucceededAtMs = pointFreshnessTracker.lastUploadSucceededAtMs,
+                )
+            }
+        }
+        if (!shouldUpdateCounters) return
+        if (result.failureClass == SyncFailureClass.NONE) {
+            consecutivePushFailures = 0
+            return
+        }
+        consecutivePushFailures++
+        val nowMs = System.currentTimeMillis()
+        val motionMode = resolveActiveMotionMode(settings)
+        if (
+            pointFreshnessTracker.isLocalFresh(
+                nowMs = nowMs,
+                intervalSec = resolvePointFreshnessIntervalSec(motionMode),
+            )
+        ) {
+            runtimeTelemetry.event(
+                "upload_failed_local_fresh",
+                "failureClass=${result.failureClass} " +
+                    "reason=${result.failureReason?.telemetryValue ?: result.skippedReason?.telemetryValue ?: "none"} " +
+                    "consecutiveFailures=$consecutivePushFailures " +
+                    "localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
+                    "uploadAgeMs=${pointFreshnessTracker.uploadAgeMs(nowMs) ?: -1L}"
+            )
+        }
+    }
+
+    private fun logQueueUploadResult(result: QueueUploadResult, scope: QueueUploadScope) {
+        val (eventName, details) = PositioningDiagnosticEvent.queueUploadResult(result = result, scope = scope)
+        runtimeTelemetry.event(eventName, details)
     }
 
     private fun trimQueuedLocationsRetention(trackerId: String) {
@@ -2711,6 +2898,20 @@ class TrackingService : Service() {
                 details = "trackerId=$trackerId deletedByAge=$deletedByAge deletedBySize=$deletedBySize maxSize=$MAX_QUEUE_SIZE maxAgeMs=$MAX_QUEUE_AGE_MS"
             )
         }
+    }
+
+    private fun updateUploadQueueCounts(trackerId: String) {
+        if (trackerId.isBlank()) return
+        uploadLivenessState = uploadLivenessState.withQueueCounts(
+            currentSessionQueuedCount = database.locationDao().getCurrentSessionCountForTracker(
+                trackerId = trackerId,
+                sessionBoundaryId = sessionBoundaryForBacklogId,
+            ),
+            backlogQueuedCount = database.locationDao().getBacklogCountForTracker(
+                trackerId = trackerId,
+                sessionBoundaryId = sessionBoundaryForBacklogId,
+            ),
+        )
     }
 
     private fun getAuthenticatedHttpClient(): OkHttpClient {
@@ -2738,31 +2939,6 @@ class TrackingService : Service() {
         return status == 2 || status == 5
     }
 
-    /**
-     * Returns the [LocationRequest] cadence and distance filter for the
-     * current motion profile. The user-facing accuracy filter is
-     * profile-independent; see [resolveCurrentAccuracyFilter].
-     */
-    private fun resolveCurrentIntervalAndDistance(): Pair<Long, Float> {
-        val settings = settingsRepository.getSettings()
-        val (interval, distance) = if (settings.autoTrackingMode) {
-            val mode = autoTrackingMotionEngine.snapshot().mode
-            TrackingLocationPolicy.getProfileParams(mode.profileIndex)
-        } else {
-            settings.loggingIntervalSec to settings.distanceFilterMeters
-        }
-        val effectiveDistance = elasticDistanceOverrideMeters ?: distance
-        return interval to effectiveDistance
-    }
-
-    /**
-     * The accuracy filter is the user's preference and does not change with
-     * motion profile. Keeping it stable means the [LocationFilter] config
-     * never thrashes when auto-mode flips between WALKING / BIKING / DRIVING.
-     */
-    private fun resolveCurrentAccuracyFilter(): Float =
-        settingsRepository.getSettings().accuracyFilterMeters
-
     private fun applyCurrentLocationRequest(reason: String): Boolean {
         if (!isTracking) return false
         if (
@@ -2772,7 +2948,9 @@ class TrackingService : Service() {
             return false
         }
         if (!TrackingPermissionGate.hasLocationPermission(this)) return false
-        val (intervalSec, distanceFilter) = resolveCurrentIntervalAndDistance()
+        val runtimeContext = currentPositioningRuntimeContext()
+        val intervalSec = runtimeContext.locationIntervalSec
+        val distanceFilter = runtimeContext.distanceFilterMeters
         val requestKey = LocationRequestKey(
             intervalSec = intervalSec,
             distanceFilterMeters = distanceFilter,
@@ -2801,6 +2979,7 @@ class TrackingService : Service() {
             if (!started) return false
             lastAppliedLocationRequestKey = requestKey
             lastLocationRequestAppliedAtMs = System.currentTimeMillis()
+            providerHealthController.markRequestApplied(lastLocationRequestAppliedAtMs)
             locationRequestReapplyRetryJob?.cancel()
             locationRequestReapplyRetryJob = null
             runtimeTelemetry.decision(
@@ -2869,17 +3048,21 @@ class TrackingService : Service() {
         fixDeliveryWatchdogJob = serviceScope.launch {
             while (isTracking && runGeneration == trackingGeneration) {
                 delay(FIX_DELIVERY_WATCHDOG_INTERVAL_MS)
-                if (!isTracking || runGeneration != trackingGeneration || !expectsActiveFixDelivery()) continue
-                val baselineMs = lastFixDeliveryAtMs.takeIf { it > 0L } ?: lastLocationRequestAppliedAtMs
-                if (baselineMs <= 0L) continue
-                val ageMs = System.currentTimeMillis() - baselineMs
-                if (ageMs <= FIX_DELIVERY_STALE_MS) continue
-                runtimeTelemetry.event(
-                    "fix_delivery_stale",
-                    "ageMs=$ageMs gpsState=$gpsRuntimeState lastAppliedAt=$lastLocationRequestAppliedAtMs"
+                if (!isTracking || runGeneration != trackingGeneration) continue
+                val decision = providerHealthController.evaluate(
+                    nowMs = System.currentTimeMillis(),
+                    isTracking = isTracking,
+                    expectsActiveFixDelivery = expectsActiveFixDelivery(),
+                    gpsProviderAvailable = isGpsProviderEnabled(),
                 )
-                lastAppliedLocationRequestKey = null
-                reapplyLocationRequestIfActive(reason = "fix_delivery_stale")
+                if (providerHealthController.shouldLog(decision)) {
+                    val (eventName, details) = PositioningDiagnosticEvent.providerHealth(decision)
+                    runtimeTelemetry.event(eventName, "$details gpsState=$gpsRuntimeState lastAppliedAt=$lastLocationRequestAppliedAtMs")
+                }
+                if (decision is ProviderHealthDecision.ReapplyRequest) {
+                    lastAppliedLocationRequestKey = null
+                    reapplyLocationRequestIfActive(reason = "fix_delivery_stale")
+                }
             }
         }
     }
@@ -2978,7 +3161,8 @@ class TrackingService : Service() {
         val mode = autoTrackingMotionEngine.snapshot().mode
         val (_, baseDistanceMeters) = TrackingLocationPolicy.getProfileParams(mode.profileIndex)
         if (baseDistanceMeters <= 0f) return
-        val accuracyThresholdMeters = resolveCurrentAccuracyFilter()
+        val runtimeContext = currentPositioningRuntimeContext(settings)
+        val accuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters
         if (measuredAccuracyMeters == null || measuredAccuracyMeters > accuracyThresholdMeters) return
         val nextBucket = computeElasticitySpeedBucket(observedSpeedMps)
         val nextDistance = computeElasticDistanceFilterMeters(baseDistanceMeters, nextBucket)
@@ -3038,7 +3222,7 @@ class TrackingService : Service() {
         startSensorWatchdog()
         stationaryPingController?.onPaused(
             reason = "pause_for_motion",
-            providerAvailable = isLocationServicesEnabled()
+            providerAvailable = isGpsProviderEnabled()
         )
         syncRuntimeStateStore()
         updateNotificationFromDb(broadcastStats = true)
@@ -3091,6 +3275,8 @@ class TrackingService : Service() {
         stationaryPingController?.onResumed(reason = reason)
         consecutiveStationaryPoints = 0
         stationaryAnchorLocation = null
+        stationaryRegionState = stationaryRegionState.clear()
+        stationaryRegionStore.clear()
         if (settingsRepository.getSettings().autoTrackingMode) {
             autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
         }
@@ -3122,7 +3308,7 @@ class TrackingService : Service() {
         if (shouldSuppressFastLockForAutoMotion(rejectReason = rejectReason, nowMs = nowMs)) {
             return
         }
-        val accuracyFilterMeters = resolveCurrentAccuracyFilter()
+        val accuracyFilterMeters = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
         if (
             !TrackingRuntimeOrchestrator.shouldAttemptFastLock(
                 FastLockTriggerInput(
@@ -3290,7 +3476,7 @@ class TrackingService : Service() {
         fastGpsLockPreferredSample = selectPreferredFastGpsSample(
             currentBest = fastGpsLockPreferredSample,
             candidate = sample,
-            desiredAccuracyMeters = resolveCurrentAccuracyFilter(),
+            desiredAccuracyMeters = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
         )
@@ -3306,7 +3492,7 @@ class TrackingService : Service() {
         ) {
             fastGpsLockFreshestSample = sample
         }
-        val threshold = resolveCurrentAccuracyFilter()
+        val threshold = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
         val earlyExitSampleWindow = fastGpsLockSampleCount in FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES..FAST_GPS_LOCK_MIN_SAMPLES
         if (earlyExitSampleWindow && isFreshAccurateLocation(sample, threshold)) {
             stopFastGpsLockWindow(reason = "early_lock_recovered")

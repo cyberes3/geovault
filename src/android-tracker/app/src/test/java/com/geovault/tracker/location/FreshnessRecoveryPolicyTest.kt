@@ -72,6 +72,8 @@ class FreshnessRecoveryPolicyTest {
             effectiveAccuracyThresholdMeters = 35f,
             candidateLocation = location(latitude = 45.0001, longitude = -122.0001, timeMs = 70_000L),
             anchor = RecoveryAnchorState.fromLocation(
+                trackerId = "tracker-1",
+                sessionBoundaryId = 1_000L,
                 location = location(latitude = 45.0, longitude = -122.0, timeMs = 10_000L),
                 radiusMeters = 50f,
                 source = "test",

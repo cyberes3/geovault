@@ -18,14 +18,53 @@ class QueueUploadOutcomePolicyTest {
     }
 
     @Test
-    fun finalOutcome_partialFailureIsTransientNotSuccess() {
-        assertEquals(
-            SyncFailureClass.TRANSIENT,
-            QueueUploadOutcomePolicy.finalOutcome(batchesSent = 1, interruptedByFailure = true)
+    fun finalResult_partialFailureIsTransientNotSuccess() {
+        val partialFailure = QueueUploadOutcomePolicy.finalResult(
+            batchesAttempted = 2,
+            batchesSent = 1,
+            rowsDeleted = 50,
+            visibleRowsSent = 10,
+            interruptedByFailure = true,
+            failureReason = QueueUploadFailureReason.HTTP_TRANSIENT,
         )
-        assertEquals(
-            SyncFailureClass.NONE,
-            QueueUploadOutcomePolicy.finalOutcome(batchesSent = 1, interruptedByFailure = false)
+        val success = QueueUploadOutcomePolicy.finalResult(
+            batchesAttempted = 1,
+            batchesSent = 1,
+            rowsDeleted = 50,
+            visibleRowsSent = 10,
+            interruptedByFailure = false,
         )
+
+        assertEquals(SyncFailureClass.TRANSIENT, partialFailure.failureClass)
+        assertEquals(1, partialFailure.batchesSent)
+        assertEquals(50, partialFailure.rowsDeleted)
+        assertEquals(10, partialFailure.visibleRowsSent)
+        assertEquals(SyncFailureClass.NONE, success.failureClass)
+    }
+
+    @Test
+    fun skippedResult_preservesSpecificReason() {
+        val result = QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.LOCK_BUSY)
+
+        assertEquals(SyncFailureClass.SKIPPED, result.failureClass)
+        assertEquals(QueueUploadSkipReason.LOCK_BUSY, result.skippedReason)
+        assertEquals(0, result.batchesAttempted)
+    }
+
+    @Test
+    fun finalResult_permanentHttpFailureRemainsPermanent() {
+        val result = QueueUploadOutcomePolicy.finalResult(
+            batchesAttempted = 1,
+            batchesSent = 0,
+            rowsDeleted = 0,
+            visibleRowsSent = 0,
+            interruptedByFailure = true,
+            failureReason = QueueUploadFailureReason.HTTP_PERMANENT,
+            httpStatusCode = 401,
+        )
+
+        assertEquals(SyncFailureClass.PERMANENT, result.failureClass)
+        assertEquals(QueueUploadFailureReason.HTTP_PERMANENT, result.failureReason)
+        assertEquals(401, result.httpStatusCode)
     }
 }

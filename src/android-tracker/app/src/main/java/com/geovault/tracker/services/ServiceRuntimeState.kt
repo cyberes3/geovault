@@ -1,5 +1,6 @@
 package com.geovault.tracker.services
 
+import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingLifecycleState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -201,8 +202,13 @@ data class TrackingRuntimeSnapshot(
     val activePointEmissionTrouble: Boolean = false,
     val activePointEmissionAccuracyTrouble: Boolean = false,
     val pointEmissionTroubleReason: String? = null,
+    val providerHealthReason: String = "unknown",
     val lastLocalPointPersistedAtMs: Long = 0L,
     val lastUploadSucceededAtMs: Long = 0L,
+    val uploadLastFailureClass: SyncFailureClass = SyncFailureClass.NONE,
+    val uploadConsecutiveFailures: Int = 0,
+    val currentSessionQueuedCount: Int = 0,
+    val backlogQueuedCount: Int = 0,
     val lastTrackedLatitude: Double? = null,
     val lastTrackedLongitude: Double? = null,
     val lastTrackedTimestampMs: Long = 0L,

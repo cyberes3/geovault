@@ -5,6 +5,8 @@ import android.location.Location
 import com.geovault.tracker.services.TrackingMotionMode
 
 data class RecoveryAnchorState(
+    val trackerId: String,
+    val sessionBoundaryId: Long,
     val latitude: Double,
     val longitude: Double,
     val timestampMs: Long,
@@ -26,12 +28,16 @@ data class RecoveryAnchorState(
 
     companion object {
         fun fromLocation(
+            trackerId: String,
+            sessionBoundaryId: Long,
             location: Location,
             radiusMeters: Float,
             source: String,
             motionMode: TrackingMotionMode,
         ): RecoveryAnchorState {
             return RecoveryAnchorState(
+                trackerId = trackerId,
+                sessionBoundaryId = sessionBoundaryId,
                 latitude = location.latitude,
                 longitude = location.longitude,
                 timestampMs = location.time,
@@ -51,6 +57,8 @@ class RecoveryAnchorStore(context: Context) {
     fun save(anchor: RecoveryAnchorState) {
         prefs.edit()
             .putString(KEY_LATITUDE, anchor.latitude.toString())
+            .putString(KEY_TRACKER_ID, anchor.trackerId)
+            .putLong(KEY_SESSION_BOUNDARY_ID, anchor.sessionBoundaryId)
             .putString(KEY_LONGITUDE, anchor.longitude.toString())
             .putLong(KEY_TIMESTAMP_MS, anchor.timestampMs)
             .putLong(KEY_ELAPSED_NANOS, anchor.elapsedRealtimeNanos)
@@ -61,15 +69,19 @@ class RecoveryAnchorStore(context: Context) {
             .apply()
     }
 
-    fun load(): RecoveryAnchorState? {
+    fun load(trackerId: String, sessionBoundaryId: Long): RecoveryAnchorState? {
         val timestamp = prefs.getLong(KEY_TIMESTAMP_MS, 0L)
         if (timestamp <= 0L) return null
+        if (prefs.getString(KEY_TRACKER_ID, null) != trackerId) return null
+        if (prefs.getLong(KEY_SESSION_BOUNDARY_ID, -1L) != sessionBoundaryId) return null
         val mode = prefs.getString(KEY_MOTION_MODE, null)
             ?.let { runCatching { TrackingMotionMode.valueOf(it) }.getOrNull() }
             ?: TrackingMotionMode.WALKING
         val accuracy = prefs.getFloat(KEY_ACCURACY_METERS, NO_ACCURACY)
             .takeIf { it != NO_ACCURACY }
         return RecoveryAnchorState(
+            trackerId = trackerId,
+            sessionBoundaryId = sessionBoundaryId,
             latitude = prefs.getString(KEY_LATITUDE, "0.0")?.toDoubleOrNull() ?: 0.0,
             longitude = prefs.getString(KEY_LONGITUDE, "0.0")?.toDoubleOrNull() ?: 0.0,
             timestampMs = timestamp,
@@ -90,6 +102,8 @@ class RecoveryAnchorStore(context: Context) {
 
     private companion object {
         private const val PREFS_NAME = "tracker_recovery_anchor_v1"
+        private const val KEY_TRACKER_ID = "tracker_id"
+        private const val KEY_SESSION_BOUNDARY_ID = "session_boundary_id"
         private const val KEY_LATITUDE = "latitude"
         private const val KEY_LONGITUDE = "longitude"
         private const val KEY_TIMESTAMP_MS = "timestamp_ms"
