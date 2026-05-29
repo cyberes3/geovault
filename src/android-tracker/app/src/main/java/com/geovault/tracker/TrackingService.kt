@@ -182,6 +182,7 @@ class TrackingService : Service() {
     private val pointFreshnessTracker = PointFreshnessTracker()
     private var lastLoggedPointEmissionTrouble: PointEmissionTrouble = PointEmissionTrouble.None
     private var lastAccuracyHoldLogKey: String? = null
+    private var lastLocationFilterLogSignature: String? = null
     private var lastPositioningDiagnosticSnapshotKey: String? = null
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
     private val autoTrackingMotionEvidenceGate = AutoTrackingMotionEvidenceGate()
@@ -311,6 +312,7 @@ class TrackingService : Service() {
         private const val LOCATION_REQUEST_REAPPLY_RETRY_MS = 10_000L
         private const val FIX_DELIVERY_WATCHDOG_INTERVAL_MS = 30_000L
         private const val FIX_DELIVERY_STALE_MS = 90_000L
+        private const val RECOVERY_HEARTBEAT_INTERVAL_MS = 15_000L
         private const val MAX_BATCHES_PER_PUSH = 10
         private const val EXTRAS_KEY_LOW_ACCURACY_FALLBACK = "low_accuracy_fallback"
         private const val EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER = "fallback_source_provider"
@@ -773,6 +775,7 @@ class TrackingService : Service() {
         uploadLivenessState = UploadLivenessState()
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
+        lastLocationFilterLogSignature = null
         lastPositioningDiagnosticSnapshotKey = null
         if (selectedTrackerId.isNotEmpty()) {
             restoreLocalFreshnessFromDatabase(
@@ -888,6 +891,7 @@ class TrackingService : Service() {
         pointFreshnessTracker.reset(sessionStartedAtMs = 0L)
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
+        lastLocationFilterLogSignature = null
         lastPositioningDiagnosticSnapshotKey = null
         autoTrackingMotionEvidenceGate.reset()
         stopAutoModeTick()
@@ -1132,28 +1136,38 @@ class TrackingService : Service() {
             },
         )
         result.policyMetrics?.let { metrics ->
-            val rawLat = metrics.rawLatitude ?: location.latitude
-            val rawLon = metrics.rawLongitude ?: location.longitude
-            val committedLat = metrics.committedLatitude?.toString() ?: "none"
-            val committedLon = metrics.committedLongitude?.toString() ?: "none"
-            runtimeTelemetry.decision(
-                name = "location_filter",
-                details = "raw=${metrics.rawDistanceMeters} effective=${metrics.effectiveDistanceMeters} " +
-                    "dt=${metrics.elapsedSeconds} impliedSpeed=${metrics.impliedSpeedMps} " +
-                    "accuracy=${metrics.accuracyMeters ?: -1f} rollingAverage=${metrics.rollingAverageStepMeters} " +
-                    "capCandidate=${metrics.capCandidateMeters} decision=${metrics.decision} " +
-                    "reason=${metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"} " +
-                    "rawLat=$rawLat rawLon=$rawLon " +
-                    "committedLat=$committedLat committedLon=$committedLon"
-            )
+            val filterReason = metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"
+            val signature = "decision=${metrics.decision}|reason=$filterReason|accepted=${result.accepted}"
+            if (signature != lastLocationFilterLogSignature) {
+                lastLocationFilterLogSignature = signature
+                val rawLat = metrics.rawLatitude ?: location.latitude
+                val rawLon = metrics.rawLongitude ?: location.longitude
+                val committedLat = metrics.committedLatitude?.toString() ?: "none"
+                val committedLon = metrics.committedLongitude?.toString() ?: "none"
+                runtimeTelemetry.decision(
+                    name = "location_filter",
+                    details = "raw=${metrics.rawDistanceMeters} effective=${metrics.effectiveDistanceMeters} " +
+                        "dt=${metrics.elapsedSeconds} impliedSpeed=${metrics.impliedSpeedMps} " +
+                        "accuracy=${metrics.accuracyMeters ?: -1f} rollingAverage=${metrics.rollingAverageStepMeters} " +
+                        "capCandidate=${metrics.capCandidateMeters} decision=${metrics.decision} " +
+                        "reason=$filterReason " +
+                        "rawLat=$rawLat rawLon=$rawLon " +
+                        "committedLat=$committedLat committedLon=$committedLon"
+                )
+            }
         }
         if (!result.accepted && result.policyMetrics == null) {
-            runtimeTelemetry.decision(
-                name = "location_filter",
-                details = "accepted=false reason=${result.rejectReason ?: result.adjustmentReason ?: "none"} " +
-                    "accuracy=${result.lastAccuracyMeters ?: -1f} " +
-                    "lat=${location.latitude} lon=${location.longitude}"
-            )
+            val filterReason = result.rejectReason ?: result.adjustmentReason ?: "none"
+            val signature = "decision=none|reason=$filterReason|accepted=false"
+            if (signature != lastLocationFilterLogSignature) {
+                lastLocationFilterLogSignature = signature
+                runtimeTelemetry.decision(
+                    name = "location_filter",
+                    details = "accepted=false reason=$filterReason " +
+                        "accuracy=${result.lastAccuracyMeters ?: -1f} " +
+                        "lat=${location.latitude} lon=${location.longitude}"
+                )
+            }
         }
         if (result.accepted && result.pointPersisted) {
             // Committed lat/lon (post-clip for `OUTLIER_CAPPED`) --
@@ -2236,9 +2250,15 @@ class TrackingService : Service() {
         held: Boolean,
         pointEmissionTrouble: PointEmissionTrouble,
     ): String {
-        return "raw=${incomingAccuracyMeters ?: -1f}|displayed=${displayedAccuracyMeters ?: -1f}|" +
+        return "raw=${accuracyMetersBucket(incomingAccuracyMeters)}|" +
+            "displayed=${accuracyMetersBucket(displayedAccuracyMeters)}|" +
             "held=$held|force=${pointEmissionTrouble.active}|reason=${pointEmissionTrouble.reason ?: "none"}|" +
             "accBlocked=${pointEmissionTrouble.accuracyBlocked}"
+    }
+
+    private fun accuracyMetersBucket(meters: Float?): Int {
+        if (meters == null || !meters.isFinite() || meters < 0f) return -1
+        return meters.toInt()
     }
 
     private fun logPointEmissionTroubleTransition(
@@ -2450,11 +2470,7 @@ class TrackingService : Service() {
         recoveryHeartbeatJob = serviceScope.launch {
             while (isTracking) {
                 TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
-                runtimeEventPublisher.publish(
-                    type = RuntimeServiceEventType.HEARTBEAT,
-                    reason = "recovery_heartbeat"
-                )
-                delay(1_000L)
+                delay(RECOVERY_HEARTBEAT_INTERVAL_MS)
             }
         }
     }

@@ -2,6 +2,7 @@ package com.geovault.tracker.presentation
 
 import android.app.Application
 import android.os.SystemClock
+import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -577,14 +578,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     displayedTrackerId = displayedTrackerId,
                     displayedTrackerName = displayedTrackerName
                 )
-                GeoVaultCaptureLog.d(
-                    TAG,
-                    "map_update vm_runtime_snapshot mode=${current.mode} selected=${snap.selectedTrackerId.trim()} " +
-                        "localActive=${snap.localRecordingActive} localId=${snap.locallyRecordedTrackerId.trim()} " +
-                        "sessionStart=${snap.sessionStartTimeMs} lastTs=${snap.lastTrackedTimestampMs} " +
-                        "lat=${snap.lastTrackedLatitude} lon=${snap.lastTrackedLongitude} " +
-                        "displayed=$displayedTrackerId trail=${current.trail.size} multi=${current.allQueueTrailsByTracker.mapSizes()}"
-                )
+                val runtimeSnapshotSignature =
+                    "mode=${current.mode}|selected=${snap.selectedTrackerId.trim()}|local=${snap.localRecordingActive}|" +
+                        "trail=${current.trail.size}|multi=${current.allQueueTrailsByTracker.mapSizes()}|" +
+                        "lastTs=${snap.lastTrackedTimestampMs}"
+                if (CaptureLogThrottle.shouldLogOnChange("vm_runtime_snapshot", runtimeSnapshotSignature)) {
+                    GeoVaultCaptureLog.d(
+                        TAG,
+                        "map_update vm_runtime_snapshot mode=${current.mode} selected=${snap.selectedTrackerId.trim()} " +
+                            "localActive=${snap.localRecordingActive} localId=${snap.locallyRecordedTrackerId.trim()} " +
+                            "sessionStart=${snap.sessionStartTimeMs} lastTs=${snap.lastTrackedTimestampMs} " +
+                            "lat=${snap.lastTrackedLatitude} lon=${snap.lastTrackedLongitude} " +
+                            "displayed=$displayedTrackerId trail=${current.trail.size} multi=${current.allQueueTrailsByTracker.mapSizes()}"
+                    )
+                }
                 val prevLocalRecording = lastObservedLocalRecordingActive
                 lastObservedLocalRecordingActive = snap.localRecordingActive
                 if (prevLocalRecording != null && !prevLocalRecording && snap.localRecordingActive) {
@@ -636,11 +643,18 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     TrackerMapTrailReloadReason.GenericMapRefresh
                 }
-                GeoVaultCaptureLog.d(
-                    TAG,
-                    "map_update vm_runtime_reload_request reason=$reloadReason recordingTransitioned=$recordingTransitioned " +
-                        "prevLocal=$prevLocalRecording currentLocal=${snap.localRecordingActive}"
-                )
+                if (recordingTransitioned ||
+                    CaptureLogThrottle.shouldLogOnChange(
+                        "vm_runtime_reload_request",
+                        "reason=$reloadReason|local=${snap.localRecordingActive}",
+                    )
+                ) {
+                    GeoVaultCaptureLog.d(
+                        TAG,
+                        "map_update vm_runtime_reload_request reason=$reloadReason recordingTransitioned=$recordingTransitioned " +
+                            "prevLocal=$prevLocalRecording currentLocal=${snap.localRecordingActive}"
+                    )
+                }
                 requestRuntimeTrailReload(reloadReason)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
@@ -653,11 +667,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             TrackPointBus.events.collect { point ->
-                GeoVaultCaptureLog.d(
-                    TAG,
-                    "map_update vm_bus_collect source=${point.source} track=${point.trackId.trim()} " +
-                        "ts=${point.timestampMs} order=${point.orderingKey} lat=${point.lat} lon=${point.lon}"
-                )
                 pointEventChannel.send(point)
             }
         }
@@ -667,11 +676,16 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         // the combined flow below so reconcile inputs come from a single coherent snapshot.
         viewModelScope.launch {
             LiveStreamRuntimeStateStore.state.collectLatest { snapshot ->
-                GeoVaultCaptureLog.d(
-                    TAG,
-                    "map_update vm_stream_snapshot wants=${snapshot.wantsSubscription} ended=${snapshot.subscriptionEnded} " +
-                        "health=${snapshot.health} active=${snapshot.activeTrackerIds.sorted()} failure=${snapshot.failureReason}"
-                )
+                val streamSignature =
+                    "wants=${snapshot.wantsSubscription}|ended=${snapshot.subscriptionEnded}|health=${snapshot.health}|" +
+                        "active=${snapshot.activeTrackerIds.sorted()}|failure=${snapshot.failureReason}"
+                if (CaptureLogThrottle.shouldLogOnChange("vm_stream_snapshot", streamSignature)) {
+                    GeoVaultCaptureLog.d(
+                        TAG,
+                        "map_update vm_stream_snapshot wants=${snapshot.wantsSubscription} ended=${snapshot.subscriptionEnded} " +
+                            "health=${snapshot.health} active=${snapshot.activeTrackerIds.sorted()} failure=${snapshot.failureReason}"
+                    )
+                }
                 // STREAM-STATE-MACHINE: an active session = the user/app expressed intent AND the
                 // orchestrator hasn't terminated (cleanly stopped or permanently failed). The
                 // active -> ended transition is what triggers lease cleanup below.
@@ -1516,14 +1530,20 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val nextRenderState = buildMapRenderState(snapshot)
         val nextBounds = trailBoundsOrNull(snapshot, nowMs)
         val nextSelectionLockPoint = selectionLockPointOrNull(snapshot)
-        GeoVaultCaptureLog.d(
-            TAG,
-            "map_update vm_render_package mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
-                "selected=${snapshot.plan.selectedTrackerId} single=${snapshot.singleTrail.trailSummary()} " +
-                "multi=${snapshot.renderTrailsByTracker.mapSizes()} remote=${snapshot.acceptedRemoteLastPoints.keys.sorted()} " +
-                "liveHead=${effectiveSession.liveHead} bounds=${nextBounds.boundsSummary()} " +
-                "selectionLock=${_uiState.value.selectionLockTrackerId.trim()} selectionPoint=$nextSelectionLockPoint"
-        )
+        val renderSignature =
+            "mode=${snapshot.mode}|displayed=${snapshot.plan.displayedTrackerId}|single=${snapshot.singleTrail.size}|" +
+                "multi=${snapshot.renderTrailsByTracker.mapSizes()}|liveHead=${effectiveSession.liveHead}|" +
+                "bounds=${nextBounds.boundsSummary()}|selectionLock=${_uiState.value.selectionLockTrackerId.trim()}"
+        if (CaptureLogThrottle.shouldLogOnChange("vm_render_package", renderSignature)) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update vm_render_package mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
+                    "selected=${snapshot.plan.selectedTrackerId} single=${snapshot.singleTrail.trailSummary()} " +
+                    "multi=${snapshot.renderTrailsByTracker.mapSizes()} remote=${snapshot.acceptedRemoteLastPoints.keys.sorted()} " +
+                    "liveHead=${effectiveSession.liveHead} bounds=${nextBounds.boundsSummary()} " +
+                    "selectionLock=${_uiState.value.selectionLockTrackerId.trim()} selectionPoint=$nextSelectionLockPoint"
+            )
+        }
         _renderPackage.update { current ->
             // RENDER-COALESCE: every _uiState tick previously bumped `revision`, which made every
             // downstream collector (camera effects, polyline rerenders, marker refreshes) treat
@@ -1579,6 +1599,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 bounds = bounds,
             )
         )
+        if (resolution == lastCameraResolution) return
         GeoVaultCaptureLog.d(
             TAG,
             "map_update vm_camera_resolve mode=${state.mode} follow=${state.followLockEnabled} " +
@@ -1587,7 +1608,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 "liveFit=${state.liveActiveFitEnabled} bounds=${bounds.boundsSummary()} reason=${resolution.reason} " +
                 "center=${resolution.centerLat},${resolution.centerLon}"
         )
-        if (resolution == lastCameraResolution) return
         lastCameraResolution = resolution
         val id = nextCameraDirectiveId++
         _cameraDirective.value = when (resolution.reason) {
@@ -2057,10 +2077,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 reason = reason,
                 plan = sessionPlan.trailReloadPlan,
             )
-            GeoVaultCaptureLog.d(
-                TAG,
-                "map_update vm_reload_skip_source reason=$reason source=${sessionPlan.trailReloadPlan.source} plan=$sessionPlan"
-            )
+            val skipSignature = "reason=$reason|source=${sessionPlan.trailReloadPlan.source}"
+            if (CaptureLogThrottle.shouldLogOnChange("vm_reload_skip_source", skipSignature)) {
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update vm_reload_skip_source reason=$reason source=${sessionPlan.trailReloadPlan.source} " +
+                        "displayed=${sessionPlan.displayedTrackerId} trail=${state.trail.size}"
+                )
+            }
             return
         }
         // RE-FIT AFTER FETCH: every reload that legitimately hit the server can move state.trail
@@ -2282,10 +2306,13 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         )
         val queueOverlay = loaded.queueOverlaysByTracker[overlayTrackerId].orEmpty()
         if (queueOverlay.isEmpty()) {
-            GeoVaultCaptureLog.d(
-                TAG,
-                "map_update vm_local_overlay_skip_empty reason=$reason source=${plan.source} overlay=$overlayTrackerId"
-            )
+            val skipSignature = "reason=$reason|source=${plan.source}|overlay=$overlayTrackerId"
+            if (CaptureLogThrottle.shouldLogOnChange("vm_local_overlay_skip_empty", skipSignature)) {
+                GeoVaultCaptureLog.d(
+                    TAG,
+                    "map_update vm_local_overlay_skip_empty reason=$reason source=${plan.source} overlay=$overlayTrackerId"
+                )
+            }
             return
         }
 
@@ -2572,14 +2599,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private fun handleTrackPointEvent(point: TrackPointEvent) {
         val nowMs = System.currentTimeMillis()
         val snapshot = buildRawSessionSnapshotForState(_uiState.value, nowMs)
-        GeoVaultCaptureLog.d(
-            TAG,
-            "map_update vm_point_reduce_start source=${point.source} track=${point.trackId.trim()} " +
-                "ts=${point.timestampMs} mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
-                "acceptedRemote=${snapshot.plan.acceptedRemoteTrackerIds.sorted()} " +
-                "localOverlay=${snapshot.plan.localOverlayTrackerIds.sorted()} " +
-                "singleBefore=${snapshot.singleTrail.trailSummary()} multiBefore=${snapshot.renderTrailsByTracker.mapSizes()}"
-        )
         val reduction = TrackerMapSessionEngine.reducePoint(
             TrackerMapSessionPointInput(
                 snapshot = snapshot,
@@ -2591,14 +2610,21 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 nowMs = nowMs,
             )
         )
-        GeoVaultCaptureLog.d(
-            TAG,
-            "map_update vm_point_reduce_result source=${point.source} track=${point.trackId.trim()} " +
-                "accepted=${reduction.acceptedBySourcePolicy} update=${reduction.shouldUpdate} " +
-                "singleAfter=${reduction.nextSnapshot.singleTrail.trailSummary()} " +
-                "multiAfter=${reduction.nextSnapshot.renderTrailsByTracker.mapSizes()} " +
-                "remoteAfter=${reduction.nextSnapshot.acceptedRemoteLastPoints.keys.sorted()}"
-        )
+        if (reduction.shouldUpdate ||
+            CaptureLogThrottle.shouldLogOnChange(
+                "vm_point_reduce_reject",
+                "source=${point.source}|track=${point.trackId.trim()}|accepted=${reduction.acceptedBySourcePolicy}",
+            )
+        ) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update vm_point_reduce_result source=${point.source} track=${point.trackId.trim()} " +
+                    "accepted=${reduction.acceptedBySourcePolicy} update=${reduction.shouldUpdate} " +
+                    "singleAfter=${reduction.nextSnapshot.singleTrail.trailSummary()} " +
+                    "multiAfter=${reduction.nextSnapshot.renderTrailsByTracker.mapSizes()} " +
+                    "remoteAfter=${reduction.nextSnapshot.acceptedRemoteLastPoints.keys.sorted()}"
+            )
+        }
         if (reduction.shouldUpdate) {
             val nextState = stateWithRefreshedSelectionCard(
                 state = reduction.nextSnapshot.uiState,

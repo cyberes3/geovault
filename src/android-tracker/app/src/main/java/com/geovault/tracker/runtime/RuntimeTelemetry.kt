@@ -1,29 +1,46 @@
 package com.geovault.tracker.runtime
 
 import android.content.Context
+import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
 
 class RuntimeTelemetry(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun event(name: String, details: String) {
-        val line = "${System.currentTimeMillis()}|$name|$details"
-        synchronized(this) {
-            val entries = prefs.getString(KEY_RING, "")
-                .orEmpty()
-                .lineSequence()
-                .filter { it.isNotBlank() }
-                .toMutableList()
-            entries.add(line)
-            val trimmed = if (entries.size > MAX_ENTRIES) entries.takeLast(MAX_ENTRIES) else entries
-            prefs.edit().putString(KEY_RING, trimmed.joinToString("\n")).apply()
+    fun event(
+        name: String,
+        details: String,
+        persistRing: Boolean = true,
+        minCaptureLogIntervalMs: Long = 0L,
+    ) {
+        if (minCaptureLogIntervalMs > 0L &&
+            !CaptureLogThrottle.shouldLogInterval("runtime_event:$name", minCaptureLogIntervalMs)
+        ) {
+            return
+        }
+        if (persistRing) {
+            val line = "${System.currentTimeMillis()}|$name|$details"
+            synchronized(this) {
+                val entries = prefs.getString(KEY_RING, "")
+                    .orEmpty()
+                    .lineSequence()
+                    .filter { it.isNotBlank() }
+                    .toMutableList()
+                entries.add(line)
+                val trimmed = if (entries.size > MAX_ENTRIES) entries.takeLast(MAX_ENTRIES) else entries
+                prefs.edit().putString(KEY_RING, trimmed.joinToString("\n")).apply()
+            }
         }
         GeoVaultCaptureLog.i(TAG, "$name $details")
     }
 
-    fun decision(name: String, details: String) {
-        event(name = "decision:$name", details = details)
+    fun decision(name: String, details: String, minCaptureLogIntervalMs: Long = 0L) {
+        event(
+            name = "decision:$name",
+            details = details,
+            minCaptureLogIntervalMs = minCaptureLogIntervalMs,
+        )
     }
 
     fun transition(name: String, fromState: RuntimeState, toState: RuntimeState) {

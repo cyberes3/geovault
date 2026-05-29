@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import android.content.Context
 import android.content.Intent
+import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.runtime.RuntimeTelemetry
@@ -64,12 +65,14 @@ internal object TrackingServiceDeliveryHelper {
         }
         val action = serviceIntent.action ?: "none"
         return try {
-            GeoVaultCaptureLog.d(TAG, "deliver source=${source.logName} action=$action path=startService")
+            if (CaptureLogThrottle.shouldLogInterval("tracking_service_delivery_success", 60_000L)) {
+                GeoVaultCaptureLog.d(TAG, "deliver source=${source.logName} action=$action path=startService")
+                telemetry.decision(
+                    name = "tracking_service_delivery",
+                    details = "source=${source.logName} action=$action path=startService result=started",
+                )
+            }
             starter.startService(appContext, serviceIntent)
-            telemetry.decision(
-                "tracking_service_delivery",
-                "source=${source.logName} action=$action path=startService result=started"
-            )
             TrackingServiceDeliveryResult.Started(source, foregroundEscalated = false)
         } catch (startRejected: IllegalStateException) {
             GeoVaultCaptureLog.w(

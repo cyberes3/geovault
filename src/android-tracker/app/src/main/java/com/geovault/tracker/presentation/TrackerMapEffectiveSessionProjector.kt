@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
@@ -56,14 +57,19 @@ object TrackerMapEffectiveSessionProjector {
             )
         )
         val liveHead = resolveLiveHead(snapshot)
-        GeoVaultCaptureLog.d(
-            TAG,
-            "map_update effective_project mode=${state.mode} displayed=${plan.displayedTrackerId} " +
-                "singleRaw=${state.trail.size} singleEffective=${snapshot.singleTrail.size} " +
-                "multiRaw=${state.allQueueTrailsByTracker.mapValues { it.value.size }} " +
-                "multiEffective=${snapshot.renderTrailsByTracker.mapValues { it.value.size }} " +
-                "visible=${input.visibleTrackerIds?.sorted()} liveHead=$liveHead"
-        )
+        val projectSignature =
+            "mode=${state.mode}|displayed=${plan.displayedTrackerId}|single=${state.trail.size}->${snapshot.singleTrail.size}|" +
+                "multi=${snapshot.renderTrailsByTracker.mapValues { it.value.size }}|liveHead=$liveHead"
+        if (CaptureLogThrottle.shouldLogOnChange("effective_project", projectSignature)) {
+            GeoVaultCaptureLog.d(
+                TAG,
+                "map_update effective_project mode=${state.mode} displayed=${plan.displayedTrackerId} " +
+                    "singleRaw=${state.trail.size} singleEffective=${snapshot.singleTrail.size} " +
+                    "multiRaw=${state.allQueueTrailsByTracker.mapValues { it.value.size }} " +
+                    "multiEffective=${snapshot.renderTrailsByTracker.mapValues { it.value.size }} " +
+                    "visible=${input.visibleTrackerIds?.sorted()} liveHead=$liveHead"
+            )
+        }
         return TrackerMapEffectiveSession(
             snapshot = snapshot,
             liveHead = liveHead,

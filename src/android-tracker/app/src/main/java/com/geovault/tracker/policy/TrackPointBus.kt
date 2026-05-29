@@ -1,5 +1,6 @@
 package com.geovault.tracker.policy
 
+import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
@@ -73,13 +74,6 @@ object TrackPointBus {
 
     fun publish(event: TrackPointEvent) {
         val orderedEvent = event.withOrderingKey()
-        GeoVaultCaptureLog.d(
-            TAG,
-            "map_update bus_publish source=${orderedEvent.source} track=${orderedEvent.trackId.trim()} " +
-                "ts=${orderedEvent.timestampMs} order=${orderedEvent.orderingKey} " +
-                "lat=${orderedEvent.lat} lon=${orderedEvent.lon} " +
-                "paused=${localDeliveryPaused.get()} quality=${orderedEvent.quality}"
-        )
         if (orderedEvent.source == TrackPointSource.LOCAL_GPS && localDeliveryPaused.get()) {
             synchronized(pausedLocalEvents) {
                 if (pausedLocalEvents.size >= PAUSED_BUFFER_CAPACITY) {
@@ -91,11 +85,13 @@ object TrackPointBus {
                     )
                 }
                 pausedLocalEvents.addLast(orderedEvent)
-                GeoVaultCaptureLog.d(
-                    TAG,
-                    "map_update bus_buffer_local track=${orderedEvent.trackId.trim()} " +
-                        "ts=${orderedEvent.timestampMs} buffered=${pausedLocalEvents.size}"
-                )
+                if (CaptureLogThrottle.shouldLogInterval("bus_buffer_local", 30_000L)) {
+                    GeoVaultCaptureLog.d(
+                        TAG,
+                        "map_update bus_buffer_local track=${orderedEvent.trackId.trim()} " +
+                            "ts=${orderedEvent.timestampMs} buffered=${pausedLocalEvents.size}"
+                    )
+                }
             }
             return
         }

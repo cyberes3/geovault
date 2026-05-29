@@ -1,5 +1,6 @@
 package com.geovault.tracker.runtime
 
+import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.tracker.location.TrackingLifecycleState
 
 class RuntimeCommandHandler(
@@ -178,10 +179,11 @@ class RuntimeCommandHandler(
             state = stateForHealth,
             isServiceRunning = repository.isServiceRunning()
         )
-        telemetry.event(
-            "watchdog",
+        val watchdogDetails =
             "healthy=${health.isHealthy} shouldRecover=${health.shouldRecover} reason=${health.reason}"
-        )
+        if (CaptureLogThrottle.shouldLogOnChange("watchdog", watchdogDetails)) {
+            telemetry.event(name = "watchdog", details = watchdogDetails)
+        }
         val recovered = if (health.shouldRecover) {
             handleCommand(
                 current = reconciledCurrent.copy(runtime = stateForHealth),
@@ -313,10 +315,12 @@ class RuntimeCommandHandler(
                 )
             }
         }
-        telemetry.event(
-            name = "service_event",
-            details = "type=${event.type} trigger=${event.trigger} reason=${event.reason} trackingRunning=${next.trackingRunning}"
-        )
+        if (event.type != RuntimeServiceEventType.HEARTBEAT) {
+            telemetry.event(
+                name = "service_event",
+                details = "type=${event.type} trigger=${event.trigger} reason=${event.reason} trackingRunning=${next.trackingRunning}"
+            )
+        }
         val emittedEffects = when (event.type) {
             RuntimeServiceEventType.TRACKING_STARTED -> {
                 effects.scheduleWatchdog()
