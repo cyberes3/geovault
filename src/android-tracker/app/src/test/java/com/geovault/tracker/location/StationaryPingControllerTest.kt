@@ -93,6 +93,65 @@ class StationaryPingControllerTest {
     }
 
     @Test
+    fun onPaused_customSparseInterval_firesAfterScaledDuration() = runTest {
+        val sparseIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS * 2
+        val actions = RecordingActions()
+        val controller = controller(actions, intervalMs = sparseIntervalMs)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(sparseIntervalMs - 1L)
+        runCurrent()
+        assertTrue(actions.requests.isEmpty())
+
+        advanceTimeBy(1L)
+        runCurrent()
+
+        assertEquals(listOf("interval_elapsed"), actions.requests)
+    }
+
+    @Test
+    fun reschedulePausedPing_whenNotScheduled_doesNotRequestProbe() = runTest {
+        val actions = RecordingActions()
+        val controller = controller(actions)
+
+        controller.reschedulePausedPing(
+            newIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS * 2,
+            providerAvailable = true,
+            reason = "sparse_tracking_changed",
+        )
+
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS * 2)
+        runCurrent()
+        assertTrue(actions.requests.isEmpty())
+    }
+
+    @Test
+    fun reschedulePausedPing_whenScheduled_restartsWithNewInterval() = runTest {
+        val actions = RecordingActions()
+        val controller = controller(actions)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS - 1_000L)
+        runCurrent()
+        assertTrue(actions.requests.isEmpty())
+
+        val sparseIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS * 2
+        controller.reschedulePausedPing(
+            newIntervalMs = sparseIntervalMs,
+            providerAvailable = true,
+            reason = "sparse_tracking_changed",
+        )
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS)
+        runCurrent()
+        assertTrue(actions.requests.isEmpty())
+
+        advanceTimeBy(sparseIntervalMs - StationaryPingController.DEFAULT_INTERVAL_MS)
+        runCurrent()
+        assertEquals(listOf("interval_elapsed"), actions.requests)
+        assertTrue(actions.events.any { it.name == "stationary_ping_reschedule_cancelled" })
+    }
+
+    @Test
     fun onPausedAfterDueProbe_schedulesNextCycle() = runTest {
         val actions = RecordingActions()
         val controller = controller(actions)
@@ -107,10 +166,14 @@ class StationaryPingControllerTest {
         assertEquals(listOf("interval_elapsed", "interval_elapsed"), actions.requests)
     }
 
-    private fun TestScope.controller(actions: RecordingActions): StationaryPingController {
+    private fun TestScope.controller(
+        actions: RecordingActions,
+        intervalMs: Long = StationaryPingController.DEFAULT_INTERVAL_MS,
+    ): StationaryPingController {
         return StationaryPingController(
             scope = this,
             actions = actions,
+            initialIntervalMs = intervalMs,
             clock = object : StationaryPingClock {
                 override fun elapsedRealtimeMs(): Long = testScheduler.currentTime
             },

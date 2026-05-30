@@ -1,6 +1,7 @@
 package com.geovault.tracker.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrackerSettingsWritePolicyTest {
@@ -16,6 +17,12 @@ class TrackerSettingsWritePolicyTest {
         val s = policy.sanitize(raw)
         assertEquals(TrackerSettings.MAX_ACCURACY_FILTER_METERS, s.accuracyFilterMeters, 0.0001f)
         assertEquals(TrackerSettings.MAX_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC, s.lowAccuracyFallbackTimeoutSec)
+    }
+
+    @Test
+    fun sanitize_preservesSparseTrackingFlag() {
+        val base = TrackerSettings(sparseTracking = true)
+        assertTrue(policy.sanitize(base).sparseTracking)
     }
 
     @Test

@@ -6,6 +6,7 @@ data class TrackerSettings(
     val lowAccuracyFallbackTimeoutSec: Long = DEFAULT_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC,
     val sendExtendedData: Boolean = true,
     val significantDataOnly: Boolean = true,
+    val sparseTracking: Boolean = false,
     val startOnBoot: Boolean = false,
     val startTrackingOnLaunch: Boolean = false,
     val keepScreenOnWhileViewingMap: Boolean = DEFAULT_KEEP_SCREEN_ON_WHILE_VIEWING_MAP,

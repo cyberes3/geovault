@@ -493,6 +493,8 @@
     <string name="extended_params_help_text">Include extra sensor and telemetry fields with each point.</string>
     <string name="significant_motion_label">Only log if motion detected</string>
     <string name="significant_motion_help_text">Only record points after your device detects meaningful movement.</string>
+    <string name="sparse_tracking_label">Sparse tracking</string>
+    <string name="sparse_tracking_help_text">Record about half as many points by using longer GPS intervals, larger distance filters, and less frequent stationary check-ins. Saves battery when you do not need a dense track. Motion detection and accuracy filtering are unchanged.</string>
     <string name="start_on_boot_label">Start tracking on boot</string>
     <string name="start_on_boot_help_text">Automatically begin tracking after the device restarts, post first unlock.</string>
     <string name="start_tracking_on_launch_label">Start tracking when app is launched</string>

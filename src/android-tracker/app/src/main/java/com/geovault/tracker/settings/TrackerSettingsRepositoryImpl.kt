@@ -73,6 +73,9 @@ class TrackerSettingsRepositoryImpl(
     override fun setSignificantDataOnly(enabled: Boolean) =
         enqueueMutation("set_significant_data_only") { it.copy(significantDataOnly = enabled) }
 
+    override fun setSparseTracking(enabled: Boolean) =
+        enqueueMutation("set_sparse_tracking") { it.copy(sparseTracking = enabled) }
+
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) =
         enqueueMutation("set_low_accuracy_fallback_enabled") { it.copy(lowAccuracyFallbackEnabled = enabled) }
 
@@ -230,7 +233,7 @@ class TrackerSettingsRepositoryImpl(
     }
 
     private fun settingsSummary(settings: TrackerSettings): String {
-        return "startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
+        return "startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},sparse=${settings.sparseTracking},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
     }
 
     private data class SettingsCommand(

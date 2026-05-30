@@ -23,8 +23,9 @@ class StationaryPingController(
     private val scope: CoroutineScope,
     private val actions: StationaryPingActions,
     private val clock: StationaryPingClock = AndroidStationaryPingClock,
-    private val intervalMs: Long = DEFAULT_INTERVAL_MS,
+    initialIntervalMs: Long = DEFAULT_INTERVAL_MS,
 ) {
+    private var intervalMs: Long = initialIntervalMs
     private var job: Job? = null
     private var dueAtElapsedMs: Long = 0L
     private var isProviderAvailable: Boolean = true
@@ -82,6 +83,15 @@ class StationaryPingController(
 
     fun onStopped(reason: String) {
         cancel(reason = reason, eventName = "stationary_ping_stopped")
+    }
+
+    fun reschedulePausedPing(newIntervalMs: Long, providerAvailable: Boolean, reason: String) {
+        intervalMs = newIntervalMs
+        val wasScheduled = job != null || dueAtElapsedMs > 0L
+        cancel(reason = reason, eventName = "stationary_ping_reschedule_cancelled")
+        if (wasScheduled) {
+            onPaused(reason = reason, providerAvailable = providerAvailable)
+        }
     }
 
     private fun dispatchIfReady(reason: String) {

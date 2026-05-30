@@ -37,6 +37,17 @@ class StationaryFreshnessCoordinatorTest {
     }
 
     @Test
+    fun nextFreshnessDueAtMs_sparseProbeInterval_usesDoubledWindow() = runTest {
+        val actions = RecordingActions()
+        val coordinator = coordinator(actions)
+        coordinator.enterRegion(anchor = anchor(), nowMs = 2_000L)
+        coordinator.markFreshnessPointPersisted(nowMs = 10_000L)
+
+        val sparseIntervalMs = 300_000L * 2
+        assertEquals(10_000L + sparseIntervalMs, coordinator.nextFreshnessDueAtMs(intervalMs = sparseIntervalMs))
+    }
+
+    @Test
     fun markFreshnessPointPersistedStoresDurableDueBase() = runTest {
         val actions = RecordingActions()
         val coordinator = coordinator(actions)

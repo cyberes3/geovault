@@ -12,6 +12,7 @@ interface TrackerSettingsRepository {
 
     fun setSendExtendedData(enabled: Boolean)
     fun setSignificantDataOnly(enabled: Boolean)
+    fun setSparseTracking(enabled: Boolean)
     fun setLowAccuracyFallbackEnabled(enabled: Boolean)
     fun setLowAccuracyFallbackTimeoutSec(value: Long)
     fun setStartOnBoot(enabled: Boolean)

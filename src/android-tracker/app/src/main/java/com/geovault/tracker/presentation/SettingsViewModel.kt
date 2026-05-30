@@ -111,6 +111,10 @@ class SettingsViewModel(
         trackerSettingsRepository.setSignificantDataOnly(enabled)
     }
 
+    fun setSparseTracking(enabled: Boolean) {
+        trackerSettingsRepository.setSparseTracking(enabled)
+    }
+
     fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {
         trackerSettingsRepository.setKeepScreenOnWhileViewingMap(enabled)
     }

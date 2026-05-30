@@ -29,7 +29,8 @@ data class TrackerPositioningRuntimeContext(
             effectiveDistanceFilterMeters: Float,
             localPointMaxGapMs: Long,
         ): TrackerPositioningRuntimeContext {
-            val preset = PositioningPresets.forMotionMode(activeMotionMode)
+            val density = PositioningDensity.from(settings)
+            val preset = PositioningPresets.forMotionMode(activeMotionMode, density)
             val filterConfig = PositioningPolicyConfig.ingestConfig(
                 maxAccuracyMeters = preset.accuracyThresholdMeters,
                 motionMode = activeMotionMode,
@@ -45,7 +46,9 @@ data class TrackerPositioningRuntimeContext(
                 recoveryConfig = preset.recoveryConfig(localPointMaxGapMs),
                 stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
                 stationaryAccuracyCeilingMeters = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
-                stationaryProbeIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS,
+                stationaryProbeIntervalMs = density.scaleDurationMs(
+                    StationaryPingController.DEFAULT_INTERVAL_MS
+                ),
             )
         }
     }

@@ -97,6 +97,37 @@ class PausedFreshnessPolicyTest {
     }
 
     @Test
+    fun evaluate_sparseProbeInterval_requiresFullTenMinutesSinceLastFreshness() {
+        val sparseIntervalMs = FIVE_MINUTES * 2
+        val anchor = location(lat = 47.0, lon = -122.0, accuracy = 6f, timeMs = 0L)
+        val candidate = location(lat = 47.0, lon = -122.0, accuracy = 8f, timeMs = sparseIntervalMs)
+
+        val tooSoon = PausedFreshnessPolicy.evaluate(
+            anchorLocation = anchor,
+            candidateLocation = candidate,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            accuracyCeilingMeters = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
+            freshnessIntervalMs = sparseIntervalMs,
+            nowMs = sparseIntervalMs,
+            lastFreshnessPointAtMs = FIVE_MINUTES,
+        )
+        assertFalse(tooSoon.shouldEmit)
+        assertEquals(PausedFreshnessDecisionReason.TOO_SOON, tooSoon.reason)
+
+        val emit = PausedFreshnessPolicy.evaluate(
+            anchorLocation = anchor,
+            candidateLocation = candidate,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            accuracyCeilingMeters = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
+            freshnessIntervalMs = sparseIntervalMs,
+            nowMs = sparseIntervalMs + 1_000L,
+            lastFreshnessPointAtMs = 0L,
+        )
+        assertTrue(emit.shouldEmit)
+        assertEquals(PausedFreshnessDecisionReason.EMIT, emit.reason)
+    }
+
+    @Test
     fun evaluate_lessThanIntervalSinceLastFreshness_skipsTooSoon() {
         val anchor = location(lat = 47.0, lon = -122.0, accuracy = 6f, timeMs = 0L)
         val candidate = location(lat = 47.0, lon = -122.0, accuracy = 8f, timeMs = FIVE_MINUTES)

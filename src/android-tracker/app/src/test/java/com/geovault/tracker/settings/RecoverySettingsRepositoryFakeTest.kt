@@ -57,6 +57,8 @@ private class StubTrackerSettingsRepository(
 
     override fun setSignificantDataOnly(enabled: Boolean) = Unit
 
+    override fun setSparseTracking(enabled: Boolean) = Unit
+
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) = Unit
 
     override fun setLowAccuracyFallbackTimeoutSec(value: Long) = Unit

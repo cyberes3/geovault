@@ -13,6 +13,14 @@ data class PositioningPresetValues(
     val filterTuning: MotionProfileTuning,
     val recoverySpeedCapMps: Float,
 ) {
+    fun withDensity(density: PositioningDensity): PositioningPresetValues {
+        if (density == PositioningDensity.Normal) return this
+        return copy(
+            locationIntervalSec = density.scaleIntervalSec(locationIntervalSec),
+            distanceFilterMeters = density.scaleDistanceMeters(distanceFilterMeters),
+        )
+    }
+
     fun recoveryConfig(maxLocalPointGapMs: Long): PositioningRecoveryConfig {
         return PositioningRecoveryConfig(
             maxLocalPointGapMs = maxLocalPointGapMs,
@@ -22,7 +30,14 @@ data class PositioningPresetValues(
 }
 
 object PositioningPresets {
-    fun forMotionMode(motionMode: TrackingMotionMode): PositioningPresetValues {
+    fun forMotionMode(
+        motionMode: TrackingMotionMode,
+        density: PositioningDensity = PositioningDensity.Normal,
+    ): PositioningPresetValues {
+        return basePreset(motionMode).withDensity(density)
+    }
+
+    private fun basePreset(motionMode: TrackingMotionMode): PositioningPresetValues {
         return when (motionMode) {
             TrackingMotionMode.WALKING -> PositioningPresetValues(
                 motionMode = motionMode,

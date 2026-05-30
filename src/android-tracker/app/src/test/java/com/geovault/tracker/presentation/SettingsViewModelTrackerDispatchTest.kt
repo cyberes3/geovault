@@ -28,6 +28,24 @@ class SettingsViewModelTrackerDispatchTest {
     }
 
     @Test
+    fun setSparseTracking_delegatesToRepository() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val recording = RecordingTrackerSettingsRepository()
+        val vm = SettingsViewModel(app, recording)
+        vm.setSparseTracking(true)
+        assertEquals(listOf("setSparseTracking(true)"), recording.calls)
+    }
+
+    @Test
+    fun setSparseTracking_disableAlsoDelegates() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val recording = RecordingTrackerSettingsRepository()
+        val vm = SettingsViewModel(app, recording)
+        vm.setSparseTracking(false)
+        assertEquals(listOf("setSparseTracking(false)"), recording.calls)
+    }
+
+    @Test
     fun setLowAccuracyFallbackTimeoutSecFromInput_ignoresNonNumeric() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
@@ -77,6 +95,10 @@ private class RecordingTrackerSettingsRepository : TrackerSettingsRepository {
 
     override fun setSignificantDataOnly(enabled: Boolean) {
         calls += "setSignificantDataOnly($enabled)"
+    }
+
+    override fun setSparseTracking(enabled: Boolean) {
+        calls += "setSparseTracking($enabled)"
     }
 
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {

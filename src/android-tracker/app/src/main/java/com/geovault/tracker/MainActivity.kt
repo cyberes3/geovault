@@ -115,6 +115,7 @@ class MainActivity : ComponentActivity() {
                     onSettingsStartOnLaunch = settingsViewModel::setStartTrackingOnLaunch,
                     onSettingsSendExtendedData = settingsViewModel::setSendExtendedData,
                     onSettingsSignificantMotionOnly = settingsViewModel::setSignificantDataOnly,
+                    onSettingsSparseTracking = settingsViewModel::setSparseTracking,
                     onSettingsKeepScreenOnMap = settingsViewModel::setKeepScreenOnWhileViewingMap,
                     onSettingsGroupModeFitOnlyActiveTrackers = settingsViewModel::setGroupModeFitOnlyActiveTrackers,
                     onSettingsRefreshHiddenTrackerItems = settingsViewModel::refreshHiddenTrackerItems,

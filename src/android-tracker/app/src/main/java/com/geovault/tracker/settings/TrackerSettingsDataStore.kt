@@ -113,6 +113,7 @@ class TrackerSettingsDataStore(context: Context) {
         prefs[KEY_LOW_ACCURACY_FALLBACK_TIMEOUT_SEC] = record.settings.lowAccuracyFallbackTimeoutSec
         prefs[KEY_EXTENDED_PARAMS] = record.settings.sendExtendedData
         prefs[KEY_SIGNIFICANT_MOTION_ONLY] = record.settings.significantDataOnly
+        prefs[KEY_SPARSE_TRACKING] = record.settings.sparseTracking
         prefs[KEY_START_ON_BOOT] = record.settings.startOnBoot
         prefs[KEY_START_TRACKING_ON_LAUNCH] = record.settings.startTrackingOnLaunch
         prefs[KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP] = record.settings.keepScreenOnWhileViewingMap
@@ -120,7 +121,7 @@ class TrackerSettingsDataStore(context: Context) {
     }
 
     private fun settingsSummary(settings: TrackerSettings): String {
-        return "startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
+        return "startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},sparse=${settings.sparseTracking},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
     }
 
     private fun toRecord(prefs: Preferences): TrackerSettingsRecord {
@@ -135,6 +136,7 @@ class TrackerSettingsDataStore(context: Context) {
                 ),
                 sendExtendedData = prefs[KEY_EXTENDED_PARAMS] ?: defaults.sendExtendedData,
                 significantDataOnly = prefs[KEY_SIGNIFICANT_MOTION_ONLY] ?: defaults.significantDataOnly,
+                sparseTracking = prefs[KEY_SPARSE_TRACKING] ?: defaults.sparseTracking,
                 startOnBoot = prefs[KEY_START_ON_BOOT] ?: defaults.startOnBoot,
                 startTrackingOnLaunch = prefs[KEY_START_TRACKING_ON_LAUNCH] ?: defaults.startTrackingOnLaunch,
                 keepScreenOnWhileViewingMap = prefs[KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP]
@@ -160,6 +162,7 @@ class TrackerSettingsDataStore(context: Context) {
         )
         private val KEY_EXTENDED_PARAMS = booleanPreferencesKey("extended_params")
         private val KEY_SIGNIFICANT_MOTION_ONLY = booleanPreferencesKey("significant_motion_only")
+        private val KEY_SPARSE_TRACKING = booleanPreferencesKey("sparse_tracking")
         private val KEY_START_ON_BOOT = booleanPreferencesKey("start_on_boot")
         private val KEY_START_TRACKING_ON_LAUNCH = booleanPreferencesKey("start_tracking_on_launch")
         private val KEY_KEEP_SCREEN_ON_WHILE_VIEWING_MAP = booleanPreferencesKey(

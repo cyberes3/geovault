@@ -76,6 +76,7 @@ fun SettingsScreen(
     onStartOnLaunch: (Boolean) -> Unit,
     onSendExtendedData: (Boolean) -> Unit,
     onSignificantMotionOnly: (Boolean) -> Unit,
+    onSparseTracking: (Boolean) -> Unit,
     onKeepScreenOnMap: (Boolean) -> Unit,
     onGroupModeFitOnlyActiveTrackers: (Boolean) -> Unit,
     onRefreshHiddenTrackerItems: () -> Unit,
@@ -192,6 +193,13 @@ fun SettingsScreen(
             helpText = stringResource(R.string.significant_motion_help_text),
             modifier = Modifier.padding(vertical = 6.dp),
             enabled = state.significantMotionSensorAvailable,
+        )
+        GeoVaultToggleHelpCard(
+            checked = trackerSettings.sparseTracking,
+            onCheckedChange = { if (!shouldIgnoreSettingChange()) onSparseTracking(it) },
+            title = stringResource(R.string.sparse_tracking_label),
+            helpText = stringResource(R.string.sparse_tracking_help_text),
+            modifier = Modifier.padding(vertical = 6.dp),
         )
         GeoVaultToggleHelpCard(
             checked = trackerSettings.startOnBoot,

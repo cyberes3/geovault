@@ -57,6 +57,30 @@ class PositioningPolicyConfigTest {
     }
 
     @Test
+    fun sparsePreset_doesNotChangeIngestFilterTuning() {
+        val normalWalking = PositioningPolicyConfig.ingestConfig(
+            maxAccuracyMeters = 25f,
+            motionMode = TrackingMotionMode.WALKING,
+        )
+        val sparseWalking = PositioningPolicyConfig.ingestConfig(
+            maxAccuracyMeters = 25f,
+            motionMode = TrackingMotionMode.WALKING,
+        )
+        val sparsePreset = PositioningPresets.forMotionMode(
+            TrackingMotionMode.WALKING,
+            PositioningDensity.Sparse,
+        )
+
+        assertEquals(normalWalking.maxImpliedSpeedMps, sparseWalking.maxImpliedSpeedMps, 1e-9)
+        assertEquals(normalWalking.maxBurstDistanceMeters, sparseWalking.maxBurstDistanceMeters, 1e-9)
+        assertEquals(MotionProfileTuning.Walking, sparsePreset.filterTuning)
+        assertEquals(
+            TrackingLocationPolicy.WALKING_INTERVAL_SEC * 2,
+            sparsePreset.locationIntervalSec,
+        )
+    }
+
+    @Test
     fun fallbackTransitionConfig_setsConservativeFreshnessTtl() {
         val fallback = PositioningPolicyConfig.fallbackTransitionConfig()
         assertEquals(2L * 60L * 1000L, fallback.freshnessTtlMs)

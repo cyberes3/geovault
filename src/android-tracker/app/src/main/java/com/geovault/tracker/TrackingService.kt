@@ -94,6 +94,8 @@ import com.geovault.tracker.services.QueueUploadSkipReason
 import com.geovault.tracker.services.PointFreshnessTracker
 import com.geovault.tracker.services.ProviderHealthController
 import com.geovault.tracker.services.ProviderHealthDecision
+import com.geovault.tracker.services.PositioningDensity
+import com.geovault.tracker.services.PositioningPresetValues
 import com.geovault.tracker.services.PositioningPresets
 import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
@@ -123,6 +125,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -149,7 +155,9 @@ class TrackingService : Service() {
     private lateinit var locationSessionCoordinator: LocationSessionCoordinator
     private lateinit var runtimeTelemetry: RuntimeTelemetry
     private lateinit var recoveryAnchorStore: RecoveryAnchorStore
+    private lateinit var stationaryPingController: StationaryPingController
     private lateinit var stationaryFreshnessCoordinator: StationaryFreshnessCoordinator
+    private var sparseTrackingObserverJob: Job? = null
     private var httpClient: OkHttpClient? = null
     private val locationUpdateMutex = Mutex()
     private val localTrackPointOrderingCounter = AtomicLong(0L)
@@ -495,8 +503,11 @@ class TrackingService : Service() {
                 trigger = SensorManagerSignificantMotionTrigger(applicationContext),
                 onResume = { resumeGps() }
             )
-            val stationaryPingController = StationaryPingController(
+            val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
+                .scaleDurationMs(StationaryPingController.DEFAULT_INTERVAL_MS)
+            stationaryPingController = StationaryPingController(
                 scope = serviceScope,
+                initialIntervalMs = initialProbeIntervalMs,
                 actions = object : StationaryPingActions {
                     override fun requestProbe(reason: String) {
                         requestStationaryFreshnessProbe(reason = reason)
@@ -524,6 +535,7 @@ class TrackingService : Service() {
             SelectedTrackerManager.syncRuntimeSelectedTracker(this)
             TrackingRecoveryCoordinator.markHeartbeat(applicationContext)
             syncRuntimeStateStore()
+            startSparseTrackingObserver()
             TrackingServiceLifecycleGate.markUsable()
         } catch (t: Throwable) {
             TrackingServiceLifecycleGate.markDestroyed()
@@ -1664,7 +1676,7 @@ class TrackingService : Service() {
         pauseGpsInternal(force = true)
         runtimeTelemetry.event(
             "paused_freshness_repaused",
-            "intervalMs=${StationaryPingController.DEFAULT_INTERVAL_MS}"
+            "intervalMs=${currentPositioningRuntimeContext(settings).stationaryProbeIntervalMs}"
         )
         return true
     }
@@ -2034,12 +2046,53 @@ class TrackingService : Service() {
         }
     }
 
+    private fun effectivePositioningPreset(
+        motionMode: TrackingMotionMode,
+        settings: TrackerSettings = settingsRepository.getSettings(),
+    ): PositioningPresetValues {
+        return PositioningPresets.forMotionMode(
+            motionMode,
+            PositioningDensity.from(settings),
+        )
+    }
+
     private fun resolvePointFreshnessIntervalSec(motionMode: TrackingMotionMode): Long {
-        return PositioningPresets.forMotionMode(motionMode).locationIntervalSec
+        return effectivePositioningPreset(motionMode).locationIntervalSec
     }
 
     private fun resolveActiveMotionMode(@Suppress("UNUSED_PARAMETER") settings: TrackerSettings): TrackingMotionMode {
         return autoTrackingMotionEngine.snapshot().mode
+    }
+
+    private fun startSparseTrackingObserver() {
+        sparseTrackingObserverJob?.cancel()
+        sparseTrackingObserverJob = serviceScope.launch {
+            settingsRepository.observeSettings()
+                .map { it.sparseTracking }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { onSparseTrackingChanged() }
+        }
+    }
+
+    private fun onSparseTrackingChanged() {
+        resetElasticDistanceOverride(reason = "sparse_tracking_changed", reapplyRequest = false)
+        reapplyLocationRequestIfActive("sparse_tracking_changed")
+        val probeIntervalMs = currentPositioningRuntimeContext().stationaryProbeIntervalMs
+        if (
+            gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION ||
+            gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+        ) {
+            stationaryPingController.reschedulePausedPing(
+                newIntervalMs = probeIntervalMs,
+                providerAvailable = isGpsProviderEnabled(),
+                reason = "sparse_tracking_changed",
+            )
+        }
+        runtimeTelemetry.event(
+            "sparse_tracking_changed",
+            "probeIntervalMs=$probeIntervalMs sparse=${settingsRepository.getSettings().sparseTracking}"
+        )
     }
 
     private fun currentPositioningRecoveryConfig(): PositioningRecoveryConfig {
@@ -2050,14 +2103,13 @@ class TrackingService : Service() {
         settings: TrackerSettings = settingsRepository.getSettings(),
     ): TrackerPositioningRuntimeContext {
         val motionMode = resolveActiveMotionMode(settings)
-        val preset = PositioningPresets.forMotionMode(motionMode)
+        val preset = effectivePositioningPreset(motionMode, settings)
         val baseDistance = preset.distanceFilterMeters
-        val pointFreshnessIntervalSec = resolvePointFreshnessIntervalSec(motionMode)
         return TrackerPositioningRuntimeContext.build(
             settings = settings,
             activeMotionMode = motionMode,
             effectiveDistanceFilterMeters = elasticDistanceOverrideMeters ?: baseDistance,
-            localPointMaxGapMs = pointFreshnessTracker.maxAllowedPointGapMs(pointFreshnessIntervalSec),
+            localPointMaxGapMs = pointFreshnessTracker.maxAllowedPointGapMs(preset.locationIntervalSec),
         )
     }
 
@@ -3149,7 +3201,7 @@ class TrackingService : Service() {
         }
         if (isFastGpsLockWindowActive) return
         val mode = autoTrackingMotionEngine.snapshot().mode
-        val baseDistanceMeters = PositioningPresets.forMotionMode(mode).distanceFilterMeters
+        val baseDistanceMeters = effectivePositioningPreset(mode).distanceFilterMeters
         if (baseDistanceMeters <= 0f) return
         val runtimeContext = currentPositioningRuntimeContext()
         val accuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters

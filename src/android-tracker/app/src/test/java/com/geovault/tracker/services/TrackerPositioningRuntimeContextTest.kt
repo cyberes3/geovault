@@ -1,9 +1,11 @@
 package com.geovault.tracker.services
 
 import com.geovault.tracker.TrackingLocationPolicy
+import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.policy.filter.MotionProfileTuning
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class TrackerPositioningRuntimeContextTest {
@@ -55,6 +57,75 @@ class TrackerPositioningRuntimeContextTest {
         assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, context.pointFreshnessIntervalSec)
         assertEquals(TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS, context.effectiveAccuracyThresholdMeters)
         assertEquals(TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS.toDouble(), context.filterConfig.trackingAccuracyThresholdMeters, 0.0)
+    }
+
+    @Test
+    fun build_sparseTrackingFalse_matchesNormalCadence() {
+        val sparseOff = TrackerPositioningRuntimeContext.build(
+            settings = TrackerSettings(sparseTracking = false),
+            activeMotionMode = TrackingMotionMode.BIKING,
+            effectiveDistanceFilterMeters = 30f,
+            localPointMaxGapMs = 90_000L,
+        )
+        val defaultSettings = TrackerPositioningRuntimeContext.build(
+            settings = TrackerSettings(),
+            activeMotionMode = TrackingMotionMode.BIKING,
+            effectiveDistanceFilterMeters = 30f,
+            localPointMaxGapMs = 90_000L,
+        )
+
+        assertEquals(defaultSettings.locationIntervalSec, sparseOff.locationIntervalSec)
+        assertEquals(defaultSettings.stationaryProbeIntervalMs, sparseOff.stationaryProbeIntervalMs)
+    }
+
+    @Test
+    fun build_sparseTrackingDoublesCadenceAndProbeInterval() {
+        val context = TrackerPositioningRuntimeContext.build(
+            settings = TrackerSettings(sparseTracking = true),
+            activeMotionMode = TrackingMotionMode.WALKING,
+            effectiveDistanceFilterMeters = 14f,
+            localPointMaxGapMs = 90_000L,
+        )
+
+        assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC * 2, context.locationIntervalSec)
+        assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC * 2, context.pointFreshnessIntervalSec)
+        assertEquals(StationaryPingController.DEFAULT_INTERVAL_MS * 2, context.stationaryProbeIntervalMs)
+        assertEquals(MotionProfileTuning.Walking.maxImpliedSpeedMps, context.filterConfig.maxImpliedSpeedMps, 0.0)
+        assertEquals(TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS, context.stationaryRadiusMeters)
+        assertEquals(TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS, context.stationaryAccuracyCeilingMeters)
+    }
+
+    @Test
+    fun build_sparseDrivingDoublesCadenceWithoutChangingFilterTuning() {
+        val normal = TrackerPositioningRuntimeContext.build(
+            settings = TrackerSettings(),
+            activeMotionMode = TrackingMotionMode.DRIVING,
+            effectiveDistanceFilterMeters = 100f,
+            localPointMaxGapMs = 90_000L,
+        )
+        val sparse = TrackerPositioningRuntimeContext.build(
+            settings = TrackerSettings(sparseTracking = true),
+            activeMotionMode = TrackingMotionMode.DRIVING,
+            effectiveDistanceFilterMeters = 200f,
+            localPointMaxGapMs = 90_000L,
+        )
+
+        assertEquals(TrackingLocationPolicy.DRIVING_INTERVAL_SEC * 2, sparse.locationIntervalSec)
+        assertEquals(200f, sparse.distanceFilterMeters)
+        assertEquals(normal.filterConfig.maxImpliedSpeedMps, sparse.filterConfig.maxImpliedSpeedMps, 0.0)
+        assertEquals(normal.filterConfig.maxBurstDistanceMeters, sparse.filterConfig.maxBurstDistanceMeters, 0.0)
+        assertNotEquals(normal.stationaryProbeIntervalMs, sparse.stationaryProbeIntervalMs)
+    }
+
+    @Test
+    fun build_effectiveDistanceFilterPassthroughIndependentOfSparse() {
+        val context = TrackerPositioningRuntimeContext.build(
+            settings = TrackerSettings(sparseTracking = true),
+            activeMotionMode = TrackingMotionMode.WALKING,
+            effectiveDistanceFilterMeters = 42f,
+            localPointMaxGapMs = 90_000L,
+        )
+        assertEquals(42f, context.distanceFilterMeters)
     }
 
     @Test
