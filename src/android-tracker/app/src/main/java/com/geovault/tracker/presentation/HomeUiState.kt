@@ -51,6 +51,14 @@ internal fun mergeHomeUiState(
     } else {
         runtime.lifecycleState
     }
+    val displayAccuracyMeters = if (
+        runtime.uiStatus == TrackingUiStatus.LOCKING &&
+        runtime.currentFixAccuracyMeters != null
+    ) {
+        runtime.currentFixAccuracyMeters
+    } else {
+        runtime.lastAccuracyMeters
+    }
     return HomeUiState(
         isTracking = effectiveRunning,
         lifecycleState = effectiveLifecycleState,
@@ -62,7 +70,7 @@ internal fun mergeHomeUiState(
         sessionStartTimeMs = runtime.sessionStartTimeMs,
         lastPointSentAtMs = runtime.lastPointSentAtMs,
         sessionTotalDistanceMeters = runtime.sessionTotalDistanceMeters,
-        lastAccuracyMeters = runtime.lastAccuracyMeters,
+        lastAccuracyMeters = displayAccuracyMeters,
         effectiveAccuracyThresholdMeters = runtime.effectiveAccuracyThresholdMeters,
         lastTrackedLatitude = runtime.lastTrackedLatitude,
         lastTrackedLongitude = runtime.lastTrackedLongitude,

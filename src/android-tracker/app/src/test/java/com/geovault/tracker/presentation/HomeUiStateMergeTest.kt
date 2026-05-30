@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.RecordingRuntime
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.services.TrackingUiStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,5 +61,35 @@ class HomeUiStateMergeTest {
 
         assertTrue(merged.isTracking)
         assertEquals(TrackingLifecycleState.STARTING, merged.lifecycleState)
+    }
+
+    @Test
+    fun merge_lockingShowsCurrentFixAccuracyInsteadOfHeldGoodAccuracy() {
+        val runtime = TrackingRuntimeSnapshot(
+            recordingRuntime = RecordingRuntime(sessionActive = true),
+            uiStatus = TrackingUiStatus.LOCKING,
+            lastAccuracyMeters = 8f,
+            currentFixAccuracyMeters = 85f,
+            effectiveAccuracyThresholdMeters = 50f,
+        )
+
+        val merged = mergeHomeUiState(runtime, HomePermissionSnapshot(), statusMessage = "")
+
+        assertEquals(85f, merged.lastAccuracyMeters)
+    }
+
+    @Test
+    fun merge_activeTrackingShowsHeldLastAccuracyWhenNotLocking() {
+        val runtime = TrackingRuntimeSnapshot(
+            recordingRuntime = RecordingRuntime(sessionActive = true),
+            uiStatus = TrackingUiStatus.TRACKING_ACTIVE,
+            lastAccuracyMeters = 8f,
+            currentFixAccuracyMeters = 85f,
+            effectiveAccuracyThresholdMeters = 50f,
+        )
+
+        val merged = mergeHomeUiState(runtime, HomePermissionSnapshot(), statusMessage = "")
+
+        assertEquals(8f, merged.lastAccuracyMeters)
     }
 }

@@ -2334,7 +2334,7 @@ class TrackingService : Service() {
             isRunning = effectiveRunning,
             gpsProviderEnabled = gpsOk,
             gpsState = gpsRuntimeState,
-            lastAccuracyMeters = snapshotForStatus.lastAccuracyMeters,
+            lastAccuracyMeters = snapshotForStatus.currentFixAccuracyMeters ?: snapshotForStatus.lastAccuracyMeters,
             effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
             activeAccuracyBlockedEmission = snapshotForStatus.activePointEmissionTrouble,
         )
