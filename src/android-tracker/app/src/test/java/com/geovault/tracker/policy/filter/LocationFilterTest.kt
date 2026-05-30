@@ -295,7 +295,7 @@ class LocationFilterTest {
     }
 
     @Test
-    fun drivingProfile_longStaleRelocationCurrentlyCommitsWithinCap() {
+    fun drivingProfile_longStaleRelocationRequiresContinuousFollowUpBeforeCommit() {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
@@ -331,8 +331,22 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals(LocationFilterResult.Decision.Commit, relocation.decision)
-        assertEquals("within-cap", relocation.reason)
+        assertEquals(LocationFilterResult.Decision.Hold, relocation.decision)
+        assertEquals("stale-relocation-unconfirmed", relocation.reason)
+
+        val confirmation = filter.evaluate(
+            LocationInput(
+                latitude = 39.0,
+                longitude = -104.9294,
+                timestampMs = 364_000L,
+                accuracyMeters = 8f,
+                speedMps = 22f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        assertEquals("stale-relocation-confirmed", confirmation.reason)
+        assertEquals(LocationFilterResult.Decision.Commit, confirmation.decision)
     }
 
     @Test

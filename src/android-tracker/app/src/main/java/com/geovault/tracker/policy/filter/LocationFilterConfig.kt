@@ -36,6 +36,11 @@ package com.geovault.tracker.policy.filter
  * @property speedRecovery profile-tuned confirmation for sustained motion
  *   above the nominal speed cap. This is generic recovery evidence, not a
  *   route or activity special case.
+ * @property staleAnchorMinAgeMs anchor age after which a far relocation
+ *   requires continuity confirmation before replacing the anchor.
+ * @property staleAnchorMinDistanceMeters minimum anchor-to-fix displacement
+ *   for stale-relocation confirmation. Smaller moves continue through the
+ *   ordinary policy to preserve normal sparse driving.
  * @property resumeConfirmationMinDistanceMeters post-pause raw displacement
  *   that must be confirmed by a second consistent fix before becoming the
  *   new anchor.
@@ -65,6 +70,8 @@ data class LocationFilterConfig(
     val movementCandidate: MovementCandidateConfig = MotionProfileTuning.Driving.movementCandidate,
     val speedRecovery: SpeedRecoveryConfig = MotionProfileTuning.Driving.speedRecovery,
     val anchorHealth: AnchorHealthConfig = MotionProfileTuning.Driving.anchorHealth,
+    val staleAnchorMinAgeMs: Long = 2L * 60L * 1000L,
+    val staleAnchorMinDistanceMeters: Double = 600.0,
     val resumeConfirmationMinDistanceMeters: Double = 150.0,
     val resumeConfirmationConsistencyMeters: Double = 75.0,
     val resumeConfirmationMaxAccuracyMeters: Double = 50.0,
@@ -103,6 +110,8 @@ data class LocationFilterConfig(
             movementCandidate != other.movementCandidate ||
             speedRecovery != other.speedRecovery ||
             anchorHealth != other.anchorHealth ||
+            staleAnchorMinAgeMs != other.staleAnchorMinAgeMs ||
+            staleAnchorMinDistanceMeters != other.staleAnchorMinDistanceMeters ||
             resumeConfirmationMinDistanceMeters != other.resumeConfirmationMinDistanceMeters ||
             resumeConfirmationConsistencyMeters != other.resumeConfirmationConsistencyMeters ||
             resumeConfirmationMaxAccuracyMeters != other.resumeConfirmationMaxAccuracyMeters ||

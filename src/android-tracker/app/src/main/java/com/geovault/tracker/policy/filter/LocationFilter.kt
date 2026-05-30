@@ -46,6 +46,7 @@ class LocationFilter(
     private var anchorHealthTracker: AnchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
     private var movementCandidateGate: MovementCandidateGate = MovementCandidateGate(config.movementCandidate)
     private var speedCapRecoveryGate: SpeedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
+    private var staleRelocationPending: Boolean = false
 
     /**
      * Last fix the filter saw whose accuracy passed the gate, regardless
@@ -70,6 +71,7 @@ class LocationFilter(
         previousAccepted = null
         lastSeenFix = null
         resumeAnchorGate.clear()
+        staleRelocationPending = false
     }
 
     /**
@@ -117,6 +119,7 @@ class LocationFilter(
         lastSeenFix = null
         movementCandidateGate.reset()
         speedCapRecoveryGate.reset()
+        staleRelocationPending = false
         if (previousAccepted != null) {
             resumeAnchorGate.start()
         }
@@ -127,6 +130,7 @@ class LocationFilter(
         previousAccepted = input
         lastSeenFix = input
         resumeAnchorGate.clear()
+        staleRelocationPending = false
     }
 
     /**
@@ -192,6 +196,16 @@ class LocationFilter(
         metrics: LocationMetrics,
         capCandidate: Double,
     ): LocationFilterResult {
+        if (requiresStaleRelocationConfirmation(input = input, previous = previous)) {
+            if (staleRelocationPending) {
+                staleRelocationPending = false
+                return commitAccept(input = input, reason = "stale-relocation-confirmed", metrics = metrics)
+            }
+            staleRelocationPending = true
+            return LocationFilterResult.hold(reason = "stale-relocation-unconfirmed", metrics = metrics)
+        }
+        staleRelocationPending = false
+
         if (metrics.dtSeconds > 0.0 && metrics.impliedSpeedMps > config.maxImpliedSpeedMps) {
             return resolveSpeedSpike(input = input, previous = previous, metrics = metrics)
         }
@@ -283,6 +297,18 @@ class LocationFilter(
             measurement = metrics.effectiveDistanceMeters,
             accuracyMeters = input.accuracyMeters?.toDouble(),
         )
+    }
+
+    private fun requiresStaleRelocationConfirmation(input: LocationInput, previous: LocationInput): Boolean {
+        val anchorAgeMs = input.timestampMs - previous.timestampMs
+        if (anchorAgeMs < config.staleAnchorMinAgeMs) return false
+        val anchorDistanceMeters = GeoMath.haversineMeters(
+            previous.latitude,
+            previous.longitude,
+            input.latitude,
+            input.longitude,
+        )
+        return anchorDistanceMeters >= config.staleAnchorMinDistanceMeters
     }
 
     private fun resolveConservative(
@@ -530,6 +556,7 @@ class LocationFilter(
         anchorHealthTracker = AnchorHealthTracker(config.anchorHealth)
         movementCandidateGate = MovementCandidateGate(config.movementCandidate)
         speedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
+        staleRelocationPending = false
     }
 
     companion object {
