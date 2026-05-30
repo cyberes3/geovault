@@ -73,23 +73,6 @@ class TrackerSettingsRepositoryImpl(
     override fun setSignificantDataOnly(enabled: Boolean) =
         enqueueMutation("set_significant_data_only") { it.copy(significantDataOnly = enabled) }
 
-    override fun setAutoTrackingMode(enabled: Boolean) =
-        enqueueMutation("set_auto_tracking_mode") { it.copy(autoTrackingMode = enabled) }
-
-    override fun setTrackingProfile(profile: TrackerTrackingProfile) =
-        enqueueMutation("set_tracking_profile") { current ->
-            writePolicy.applyProfile(current, profile)
-        }
-
-    override fun setLoggingIntervalSec(value: Long) =
-        enqueueMutation("set_logging_interval_sec") { it.copy(loggingIntervalSec = value) }
-
-    override fun setDistanceFilterMeters(value: Float) =
-        enqueueMutation("set_distance_filter_meters") { it.copy(distanceFilterMeters = value) }
-
-    override fun setAccuracyFilterMeters(value: Float) =
-        enqueueMutation("set_accuracy_filter_meters") { it.copy(accuracyFilterMeters = value) }
-
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) =
         enqueueMutation("set_low_accuracy_fallback_enabled") { it.copy(lowAccuracyFallbackEnabled = enabled) }
 
@@ -247,7 +230,7 @@ class TrackerSettingsRepositoryImpl(
     }
 
     private fun settingsSummary(settings: TrackerSettings): String {
-        return "auto=${settings.autoTrackingMode},startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},profile=${settings.trackingProfile},interval=${settings.loggingIntervalSec},distance=${settings.distanceFilterMeters},accuracy=${settings.accuracyFilterMeters},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
+        return "startOnBoot=${settings.startOnBoot},startOnLaunch=${settings.startTrackingOnLaunch},extended=${settings.sendExtendedData},sigMotion=${settings.significantDataOnly},lowAccFallback=${settings.lowAccuracyFallbackEnabled},keepScreenOn=${settings.keepScreenOnWhileViewingMap},groupFitActiveOnly=${settings.groupModeFitOnlyActiveTrackers},lowAccTimeout=${settings.lowAccuracyFallbackTimeoutSec}"
     }
 
     private data class SettingsCommand(

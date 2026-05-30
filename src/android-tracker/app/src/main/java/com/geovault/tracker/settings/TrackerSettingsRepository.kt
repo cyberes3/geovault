@@ -12,11 +12,6 @@ interface TrackerSettingsRepository {
 
     fun setSendExtendedData(enabled: Boolean)
     fun setSignificantDataOnly(enabled: Boolean)
-    fun setAutoTrackingMode(enabled: Boolean)
-    fun setTrackingProfile(profile: TrackerTrackingProfile)
-    fun setLoggingIntervalSec(value: Long)
-    fun setDistanceFilterMeters(value: Float)
-    fun setAccuracyFilterMeters(value: Float)
     fun setLowAccuracyFallbackEnabled(enabled: Boolean)
     fun setLowAccuracyFallbackTimeoutSec(value: Long)
     fun setStartOnBoot(enabled: Boolean)

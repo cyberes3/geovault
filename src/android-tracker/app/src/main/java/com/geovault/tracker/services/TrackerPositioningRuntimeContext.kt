@@ -30,23 +30,18 @@ data class TrackerPositioningRuntimeContext(
             localPointMaxGapMs: Long,
         ): TrackerPositioningRuntimeContext {
             val preset = PositioningPresets.forMotionMode(activeMotionMode)
-            val locationIntervalSec = if (settings.autoTrackingMode) {
-                preset.locationIntervalSec
-            } else {
-                settings.loggingIntervalSec
-            }
             val filterConfig = TrackingPolicyProfiles.ingestConfig(
-                maxAccuracyMeters = settings.accuracyFilterMeters,
+                maxAccuracyMeters = preset.accuracyThresholdMeters,
                 motionMode = activeMotionMode,
                 isMockLocation = false,
             )
             return TrackerPositioningRuntimeContext(
                 settings = settings,
                 activeMotionMode = activeMotionMode,
-                locationIntervalSec = locationIntervalSec,
+                locationIntervalSec = preset.locationIntervalSec,
                 distanceFilterMeters = effectiveDistanceFilterMeters,
                 pointFreshnessIntervalSec = preset.locationIntervalSec,
-                effectiveAccuracyThresholdMeters = settings.accuracyFilterMeters,
+                effectiveAccuracyThresholdMeters = preset.accuracyThresholdMeters,
                 filterConfig = filterConfig,
                 recoveryConfig = preset.recoveryConfig(localPointMaxGapMs),
                 stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,

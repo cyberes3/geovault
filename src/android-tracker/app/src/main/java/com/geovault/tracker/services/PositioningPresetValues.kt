@@ -3,11 +3,13 @@ package com.geovault.tracker.services
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.policy.filter.MotionProfileTuning
+import com.geovault.tracker.settings.TrackerSettings
 
 data class PositioningPresetValues(
     val motionMode: TrackingMotionMode,
     val locationIntervalSec: Long,
     val distanceFilterMeters: Float,
+    val accuracyThresholdMeters: Float,
     val filterTuning: MotionProfileTuning,
     val recoverySpeedCapMps: Float,
 ) {
@@ -26,6 +28,7 @@ object PositioningPresets {
                 motionMode = motionMode,
                 locationIntervalSec = TrackingLocationPolicy.WALKING_INTERVAL_SEC,
                 distanceFilterMeters = TrackingLocationPolicy.WALKING_DISTANCE_FILTER_METERS,
+                accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Walking,
                 recoverySpeedCapMps = 4.5f,
             )
@@ -33,6 +36,7 @@ object PositioningPresets {
                 motionMode = motionMode,
                 locationIntervalSec = TrackingLocationPolicy.BIKING_INTERVAL_SEC,
                 distanceFilterMeters = TrackingLocationPolicy.BIKING_DISTANCE_FILTER_METERS,
+                accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Biking,
                 recoverySpeedCapMps = 14f,
             )
@@ -40,6 +44,7 @@ object PositioningPresets {
                 motionMode = motionMode,
                 locationIntervalSec = TrackingLocationPolicy.DRIVING_INTERVAL_SEC,
                 distanceFilterMeters = TrackingLocationPolicy.DRIVING_DISTANCE_FILTER_METERS,
+                accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Driving,
                 recoverySpeedCapMps = 60f,
             )

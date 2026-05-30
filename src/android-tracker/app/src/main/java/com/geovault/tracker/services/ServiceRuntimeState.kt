@@ -6,17 +6,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class TrackingMotionMode(val profileIndex: Int) {
-    WALKING(0),
-    BIKING(1),
-    DRIVING(2);
-
-    companion object {
-        @JvmStatic
-        fun fromProfileIndex(profileIndex: Int): TrackingMotionMode {
-            return TrackingPolicyProfiles.motionModeFromProfileIndex(profileIndex)
-        }
-    }
+enum class TrackingMotionMode {
+    WALKING,
+    BIKING,
+    DRIVING,
 }
 
 enum class TrackingUiStatus {

@@ -15,13 +15,6 @@ import org.robolectric.annotation.Config
 class TrackingLocationPolicyTest {
 
     @Test
-    fun getProfileParams_biking_matchesConstants() {
-        val params = TrackingLocationPolicy.getProfileParams(1)
-        assertEquals(TrackingLocationPolicy.BIKING_INTERVAL_SEC, params.first)
-        assertEquals(TrackingLocationPolicy.BIKING_DISTANCE_FILTER_METERS, params.second, 0.001f)
-    }
-
-    @Test
     fun getRecommendedProfile_hysteresisFromWalking() {
         assertEquals(0, TrackingLocationPolicy.getRecommendedProfile(1.5f, 0))
         assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(2.1f, 0))

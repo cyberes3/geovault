@@ -38,12 +38,4 @@ object TrackingPolicyProfiles {
         )
     }
 
-    fun motionModeFromProfileIndex(profileIndex: Int): TrackingMotionMode {
-        return when (profileIndex) {
-            TrackingMotionMode.WALKING.profileIndex -> TrackingMotionMode.WALKING
-            TrackingMotionMode.BIKING.profileIndex -> TrackingMotionMode.BIKING
-            TrackingMotionMode.DRIVING.profileIndex -> TrackingMotionMode.DRIVING
-            else -> TrackingMotionMode.BIKING
-        }
-    }
 }

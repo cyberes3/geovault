@@ -160,23 +160,6 @@ object TrackingLocationPolicy {
     }
 
     /**
-     * Profile indexes: 0: Walking, 1: Biking, 2: Driving.
-     *
-     * Profiles drive only the [android.location.LocationRequest] cadence
-     * and distance filter. The positioning filter accuracy gate is owned
-     * by the user setting (`accuracyFilterMeters`) and is profile-
-     * independent so mode flips never mutate the filter pipeline state.
-     */
-    fun getProfileParams(profileIndex: Int): Pair<Long, Float> {
-        return when (profileIndex) {
-            0 -> WALKING_INTERVAL_SEC to WALKING_DISTANCE_FILTER_METERS
-            1 -> BIKING_INTERVAL_SEC to BIKING_DISTANCE_FILTER_METERS
-            2 -> DRIVING_INTERVAL_SEC to DRIVING_DISTANCE_FILTER_METERS
-            else -> BIKING_INTERVAL_SEC to BIKING_DISTANCE_FILTER_METERS
-        }
-    }
-
-    /**
      * Determines the best profile based on speed (m/s) with hysteresis.
      *
      * Thresholds (m/s):

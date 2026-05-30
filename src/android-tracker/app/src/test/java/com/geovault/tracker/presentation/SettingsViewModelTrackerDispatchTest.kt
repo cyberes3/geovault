@@ -7,7 +7,6 @@ import com.geovault.tracker.settings.TrackerSettingsDefaults
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.settings.TrackerSettingsState
-import com.geovault.tracker.settings.TrackerTrackingProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,26 +77,6 @@ private class RecordingTrackerSettingsRepository : TrackerSettingsRepository {
 
     override fun setSignificantDataOnly(enabled: Boolean) {
         calls += "setSignificantDataOnly($enabled)"
-    }
-
-    override fun setAutoTrackingMode(enabled: Boolean) {
-        calls += "setAutoTrackingMode($enabled)"
-    }
-
-    override fun setTrackingProfile(profile: TrackerTrackingProfile) {
-        calls += "setTrackingProfile(${profile.name})"
-    }
-
-    override fun setLoggingIntervalSec(value: Long) {
-        calls += "setLoggingIntervalSec($value)"
-    }
-
-    override fun setDistanceFilterMeters(value: Float) {
-        calls += "setDistanceFilterMeters($value)"
-    }
-
-    override fun setAccuracyFilterMeters(value: Float) {
-        calls += "setAccuracyFilterMeters($value)"
     }
 
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) {

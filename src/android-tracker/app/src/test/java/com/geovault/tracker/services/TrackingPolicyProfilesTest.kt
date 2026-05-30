@@ -9,12 +9,6 @@ import org.junit.Test
 class TrackingPolicyProfilesTest {
 
     @Test
-    fun motionModeFromProfileIndex_defaultsToBiking() {
-        assertEquals(TrackingMotionMode.BIKING, TrackingPolicyProfiles.motionModeFromProfileIndex(-1))
-        assertEquals(TrackingMotionMode.BIKING, TrackingPolicyProfiles.motionModeFromProfileIndex(999))
-    }
-
-    @Test
     fun ingestConfig_appliesProfileSpecificPhysicsAndSharedAccuracyThreshold() {
         val walking = TrackingPolicyProfiles.ingestConfig(
             maxAccuracyMeters = 25f,

@@ -57,16 +57,6 @@ private class StubTrackerSettingsRepository(
 
     override fun setSignificantDataOnly(enabled: Boolean) = Unit
 
-    override fun setAutoTrackingMode(enabled: Boolean) = Unit
-
-    override fun setTrackingProfile(profile: TrackerTrackingProfile) = Unit
-
-    override fun setLoggingIntervalSec(value: Long) = Unit
-
-    override fun setDistanceFilterMeters(value: Float) = Unit
-
-    override fun setAccuracyFilterMeters(value: Float) = Unit
-
     override fun setLowAccuracyFallbackEnabled(enabled: Boolean) = Unit
 
     override fun setLowAccuracyFallbackTimeoutSec(value: Long) = Unit

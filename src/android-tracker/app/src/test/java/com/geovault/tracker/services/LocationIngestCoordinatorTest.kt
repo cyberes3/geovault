@@ -34,7 +34,6 @@ class LocationIngestCoordinatorTest {
         val dao = FakeLocationDao()
         val coordinator = LocationIngestCoordinator(dao)
         val settings = TrackerSettings(
-            distanceFilterMeters = 1000f,
             accuracyFilterMeters = 5f
         )
         val location = Location("gps").apply {

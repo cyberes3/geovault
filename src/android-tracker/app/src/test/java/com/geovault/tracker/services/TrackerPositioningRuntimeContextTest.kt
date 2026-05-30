@@ -10,7 +10,7 @@ class TrackerPositioningRuntimeContextTest {
     @Test
     fun build_autoModeUsesMotionProfileCadenceAndRecoveryConfig() {
         val context = TrackerPositioningRuntimeContext.build(
-            settings = TrackerSettings(autoTrackingMode = true),
+            settings = TrackerSettings(),
             activeMotionMode = TrackingMotionMode.DRIVING,
             effectiveDistanceFilterMeters = 123f,
             localPointMaxGapMs = 90_000L,
@@ -24,11 +24,9 @@ class TrackerPositioningRuntimeContextTest {
     }
 
     @Test
-    fun build_manualModeKeepsUserCadenceButUsesActiveModeForPhysics() {
+    fun build_alwaysUsesPresetCadenceAndAccuracyForPhysics() {
         val context = TrackerPositioningRuntimeContext.build(
             settings = TrackerSettings(
-                autoTrackingMode = false,
-                loggingIntervalSec = 42L,
                 accuracyFilterMeters = 33f,
             ),
             activeMotionMode = TrackingMotionMode.WALKING,
@@ -36,18 +34,16 @@ class TrackerPositioningRuntimeContextTest {
             localPointMaxGapMs = 120_000L,
         )
 
-        assertEquals(42L, context.locationIntervalSec)
+        assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, context.locationIntervalSec)
         assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, context.pointFreshnessIntervalSec)
-        assertEquals(33f, context.effectiveAccuracyThresholdMeters)
+        assertEquals(TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS, context.effectiveAccuracyThresholdMeters)
         assertEquals(4.5f, context.recoveryConfig.recoverySpeedCapMps)
     }
 
     @Test
-    fun build_autoModeIgnoresUserCadenceButPreservesUserAccuracy() {
+    fun build_internalAccuracyThresholdFeedsFilterConfig() {
         val context = TrackerPositioningRuntimeContext.build(
             settings = TrackerSettings(
-                autoTrackingMode = true,
-                loggingIntervalSec = 42L,
                 accuracyFilterMeters = 33f,
             ),
             activeMotionMode = TrackingMotionMode.WALKING,
@@ -57,14 +53,14 @@ class TrackerPositioningRuntimeContextTest {
 
         assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, context.locationIntervalSec)
         assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, context.pointFreshnessIntervalSec)
-        assertEquals(33f, context.effectiveAccuracyThresholdMeters)
-        assertEquals(33.0, context.filterConfig.trackingAccuracyThresholdMeters, 0.0)
+        assertEquals(TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS, context.effectiveAccuracyThresholdMeters)
+        assertEquals(TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS.toDouble(), context.filterConfig.trackingAccuracyThresholdMeters, 0.0)
     }
 
     @Test
     fun build_activeMotionModeSelectsFilterTuningValues() {
         val context = TrackerPositioningRuntimeContext.build(
-            settings = TrackerSettings(autoTrackingMode = true),
+            settings = TrackerSettings(),
             activeMotionMode = TrackingMotionMode.BIKING,
             effectiveDistanceFilterMeters = 30f,
             localPointMaxGapMs = 90_000L,
