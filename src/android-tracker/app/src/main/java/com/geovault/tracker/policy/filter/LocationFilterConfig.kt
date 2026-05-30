@@ -5,10 +5,9 @@ package com.geovault.tracker.policy.filter
  * surviving non-filter gates that the [com.geovault.tracker.policy.TrackPointPolicyEngine]
  * facade still owns (timestamp normalisation, freshness TTL, future-skew).
  *
- * Defaults are profile-independent: the same tuning runs for walking,
- * biking, and driving sessions. Speed profiles only change the
- * [com.geovault.tracker.services.PositioningPolicyConfig] LocationRequest
- * (interval / distance-filter) and the user-facing accuracy threshold.
+ * Defaults are motion-preset independent: the same generic gates run for
+ * walking, biking, and driving sessions. Speed-selected presets only change
+ * numeric thresholds and request cadence.
  *
  * Numeric ranges:
  *
@@ -18,7 +17,7 @@ package com.geovault.tracker.policy.filter
  * @property policy outlier handling strategy. See [LocationFilterPolicy].
  * @property maxImpliedSpeedMps absolute upper bound on `raw / dt` between
  *   two consecutive seen fixes (m/s). This is intentionally supplied by
- *   the active motion profile; on-foot tracking must not inherit highway
+ *   the active motion preset; on-foot tracking must not inherit highway
  *   headroom.
  * @property maxBurstDistanceMeters raw-distance threshold for the burst
  *   term of the implied-anomaly check. A fix with `raw > maxBurst` AND
@@ -33,7 +32,7 @@ package com.geovault.tracker.policy.filter
  * @property rollingWindowSeconds window over which the metrics engine
  *   tracks the rolling average step distance, used to derive the third
  *   uncertainty cap (`rollingCap`). Anything below 3 s makes the cap noisy.
- * @property speedRecovery profile-tuned confirmation for sustained motion
+ * @property speedRecovery preset-tuned confirmation for sustained motion
  *   above the nominal speed cap. This is generic recovery evidence, not a
  *   route or activity special case.
  * @property staleAnchorMinAgeMs anchor age after which a far relocation
@@ -94,7 +93,7 @@ data class LocationFilterConfig(
      * live-swapped without disturbing the anchor.
      *
      * This guarantee is what keeps the filter stable across user setting
-     * changes and any future per-profile gate tweaks: a benign config
+     * changes and any future preset threshold tweaks: a benign config
      * mutation must never produce a `first-fix` accept of the next noisy
      * sample.
      */

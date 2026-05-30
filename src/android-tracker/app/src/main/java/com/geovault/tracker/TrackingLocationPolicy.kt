@@ -4,7 +4,7 @@ import android.location.Location
 import com.geovault.tracker.policy.filter.StationaryConfidence
 
 /**
- * Pure logic for stationary detection and motion-profile selection.
+ * Pure logic for stationary detection and location request timing.
  * Extracted so it can be unit tested without Service/Context.
  */
 object TrackingLocationPolicy {
@@ -159,25 +159,4 @@ object TrackingLocationPolicy {
         return intervalMs to minUpdateMs
     }
 
-    /**
-     * Determines the best profile based on speed (m/s) with hysteresis.
-     *
-     * Thresholds (m/s):
-     * Walking -> Biking: > 2.0 (7.2 km/h)
-     * Biking -> Driving: > 8.0 (28.8 km/h)
-     * Driving -> Biking: < 6.0 (21.6 km/h)
-     * Biking -> Walking: < 1.5 (5.4 km/h)
-     */
-    fun getRecommendedProfile(speedMps: Float, currentProfile: Int): Int {
-        return when (currentProfile) {
-            0 -> if (speedMps > 2.0f) 1 else 0
-            1 -> when {
-                speedMps > 8.0f -> 2
-                speedMps < 1.5f -> 0
-                else -> 1
-            }
-            2 -> if (speedMps < 6.0f) 1 else 2
-            else -> 1
-        }
-    }
 }

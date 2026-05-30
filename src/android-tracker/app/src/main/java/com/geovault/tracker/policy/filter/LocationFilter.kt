@@ -87,7 +87,7 @@ class LocationFilter(
      *
      * Physics-affecting fields (kalman, policy, rolling window, anomaly
      * thresholds) require rebuilding transient scoring state. The committed
-     * anchor is intentionally preserved so profile changes and request
+     * anchor is intentionally preserved so preset changes and request
      * reapplications cannot turn the next raw fix into an unconditional
      * `first-fix` accept.
      */

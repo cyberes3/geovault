@@ -15,12 +15,6 @@ import org.robolectric.annotation.Config
 class TrackingLocationPolicyTest {
 
     @Test
-    fun getRecommendedProfile_hysteresisFromWalking() {
-        assertEquals(0, TrackingLocationPolicy.getRecommendedProfile(1.5f, 0))
-        assertEquals(1, TrackingLocationPolicy.getRecommendedProfile(2.1f, 0))
-    }
-
-    @Test
     fun stationaryUpdate_threeClosePointsWithSignificantMotionOnly_triggersPause() {
         val filter = 10f
         val t0 = 1_000_000L
