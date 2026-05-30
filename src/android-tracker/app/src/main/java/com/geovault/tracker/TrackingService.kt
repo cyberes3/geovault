@@ -2336,7 +2336,7 @@ class TrackingService : Service() {
             gpsState = gpsRuntimeState,
             lastAccuracyMeters = snapshotForStatus.lastAccuracyMeters,
             effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
-            activeAccuracyBlockedEmission = snapshotForStatus.activePointEmissionAccuracyTrouble,
+            activeAccuracyBlockedEmission = snapshotForStatus.activePointEmissionTrouble,
         )
         val activeMotionMode = positioningContext.activeMotionMode
         val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
