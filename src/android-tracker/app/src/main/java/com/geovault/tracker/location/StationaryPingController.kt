@@ -30,17 +30,8 @@ class StationaryPingController(
     private var isProviderAvailable: Boolean = true
     private var isDueWhileProviderUnavailable: Boolean = false
 
-    fun onPaused(
-        reason: String,
-        providerAvailable: Boolean,
-        dueInMs: Long = intervalMs,
-    ) {
+    fun onPaused(reason: String, providerAvailable: Boolean) {
         isProviderAvailable = providerAvailable
-        if (job?.isActive == true && clock.elapsedRealtimeMs() >= dueAtElapsedMs) {
-            job?.cancel()
-            dispatchIfReady(reason = reason)
-            return
-        }
         if (job?.isActive == true) {
             actions.logEvent(
                 "stationary_ping_schedule_kept",
@@ -49,10 +40,10 @@ class StationaryPingController(
             return
         }
         isDueWhileProviderUnavailable = false
-        dueAtElapsedMs = clock.elapsedRealtimeMs() + dueInMs.coerceAtLeast(0L)
+        dueAtElapsedMs = clock.elapsedRealtimeMs() + intervalMs
         actions.logEvent(
             "stationary_ping_scheduled",
-            "reason=$reason dueInMs=${dueInMs.coerceAtLeast(0L)} providerAvailable=$providerAvailable"
+            "reason=$reason intervalMs=$intervalMs providerAvailable=$providerAvailable"
         )
         job = scope.launch {
             val remaining = dueAtElapsedMs - clock.elapsedRealtimeMs()
@@ -61,30 +52,6 @@ class StationaryPingController(
             }
             dispatchIfReady(reason = "interval_elapsed")
         }
-    }
-
-    fun reconcilePausedState(
-        reason: String,
-        providerAvailable: Boolean,
-        dueInMs: Long,
-    ) {
-        isProviderAvailable = providerAvailable
-        if (isDueWhileProviderUnavailable && providerAvailable) {
-            dispatchIfReady(reason = reason)
-            return
-        }
-        if (job?.isActive == true) {
-            if (clock.elapsedRealtimeMs() >= dueAtElapsedMs) {
-                job?.cancel()
-                dispatchIfReady(reason = reason)
-            }
-            return
-        }
-        onPaused(
-            reason = reason,
-            providerAvailable = providerAvailable,
-            dueInMs = dueInMs,
-        )
     }
 
     fun onProviderPaused(reason: String) {

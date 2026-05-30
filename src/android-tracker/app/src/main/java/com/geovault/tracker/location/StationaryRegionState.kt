@@ -56,6 +56,15 @@ data class StationaryRegionState(
         )
     }
 
+    fun nextFreshnessDueAtMs(intervalMs: Long): Long? {
+        if (!hasRegion) return null
+        val baseMs = lastFreshnessPointAtMs
+            .takeIf { it > 0L }
+            ?: enteredAtMs.takeIf { it > 0L }
+            ?: return null
+        return baseMs + intervalMs.coerceAtLeast(0L)
+    }
+
     fun clear(): StationaryRegionState = StationaryRegionState()
 }
 

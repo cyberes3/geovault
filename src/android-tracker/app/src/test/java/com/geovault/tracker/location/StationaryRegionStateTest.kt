@@ -66,6 +66,48 @@ class StationaryRegionStateTest {
     }
 
     @Test
+    fun nextFreshnessDueAtMs_usesEntryTimeUntilFirstFreshnessPoint() {
+        val anchor = RecoveryAnchorState(
+            trackerId = "tracker-1",
+            sessionBoundaryId = 1_000L,
+            latitude = 1.0,
+            longitude = 2.0,
+            timestampMs = 1_000L,
+            elapsedRealtimeNanos = 1_000_000L,
+            accuracyMeters = null,
+            radiusMeters = 50f,
+            source = "test",
+            motionMode = TrackingMotionMode.WALKING,
+        )
+
+        val state = StationaryRegionState().enter(anchor = anchor, nowMs = 2_000L)
+
+        assertEquals(302_000L, state.nextFreshnessDueAtMs(intervalMs = 300_000L))
+    }
+
+    @Test
+    fun nextFreshnessDueAtMs_usesLastFreshnessPointAfterEmission() {
+        val anchor = RecoveryAnchorState(
+            trackerId = "tracker-1",
+            sessionBoundaryId = 1_000L,
+            latitude = 1.0,
+            longitude = 2.0,
+            timestampMs = 1_000L,
+            elapsedRealtimeNanos = 1_000_000L,
+            accuracyMeters = null,
+            radiusMeters = 50f,
+            source = "test",
+            motionMode = TrackingMotionMode.WALKING,
+        )
+
+        val state = StationaryRegionState()
+            .enter(anchor = anchor, nowMs = 2_000L)
+            .markFreshnessPointPersisted(nowMs = 10_000L)
+
+        assertEquals(310_000L, state.nextFreshnessDueAtMs(intervalMs = 300_000L))
+    }
+
+    @Test
     fun poorAccuracyStationaryFixesDoNotMoveRegionAnchor() {
         val anchor = RecoveryAnchorState(
             trackerId = "tracker-1",
