@@ -3250,6 +3250,7 @@ class TrackingService : Service() {
                 gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
             ) {
                 delay(60_000L)
+                reconcileStationaryFreshnessProbeSchedule(reason = "sensor_watchdog")
                 val age = System.currentTimeMillis() - sigMotionSensorStartTime
                 if (age > 5 * 60_000L) {
                     significantMotionBridge?.cancel()
@@ -3259,6 +3260,40 @@ class TrackingService : Service() {
                 }
             }
         }
+    }
+
+    private fun reconcileStationaryFreshnessProbeSchedule(reason: String) {
+        if (
+            !isTracking ||
+            (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
+                gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED)
+        ) {
+            return
+        }
+        val dueAtMs = nextStationaryFreshnessDueAtMs() ?: return
+        val nowMs = System.currentTimeMillis()
+        val dueInMs = dueAtMs - nowMs
+        stationaryPingController?.reconcilePausedState(
+            reason = reason,
+            providerAvailable = isGpsProviderEnabled(),
+            dueInMs = dueInMs,
+        )
+        if (dueInMs <= 0L) {
+            runtimeTelemetry.event(
+                "stationary_ping_due_reconciled",
+                "reason=$reason overdueMs=${-dueInMs} state=$gpsRuntimeState"
+            )
+        }
+    }
+
+    private fun nextStationaryFreshnessDueAtMs(): Long? {
+        if (!stationaryRegionState.hasRegion) return null
+        val baseMs = stationaryRegionState.lastFreshnessPointAtMs
+            .takeIf { it > 0L }
+            ?: stationaryRegionState.enteredAtMs.takeIf { it > 0L }
+            ?: return null
+        val intervalMs = currentPositioningRuntimeContext().stationaryProbeIntervalMs
+        return baseMs + intervalMs
     }
 
     private fun resumeGps(reason: String = "significant_motion_resume") {

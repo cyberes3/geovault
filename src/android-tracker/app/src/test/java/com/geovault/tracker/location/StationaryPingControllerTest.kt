@@ -107,6 +107,41 @@ class StationaryPingControllerTest {
         assertEquals(listOf("interval_elapsed", "interval_elapsed"), actions.requests)
     }
 
+    @Test
+    fun onPaused_withShortDueWindowRequestsProbeAtDurableDueTime() = runTest {
+        val actions = RecordingActions()
+        val controller = controller(actions)
+
+        controller.onPaused(
+            reason = "watchdog_reconcile",
+            providerAvailable = true,
+            dueInMs = 1_000L,
+        )
+        advanceTimeBy(999L)
+        runCurrent()
+        assertTrue(actions.requests.isEmpty())
+
+        advanceTimeBy(1L)
+        runCurrent()
+
+        assertEquals(listOf("interval_elapsed"), actions.requests)
+    }
+
+    @Test
+    fun reconcilePausedState_dispatchesImmediatelyWhenDurableDueTimeIsPast() = runTest {
+        val actions = RecordingActions()
+        val controller = controller(actions)
+
+        controller.reconcilePausedState(
+            reason = "sensor_watchdog",
+            providerAvailable = true,
+            dueInMs = -1_000L,
+        )
+        runCurrent()
+
+        assertEquals(listOf("interval_elapsed"), actions.requests)
+    }
+
     private fun TestScope.controller(actions: RecordingActions): StationaryPingController {
         return StationaryPingController(
             scope = this,
