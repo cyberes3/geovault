@@ -214,8 +214,10 @@ class TrackerMapViewModelStreamingContractsTest {
                 state = state,
                 plan = singlePlan(trackerId),
                 trailPointLimit = 100,
-                recentDataWindowByTracker = mapOf(trackerId to "current_session"),
-                currentSessionStartByTracker = mapOf(trackerId to sessionStart),
+                sessionWindows = TrackerMapSessionWindowState(
+                    recentDataWindowByTracker = mapOf(trackerId to "current_session"),
+                    currentSessionStartByTracker = mapOf(trackerId to sessionStart),
+                ),
                 nowMs = sessionStart + 1_000L,
             )
         )
@@ -262,8 +264,10 @@ class TrackerMapViewModelStreamingContractsTest {
                 state = state,
                 plan = singlePlan(trackerId),
                 trailPointLimit = 100,
-                recentDataWindowByTracker = mapOf(trackerId to "session"),
-                currentSessionStartByTracker = mapOf(trackerId to sessionStart),
+                sessionWindows = TrackerMapSessionWindowState(
+                    recentDataWindowByTracker = mapOf(trackerId to "session"),
+                    currentSessionStartByTracker = mapOf(trackerId to sessionStart),
+                ),
                 nowMs = 11_000L,
             )
         )

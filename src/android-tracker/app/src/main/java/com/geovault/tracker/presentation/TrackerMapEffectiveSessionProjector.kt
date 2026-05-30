@@ -9,8 +9,7 @@ data class TrackerMapEffectiveSessionInput(
     val state: TrackerMapUiState,
     val plan: TrackerMapStreamingPlan,
     val trailPointLimit: Int,
-    val recentDataWindowByTracker: Map<String, String?> = emptyMap(),
-    val currentSessionStartByTracker: Map<String, Long> = emptyMap(),
+    val sessionWindows: TrackerMapSessionWindowState = TrackerMapSessionWindowState(),
     val visibleTrackerIds: Set<String>? = null,
     val nowMs: Long = System.currentTimeMillis(),
 )
@@ -50,8 +49,7 @@ object TrackerMapEffectiveSessionProjector {
                 state = effectiveState,
                 plan = plan,
                 localRuntimeOverlayTrails = renderTrails,
-                recentDataWindowByTracker = input.recentDataWindowByTracker,
-                currentSessionStartByTracker = input.currentSessionStartByTracker,
+                sessionWindows = input.sessionWindows,
                 visibleTrackerIds = input.visibleTrackerIds,
                 nowMs = input.nowMs,
             )

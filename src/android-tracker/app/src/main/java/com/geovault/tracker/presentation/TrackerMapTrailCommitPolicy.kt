@@ -63,6 +63,10 @@ internal object TrackerMapTrailCommitPolicy {
             loadedServerTrail = singleServerSeed,
             trackerId = input.plan.activeTrackerId,
             clearedHistoryTrackerIds = clearedIds,
+        ).preserveActiveTrailWhenReloadBlanks(
+            latest = input.latestState,
+            plan = input.plan,
+            activeSessionStartByTracker = input.activeSessionStartByTracker,
         )
         val mergedMultiTrails = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
             serverTrails = sanitizedLoaded.serverTrails,
@@ -172,6 +176,26 @@ internal object TrackerMapTrailCommitPolicy {
             "map_update trail_commit_preserve_single reason=$reason tracker=$normalizedId previous=${previous.size}"
         )
         return previous
+    }
+
+    private fun List<QueuedLocation>.preserveActiveTrailWhenReloadBlanks(
+        latest: TrackerMapUiState,
+        plan: TrackerMapTrailReloadPlan,
+        activeSessionStartByTracker: Map<String, Long>,
+    ): List<QueuedLocation> {
+        if (isNotEmpty()) return this
+        val activeTrackerId = plan.activeTrackerId.trim()
+        val activeStart = activeSessionStartByTracker[activeTrackerId] ?: return this
+        val activeCurrent = latest.trail.filter { point ->
+            point.trackerId.trim() == activeTrackerId &&
+                point.startTimestampMs == activeStart
+        }
+        if (activeCurrent.isEmpty()) return this
+        GeoVaultCaptureLog.w(
+            TAG,
+            "map_update trail_commit_blank_guard source=${plan.source} active=$activeTrackerId preserved=${activeCurrent.size}"
+        )
+        return activeCurrent
     }
 
     private fun List<QueuedLocation>.withActiveSessionCoverageFrom(

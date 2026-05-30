@@ -1675,8 +1675,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 state = state,
                 plan = plan,
                 localRuntimeOverlayTrails = state.allQueueTrailsByTracker,
-                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
-                currentSessionStartByTracker = currentSessionStartByTracker(state),
+                sessionWindows = currentSessionWindows(state),
                 visibleTrackerIds = visibleTrackerIdsForSessionPlan(state, plan),
                 nowMs = nowMs,
             )
@@ -1698,8 +1697,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 state = state,
                 plan = plan,
                 trailPointLimit = TRAIL_POINT_LIMIT,
-                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
-                currentSessionStartByTracker = currentSessionStartByTracker(state),
+                sessionWindows = currentSessionWindows(state),
                 visibleTrackerIds = visibleTrackerIdsForSessionPlan(state, plan),
                 nowMs = nowMs,
             )
@@ -1757,13 +1755,11 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
      * locally-recorded tracker (the only tracker whose session boundary the client knows
      * authoritatively); foreign trackers are absent and fall back to per-point starttimestamps.
      */
-    private fun currentSessionStartByTracker(state: TrackerMapUiState): Map<String, Long> {
-        if (!state.runtime.localRecordingActive) return emptyMap()
-        val sessionStart = state.runtime.sessionStartTimeMs
-        if (sessionStart <= 0L) return emptyMap()
-        val trackerId = state.runtime.locallyRecordedTrackerId.trim()
-        if (trackerId.isEmpty()) return emptyMap()
-        return mapOf(trackerId to sessionStart)
+    private fun currentSessionWindows(state: TrackerMapUiState): TrackerMapSessionWindowState {
+        return TrackerMapSessionWindowResolver.resolve(
+            recentDataWindowByTracker = currentRecentDataWindowByTracker(),
+            runtime = state.runtime,
+        )
     }
 
     fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
@@ -2170,16 +2166,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             // tracker is currently recording. The runtime carries the active session start;
             // overlay points stamped with a different non-null session start are stale and
             // would otherwise paint a cross-session connector ("spike") on the rendered line.
-            val activeLocalTrackerId = latest.runtime.locallyRecordedTrackerId.trim()
-            val activeSessionStart = latest.runtime.sessionStartTimeMs
-                .takeIf { it > 0L && latest.runtime.localRecordingActive }
-            val activeSessionStartByTracker: Map<String, Long> = if (
-                activeSessionStart != null && activeLocalTrackerId.isNotEmpty()
-            ) {
-                mapOf(activeLocalTrackerId to activeSessionStart)
-            } else {
-                emptyMap()
-            }
+            val activeSessionStartByTracker = TrackerMapSessionWindowResolver
+                .currentSessionStartByTracker(latest.runtime)
             val commit = TrackerMapTrailCommitPolicy.resolve(
                 TrackerMapTrailCommitInput(
                     reason = reason,
@@ -2191,21 +2179,16 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     clearedHistoryTrackerIds = clearedHistoryTrackerIds,
                 )
             )
-            val guardedCommit = commit.withActiveTrailBlankingGuard(
-                latest = latest,
-                plan = plan,
-                activeSessionStartByTracker = activeSessionStartByTracker,
-            )
-            mergeCommitted = MergedTrailResult(guardedCommit.trail, guardedCommit.multiTrails)
+            mergeCommitted = MergedTrailResult(commit.trail, commit.multiTrails)
             GeoVaultCaptureLog.i(
                 TAG,
                 "map_update vm_reload_commit reason=$reason source=${plan.source} " +
-                    "trail=${guardedCommit.trail.trailSummary()} multi=${guardedCommit.multiTrails.mapSizes()} " +
+                    "trail=${commit.trail.trailSummary()} multi=${commit.multiTrails.mapSizes()} " +
                     "barriers=${clearedHistoryTrackerIds.sorted()}"
             )
             latest.copy(
-                trail = guardedCommit.trail,
-                allQueueTrailsByTracker = guardedCommit.multiTrails,
+                trail = commit.trail,
+                allQueueTrailsByTracker = commit.multiTrails,
                 currentGroupId = if (latest.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     plan.resolvedGroupId
                 } else {
@@ -2246,26 +2229,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             // re-fit the user did not initiate.
             requestFitTrail(TrackerMapFitTrailMode.Instant)
         }
-    }
-
-    private fun TrackerMapTrailCommitResult.withActiveTrailBlankingGuard(
-        latest: TrackerMapUiState,
-        plan: TrackerMapTrailReloadPlan,
-        activeSessionStartByTracker: Map<String, Long>,
-    ): TrackerMapTrailCommitResult {
-        if (trail.isNotEmpty()) return this
-        val activeTrackerId = plan.activeTrackerId.trim()
-        val activeStart = activeSessionStartByTracker[activeTrackerId] ?: return this
-        val activeCurrent = latest.trail.filter { point ->
-            point.trackerId.trim() == activeTrackerId &&
-                point.startTimestampMs == activeStart
-        }
-        if (activeCurrent.isEmpty()) return this
-        GeoVaultCaptureLog.w(
-            TAG,
-            "map_update vm_reload_blank_guard source=${plan.source} active=$activeTrackerId preserved=${activeCurrent.size}"
-        )
-        return copy(trail = activeCurrent)
     }
 
     private data class MergedTrailResult(
@@ -2336,7 +2299,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 },
                 singleTrailSeed = latest.trail,
             )
-            val activeSessionStartByTracker = currentSessionStartByTracker(latest)
+            val activeSessionStartByTracker = TrackerMapSessionWindowResolver
+                .currentSessionStartByTracker(latest.runtime)
             val commit = TrackerMapTrailCommitPolicy.resolve(
                 TrackerMapTrailCommitInput(
                     reason = reason,
@@ -2604,8 +2568,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 snapshot = snapshot,
                 point = point,
                 trailPointLimit = TRAIL_POINT_LIMIT,
-                recentDataWindowByTracker = currentRecentDataWindowByTracker(),
-                currentSessionStartByTracker = currentSessionStartByTracker(snapshot.uiState),
+                sessionWindows = currentSessionWindows(snapshot.uiState),
                 visibleTrackerIds = visibleTrackerIdsForSessionPlan(snapshot.uiState, snapshot.plan),
                 nowMs = nowMs,
             )

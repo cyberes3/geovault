@@ -164,7 +164,9 @@ class TrackerMapSessionEngineTest {
                         queued("tracker-a", id = 0L, time = 30L, prov = "local_gps", startTimestampMs = s2),
                     )
                 ),
-                recentDataWindowByTracker = mapOf("tracker-a" to "current_session"),
+                sessionWindows = TrackerMapSessionWindowState(
+                    recentDataWindowByTracker = mapOf("tracker-a" to "current_session"),
+                ),
                 nowMs = 1_000_000L,
             )
         )
@@ -190,9 +192,11 @@ class TrackerMapSessionEngineTest {
                         queued("tracker-b", id = 0L, time = 20L, prov = "local_gps", startTimestampMs = s2),
                     ),
                 ),
-                recentDataWindowByTracker = mapOf(
-                    "tracker-a" to "current_session",
-                    "tracker-b" to "all",
+                sessionWindows = TrackerMapSessionWindowState(
+                    recentDataWindowByTracker = mapOf(
+                        "tracker-a" to "current_session",
+                        "tracker-b" to "all",
+                    ),
                 ),
                 nowMs = 1_000_000L,
             )
@@ -220,7 +224,9 @@ class TrackerMapSessionEngineTest {
                     displayedTrackerId = "active",
                 ),
                 localRuntimeOverlayTrails = emptyMap(),
-                recentDataWindowByTracker = mapOf("active" to "current_session"),
+                sessionWindows = TrackerMapSessionWindowState(
+                    recentDataWindowByTracker = mapOf("active" to "current_session"),
+                ),
                 nowMs = 1_000_000L,
             )
         )
@@ -257,8 +263,10 @@ class TrackerMapSessionEngineTest {
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
                     displayedTrackerId = "active",
                 ),
-                recentDataWindowByTracker = mapOf("active" to "session"),
-                currentSessionStartByTracker = mapOf("active" to current),
+                sessionWindows = TrackerMapSessionWindowState(
+                    recentDataWindowByTracker = mapOf("active" to "session"),
+                    currentSessionStartByTracker = mapOf("active" to current),
+                ),
                 nowMs = 1_000_000L,
             )
         )

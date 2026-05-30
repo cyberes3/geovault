@@ -10,13 +10,18 @@ object TrackerGeometryMergePolicy {
     fun merged(existing: Tracker?, incoming: Tracker): Tracker {
         if (existing == null) return incoming
         val incomingHasGeometry = incoming.geometry != null
+        val mergedPointParams = mergedPointParams(
+            existing = existing,
+            incoming = incoming,
+            incomingHasGeometry = incomingHasGeometry,
+        )
         return Tracker(
             id = incoming.id,
             name = incoming.name.ifBlank { existing.name },
             color = incoming.color ?: existing.color,
             settings = incoming.settings ?: existing.settings,
             geometry = incoming.geometry ?: existing.geometry,
-            point_params = if (incomingHasGeometry) incoming.point_params else incoming.point_params ?: existing.point_params,
+            point_params = mergedPointParams,
             last_point = incoming.last_point ?: existing.last_point,
             bbox = incoming.bbox ?: existing.bbox,
             tracker_secret = incoming.tracker_secret ?: existing.tracker_secret,
@@ -36,5 +41,17 @@ object TrackerGeometryMergePolicy {
             world_share_url = incoming.world_share_url ?: existing.world_share_url,
             shared_with_emails = incoming.shared_with_emails ?: existing.shared_with_emails,
         )
+    }
+
+    private fun mergedPointParams(
+        existing: Tracker,
+        incoming: Tracker,
+        incomingHasGeometry: Boolean,
+    ): List<Map<String, Any?>>? {
+        return if (incomingHasGeometry) {
+            incoming.point_params
+        } else {
+            incoming.point_params ?: existing.point_params
+        }
     }
 }
