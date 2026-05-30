@@ -2,6 +2,7 @@ package com.geovault.tracker.presentation
 
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.services.TrackingStatusAccuracyProjector
 import com.geovault.tracker.services.TrackingUiStatus
 
 data class HomePermissionSnapshot(
@@ -51,14 +52,11 @@ internal fun mergeHomeUiState(
     } else {
         runtime.lifecycleState
     }
-    val displayAccuracyMeters = if (
-        runtime.uiStatus == TrackingUiStatus.LOCKING &&
-        runtime.currentFixAccuracyMeters != null
-    ) {
-        runtime.currentFixAccuracyMeters
-    } else {
-        runtime.lastAccuracyMeters
-    }
+    val displayAccuracyMeters = TrackingStatusAccuracyProjector.displayAccuracy(
+        uiStatus = runtime.uiStatus,
+        lastAccuracyMeters = runtime.lastAccuracyMeters,
+        currentFixAccuracyMeters = runtime.currentFixAccuracyMeters,
+    )
     return HomeUiState(
         isTracking = effectiveRunning,
         lifecycleState = effectiveLifecycleState,

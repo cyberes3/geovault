@@ -106,7 +106,8 @@ import com.geovault.tracker.services.TrackingRuntimeOrchestrator
 import com.geovault.tracker.services.RuntimeLocationGateInput
 import com.geovault.tracker.services.FastLockTriggerInput
 import com.geovault.tracker.services.TrackingSessionCoordinator
-import com.geovault.tracker.services.TrackingUiStatusResolver
+import com.geovault.tracker.services.TrackingStatusAccuracyInput
+import com.geovault.tracker.services.TrackingStatusAccuracyProjector
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.RuntimeSnapshotProjector
@@ -2300,13 +2301,16 @@ class TrackingService : Service() {
             expectsActiveFixDelivery = expectsActiveFixDelivery(),
             gpsProviderAvailable = gpsOk,
         )
-        val uiStatus = TrackingUiStatusResolver.resolveForGpsState(
-            isRunning = effectiveRunning,
-            gpsProviderEnabled = gpsOk,
-            gpsState = gpsRuntimeState,
-            lastAccuracyMeters = snapshotForStatus.currentFixAccuracyMeters ?: snapshotForStatus.lastAccuracyMeters,
-            effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
-            activeAccuracyBlockedEmission = snapshotForStatus.activePointEmissionTrouble,
+        val statusProjection = TrackingStatusAccuracyProjector.project(
+            TrackingStatusAccuracyInput(
+                isRunning = effectiveRunning,
+                gpsProviderEnabled = gpsOk,
+                gpsState = gpsRuntimeState,
+                lastAccuracyMeters = snapshotForStatus.lastAccuracyMeters,
+                currentFixAccuracyMeters = snapshotForStatus.currentFixAccuracyMeters,
+                effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
+                activeAccuracyBlockedEmission = snapshotForStatus.activePointEmissionTrouble,
+            )
         )
         val activeMotionMode = positioningContext.activeMotionMode
         val selectedTrackerName = SelectedTrackerPrefs.selectedTrackerName(this)
@@ -2331,7 +2335,7 @@ class TrackingService : Service() {
                     gpsProviderEnabled = gpsOk,
                     autoTrackingEnabled = true,
                     activeMotionMode = activeMotionMode,
-                    uiStatus = uiStatus,
+                    uiStatus = statusProjection.uiStatus,
                     gpsPaused = recordingRuntime.pausedForMotion,
                     effectiveAccuracyThresholdMeters = effectiveAccuracyThreshold,
                     sessionVisibleBoundaryId = sessionVisibleBoundaryId,
