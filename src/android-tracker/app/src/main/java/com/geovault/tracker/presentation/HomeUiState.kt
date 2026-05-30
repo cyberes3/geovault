@@ -36,12 +36,14 @@ data class HomeUiState(
     val runtimeFailureReason: String? = null,
     val permissions: HomePermissionSnapshot = HomePermissionSnapshot(),
     val statusMessage: String = "",
+    val sparseTrackingEnabled: Boolean = false,
 )
 
 internal fun mergeHomeUiState(
     runtime: TrackingRuntimeSnapshot,
     permissions: HomePermissionSnapshot,
     statusMessage: String,
+    sparseTrackingEnabled: Boolean = false,
 ): HomeUiState {
     val displayName = runtime.selectedTrackerName.trim().ifBlank {
         runtime.selectedTrackerId.trim()
@@ -77,5 +79,6 @@ internal fun mergeHomeUiState(
         runtimeFailureReason = runtime.failureReason,
         permissions = permissions,
         statusMessage = statusMessage,
+        sparseTrackingEnabled = sparseTrackingEnabled,
     )
 }

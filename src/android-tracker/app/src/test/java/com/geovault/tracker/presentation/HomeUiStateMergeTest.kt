@@ -79,6 +79,18 @@ class HomeUiStateMergeTest {
     }
 
     @Test
+    fun merge_sparseTrackingEnabled_isPassedThrough() {
+        val merged = mergeHomeUiState(
+            runtime = TrackingRuntimeSnapshot(),
+            permissions = HomePermissionSnapshot(),
+            statusMessage = "",
+            sparseTrackingEnabled = true,
+        )
+
+        assertTrue(merged.sparseTrackingEnabled)
+    }
+
+    @Test
     fun merge_activeTrackingShowsHeldLastAccuracyWhenNotLocking() {
         val runtime = TrackingRuntimeSnapshot(
             recordingRuntime = RecordingRuntime(sessionActive = true),

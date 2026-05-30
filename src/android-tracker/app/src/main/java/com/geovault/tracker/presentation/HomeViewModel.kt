@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.tracker.R
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.TrackingPermissionGate
+import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +16,10 @@ import kotlinx.coroutines.launch
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val trackerSettingsRepository: TrackerSettingsRepository =
+        TrackerAppServices.from(application).trackerSettingsRepository()
     private var lastRuntime: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot()
+    private var sparseTrackingEnabled: Boolean = trackerSettingsRepository.getSettings().sparseTracking
     private val permissionFlow = MutableStateFlow(readPermissionSnapshot())
 
     private val _uiState = MutableStateFlow(
@@ -30,6 +35,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             TrackingRuntimeStateStore.state.collect { snap ->
                 lastRuntime = snap
+                pushUi()
+            }
+        }
+        viewModelScope.launch {
+            trackerSettingsRepository.observeSettings().collect { settings ->
+                sparseTrackingEnabled = settings.sparseTracking
                 pushUi()
             }
         }
@@ -58,6 +69,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             runtime = lastRuntime,
             permissions = perms,
             statusMessage = message,
+            sparseTrackingEnabled = sparseTrackingEnabled,
         )
     }
 

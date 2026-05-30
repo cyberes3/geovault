@@ -417,6 +417,14 @@ private fun TrackingContainer(
                 fontWeight = FontWeight.Bold,
                 color = homeStatusColor(state.trackingUiStatus, isPreparingToTrack),
             )
+            if (state.sparseTrackingEnabled) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.sparse_tracking_label),
+                    fontSize = 14.sp,
+                    color = geoVaultContentSecondaryColor(),
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(text = trackerName, fontSize = 16.sp, color = trackerTextColor)
             Spacer(modifier = Modifier.height(16.dp))
