@@ -46,7 +46,6 @@ import com.geovault.tracker.presentation.SharedViewModel
 import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.presentation.TrackersGroupsSubTab
 import com.geovault.tracker.presentation.TrackersGroupsViewModel
-import com.geovault.tracker.settings.TrackerTrackingProfile
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.R
 import com.geovault.tracker.TrackerApplication
@@ -69,17 +68,12 @@ fun MainScreen(
     onSettingsServerUrlChanged: (String) -> Unit,
     onSettingsConnect: () -> Unit,
     onSettingsDisconnect: () -> Unit,
-    onSettingsTrackingProfileSelected: (TrackerTrackingProfile) -> Unit,
-    onSettingsLoggingIntervalInput: (String) -> Unit,
-    onSettingsDistanceFilterInput: (String) -> Unit,
-    onSettingsAccuracyFilterInput: (String) -> Unit,
     onSettingsLowAccuracyFallbackEnabled: (Boolean) -> Unit,
     onSettingsLowAccuracyTimeoutInput: (String) -> Unit,
     onSettingsStartOnBoot: (Boolean) -> Unit,
     onSettingsStartOnLaunch: (Boolean) -> Unit,
     onSettingsSendExtendedData: (Boolean) -> Unit,
     onSettingsSignificantMotionOnly: (Boolean) -> Unit,
-    onSettingsAutoTrackingMode: (Boolean) -> Unit,
     onSettingsKeepScreenOnMap: (Boolean) -> Unit,
     onSettingsGroupModeFitOnlyActiveTrackers: (Boolean) -> Unit,
     onSettingsRefreshHiddenTrackerItems: () -> Unit,
@@ -517,17 +511,12 @@ fun MainScreen(
                     onServerUrlChanged = onSettingsServerUrlChanged,
                     onConnect = onSettingsConnect,
                     onDisconnect = onSettingsDisconnect,
-                    onTrackingProfileSelected = onSettingsTrackingProfileSelected,
-                    onLoggingIntervalInput = onSettingsLoggingIntervalInput,
-                    onDistanceFilterInput = onSettingsDistanceFilterInput,
-                    onAccuracyFilterInput = onSettingsAccuracyFilterInput,
                     onLowAccuracyFallbackEnabled = onSettingsLowAccuracyFallbackEnabled,
                     onLowAccuracyTimeoutInput = onSettingsLowAccuracyTimeoutInput,
                     onStartOnBoot = onSettingsStartOnBoot,
                     onStartOnLaunch = onSettingsStartOnLaunch,
                     onSendExtendedData = onSettingsSendExtendedData,
                     onSignificantMotionOnly = onSettingsSignificantMotionOnly,
-                    onAutoTrackingMode = onSettingsAutoTrackingMode,
                     onKeepScreenOnMap = onSettingsKeepScreenOnMap,
                     onGroupModeFitOnlyActiveTrackers = onSettingsGroupModeFitOnlyActiveTrackers,
                     onRefreshHiddenTrackerItems = onSettingsRefreshHiddenTrackerItems,

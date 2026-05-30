@@ -16,7 +16,6 @@ import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
-import com.geovault.tracker.settings.TrackerTrackingProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,31 +79,6 @@ class SettingsViewModel(
         refreshHiddenTrackerItems()
     }
 
-    fun setTrackingProfile(profile: TrackerTrackingProfile) {
-        trackerSettingsRepository.setTrackingProfile(profile)
-    }
-
-    fun setLoggingIntervalSecFromInput(raw: String) {
-        val value = raw.toLongOrNull() ?: return
-        trackerSettingsRepository.setLoggingIntervalSec(value)
-    }
-
-    fun setDistanceFilterMetersFromInput(raw: String) {
-        val value = SettingsMeasurementPolicy.displayTextToMetersOrNull(
-            raw = raw,
-            usesImperial = _state.value.usesImperialUnits
-        ) ?: return
-        trackerSettingsRepository.setDistanceFilterMeters(value)
-    }
-
-    fun setAccuracyFilterMetersFromInput(raw: String) {
-        val value = SettingsMeasurementPolicy.displayTextToMetersOrNull(
-            raw = raw,
-            usesImperial = _state.value.usesImperialUnits
-        ) ?: return
-        trackerSettingsRepository.setAccuracyFilterMeters(value)
-    }
-
     fun setLowAccuracyFallbackTimeoutSecFromInput(raw: String) {
         val value = raw.toLongOrNull() ?: return
         trackerSettingsRepository.setLowAccuracyFallbackTimeoutSec(value)
@@ -135,10 +109,6 @@ class SettingsViewModel(
             return
         }
         trackerSettingsRepository.setSignificantDataOnly(enabled)
-    }
-
-    fun setAutoTrackingMode(enabled: Boolean) {
-        trackerSettingsRepository.setAutoTrackingMode(enabled)
     }
 
     fun setKeepScreenOnWhileViewingMap(enabled: Boolean) {

@@ -29,30 +29,21 @@ class SettingsViewModelTrackerDispatchTest {
     }
 
     @Test
-    fun setTrackingProfile_delegatesToRepository() {
+    fun setLowAccuracyFallbackTimeoutSecFromInput_ignoresNonNumeric() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
         val vm = SettingsViewModel(app, recording)
-        vm.setTrackingProfile(TrackerTrackingProfile.DRIVING)
-        assertEquals(listOf("setTrackingProfile(DRIVING)"), recording.calls)
-    }
-
-    @Test
-    fun setLoggingIntervalSecFromInput_ignoresNonNumeric() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        val recording = RecordingTrackerSettingsRepository()
-        val vm = SettingsViewModel(app, recording)
-        vm.setLoggingIntervalSecFromInput("abc")
+        vm.setLowAccuracyFallbackTimeoutSecFromInput("abc")
         assertEquals(emptyList<String>(), recording.calls)
     }
 
     @Test
-    fun setLoggingIntervalSecFromInput_parsesAndDispatches() {
+    fun setLowAccuracyFallbackTimeoutSecFromInput_parsesAndDispatches() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val recording = RecordingTrackerSettingsRepository()
         val vm = SettingsViewModel(app, recording)
-        vm.setLoggingIntervalSecFromInput("33")
-        assertEquals(listOf("setLoggingIntervalSec(33)"), recording.calls)
+        vm.setLowAccuracyFallbackTimeoutSecFromInput("33")
+        assertEquals(listOf("setLowAccuracyFallbackTimeoutSec(33)"), recording.calls)
     }
 }
 
