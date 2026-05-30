@@ -47,8 +47,9 @@ import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RecoveryAnchorStore
-import com.geovault.tracker.location.StationaryRegionState
 import com.geovault.tracker.location.StationaryRegionStore
+import com.geovault.tracker.location.StationaryFreshnessActions
+import com.geovault.tracker.location.StationaryFreshnessCoordinator
 import com.geovault.tracker.location.StationaryPingActions
 import com.geovault.tracker.location.StationaryPingController
 import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
@@ -147,7 +148,7 @@ class TrackingService : Service() {
     private lateinit var locationSessionCoordinator: LocationSessionCoordinator
     private lateinit var runtimeTelemetry: RuntimeTelemetry
     private lateinit var recoveryAnchorStore: RecoveryAnchorStore
-    private lateinit var stationaryRegionStore: StationaryRegionStore
+    private lateinit var stationaryFreshnessCoordinator: StationaryFreshnessCoordinator
     private var httpClient: OkHttpClient? = null
     private val locationUpdateMutex = Mutex()
     private val localTrackPointOrderingCounter = AtomicLong(0L)
@@ -178,7 +179,6 @@ class TrackingService : Service() {
     private val freshnessRecoveryController = FreshnessRecoveryController()
     private val providerHealthController = ProviderHealthController(staleFixDeliveryMs = FIX_DELIVERY_STALE_MS)
     private var recoveryAnchorState: RecoveryAnchorState? = null
-    private var stationaryRegionState: StationaryRegionState = StationaryRegionState()
     private var uploadLivenessState: UploadLivenessState = UploadLivenessState()
     private val pointFreshnessTracker = PointFreshnessTracker()
     private var lastLoggedPointEmissionTrouble: PointEmissionTrouble = PointEmissionTrouble.None
@@ -214,12 +214,6 @@ class TrackingService : Service() {
     private var sigMotionSensorStartTime: Long = 0L
     private var watchdogJob: Job? = null
     private var significantMotionBridge: SignificantMotionResumeBridge? = null
-    private var stationaryPingController: StationaryPingController? = null
-    private var pausedFreshnessProbeActive: Boolean = false
-    private var pausedFreshnessProbeStartedAtMs: Long = 0L
-    private var pausedFreshnessPoorAccuracyFixes: Int = 0
-    private var pausedFreshnessProbeTimeoutJob: Job? = null
-    private var lastPausedFreshnessPointAtMs: Long = 0L
     private var consecutiveStationaryPoints: Int = 0
     private var stationaryAnchorLocation: Location? = null
     private var consecutivePushFailures = 0
@@ -476,7 +470,6 @@ class TrackingService : Service() {
             runtimeEventPublisher = RuntimeEventPublisher(applicationContext)
             runtimeTelemetry = RuntimeTelemetry(applicationContext)
             recoveryAnchorStore = RecoveryAnchorStore(applicationContext)
-            stationaryRegionStore = StationaryRegionStore(applicationContext)
             locationSessionCoordinator = LocationSessionCoordinator(this) { error ->
                 runtimeTelemetry.event(
                     "location_request_registration_failed",
@@ -501,7 +494,7 @@ class TrackingService : Service() {
                 trigger = SensorManagerSignificantMotionTrigger(applicationContext),
                 onResume = { resumeGps() }
             )
-            stationaryPingController = StationaryPingController(
+            val stationaryPingController = StationaryPingController(
                 scope = serviceScope,
                 actions = object : StationaryPingActions {
                     override fun requestProbe(reason: String) {
@@ -510,6 +503,20 @@ class TrackingService : Service() {
 
                     override fun logEvent(name: String, details: String) {
                         runtimeTelemetry.event(name, details)
+                    }
+                }
+            )
+            stationaryFreshnessCoordinator = StationaryFreshnessCoordinator(
+                store = StationaryRegionStore(applicationContext),
+                pingController = stationaryPingController,
+                scope = serviceScope,
+                actions = object : StationaryFreshnessActions {
+                    override fun logEvent(name: String, details: String) {
+                        runtimeTelemetry.event(name, details)
+                    }
+
+                    override fun onProbeTimeout() {
+                        pauseGpsInternal(force = true)
                     }
                 }
             )
@@ -681,8 +688,7 @@ class TrackingService : Service() {
         cleanupServiceResources(reason = "on_destroy")
         significantMotionBridge?.cancel()
         significantMotionBridge = null
-        stationaryPingController?.onStopped(reason = "on_destroy")
-        stationaryPingController = null
+        stationaryFreshnessCoordinator.onStopped(reason = "on_destroy")
         serviceJob.cancel()
         TrackingServiceLifecycleGate.markDestroyed()
         super.onDestroy()
@@ -773,7 +779,7 @@ class TrackingService : Service() {
         providerHealthController.reset()
         lastFixDeliveryAtMs = 0L
         lastLocationRequestAppliedAtMs = 0L
-        stationaryRegionState = StationaryRegionState()
+        stationaryFreshnessCoordinator.resetSession()
         uploadLivenessState = UploadLivenessState()
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
@@ -875,7 +881,7 @@ class TrackingService : Service() {
         transitionGpsState(GpsRuntimeEvent.TRACKING_STOPPED, "transition_to_stopped_state")
         lastFilteredLocation = null
         latestObservedRawLocation = null
-        stationaryPingController?.onStopped(reason = "tracking_stopped")
+        stationaryFreshnessCoordinator.onStopped(reason = "tracking_stopped")
         clearPausedFreshnessProbe(reason = "tracking_stopped", clearLastFreshnessTimestamp = true)
         lowAccuracyFallbackCandidate = null
         lowAccuracyFallbackCoordinator.onTrackingStopped()
@@ -887,8 +893,7 @@ class TrackingService : Service() {
         lastLocationRequestAppliedAtMs = 0L
         recoveryAnchorState = null
         recoveryAnchorStore.clear()
-        stationaryRegionState = StationaryRegionState()
-        stationaryRegionStore.clear()
+        stationaryFreshnessCoordinator.clearRegion()
         uploadLivenessState = UploadLivenessState()
         pointFreshnessTracker.reset(sessionStartedAtMs = 0L)
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
@@ -921,7 +926,7 @@ class TrackingService : Service() {
         stopFastGpsLockWindow(reason = "cleanup")
         unregisterGpsProviderReceiverIfNeeded()
         cancelLowAccuracyFallbackTimer(clearCandidate = false)
-        stationaryPingController?.onStopped(reason = "cleanup_$reason")
+        stationaryFreshnessCoordinator.onStopped(reason = "cleanup_$reason")
         clearPausedFreshnessProbe(reason = "cleanup_$reason", clearLastFreshnessTimestamp = true)
         significantMotionBridge?.cancel()
         autoTrackingMotionEvidenceGate.reset()
@@ -1019,7 +1024,7 @@ class TrackingService : Service() {
         if (selectedTrackerId.isEmpty()) return
         val motionMode = runtimeContext.activeMotionMode
         if (
-            pausedFreshnessProbeActive &&
+            stationaryFreshnessCoordinator.probeActive &&
             !bypassFilters &&
             !skipAdaptiveTrackingEffects &&
             handlePausedFreshnessProbeFix(
@@ -1520,7 +1525,7 @@ class TrackingService : Service() {
      */
     private fun requestStationaryFreshnessProbe(reason: String): Boolean {
         if (!isTracking) {
-            stationaryPingController?.onStopped(reason = "not_tracking")
+            stationaryFreshnessCoordinator.onStopped(reason = "not_tracking")
             runtimeTelemetry.event(
                 "stationary_ping_dropped",
                 "reason=$reason notTracking=true gpsState=$gpsRuntimeState"
@@ -1530,7 +1535,7 @@ class TrackingService : Service() {
         if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
             gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
         ) {
-            stationaryPingController?.onResumed(reason = "not_paused")
+            stationaryFreshnessCoordinator.onResumed(reason = "not_paused")
             clearPausedFreshnessProbe(reason = "stationary_ping_not_paused")
             runtimeTelemetry.event("stationary_ping_skipped", "reason=$reason state=$gpsRuntimeState")
             return true
@@ -1542,7 +1547,7 @@ class TrackingService : Service() {
         )
         if (gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
             clearPausedFreshnessProbe(reason = "provider_unavailable_before_probe")
-            stationaryPingController?.onPaused(
+            stationaryFreshnessCoordinator.schedulePausedPing(
                 reason = "provider_unavailable_before_probe",
                 providerAvailable = false,
             )
@@ -1567,15 +1572,13 @@ class TrackingService : Service() {
         val decision = PausedFreshnessPolicy.evaluate(
             anchorLocation = anchorLocation,
             candidateLocation = probeLocation,
-            stationaryRadiusMeters = stationaryRegionState.radiusMeters
-                .takeIf { stationaryRegionState.hasRegion }
+            stationaryRadiusMeters = stationaryFreshnessCoordinator.radiusMeters
+                .takeIf { stationaryFreshnessCoordinator.hasRegion }
                 ?: TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             accuracyCeilingMeters = runtimeContext.stationaryAccuracyCeilingMeters,
             freshnessIntervalMs = runtimeContext.stationaryProbeIntervalMs,
             nowMs = nowMs,
-            lastFreshnessPointAtMs = stationaryRegionState.lastFreshnessPointAtMs
-                .takeIf { it > 0L }
-                ?: lastPausedFreshnessPointAtMs,
+            lastFreshnessPointAtMs = stationaryFreshnessCoordinator.lastFreshnessPointAtMs,
         )
         if (!decision.shouldEmit) {
             logPausedFreshnessDecision(eventName = "paused_freshness_skipped", decision = decision, probeLocation = probeLocation)
@@ -1590,14 +1593,10 @@ class TrackingService : Service() {
                     return true
                 }
                 PausedFreshnessDecisionReason.POOR_ACCURACY -> {
-                    stationaryRegionState = stationaryRegionState.recordPoorAccuracyFix()
-                    stationaryRegionStore.save(stationaryRegionState)
-                    pausedFreshnessPoorAccuracyFixes = stationaryRegionState.poorAccuracyFixes
-                    val probeAgeMs = nowMs - (stationaryRegionState.probeStartedAtMs.takeIf { it > 0L }
-                        ?: pausedFreshnessProbeStartedAtMs)
+                    val probeState = stationaryFreshnessCoordinator.recordPoorAccuracyFix(nowMs)
                     if (
-                        pausedFreshnessPoorAccuracyFixes >= PAUSED_FRESHNESS_MAX_POOR_ACCURACY_FIXES ||
-                        probeAgeMs >= PAUSED_FRESHNESS_PROBE_TIMEOUT_MS
+                        probeState.poorAccuracyFixes >= PAUSED_FRESHNESS_MAX_POOR_ACCURACY_FIXES ||
+                        probeState.probeAgeMs >= PAUSED_FRESHNESS_PROBE_TIMEOUT_MS
                     ) {
                         clearPausedFreshnessProbe(reason = "poor_accuracy_timeout")
                         if (pointFreshnessTracker.shouldForceLocalRecovery(
@@ -1649,9 +1648,7 @@ class TrackingService : Service() {
             pauseGpsInternal(force = true)
             return true
         }
-        lastPausedFreshnessPointAtMs = nowMs
-        stationaryRegionState = stationaryRegionState.markFreshnessPointPersisted(nowMs)
-        stationaryRegionStore.save(stationaryRegionState)
+        stationaryFreshnessCoordinator.markFreshnessPointPersisted(nowMs)
         logPausedFreshnessDecision(eventName = "paused_freshness_emitted", decision = decision, probeLocation = probeLocation)
         runtimeTelemetry.event(
             name = "track_point",
@@ -1672,25 +1669,12 @@ class TrackingService : Service() {
     }
 
     private fun markPausedFreshnessProbeStarted(nowMs: Long) {
-        stationaryRegionState = stationaryRegionState.startProbe(nowMs)
-        stationaryRegionStore.save(stationaryRegionState)
-        pausedFreshnessProbeActive = true
-        pausedFreshnessProbeStartedAtMs = nowMs
-        pausedFreshnessPoorAccuracyFixes = 0
-        pausedFreshnessProbeTimeoutJob?.cancel()
-        pausedFreshnessProbeTimeoutJob = serviceScope.launch {
-            delay(PAUSED_FRESHNESS_PROBE_TIMEOUT_MS)
-            if (pausedFreshnessProbeActive && pausedFreshnessProbeStartedAtMs == nowMs) {
-                runtimeTelemetry.event("paused_freshness_probe_timeout", "ageMs=$PAUSED_FRESHNESS_PROBE_TIMEOUT_MS")
-                clearPausedFreshnessProbe(reason = "timeout")
-                pauseGpsInternal(force = true)
-            }
-        }
         val anchorAgeMs = lastFilteredLocation?.time?.let { nowMs - it }
-        runtimeTelemetry.event(
-            "paused_freshness_probe_started",
-            "state=$gpsRuntimeState consecutiveStationary=$consecutiveStationaryPoints " +
-                "anchorAgeMs=${anchorAgeMs ?: -1L}"
+        stationaryFreshnessCoordinator.startProbe(
+            nowMs = nowMs,
+            timeoutMs = PAUSED_FRESHNESS_PROBE_TIMEOUT_MS,
+            details = "state=$gpsRuntimeState consecutiveStationary=$consecutiveStationaryPoints " +
+                "anchorAgeMs=${anchorAgeMs ?: -1L}",
         )
     }
 
@@ -1698,22 +1682,10 @@ class TrackingService : Service() {
         reason: String,
         clearLastFreshnessTimestamp: Boolean = false,
     ) {
-        if (pausedFreshnessProbeActive || pausedFreshnessProbeStartedAtMs > 0L) {
-            runtimeTelemetry.event(
-                "paused_freshness_probe_cleared",
-                "reason=$reason active=$pausedFreshnessProbeActive startedAt=$pausedFreshnessProbeStartedAtMs"
-            )
-        }
-        pausedFreshnessProbeActive = false
-        pausedFreshnessProbeStartedAtMs = 0L
-        pausedFreshnessPoorAccuracyFixes = 0
-        stationaryRegionState = stationaryRegionState.clearProbe(clearLastFreshnessTimestamp)
-        stationaryRegionStore.save(stationaryRegionState)
-        pausedFreshnessProbeTimeoutJob?.cancel()
-        pausedFreshnessProbeTimeoutJob = null
-        if (clearLastFreshnessTimestamp) {
-            lastPausedFreshnessPointAtMs = 0L
-        }
+        stationaryFreshnessCoordinator.clearProbe(
+            reason = reason,
+            clearLastFreshnessTimestamp = clearLastFreshnessTimestamp,
+        )
     }
 
     private fun logPausedFreshnessDecision(
@@ -2227,10 +2199,9 @@ class TrackingService : Service() {
             source = "stationary_region",
             motionMode = motionMode,
         )
-        stationaryRegionState = stationaryRegionState.enter(anchor = anchor, nowMs = nowMs)
+        stationaryFreshnessCoordinator.enterRegion(anchor = anchor, nowMs = nowMs)
         recoveryAnchorState = anchor
         recoveryAnchorStore.save(anchor)
-        stationaryRegionStore.save(stationaryRegionState)
     }
 
     private fun buildAccuracyHoldLogKey(
@@ -2286,11 +2257,10 @@ class TrackingService : Service() {
                     "localAgeMs=${sessionStartedAtMs - anchor.timestampMs}"
             )
         }
-        stationaryRegionStore.load(
+        stationaryFreshnessCoordinator.restore(
             trackerId = trackerId,
             sessionBoundaryId = sessionVisibleBoundaryId,
         )?.let { restored ->
-            stationaryRegionState = restored
             runtimeTelemetry.event(
                 "stationary_region_restored",
                 "trackerId=$trackerId enteredAtMs=${restored.enteredAtMs} " +
@@ -2400,8 +2370,8 @@ class TrackingService : Service() {
             } else {
                 "inactive"
             },
-            stationaryRegion = if (stationaryRegionState.hasRegion) {
-                "active:probe=${stationaryRegionState.probeActive}:poorFixes=${stationaryRegionState.poorAccuracyFixes}"
+            stationaryRegion = if (stationaryFreshnessCoordinator.hasRegion) {
+                "active:probe=${stationaryFreshnessCoordinator.probeActive}:poorFixes=${stationaryFreshnessCoordinator.poorAccuracyFixes}"
             } else {
                 "inactive"
             },
@@ -2587,9 +2557,9 @@ class TrackingService : Service() {
         }
         transitionGpsState(GpsRuntimeEvent.PROVIDER_DISABLED, reason)
         if (gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
-            stationaryPingController?.onProviderPaused(reason = reason)
+            stationaryFreshnessCoordinator.onProviderPaused(reason = reason)
         } else {
-            stationaryPingController?.onResumed(reason = "provider_disabled")
+            stationaryFreshnessCoordinator.onResumed(reason = "provider_disabled")
         }
         resetElasticDistanceOverride(reason = "gps_provider_disabled", reapplyRequest = false)
         stopFastGpsLockWindow(reason = "gps_provider_disabled")
@@ -2612,7 +2582,7 @@ class TrackingService : Service() {
         }
         transitionGpsState(GpsRuntimeEvent.PROVIDER_ENABLED, reason)
         if (gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION) {
-            stationaryPingController?.onProviderRestored(reason = reason)
+            stationaryFreshnessCoordinator.onProviderRestored(reason = reason)
             if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION) {
                 return
             }
@@ -3234,7 +3204,7 @@ class TrackingService : Service() {
         significantMotionBridge?.request()
         sigMotionSensorStartTime = System.currentTimeMillis()
         startSensorWatchdog()
-        stationaryPingController?.onPaused(
+        stationaryFreshnessCoordinator.schedulePausedPing(
             reason = "pause_for_motion",
             providerAvailable = isGpsProviderEnabled()
         )
@@ -3270,7 +3240,7 @@ class TrackingService : Service() {
         ) {
             return
         }
-        val dueAtMs = stationaryRegionState.nextFreshnessDueAtMs(
+        val dueAtMs = stationaryFreshnessCoordinator.nextFreshnessDueAtMs(
             intervalMs = currentPositioningRuntimeContext().stationaryProbeIntervalMs
         ) ?: return
         val nowMs = System.currentTimeMillis()
@@ -3307,11 +3277,10 @@ class TrackingService : Service() {
             ensureLowAccuracyFallbackTimerRunning()
             runtimeTelemetry.event("fallback_preserved_on_resume", "reason=$reason")
         }
-        stationaryPingController?.onResumed(reason = reason)
+        stationaryFreshnessCoordinator.onResumed(reason = reason)
         consecutiveStationaryPoints = 0
         stationaryAnchorLocation = null
-        stationaryRegionState = stationaryRegionState.clear()
-        stationaryRegionStore.clear()
+        stationaryFreshnessCoordinator.clearRegion()
         autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
         watchdogJob?.cancel()
         watchdogJob = null
