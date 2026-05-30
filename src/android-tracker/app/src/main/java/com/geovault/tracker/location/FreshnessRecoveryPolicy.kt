@@ -1,6 +1,7 @@
 package com.geovault.tracker.location
 
 import android.location.Location
+import com.geovault.tracker.policy.filter.LocationFilterReasons
 
 enum class FreshnessRecoveryReason(val telemetryValue: String) {
     INACTIVE("inactive"),
@@ -78,7 +79,7 @@ object FreshnessRecoveryPolicy {
 
     private fun blockingReason(input: FreshnessRecoveryInput): FreshnessRecoveryDecision.Blocked? {
         if (input.accepted) {
-            if (input.filterReason != "uncertainty-suppressed") {
+            if (input.filterReason != LocationFilterReasons.UNCERTAINTY_SUPPRESSED) {
                 return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.ALREADY_ACCEPTED_NOT_PERSISTED)
             }
         }

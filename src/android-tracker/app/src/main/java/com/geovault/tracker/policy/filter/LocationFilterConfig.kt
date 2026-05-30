@@ -7,7 +7,7 @@ package com.geovault.tracker.policy.filter
  *
  * Defaults are profile-independent: the same tuning runs for walking,
  * biking, and driving sessions. Speed profiles only change the
- * [com.geovault.tracker.policy.TrackingPolicyProfiles] LocationRequest
+ * [com.geovault.tracker.services.PositioningPolicyConfig] LocationRequest
  * (interval / distance-filter) and the user-facing accuracy threshold.
  *
  * Numeric ranges:

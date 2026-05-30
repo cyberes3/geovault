@@ -2,6 +2,7 @@ package com.geovault.tracker.policy
 
 import com.geovault.tracker.policy.filter.LocationFilter
 import com.geovault.tracker.policy.filter.LocationFilterConfig
+import com.geovault.tracker.policy.filter.LocationFilterReasons
 import com.geovault.tracker.policy.filter.LocationFilterResult
 import com.geovault.tracker.policy.filter.LocationInput
 import com.geovault.tracker.policy.filter.LocationMetrics
@@ -239,7 +240,7 @@ object TrackPointPolicyEngine {
         return when (result.decision) {
             LocationFilterResult.Decision.Reject -> {
                 val rejectReason = when (result.reason) {
-                    "low-accuracy" -> TrackPointRejectReason.BAD_ACCURACY
+                    LocationFilterReasons.LOW_ACCURACY -> TrackPointRejectReason.BAD_ACCURACY
                     else -> TrackPointRejectReason.JUMP
                 }
                 TrackPointDecision(

@@ -30,7 +30,7 @@ object PositioningPresets {
                 distanceFilterMeters = TrackingLocationPolicy.WALKING_DISTANCE_FILTER_METERS,
                 accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Walking,
-                recoverySpeedCapMps = 4.5f,
+                recoverySpeedCapMps = MotionProfileTuning.Walking.maxImpliedSpeedMps.toFloat(),
             )
             TrackingMotionMode.BIKING -> PositioningPresetValues(
                 motionMode = motionMode,
@@ -38,7 +38,7 @@ object PositioningPresets {
                 distanceFilterMeters = TrackingLocationPolicy.BIKING_DISTANCE_FILTER_METERS,
                 accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Biking,
-                recoverySpeedCapMps = 14f,
+                recoverySpeedCapMps = MotionProfileTuning.Biking.maxImpliedSpeedMps.toFloat(),
             )
             TrackingMotionMode.DRIVING -> PositioningPresetValues(
                 motionMode = motionMode,
@@ -46,7 +46,7 @@ object PositioningPresets {
                 distanceFilterMeters = TrackingLocationPolicy.DRIVING_DISTANCE_FILTER_METERS,
                 accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Driving,
-                recoverySpeedCapMps = 60f,
+                recoverySpeedCapMps = MotionProfileTuning.Driving.maxImpliedSpeedMps.toFloat(),
             )
         }
     }

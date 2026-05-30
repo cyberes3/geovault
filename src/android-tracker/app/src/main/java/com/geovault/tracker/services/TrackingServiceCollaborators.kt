@@ -14,6 +14,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.LocationFilterConfig
+import com.geovault.tracker.policy.filter.LocationFilterReasons
 import com.geovault.tracker.settings.TrackerSettings
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -72,10 +73,9 @@ class LocationIngestCoordinator(
         nowElapsedRealtimeNanos: Long,
         sessionStartTimeMs: Long = 0L,
         isMockLocation: Boolean = LocationCompat.isMock(location),
-        filterConfig: LocationFilterConfig = TrackingPolicyProfiles.ingestConfig(
+        filterConfig: LocationFilterConfig = PositioningPolicyConfig.ingestConfig(
             maxAccuracyMeters = effectiveAccuracyFilterMeters,
             motionMode = motionMode,
-            isMockLocation = isMockLocation,
         ),
     ): LocationIngestResult {
         require(queuedTrackerId.isNotBlank()) { "queuedTrackerId must not be blank" }
@@ -301,9 +301,9 @@ class LocationIngestCoordinator(
         if (isExpectedRecoveryReason(policyReason)) return null
         val previous = previousByTrack ?: return null
         val anchorAgeMs = nowMs - previous.timestampMs
-        if (anchorAgeMs < TrackingPolicyProfiles.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return null
+        if (anchorAgeMs < PositioningPolicyConfig.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return null
         val nextStreak = (jumpRejectStreakByStream[streamKey]?.get() ?: 0L) + 1L
-        if (nextStreak < TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD) return null
+        if (nextStreak < PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD) return null
         return LocalReanchorEvent(
             streamKey = streamKey,
             policyReason = policyReason,
@@ -321,10 +321,10 @@ class LocationIngestCoordinator(
     }
 
     private fun isExpectedRecoveryReason(policyReason: String?): Boolean {
-        return policyReason == "resume-unconfirmed" ||
-            policyReason == "candidate-unconfirmed" ||
-            policyReason == "speed-cap-unconfirmed" ||
-            policyReason == "speed-cap-exceeded"
+        return policyReason == LocationFilterReasons.RESUME_UNCONFIRMED ||
+            policyReason == LocationFilterReasons.CANDIDATE_UNCONFIRMED ||
+            policyReason == LocationFilterReasons.SPEED_CAP_UNCONFIRMED ||
+            policyReason == LocationFilterReasons.SPEED_CAP_EXCEEDED
     }
 
     private fun isOutOfOrderAgainstTrack(previousByTrack: TrackPointEvent?, canonical: TrackPointEvent): Boolean {
@@ -386,7 +386,7 @@ class LocationIngestCoordinator(
         val timestampSkewMs = abs(normalizedTimestampMs - nowMs)
         val timestampForPolicyMs = if (
             isMockLocation &&
-            timestampSkewMs > TrackingPolicyProfiles.MOCK_TIMESTAMP_SKEW_TOLERANCE_MS
+            timestampSkewMs > PositioningPolicyConfig.MOCK_TIMESTAMP_SKEW_TOLERANCE_MS
         ) {
             nowMs
         } else {

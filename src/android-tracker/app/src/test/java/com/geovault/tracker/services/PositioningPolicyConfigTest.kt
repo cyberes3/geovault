@@ -6,24 +6,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TrackingPolicyProfilesTest {
+class PositioningPolicyConfigTest {
 
     @Test
-    fun ingestConfig_appliesProfileSpecificPhysicsAndSharedAccuracyThreshold() {
-        val walking = TrackingPolicyProfiles.ingestConfig(
+    fun ingestConfig_appliesPresetSpecificPhysicsAndSharedAccuracyThreshold() {
+        val walking = PositioningPolicyConfig.ingestConfig(
             maxAccuracyMeters = 25f,
             motionMode = TrackingMotionMode.WALKING,
-            isMockLocation = false,
         )
-        val biking = TrackingPolicyProfiles.ingestConfig(
+        val biking = PositioningPolicyConfig.ingestConfig(
             maxAccuracyMeters = 25f,
             motionMode = TrackingMotionMode.BIKING,
-            isMockLocation = false,
         )
-        val driving = TrackingPolicyProfiles.ingestConfig(
+        val driving = PositioningPolicyConfig.ingestConfig(
             maxAccuracyMeters = 25f,
             motionMode = TrackingMotionMode.DRIVING,
-            isMockLocation = false,
         )
         assertTrue(walking.maxImpliedSpeedMps < biking.maxImpliedSpeedMps)
         assertTrue(biking.maxImpliedSpeedMps < driving.maxImpliedSpeedMps)
@@ -36,15 +33,13 @@ class TrackingPolicyProfilesTest {
 
     @Test
     fun ingestConfig_appliesAccuracyThresholdAcrossModes() {
-        val tight = TrackingPolicyProfiles.ingestConfig(
+        val tight = PositioningPolicyConfig.ingestConfig(
             maxAccuracyMeters = 10f,
             motionMode = TrackingMotionMode.WALKING,
-            isMockLocation = false,
         )
-        val loose = TrackingPolicyProfiles.ingestConfig(
+        val loose = PositioningPolicyConfig.ingestConfig(
             maxAccuracyMeters = 80f,
             motionMode = TrackingMotionMode.WALKING,
-            isMockLocation = false,
         )
         assertTrue(tight.trackingAccuracyThresholdMeters < loose.trackingAccuracyThresholdMeters)
     }
@@ -63,7 +58,7 @@ class TrackingPolicyProfilesTest {
 
     @Test
     fun fallbackTransitionConfig_setsConservativeFreshnessTtl() {
-        val fallback = TrackingPolicyProfiles.fallbackTransitionConfig()
+        val fallback = PositioningPolicyConfig.fallbackTransitionConfig()
         assertEquals(2L * 60L * 1000L, fallback.freshnessTtlMs)
     }
 }

@@ -3,10 +3,10 @@ package com.geovault.tracker.services
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 
 /**
- * Builds positioning policy config from the active internal speed preset.
- * User-facing tracking profiles are intentionally not part of this path.
+ * Builds internal positioning policy configs from speed-selected presets.
+ * User-facing tracking settings are intentionally not part of this path.
  */
-object TrackingPolicyProfiles {
+object PositioningPolicyConfig {
     private const val MAX_FUTURE_SKEW_MS = 5L * 60L * 1000L
     private const val LOCAL_FRESHNESS_TTL_MS = 120_000L
     private const val FALLBACK_FRESHNESS_TTL_MS = 2L * 60L * 1000L
@@ -18,7 +18,6 @@ object TrackingPolicyProfiles {
     fun ingestConfig(
         maxAccuracyMeters: Float,
         motionMode: TrackingMotionMode,
-        @Suppress("UNUSED_PARAMETER") isMockLocation: Boolean,
     ): LocationFilterConfig {
         val tuning = PositioningPresets.forMotionMode(motionMode).filterTuning
         return LocationFilterConfig.fromTuning(
@@ -37,5 +36,4 @@ object TrackingPolicyProfiles {
             normalizeSecondsTimestamps = false,
         )
     }
-
 }

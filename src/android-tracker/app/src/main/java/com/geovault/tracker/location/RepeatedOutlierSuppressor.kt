@@ -1,6 +1,8 @@
 package com.geovault.tracker.location
 
 import android.location.Location
+import com.geovault.tracker.services.PositioningPresets
+import com.geovault.tracker.services.TrackingMotionMode
 import kotlin.math.floor
 
 data class RepeatedOutlierDecision(
@@ -18,10 +20,7 @@ data class RepeatedOutlierDecision(
  */
 class RepeatedOutlierSuppressor(
     private val configProvider: () -> PositioningRecoveryConfig = {
-        PositioningRecoveryConfig.fromMotionMode(
-            motionMode = com.geovault.tracker.services.TrackingMotionMode.WALKING,
-            maxLocalPointGapMs = 90_000L,
-        )
+        PositioningPresets.forMotionMode(TrackingMotionMode.WALKING).recoveryConfig(maxLocalPointGapMs = 90_000L)
     },
 ) {
     private data class Fingerprint(

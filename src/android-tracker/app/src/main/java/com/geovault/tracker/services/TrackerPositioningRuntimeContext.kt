@@ -30,10 +30,9 @@ data class TrackerPositioningRuntimeContext(
             localPointMaxGapMs: Long,
         ): TrackerPositioningRuntimeContext {
             val preset = PositioningPresets.forMotionMode(activeMotionMode)
-            val filterConfig = TrackingPolicyProfiles.ingestConfig(
+            val filterConfig = PositioningPolicyConfig.ingestConfig(
                 maxAccuracyMeters = preset.accuracyThresholdMeters,
                 motionMode = activeMotionMode,
-                isMockLocation = false,
             )
             return TrackerPositioningRuntimeContext(
                 settings = settings,

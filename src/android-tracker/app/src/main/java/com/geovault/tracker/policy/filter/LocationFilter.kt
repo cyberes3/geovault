@@ -4,7 +4,7 @@ import com.geovault.common.geo.GeoMath
 import kotlin.math.max
 
 /**
- * Profile-tuned positioning filter.
+ * Preset-tuned positioning filter.
  *
  * One [LocationFilter] instance per stream (e.g. local GPS for the
  * recording user, or per remote-tracker websocket subscription). The
@@ -156,11 +156,11 @@ class LocationFilter(
             // calculation.
             anchorHealthTracker.onReject(metrics)
             speedCapRecoveryGate.reset()
-            return LocationFilterResult.reject(reason = "low-accuracy", metrics = metrics)
+            return LocationFilterResult.reject(reason = LocationFilterReasons.LOW_ACCURACY, metrics = metrics)
         }
 
         val result = resolveDecision(input = input, metrics = metrics)
-        if (result.reason != "resume-unconfirmed") {
+        if (result.reason != LocationFilterReasons.RESUME_UNCONFIRMED) {
             lastSeenFix = input
         }
         return result
@@ -168,7 +168,7 @@ class LocationFilter(
 
     private fun resolveDecision(input: LocationInput, metrics: LocationMetrics): LocationFilterResult {
         val previous = previousAccepted
-            ?: return commitAccept(input = input, reason = "first-fix", metrics = metrics)
+            ?: return commitAccept(input = input, reason = LocationFilterReasons.FIRST_FIX, metrics = metrics)
 
         val capCandidate = inflateCapForAnchorTrust(metrics.capCandidate, metrics.anchorTrust)
             .let { inflateCapForAnomaly(it, metrics.impliedAnomaly) }
@@ -199,10 +199,10 @@ class LocationFilter(
         if (requiresStaleRelocationConfirmation(input = input, previous = previous)) {
             if (staleRelocationPending) {
                 staleRelocationPending = false
-                return commitAccept(input = input, reason = "stale-relocation-confirmed", metrics = metrics)
+                return commitAccept(input = input, reason = LocationFilterReasons.STALE_RELOCATION_CONFIRMED, metrics = metrics)
             }
             staleRelocationPending = true
-            return LocationFilterResult.hold(reason = "stale-relocation-unconfirmed", metrics = metrics)
+            return LocationFilterResult.hold(reason = LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED, metrics = metrics)
         }
         staleRelocationPending = false
 
@@ -218,7 +218,7 @@ class LocationFilter(
                 anchorSuspect = anchorHealthTracker.suspect,
             ) == MovementCandidateGate.Decision.Hold
         ) {
-            return LocationFilterResult.hold(reason = "candidate-unconfirmed", metrics = metrics)
+            return LocationFilterResult.hold(reason = LocationFilterReasons.CANDIDATE_UNCONFIRMED, metrics = metrics)
         }
 
         // Smooth the RSS-corrected effective distance through the 1D
@@ -231,17 +231,17 @@ class LocationFilter(
 
         return when (config.policy) {
             LocationFilterPolicy.PassThrough ->
-                commitAccept(input = input, reason = "pass-through", metrics = metrics)
+                commitAccept(input = input, reason = LocationFilterReasons.PASS_THROUGH, metrics = metrics)
 
             LocationFilterPolicy.Adjust ->
                 if (decisionDistance <= capCandidate) {
-                    commitAccept(input = input, reason = "within-cap", metrics = metrics)
+                    commitAccept(input = input, reason = LocationFilterReasons.WITHIN_CAP, metrics = metrics)
                 } else {
                     commitClip(
                         input = input,
                         previous = previous,
                         capMeters = capCandidate,
-                        reason = "adjust-cap",
+                        reason = LocationFilterReasons.ADJUST_CAP,
                         metrics = metrics,
                     )
                 }
@@ -275,7 +275,7 @@ class LocationFilter(
                 capCandidate = capCandidate,
             )
             ResumeAnchorGate.Decision.Hold ->
-                LocationFilterResult.hold(reason = "resume-unconfirmed", metrics = metrics)
+                LocationFilterResult.hold(reason = LocationFilterReasons.RESUME_UNCONFIRMED, metrics = metrics)
             ResumeAnchorGate.Decision.Confirmed ->
                 commitAccept(input = input, reason = "motion-resume-confirmed", metrics = metrics)
         }
@@ -342,7 +342,7 @@ class LocationFilter(
         // being accepted at face value. The snap and outlier paths above
         // already handled the truly egregious cases on raw.
         if (decisionDistance <= capCandidate) {
-            return commitAccept(input = input, reason = "within-cap", metrics = metrics)
+            return commitAccept(input = input, reason = LocationFilterReasons.WITHIN_CAP, metrics = metrics)
         }
 
         val capMeters = capCandidate.coerceAtMost(metrics.rawDistanceMeters)
@@ -410,21 +410,21 @@ class LocationFilter(
         val capMeters = config.maxImpliedSpeedMps * metrics.dtSeconds
         return when (config.policy) {
             LocationFilterPolicy.PassThrough ->
-                commitAccept(input = input, reason = "speed-cap-passthrough", metrics = metrics)
+                commitAccept(input = input, reason = LocationFilterReasons.SPEED_CAP_PASSTHROUGH, metrics = metrics)
             LocationFilterPolicy.Adjust -> commitClip(
                 input = input,
                 previous = previous,
                 capMeters = capMeters,
-                reason = "speed-cap",
+                reason = LocationFilterReasons.SPEED_CAP,
                 metrics = metrics,
             )
             LocationFilterPolicy.Conservative -> when (speedCapRecoveryGate.evaluate(input = input, metrics = metrics)) {
                 SpeedCapRecoveryGate.Decision.Confirmed ->
-                    commitAccept(input = input, reason = "speed-cap-recovered", metrics = metrics)
+                    commitAccept(input = input, reason = LocationFilterReasons.SPEED_CAP_RECOVERED, metrics = metrics)
                 SpeedCapRecoveryGate.Decision.Hold ->
-                    LocationFilterResult.hold(reason = "speed-cap-unconfirmed", metrics = metrics)
+                    LocationFilterResult.hold(reason = LocationFilterReasons.SPEED_CAP_UNCONFIRMED, metrics = metrics)
                 SpeedCapRecoveryGate.Decision.Reject ->
-                    reject(reason = "speed-cap-exceeded", metrics = metrics)
+                    reject(reason = LocationFilterReasons.SPEED_CAP_EXCEEDED, metrics = metrics)
             }
         }
     }
@@ -450,7 +450,7 @@ class LocationFilter(
     ): LocationFilterResult = commitAdjustToAnchor(
         input = input,
         previous = previous,
-        reason = "uncertainty-suppressed",
+        reason = LocationFilterReasons.UNCERTAINTY_SUPPRESSED,
         metrics = metrics,
     )
 

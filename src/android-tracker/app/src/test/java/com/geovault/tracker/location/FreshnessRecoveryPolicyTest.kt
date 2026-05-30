@@ -1,6 +1,7 @@
 package com.geovault.tracker.location
 
 import android.location.Location
+import com.geovault.tracker.services.PositioningPresets
 import com.geovault.tracker.services.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -173,10 +174,9 @@ class FreshnessRecoveryPolicyTest {
             ),
             repeatedOutlierSuppressed = repeatedOutlierSuppressed,
             nowMs = nowMs,
-            config = PositioningRecoveryConfig.fromMotionMode(
-                motionMode = TrackingMotionMode.WALKING,
-                maxLocalPointGapMs = 90_000L,
-            ),
+            config = PositioningPresets
+                .forMotionMode(TrackingMotionMode.WALKING)
+                .recoveryConfig(maxLocalPointGapMs = 90_000L),
         )
     }
 

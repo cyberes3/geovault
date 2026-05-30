@@ -100,7 +100,7 @@ import com.geovault.tracker.services.RuntimeEventPublisher
 import com.geovault.tracker.services.TrackerPositioningRuntimeContext
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
-import com.geovault.tracker.services.TrackingPolicyProfiles
+import com.geovault.tracker.services.PositioningPolicyConfig
 import com.geovault.tracker.services.TrackingRuntimeOrchestrator
 import com.geovault.tracker.services.RuntimeLocationGateInput
 import com.geovault.tracker.services.FastLockTriggerInput
@@ -3635,7 +3635,7 @@ class TrackingService : Service() {
     ): Boolean {
         if (previousAcceptedLocation == null) return true
         val trackId = FALLBACK_TRANSITION_TRACK_ID
-        val config = TrackingPolicyProfiles.fallbackTransitionConfig()
+        val config = PositioningPolicyConfig.fallbackTransitionConfig()
         TrackPointPolicyEngine.resetStream(source = TrackPointSource.LOCAL_GPS, trackId = trackId)
         TrackPointPolicyEngine.evaluate(
             event = trackPointEventFromLocation(previousAcceptedLocation, trackId),

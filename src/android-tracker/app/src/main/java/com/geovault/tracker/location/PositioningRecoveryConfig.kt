@@ -1,7 +1,7 @@
 package com.geovault.tracker.location
 
 import com.geovault.tracker.TrackingLocationPolicy
-import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.policy.filter.LocationFilterReasons
 
 data class PositioningRecoveryConfig(
     val maxLocalPointGapMs: Long,
@@ -34,25 +34,11 @@ data class PositioningRecoveryConfig(
         const val DEFAULT_REPEATED_OUTLIER_REPEAT_WINDOW_MS = 10L * 60_000L
 
         val DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS: Set<String> = setOf(
-            "candidate-unconfirmed",
-            "resume-unconfirmed",
-            "speed-cap-unconfirmed",
-            "speed-cap-exceeded",
-            "uncertainty-suppressed",
+            LocationFilterReasons.CANDIDATE_UNCONFIRMED,
+            LocationFilterReasons.RESUME_UNCONFIRMED,
+            LocationFilterReasons.SPEED_CAP_UNCONFIRMED,
+            LocationFilterReasons.SPEED_CAP_EXCEEDED,
+            LocationFilterReasons.UNCERTAINTY_SUPPRESSED,
         )
-
-        fun fromMotionMode(
-            motionMode: TrackingMotionMode,
-            maxLocalPointGapMs: Long,
-        ): PositioningRecoveryConfig {
-            return PositioningRecoveryConfig(
-                maxLocalPointGapMs = maxLocalPointGapMs,
-                recoverySpeedCapMps = when (motionMode) {
-                    TrackingMotionMode.WALKING -> 4.5f
-                    TrackingMotionMode.BIKING -> 14f
-                    TrackingMotionMode.DRIVING -> 60f
-                },
-            )
-        }
     }
 }

@@ -476,7 +476,7 @@ class LocationIngestCoordinatorTest {
 
         var previousAccepted = seed.lastFilteredLocation
         var lastResult: LocationIngestResult? = null
-        repeat(TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
+        repeat(PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
             val nowMs = anchorTimeMs + 4 * 60_000L + idx * 1_000L
             val candidate = Location("gps").apply {
                 latitude = 10.010 + idx * 0.002
@@ -526,7 +526,7 @@ class LocationIngestCoordinatorTest {
 
         var previousAccepted = seed.lastFilteredLocation
         var lastResult: LocationIngestResult? = null
-        repeat(TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
+        repeat(PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
             val nowMs = anchorTimeMs + 4 * 60_000L + (idx + 1) * 20_000L
             val candidate = Location("gps").apply {
                 latitude = 12.0000
@@ -580,7 +580,7 @@ class LocationIngestCoordinatorTest {
 
         var previousAccepted = seed.lastFilteredLocation
         var lastResult: LocationIngestResult? = null
-        repeat(TrackingPolicyProfiles.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
+        repeat(PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
             val nowMs = anchorTimeMs + 4 * 60_000L + (idx + 1) * 30_000L
             val candidate = Location("gps").apply {
                 latitude = 12.00052
