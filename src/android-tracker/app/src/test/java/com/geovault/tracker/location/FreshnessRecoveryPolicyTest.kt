@@ -36,6 +36,18 @@ class FreshnessRecoveryPolicyTest {
     }
 
     @Test
+    fun activeProbe_firstPromotableFixWaitsForMoreEvidence() {
+        val decision = FreshnessRecoveryPolicy.evaluate(
+            input = input(),
+            probeActive = true,
+            probeStartedAtMs = 10_000L,
+            promotableProbeFixes = 0,
+        )
+
+        assertEquals(FreshnessRecoveryReason.PROBE_WAIT, decision.reason)
+    }
+
+    @Test
     fun activeProbe_badAccuracyBlocksCommit() {
         val decision = FreshnessRecoveryPolicy.evaluate(
             input = input(accuracyMeters = 90f),
@@ -103,11 +115,45 @@ class FreshnessRecoveryPolicyTest {
         assertEquals(FreshnessRecoveryReason.ALREADY_ACCEPTED_NOT_PERSISTED, decision.reason)
     }
 
+    @Test
+    fun activeProbe_implausibleLargeMoveBlocksAnchorCommit() {
+        val decision = FreshnessRecoveryPolicy.evaluate(
+            input = input(
+                candidateLatitude = 45.1,
+                candidateLongitude = -122.0,
+                candidateTimeMs = 30_000L,
+                nowMs = 30_000L,
+            ),
+            probeActive = true,
+            probeStartedAtMs = 10_000L,
+            promotableProbeFixes = 1,
+        )
+
+        assertEquals(FreshnessRecoveryReason.IMPLAUSIBLE_MOVE, decision.reason)
+    }
+
+    @Test
+    fun activeProbe_repeatedOutlierBlocksAnchorCommit() {
+        val decision = FreshnessRecoveryPolicy.evaluate(
+            input = input(repeatedOutlierSuppressed = true),
+            probeActive = true,
+            probeStartedAtMs = 10_000L,
+            promotableProbeFixes = 1,
+        )
+
+        assertEquals(FreshnessRecoveryReason.REPEATED_OUTLIER, decision.reason)
+    }
+
     private fun input(
         filterReason: String = "candidate-unconfirmed",
         accuracyMeters: Float = 12f,
         accepted: Boolean = false,
         pointPersisted: Boolean = false,
+        candidateLatitude: Double = 45.0001,
+        candidateLongitude: Double = -122.0001,
+        candidateTimeMs: Long = 70_000L,
+        repeatedOutlierSuppressed: Boolean = false,
+        nowMs: Long = candidateTimeMs,
     ): FreshnessRecoveryInput {
         return FreshnessRecoveryInput(
             localRecoveryDue = true,
@@ -116,7 +162,7 @@ class FreshnessRecoveryPolicyTest {
             filterReason = filterReason,
             accuracyMeters = accuracyMeters,
             effectiveAccuracyThresholdMeters = 35f,
-            candidateLocation = location(latitude = 45.0001, longitude = -122.0001, timeMs = 70_000L),
+            candidateLocation = location(latitude = candidateLatitude, longitude = candidateLongitude, timeMs = candidateTimeMs),
             anchor = RecoveryAnchorState.fromLocation(
                 trackerId = "tracker-1",
                 sessionBoundaryId = 1_000L,
@@ -125,8 +171,8 @@ class FreshnessRecoveryPolicyTest {
                 source = "test",
                 motionMode = TrackingMotionMode.WALKING,
             ),
-            repeatedOutlierSuppressed = false,
-            nowMs = 70_000L,
+            repeatedOutlierSuppressed = repeatedOutlierSuppressed,
+            nowMs = nowMs,
             config = PositioningRecoveryConfig.fromMotionMode(
                 motionMode = TrackingMotionMode.WALKING,
                 maxLocalPointGapMs = 90_000L,

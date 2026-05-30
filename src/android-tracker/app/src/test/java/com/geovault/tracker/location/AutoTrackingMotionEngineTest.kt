@@ -166,6 +166,22 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
+    fun acceptedFix_twoDrivingSpeedSamples_promotesBikingToDriving() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 6f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 6f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 3_000L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+        val out = engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 4_000L)
+
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+        assertEquals(TransitionPath.LADDER, out.transitionPath)
+    }
+
+    @Test
     fun motionEvidence_drivingClassSpeedFromWalking_skipsDirectlyToDriving() {
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)

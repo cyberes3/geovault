@@ -186,6 +186,156 @@ class LocationFilterTest {
     }
 
     @Test
+    fun walkingProfile_steadyHumanWalkingCommitsWithoutHoldsOrRejects() {
+        val filter = LocationFilter(walkingConfig())
+        var lat = 24.7097
+        val lon = -81.1011
+        var ts = 0L
+        filter.evaluate(
+            LocationInput(
+                latitude = lat,
+                longitude = lon,
+                timestampMs = ts,
+                accuracyMeters = 3f,
+                speedMps = 2f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val decisions = mutableListOf<LocationFilterResult.Decision>()
+        repeat(12) {
+            ts += 5_000L
+            lat += 10.0 / 111_000.0
+            val result = filter.evaluate(
+                LocationInput(
+                    latitude = lat,
+                    longitude = lon,
+                    timestampMs = ts,
+                    accuracyMeters = 3f,
+                    speedMps = 2f,
+                    bearingDegrees = 0f,
+                )
+            )
+            decisions += result.decision
+        }
+
+        assertEquals(emptyList<LocationFilterResult.Decision>(), decisions.filter {
+            it == LocationFilterResult.Decision.Hold || it == LocationFilterResult.Decision.Reject
+        })
+    }
+
+    @Test
+    fun walkingProfile_rubberBandJumpDoesNotCommitAsTravel() {
+        val filter = LocationFilter(walkingConfig())
+        val lon = -81.1011
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = lon,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 1.2f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val jump = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097 + 95.0 / 111_000.0,
+                longitude = lon,
+                timestampMs = 15_000L,
+                accuracyMeters = 8f,
+                speedMps = 0.4f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        assertTrue(
+            jump.decision == LocationFilterResult.Decision.Hold ||
+                jump.decision == LocationFilterResult.Decision.Reject ||
+                jump.decision == LocationFilterResult.Decision.SnapInternal
+        )
+    }
+
+    @Test
+    fun sparseDrivingStream_commitsPlausibleHighwayContinuity() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        val lon = -81.1011
+        var lat = 24.7097
+        var ts = 0L
+        filter.evaluate(
+            LocationInput(
+                latitude = lat,
+                longitude = lon,
+                timestampMs = ts,
+                accuracyMeters = 6f,
+                speedMps = 22f,
+                bearingDegrees = 0f,
+            )
+        )
+
+        val decisions = mutableListOf<LocationFilterResult.Decision>()
+        repeat(10) { idx ->
+            val dtSec = 12 + (idx % 4) * 3
+            ts += dtSec * 1_000L
+            lat += (dtSec * 22.0) / 111_000.0
+            decisions += filter.evaluate(
+                LocationInput(
+                    latitude = lat,
+                    longitude = lon,
+                    timestampMs = ts,
+                    accuracyMeters = 6f,
+                    speedMps = 22f,
+                    bearingDegrees = 0f,
+                )
+            ).decision
+        }
+
+        assertEquals(List(10) { LocationFilterResult.Decision.Commit }, decisions)
+    }
+
+    @Test
+    fun drivingProfile_longStaleRelocationCurrentlyCommitsWithinCap() {
+        val filter = LocationFilter(LocationFilterConfig.Default)
+        filter.evaluate(
+            LocationInput(
+                latitude = 39.0,
+                longitude = -105.0,
+                timestampMs = 0L,
+                accuracyMeters = 6f,
+                speedMps = 0f,
+                bearingDegrees = 90f,
+            )
+        )
+        val indoorDrift = filter.evaluate(
+            LocationInput(
+                latitude = 39.0002,
+                longitude = -104.9998,
+                timestampMs = 60_000L,
+                accuracyMeters = 140f,
+                speedMps = 0f,
+                bearingDegrees = 90f,
+            )
+        )
+        assertEquals(LocationFilterResult.Decision.Reject, indoorDrift.decision)
+        assertEquals("low-accuracy", indoorDrift.reason)
+
+        val relocation = filter.evaluate(
+            LocationInput(
+                latitude = 39.0,
+                longitude = -104.932,
+                timestampMs = 354_000L,
+                accuracyMeters = 8f,
+                speedMps = 22f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Commit, relocation.decision)
+        assertEquals("within-cap", relocation.reason)
+    }
+
+    @Test
     fun accurateHighwayMotion_withTinyReportedSpeed_isAccepted() {
         // The chipset reporting near-zero ground speed while the
         // device actually moved ~200 m in 8 s is just a sparse-fix

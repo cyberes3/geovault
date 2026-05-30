@@ -66,6 +66,30 @@ class StationaryRegionStateTest {
     }
 
     @Test
+    fun poorAccuracyStationaryFixesDoNotMoveRegionAnchor() {
+        val anchor = RecoveryAnchorState(
+            trackerId = "tracker-1",
+            sessionBoundaryId = 1_000L,
+            latitude = 45.0,
+            longitude = -122.0,
+            timestampMs = 1_000L,
+            elapsedRealtimeNanos = 1_000_000L,
+            accuracyMeters = 8f,
+            radiusMeters = 50f,
+            source = "test",
+            motionMode = TrackingMotionMode.WALKING,
+        )
+
+        val state = StationaryRegionState()
+            .enter(anchor = anchor, nowMs = 2_000L)
+            .recordPoorAccuracyFix()
+            .recordPoorAccuracyFix()
+
+        assertEquals(anchor, state.anchor)
+        assertEquals(2, state.poorAccuracyFixes)
+    }
+
+    @Test
     fun stationaryRegionStoreRestoresMatchingContextAndFreshnessTime() {
         val store = StationaryRegionStore(ApplicationProvider.getApplicationContext())
         store.clear()
