@@ -37,10 +37,6 @@ internal class SpeedCapRecoveryGate(
     }
 
     fun evaluate(input: LocationInput, metrics: LocationMetrics): Decision {
-        if (!config.enabled) {
-            candidate = null
-            return Decision.Reject
-        }
         val speedMps = max(metrics.reportedSpeedMps, metrics.impliedSpeedMps)
         if (!isPromotable(speedMps, metrics)) {
             candidate = null
