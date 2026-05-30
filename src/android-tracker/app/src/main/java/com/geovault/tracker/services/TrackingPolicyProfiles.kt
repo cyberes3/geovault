@@ -1,13 +1,10 @@
 package com.geovault.tracker.services
 
 import com.geovault.tracker.policy.filter.LocationFilterConfig
-import com.geovault.tracker.policy.filter.MotionProfileTuning
 
 /**
- * Motion-mode profiles affect both the [android.location.LocationRequest]
- * and the physical plausibility limits used by the positioning filter.
- * Slow on-foot tracking cannot safely share the same speed/burst envelope
- * as biking or driving.
+ * Builds positioning policy config from the active internal speed preset.
+ * User-facing tracking profiles are intentionally not part of this path.
  */
 object TrackingPolicyProfiles {
     private const val MAX_FUTURE_SKEW_MS = 5L * 60L * 1000L
@@ -23,11 +20,7 @@ object TrackingPolicyProfiles {
         motionMode: TrackingMotionMode,
         @Suppress("UNUSED_PARAMETER") isMockLocation: Boolean,
     ): LocationFilterConfig {
-        val tuning = when (motionMode) {
-            TrackingMotionMode.WALKING -> MotionProfileTuning.Walking
-            TrackingMotionMode.BIKING -> MotionProfileTuning.Biking
-            TrackingMotionMode.DRIVING -> MotionProfileTuning.Driving
-        }
+        val tuning = PositioningPresets.forMotionMode(motionMode).filterTuning
         return LocationFilterConfig.fromTuning(
             tuning = tuning,
             trackingAccuracyThresholdMeters = maxAccuracyMeters.toDouble(),

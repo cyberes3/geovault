@@ -93,6 +93,7 @@ import com.geovault.tracker.services.QueueUploadSkipReason
 import com.geovault.tracker.services.PointFreshnessTracker
 import com.geovault.tracker.services.ProviderHealthController
 import com.geovault.tracker.services.ProviderHealthDecision
+import com.geovault.tracker.services.PositioningPresets
 import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
 import com.geovault.tracker.services.RuntimeEventPublisher
@@ -2066,7 +2067,7 @@ class TrackingService : Service() {
     }
 
     private fun resolvePointFreshnessIntervalSec(motionMode: TrackingMotionMode): Long {
-        return TrackingLocationPolicy.getProfileParams(motionMode.profileIndex).first
+        return PositioningPresets.forMotionMode(motionMode).locationIntervalSec
     }
 
     private fun resolveActiveMotionMode(settings: TrackerSettings): TrackingMotionMode {
@@ -2085,10 +2086,11 @@ class TrackingService : Service() {
         settings: TrackerSettings = settingsRepository.getSettings(),
     ): TrackerPositioningRuntimeContext {
         val motionMode = resolveActiveMotionMode(settings)
-        val (_, baseDistance) = if (settings.autoTrackingMode) {
-            TrackingLocationPolicy.getProfileParams(motionMode.profileIndex)
+        val preset = PositioningPresets.forMotionMode(motionMode)
+        val baseDistance = if (settings.autoTrackingMode) {
+            preset.distanceFilterMeters
         } else {
-            settings.loggingIntervalSec to settings.distanceFilterMeters
+            settings.distanceFilterMeters
         }
         val pointFreshnessIntervalSec = resolvePointFreshnessIntervalSec(motionMode)
         return TrackerPositioningRuntimeContext.build(

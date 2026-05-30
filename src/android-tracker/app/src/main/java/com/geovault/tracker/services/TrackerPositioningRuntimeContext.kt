@@ -1,8 +1,8 @@
 package com.geovault.tracker.services
 
 import com.geovault.tracker.TrackingLocationPolicy
-import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.location.StationaryPingController
+import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.settings.TrackerSettings
 
@@ -29,11 +29,9 @@ data class TrackerPositioningRuntimeContext(
             effectiveDistanceFilterMeters: Float,
             localPointMaxGapMs: Long,
         ): TrackerPositioningRuntimeContext {
-            val profileIntervalSec = TrackingLocationPolicy
-                .getProfileParams(activeMotionMode.profileIndex)
-                .first
+            val preset = PositioningPresets.forMotionMode(activeMotionMode)
             val locationIntervalSec = if (settings.autoTrackingMode) {
-                profileIntervalSec
+                preset.locationIntervalSec
             } else {
                 settings.loggingIntervalSec
             }
@@ -47,13 +45,10 @@ data class TrackerPositioningRuntimeContext(
                 activeMotionMode = activeMotionMode,
                 locationIntervalSec = locationIntervalSec,
                 distanceFilterMeters = effectiveDistanceFilterMeters,
-                pointFreshnessIntervalSec = profileIntervalSec,
+                pointFreshnessIntervalSec = preset.locationIntervalSec,
                 effectiveAccuracyThresholdMeters = settings.accuracyFilterMeters,
                 filterConfig = filterConfig,
-                recoveryConfig = PositioningRecoveryConfig.fromMotionMode(
-                    motionMode = activeMotionMode,
-                    maxLocalPointGapMs = localPointMaxGapMs,
-                ),
+                recoveryConfig = preset.recoveryConfig(localPointMaxGapMs),
                 stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
                 stationaryAccuracyCeilingMeters = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
                 stationaryProbeIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS,

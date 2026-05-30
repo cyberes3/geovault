@@ -1,5 +1,7 @@
 package com.geovault.tracker.services
 
+import com.geovault.tracker.TrackingLocationPolicy
+import com.geovault.tracker.policy.filter.MotionProfileTuning
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,6 +53,18 @@ class TrackingPolicyProfilesTest {
             isMockLocation = false,
         )
         assertTrue(tight.trackingAccuracyThresholdMeters < loose.trackingAccuracyThresholdMeters)
+    }
+
+    @Test
+    fun positioningPresets_bundleProviderFilterAndRecoveryValues() {
+        val walking = PositioningPresets.forMotionMode(TrackingMotionMode.WALKING)
+        val biking = PositioningPresets.forMotionMode(TrackingMotionMode.BIKING)
+        val driving = PositioningPresets.forMotionMode(TrackingMotionMode.DRIVING)
+
+        assertEquals(TrackingLocationPolicy.WALKING_INTERVAL_SEC, walking.locationIntervalSec)
+        assertEquals(TrackingLocationPolicy.BIKING_DISTANCE_FILTER_METERS, biking.distanceFilterMeters)
+        assertEquals(MotionProfileTuning.Driving, driving.filterTuning)
+        assertEquals(60f, driving.recoveryConfig(maxLocalPointGapMs = 90_000L).recoverySpeedCapMps)
     }
 
     @Test
