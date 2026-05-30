@@ -51,10 +51,7 @@ object TrackerMapRecentDataWindowFilterPolicy {
         val key = context.windowKey?.trim()?.lowercase()
         if (key.isNullOrEmpty() || key == "all") return points
         val result = when (key) {
-            "current_session" -> withLatestPointFallback(
-                original = points,
-                filtered = filterByLatestSegments(points, context.currentSessionStartMs, keep = 1),
-            )
+            "current_session" -> filterCurrentSession(points, context.currentSessionStartMs)
             "session" -> withLatestPointFallback(
                 original = points,
                 filtered = filterByLatestSegments(points, context.currentSessionStartMs, keep = 2),
@@ -68,6 +65,15 @@ object TrackerMapRecentDataWindowFilterPolicy {
             }
         }
         return result
+    }
+
+    private fun filterCurrentSession(
+        points: List<QueuedLocation>,
+        currentSessionStartMs: Long?,
+    ): List<QueuedLocation> {
+        val filtered = filterByLatestSegments(points, currentSessionStartMs, keep = 1)
+        if (currentSessionStartMs != null) return filtered
+        return withLatestPointFallback(original = points, filtered = filtered)
     }
 
     private fun filterByLatestSegments(

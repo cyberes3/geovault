@@ -52,10 +52,32 @@ class TrackerGeometryMergePolicyTest {
         assertEquals("#112233", merged.color)
         assertEquals("owner@example.com", merged.owner_email)
         assertEquals(100L, merged.updated_at)
-        assertEquals(listOf(mapOf("starttimestamp" to 90L)), merged.point_params)
         assertEquals(listOf(10.0, 20.0, 100.0), merged.last_point)
         assertNotNull(merged.geometry)
         assertEquals(listOf(listOf(30.0, 40.0)), merged.geometry?.coordinates)
+        assertEquals(null, merged.point_params)
+    }
+
+    @Test
+    fun merged_preservesExistingPointParams_whenIncomingOmitsGeometry() {
+        val existing = tracker(
+            id = "t1",
+            name = "Existing Name",
+            geometryCoords = listOf(listOf(10.0, 20.0)),
+            color = "#112233",
+            pointParams = listOf(mapOf("starttimestamp" to 90L)),
+        )
+        val incoming = tracker(
+            id = "t1",
+            name = "",
+            geometryCoords = null,
+            color = null,
+        )
+
+        val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
+
+        assertEquals(listOf(listOf(10.0, 20.0)), merged.geometry?.coordinates)
+        assertEquals(listOf(mapOf("starttimestamp" to 90L)), merged.point_params)
     }
 
     @Test

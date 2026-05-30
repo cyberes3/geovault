@@ -9,13 +9,14 @@ import com.geovault.tracker.Tracker
 object TrackerGeometryMergePolicy {
     fun merged(existing: Tracker?, incoming: Tracker): Tracker {
         if (existing == null) return incoming
+        val incomingHasGeometry = incoming.geometry != null
         return Tracker(
             id = incoming.id,
             name = incoming.name.ifBlank { existing.name },
             color = incoming.color ?: existing.color,
             settings = incoming.settings ?: existing.settings,
             geometry = incoming.geometry ?: existing.geometry,
-            point_params = incoming.point_params ?: existing.point_params,
+            point_params = if (incomingHasGeometry) incoming.point_params else incoming.point_params ?: existing.point_params,
             last_point = incoming.last_point ?: existing.last_point,
             bbox = incoming.bbox ?: existing.bbox,
             tracker_secret = incoming.tracker_secret ?: existing.tracker_secret,

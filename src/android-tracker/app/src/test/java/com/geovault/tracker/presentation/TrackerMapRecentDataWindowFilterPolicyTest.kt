@@ -283,17 +283,14 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
     }
 
     @Test
-    fun currentSession_keepsLatestPointWhenFilterWouldEmpty() {
-        // The fallback is exercised when filtering nukes every point. Use authoritative
-        // override that no point in the trail belongs to.
+    fun currentSession_authoritativeStartDoesNotFallbackToPreviousSession() {
         val authoritative = 99_000L
         val points = listOf(
             point(time = 1L, startTimestampMs = 10_000L),
             point(time = 2L, startTimestampMs = 10_000L),
         )
         val filtered = apply(points, key = "current_session", currentSessionStartMs = authoritative)
-        assertEquals(1, filtered.size)
-        assertEquals(points.last(), filtered.single())
+        assertEquals(emptyList<QueuedLocation>(), filtered)
     }
 
     private fun apply(
