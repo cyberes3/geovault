@@ -559,7 +559,9 @@ class LocationIngestCoordinatorTest {
         assertFalse(result.accepted)
         assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
         assertEquals("speed-cap-exceeded", result.policyMetrics?.reason)
-        assertEquals(1, dao.getCount())
+        // Universal speed recovery can persist one confirmed recovery point, but
+        // later speed-cap rejects must not force the local-stall reanchor path.
+        assertEquals(2, dao.getCount())
     }
 
     @Test
