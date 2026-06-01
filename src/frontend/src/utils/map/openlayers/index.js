@@ -1,0 +1,16 @@
+import {TileSourceCatalog} from '../tileSources/TileSourceCatalog.js'
+import {OpenLayersBasemapFactory} from './OpenLayersBasemapFactory.js'
+
+const tileSourceCatalog = new TileSourceCatalog()
+
+/** Shared basemap factory for small OpenLayers maps (import previews, feature replacement, etc.). */
+export const openLayersBasemap = new OpenLayersBasemapFactory(tileSourceCatalog)
+
+export {OpenLayersBasemapFactory} from './OpenLayersBasemapFactory.js'
+export {TileSourceCatalog} from '../tileSources/TileSourceCatalog.js'
+export {RasterTileUrls} from '../tileSources/RasterTileUrls.js'
+export {
+  FALLBACK_OSM_TILE_SOURCE,
+  OSM_TILE_SOURCE_ID,
+  TILE_SOURCES_API_URL
+} from '../tileSources/constants.js'

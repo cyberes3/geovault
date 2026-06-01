@@ -28,8 +28,8 @@
 
 <script>
 import {Map, View} from 'ol'
-import {OSM} from 'ol/source'
-import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
+import {Vector as VectorLayer} from 'ol/layer'
+import {openLayersBasemap} from '@/utils/map/openlayers/index.js'
 import {Vector as VectorSource} from 'ol/source'
 import {Style, Fill, Stroke, Circle, Text} from 'ol/style'
 import {GeoJSON} from 'ol/format'
@@ -70,8 +70,9 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        this.$nextTick(() => {
-          this.initializeMap()
+        this.$nextTick(async () => {
+          this.isLoading = true
+          await this.initializeMap()
           this.loadFeatures()
         })
       } else {
@@ -94,7 +95,7 @@ export default {
     }
   },
   methods: {
-    initializeMap() {
+    async initializeMap() {
       if (this.map) {
         this.cleanup()
       }
@@ -115,13 +116,13 @@ export default {
         declutter: true
       })
 
+      const basemapLayer = await openLayersBasemap.createTileLayer()
+
       // Create map
       this.map = new Map({
         target: this.$refs.mapContainer,
         layers: [
-          new TileLayer({
-            source: new OSM()
-          }),
+          basemapLayer,
           this.vectorLayer,
           this.labelLayer
         ],
@@ -278,6 +279,7 @@ export default {
     loadFeatures() {
       if (!this.map || !this.features || this.features.length === 0) {
         this.featureCount = 0
+        this.isLoading = false
         return
       }
 

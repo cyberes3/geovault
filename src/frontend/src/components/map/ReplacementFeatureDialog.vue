@@ -293,8 +293,8 @@
 import {APIHOST} from '@/config.js'
 import {PROCESSING_MESSAGES} from '@/assets/js/constants/processing-messages.js'
 import {Map, View} from 'ol'
-import {OSM} from 'ol/source'
-import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
+import {Vector as VectorLayer} from 'ol/layer'
+import {openLayersBasemap} from '@/utils/map/openlayers/index.js'
 import {Vector as VectorSource} from 'ol/source'
 import {Style, Fill, Stroke, Circle} from 'ol/style'
 import {GeoJSON} from 'ol/format'
@@ -390,6 +390,7 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
+        openLayersBasemap.prefetch()
         this.$nextTick(() => {
           this.resetDialog()
           this.fetchExistingFeatureGeometryType()
@@ -404,7 +405,7 @@ export default {
         this.$nextTick(() => {
           // Additional delay to ensure BaseModal content is visible
           setTimeout(() => {
-            this.initializeExpandedMap()
+            void this.initializeExpandedMap()
           }, 100)
         })
       } else {
@@ -520,11 +521,11 @@ export default {
       if (el && !this.featureMaps[index]) {
         // Wait for next tick to ensure DOM is ready
         this.$nextTick(() => {
-          this.initializeFeatureMap(el, index)
+          void this.initializeFeatureMap(el, index)
         })
       }
     },
-    initializeFeatureMap(container, index) {
+    async initializeFeatureMap(container, index) {
       if (!container || this.featureMaps[index]) return
 
       const feature = this.sortedFeatures[index]
@@ -564,10 +565,7 @@ export default {
           }
         }))
 
-        // Create tile layer
-        const tileLayer = markRaw(new TileLayer({
-          source: new OSM()
-        }))
+        const tileLayer = markRaw(await openLayersBasemap.createTileLayer())
 
         // Convert feature to GeoJSON and add to map
         const geoJsonFeature = {
@@ -671,7 +669,7 @@ export default {
       // Ref callback - map initialization is handled by watcher
       // This is kept for potential future use
     },
-    initializeExpandedMap() {
+    async initializeExpandedMap() {
       if (this.expandedMapIndex === null || this.expandedMap) return
 
       const container = document.getElementById('expanded-feature-map')
@@ -714,10 +712,7 @@ export default {
           }
         }))
 
-        // Create tile layer
-        const tileLayer = markRaw(new TileLayer({
-          source: new OSM()
-        }))
+        const tileLayer = markRaw(await openLayersBasemap.createTileLayer())
 
         // Convert feature to GeoJSON and add to map
         const geoJsonFeature = {

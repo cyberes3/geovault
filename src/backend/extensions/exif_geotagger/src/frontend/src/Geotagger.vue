@@ -129,8 +129,9 @@
 <script>
 import 'ol/ol.css';
 import { Map, View } from 'ol';
-import { XYZ, Vector as VectorSource } from 'ol/source';
-import { Tile as TileLayer, Vector as VectorLayer } from 'ol/layer';
+import { Vector as VectorSource } from 'ol/source';
+import { Vector as VectorLayer } from 'ol/layer';
+import { openLayersBasemap } from 'platform/utils/map/openlayers/index.js';
 import { fromLonLat, toLonLat } from 'ol/proj.js';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
@@ -176,7 +177,7 @@ export default {
         };
     },
     mounted() {
-        this.initMap();
+        void this.initMap();
     },
     watch: {
         imageFile(newVal) {
@@ -184,7 +185,7 @@ export default {
         }
     },
     methods: {
-        initMap() {
+        async initMap() {
             this.markerSource = new VectorSource();
             const markerLayer = new VectorLayer({
                 source: this.markerSource,
@@ -197,16 +198,12 @@ export default {
                 })
             });
 
+            const basemapLayer = await openLayersBasemap.createTileLayer();
+
             this.map = new Map({
                 target: this.$refs.mapContainer,
                 layers: [
-                    new TileLayer({
-                        source: new XYZ({
-                            url: 'https://{a-c}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            crossOrigin: 'anonymous',
-                            attributions: '© OpenStreetMap contributors'
-                        })
-                    }),
+                    basemapLayer,
                     markerLayer
                 ],
                 controls: [],
