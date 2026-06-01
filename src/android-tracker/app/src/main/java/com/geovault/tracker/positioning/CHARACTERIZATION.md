@@ -13,7 +13,7 @@ Regression tests for behaviors that must not change when refactoring `positionin
 | Paused freshness | Stationary region + probe eligibility while GPS paused | `PausedFreshnessCharacterizationTest` |
 | Fallback + pause | Fallback timer / emit policy across GPS states | `RecoveryCharacterizationTest`, `TrackingServiceFallbackPersistenceTest` |
 | Recovery anchor | `RecoveryAnchorStore` save/load/clear round-trip | `RecoveryAnchorRestartTest` |
-| Upload → snapshot | Queue result updates snapshot fields | `RuntimeSnapshotProjectorTest`, `UploadLivenessStateTest` |
+| Upload → snapshot | Queue result updates snapshot fields | `UploadSnapshotCharacterizationTest`, `RuntimeSnapshotProjectorTest`, `UploadLivenessStateTest` |
 | UI status | `TrackingUiStatusResolver` sequences from runtime snapshot | `PositioningStatusProjectionCharacterizationTest` |
 
 ## Manual smoke (release checklist)
@@ -26,6 +26,10 @@ Regression tests for behaviors that must not change when refactoring `positionin
 6. Fast GPS lock window after poor-accuracy reject.
 7. Low-accuracy fallback timer emit.
 8. Map puck does not drive collection (recording independent of map).
+
+## Future (optional)
+
+- Robolectric harness: minimal `PositioningRuntime` START → fix → STOP with fake `LocationSessionCoordinator`.
 
 ## Out of scope
 

@@ -4,13 +4,12 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
+import android.app.Notification
 import android.location.Location
 import android.location.LocationListener
 import android.os.IBinder
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.SelectedTrackerManager
-import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingRecoveryCoordinator
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.positioning.collection.GpsCollectionSubsystem
@@ -69,33 +68,6 @@ internal class PositioningRuntime(
     internal lateinit var commands: CommandDiagnosticsSubsystem
     internal lateinit var manualFix: ManualFixSubsystem
     internal lateinit var upload: UploadSubsystem
-
-    internal val database get() = deps.database
-    internal val settingsRepository get() = deps.settingsRepository
-    internal val sessionCoordinator get() = deps.sessionCoordinator
-    internal val locationIngestCoordinator get() = deps.locationIngestCoordinator
-    internal val trackerLocationPipeline get() = deps.trackerLocationPipeline
-    internal val notificationPresenter get() = deps.notificationPresenter
-    internal val runtimeEventPublisher get() = deps.runtimeEventPublisher
-    internal val queueUploadEngine get() = deps.queueUploadEngine
-    internal val locationSessionCoordinator get() = deps.locationSessionCoordinator
-    internal val runtimeTelemetry get() = deps.runtimeTelemetry
-    internal val recoveryAnchorStore get() = deps.recoveryAnchorStore
-    internal val stationaryPingController get() = deps.stationaryPingController
-    internal val stationaryFreshnessCoordinator get() = deps.stationaryFreshnessCoordinator
-    internal val lowAccuracyFallbackCoordinator get() = deps.lowAccuracyFallbackCoordinator
-    internal val repeatedOutlierSuppressor get() = deps.repeatedOutlierSuppressor
-    internal val freshnessRecoveryController get() = deps.freshnessRecoveryController
-    internal val providerHealthController get() = deps.providerHealthController
-    internal val pointFreshnessTracker get() = deps.pointFreshnessTracker
-    internal val autoTrackingMotionEngine get() = deps.autoTrackingMotionEngine
-    internal val autoTrackingMotionCoordinator get() = deps.autoTrackingMotionCoordinator
-    internal var significantMotionBridge
-        get() = deps.significantMotionBridge
-        set(value) { deps.significantMotionBridge = value }
-    internal var httpClient
-        get() = deps.httpClient
-        set(value) { deps.httpClient = value }
 
     internal val localTrackPointOrderingCounter get() = state.localTrackPointOrderingCounter
 
@@ -219,18 +191,17 @@ internal class PositioningRuntime(
                 if (state.isTracking) {
                     serviceScope.launch(Dispatchers.IO) {
                         val trackerId = ports.selectedTrackerId()
-                        val count = database.locationDao().getCurrentSessionCountForTracker(
+                        val count = deps.database.locationDao().getCurrentSessionCountForTracker(
                             trackerId = trackerId,
                             sessionBoundaryId = state.sessionVisibleBoundaryId,
                         )
                         projection.updateRuntimeSnapshot { it.copy(queuedPointsVisible = count) }
                         projection.syncRuntimeStateStore()
                         withContext(Dispatchers.Main) {
-                            service.startForeground(
-                                ports.notificationId(),
-                                notificationPresenter.buildTrackingNotification(state.runtimeSnapshot),
-                                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                            val notification: Notification = deps.notificationPresenter.buildTrackingNotification(
+                                state.runtimeSnapshot,
                             )
+                            ports.startForeground(notification)
                             foreground.logNotificationSurfaceDiagnostics(
                                 trigger = startupTrigger,
                                 action = intent?.action,
