@@ -1,15 +1,11 @@
-package com.geovault.tracker.positioning
-import com.geovault.tracker.tracking.TrackingServiceConstants
+package com.geovault.tracker.positioning.recovery
 
-
-
+import com.geovault.tracker.positioning.PositioningRuntime
+import android.Manifest
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.app.Service
-import android.Manifest
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -23,51 +19,49 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
 import android.os.UserManager
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.provider.Settings
-import com.geovault.common.logging.GeoVaultCaptureLog
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
-import com.geovault.tracker.db.AppDatabase
+import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingLocationPolicy
-import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.TrackingRecoveryCoordinator
+import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.location.AutoTrackingMotionEngine
-import com.geovault.tracker.location.AutoTrackingMotionState
-import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoMotionRejectHandling
+import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoTrackingMotionCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
-import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionState
+import com.geovault.tracker.location.FreshnessRecoveryController
+import com.geovault.tracker.location.FreshnessRecoveryDecision
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
+import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.LowAccuracyFallbackLoopDecision
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.PausedFreshnessDecision
 import com.geovault.tracker.location.PausedFreshnessDecisionReason
 import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.location.PausedFreshnessPolicy
-import com.geovault.tracker.location.FreshnessRecoveryController
-import com.geovault.tracker.location.FreshnessRecoveryDecision
-import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
-import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
-import com.geovault.tracker.positioning.ingest.FixIngestMode
-import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
 import com.geovault.tracker.location.PositioningRecoveryConfig
-import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RecoveryAnchorStore
-import com.geovault.tracker.location.StationaryRegionStore
+import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.StationaryFreshnessActions
 import com.geovault.tracker.location.StationaryFreshnessCoordinator
+import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
 import com.geovault.tracker.location.StationaryPingActions
 import com.geovault.tracker.location.StationaryPingController
-import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
+import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
@@ -85,56 +79,64 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.runtime.RuntimeServiceEventType
-import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.PositioningDiagnosticEvent
-import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
-import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
-import com.geovault.tracker.runtime.TrackingRuntimeController
-import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
-import com.geovault.tracker.sensor.SignificantMotionResumeBridge
-import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.GpsRuntimeStateMachine
+import com.geovault.tracker.positioning.config.PositioningDensity
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
+import com.geovault.tracker.positioning.config.PositioningPresetValues
+import com.geovault.tracker.positioning.config.PositioningPresets
+import com.geovault.tracker.positioning.ingest.FixIngestMode
+import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
+import com.geovault.tracker.runtime.PositioningDiagnosticEvent
+import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
+import com.geovault.tracker.runtime.RuntimeServiceEventType
+import com.geovault.tracker.runtime.RuntimeTelemetry
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
+import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
+import com.geovault.tracker.sensor.SignificantMotionResumeBridge
+import com.geovault.tracker.services.FastLockTriggerInput
+import com.geovault.tracker.services.LocationIngestCoordinator
+import com.geovault.tracker.services.LocationIngestResult
+import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.services.PointFreshnessTracker
+import com.geovault.tracker.services.ProviderHealthController
+import com.geovault.tracker.services.ProviderHealthDecision
 import com.geovault.tracker.services.QueueUploadConfig
 import com.geovault.tracker.services.QueueUploadEngine
 import com.geovault.tracker.services.QueueUploadOutcomePolicy
 import com.geovault.tracker.services.QueueUploadResult
 import com.geovault.tracker.services.QueueUploadScope
 import com.geovault.tracker.services.QueueUploadSkipReason
-import com.geovault.tracker.services.PointFreshnessTracker
-import com.geovault.tracker.services.ProviderHealthController
-import com.geovault.tracker.services.ProviderHealthDecision
-import com.geovault.tracker.positioning.config.PositioningDensity
-import com.geovault.tracker.positioning.config.PositioningPresetValues
-import com.geovault.tracker.positioning.config.PositioningPresets
 import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
 import com.geovault.tracker.services.RuntimeEventPublisher
-import com.geovault.tracker.positioning.PositioningContext
+import com.geovault.tracker.services.RuntimeLocationGateInput
+import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
+import com.geovault.tracker.services.RuntimeSnapshotProjector
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
-import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import com.geovault.tracker.services.TrackingRuntimeOrchestrator
-import com.geovault.tracker.services.RuntimeLocationGateInput
-import com.geovault.tracker.services.FastLockTriggerInput
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingSessionCoordinator
 import com.geovault.tracker.services.TrackingStatusAccuracyInput
 import com.geovault.tracker.services.TrackingStatusAccuracyProjector
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.RuntimeSnapshotProjector
-import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
 import com.geovault.tracker.services.UploadLivenessState
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.tracking.TrackingServiceConstants
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -150,48 +152,45 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
-
-    internal fun PositioningRuntime.requestStationaryFreshnessProbe(reason: String): Boolean {
-        if (!isTracking) {
-            stationaryFreshnessCoordinator.onStopped(reason = "not_tracking")
-            runtimeTelemetry.event(
+internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
+    fun requestStationaryFreshnessProbe(reason: String): Boolean {
+        if (!rt.state.isTracking) {
+            rt.deps.stationaryFreshnessCoordinator.onStopped(reason = "not_tracking")
+            rt.deps.runtimeTelemetry.event(
                 "stationary_ping_dropped",
-                "reason=$reason notTracking=true gpsState=$gpsRuntimeState"
+                "reason=$reason notTracking=true gpsState=${rt.state.gpsRuntimeState}"
             )
             return false
         }
-        if (gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
-            gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+        if (rt.state.gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
+            rt.state.gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
         ) {
-            stationaryFreshnessCoordinator.onResumed(reason = "not_paused")
-            clearPausedFreshnessProbe(reason = "stationary_ping_not_paused")
-            runtimeTelemetry.event("stationary_ping_skipped", "reason=$reason state=$gpsRuntimeState")
+            rt.deps.stationaryFreshnessCoordinator.onResumed(reason = "not_paused")
+            rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "stationary_ping_not_paused")
+            rt.deps.runtimeTelemetry.event("stationary_ping_skipped", "reason=$reason state=${rt.state.gpsRuntimeState}")
             return true
         }
-        runtimeTelemetry.event(
+        rt.deps.runtimeTelemetry.event(
             "stationary_ping_received",
-            "reason=$reason state=$gpsRuntimeState lastRaw=${summarizeLocationForTelemetry(latestObservedRawLocation)} " +
-                "lastAccepted=${summarizeLocationForTelemetry(lastFilteredLocation)}"
+            "reason=$reason state=rt.state.gpsRuntimeState lastRaw=${rt.commands.summarizeLocationForTelemetry(rt.state.latestObservedRawLocation)} " +
+                "lastAccepted=${rt.commands.summarizeLocationForTelemetry(rt.state.lastFilteredLocation)}"
         )
-        if (gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
-            clearPausedFreshnessProbe(reason = "provider_unavailable_before_probe")
-            stationaryFreshnessCoordinator.schedulePausedPing(
+        if (rt.state.gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
+            rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "provider_unavailable_before_probe")
+            rt.deps.stationaryFreshnessCoordinator.schedulePausedPing(
                 reason = "provider_unavailable_before_probe",
                 providerAvailable = false,
             )
-            runtimeTelemetry.event("stationary_ping_deferred", "reason=$reason state=$gpsRuntimeState")
+            rt.deps.runtimeTelemetry.event("stationary_ping_deferred", "reason=$reason state=${rt.state.gpsRuntimeState}")
             return true
         }
-        markPausedFreshnessProbeStarted(nowMs = System.currentTimeMillis())
-        resumeGps(reason = "stationary_ping_resume")
+        rt.recovery.pausedFreshness.markPausedFreshnessProbeStarted(nowMs = System.currentTimeMillis())
+        rt.collection.resumeGps(reason = "stationary_ping_resume")
         return true
     }
 
-    internal suspend fun PositioningRuntime.handlePausedFreshnessProbeFix(
+    suspend fun handlePausedFreshnessProbeFix(
         selectedTrackerId: String,
         probeLocation: Location,
         anchorLocation: Location?,
@@ -200,55 +199,55 @@ import kotlin.random.Random
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
     ): Boolean {
-        val runtimeContext = currentPositioningRuntimeContext(settings)
+        val runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
         val decision = PausedFreshnessPolicy.evaluate(
             anchorLocation = anchorLocation,
             candidateLocation = probeLocation,
-            stationaryRadiusMeters = stationaryFreshnessCoordinator.radiusMeters
-                .takeIf { stationaryFreshnessCoordinator.hasRegion }
+            stationaryRadiusMeters = rt.deps.stationaryFreshnessCoordinator.radiusMeters
+                .takeIf { rt.deps.stationaryFreshnessCoordinator.hasRegion }
                 ?: TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             accuracyCeilingMeters = runtimeContext.stationaryAccuracyCeilingMeters,
             freshnessIntervalMs = runtimeContext.stationaryProbeIntervalMs,
             nowMs = nowMs,
-            lastFreshnessPointAtMs = stationaryFreshnessCoordinator.lastFreshnessPointAtMs,
+            lastFreshnessPointAtMs = rt.deps.stationaryFreshnessCoordinator.lastFreshnessPointAtMs,
         )
         if (!decision.shouldEmit) {
-            logPausedFreshnessDecision(eventName = "paused_freshness_skipped", decision = decision, probeLocation = probeLocation)
+            rt.recovery.pausedFreshness.logPausedFreshnessDecision(eventName = "paused_freshness_skipped", decision = decision, probeLocation = probeLocation)
             when (decision.reason) {
                 PausedFreshnessDecisionReason.MOVED -> {
-                    clearPausedFreshnessProbe(reason = decision.reason.telemetryValue)
+                    rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = decision.reason.telemetryValue)
                     return false
                 }
                 PausedFreshnessDecisionReason.NO_ANCHOR -> {
-                    clearPausedFreshnessProbe(reason = decision.reason.telemetryValue)
-                    pauseGpsInternal(force = true)
+                    rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = decision.reason.telemetryValue)
+                    rt.collection.pauseGpsInternal(force = true)
                     return true
                 }
                 PausedFreshnessDecisionReason.POOR_ACCURACY -> {
-                    val probeState = stationaryFreshnessCoordinator.recordPoorAccuracyFix(nowMs)
+                    val probeState = rt.deps.stationaryFreshnessCoordinator.recordPoorAccuracyFix(nowMs)
                     if (
                         probeState.poorAccuracyFixes >= TrackingServiceConstants.PAUSED_FRESHNESS_MAX_POOR_ACCURACY_FIXES ||
                         probeState.probeAgeMs >= TrackingServiceConstants.PAUSED_FRESHNESS_PROBE_TIMEOUT_MS
                     ) {
-                        clearPausedFreshnessProbe(reason = "poor_accuracy_timeout")
-                        if (pointFreshnessTracker.shouldForceLocalRecovery(
+                        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "poor_accuracy_timeout")
+                        if (rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
                                 nowMs = nowMs,
-                                intervalSec = resolvePointFreshnessIntervalSec(motionMode),
+                                intervalSec = rt.contextBuilder.resolvePointFreshnessIntervalSec(motionMode),
                             )
                         ) {
-                            runtimeTelemetry.event(
+                            rt.deps.runtimeTelemetry.event(
                                 "paused_freshness_kept_awake",
-                                "reason=poor_accuracy localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L}"
+                                "reason=poor_accuracy localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L}"
                             )
                         } else {
-                            pauseGpsInternal(force = true)
+                            rt.collection.pauseGpsInternal(force = true)
                         }
                     }
                     return true
                 }
                 PausedFreshnessDecisionReason.TOO_SOON -> {
-                    clearPausedFreshnessProbe(reason = "too_soon")
-                    pauseGpsInternal(force = true)
+                    rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "too_soon")
+                    rt.collection.pauseGpsInternal(force = true)
                     return true
                 }
                 PausedFreshnessDecisionReason.EMIT -> return false
@@ -256,8 +255,8 @@ import kotlin.random.Random
         }
 
         val anchor = anchorLocation ?: run {
-            clearPausedFreshnessProbe(reason = "emit_without_anchor")
-            pauseGpsInternal(force = true)
+            rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "emit_without_anchor")
+            rt.collection.pauseGpsInternal(force = true)
             return true
         }
         val freshnessLocation = PausedFreshnessPointFactory.buildAnchoredFreshnessLocation(
@@ -266,7 +265,7 @@ import kotlin.random.Random
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
-        val persisted = persistPausedFreshnessPoint(
+        val persisted = rt.recovery.pausedFreshness.persistPausedFreshnessPoint(
             selectedTrackerId = selectedTrackerId,
             freshnessLocation = freshnessLocation,
             previousAcceptedLocation = anchor,
@@ -276,13 +275,13 @@ import kotlin.random.Random
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
         )
         if (!persisted) {
-            clearPausedFreshnessProbe(reason = "persist_rejected")
-            pauseGpsInternal(force = true)
+            rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "persist_rejected")
+            rt.collection.pauseGpsInternal(force = true)
             return true
         }
-        stationaryFreshnessCoordinator.markFreshnessPointPersisted(nowMs)
-        logPausedFreshnessDecision(eventName = "paused_freshness_emitted", decision = decision, probeLocation = probeLocation)
-        runtimeTelemetry.event(
+        rt.deps.stationaryFreshnessCoordinator.markFreshnessPointPersisted(nowMs)
+        rt.recovery.pausedFreshness.logPausedFreshnessDecision(eventName = "paused_freshness_emitted", decision = decision, probeLocation = probeLocation)
+        rt.deps.runtimeTelemetry.event(
             name = "track_point",
             details = "lat=%.8f lon=%.8f accuracy=%.1f speed=%.2f reason=paused-freshness source=paused_freshness".format(
                 freshnessLocation.latitude,
@@ -291,41 +290,41 @@ import kotlin.random.Random
                 if (freshnessLocation.hasSpeed()) freshnessLocation.speed else -1f,
             )
         )
-        clearPausedFreshnessProbe(reason = "emitted")
-        pauseGpsInternal(force = true)
-        runtimeTelemetry.event(
+        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "emitted")
+        rt.collection.pauseGpsInternal(force = true)
+        rt.deps.runtimeTelemetry.event(
             "paused_freshness_repaused",
-            "intervalMs=${currentPositioningRuntimeContext(settings).stationaryProbeIntervalMs}"
+            "intervalMs=${rt.contextBuilder.currentPositioningRuntimeContext(settings).stationaryProbeIntervalMs}"
         )
         return true
     }
 
-    internal fun PositioningRuntime.markPausedFreshnessProbeStarted(nowMs: Long) {
-        val anchorAgeMs = lastFilteredLocation?.time?.let { nowMs - it }
-        stationaryFreshnessCoordinator.startProbe(
+    fun markPausedFreshnessProbeStarted(nowMs: Long) {
+        val anchorAgeMs = rt.state.lastFilteredLocation?.time?.let { nowMs - it }
+        rt.deps.stationaryFreshnessCoordinator.startProbe(
             nowMs = nowMs,
             timeoutMs = TrackingServiceConstants.PAUSED_FRESHNESS_PROBE_TIMEOUT_MS,
-            details = "state=$gpsRuntimeState consecutiveStationary=$consecutiveStationaryPoints " +
+            details = "state=rt.state.gpsRuntimeState consecutiveStationary=rt.state.consecutiveStationaryPoints " +
                 "anchorAgeMs=${anchorAgeMs ?: -1L}",
         )
     }
 
-    internal fun PositioningRuntime.clearPausedFreshnessProbe(
+    fun clearPausedFreshnessProbe(
         reason: String,
         clearLastFreshnessTimestamp: Boolean = false,
     ) {
-        stationaryFreshnessCoordinator.clearProbe(
+        rt.deps.stationaryFreshnessCoordinator.clearProbe(
             reason = reason,
             clearLastFreshnessTimestamp = clearLastFreshnessTimestamp,
         )
     }
 
-    internal fun PositioningRuntime.logPausedFreshnessDecision(
+    fun logPausedFreshnessDecision(
         eventName: String,
         decision: PausedFreshnessDecision,
         probeLocation: Location,
     ) {
-        runtimeTelemetry.event(
+        rt.deps.runtimeTelemetry.event(
             eventName,
             "reason=${decision.reason.telemetryValue} " +
                 "distance=${decision.distanceMeters ?: -1f} " +
@@ -335,7 +334,7 @@ import kotlin.random.Random
         )
     }
 
-    internal suspend fun PositioningRuntime.persistPausedFreshnessPoint(
+    suspend fun persistPausedFreshnessPoint(
         selectedTrackerId: String,
         freshnessLocation: Location,
         previousAcceptedLocation: Location,
@@ -344,8 +343,8 @@ import kotlin.random.Random
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
     ): Boolean {
-        val runtimeContext = currentPositioningRuntimeContext(settings)
-        val pipelineOutput = trackerLocationPipeline.processFix(
+        val runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
+        val pipelineOutput = rt.deps.trackerLocationPipeline.processFix(
             input = TrackerLocationPipelineInput(
                 trackId = selectedTrackerId,
                 location = freshnessLocation,
@@ -356,19 +355,19 @@ import kotlin.random.Random
                     effectiveAccuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters,
                 ),
                 previousAcceptedLocation = previousAcceptedLocation,
-                sessionVisibleBoundaryId = sessionVisibleBoundaryId,
+                sessionVisibleBoundaryId = rt.state.sessionVisibleBoundaryId,
                 ingestMode = FixIngestMode.PausedFreshness,
                 propsJson = null,
-                totalDistanceMeters = runtimeSnapshot.sessionTotalDistanceMeters,
+                totalDistanceMeters = rt.state.runtimeSnapshot.sessionTotalDistanceMeters,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-                sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
+                sessionStartTimeMs = rt.state.runtimeSnapshot.sessionStartTimeMs,
                 isMockLocation = LocationCompat.isMock(freshnessLocation),
                 skipAdaptiveTrackingEffects = true,
                 localRecoveryDue = false,
                 recoveryConfig = runtimeContext.recoveryConfig,
-                recoveryAnchor = recoveryAnchorState,
-                outlierSuppressorAnchor = lastFilteredLocation,
+                recoveryAnchor = rt.state.recoveryAnchorState,
+                outlierSuppressorAnchor = rt.state.lastFilteredLocation,
             ),
             onAutoMotionRejected = { result, _, _ ->
                 AutoMotionRejectHandling.Rejected(
@@ -396,7 +395,7 @@ import kotlin.random.Random
         )
         val result = pipelineOutput.result
         if (!result.accepted || !result.pointPersisted) {
-            runtimeTelemetry.event(
+            rt.deps.runtimeTelemetry.event(
                 "paused_freshness_persist_skipped",
                 "accepted=${result.accepted} persisted=${result.pointPersisted} " +
                     "reason=${result.rejectReason ?: result.adjustmentReason ?: "none"}"
@@ -405,20 +404,20 @@ import kotlin.random.Random
         }
 
         val acceptedLocation = result.lastFilteredLocation ?: freshnessLocation
-        pointFreshnessTracker.markLocalPointPersisted(nowMs)
-        freshnessRecoveryController.reset()
-        updateRecoveryAnchor(
+        rt.deps.pointFreshnessTracker.markLocalPointPersisted(nowMs)
+        rt.deps.freshnessRecoveryController.reset()
+        rt.contextBuilder.updateRecoveryAnchor(
             location = acceptedLocation,
             source = "paused_freshness",
             motionMode = motionMode,
         )
-        lastFilteredLocation = acceptedLocation
-        lastSpeedReferenceLocation = Location(acceptedLocation)
-        val finalPropsJson = buildLocalPointPropsJson(
+        rt.state.lastFilteredLocation = acceptedLocation
+        rt.state.lastSpeedReferenceLocation = Location(acceptedLocation)
+        val finalPropsJson = rt.utilities.buildLocalPointPropsJson(
             location = acceptedLocation,
             distanceMeters = result.nextSessionDistanceMeters,
         )
-        applyAccuracyHoldUpdate(
+        rt.projection.applyAccuracyHoldUpdate(
             incomingAccuracyMeters = result.lastAccuracyMeters,
             extraTransform = { snapshot ->
                 snapshot.copy(
@@ -431,24 +430,26 @@ import kotlin.random.Random
                 )
             },
         )
-        publishTrackPoint(
+        rt.utilities.publishTrackPoint(
             trackId = selectedTrackerId,
             location = acceptedLocation,
             propsJson = finalPropsJson,
-            quality = resolveTrackPointQuality(acceptedLocation, finalPropsJson),
+            quality = rt.utilities.resolveTrackPointQuality(acceptedLocation, finalPropsJson),
         )
         withContext(Dispatchers.Main) {
-            syncRuntimeStateStore()
-            updateNotificationFromDb(broadcastStats = false)
+            rt.projection.syncRuntimeStateStore()
+            rt.projection.updateNotificationFromDb(broadcastStats = false)
         }
-        serviceScope.launch(Dispatchers.IO) {
-            val outcome = pushQueuedLocations(
+        rt.serviceScope.launch(Dispatchers.IO) {
+            val outcome = rt.upload.pushQueuedLocations(
                 scope = QueueUploadScope.LIVE_ONLY,
                 updateFailureCounters = false
             )
             if (outcome == SyncFailureClass.NONE) {
-                consecutivePushFailures = 0
+                rt.state.consecutivePushFailures = 0
             }
         }
         return true
     }
+
+}

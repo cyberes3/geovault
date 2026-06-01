@@ -67,8 +67,12 @@ internal class PositioningDependencies(
     var httpClient: OkHttpClient? = null
     var significantMotionBridge: SignificantMotionResumeBridge? = null
 
-    val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator { runtime.currentPositioningRecoveryConfig() }
-    val repeatedOutlierSuppressor = RepeatedOutlierSuppressor { runtime.currentPositioningRecoveryConfig() }
+    val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator {
+        runtime.contextBuilder.currentPositioningRecoveryConfig()
+    }
+    val repeatedOutlierSuppressor = RepeatedOutlierSuppressor {
+        runtime.contextBuilder.currentPositioningRecoveryConfig()
+    }
     val freshnessRecoveryController = FreshnessRecoveryController()
     val providerHealthController = ProviderHealthController(
         staleFixDeliveryMs = TrackingServiceConstants.FIX_DELIVERY_STALE_MS,
@@ -94,7 +98,7 @@ internal class PositioningDependencies(
                 "location_request_registration_failed",
                 "type=${error.javaClass.simpleName} message=${error.message.orEmpty()}",
             )
-            runtime.scheduleLocationRequestReapplyRetry(reason = "async_registration_failure")
+            runtime.locationRequests.scheduleLocationRequestReapplyRetry(reason = "async_registration_failure")
         }
         locationIngestCoordinator = LocationIngestCoordinator(database.locationDao()) { event ->
             runtimeTelemetry.event(
@@ -112,11 +116,11 @@ internal class PositioningDependencies(
             context = service.applicationContext,
             locationDao = database.locationDao(),
             pushContext = runtime.pushDispatcher,
-            authenticatedClientProvider = { runtime.getAuthenticatedHttpClient() },
+            authenticatedClientProvider = { runtime.upload.getAuthenticatedHttpClient() },
         )
         significantMotionBridge = SignificantMotionResumeBridge(
             trigger = SensorManagerSignificantMotionTrigger(service.applicationContext),
-            onResume = { runtime.resumeGps() },
+            onResume = { runtime.collection.resumeGps() },
         )
         val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
             .scaleDurationMs(StationaryPingController.DEFAULT_INTERVAL_MS)
@@ -125,7 +129,7 @@ internal class PositioningDependencies(
             initialIntervalMs = initialProbeIntervalMs,
             actions = object : StationaryPingActions {
                 override fun requestProbe(reason: String) {
-                    runtime.requestStationaryFreshnessProbe(reason = reason)
+                    runtime.recovery.pausedFreshness.requestStationaryFreshnessProbe(reason = reason)
                 }
 
                 override fun logEvent(name: String, details: String) {
@@ -143,7 +147,7 @@ internal class PositioningDependencies(
                 }
 
                 override fun onProbeTimeout() {
-                    runtime.pauseGpsInternal(force = true)
+                    runtime.collection.pauseGpsInternal(force = true)
                 }
             },
         )

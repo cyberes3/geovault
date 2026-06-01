@@ -3,12 +3,13 @@ package com.geovault.tracker.tracking
 import android.content.Intent
 import android.location.LocationListener
 import android.os.IBinder
+import com.geovault.tracker.positioning.PositioningAndroidPorts
 import com.geovault.tracker.positioning.PositioningRuntime
 
 internal class TrackingServiceHost(
     private val service: TrackingService,
 ) {
-    val runtime = PositioningRuntime(service)
+    val runtime = PositioningRuntime(PositioningAndroidPorts(service))
 
     val locationListener: LocationListener get() = runtime.locationListener
     val gpsProviderReceiver get() = runtime.gpsProviderReceiver

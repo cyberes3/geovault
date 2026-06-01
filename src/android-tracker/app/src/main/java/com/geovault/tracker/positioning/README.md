@@ -1,22 +1,31 @@
 # Positioning Runtime
 
-Unified recording-time positioning for android-tracker. `PositioningRuntime` owns session state, GPS collection, fix ingest, recovery, and motion adaptation. The foreground service shell in `tracking/` delegates here.
+Unified recording-time positioning for android-tracker. `PositioningRuntime` is a thin facade; subsystems own GPS collection, fix ingest, recovery, motion, lifecycle, and projection. The foreground service shell in `tracking/` delegates here.
 
 ## Layout
 
 | Area | Responsibility |
 |------|----------------|
-| `PositioningRuntime.kt` | Facade: lifecycle, listeners, session fields via `PositioningSessionState` |
+| `PositioningRuntime.kt` | Facade: lifecycle, listeners, subsystem wiring (~310 LOC) |
 | `PositioningSessionState.kt` | Sole mutable session bag; `resetForStart()` / `resetForStop()` |
-| `PositioningConfig.kt` | Builds `PositioningContext` from settings + state |
-| `PositioningContext.kt` | Immutable snapshot per fix (includes derived `RecordingPace`) |
+| `PositioningConfig.kt` / `PositioningContext.kt` | Immutable context per fix (includes `RecordingPace`) |
 | `PositioningDependencies.kt` | Wires DB, upload, coordinators, pipeline |
-| `PositioningAndroidPorts.kt` | Service / notification / tracker-id Android boundary |
-| `ingest/` | `TrackerLocationPipeline`, `FixIngestSubsystem` (fix processing) |
+| `PositioningAndroidPorts.kt` | Service, notification id, selected tracker id |
+| `PositioningHostUtilities.kt` | Publish, haptics, device/battery helpers |
+| `PositioningContextBuilder.kt` | Settings → `PositioningContext`, recovery config |
+| `RuntimeProjectionSubsystem.kt` | Snapshot, notification, control state |
+| `SessionLifecycleSubsystem.kt` | Start/stop, location updates, resets |
+| `ForegroundSubsystem.kt` | FGS promotion, safe stop |
+| `CommandDiagnosticsSubsystem.kt` | Background wakeup + location-update commands |
+| `ManualFixSubsystem.kt` | Manual send point |
+| `UploadSubsystem.kt` | Queue upload jobs and liveness |
+| `ingest/FixIngestSubsystem.kt` | Serialized fix processing |
 | `collection/` | `GpsCollectionSubsystem`, `LocationRequestSubsystem`, `UnifiedLocationClient` |
-| `recovery/` | Fast-lock, low-accuracy fallback, paused freshness, recovery jobs |
-| `motion/` | Elastic distance + auto-motion adaptation |
-| `config/` | GPS state machine, presets, policy config |
+| `recovery/RecoverySubsystem.kt` | Fast-lock, fallback, paused freshness, heartbeat jobs |
+| `motion/MotionSubsystem.kt` | Elastic distance + auto-motion |
+| `config/` | GPS state machine, presets |
+
+See [`CHARACTERIZATION.md`](CHARACTERIZATION.md) for the regression-test checklist.
 
 ## Boundaries
 

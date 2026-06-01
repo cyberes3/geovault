@@ -1,15 +1,11 @@
-package com.geovault.tracker.positioning
-import com.geovault.tracker.tracking.TrackingServiceConstants
+package com.geovault.tracker.positioning.recovery
 
-
-
+import com.geovault.tracker.positioning.PositioningRuntime
+import android.Manifest
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.app.Service
-import android.Manifest
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -23,51 +19,49 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
 import android.os.UserManager
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.provider.Settings
-import com.geovault.common.logging.GeoVaultCaptureLog
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
-import com.geovault.tracker.db.AppDatabase
+import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingLocationPolicy
-import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.TrackingRecoveryCoordinator
+import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.location.AutoTrackingMotionEngine
-import com.geovault.tracker.location.AutoTrackingMotionState
-import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoMotionRejectHandling
+import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoTrackingMotionCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
-import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionState
+import com.geovault.tracker.location.FreshnessRecoveryController
+import com.geovault.tracker.location.FreshnessRecoveryDecision
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
+import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.LowAccuracyFallbackLoopDecision
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.PausedFreshnessDecision
 import com.geovault.tracker.location.PausedFreshnessDecisionReason
 import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.location.PausedFreshnessPolicy
-import com.geovault.tracker.location.FreshnessRecoveryController
-import com.geovault.tracker.location.FreshnessRecoveryDecision
-import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
-import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
-import com.geovault.tracker.positioning.ingest.FixIngestMode
-import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
 import com.geovault.tracker.location.PositioningRecoveryConfig
-import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RecoveryAnchorStore
-import com.geovault.tracker.location.StationaryRegionStore
+import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.StationaryFreshnessActions
 import com.geovault.tracker.location.StationaryFreshnessCoordinator
+import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
 import com.geovault.tracker.location.StationaryPingActions
 import com.geovault.tracker.location.StationaryPingController
-import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
+import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
@@ -85,56 +79,64 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.runtime.RuntimeServiceEventType
-import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.PositioningDiagnosticEvent
-import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
-import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
-import com.geovault.tracker.runtime.TrackingRuntimeController
-import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
-import com.geovault.tracker.sensor.SignificantMotionResumeBridge
-import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.GpsRuntimeStateMachine
+import com.geovault.tracker.positioning.config.PositioningDensity
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
+import com.geovault.tracker.positioning.config.PositioningPresetValues
+import com.geovault.tracker.positioning.config.PositioningPresets
+import com.geovault.tracker.positioning.ingest.FixIngestMode
+import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
+import com.geovault.tracker.runtime.PositioningDiagnosticEvent
+import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
+import com.geovault.tracker.runtime.RuntimeServiceEventType
+import com.geovault.tracker.runtime.RuntimeTelemetry
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
+import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
+import com.geovault.tracker.sensor.SignificantMotionResumeBridge
+import com.geovault.tracker.services.FastLockTriggerInput
+import com.geovault.tracker.services.LocationIngestCoordinator
+import com.geovault.tracker.services.LocationIngestResult
+import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.services.PointFreshnessTracker
+import com.geovault.tracker.services.ProviderHealthController
+import com.geovault.tracker.services.ProviderHealthDecision
 import com.geovault.tracker.services.QueueUploadConfig
 import com.geovault.tracker.services.QueueUploadEngine
 import com.geovault.tracker.services.QueueUploadOutcomePolicy
 import com.geovault.tracker.services.QueueUploadResult
 import com.geovault.tracker.services.QueueUploadScope
 import com.geovault.tracker.services.QueueUploadSkipReason
-import com.geovault.tracker.services.PointFreshnessTracker
-import com.geovault.tracker.services.ProviderHealthController
-import com.geovault.tracker.services.ProviderHealthDecision
-import com.geovault.tracker.positioning.config.PositioningDensity
-import com.geovault.tracker.positioning.config.PositioningPresetValues
-import com.geovault.tracker.positioning.config.PositioningPresets
 import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
 import com.geovault.tracker.services.RuntimeEventPublisher
-import com.geovault.tracker.positioning.PositioningContext
+import com.geovault.tracker.services.RuntimeLocationGateInput
+import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
+import com.geovault.tracker.services.RuntimeSnapshotProjector
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
-import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import com.geovault.tracker.services.TrackingRuntimeOrchestrator
-import com.geovault.tracker.services.RuntimeLocationGateInput
-import com.geovault.tracker.services.FastLockTriggerInput
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingSessionCoordinator
 import com.geovault.tracker.services.TrackingStatusAccuracyInput
 import com.geovault.tracker.services.TrackingStatusAccuracyProjector
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.RuntimeSnapshotProjector
-import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
 import com.geovault.tracker.services.UploadLivenessState
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.tracking.TrackingServiceConstants
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -150,12 +152,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
-
-    internal fun PositioningRuntime.maybeStartFastGpsLockWindow(
+internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
+    fun maybeStartFastGpsLockWindow(
         measuredAccuracyMeters: Float?,
         rejectReason: TrackPointRejectReason? = null
     ) {
@@ -163,51 +162,51 @@ import kotlin.random.Random
         if (shouldSuppressFastLockForAutoMotion(rejectReason = rejectReason, nowMs = nowMs)) {
             return
         }
-        val accuracyFilterMeters = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
+        val accuracyFilterMeters = rt.contextBuilder.currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
         if (
             !TrackingRuntimeOrchestrator.shouldAttemptFastLock(
                 FastLockTriggerInput(
-                    isTracking = isTracking,
-                    isFastGpsLockWindowActive = isFastGpsLockWindowActive,
-                    isFastGpsLockPriming = isFastGpsLockPriming,
-                    gpsState = gpsRuntimeState,
+                    isTracking = rt.state.isTracking,
+                    isFastGpsLockWindowActive = rt.state.isFastGpsLockWindowActive,
+                    isFastGpsLockPriming = rt.state.isFastGpsLockPriming,
+                    gpsState = rt.state.gpsRuntimeState,
                     rejectReason = rejectReason,
                     measuredAccuracyMeters = measuredAccuracyMeters,
                     accuracyFilterMeters = accuracyFilterMeters
                 )
             )
         ) return
-        isFastGpsLockPriming = true
-        locationSessionCoordinator.getLastLocation(
+        rt.state.isFastGpsLockPriming = true
+        rt.deps.locationSessionCoordinator.getLastLocation(
             onSuccess = { last ->
-                isFastGpsLockPriming = false
-                if (!isTracking || isFastGpsLockWindowActive) return@getLastLocation
+                rt.state.isFastGpsLockPriming = false
+                if (!rt.state.isTracking || rt.state.isFastGpsLockWindowActive) return@getLastLocation
                 if (isFreshAccurateLocation(last, accuracyFilterMeters)) {
-                    transitionGpsState(GpsRuntimeEvent.FIX_ACCEPTED, "fast_lock_last_known_recovered")
-                    lowAccuracyFallbackCoordinator.onAcceptedFix()
-                    cancelLowAccuracyFallbackTimer(clearCandidate = true)
+                    rt.collection.transitionGpsState(GpsRuntimeEvent.FIX_ACCEPTED, "fast_lock_last_known_recovered")
+                    rt.deps.lowAccuracyFallbackCoordinator.onAcceptedFix()
+                    rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = true)
                     return@getLastLocation
                 }
                 startFastGpsLockBurst(measuredAccuracyMeters = measuredAccuracyMeters, accuracyFilterMeters = accuracyFilterMeters)
             },
             onFailure = { error ->
                 GeoVaultCaptureLog.e(TrackingServiceConstants.TAG, "Fast-lock last location lookup failed", error)
-                isFastGpsLockPriming = false
-                if (!isTracking || isFastGpsLockWindowActive) return@getLastLocation
+                rt.state.isFastGpsLockPriming = false
+                if (!rt.state.isTracking || rt.state.isFastGpsLockWindowActive) return@getLastLocation
                 startFastGpsLockBurst(measuredAccuracyMeters = measuredAccuracyMeters, accuracyFilterMeters = accuracyFilterMeters)
             }
         )
     }
 
-    internal fun PositioningRuntime.shouldSuppressFastLockForAutoMotion(
+    fun shouldSuppressFastLockForAutoMotion(
         rejectReason: TrackPointRejectReason?,
         nowMs: Long,
     ): Boolean {
-        val lastMotionEvidenceAtMs = autoTrackingMotionCoordinator.lastEvidenceWallClockMs
+        val lastMotionEvidenceAtMs = rt.deps.autoTrackingMotionCoordinator.lastEvidenceWallClockMs
         val elapsedSinceEvidenceMs = lastMotionEvidenceAtMs
             .takeIf { it > 0L }
             ?.let { nowMs - it }
-        val elapsedSinceModeChangeMs = lastAutoModeChangedAtMs
+        val elapsedSinceModeChangeMs = rt.state.lastAutoModeChangedAtMs
             .takeIf { it > 0L }
             ?.let { nowMs - it }
         if (
@@ -215,13 +214,13 @@ import kotlin.random.Random
                 rejectReason = rejectReason,
                 nowMs = nowMs,
                 lastMotionEvidenceAtMs = lastMotionEvidenceAtMs,
-                lastModeChangedAtMs = lastAutoModeChangedAtMs,
+                lastModeChangedAtMs = rt.state.lastAutoModeChangedAtMs,
                 windowMs = TrackingServiceConstants.AUTO_MOTION_FAST_LOCK_SUPPRESS_WINDOW_MS,
             )
         ) {
             return false
         }
-        runtimeTelemetry.event(
+        rt.deps.runtimeTelemetry.event(
             name = "auto_motion_fast_lock_suppressed",
             details = "reason=$rejectReason elapsedSinceEvidenceMs=${elapsedSinceEvidenceMs ?: -1L} " +
                 "elapsedSinceModeChangeMs=${elapsedSinceModeChangeMs ?: -1L}"
@@ -229,35 +228,35 @@ import kotlin.random.Random
         return true
     }
 
-    internal fun PositioningRuntime.startFastGpsLockBurst(measuredAccuracyMeters: Float?, accuracyFilterMeters: Float) {
-        if (!isTracking || isFastGpsLockWindowActive) return
-        isFastGpsLockWindowActive = true
-        transitionGpsState(GpsRuntimeEvent.FAST_LOCK_STARTED, "fast_gps_lock_start")
-        fastGpsLockStartCountThisSession++
-        cancelLowAccuracyFallbackTimer(clearCandidate = false)
-        resetElasticDistanceOverride(reason = "fast_gps_lock_start", reapplyRequest = false)
-        resetFastGpsLockSamples()
-        if (!applyCurrentLocationRequest("fast_gps_lock_start")) {
-            isFastGpsLockWindowActive = false
-            failActiveTrackingAndStop(service.getString(R.string.unable_to_start_location_updates))
+    fun startFastGpsLockBurst(measuredAccuracyMeters: Float?, accuracyFilterMeters: Float) {
+        if (!rt.state.isTracking || rt.state.isFastGpsLockWindowActive) return
+        rt.state.isFastGpsLockWindowActive = true
+        rt.collection.transitionGpsState(GpsRuntimeEvent.FAST_LOCK_STARTED, "fast_gps_lock_start")
+        rt.state.fastGpsLockStartCountThisSession++
+        rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = false)
+        rt.motion.resetElasticDistanceOverride(reason = "fast_gps_lock_start", reapplyRequest = false)
+        rt.recovery.fastLock.resetFastGpsLockSamples()
+        if (!rt.locationRequests.applyCurrentLocationRequest("fast_gps_lock_start")) {
+            rt.state.isFastGpsLockWindowActive = false
+            rt.foreground.failActiveTrackingAndStop(rt.ports.service.getString(R.string.unable_to_start_location_updates))
             return
         }
-        runtimeTelemetry.event(
+        rt.deps.runtimeTelemetry.event(
             "fast_lock_start",
             "measuredAcc=${measuredAccuracyMeters ?: -1f} accuracyFilter=$accuracyFilterMeters"
         )
-        fastGpsLockWindowJob?.cancel()
-        val runGeneration = trackingGeneration
-        fastGpsLockWindowJob = ingestScope.launch {
+        rt.state.fastGpsLockWindowJob?.cancel()
+        val runGeneration = rt.state.trackingGeneration
+        rt.state.fastGpsLockWindowJob = rt.ingestScope.launch {
             delay(TrackingServiceConstants.FAST_GPS_LOCK_WINDOW_MS)
-            if (!isTracking || runGeneration != trackingGeneration || !isFastGpsLockWindowActive) return@launch
+            if (!rt.state.isTracking || runGeneration != rt.state.trackingGeneration || !rt.state.isFastGpsLockWindowActive) return@launch
             val best = selectBestFastGpsLockSample(
                 desiredAccuracyMeters = accuracyFilterMeters,
                 nowMs = System.currentTimeMillis(),
                 nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
             )
-            fastGpsLockTimeoutCountThisSession++
-            transitionGpsState(GpsRuntimeEvent.FAST_LOCK_TIMEOUT, "fast_gps_lock_timeout")
+            rt.state.fastGpsLockTimeoutCountThisSession++
+            rt.collection.transitionGpsState(GpsRuntimeEvent.FAST_LOCK_TIMEOUT, "fast_gps_lock_timeout")
             if (best != null) {
                 val fallbackLocation = Location(best).apply {
                     time = System.currentTimeMillis()
@@ -270,109 +269,109 @@ import kotlin.random.Random
                     }
                 }
                 if (
-                    !shouldEmitFallbackForTransition(
-                        previousAcceptedLocation = lastFilteredLocation,
+                    !rt.recovery.fallback.shouldEmitFallbackForTransition(
+                        previousAcceptedLocation = rt.state.lastFilteredLocation,
                         fallbackCandidateLocation = fallbackLocation,
                         nowMs = fallbackLocation.time
                     )
                 ) {
-                    runtimeTelemetry.event("fast_lock_timeout_rejected", "reason=implausible_transition")
-                } else if (!shouldPersistFallbackPoint(lastFilteredLocation, fallbackLocation)) {
-                    runtimeTelemetry.event("fast_lock_timeout_skipped_persist", "reason=accuracy_uncertainty")
+                    rt.deps.runtimeTelemetry.event("fast_lock_timeout_rejected", "reason=implausible_transition")
+                } else if (!rt.recovery.fallback.shouldPersistFallbackPoint(rt.state.lastFilteredLocation, fallbackLocation)) {
+                    rt.deps.runtimeTelemetry.event("fast_lock_timeout_skipped_persist", "reason=accuracy_uncertainty")
                 } else {
-                    lowAccuracyFallbackCoordinator.onFallbackEmitted(
+                    rt.deps.lowAccuracyFallbackCoordinator.onFallbackEmitted(
                         candidateLatitude = fallbackLocation.latitude,
                         candidateLongitude = fallbackLocation.longitude,
                         candidateTimestampMs = fallbackLocation.time,
                     )
-                    lowAccuracyFallbackCandidate = null
-                    processLocationUpdateSerialized(
+                    rt.state.lowAccuracyFallbackCandidate = null
+                    rt.fixIngest.processLocationUpdateSerialized(
                         fallbackLocation,
                         bypassFilters = true
                     )
                 }
             }
-            stopFastGpsLockWindow(reason = "timeout")
+            rt.recovery.fastLock.stopFastGpsLockWindow(reason = "timeout")
         }
     }
 
-    internal fun PositioningRuntime.stopFastGpsLockWindow(reason: String) {
-        if (!isFastGpsLockWindowActive && fastGpsLockWindowJob == null) return
-        fastGpsLockWindowJob?.cancel()
-        fastGpsLockWindowJob = null
-        if (isFastGpsLockWindowActive) {
-            fastGpsLockStopCountThisSession++
-            runtimeTelemetry.event("fast_lock_stop", "reason=$reason samples=$fastGpsLockSampleCount")
+    fun stopFastGpsLockWindow(reason: String) {
+        if (!rt.state.isFastGpsLockWindowActive && rt.state.fastGpsLockWindowJob == null) return
+        rt.state.fastGpsLockWindowJob?.cancel()
+        rt.state.fastGpsLockWindowJob = null
+        if (rt.state.isFastGpsLockWindowActive) {
+            rt.state.fastGpsLockStopCountThisSession++
+            rt.deps.runtimeTelemetry.event("fast_lock_stop", "reason=$reason samples=${rt.state.fastGpsLockSampleCount}")
         }
-        isFastGpsLockWindowActive = false
-        resetFastGpsLockSamples()
+        rt.state.isFastGpsLockWindowActive = false
+        rt.recovery.fastLock.resetFastGpsLockSamples()
         if (
-            isTracking &&
-            gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
-            gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER &&
-            gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
+            rt.state.isTracking &&
+            rt.state.gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
+            rt.state.gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER &&
+            rt.state.gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
         ) {
-            reapplyLocationRequestIfActive("fast_lock_stop_$reason")
+            rt.locationRequests.reapplyLocationRequestIfActive("fast_lock_stop_$reason")
         }
     }
 
-    internal fun PositioningRuntime.resetFastGpsLockSamples() {
-        fastGpsLockSampleCount = 0
-        fastGpsLockPreferredSample = null
-        fastGpsLockBestAccuracySample = null
-        fastGpsLockFreshestSample = null
-        fastGpsLockNewestSample = null
+    fun resetFastGpsLockSamples() {
+        rt.state.fastGpsLockSampleCount = 0
+        rt.state.fastGpsLockPreferredSample = null
+        rt.state.fastGpsLockBestAccuracySample = null
+        rt.state.fastGpsLockFreshestSample = null
+        rt.state.fastGpsLockNewestSample = null
     }
 
-    internal fun PositioningRuntime.recordFastGpsLockSample(location: Location, nowMs: Long, nowElapsedRealtimeNanos: Long) {
-        if (!isFastGpsLockWindowActive) return
-        fastGpsLockSampleCount += 1
+    fun recordFastGpsLockSample(location: Location, nowMs: Long, nowElapsedRealtimeNanos: Long) {
+        if (!rt.state.isFastGpsLockWindowActive) return
+        rt.state.fastGpsLockSampleCount += 1
         val sample = Location(location)
-        fastGpsLockNewestSample = sample
-        fastGpsLockPreferredSample = selectPreferredFastGpsSample(
-            currentBest = fastGpsLockPreferredSample,
+        rt.state.fastGpsLockNewestSample = sample
+        rt.state.fastGpsLockPreferredSample = selectPreferredFastGpsSample(
+            currentBest = rt.state.fastGpsLockPreferredSample,
             candidate = sample,
-            desiredAccuracyMeters = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters,
+            desiredAccuracyMeters = rt.contextBuilder.currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters,
             nowMs = nowMs,
             nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
         )
         if (
-            fastGpsLockBestAccuracySample == null ||
-            isMoreAccurateSample(sample, fastGpsLockBestAccuracySample)
+            rt.state.fastGpsLockBestAccuracySample == null ||
+            isMoreAccurateSample(sample, rt.state.fastGpsLockBestAccuracySample)
         ) {
-            fastGpsLockBestAccuracySample = sample
+            rt.state.fastGpsLockBestAccuracySample = sample
         }
         if (
-            fastGpsLockFreshestSample == null ||
-            isFresherSample(sample, fastGpsLockFreshestSample, nowMs, nowElapsedRealtimeNanos)
+            rt.state.fastGpsLockFreshestSample == null ||
+            isFresherSample(sample, rt.state.fastGpsLockFreshestSample, nowMs, nowElapsedRealtimeNanos)
         ) {
-            fastGpsLockFreshestSample = sample
+            rt.state.fastGpsLockFreshestSample = sample
         }
-        val threshold = currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
-        val earlyExitSampleWindow = fastGpsLockSampleCount in TrackingServiceConstants.FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES..TrackingServiceConstants.FAST_GPS_LOCK_MIN_SAMPLES
+        val threshold = rt.contextBuilder.currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
+        val earlyExitSampleWindow = rt.state.fastGpsLockSampleCount in TrackingServiceConstants.FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES..TrackingServiceConstants.FAST_GPS_LOCK_MIN_SAMPLES
         if (earlyExitSampleWindow && isFreshAccurateLocation(sample, threshold)) {
-            stopFastGpsLockWindow(reason = "early_lock_recovered")
-            cancelLowAccuracyFallbackTimer(clearCandidate = true)
+            rt.recovery.fastLock.stopFastGpsLockWindow(reason = "early_lock_recovered")
+            rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = true)
         }
         maybeLogFastGpsLockSummary(nowMs)
     }
 
-    internal fun PositioningRuntime.selectBestFastGpsLockSample(
+    fun selectBestFastGpsLockSample(
         desiredAccuracyMeters: Float,
         nowMs: Long,
         nowElapsedRealtimeNanos: Long
     ): Location? {
-        fastGpsLockPreferredSample?.let { preferred ->
+        rt.state.fastGpsLockPreferredSample?.let { preferred ->
             if (isFreshAccurateLocation(preferred, desiredAccuracyMeters)) {
                 return Location(preferred)
             }
         }
-        fastGpsLockBestAccuracySample?.let { bestAccuracy ->
+        rt.state.fastGpsLockBestAccuracySample?.let { bestAccuracy ->
             if (isFreshAccurateLocation(bestAccuracy, desiredAccuracyMeters)) {
                 return Location(bestAccuracy)
             }
         }
-        fastGpsLockFreshestSample?.let { freshest ->
+        rt.state.fastGpsLockFreshestSample?.let { freshest ->
             val normalizedTs = CanonicalTimeNormalizer.normalizeTimestampMs(freshest.time, nowMs)
             val ageMs = CanonicalTimeNormalizer.ageMs(
                 nowMs = nowMs,
@@ -384,12 +383,12 @@ import kotlin.random.Random
                 return Location(freshest)
             }
         }
-        return fastGpsLockPreferredSample?.let { Location(it) }
-            ?: fastGpsLockBestAccuracySample?.let { Location(it) }
-            ?: fastGpsLockNewestSample?.let { Location(it) }
+        return rt.state.fastGpsLockPreferredSample?.let { Location(it) }
+            ?: rt.state.fastGpsLockBestAccuracySample?.let { Location(it) }
+            ?: rt.state.fastGpsLockNewestSample?.let { Location(it) }
     }
 
-    internal fun PositioningRuntime.isFreshAccurateLocation(location: Location?, accuracyFilterMeters: Float): Boolean {
+    fun isFreshAccurateLocation(location: Location?, accuracyFilterMeters: Float): Boolean {
         location ?: return false
         if (!location.hasAccuracy() || location.accuracy > accuracyFilterMeters) return false
         val nowMs = System.currentTimeMillis()
@@ -403,14 +402,14 @@ import kotlin.random.Random
         return ageMs in 0..TrackingServiceConstants.FAST_GPS_LOCK_MAX_LAST_LOCATION_AGE_MS
     }
 
-    internal fun PositioningRuntime.isMoreAccurateSample(candidate: Location, currentBest: Location?): Boolean {
+    fun isMoreAccurateSample(candidate: Location, currentBest: Location?): Boolean {
         currentBest ?: return true
         if (!candidate.hasAccuracy()) return false
         if (!currentBest.hasAccuracy()) return true
         return candidate.accuracy < currentBest.accuracy
     }
 
-    internal fun PositioningRuntime.isFresherSample(
+    fun isFresherSample(
         candidate: Location,
         currentBest: Location?,
         nowMs: Long,
@@ -432,29 +431,29 @@ import kotlin.random.Random
         return candidateAgeMs < currentBestAgeMs
     }
 
-    internal fun PositioningRuntime.maybeLogFastGpsLockSummary(nowMs: Long) {
-        if (!isFastGpsLockWindowActive) return
-        if (nowMs - fastGpsLockLastSummaryAtMs < TrackingServiceConstants.FAST_GPS_LOCK_SUMMARY_INTERVAL_MS) return
-        fastGpsLockLastSummaryAtMs = nowMs
-        runtimeTelemetry.event(
+    fun maybeLogFastGpsLockSummary(nowMs: Long) {
+        if (!rt.state.isFastGpsLockWindowActive) return
+        if (nowMs - rt.state.fastGpsLockLastSummaryAtMs < TrackingServiceConstants.FAST_GPS_LOCK_SUMMARY_INTERVAL_MS) return
+        rt.state.fastGpsLockLastSummaryAtMs = nowMs
+        rt.deps.runtimeTelemetry.event(
             "fast_lock_summary",
-            "samples=$fastGpsLockSampleCount starts=$fastGpsLockStartCountThisSession stops=$fastGpsLockStopCountThisSession timeouts=$fastGpsLockTimeoutCountThisSession"
+            "samples=rt.state.fastGpsLockSampleCount starts=rt.state.fastGpsLockStartCountThisSession stops=rt.state.fastGpsLockStopCountThisSession timeouts=${rt.state.fastGpsLockTimeoutCountThisSession}"
         )
     }
 
-    internal fun PositioningRuntime.selectMoreAccurateLocation(currentBest: Location?, candidate: Location): Location {
+    fun selectMoreAccurateLocation(currentBest: Location?, candidate: Location): Location {
         if (currentBest == null) return Location(candidate)
         val candidateAcc = if (candidate.hasAccuracy()) candidate.accuracy else Float.MAX_VALUE
         val currentAcc = if (currentBest.hasAccuracy()) currentBest.accuracy else Float.MAX_VALUE
         return if (candidateAcc < currentAcc) Location(candidate) else currentBest
     }
 
-    internal fun PositioningRuntime.selectNewerTimestampLocation(currentNewest: Location?, candidate: Location): Location {
+    fun selectNewerTimestampLocation(currentNewest: Location?, candidate: Location): Location {
         if (currentNewest == null) return Location(candidate)
         return if (candidate.time > currentNewest.time) Location(candidate) else currentNewest
     }
 
-    internal fun PositioningRuntime.hasRecoveredFastGpsLock(
+    fun hasRecoveredFastGpsLock(
         quality: TrackPointQuality,
         measuredAccuracyMeters: Float?,
         accuracyFilterMeters: Float
@@ -464,7 +463,7 @@ import kotlin.random.Random
         return measured <= accuracyFilterMeters
     }
 
-internal fun PositioningRuntime.selectPreferredFastGpsSample(
+    fun selectPreferredFastGpsSample(
     currentBest: Location?,
     candidate: Location?,
     desiredAccuracyMeters: Float,
@@ -531,4 +530,6 @@ internal fun PositioningRuntime.selectPreferredFastGpsSample(
         return if (candidateAcc < currentAcc) candidate else currentBest
     }
     return candidate
+}
+
 }

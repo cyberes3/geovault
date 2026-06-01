@@ -1,16 +1,11 @@
-package com.geovault.tracker.positioning
-import com.geovault.tracker.tracking.TrackingServiceConstants
+package com.geovault.tracker.positioning.ingest
 
-import com.geovault.tracker.positioning.PointEmissionTrouble
-
-
+import com.geovault.tracker.positioning.PositioningRuntime
+import android.Manifest
 import android.app.ForegroundServiceStartNotAllowedException
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.app.Service
-import android.Manifest
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -24,51 +19,50 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
 import android.os.UserManager
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.provider.Settings
-import com.geovault.common.logging.GeoVaultCaptureLog
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
-import com.geovault.tracker.db.AppDatabase
+import com.geovault.common.geo.GeoCoordinates
+import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.R
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackingLocationPolicy
-import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.TrackingRecoveryCoordinator
+import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.tracker.location.AutoTrackingMotionEngine
-import com.geovault.tracker.location.AutoTrackingMotionState
-import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoMotionRejectHandling
+import com.geovault.tracker.location.AutoTrackingEngineOutput
 import com.geovault.tracker.location.AutoTrackingMotionCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
-import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionState
+import com.geovault.tracker.location.FreshnessRecoveryController
+import com.geovault.tracker.location.FreshnessRecoveryDecision
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
+import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.LowAccuracyFallbackLoopDecision
 import com.geovault.tracker.location.NetworkStatusMonitor
 import com.geovault.tracker.location.PausedFreshnessDecision
 import com.geovault.tracker.location.PausedFreshnessDecisionReason
 import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.location.PausedFreshnessPolicy
-import com.geovault.tracker.location.FreshnessRecoveryController
-import com.geovault.tracker.location.FreshnessRecoveryDecision
-import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
-import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
-import com.geovault.tracker.positioning.ingest.FixIngestMode
-import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
 import com.geovault.tracker.location.PositioningRecoveryConfig
-import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RecoveryAnchorStore
-import com.geovault.tracker.location.StationaryRegionStore
+import com.geovault.tracker.location.RepeatedOutlierSuppressor
 import com.geovault.tracker.location.StationaryFreshnessActions
 import com.geovault.tracker.location.StationaryFreshnessCoordinator
+import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
 import com.geovault.tracker.location.StationaryPingActions
 import com.geovault.tracker.location.StationaryPingController
-import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
+import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
@@ -86,56 +80,65 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.runtime.RuntimeServiceEventType
-import com.geovault.tracker.runtime.RuntimeTrigger
-import com.geovault.tracker.runtime.PositioningDiagnosticEvent
-import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
-import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
-import com.geovault.tracker.runtime.TrackingRuntimeController
-import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
-import com.geovault.tracker.sensor.SignificantMotionResumeBridge
-import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.positioning.PointEmissionTrouble
+import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.GpsRuntimeStateMachine
+import com.geovault.tracker.positioning.config.PositioningDensity
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
+import com.geovault.tracker.positioning.config.PositioningPresetValues
+import com.geovault.tracker.positioning.config.PositioningPresets
+import com.geovault.tracker.positioning.ingest.FixIngestMode
+import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
+import com.geovault.tracker.runtime.PositioningDiagnosticEvent
+import com.geovault.tracker.runtime.PositioningDiagnosticSnapshot
+import com.geovault.tracker.runtime.RuntimeServiceEventType
+import com.geovault.tracker.runtime.RuntimeTelemetry
+import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.runtime.TrackingServiceLifecycleGate
+import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
+import com.geovault.tracker.sensor.SignificantMotionResumeBridge
+import com.geovault.tracker.services.FastLockTriggerInput
+import com.geovault.tracker.services.LocationIngestCoordinator
+import com.geovault.tracker.services.LocationIngestResult
+import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.services.PointFreshnessTracker
+import com.geovault.tracker.services.ProviderHealthController
+import com.geovault.tracker.services.ProviderHealthDecision
 import com.geovault.tracker.services.QueueUploadConfig
 import com.geovault.tracker.services.QueueUploadEngine
 import com.geovault.tracker.services.QueueUploadOutcomePolicy
 import com.geovault.tracker.services.QueueUploadResult
 import com.geovault.tracker.services.QueueUploadScope
 import com.geovault.tracker.services.QueueUploadSkipReason
-import com.geovault.tracker.services.PointFreshnessTracker
-import com.geovault.tracker.services.ProviderHealthController
-import com.geovault.tracker.services.ProviderHealthDecision
-import com.geovault.tracker.positioning.config.PositioningDensity
-import com.geovault.tracker.positioning.config.PositioningPresetValues
-import com.geovault.tracker.positioning.config.PositioningPresets
 import com.geovault.tracker.services.RecordingRuntimeReducer
 import com.geovault.tracker.services.RuntimeAccuracyHoldPolicy
 import com.geovault.tracker.services.RuntimeEventPublisher
-import com.geovault.tracker.positioning.PositioningContext
+import com.geovault.tracker.services.RuntimeLocationGateInput
+import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
+import com.geovault.tracker.services.RuntimeSnapshotProjector
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingNotificationPresenter
-import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import com.geovault.tracker.services.TrackingRuntimeOrchestrator
-import com.geovault.tracker.services.RuntimeLocationGateInput
-import com.geovault.tracker.services.FastLockTriggerInput
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingSessionCoordinator
 import com.geovault.tracker.services.TrackingStatusAccuracyInput
 import com.geovault.tracker.services.TrackingStatusAccuracyProjector
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import com.geovault.tracker.services.RuntimeSnapshotProjector
-import com.geovault.tracker.services.RuntimeSnapshotProjectionInput
 import com.geovault.tracker.services.UploadLivenessState
 import com.geovault.tracker.settings.TrackerSettings
 import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.tracking.TrackingServiceConstants
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -151,68 +154,64 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.json.JSONObject
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.TimeUnit
-import kotlin.random.Random
-import com.geovault.common.geo.GeoCoordinates
 
-
-    internal suspend fun PositioningRuntime.processLocationUpdate(
+internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
+    suspend fun processLocationUpdate(
         location: Location,
         bypassFilters: Boolean = false,
         propsJson: String? = null,
         allowWhenGpsPaused: Boolean = false,
         skipAdaptiveTrackingEffects: Boolean = false,
     ) {
-        val runGeneration = trackingGeneration
+        val runGeneration = rt.state.trackingGeneration
         if (!GeoCoordinates.isValidGeographic(location.latitude, location.longitude)) {
-            runtimeTelemetry.event(
+            rt.deps.runtimeTelemetry.event(
                 "fix_rejected_invalid_coordinates",
-                "lat=${location.latitude} lon=${location.longitude} pace=${state.collectionPace}",
+                "lat=${location.latitude} lon=${location.longitude} pace=${rt.state.collectionPace}",
             )
             return
         }
         if (
             !TrackingRuntimeOrchestrator.shouldProcessLocationUpdate(
                 RuntimeLocationGateInput(
-                    isTracking = isTracking,
-                    gpsState = gpsRuntimeState,
+                    isTracking = rt.state.isTracking,
+                    gpsState = rt.state.gpsRuntimeState,
                     allowWhenGpsPaused = allowWhenGpsPaused
                 )
             )
         ) {
             return
         }
-        val settings = settingsRepository.getSettings()
-        var runtimeContext = currentPositioningRuntimeContext(settings)
-        val previousAcceptedLocation = lastFilteredLocation?.let { Location(it) }
+        val settings = rt.deps.settingsRepository.getSettings()
+        var runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
+        val previousAcceptedLocation = rt.state.lastFilteredLocation?.let { Location(it) }
         val nowMs = System.currentTimeMillis()
         val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-        if (isFastGpsLockWindowActive) {
-            recordFastGpsLockSample(
+        if (rt.state.isFastGpsLockWindowActive) {
+            rt.recovery.fastLock.recordFastGpsLockSample(
                 location = location,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos
             )
         }
-        val observedSpeedMps = resolveObservedSpeedMps(location, lastSpeedReferenceLocation)
-        if (!isTracking || runGeneration != trackingGeneration) return
-        applyAccuracyHoldUpdate(
+        val observedSpeedMps = rt.utilities.resolveObservedSpeedMps(location, rt.state.lastSpeedReferenceLocation)
+        if (!rt.state.isTracking || runGeneration != rt.state.trackingGeneration) return
+        rt.projection.applyAccuracyHoldUpdate(
             incomingAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
         )
-        syncRuntimeStateStore()
-        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(service)
+        rt.projection.syncRuntimeStateStore()
+        val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(rt.ports.service)
         if (selectedTrackerId.isEmpty()) return
         var motionMode = runtimeContext.activeMotionMode
         if (
-            stationaryFreshnessCoordinator.probeActive &&
+            rt.deps.stationaryFreshnessCoordinator.probeActive &&
             !bypassFilters &&
             !skipAdaptiveTrackingEffects &&
-            handlePausedFreshnessProbeFix(
+            rt.recovery.pausedFreshness.handlePausedFreshnessProbeFix(
                 selectedTrackerId = selectedTrackerId,
                 probeLocation = location,
                 anchorLocation = previousAcceptedLocation
-                    ?: recoveryAnchorState?.toLocation(providerPrefix = "paused_recovery_anchor"),
+                    ?: rt.state.recoveryAnchorState?.toLocation(providerPrefix = "paused_recovery_anchor"),
                 settings = settings,
                 motionMode = motionMode,
                 nowMs = nowMs,
@@ -227,7 +226,7 @@ import com.geovault.common.geo.GeoCoordinates
         // long gap and permanently block the stationary counter.
         val activeMotionHint = (observedSpeedMps ?: 0f) > TrackingServiceConstants.MOTION_HINT_FLOOR_MPS
         val pointPropsJson = propsJson
-        val pipelineOutput = trackerLocationPipeline.processFix(
+        val pipelineOutput = rt.deps.trackerLocationPipeline.processFix(
             input = TrackerLocationPipelineInput(
                 trackId = selectedTrackerId,
                 location = location,
@@ -238,35 +237,35 @@ import com.geovault.common.geo.GeoCoordinates
                     effectiveAccuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters,
                 ),
                 previousAcceptedLocation = previousAcceptedLocation,
-                sessionVisibleBoundaryId = sessionVisibleBoundaryId,
+                sessionVisibleBoundaryId = rt.state.sessionVisibleBoundaryId,
                 ingestMode = when {
                     bypassFilters -> FixIngestMode.FreshnessBypass
                     else -> FixIngestMode.Live
                 },
                 propsJson = pointPropsJson,
-                totalDistanceMeters = runtimeSnapshot.sessionTotalDistanceMeters,
+                totalDistanceMeters = rt.state.runtimeSnapshot.sessionTotalDistanceMeters,
                 nowMs = nowMs,
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
-                sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
+                sessionStartTimeMs = rt.state.runtimeSnapshot.sessionStartTimeMs,
                 isMockLocation = LocationCompat.isMock(location),
                 skipAdaptiveTrackingEffects = skipAdaptiveTrackingEffects,
-                localRecoveryDue = pointFreshnessTracker.shouldForceLocalRecovery(
+                localRecoveryDue = rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
                     nowMs = nowMs,
                     intervalSec = runtimeContext.pointFreshnessIntervalSec,
                 ),
                 recoveryConfig = runtimeContext.recoveryConfig,
-                recoveryAnchor = recoveryAnchorState,
-                outlierSuppressorAnchor = lastFilteredLocation,
+                recoveryAnchor = rt.state.recoveryAnchorState,
+                outlierSuppressorAnchor = rt.state.lastFilteredLocation,
             ),
             onAutoMotionRejected = { ingestResult, rejectedLocation, eventNowMs ->
-                handleAutoMotionRejectedFix(
+                rt.motion.handleAutoMotionRejectedFix(
                     result = ingestResult,
                     location = rejectedLocation,
                     nowMs = eventNowMs,
                 )
             },
             refreshMotionContext = {
-                runtimeContext = currentPositioningRuntimeContext(settings)
+                runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
                 TrackerLocationMotionContext(
                     motionMode = runtimeContext.activeMotionMode,
                     filterConfig = runtimeContext.filterConfig,
@@ -274,7 +273,7 @@ import com.geovault.common.geo.GeoCoordinates
                 )
             },
             buildFreshnessRecoveryLocation = { anchor, sourceLocation, recoveryNowMs, recoveryElapsedNanos ->
-                buildFreshnessRecoveryLocation(
+                rt.contextBuilder.buildFreshnessRecoveryLocation(
                     anchor = anchor,
                     sourceLocation = sourceLocation,
                     nowMs = recoveryNowMs,
@@ -283,11 +282,11 @@ import com.geovault.common.geo.GeoCoordinates
             },
         )
         var result = pipelineOutput.result
-        runtimeContext = currentPositioningRuntimeContext(settings)
+        runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
         motionMode = pipelineOutput.motionContext.motionMode
         val repeatedOutlierSuppressed = pipelineOutput.repeatedOutlierSuppressed
         if (pipelineOutput.motionModeChanged) {
-            runtimeTelemetry.event(
+            rt.deps.runtimeTelemetry.event(
                 name = "auto_motion_retry",
                 details = "mode=$motionMode accepted=${result.accepted} " +
                     "reason=${result.policyMetrics?.reason ?: result.rejectReason ?: "none"}"
@@ -295,15 +294,15 @@ import com.geovault.common.geo.GeoCoordinates
         }
         val freshnessRecoveryDecision = pipelineOutput.freshnessRecoveryDecision
         if (freshnessRecoveryDecision == FreshnessRecoveryDecision.CommitAnchor) {
-            runtimeTelemetry.event(
+            rt.deps.runtimeTelemetry.event(
                 "freshness_probe_commit",
                 "reason=${result.policyMetrics?.reason ?: result.rejectReason ?: "none"} " +
                     "accuracy=${if (location.hasAccuracy()) location.accuracy else -1f} " +
-                    "localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
-                    "uploadAgeMs=${pointFreshnessTracker.uploadAgeMs(nowMs) ?: -1L}"
+                    "localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
+                    "uploadAgeMs=${rt.deps.pointFreshnessTracker.uploadAgeMs(nowMs) ?: -1L}"
             )
         } else {
-            maybeLogFreshnessProbeDecision(
+            rt.contextBuilder.maybeLogFreshnessProbeDecision(
                 decision = freshnessRecoveryDecision,
                 result = result,
                 nowMs = nowMs,
@@ -311,13 +310,13 @@ import com.geovault.common.geo.GeoCoordinates
             )
         }
         val nextSessionDistance = result.nextSessionDistanceMeters
-        val pointEmissionTrouble = resolvePointEmissionTrouble(
+        val pointEmissionTrouble = rt.contextBuilder.resolvePointEmissionTrouble(
             result = result,
             nowMs = nowMs,
             motionMode = motionMode,
             effectiveAccuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters,
         )
-        applyAccuracyHoldUpdate(
+        rt.projection.applyAccuracyHoldUpdate(
             incomingAccuracyMeters = result.lastAccuracyMeters,
             pointEmissionTrouble = pointEmissionTrouble,
             extraTransform = { snapshot ->
@@ -329,13 +328,13 @@ import com.geovault.common.geo.GeoCoordinates
         result.policyMetrics?.let { metrics ->
             val filterReason = metrics.reason ?: result.rejectReason ?: result.adjustmentReason ?: "none"
             val signature = "decision=${metrics.decision}|reason=$filterReason|accepted=${result.accepted}"
-            if (signature != lastLocationFilterLogSignature) {
-                lastLocationFilterLogSignature = signature
+            if (signature != rt.state.lastLocationFilterLogSignature) {
+                rt.state.lastLocationFilterLogSignature = signature
                 val rawLat = metrics.rawLatitude ?: location.latitude
                 val rawLon = metrics.rawLongitude ?: location.longitude
                 val committedLat = metrics.committedLatitude?.toString() ?: "none"
                 val committedLon = metrics.committedLongitude?.toString() ?: "none"
-                runtimeTelemetry.decision(
+                rt.deps.runtimeTelemetry.decision(
                     name = "location_filter",
                     details = "raw=${metrics.rawDistanceMeters} effective=${metrics.effectiveDistanceMeters} " +
                         "dt=${metrics.elapsedSeconds} impliedSpeed=${metrics.impliedSpeedMps} " +
@@ -350,9 +349,9 @@ import com.geovault.common.geo.GeoCoordinates
         if (!result.accepted && result.policyMetrics == null) {
             val filterReason = result.rejectReason ?: result.adjustmentReason ?: "none"
             val signature = "decision=none|reason=$filterReason|accepted=false"
-            if (signature != lastLocationFilterLogSignature) {
-                lastLocationFilterLogSignature = signature
-                runtimeTelemetry.decision(
+            if (signature != rt.state.lastLocationFilterLogSignature) {
+                rt.state.lastLocationFilterLogSignature = signature
+                rt.deps.runtimeTelemetry.decision(
                     name = "location_filter",
                     details = "accepted=false reason=$filterReason " +
                         "accuracy=${result.lastAccuracyMeters ?: -1f} " +
@@ -362,7 +361,7 @@ import com.geovault.common.geo.GeoCoordinates
         }
         if (result.accepted && result.pointPersisted) {
             // Committed lat/lon (post-clip for `OUTLIER_CAPPED`) --
-            // matches what lands in the database, not the raw chipset
+            // matches what lands in the rt.deps.database, not the raw chipset
             // coords. Internal snaps advance runtime state without
             // emitting a duplicate point, so they do not reach this log.
             val committed = result.lastFilteredLocation ?: location
@@ -376,7 +375,7 @@ import com.geovault.common.geo.GeoCoordinates
             } else {
                 "live"
             }
-            runtimeTelemetry.event(
+            rt.deps.runtimeTelemetry.event(
                 name = "track_point",
                 details = "lat=%.8f lon=%.8f accuracy=%.1f speed=%.2f reason=%s source=%s".format(
                     committed.latitude,
@@ -388,106 +387,106 @@ import com.geovault.common.geo.GeoCoordinates
                 )
             )
         }
-        withContext(Dispatchers.Main) { syncRuntimeStateStore() }
+        withContext(Dispatchers.Main) { rt.projection.syncRuntimeStateStore() }
         if (!result.accepted) {
             val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
                 result.rejectReason == TrackPointRejectReason.STALE
             if (rejectedForLock) {
                 if (repeatedOutlierSuppressed) {
-                    runtimeTelemetry.event(
+                    rt.deps.runtimeTelemetry.event(
                         "repeated_outlier_suppressed",
                         "reason=pipeline_pre_freshness repeats=-1 " +
                             "accuracy=${if (location.hasAccuracy()) location.accuracy else -1f} " +
                             "lat=${location.latitude} lon=${location.longitude}"
                     )
                 }
-                val fastLockSuppressed = repeatedOutlierSuppressed || shouldSuppressFastLockForAutoMotion(
+                val fastLockSuppressed = repeatedOutlierSuppressed || rt.recovery.fastLock.shouldSuppressFastLockForAutoMotion(
                     rejectReason = result.rejectReason,
                     nowMs = nowMs,
                 )
                 if (!fastLockSuppressed) {
-                    maybeStartFastGpsLockWindow(
+                    rt.recovery.fastLock.maybeStartFastGpsLockWindow(
                         measuredAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
                         rejectReason = result.rejectReason
                     )
                 }
                 if (settings.lowAccuracyFallbackEnabled && !repeatedOutlierSuppressed) {
-                    transitionGpsState(GpsRuntimeEvent.FIX_REJECTED, "rejected_for_lock:${result.rejectReason}")
-                    lowAccuracyFallbackRejectedFixCountThisSession++
-                    maybeLogFallbackRejectSummary(nowMs)
-                    lowAccuracyFallbackCandidate = selectLowAccuracyFallbackCandidate(
+                    rt.collection.transitionGpsState(GpsRuntimeEvent.FIX_REJECTED, "rejected_for_lock:${result.rejectReason}")
+                    rt.state.lowAccuracyFallbackRejectedFixCountThisSession++
+                    rt.recovery.fallback.maybeLogFallbackRejectSummary(nowMs)
+                    rt.state.lowAccuracyFallbackCandidate = rt.recovery.fallback.selectLowAccuracyFallbackCandidate(
                         rejectedLocation = location,
                         nowMs = nowMs,
                         motionMode = motionMode,
                     )
-                    val armDecision = lowAccuracyFallbackCoordinator.onRejectedFixForLock(
+                    val armDecision = rt.deps.lowAccuracyFallbackCoordinator.onRejectedFixForLock(
                         fallbackEligible = true,
                         candidateLatitude = location.latitude,
                         candidateLongitude = location.longitude,
                         candidateTimestampMs = location.time
                     )
                     if (armDecision == LowAccuracyFallbackArmDecision.START_TIMER) {
-                        transitionGpsState(GpsRuntimeEvent.FALLBACK_TIMER_ARMED, "fallback_timer_armed")
-                        lowAccuracyFallbackArmCountThisSession++
-                        lowAccuracyFallbackTimerArmedAtMs = nowMs
-                        ensureLowAccuracyFallbackTimerRunning()
+                        rt.collection.transitionGpsState(GpsRuntimeEvent.FALLBACK_TIMER_ARMED, "fallback_timer_armed")
+                        rt.state.lowAccuracyFallbackArmCountThisSession++
+                        rt.state.lowAccuracyFallbackTimerArmedAtMs = nowMs
+                        rt.recovery.fallback.ensureLowAccuracyFallbackTimerRunning()
                     }
                 }
             }
             if (bypassFilters || skipAdaptiveTrackingEffects) {
-                processAutoTrackingOutput(
-                    output = autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
+                rt.motion.processAutoTrackingOutput(
+                    output = rt.deps.autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
                     reason = "rejected_fix"
                 )
             }
-            broadcastSessionStats()
-            lastSpeedReferenceLocation = Location(location)
+            rt.projection.broadcastSessionStats()
+            rt.state.lastSpeedReferenceLocation = Location(location)
             return
         }
-        if (!isTracking || runGeneration != trackingGeneration) return
+        if (!rt.state.isTracking || runGeneration != rt.state.trackingGeneration) return
 
-        if (!isWaitingForProviderState()) {
-            transitionGpsState(GpsRuntimeEvent.FIX_ACCEPTED, "fix_accepted")
+        if (!rt.utilities.isWaitingForProviderState()) {
+            rt.collection.transitionGpsState(GpsRuntimeEvent.FIX_ACCEPTED, "fix_accepted")
         }
         if (result.pointPersisted) {
-            pointFreshnessTracker.markLocalPointPersisted(nowMs)
-            lowAccuracyFallbackCoordinator.onAcceptedFix()
-            cancelLowAccuracyFallbackTimer(clearCandidate = true)
-            repeatedOutlierSuppressor.reset()
-            freshnessRecoveryController.reset()
-            if (lastLoggedPointEmissionTrouble.active) {
-                logPointEmissionTroubleTransition(
-                    previous = lastLoggedPointEmissionTrouble,
+            rt.deps.pointFreshnessTracker.markLocalPointPersisted(nowMs)
+            rt.deps.lowAccuracyFallbackCoordinator.onAcceptedFix()
+            rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = true)
+            rt.deps.repeatedOutlierSuppressor.reset()
+            rt.deps.freshnessRecoveryController.reset()
+            if (rt.state.lastLoggedPointEmissionTrouble.active) {
+                rt.projection.logPointEmissionTroubleTransition(
+                    previous = rt.state.lastLoggedPointEmissionTrouble,
                     current = PointEmissionTrouble.None,
                     nowMs = nowMs,
                 )
-                lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
+                rt.state.lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
             }
-            updateRuntimeSnapshot {
+            rt.projection.updateRuntimeSnapshot {
                 it.copy(
-                    lastLocalPointPersistedAtMs = pointFreshnessTracker.lastLocalPointPersistedAtMs,
+                    lastLocalPointPersistedAtMs = rt.deps.pointFreshnessTracker.lastLocalPointPersistedAtMs,
                     activePointEmissionTrouble = false,
                     activePointEmissionAccuracyTrouble = false,
                     pointEmissionTroubleReason = null,
                 )
             }
         } else {
-            pointFreshnessTracker.markInternalAccepted(nowMs)
+            rt.deps.pointFreshnessTracker.markInternalAccepted(nowMs)
         }
-        lastFilteredLocation = result.lastFilteredLocation
+        rt.state.lastFilteredLocation = result.lastFilteredLocation
         val acceptedLocation = result.lastFilteredLocation ?: location
         if (result.pointPersisted) {
-            updateRecoveryAnchor(
+            rt.contextBuilder.updateRecoveryAnchor(
                 location = acceptedLocation,
                 source = "persisted_point",
                 motionMode = motionMode,
             )
         }
-        val finalPropsJson = pointPropsJson ?: buildLocalPointPropsJson(
+        val finalPropsJson = pointPropsJson ?: rt.utilities.buildLocalPointPropsJson(
             location = acceptedLocation,
             distanceMeters = nextSessionDistance
         )
-        updateRuntimeSnapshot {
+        rt.projection.updateRuntimeSnapshot {
             it.copy(
                 queuedPointsVisible = result.queuedPointsVisible,
                 lastTrackedLatitude = result.lastTrackedLatitude,
@@ -503,18 +502,18 @@ import com.geovault.common.geo.GeoCoordinates
                 "lon=${result.lastTrackedLongitude} acc=${result.lastAccuracyMeters} " +
                 "queuedVisible=${result.queuedPointsVisible} adjustment=${result.adjustmentReason ?: "none"}"
         )
-        val acceptedQuality = result.trackPointQuality ?: resolveTrackPointQuality(acceptedLocation, finalPropsJson)
+        val acceptedQuality = result.trackPointQuality ?: rt.utilities.resolveTrackPointQuality(acceptedLocation, finalPropsJson)
         if (
-            isFastGpsLockWindowActive &&
-            hasRecoveredFastGpsLock(
+            rt.state.isFastGpsLockWindowActive &&
+            rt.recovery.fastLock.hasRecoveredFastGpsLock(
                 quality = acceptedQuality,
                 measuredAccuracyMeters = result.lastAccuracyMeters,
                 accuracyFilterMeters = runtimeContext.effectiveAccuracyThresholdMeters
             )
         ) {
-            stopFastGpsLockWindow(reason = "accepted_fix_lock_recovered")
-            lowAccuracyFallbackCoordinator.onAcceptedFix()
-            cancelLowAccuracyFallbackTimer(clearCandidate = true)
+            rt.recovery.fastLock.stopFastGpsLockWindow(reason = "accepted_fix_lock_recovered")
+            rt.deps.lowAccuracyFallbackCoordinator.onAcceptedFix()
+            rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = true)
         }
         if (!skipAdaptiveTrackingEffects) {
             val stationaryRadius = runtimeContext.stationaryRadiusMeters
@@ -530,10 +529,10 @@ import com.geovault.common.geo.GeoCoordinates
             val stationaryConfidence = result.policyMetrics?.stationaryConfidence
             val stationaryReferenceLocation = result.lastFilteredLocation ?: location
             val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
-                lastLocation = stationaryAnchorLocation,
+                lastLocation = rt.state.stationaryAnchorLocation,
                 location = stationaryReferenceLocation,
                 stationaryRadiusMeters = stationaryRadius,
-                currentConsecutive = consecutiveStationaryPoints,
+                currentConsecutive = rt.state.consecutiveStationaryPoints,
                 significantMotionOnly = settings.significantDataOnly,
                 activeMotionHint = activeMotionHint,
                 filterIntervened = filterIntervened,
@@ -541,9 +540,9 @@ import com.geovault.common.geo.GeoCoordinates
                 confidence = stationaryConfidence,
             )
             if (stationaryDecision.reason != "disabled") {
-                runtimeTelemetry.event(
+                rt.deps.runtimeTelemetry.event(
                     name = "stationary_update",
-                    details = "from=$consecutiveStationaryPoints to=${stationaryDecision.consecutive} " +
+                    details = "from=rt.state.consecutiveStationaryPoints to=${stationaryDecision.consecutive} " +
                         "shouldPause=${stationaryDecision.shouldPause} reason=${stationaryDecision.reason} " +
                         "accuracy=${if (stationaryReferenceLocation.hasAccuracy()) stationaryReferenceLocation.accuracy else -1f} " +
                         "adjustmentReason=${adjustmentReason ?: "none"} " +
@@ -553,39 +552,39 @@ import com.geovault.common.geo.GeoCoordinates
                         "oscillating=${stationaryConfidence?.isOscillating ?: false}"
                 )
             }
-            consecutiveStationaryPoints = stationaryDecision.consecutive
-            stationaryAnchorLocation = when (consecutiveStationaryPoints) {
+            rt.state.consecutiveStationaryPoints = stationaryDecision.consecutive
+            rt.state.stationaryAnchorLocation = when (rt.state.consecutiveStationaryPoints) {
                 0 -> null
                 1 -> Location(stationaryReferenceLocation)
-                else -> stationaryAnchorLocation
+                else -> rt.state.stationaryAnchorLocation
             }
             val pauseEligibility = StationaryPauseEligibilityPolicy.evaluate(
                 stationaryPolicyWantsPause = stationaryDecision.shouldPause,
-                localPointFresh = pointFreshnessTracker.isLocalFresh(
+                localPointFresh = rt.deps.pointFreshnessTracker.isLocalFresh(
                     nowMs = nowMs,
                     intervalSec = runtimeContext.pointFreshnessIntervalSec,
                 ),
-                fallbackPending = lowAccuracyFallbackCoordinator.hasPendingCandidate(),
-                providerAvailable = isGpsProviderEnabled(),
+                fallbackPending = rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate(),
+                providerAvailable = rt.utilities.isGpsProviderEnabled(),
             )
             if (stationaryDecision.shouldPause && !pauseEligibility.shouldPause) {
-                runtimeTelemetry.event(
+                rt.deps.runtimeTelemetry.event(
                     "stationary_pause_blocked",
                     "reason=${pauseEligibility.reason.telemetryValue} " +
-                        "localAgeMs=${pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
-                        "fallbackPending=${lowAccuracyFallbackCoordinator.hasPendingCandidate()}"
+                        "localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
+                        "fallbackPending=${rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate()}"
                 )
             }
             if (pauseEligibility.shouldPause) {
-                enterStationaryRegion(
-                    anchorLocation = stationaryAnchorLocation ?: stationaryReferenceLocation,
+                rt.collection.enterStationaryRegion(
+                    anchorLocation = rt.state.stationaryAnchorLocation ?: stationaryReferenceLocation,
                     nowMs = nowMs,
                     motionMode = motionMode,
                     radiusMeters = stationaryRadius,
                 )
-                pauseGps()
+                rt.collection.pauseGps()
             }
-            autoTrackingMotionCoordinator.clearEvidenceCandidate()
+            rt.deps.autoTrackingMotionCoordinator.clearEvidenceCandidate()
             // Auto-mode classification runs on vetted geometry only:
             // effectiveDistance / dt from the position filter's accepted,
             // RSS-corrected metrics. Falling back to chipset speed here is
@@ -598,14 +597,14 @@ import com.geovault.common.geo.GeoCoordinates
                     0f
                 }
             } ?: 0f
-            processAutoTrackingOutput(
-                output = autoTrackingMotionEngine.onAcceptedFix(
+            rt.motion.processAutoTrackingOutput(
+                output = rt.deps.autoTrackingMotionEngine.onAcceptedFix(
                     speedMps = vettedSpeedMps,
                     eventTimeMs = nowMs
                 ),
                 reason = "accepted_fix"
             )
-            maybeApplyElasticDistanceFilter(
+            rt.motion.maybeApplyElasticDistanceFilter(
                 observedSpeedMps = observedSpeedMps,
                 measuredAccuracyMeters = (result.lastFilteredLocation ?: location)
                     .takeIf { it.hasAccuracy() }
@@ -619,7 +618,7 @@ import com.geovault.common.geo.GeoCoordinates
                     "locationTs=${acceptedLocation.time} lat=${acceptedLocation.latitude} " +
                     "lon=${acceptedLocation.longitude} quality=$acceptedQuality"
             )
-            publishTrackPoint(
+            rt.utilities.publishTrackPoint(
                 trackId = selectedTrackerId,
                 location = acceptedLocation,
                 propsJson = finalPropsJson,
@@ -632,33 +631,33 @@ import com.geovault.common.geo.GeoCoordinates
                     "runtimeTs=${result.lastTrackedTimestampMs} reason=not_persisted"
             )
         }
-        lastSpeedReferenceLocation = Location(location)
+        rt.state.lastSpeedReferenceLocation = Location(location)
         withContext(Dispatchers.Main) {
-            syncRuntimeStateStore()
-            updateNotificationFromDb(broadcastStats = false)
+            rt.projection.syncRuntimeStateStore()
+            rt.projection.updateNotificationFromDb(broadcastStats = false)
         }
         if (result.pointPersisted) {
-            serviceScope.launch(Dispatchers.IO) {
-                val outcome = pushQueuedLocations(
+            rt.serviceScope.launch(Dispatchers.IO) {
+                val outcome = rt.upload.pushQueuedLocations(
                     scope = QueueUploadScope.LIVE_ONLY,
                     updateFailureCounters = false
                 )
                 if (outcome == SyncFailureClass.NONE) {
-                    consecutivePushFailures = 0
+                    rt.state.consecutivePushFailures = 0
                 }
             }
         }
     }
 
-    internal suspend fun PositioningRuntime.processLocationUpdateSerialized(
+    suspend fun processLocationUpdateSerialized(
         location: Location,
         bypassFilters: Boolean = false,
         propsJson: String? = null,
         allowWhenGpsPaused: Boolean = false,
         skipAdaptiveTrackingEffects: Boolean = false,
     ) {
-        locationUpdateMutex.withLock {
-            processLocationUpdate(
+        rt.locationUpdateMutex.withLock {
+            rt.fixIngest.processLocationUpdate(
                 location = location,
                 bypassFilters = bypassFilters,
                 propsJson = propsJson,
@@ -667,3 +666,5 @@ import com.geovault.common.geo.GeoCoordinates
             )
         }
     }
+
+}
