@@ -15,8 +15,11 @@ GeoVault uses **two methods** to identify duplicates, checking in **two places**
    - **These are always blocked** because importing them would create an exact copy
 
 2. **Same Location (Geometry-Based)**
-   - The feature is at the **exact same spot** as another feature, but has different properties
-   - Only compares the coordinates, ignoring names, descriptions, and other details
+   - The feature has the **same geometry** as another feature, but has different properties
+   - Only compares coordinates, ignoring names, descriptions, and other details
+   - The **same rules** apply whether the match is in your feature library or another file in the import queue
+   - For **points**, this means the same spot (within GPS precision tolerance, about 0.5 m)
+   - For **tracks, lines, and polygons**, this means the **same path or shape** (matching vertices), not merely following the same trail or overlapping another feature
    - Example: You have a point called "Gas Station" and upload a point called "Coffee Shop" at the same coordinates
    - **These are also blocked by default** to prevent cluttering the same location with multiple features
 
@@ -29,6 +32,7 @@ GeoVault uses **two methods** to identify duplicates, checking in **two places**
 2. **Your Import Queue**
    - Files you've uploaded but haven't imported yet
    - Only checks files that were uploaded **before** the current one
+   - Geometry checks use the same full-geometry matching as the feature library (not a separate rounding rule)
    - This prevents importing the same feature multiple times when processing several files
 
 ## What You'll See
@@ -98,6 +102,11 @@ You upload "trails.geojson" on Monday and import it. On Tuesday, you accidentall
 You have 50 trail markers on your map. You get an updated file with the same 50 trails but with updated descriptions.
 
 **Result**: All 50 features will show as "Same Location as Feature in Library" because they're at the same spots. To update them, edit the existing features or delete the old ones first, then import the new file.
+
+### Scenario 2b: Second Hike on the Same Trail
+You recorded a GPX track on a trail you hiked before. The new track follows much of the same path but is a different recording (different length, timing, or GPS points).
+
+**Result**: The new track is **not** treated as a same-location duplicate. Only re-uploading the **same path** (matching track geometry) triggers that warning. Repeat hikes on a shared corridor import normally.
 
 ### Scenario 3: Multiple Files with Overlap
 You upload three files: "north_trails.geojson", "south_trails.geojson", and "all_trails.geojson" (which contains everything).

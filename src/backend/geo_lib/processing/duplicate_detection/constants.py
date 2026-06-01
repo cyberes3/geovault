@@ -15,3 +15,13 @@ GEOM_TYPE_MAPPING = {
     'polygon': 'Polygon',
     'multipolygon': 'MultiPolygon',
 }
+
+# GeoJSON geometry type strings for GEOSGeometry construction (batched duplicate detection)
+GEOJSON_GEOM_TYPE_NAMES = {
+    'point': 'Point',
+    'linestring': 'LineString',
+    'polygon': 'Polygon',
+    'multilinestring': 'MultiLineString',
+    'multipolygon': 'MultiPolygon',
+    'multipoint': 'MultiPoint',
+}

@@ -11,12 +11,14 @@ Also tests priority rules:
 - Hash > Geometry (within same source)
 - Feature Store > Cross-Queue (across sources)
 """
+from unittest.mock import patch
+
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 
 from datetime import datetime, timedelta, timezone
 
-from django.contrib.gis.geos import Point
+from django.contrib.gis.geos import LineString, Point
 
 from api.models import FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
@@ -33,6 +35,27 @@ from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, Du
 
 
 User = get_user_model()
+
+
+def _linestring_geometry_3d(coordinates: list) -> LineString:
+    """FeatureStore.geometry is 3D; build a matching LineString for tests."""
+    return LineString(*[(c[0], c[1], 0) for c in coordinates], srid=4326)
+
+
+def _point_feature(lon: float, lat: float, name: str = 'Test') -> dict:
+    return {
+        'type': 'Feature',
+        'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
+        'properties': {'name': name},
+    }
+
+
+def _duplicate_detection_setting(key: str) -> int:
+    settings = {
+        'DUPLICATE_DETECTION_BATCH_THRESHOLD': 2,
+        'DUPLICATE_DETECTION_BATCH_SIZE': 100,
+    }
+    return settings[key]
 
 
 class TestDuplicateDetectionIndividual(TestCase):
@@ -132,6 +155,41 @@ class TestDuplicateDetectionIndividual(TestCase):
         
         print("✓ Test 2 passed: Feature store geometry duplicate detected correctly")
 
+    def test_feature_store_geometry_duplicate_2d_vs_3d(self):
+        """2D vs 3D geojson with same lon/lat is a geometry duplicate in the library."""
+        stored_point = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-105.64053, 38.79543]},
+            'properties': {'name': 'Trailhead', 'description': '2D'},
+        }
+        import_point = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-105.64053, 38.79543, 2100.0]},
+            'properties': {'name': 'Trailhead', 'description': '3D with elevation'},
+        }
+
+        stored_hash = generate_geojson_hash(stored_point)
+        stored_point['properties']['geojson_hash'] = stored_hash
+        coords = stored_point['geometry']['coordinates']
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=stored_point,
+            geojson_hash=stored_hash,
+            geometry=Point(coords[0], coords[1], 0, srid=4326),
+        )
+
+        remaining, duplicates, _log = find_duplicates_for_source(
+            [import_point],
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None,
+        )
+
+        self.assertEqual(len(remaining), 0)
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
+
     def test_cross_queue_hash_duplicate_only(self):
         """Test 3: Cross-queue hash duplicate detection."""
         # Create an older import queue item with a feature
@@ -213,6 +271,52 @@ class TestDuplicateDetectionIndividual(TestCase):
         self.assertEqual(duplicates[0]['existing_features'][0]['id'], older_queue.id)
         
         print("✓ Test 4 passed: Cross-queue geometry duplicate detected correctly")
+
+    def test_cross_queue_geometry_duplicate_with_precision(self):
+        """Cross-queue geometry duplicates use geometries_match tolerance, not exact JSON keys."""
+        feature_low_precision = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-105.64053, 38.79543]},
+            'properties': {'name': "Dick's Peak", 'description': 'Older queue file'},
+        }
+        feature_high_precision = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-105.64053344726562, 38.79542922973633]},
+            'properties': {'name': "Dick's Peak", 'description': 'Newer queue file'},
+        }
+
+        feature_hash = generate_geojson_hash(feature_low_precision)
+        feature_low_precision['properties']['geojson_hash'] = feature_hash
+
+        older_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='older.gpx',
+            raw_file='<gpx></gpx>',
+            geofeatures=[feature_low_precision],
+            imported=False,
+        )
+
+        newer_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='newer.gpx',
+            raw_file='<gpx></gpx>',
+            geofeatures=[],
+            imported=False,
+        )
+
+        remaining, duplicates, _log = find_duplicates_for_source(
+            [feature_high_precision],
+            self.user.id,
+            source='cross_queue',
+            exclude_queue_id=newer_queue.id,
+            exclude_timestamp=newer_queue.timestamp,
+        )
+
+        self.assertEqual(len(remaining), 0)
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0]['source'], DuplicateSource.CROSS_QUEUE)
+        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
+        self.assertEqual(duplicates[0]['existing_features'][0]['id'], older_queue.id)
 
     def test_coordinate_precision_edge_case(self):
         """
@@ -302,6 +406,208 @@ class TestDuplicateDetectionIndividual(TestCase):
                        f"Total distance ({distance_meters:.3f}m) should be less than 0.5 meters")
         
         print("✓ Test coordinate precision edge case passed: Features with different coordinate precision detected as duplicates")
+
+    def test_overlapping_linestrings_not_geometry_duplicate(self):
+        """Repeat hikes on the same trail must not match when paths differ."""
+        shared_segment = [
+            [-105.64053, 38.79543],
+            [-105.64060, 38.79550],
+            [-105.64070, 38.79560],
+        ]
+        stored_line = {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': shared_segment},
+            'properties': {'name': 'zookeeper 07202025', 'description': 'First hike'},
+        }
+        longer_line = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'LineString',
+                'coordinates': shared_segment + [[-105.64100, 38.79600], [-105.64200, 38.79700]],
+            },
+            'properties': {'name': 'zookeeper 052526', 'description': 'Second hike'},
+        }
+
+        stored_hash = generate_geojson_hash(stored_line)
+        stored_line['properties']['geojson_hash'] = stored_hash
+
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=stored_line,
+            geojson_hash=stored_hash,
+            geometry=_linestring_geometry_3d(shared_segment),
+        )
+
+        remaining, duplicates, _log = find_duplicates_for_source(
+            [longer_line],
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None,
+        )
+
+        self.assertEqual(len(remaining), 1, "Different paths should not be geometry duplicates")
+        self.assertEqual(len(duplicates), 0)
+
+    def test_identical_linestring_geometry_duplicate(self):
+        """Same path with different properties is a geometry duplicate."""
+        coordinates = [
+            [-105.64053, 38.79543],
+            [-105.64060, 38.79550],
+            [-105.64070, 38.79560],
+        ]
+        stored_line = {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': coordinates},
+            'properties': {'name': 'Trail A', 'description': 'Original'},
+        }
+        reimport_line = {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': list(coordinates)},
+            'properties': {'name': 'Trail B', 'description': 'Re-import'},
+        }
+
+        stored_hash = generate_geojson_hash(stored_line)
+        stored_line['properties']['geojson_hash'] = stored_hash
+
+        store_feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=stored_line,
+            geojson_hash=stored_hash,
+            geometry=_linestring_geometry_3d(coordinates),
+        )
+
+        remaining, duplicates, _log = find_duplicates_for_source(
+            [reimport_line],
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None,
+        )
+
+        self.assertEqual(len(remaining), 0)
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
+        self.assertEqual(duplicates[0]['existing_features'][0]['id'], store_feature.id)
+
+    def test_linestring_coordinate_precision_geometry_duplicate(self):
+        """Same path with per-vertex precision differences within tolerance is a duplicate."""
+        stored_coords = [
+            [-105.64053, 38.79543],
+            [-105.64060, 38.79550],
+        ]
+        precise_coords = [
+            [-105.64053344726562, 38.79542922973633],
+            [-105.64060000000001, 38.79550000000001],
+        ]
+        stored_line = {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': stored_coords},
+            'properties': {'name': 'Trail', 'description': 'Lower precision'},
+        }
+        precise_line = {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': precise_coords},
+            'properties': {'name': 'Trail', 'description': 'Higher precision'},
+        }
+
+        stored_hash = generate_geojson_hash(stored_line)
+        stored_line['properties']['geojson_hash'] = stored_hash
+
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=stored_line,
+            geojson_hash=stored_hash,
+            geometry=_linestring_geometry_3d(stored_coords),
+        )
+
+        remaining, duplicates, _log = find_duplicates_for_source(
+            [precise_line],
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None,
+        )
+
+        self.assertEqual(len(remaining), 0)
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY)
+
+
+@patch('geo_lib.processing.duplicate_detection.find.get_required_setting')
+class TestGeometryDuplicateBatchedPath(TestCase):
+    """Batched geometry duplicate detection (large import files)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='batched@example.com',
+            password='testpass123',
+            username='batcheduser',
+        )
+        self.coords = [-122.4194, 37.7749]
+
+    def _seed_library_point(self):
+        stored = _point_feature(self.coords[0], self.coords[1], 'Library point')
+        stored_hash = generate_geojson_hash(stored)
+        stored['properties']['geojson_hash'] = stored_hash
+        return FeatureStore.objects.create(
+            user=self.user,
+            geojson=stored,
+            geojson_hash=stored_hash,
+            geometry=Point(self.coords[0], self.coords[1], 0, srid=4326),
+        )
+
+    def test_batched_path_detects_feature_store_geometry_duplicate(self, mock_settings):
+        """Features above batch threshold use batched PostGIS path and still find library duplicates."""
+        mock_settings.side_effect = _duplicate_detection_setting
+        self._seed_library_point()
+
+        import_features = [
+            _point_feature(self.coords[0], self.coords[1], f'Import {i}')
+            for i in range(3)
+        ]
+
+        remaining, duplicates, _log = find_geometry_duplicates(
+            import_features,
+            self.user.id,
+            source_filter='feature_store',
+        )
+
+        self.assertEqual(len(remaining), 0)
+        self.assertEqual(len(duplicates), 3)
+        for dup in duplicates:
+            self.assertEqual(dup['source'], DuplicateSource.FEATURE_STORE)
+            self.assertEqual(dup['match_type'], DuplicateMatchType.GEOMETRY)
+
+    @patch('geo_lib.processing.duplicate_detection.find._find_library_matches_for_batch_item')
+    def test_batched_fallback_still_detects_library_duplicate(
+            self,
+            mock_batch_library_lookup,
+            mock_settings,
+    ):
+        """When batched PostGIS lookup fails, per-feature resolve still finds library duplicates."""
+        mock_settings.side_effect = _duplicate_detection_setting
+        mock_batch_library_lookup.side_effect = RuntimeError('simulated batch failure')
+        store_feature = self._seed_library_point()
+
+        import_features = [
+            _point_feature(self.coords[0], self.coords[1], f'Import {i}')
+            for i in range(3)
+        ]
+
+        remaining, duplicates, _log = find_geometry_duplicates(
+            import_features,
+            self.user.id,
+            source_filter='feature_store',
+        )
+
+        self.assertEqual(len(remaining), 0)
+        self.assertEqual(len(duplicates), 3)
+        self.assertGreater(mock_batch_library_lookup.call_count, 0)
+        self.assertEqual(
+            duplicates[0]['existing_features'][0]['id'],
+            store_feature.id,
+        )
 
 
 class TestDuplicatePriorityRules(TestCase):
