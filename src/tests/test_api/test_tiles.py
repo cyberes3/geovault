@@ -8,10 +8,11 @@ from urllib.response import addinfourl
 
 import requests
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 
+from geo_lib.http.outbound import USER_AGENT
 from geo_lib.tile_sources.registry import get_all_tile_sources, get_tile_source, get_tile_sources_for_client
-from geo_lib.utils.version import get_user_agent
+from geo_lib.tile_upstream import build_tile_upstream_headers
 
 # Content-Type prefixes that indicate a successful tile response from upstream
 _VALID_TILE_CONTENT_TYPES = (
@@ -250,38 +251,12 @@ class TestTilesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('sources', data)
 
-    def test_osm_has_proxy_config_with_user_agent(self):
-        """Test that OSM tile source has proxy_config with User-Agent header."""
-        osm_source = get_tile_source('osm')
-        self.assertIsNotNone(osm_source, "OSM tile source should be registered")
-        
-        # OSM may not require proxy by default, but should have proxy_config for when proxying is enabled
-        proxy_config = osm_source.get('proxy_config')
-        self.assertIsNotNone(proxy_config, "OSM should have proxy_config")
-        
-        headers = proxy_config.get('headers', {})
-        self.assertIn('User-Agent', headers, "OSM proxy_config should include User-Agent header")
-        
-        # Verify User-Agent matches expected format
-        user_agent = headers['User-Agent']
-        self.assertTrue(user_agent.startswith('GeoVault/'), f"User-Agent should start with 'GeoVault/', got '{user_agent}'")
-        self.assertEqual(user_agent, get_user_agent(), "User-Agent should match get_user_agent()")
-
-    def test_opentopomap_has_proxy_config_with_user_agent(self):
-        """Test that OpenTopoMap tile source has proxy_config with User-Agent header."""
-        opentopomap_source = get_tile_source('opentopomap')
-        self.assertIsNotNone(opentopomap_source, "OpenTopoMap tile source should be registered")
-        
-        proxy_config = opentopomap_source.get('proxy_config')
-        self.assertIsNotNone(proxy_config, "OpenTopoMap should have proxy_config")
-        
-        headers = proxy_config.get('headers', {})
-        self.assertIn('User-Agent', headers, "OpenTopoMap proxy_config should include User-Agent header")
-        
-        # Verify User-Agent matches expected format
-        user_agent = headers['User-Agent']
-        self.assertTrue(user_agent.startswith('GeoVault/'), f"User-Agent should start with 'GeoVault/', got '{user_agent}'")
-        self.assertEqual(user_agent, get_user_agent(), "User-Agent should match get_user_agent()")
+    @override_settings(DEBUG=False, SITE_DOMAIN='public.example.test')
+    def test_build_tile_upstream_headers_sets_user_agent_and_osm_referer(self):
+        request = RequestFactory().get('/')
+        headers = build_tile_upstream_headers('osm', request, None)
+        self.assertEqual(headers['User-Agent'], USER_AGENT)
+        self.assertEqual(headers['Referer'], 'https://public.example.test/')
 
     @patch('geo_lib.tiles.requests.get')
     @override_settings(DEBUG=False, SITE_DOMAIN='public.example.test', TILE_CACHE_ENABLED=False)
@@ -297,13 +272,14 @@ class TestTilesAPI(TestCase):
 
         self.assertEqual(response.status_code, 200)
         actual_headers = mock_requests_get.call_args.kwargs.get('headers', {})
+        self.assertEqual(actual_headers.get('User-Agent'), USER_AGENT)
         self.assertEqual(actual_headers.get('Referer'), 'https://public.example.test/')
         self.assertNotIn('172.0.2.102', actual_headers.get('Referer', ''))
 
     @patch('geo_lib.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
-    def test_tile_proxy_uses_custom_user_agent(self, mock_requests_get):
-        """Test that tile proxy uses custom User-Agent header from proxy_config when proxying is enabled."""
+    def test_tile_proxy_forwards_source_headers_and_user_agent(self, mock_requests_get):
+        """Tile proxy merges per-source proxy headers with the standard outbound User-Agent."""
         # Create a mock response
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -335,17 +311,12 @@ class TestTilesAPI(TestCase):
         call_args = mock_requests_get.call_args
         actual_headers = call_args.kwargs.get('headers', {})
 
-        # Verify all headers from proxy_config are present
+        self.assertEqual(actual_headers.get('User-Agent'), USER_AGENT)
         for header_name, header_value in expected_headers.items():
-            self.assertIn(
-                header_name,
-                actual_headers,
-                f"Header '{header_name}' should be present in proxy request"
-            )
             self.assertEqual(
-                actual_headers[header_name],
+                actual_headers.get(header_name),
                 header_value,
-                f"Header '{header_name}' should be '{header_value}', got '{actual_headers.get(header_name)}'"
+                f"Header '{header_name}' should be '{header_value}'",
             )
 
     @patch('geo_lib.tile_sources.registry.get_config_loader')

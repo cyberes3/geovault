@@ -8,7 +8,6 @@ This tile source does not require a proxy as it can be accessed directly.
 """
 
 from geo_lib.tile_sources.base import TileSource
-from geo_lib.utils.version import get_user_agent
 
 
 class OpenTopoMapTileSource(TileSource):
@@ -37,13 +36,4 @@ class OpenTopoMapTileSource(TileSource):
             'url': 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png',
             'tileSize': 256,
             'attribution': '<a href="https://github.com/sletuffe/OpenTopoMap">&copy; OpenTopoMap-R</a> <a href="https://openmaps.fr/donate">❤️ Donation</a> <a href="http://www.openstreetmap.org/copyright">&copy; OpenStreetMap</a>'
-        }
-    
-    @property
-    def proxy_config(self):
-        """Proxy configuration with user agent for openmaps.fr."""
-        return {
-            'headers': {
-                'User-Agent': get_user_agent()
-            }
         }

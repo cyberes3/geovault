@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
+from geo_lib.http.outbound import USER_AGENT
 from geo_lib.logging.console import get_tagged_logger
 from website.settings_utils import get_required_setting
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
@@ -196,7 +197,7 @@ def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Option
         return None
 
     try:
-        req = Request(url, headers={"User-Agent": "GeoVault/1.0"})
+        req = Request(url, headers={"User-Agent": USER_AGENT})
         opener = build_opener(_SafeRedirectHandler())
         with opener.open(req, timeout=timeout) as response:
             # Check content length if available

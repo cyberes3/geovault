@@ -13,9 +13,9 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting, get_setting
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
+from geo_lib.tile_upstream import build_tile_upstream_headers
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename
 from website.config_loader import get_config_loader
-from website.public_url import public_base_url
 
 _logger = get_tagged_logger()
 
@@ -174,15 +174,7 @@ def tile_proxy(request, service, z, x, y):
     tile_url = url_template.format(z=z, x=x, y=y)
 
     try:
-        # Create request with headers from proxy_config (copy so we don't mutate cached config)
-        headers = dict(proxy_config.get('headers', {}))
-        # For OSM/OpenTopoMap/OpenHikingMap, send a valid Referer when in browser (tile servers expect it)
-        if service in ('osm', 'opentopomap', 'openhikingmap'):
-            referer = request.META.get('HTTP_REFERER', '').strip()
-            if not referer:
-                referer = f'{public_base_url()}/'
-            if referer:
-                headers['Referer'] = referer
+        headers = build_tile_upstream_headers(service, request, proxy_config)
 
         # Use requests library with streaming for better performance
         response = requests.get(tile_url, headers=headers, stream=True, timeout=10)
@@ -293,8 +285,7 @@ def style_proxy(request, map_id):
     style_url = f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}'
     
     try:
-        # Fetch the style.json from MapTiler
-        headers = proxy_config.get('headers', {})
+        headers = build_tile_upstream_headers(source_id, request, proxy_config)
         response = requests.get(style_url, headers=headers, timeout=10)
         
         if response.status_code != 200:

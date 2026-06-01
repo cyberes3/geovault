@@ -7,6 +7,7 @@ from PIL import Image
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source
+from geo_lib.tile_upstream import build_tile_upstream_headers
 from website.config_loader import get_config_loader
 from website.public_url import public_base_url
 
@@ -101,33 +102,19 @@ def _pick_zoom_for_extent(extent):
     return _MIN_PREVIEW_ZOOM
 
 
-def _upstream_headers_for_tile(request, tile_source_config: dict) -> dict:
-    """
-    Match geo_lib.tiles.tile_proxy upstream request headers (User-Agent, Referer for OSM family).
-    """
-    proxy_config = tile_source_config.get("proxy_config") or {}
-    headers = dict(proxy_config.get("headers", {}))
-    service_id = tile_source_config.get("id", "")
-    if service_id in ("osm", "opentopomap", "openhikingmap"):
-        referer = (request.META.get("HTTP_REFERER", "") or "").strip()
-        if not referer:
-            referer = f"{public_base_url()}/"
-        if referer:
-            headers["Referer"] = referer
-    return headers
-
-
 def _download_tile(request, tile_source_config: dict, z: int, x: int, y: int):
+    service_id = tile_source_config.get("id", "")
+    proxy_config = tile_source_config.get("proxy_config")
+    headers = build_tile_upstream_headers(service_id, request, proxy_config)
+
     url_template = tile_source_config.get("url_template")
     if tile_url_template_has_placeholders(url_template):
         tile_url = url_template.format(z=z, x=x, y=y)
-        headers = _upstream_headers_for_tile(request, tile_source_config)
     else:
         client_url = tile_source_config.get("client_config", {}).get("url", "")
         tile_url = client_url.format(z=z, x=x, y=y)
         if tile_url.startswith("/"):
             tile_url = f"{public_base_url()}{tile_url}"
-        headers = _upstream_headers_for_tile(request, tile_source_config)
 
     response = requests.get(tile_url, headers=headers, timeout=10)
     if response.status_code != 200:

@@ -43,14 +43,3 @@ def get_git_commit_hash() -> str:
         return "unknown"
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
         return "unknown"
-
-
-def get_user_agent() -> str:
-    """
-    Get the user agent string for HTTP requests.
-
-    Returns:
-        User agent string in format 'GeoVault/[commit hash]'
-    """
-    commit_hash = get_git_commit_hash()
-    return f"GeoVault/{commit_hash}"
