@@ -1,12 +1,20 @@
 import {
-  FALLBACK_OSM_TILE_SOURCE,
   OSM_TILE_SOURCE_ID,
   TILE_SOURCES_API_URL
 } from './constants.js'
 
+export class TileSourceCatalogError extends Error {
+  constructor(message, options = {}) {
+    super(message)
+    this.name = 'TileSourceCatalogError'
+    this.cause = options.cause
+  }
+}
+
 /**
  * Loads and caches tile sources from the GeoVault API.
  * Proxy URLs (e.g. /api/tiles/osm/...) are applied server-side before this client sees them.
+ * This intentionally has no direct-tile fallback: clients must use the API so proxy config is honored.
  */
 export class TileSourceCatalog {
   /**
@@ -14,7 +22,7 @@ export class TileSourceCatalog {
    */
   constructor(options = {}) {
     this.apiUrl = options.apiUrl ?? TILE_SOURCES_API_URL
-    this.fetchFn = options.fetchFn ?? fetch
+    this.fetchFn = options.fetchFn ?? window.fetch.bind(window)
     this._loadPromise = null
   }
 
@@ -26,7 +34,10 @@ export class TileSourceCatalog {
   /** @returns {Promise<object[]>} */
   load() {
     if (!this._loadPromise) {
-      this._loadPromise = this._fetchVisibleSources()
+      this._loadPromise = this._fetchVisibleSources().catch((error) => {
+        this._loadPromise = null
+        throw error
+      })
     }
     return this._loadPromise
   }
@@ -38,7 +49,7 @@ export class TileSourceCatalog {
    */
   resolveSource(sources, preferredId = OSM_TILE_SOURCE_ID) {
     if (!Array.isArray(sources) || sources.length === 0) {
-      return FALLBACK_OSM_TILE_SOURCE
+      throw new TileSourceCatalogError('Tile sources API returned no visible tile sources')
     }
 
     if (preferredId) {
@@ -46,6 +57,7 @@ export class TileSourceCatalog {
       if (preferred) {
         return preferred
       }
+      throw new TileSourceCatalogError(`Tile sources API did not include required source: ${preferredId}`)
     }
 
     const osm = sources.find((source) => source.id === OSM_TILE_SOURCE_ID)
@@ -70,19 +82,25 @@ export class TileSourceCatalog {
     try {
       const response = await this.fetchFn(this.apiUrl, {credentials: 'include'})
       if (!response.ok) {
-        throw new Error(`Tile sources HTTP ${response.status}`)
+        throw new Error(`HTTP ${response.status} ${response.statusText || ''}`.trim())
       }
 
       const data = await response.json()
       if (!Array.isArray(data?.sources)) {
-        return [FALLBACK_OSM_TILE_SOURCE]
+        throw new Error('Tile sources response did not include a sources array')
       }
 
       const visible = data.sources.filter((source) => !source.hidden)
-      return visible.length > 0 ? visible : [FALLBACK_OSM_TILE_SOURCE]
+      if (visible.length === 0) {
+        throw new Error('Tile sources response did not include visible sources')
+      }
+      return visible
     } catch (error) {
-      console.warn('TileSourceCatalog: using OSM fallback', error)
-      return [FALLBACK_OSM_TILE_SOURCE]
+      const causeMessage = error instanceof Error ? error.message : String(error)
+      throw new TileSourceCatalogError(
+        `Unable to load tile sources from ${this.apiUrl}: ${causeMessage}`,
+        {cause: error}
+      )
     }
   }
 }

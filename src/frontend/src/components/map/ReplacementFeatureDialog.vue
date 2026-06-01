@@ -390,7 +390,9 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        openLayersBasemap.prefetch()
+        openLayersBasemap.prefetch().catch((error) => {
+          console.error('Error prefetching OpenLayers basemap tile sources:', error)
+        })
         this.$nextTick(() => {
           this.resetDialog()
           this.fetchExistingFeatureGeometryType()

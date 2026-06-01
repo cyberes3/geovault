@@ -177,7 +177,9 @@ export default {
         };
     },
     mounted() {
-        void this.initMap();
+        this.initMap().catch((error) => {
+            console.error('Error initializing EXIF geotagger map:', error);
+        });
     },
     watch: {
         imageFile(newVal) {

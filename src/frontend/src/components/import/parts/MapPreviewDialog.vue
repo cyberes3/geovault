@@ -72,8 +72,13 @@ export default {
       if (newVal) {
         this.$nextTick(async () => {
           this.isLoading = true
-          await this.initializeMap()
-          this.loadFeatures()
+          try {
+            await this.initializeMap()
+            this.loadFeatures()
+          } catch (error) {
+            console.error('Error initializing map preview:', error)
+            this.isLoading = false
+          }
         })
       } else {
         this.cleanup()

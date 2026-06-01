@@ -7,10 +7,13 @@ const tileSourceCatalog = new TileSourceCatalog()
 export const openLayersBasemap = new OpenLayersBasemapFactory(tileSourceCatalog)
 
 export {OpenLayersBasemapFactory} from './OpenLayersBasemapFactory.js'
-export {TileSourceCatalog} from '../tileSources/TileSourceCatalog.js'
+export {
+  TileSourceCatalog,
+  TileSourceCatalogError
+} from '../tileSources/TileSourceCatalog.js'
 export {RasterTileUrls} from '../tileSources/RasterTileUrls.js'
 export {
-  FALLBACK_OSM_TILE_SOURCE,
   OSM_TILE_SOURCE_ID,
+  TILE_SOURCES_API_PATH,
   TILE_SOURCES_API_URL
 } from '../tileSources/constants.js'
