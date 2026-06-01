@@ -34,26 +34,26 @@ class AutoTrackingMotionCoordinator(
         nowMs: Long,
     ): AutoMotionRejectHandling {
         val policyReason = metrics?.reason
-        val evidence = metrics
-            ?.takeIf { isEvidenceReason(policyReason) }
-            ?.let { evidenceGate.evaluate(metrics = it, eventTimeMs = eventTimeMs) }
-        if (evidence != null && metrics != null) {
-            lastCapEvidenceAtMs = eventTimeMs
-            lastEvidenceWallClockMs = nowMs
-            val modeBefore = engine.snapshot().mode
-            val output = engine.onMotionEvidence(
-                speedMps = evidence.speedMps,
-                eventTimeMs = eventTimeMs,
-                confidence = evidence.confidence,
-            )
-            return AutoMotionRejectHandling.Evidence(
-                modeBefore = modeBefore,
-                output = output,
-                evidence = evidence,
-                policyReason = metrics.reason,
-                accuracyMeters = metrics.accuracyMeters,
-                elapsedSeconds = metrics.elapsedSeconds,
-            )
+        if (metrics != null && isEvidenceReason(policyReason)) {
+            val evidence = evidenceGate.evaluate(metrics = metrics, eventTimeMs = eventTimeMs)
+            if (evidence != null) {
+                lastCapEvidenceAtMs = eventTimeMs
+                lastEvidenceWallClockMs = nowMs
+                val modeBefore = engine.snapshot().mode
+                val output = engine.onMotionEvidence(
+                    speedMps = evidence.speedMps,
+                    eventTimeMs = eventTimeMs,
+                    confidence = evidence.confidence,
+                )
+                return AutoMotionRejectHandling.Evidence(
+                    modeBefore = modeBefore,
+                    output = output,
+                    evidence = evidence,
+                    policyReason = metrics.reason,
+                    accuracyMeters = metrics.accuracyMeters,
+                    elapsedSeconds = metrics.elapsedSeconds,
+                )
+            }
         }
 
         if (isNeutralHoldReason(policyReason)) {
