@@ -1,6 +1,7 @@
 package com.geovault.tracker.location
 
 import android.location.Location
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.services.PositioningPresets
 import com.geovault.tracker.services.TrackingMotionMode
 import org.junit.Assert.assertEquals
@@ -160,7 +161,7 @@ class FreshnessRecoveryPolicyTest {
             localRecoveryDue = true,
             accepted = accepted,
             pointPersisted = pointPersisted,
-            filterReason = filterReason,
+            filterReason = FilterReason.fromWire(filterReason),
             accuracyMeters = accuracyMeters,
             effectiveAccuracyThresholdMeters = 35f,
             candidateLocation = location(latitude = candidateLatitude, longitude = candidateLongitude, timeMs = candidateTimeMs),

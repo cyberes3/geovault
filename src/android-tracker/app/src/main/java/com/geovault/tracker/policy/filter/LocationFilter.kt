@@ -47,6 +47,14 @@ class LocationFilter(
     private var movementCandidateGate: MovementCandidateGate = MovementCandidateGate(config.movementCandidate)
     private var speedCapRecoveryGate: SpeedCapRecoveryGate = SpeedCapRecoveryGate(config.speedRecovery)
     private var relocationRecoveryGate: RelocationRecoveryGate = RelocationRecoveryGate()
+    private val regularFixEvaluator: RegularFixEvaluator
+        get() = RegularFixEvaluator(
+            config = config,
+            relocationRecoveryGate = relocationRecoveryGate,
+            speedCapRecoveryGate = speedCapRecoveryGate,
+            movementCandidateGate = movementCandidateGate,
+            anchorHealthTracker = anchorHealthTracker,
+        )
 
     /**
      * Last fix the filter saw whose accuracy passed the gate, regardless
@@ -156,11 +164,11 @@ class LocationFilter(
             // calculation.
             anchorHealthTracker.onReject(metrics)
             speedCapRecoveryGate.reset()
-            return LocationFilterResult.reject(reason = LocationFilterReasons.LOW_ACCURACY, metrics = metrics)
+            return LocationFilterResult.reject(reason = FilterReason.LOW_ACCURACY, metrics = metrics)
         }
 
         val result = resolveDecision(input = input, metrics = metrics)
-        if (result.reason != LocationFilterReasons.RESUME_UNCONFIRMED) {
+        if (result.reason != FilterReason.RESUME_UNCONFIRMED) {
             lastSeenFix = input
         }
         return result
@@ -168,7 +176,7 @@ class LocationFilter(
 
     private fun resolveDecision(input: LocationInput, metrics: LocationMetrics): LocationFilterResult {
         val previous = previousAccepted
-            ?: return commitAccept(input = input, reason = LocationFilterReasons.FIRST_FIX, metrics = metrics)
+            ?: return commitAccept(input = input, reason = FilterReason.FIRST_FIX, metrics = metrics)
 
         val capCandidate = inflateCapForAnchorTrust(metrics.capCandidate, metrics.anchorTrust)
             .let { inflateCapForAnomaly(it, metrics.impliedAnomaly) }
@@ -197,72 +205,18 @@ class LocationFilter(
         capCandidate: Double,
         relocationGateEnabled: Boolean = true,
     ): LocationFilterResult {
-        if (relocationGateEnabled) {
-            when (relocationRecoveryGate.evaluate(input = input, previousAnchor = previous, config = config)) {
-                RelocationRecoveryGate.Decision.ContinueRegular -> Unit
-                RelocationRecoveryGate.Decision.Hold ->
-                    return LocationFilterResult.hold(
-                        reason = LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED,
-                        metrics = metrics,
-                    )
-                RelocationRecoveryGate.Decision.Confirmed -> return resolveRegularDecision(
-                    input = input,
-                    previous = previous,
-                    metrics = metrics,
-                    capCandidate = capCandidate,
-                    relocationGateEnabled = false,
-                )
-            }
-        }
-
-        if (metrics.dtSeconds > 0.0 && metrics.impliedSpeedMps > config.maxImpliedSpeedMps) {
-            return resolveSpeedSpike(input = input, previous = previous, metrics = metrics)
-        }
-        speedCapRecoveryGate.reset()
-
-        if (movementCandidateGate.assess(
-                input = input,
-                previousAnchor = previous,
-                metrics = metrics,
-                anchorSuspect = anchorHealthTracker.suspect,
-            ) == MovementCandidateGate.Decision.Hold
-        ) {
-            return LocationFilterResult.hold(reason = LocationFilterReasons.CANDIDATE_UNCONFIRMED, metrics = metrics)
-        }
-
-        // Smooth the RSS-corrected effective distance through the 1D
-        // Kalman before comparing against the cap. The smoother absorbs
-        // single-fix magnitude spikes that would otherwise read as
-        // "within cap but feels wrong". The first-fix shortcut above
-        // ensures Kalman state is seeded by an accepted observation, not
-        // an arbitrary first measurement.
-        val decisionDistance = smoothDecisionDistance(metrics, input)
-
-        return when (config.policy) {
-            LocationFilterPolicy.PassThrough ->
-                commitAccept(input = input, reason = LocationFilterReasons.PASS_THROUGH, metrics = metrics)
-
-            LocationFilterPolicy.Adjust ->
-                if (decisionDistance <= capCandidate) {
-                    commitAccept(input = input, reason = LocationFilterReasons.WITHIN_CAP, metrics = metrics)
-                } else {
-                    commitClip(
-                        input = input,
-                        previous = previous,
-                        capMeters = capCandidate,
-                        reason = LocationFilterReasons.ADJUST_CAP,
-                        metrics = metrics,
-                    )
-                }
-
-            LocationFilterPolicy.Conservative -> resolveConservative(
-                input = input,
-                previous = previous,
-                capCandidate = capCandidate,
-                metrics = metrics,
-                decisionDistance = decisionDistance,
-            )
-        }
+        return regularFixEvaluator.evaluate(
+            input = input,
+            previous = previous,
+            metrics = metrics,
+            capCandidate = capCandidate,
+            relocationGateEnabled = relocationGateEnabled,
+            smoothDecisionDistance = ::smoothDecisionDistance,
+            resolveSpeedSpike = ::resolveSpeedSpike,
+            commitAccept = ::commitAccept,
+            commitClip = ::commitClip,
+            resolveConservative = ::resolveConservative,
+        )
     }
 
     private fun resolveMotionResume(
@@ -284,9 +238,9 @@ class LocationFilter(
                 capCandidate = capCandidate,
             )
             ResumeAnchorGate.Decision.Hold ->
-                LocationFilterResult.hold(reason = LocationFilterReasons.RESUME_UNCONFIRMED, metrics = metrics)
+                LocationFilterResult.hold(reason = FilterReason.RESUME_UNCONFIRMED, metrics = metrics)
             ResumeAnchorGate.Decision.Confirmed ->
-                commitAccept(input = input, reason = "motion-resume-confirmed", metrics = metrics)
+                commitAccept(input = input, reason = FilterReason.MOTION_RESUME_CONFIRMED, metrics = metrics)
         }
     }
 
@@ -328,7 +282,7 @@ class LocationFilter(
         // `implied-speed` to distinguish chipset teleports from
         // slow-but-far fixes.
         if (isOutlier(metrics, capCandidate)) {
-            val reason = if (metrics.impliedAnomaly) "implied-speed" else "outlier-capped"
+            val reason = if (metrics.impliedAnomaly) FilterReason.IMPLIED_SPEED else FilterReason.OUTLIER_CAPPED
             return reject(reason = reason, metrics = metrics)
         }
 
@@ -339,7 +293,7 @@ class LocationFilter(
         // being accepted at face value. The snap and outlier paths above
         // already handled the truly egregious cases on raw.
         if (decisionDistance <= capCandidate) {
-            return commitAccept(input = input, reason = LocationFilterReasons.WITHIN_CAP, metrics = metrics)
+            return commitAccept(input = input, reason = FilterReason.WITHIN_CAP, metrics = metrics)
         }
 
         val capMeters = capCandidate.coerceAtMost(metrics.rawDistanceMeters)
@@ -347,7 +301,7 @@ class LocationFilter(
             input = input,
             previous = previous,
             capMeters = capMeters,
-            reason = "conservative-clip",
+            reason = FilterReason.CONSERVATIVE_CLIP,
             metrics = metrics,
         )
     }
@@ -407,28 +361,28 @@ class LocationFilter(
         val capMeters = config.maxImpliedSpeedMps * metrics.dtSeconds
         return when (config.policy) {
             LocationFilterPolicy.PassThrough ->
-                commitAccept(input = input, reason = LocationFilterReasons.SPEED_CAP_PASSTHROUGH, metrics = metrics)
+                commitAccept(input = input, reason = FilterReason.SPEED_CAP_PASSTHROUGH, metrics = metrics)
             LocationFilterPolicy.Adjust -> commitClip(
                 input = input,
                 previous = previous,
                 capMeters = capMeters,
-                reason = LocationFilterReasons.SPEED_CAP,
+                reason = FilterReason.SPEED_CAP,
                 metrics = metrics,
             )
             LocationFilterPolicy.Conservative -> when (speedCapRecoveryGate.evaluate(input = input, metrics = metrics)) {
                 SpeedCapRecoveryGate.Decision.Confirmed ->
-                    commitAccept(input = input, reason = LocationFilterReasons.SPEED_CAP_RECOVERED, metrics = metrics)
+                    commitAccept(input = input, reason = FilterReason.SPEED_CAP_RECOVERED, metrics = metrics)
                 SpeedCapRecoveryGate.Decision.Hold ->
-                    LocationFilterResult.hold(reason = LocationFilterReasons.SPEED_CAP_UNCONFIRMED, metrics = metrics)
+                    LocationFilterResult.hold(reason = FilterReason.SPEED_CAP_UNCONFIRMED, metrics = metrics)
                 SpeedCapRecoveryGate.Decision.Reject ->
-                    reject(reason = LocationFilterReasons.SPEED_CAP_EXCEEDED, metrics = metrics)
+                    reject(reason = FilterReason.SPEED_CAP_EXCEEDED, metrics = metrics)
             }
         }
     }
 
     private fun commitAccept(
         input: LocationInput,
-        reason: String,
+        reason: FilterReason,
         metrics: LocationMetrics,
     ): LocationFilterResult {
         commit(input = input, metrics = metrics, committedDisplacement = distanceFromCommittedAnchor(input))
@@ -447,14 +401,14 @@ class LocationFilter(
     ): LocationFilterResult = commitAdjustToAnchor(
         input = input,
         previous = previous,
-        reason = LocationFilterReasons.UNCERTAINTY_SUPPRESSED,
+        reason = FilterReason.UNCERTAINTY_SUPPRESSED,
         metrics = metrics,
     )
 
     private fun commitAdjustToAnchor(
         input: LocationInput,
         previous: LocationInput,
-        reason: String,
+        reason: FilterReason,
         metrics: LocationMetrics,
     ): LocationFilterResult {
         val acceptedInput = input.copy(latitude = previous.latitude, longitude = previous.longitude)
@@ -472,7 +426,7 @@ class LocationFilter(
         input: LocationInput,
         previous: LocationInput,
         capMeters: Double,
-        reason: String,
+        reason: FilterReason,
         metrics: LocationMetrics,
     ): LocationFilterResult {
         val raw = distanceFromCommittedAnchor(input)
@@ -514,7 +468,7 @@ class LocationFilter(
         previousAccepted = input
     }
 
-    private fun reject(reason: String, metrics: LocationMetrics): LocationFilterResult {
+    private fun reject(reason: FilterReason, metrics: LocationMetrics): LocationFilterResult {
         anchorHealthTracker.onReject(metrics)
         speedCapRecoveryGate.reset()
         return LocationFilterResult.reject(reason = reason, metrics = metrics)

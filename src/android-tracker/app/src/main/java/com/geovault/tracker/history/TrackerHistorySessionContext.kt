@@ -9,7 +9,36 @@ data class TrackerHistorySessionContext(
     val activeSessionStartMs: Long?,
     val window: TrackerHistoryWindow,
     val skipRenderWindowFilter: Boolean = false,
-)
+) {
+    fun resolveEffectiveSessionStartMs(
+        overlayBatches: List<TrackerHistorySourceBatch>,
+        clearBoundary: TrackerHistoryClearBoundary?,
+    ): Long? {
+        activeSessionStartMs?.let { return it }
+        if (!window.isCurrentSession && !window.isSession) return null
+        val trackerId = clearBoundary?.trackerId?.trim().orEmpty()
+        return overlayBatches
+            .flatMap { it.points }
+            .asSequence()
+            .filter { point ->
+                if (trackerId.isNotEmpty() && point.trackerId.trim() != trackerId) {
+                    return@filter false
+                }
+                point.startTimestampMs != null && point.isAfterClearBoundary(clearBoundary)
+            }
+            .mapNotNull { it.startTimestampMs }
+            .maxOrNull()
+    }
+
+    private fun TrackerHistoryPoint.isAfterClearBoundary(boundary: TrackerHistoryClearBoundary?): Boolean {
+        if (boundary == null) return true
+        if (trackerId.trim() != boundary.trackerId.trim()) return true
+        val afterClearTime = timestampMs >= boundary.clearedAtMs
+        val matchesActiveSession = boundary.activeSessionStartMs != null &&
+            startTimestampMs == boundary.activeSessionStartMs
+        return afterClearTime || matchesActiveSession
+    }
+}
 
 object TrackerHistoryRenderWindowPolicy {
     /**

@@ -5,7 +5,7 @@ import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.services.LocationIngestCoordinator
@@ -95,7 +95,7 @@ class TrackerLocationPipelineTest {
                         confidence = AutoTrackingMotionEvidenceConfidence.High,
                         path = EvidencePath.FAST_EMIT,
                     ),
-                    policyReason = LocationFilterReasons.SPEED_CAP_EXCEEDED,
+                    policyReason = FilterReason.SPEED_CAP_EXCEEDED.wireValue,
                     accuracyMeters = 8f,
                     elapsedSeconds = 20.0,
                 )
@@ -117,6 +117,85 @@ class TrackerLocationPipelineTest {
         assertEquals(TrackingMotionMode.DRIVING, output.motionContext.motionMode)
     }
 
+    @Test
+    fun processFix_pausedFreshness_skipsAutoMotionAndFreshnessRecovery() {
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val freshnessController = FreshnessRecoveryController()
+        val pipeline = TrackerLocationPipeline(
+            locationIngestCoordinator = coordinator,
+            freshnessRecoveryController = freshnessController,
+            repeatedOutlierSuppressor = RepeatedOutlierSuppressor(),
+        )
+        val settings = TrackerSettings(accuracyFilterMeters = 50f)
+        val trackId = "tracker-1"
+        val anchorTimeMs = 1_700_000_000_000L
+        val seed = coordinator.ingest(
+            trackId = trackId,
+            location = Location("gps").apply {
+                latitude = 12.0
+                longitude = -45.0
+                accuracy = 5f
+                time = anchorTimeMs
+            },
+            settings = settings,
+            motionMode = TrackingMotionMode.WALKING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = anchorTimeMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false,
+        )
+        assertTrue(seed.accepted)
+
+        val nowMs = anchorTimeMs + 120_000L
+        val candidate = Location("gps").apply {
+            latitude = 12.05
+            longitude = -44.95
+            accuracy = 8f
+            time = nowMs
+        }
+        val output = pipeline.processFix(
+            input = pipelineInput(
+                trackId = trackId,
+                location = candidate,
+                settings = settings,
+                previousAcceptedLocation = seed.lastFilteredLocation,
+                nowMs = nowMs,
+                ingestMode = FixIngestMode.PausedFreshness,
+                localRecoveryDue = true,
+                anchor = RecoveryAnchorState(
+                    trackerId = trackId,
+                    sessionBoundaryId = 0L,
+                    latitude = 12.0,
+                    longitude = -45.0,
+                    timestampMs = anchorTimeMs,
+                    elapsedRealtimeNanos = 0L,
+                    accuracyMeters = 5f,
+                    radiusMeters = 25f,
+                    source = "test",
+                    motionMode = TrackingMotionMode.WALKING,
+                ),
+            ),
+            onAutoMotionRejected = { _, _, _ ->
+                error("paused freshness must not invoke auto-motion")
+            },
+            refreshMotionContext = { error("paused freshness must not refresh motion") },
+            buildFreshnessRecoveryLocation = { _, _, _, _ ->
+                error("paused freshness must not build recovery location")
+            },
+        )
+
+        assertTrue(output.result.accepted)
+        assertEquals(FreshnessRecoveryDecision.Inactive, output.freshnessRecoveryDecision)
+        assertFalse(output.motionModeChanged)
+        assertEquals(null, output.autoMotionHandling)
+    }
+
     private fun pipelineInput(
         trackId: String = "tracker-1",
         location: Location,
@@ -124,6 +203,7 @@ class TrackerLocationPipelineTest {
         previousAcceptedLocation: Location? = null,
         nowMs: Long,
         motionMode: TrackingMotionMode = TrackingMotionMode.BIKING,
+        ingestMode: FixIngestMode = FixIngestMode.Live,
         localRecoveryDue: Boolean = false,
         anchor: RecoveryAnchorState? = null,
         outlierAnchor: Location? = null,
@@ -136,7 +216,7 @@ class TrackerLocationPipelineTest {
             motionContext = motion,
             previousAcceptedLocation = previousAcceptedLocation,
             sessionVisibleBoundaryId = 0L,
-            bypassFilters = false,
+            ingestMode = ingestMode,
             propsJson = null,
             totalDistanceMeters = 0f,
             nowMs = nowMs,

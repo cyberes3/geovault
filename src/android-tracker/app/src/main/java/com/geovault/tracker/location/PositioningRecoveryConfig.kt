@@ -1,13 +1,13 @@
 package com.geovault.tracker.location
 
 import com.geovault.tracker.TrackingLocationPolicy
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
 
 data class PositioningRecoveryConfig(
     val maxLocalPointGapMs: Long,
     val freshnessProbeWindowMs: Long = DEFAULT_FRESHNESS_PROBE_WINDOW_MS,
     val minPromotableProbeFixes: Int = DEFAULT_MIN_PROMOTABLE_PROBE_FIXES,
-    val freshnessRecoveryHoldReasons: Set<String> = DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS,
+    val freshnessRecoveryHoldReasons: Set<FilterReason> = FilterReason.freshnessRecoveryHolds,
     val anchoredRecoveryAccuracyCeilingMeters: Float = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
     val recoverySpeedCapMps: Float,
     val repeatedOutlierMinAccuracyMeters: Float = DEFAULT_REPEATED_OUTLIER_MIN_ACCURACY_METERS,
@@ -32,13 +32,6 @@ data class PositioningRecoveryConfig(
         const val DEFAULT_REPEATED_OUTLIER_ACCURACY_BUCKET_METERS = 250f
         const val DEFAULT_REPEATED_OUTLIER_SUPPRESS_AFTER_COUNT = 2
         const val DEFAULT_REPEATED_OUTLIER_REPEAT_WINDOW_MS = 10L * 60_000L
-
-        val DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS: Set<String> = setOf(
-            LocationFilterReasons.CANDIDATE_UNCONFIRMED,
-            LocationFilterReasons.RESUME_UNCONFIRMED,
-            LocationFilterReasons.SPEED_CAP_UNCONFIRMED,
-            LocationFilterReasons.SPEED_CAP_EXCEEDED,
-            LocationFilterReasons.UNCERTAINTY_SUPPRESSED,
-        )
+        val DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS: Set<FilterReason> = FilterReason.freshnessRecoveryHolds
     }
 }

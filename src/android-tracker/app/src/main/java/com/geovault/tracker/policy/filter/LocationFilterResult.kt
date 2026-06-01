@@ -22,7 +22,7 @@ package com.geovault.tracker.policy.filter
  */
 data class LocationFilterResult(
     val decision: Decision,
-    val reason: String,
+    val reason: FilterReason,
     val adjustedLatitude: Double?,
     val adjustedLongitude: Double?,
     val cappedDistanceMeters: Double?,
@@ -31,11 +31,11 @@ data class LocationFilterResult(
     enum class Decision { Commit, Hold, SnapInternal, Reject }
 
     companion object {
-        fun commit(reason: String, metrics: LocationMetrics): LocationFilterResult =
+        fun commit(reason: FilterReason, metrics: LocationMetrics): LocationFilterResult =
             LocationFilterResult(Decision.Commit, reason, null, null, null, metrics)
 
         fun commitAdjusted(
-            reason: String,
+            reason: FilterReason,
             adjustedLatitude: Double,
             adjustedLongitude: Double,
             cappedDistanceMeters: Double,
@@ -43,18 +43,18 @@ data class LocationFilterResult(
         ): LocationFilterResult =
             LocationFilterResult(Decision.Commit, reason, adjustedLatitude, adjustedLongitude, cappedDistanceMeters, metrics)
 
-        fun hold(reason: String, metrics: LocationMetrics): LocationFilterResult =
+        fun hold(reason: FilterReason, metrics: LocationMetrics): LocationFilterResult =
             LocationFilterResult(Decision.Hold, reason, null, null, null, metrics)
 
         fun snapInternal(
-            reason: String,
+            reason: FilterReason,
             adjustedLatitude: Double,
             adjustedLongitude: Double,
             metrics: LocationMetrics,
         ): LocationFilterResult =
             LocationFilterResult(Decision.SnapInternal, reason, adjustedLatitude, adjustedLongitude, 0.0, metrics)
 
-        fun reject(reason: String, metrics: LocationMetrics): LocationFilterResult =
+        fun reject(reason: FilterReason, metrics: LocationMetrics): LocationFilterResult =
             LocationFilterResult(Decision.Reject, reason, null, null, null, metrics)
     }
 }

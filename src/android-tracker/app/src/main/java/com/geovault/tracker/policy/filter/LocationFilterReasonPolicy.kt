@@ -1,37 +1,33 @@
 package com.geovault.tracker.policy.filter
 
-/**
- * Single semantic contract for [LocationFilterReasons] consumed by motion recovery,
- * local reanchor policy, and freshness recovery.
- */
 object LocationFilterReasonPolicy {
-    private val spatialHoldReasons: Set<String> = setOf(
-        LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED,
-        LocationFilterReasons.RESUME_UNCONFIRMED,
-        LocationFilterReasons.CANDIDATE_UNCONFIRMED,
-        LocationFilterReasons.SPEED_CAP_UNCONFIRMED,
+    private val spatialHoldReasons: Set<FilterReason> = setOf(
+        FilterReason.STALE_RELOCATION_UNCONFIRMED,
+        FilterReason.RESUME_UNCONFIRMED,
+        FilterReason.CANDIDATE_UNCONFIRMED,
+        FilterReason.SPEED_CAP_UNCONFIRMED,
     )
 
-    fun isSpatialHold(reason: String?): Boolean {
+    fun isSpatialHold(reason: FilterReason?): Boolean {
         return reason != null && reason in spatialHoldReasons
     }
 
-    fun isExpectedRecoveryHold(reason: String?): Boolean {
-        return isSpatialHold(reason) || reason == LocationFilterReasons.SPEED_CAP_EXCEEDED
+    fun isExpectedRecoveryHold(reason: FilterReason?): Boolean {
+        return isSpatialHold(reason) || reason == FilterReason.SPEED_CAP_EXCEEDED
     }
 
-    fun isCapEvidence(reason: String?): Boolean {
-        return reason == LocationFilterReasons.SPEED_CAP_EXCEEDED ||
-            reason == LocationFilterReasons.SPEED_CAP_UNCONFIRMED
+    fun isCapEvidence(reason: FilterReason?): Boolean {
+        return reason == FilterReason.SPEED_CAP_EXCEEDED ||
+            reason == FilterReason.SPEED_CAP_UNCONFIRMED
     }
 
-    fun isRecoverableFreshnessHold(reason: String?, holdReasons: Set<String>): Boolean {
+    fun isRecoverableFreshnessHold(reason: FilterReason?, holdReasons: Set<FilterReason>): Boolean {
         return reason != null && reason in holdReasons
     }
 
     fun blocksFreshnessAnchorCommit(
-        reason: String?,
-        holdReasons: Set<String>,
+        reason: FilterReason?,
+        holdReasons: Set<FilterReason>,
         repeatedOutlierSuppressed: Boolean,
     ): Boolean {
         if (repeatedOutlierSuppressed) return true

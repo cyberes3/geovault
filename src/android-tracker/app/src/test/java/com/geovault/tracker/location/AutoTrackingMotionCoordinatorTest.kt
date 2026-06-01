@@ -1,7 +1,7 @@
 package com.geovault.tracker.location
 
 import com.geovault.tracker.policy.TrackPointDecisionMetrics
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.services.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -24,7 +24,7 @@ class AutoTrackingMotionCoordinatorTest {
                 lat = 12.0,
                 lon = -45.0,
                 speedMps = 12.0,
-                reason = LocationFilterReasons.SPEED_CAP_EXCEEDED,
+                reason = FilterReason.SPEED_CAP_EXCEEDED.wireValue,
             ),
             rejectReason = null,
             eventTimeMs = 1_000L,
@@ -35,7 +35,7 @@ class AutoTrackingMotionCoordinatorTest {
                 lat = 12.0005,
                 lon = -44.9975,
                 speedMps = 9.0,
-                reason = LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED,
+                reason = FilterReason.STALE_RELOCATION_UNCONFIRMED.wireValue,
             ),
             rejectReason = null,
             eventTimeMs = 11_000L,
@@ -46,7 +46,7 @@ class AutoTrackingMotionCoordinatorTest {
                 lat = 12.0,
                 lon = -44.997,
                 speedMps = 12.0,
-                reason = LocationFilterReasons.SPEED_CAP_EXCEEDED,
+                reason = FilterReason.SPEED_CAP_EXCEEDED.wireValue,
             ),
             rejectReason = null,
             eventTimeMs = 21_000L,

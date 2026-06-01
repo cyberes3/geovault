@@ -377,6 +377,6 @@ class LocationFilterStateIsolationTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Commit, r.decision)
-        assertEquals("first-fix", r.reason)
+        assertEquals(FilterReason.FIRST_FIX, r.reason)
     }
 }

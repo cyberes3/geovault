@@ -2,6 +2,7 @@ package com.geovault.tracker.location
 
 import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
 import com.geovault.tracker.services.TrackingMotionMode
 
@@ -80,11 +81,11 @@ class AutoTrackingMotionCoordinator(
     }
 
     private fun isEvidenceReason(reason: String?): Boolean {
-        return LocationFilterReasonPolicy.isCapEvidence(reason)
+        return LocationFilterReasonPolicy.isCapEvidence(FilterReason.fromWire(reason))
     }
 
     private fun isNeutralHoldReason(reason: String?): Boolean {
-        return LocationFilterReasonPolicy.isSpatialHold(reason)
+        return LocationFilterReasonPolicy.isSpatialHold(FilterReason.fromWire(reason))
     }
 
     private fun isTransientReject(rejectReason: TrackPointRejectReason?): Boolean {

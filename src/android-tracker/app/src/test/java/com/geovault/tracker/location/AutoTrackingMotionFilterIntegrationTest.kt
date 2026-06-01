@@ -5,7 +5,7 @@ import com.geovault.tracker.policy.TrackPointDecision
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointSource
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.MotionProfileTuning
 import com.geovault.tracker.services.TrackingMotionMode
@@ -207,7 +207,7 @@ class AutoTrackingMotionFilterIntegrationTest {
         }
 
         assertNotEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
-        assertTrue(LocationFilterReasons.STALE_RELOCATION_CONFIRMED !in acceptedReasons)
+        assertTrue(FilterReason.STALE_RELOCATION_CONFIRMED.wireValue !in acceptedReasons)
         assertTrue(acceptedDistances.maxOrNull().orZero() < 700.0)
     }
 

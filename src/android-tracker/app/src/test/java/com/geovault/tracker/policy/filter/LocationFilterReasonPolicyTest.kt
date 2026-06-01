@@ -11,7 +11,7 @@ class LocationFilterReasonPolicyTest {
     fun isExpectedRecoveryHold_includesStaleRelocationUnconfirmed() {
         assertTrue(
             LocationFilterReasonPolicy.isExpectedRecoveryHold(
-                LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED,
+                FilterReason.STALE_RELOCATION_UNCONFIRMED,
             ),
         )
     }
@@ -20,7 +20,7 @@ class LocationFilterReasonPolicyTest {
     fun blocksFreshnessAnchorCommit_whenRepeatedOutlierSuppressed() {
         assertTrue(
             LocationFilterReasonPolicy.blocksFreshnessAnchorCommit(
-                reason = LocationFilterReasons.CANDIDATE_UNCONFIRMED,
+                reason = FilterReason.CANDIDATE_UNCONFIRMED,
                 holdReasons = PositioningRecoveryConfig.DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS,
                 repeatedOutlierSuppressed = true,
             ),
@@ -31,7 +31,7 @@ class LocationFilterReasonPolicyTest {
     fun blocksFreshnessAnchorCommit_whenReasonNotRecoverable() {
         assertTrue(
             LocationFilterReasonPolicy.blocksFreshnessAnchorCommit(
-                reason = LocationFilterReasons.WITHIN_CAP,
+                reason = FilterReason.WITHIN_CAP,
                 holdReasons = PositioningRecoveryConfig.DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS,
                 repeatedOutlierSuppressed = false,
             ),
@@ -42,7 +42,7 @@ class LocationFilterReasonPolicyTest {
     fun blocksFreshnessAnchorCommit_falseForRecoverableHold() {
         assertFalse(
             LocationFilterReasonPolicy.blocksFreshnessAnchorCommit(
-                reason = LocationFilterReasons.RESUME_UNCONFIRMED,
+                reason = FilterReason.RESUME_UNCONFIRMED,
                 holdReasons = PositioningRecoveryConfig.DEFAULT_FRESHNESS_RECOVERY_HOLD_REASONS,
                 repeatedOutlierSuppressed = false,
             ),

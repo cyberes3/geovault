@@ -7,7 +7,7 @@ import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
@@ -570,7 +570,7 @@ class LocationIngestCoordinatorTest {
                 isMockLocation = false,
             )
             previousAccepted = result.lastFilteredLocation
-            if (result.policyMetrics?.reason == LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED) {
+            if (result.policyMetrics?.reason == FilterReason.STALE_RELOCATION_UNCONFIRMED.wireValue) {
                 assertFalse(result.accepted)
                 assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
             }
@@ -631,9 +631,9 @@ class LocationIngestCoordinatorTest {
         assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
         val policyReason = result.policyMetrics?.reason
         assertTrue(
-            policyReason == LocationFilterReasons.SPEED_CAP_EXCEEDED ||
-                policyReason == LocationFilterReasons.SPEED_CAP_UNCONFIRMED ||
-                policyReason == LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED,
+            policyReason == FilterReason.SPEED_CAP_EXCEEDED.wireValue ||
+                policyReason == FilterReason.SPEED_CAP_UNCONFIRMED.wireValue ||
+                policyReason == FilterReason.STALE_RELOCATION_UNCONFIRMED.wireValue,
         )
         assertEquals(0, reanchorEvents)
         assertTrue(dao.getCount() <= 2)

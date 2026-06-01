@@ -2,11 +2,18 @@ package com.geovault.tracker.location
 
 import android.location.Location
 import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.services.LocationIngestCoordinator
 import com.geovault.tracker.services.LocationIngestResult
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
+
+enum class FixIngestMode {
+    Live,
+    PausedFreshness,
+    FreshnessBypass,
+}
 
 data class TrackerLocationMotionContext(
     val motionMode: TrackingMotionMode,
@@ -21,7 +28,7 @@ data class TrackerLocationPipelineInput(
     val motionContext: TrackerLocationMotionContext,
     val previousAcceptedLocation: Location?,
     val sessionVisibleBoundaryId: Long,
-    val bypassFilters: Boolean,
+    val ingestMode: FixIngestMode,
     val propsJson: String?,
     val totalDistanceMeters: Float,
     val nowMs: Long,
@@ -33,7 +40,10 @@ data class TrackerLocationPipelineInput(
     val recoveryConfig: PositioningRecoveryConfig,
     val recoveryAnchor: RecoveryAnchorState?,
     val outlierSuppressorAnchor: Location?,
-)
+) {
+    val bypassFilters: Boolean
+        get() = ingestMode == FixIngestMode.PausedFreshness || ingestMode == FixIngestMode.FreshnessBypass
+}
 
 data class TrackerLocationPipelineOutput(
     val result: LocationIngestResult,
@@ -64,12 +74,27 @@ class TrackerLocationPipeline(
             Long,
         ) -> Location,
     ): TrackerLocationPipelineOutput {
+        if (input.ingestMode == FixIngestMode.PausedFreshness) {
+            val result = ingest(input, input.motionContext)
+            return TrackerLocationPipelineOutput(
+                result = result,
+                motionContext = input.motionContext,
+                motionModeChanged = false,
+                autoMotionHandling = null,
+                repeatedOutlierSuppressed = false,
+                freshnessRecoveryDecision = FreshnessRecoveryDecision.Inactive,
+            )
+        }
+
         var motionContext = input.motionContext
         var result = ingest(input, motionContext)
         var autoMotionHandling: AutoMotionRejectHandling? = null
         var motionModeChanged = false
 
-        if (!result.accepted && !input.bypassFilters && !input.skipAdaptiveTrackingEffects) {
+        val runLiveRecovery = input.ingestMode == FixIngestMode.Live &&
+            !input.skipAdaptiveTrackingEffects
+
+        if (!result.accepted && runLiveRecovery) {
             autoMotionHandling = onAutoMotionRejected(result, input.location, input.nowMs)
             if (autoMotionHandling is AutoMotionRejectHandling.Evidence && autoMotionHandling.output.modeChanged) {
                 motionContext = refreshMotionContext()
@@ -78,26 +103,31 @@ class TrackerLocationPipeline(
             }
         }
 
-        val repeatedOutlierSuppressed = evaluateRepeatedOutlierSuppressed(
-            result = result,
-            input = input,
-        )
+        val repeatedOutlierSuppressed = if (input.ingestMode == FixIngestMode.Live) {
+            evaluateRepeatedOutlierSuppressed(result = result, input = input)
+        } else {
+            false
+        }
 
-        val freshnessRecoveryDecision = freshnessRecoveryController.evaluate(
-            FreshnessRecoveryInput(
-                localRecoveryDue = input.localRecoveryDue,
-                accepted = result.accepted,
-                pointPersisted = result.pointPersisted,
-                filterReason = result.policyMetrics?.reason,
-                accuracyMeters = result.lastAccuracyMeters,
-                effectiveAccuracyThresholdMeters = motionContext.effectiveAccuracyThresholdMeters,
-                candidateLocation = input.location,
-                anchor = input.recoveryAnchor,
-                repeatedOutlierSuppressed = repeatedOutlierSuppressed,
-                nowMs = input.nowMs,
-                config = input.recoveryConfig,
+        val freshnessRecoveryDecision = if (input.ingestMode == FixIngestMode.Live) {
+            freshnessRecoveryController.evaluate(
+                FreshnessRecoveryInput(
+                    localRecoveryDue = input.localRecoveryDue,
+                    accepted = result.accepted,
+                    pointPersisted = result.pointPersisted,
+                    filterReason = FilterReason.fromWire(result.policyMetrics?.reason),
+                    accuracyMeters = result.lastAccuracyMeters,
+                    effectiveAccuracyThresholdMeters = motionContext.effectiveAccuracyThresholdMeters,
+                    candidateLocation = input.location,
+                    anchor = input.recoveryAnchor,
+                    repeatedOutlierSuppressed = repeatedOutlierSuppressed,
+                    nowMs = input.nowMs,
+                    config = input.recoveryConfig,
+                ),
             )
-        )
+        } else {
+            FreshnessRecoveryDecision.Inactive
+        }
 
         if (freshnessRecoveryDecision == FreshnessRecoveryDecision.CommitAnchor) {
             val anchor = input.recoveryAnchor

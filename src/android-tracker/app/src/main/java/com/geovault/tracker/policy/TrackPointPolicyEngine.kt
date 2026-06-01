@@ -2,7 +2,7 @@ package com.geovault.tracker.policy
 
 import com.geovault.tracker.policy.filter.LocationFilter
 import com.geovault.tracker.policy.filter.LocationFilterConfig
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterResult
 import com.geovault.tracker.policy.filter.LocationInput
 import com.geovault.tracker.policy.filter.LocationMetrics
@@ -231,7 +231,7 @@ object TrackPointPolicyEngine {
                 LocationFilterResult.Decision.SnapInternal -> "snap-internal"
                 LocationFilterResult.Decision.Reject -> "rejected"
             },
-            reason = result.reason,
+            reason = result.reason.wireValue,
             rawLatitude = event.lat,
             rawLongitude = event.lon,
             committedLatitude = result.committedLatitude(event),
@@ -240,7 +240,7 @@ object TrackPointPolicyEngine {
         return when (result.decision) {
             LocationFilterResult.Decision.Reject -> {
                 val rejectReason = when (result.reason) {
-                    LocationFilterReasons.LOW_ACCURACY -> TrackPointRejectReason.BAD_ACCURACY
+                    FilterReason.LOW_ACCURACY -> TrackPointRejectReason.BAD_ACCURACY
                     else -> TrackPointRejectReason.JUMP
                 }
                 TrackPointDecision(

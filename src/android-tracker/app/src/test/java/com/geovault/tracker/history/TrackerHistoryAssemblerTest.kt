@@ -99,6 +99,46 @@ class TrackerHistoryAssemblerTest {
     }
 
     @Test
+    fun compose_currentSession_resolvesSessionStartFromOverlayWhenRuntimeStartNull() {
+        val sessionStartMs = 50_000L
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("current_session"))
+        val overlay = TrackerHistorySourceBatch(
+            trackerId = "tracker-1",
+            window = key.window,
+            sourceKind = TrackerHistorySourceKind.LOCAL_LIVE,
+            points = listOf(
+                point(10_000L, provenance = TrackerHistoryProvenance.LOCAL_LIVE, startTimestampMs = 1_000L),
+                point(60_000L, provenance = TrackerHistoryProvenance.LOCAL_LIVE, startTimestampMs = sessionStartMs),
+            ),
+        )
+        val previous = TrackerHistorySnapshot(
+            key = key,
+            trunk = emptyList(),
+            overlay = emptyList(),
+            points = emptyList(),
+            committedAtMs = 1L,
+            generation = 1L,
+        )
+
+        val result = TrackerHistoryAssembler.compose(
+            TrackerHistoryComposeInput(
+                key = key,
+                trunk = null,
+                overlayBatches = listOf(overlay),
+                sessionContext = sessionContext(key.window, activeSessionStartMs = null),
+                nowMs = 61_000L,
+                previousSnapshot = previous,
+            ),
+        )
+
+        assertTrue(result.committed)
+        assertEquals("composed", result.reason)
+        assertEquals(listOf(60_000L), result.snapshot.points.map { it.timestampMs })
+        assertTrue(result.snapshot.trunk.isEmpty())
+        assertEquals(listOf(60_000L), result.snapshot.overlay.map { it.timestampMs })
+    }
+
+    @Test
     fun compose_completeServerTrunk_skipsClientWindowFilterAtComposeOnly() {
         val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("1w"))
         val nowMs = 10_000_000L

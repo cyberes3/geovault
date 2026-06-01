@@ -1,8 +1,8 @@
 package com.geovault.tracker.location
 
 import android.location.Location
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
-import com.geovault.tracker.policy.filter.LocationFilterReasons
 
 enum class FreshnessRecoveryReason(val telemetryValue: String) {
     INACTIVE("inactive"),
@@ -43,7 +43,7 @@ data class FreshnessRecoveryInput(
     val localRecoveryDue: Boolean,
     val accepted: Boolean,
     val pointPersisted: Boolean,
-    val filterReason: String?,
+    val filterReason: FilterReason?,
     val accuracyMeters: Float?,
     val effectiveAccuracyThresholdMeters: Float,
     val candidateLocation: Location,
@@ -64,7 +64,7 @@ object FreshnessRecoveryPolicy {
             return FreshnessRecoveryDecision.Inactive
         }
         if (!probeActive) {
-            return FreshnessRecoveryDecision.ProbeStarted(input.filterReason)
+            return FreshnessRecoveryDecision.ProbeStarted(input.filterReason?.wireValue)
         }
         if (probeStartedAtMs > 0L && input.nowMs - probeStartedAtMs > input.config.freshnessProbeWindowMs) {
             return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.PROBE_EXPIRED)
@@ -74,13 +74,13 @@ object FreshnessRecoveryPolicy {
         return if (promotableProbeFixes + 1 >= input.config.minPromotableProbeFixes) {
             FreshnessRecoveryDecision.CommitAnchor
         } else {
-            FreshnessRecoveryDecision.ProbeWait(input.filterReason)
+            FreshnessRecoveryDecision.ProbeWait(input.filterReason?.wireValue)
         }
     }
 
     private fun blockingReason(input: FreshnessRecoveryInput): FreshnessRecoveryDecision.Blocked? {
         if (input.accepted) {
-            if (input.filterReason != LocationFilterReasons.UNCERTAINTY_SUPPRESSED) {
+            if (input.filterReason != FilterReason.UNCERTAINTY_SUPPRESSED) {
                 return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.ALREADY_ACCEPTED_NOT_PERSISTED)
             }
         }
@@ -95,7 +95,10 @@ object FreshnessRecoveryPolicy {
             if (input.repeatedOutlierSuppressed) {
                 return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.REPEATED_OUTLIER)
             }
-            return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.NOT_RECOVERABLE_HOLD, reason)
+            return FreshnessRecoveryDecision.Blocked(
+                FreshnessRecoveryReason.NOT_RECOVERABLE_HOLD,
+                reason.wireValue,
+            )
         }
         val accuracy = input.accuracyMeters
             ?: return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.MISSING_ACCURACY)

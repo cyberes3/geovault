@@ -9,6 +9,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.LocationFilterConfig
+import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -222,7 +223,7 @@ private class LocalTrackReanchorPolicy {
     }
 
     private fun isExpectedRecoveryReason(policyReason: String?): Boolean {
-        return LocationFilterReasonPolicy.isExpectedRecoveryHold(policyReason)
+        return LocationFilterReasonPolicy.isExpectedRecoveryHold(FilterReason.fromWire(policyReason))
     }
 }
 

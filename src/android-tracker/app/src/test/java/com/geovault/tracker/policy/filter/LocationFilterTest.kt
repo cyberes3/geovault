@@ -33,7 +33,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Reject, result.decision)
-        assertEquals("low-accuracy", result.reason)
+        assertEquals(FilterReason.LOW_ACCURACY, result.reason)
     }
 
     @Test
@@ -318,7 +318,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Reject, indoorDrift.decision)
-        assertEquals("low-accuracy", indoorDrift.reason)
+        assertEquals(FilterReason.LOW_ACCURACY, indoorDrift.reason)
 
         val relocation = filter.evaluate(
             LocationInput(
@@ -332,7 +332,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Hold, relocation.decision)
-        assertEquals("stale-relocation-unconfirmed", relocation.reason)
+        assertEquals(FilterReason.STALE_RELOCATION_UNCONFIRMED, relocation.reason)
 
         val confirmation = filter.evaluate(
             LocationInput(
@@ -346,7 +346,13 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Commit, confirmation.decision)
-        assertTrue(confirmation.reason != "stale-relocation-confirmed")
+        assertTrue(confirmation.reason != FilterReason.STALE_RELOCATION_CONFIRMED)
+        assertTrue(
+            confirmation.reason == FilterReason.WITHIN_CAP ||
+                confirmation.reason == FilterReason.SPEED_CAP_RECOVERED ||
+                confirmation.reason == FilterReason.SPEED_CAP_UNCONFIRMED ||
+                confirmation.reason == FilterReason.SPEED_CAP_EXCEEDED,
+        )
     }
 
     @Test
@@ -393,13 +399,13 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Hold, relocation.decision)
-        assertEquals("stale-relocation-unconfirmed", relocation.reason)
+        assertEquals(FilterReason.STALE_RELOCATION_UNCONFIRMED, relocation.reason)
         assertTrue(
             confirmation.decision == LocationFilterResult.Decision.Hold ||
                 confirmation.decision == LocationFilterResult.Decision.Reject ||
                 confirmation.adjustedLatitude != null
         )
-        assertTrue(confirmation.reason != "stale-relocation-confirmed")
+        assertTrue(confirmation.reason != FilterReason.STALE_RELOCATION_CONFIRMED)
     }
 
     @Test
@@ -506,9 +512,9 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Hold, first.decision)
-        assertEquals("speed-cap-unconfirmed", first.reason)
+        assertEquals(FilterReason.SPEED_CAP_UNCONFIRMED, first.reason)
         assertEquals(LocationFilterResult.Decision.Commit, recovered.decision)
-        assertEquals("speed-cap-recovered", recovered.reason)
+        assertEquals(FilterReason.SPEED_CAP_RECOVERED, recovered.reason)
     }
 
     @Test
@@ -538,7 +544,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Reject, spike.decision)
-        assertEquals("speed-cap-exceeded", spike.reason)
+        assertEquals(FilterReason.SPEED_CAP_EXCEEDED, spike.reason)
     }
 
     @Test
@@ -635,9 +641,9 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Hold, first.decision)
-        assertEquals("speed-cap-unconfirmed", first.reason)
+        assertEquals(FilterReason.SPEED_CAP_UNCONFIRMED, first.reason)
         assertEquals(LocationFilterResult.Decision.Commit, second.decision)
-        assertEquals("speed-cap-recovered", second.reason)
+        assertEquals(FilterReason.SPEED_CAP_RECOVERED, second.reason)
     }
 
     @Test
@@ -667,7 +673,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Reject, spike.decision)
-        assertEquals("speed-cap-exceeded", spike.reason)
+        assertEquals(FilterReason.SPEED_CAP_EXCEEDED, spike.reason)
     }
 
     @Test
@@ -701,7 +707,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
-        assertEquals("uncertainty-suppressed", result.reason)
+        assertEquals(FilterReason.UNCERTAINTY_SUPPRESSED, result.reason)
         assertEquals(24.7097, result.adjustedLatitude ?: 0.0, 0.0000001)
         assertEquals(-81.1011, result.adjustedLongitude ?: 0.0, 0.0000001)
     }
@@ -771,7 +777,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
-        assertEquals("uncertainty-suppressed", result.reason)
+        assertEquals(FilterReason.UNCERTAINTY_SUPPRESSED, result.reason)
     }
 
     @Test
@@ -808,7 +814,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
-        assertEquals("uncertainty-suppressed", result.reason)
+        assertEquals(FilterReason.UNCERTAINTY_SUPPRESSED, result.reason)
     }
 
     @Test
@@ -853,7 +859,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Reject, result.decision)
-        assertEquals("implied-speed", result.reason)
+        assertEquals(FilterReason.IMPLIED_SPEED, result.reason)
     }
 
     @Test
@@ -888,7 +894,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Reject, result.decision)
-        assertEquals("outlier-capped", result.reason)
+        assertEquals(FilterReason.OUTLIER_CAPPED, result.reason)
     }
 
     @Test
@@ -920,7 +926,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
-        assertEquals("uncertainty-suppressed", result.reason)
+        assertEquals(FilterReason.UNCERTAINTY_SUPPRESSED, result.reason)
     }
 
     @Test
@@ -951,7 +957,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.SnapInternal, result.decision)
-        assertEquals("uncertainty-suppressed", result.reason)
+        assertEquals(FilterReason.UNCERTAINTY_SUPPRESSED, result.reason)
     }
 
     @Test
@@ -987,7 +993,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Commit, result.decision)
-        assertEquals("within-cap", result.reason)
+        assertEquals(FilterReason.WITHIN_CAP, result.reason)
     }
 
     @Test
@@ -1063,7 +1069,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Reject, garbage.decision)
-        assertEquals("low-accuracy", garbage.reason)
+        assertEquals(FilterReason.LOW_ACCURACY, garbage.reason)
 
         val recovered = filter.evaluate(
             LocationInput(
@@ -1123,7 +1129,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Hold, postResume.decision)
-        assertEquals("resume-unconfirmed", postResume.reason)
+        assertEquals(FilterReason.RESUME_UNCONFIRMED, postResume.reason)
         assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
@@ -1152,7 +1158,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Hold, first.decision)
-        assertEquals("resume-unconfirmed", first.reason)
+        assertEquals(FilterReason.RESUME_UNCONFIRMED, first.reason)
 
         val second = filter.evaluate(
             LocationInput(
@@ -1164,7 +1170,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Commit, second.decision)
-        assertEquals("motion-resume-confirmed", second.reason)
+        assertEquals(FilterReason.MOTION_RESUME_CONFIRMED, second.reason)
         assertEquals(30L * 60L * 1000L + 1_000L, filter.lastAcceptedTimestampMs)
     }
 
@@ -1203,7 +1209,7 @@ class LocationFilterTest {
         )
 
         assertEquals(LocationFilterResult.Decision.Hold, inconsistent.decision)
-        assertEquals("resume-unconfirmed", inconsistent.reason)
+        assertEquals(FilterReason.RESUME_UNCONFIRMED, inconsistent.reason)
         assertEquals(0L, filter.lastAcceptedTimestampMs)
     }
 
@@ -1232,7 +1238,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.SnapInternal, postResume.decision)
-        assertEquals("uncertainty-suppressed", postResume.reason)
+        assertEquals(FilterReason.UNCERTAINTY_SUPPRESSED, postResume.reason)
         assertEquals(24.7097, postResume.adjustedLatitude ?: 0.0, 0.0)
         assertEquals(-81.1011, postResume.adjustedLongitude ?: 0.0, 0.0)
         assertEquals(20_000L, filter.lastAcceptedTimestampMs)
@@ -1257,7 +1263,7 @@ class LocationFilterTest {
             )
         )
         assertEquals(LocationFilterResult.Decision.Commit, first.decision)
-        assertEquals("first-fix", first.reason)
+        assertEquals(FilterReason.FIRST_FIX, first.reason)
     }
 
     /**

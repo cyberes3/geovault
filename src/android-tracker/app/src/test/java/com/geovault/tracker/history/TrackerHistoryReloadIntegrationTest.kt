@@ -147,6 +147,49 @@ class TrackerHistoryReloadIntegrationTest {
     }
 
     @Test
+    fun recordStart_overlayBeforeRuntimeSessionStart_composesNonEmptyCurrentSession() {
+        val repository = TrackerHistoryRepository()
+        val dispatcher = TrackerHistoryIntentDispatcher(repository)
+        val trackerId = "t1"
+        val window = TrackerHistoryWindow("current_session")
+        val sessionStartMs = 5_000L
+
+        dispatcher.dispatch(
+            TrackerHistoryIntent.Clear(
+                boundary = TrackerHistoryClearBoundary(
+                    trackerId = trackerId,
+                    clearedAtMs = sessionStartMs,
+                    activeSessionStartMs = sessionStartMs,
+                ),
+                window = window,
+            ),
+        )
+        assertTrue(repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.isEmpty())
+
+        dispatcher.dispatch(
+            TrackerHistoryIntent.CommitOverlay(
+                batch = TrackerHistorySourceBatch(
+                    trackerId = trackerId,
+                    window = window,
+                    sourceKind = TrackerHistorySourceKind.LOCAL_LIVE,
+                    points = listOf(
+                        point(
+                            trackerId = trackerId,
+                            timestampMs = 6_000L,
+                            provenance = TrackerHistoryProvenance.LOCAL_LIVE,
+                            startTimestampMs = sessionStartMs,
+                        ),
+                    ),
+                ),
+                activeSessionStartMs = null,
+            ),
+        )
+
+        val composed = repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!
+        assertEquals(listOf(6_000L), composed.points.map { it.timestampMs })
+    }
+
+    @Test
     fun activeRecording_ignoresStaleCurrentSessionServerTrunk() {
         val repository = TrackerHistoryRepository()
         val dispatcher = TrackerHistoryIntentDispatcher(repository)

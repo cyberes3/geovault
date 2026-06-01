@@ -1,7 +1,8 @@
 package com.geovault.tracker.location
 
 import com.geovault.common.geo.GeoMath
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.FilterReason
+import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
 import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -163,8 +164,7 @@ class AutoTrackingMotionEvidenceGate(
     }
 
     private fun isSupportedReason(reason: String?): Boolean {
-        return reason == LocationFilterReasons.SPEED_CAP_EXCEEDED ||
-            reason == LocationFilterReasons.SPEED_CAP_UNCONFIRMED
+        return LocationFilterReasonPolicy.isCapEvidence(FilterReason.fromWire(reason))
     }
 
     private fun isStrongFirstFix(observation: Observation): Boolean {

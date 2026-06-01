@@ -42,9 +42,49 @@ object TrackerHistoryAssembler {
         )
             .dedupeOverlay()
             .sortedBy { it.timestampMs }
-        val points = (trunkPoints + eligibleOverlay)
+        var points = (trunkPoints + eligibleOverlay)
             .distinctBy { it.key }
             .sortedBy { it.timestampMs }
+        var resolvedTrunkPoints = trunkPoints
+        var resolvedOverlayPoints = eligibleOverlay
+        if (points.isEmpty() && input.clearBoundary == null) {
+            val rawOverlayCount = input.overlayBatches.sumOf { it.points.size }
+            if (rawOverlayCount > 0) {
+                val effectiveSessionStartMs = input.sessionContext.resolveEffectiveSessionStartMs(
+                    overlayBatches = input.overlayBatches,
+                    clearBoundary = input.clearBoundary,
+                )
+                if (effectiveSessionStartMs != null && input.activeSessionStartMs == null) {
+                    val retryContext = input.sessionContext.copy(activeSessionStartMs = effectiveSessionStartMs)
+                    val retryInput = input.copy(sessionContext = retryContext)
+                    resolvedTrunkPoints = filterPointsForRecentDataWindow(
+                        points = input.trunk
+                            ?.points
+                            .orEmpty()
+                            .filter { it.trackerId.trim() == trackerId },
+                        input = retryInput,
+                    ).sortedBy { it.timestampMs }
+                    resolvedOverlayPoints = filterPointsForRecentDataWindow(
+                        points = input.overlayBatches
+                            .flatMap { it.points }
+                            .filter { it.trackerId.trim() == trackerId }
+                            .filter { point -> point.isAfterClearBoundary(input.clearBoundary) },
+                        input = retryInput,
+                    )
+                        .dedupeOverlay()
+                        .sortedBy { it.timestampMs }
+                    points = (resolvedTrunkPoints + resolvedOverlayPoints)
+                        .distinctBy { it.key }
+                        .sortedBy { it.timestampMs }
+                    GeoVaultCaptureLog.i(
+                        TAG,
+                        "map_update history_compose_session_start_resolved tracker=$trackerId " +
+                            "window=${input.key.window.normalizedKey} session=$effectiveSessionStartMs " +
+                            "overlay_pts=$rawOverlayCount result=${points.size}",
+                    )
+                }
+            }
+        }
         if (points.isEmpty() && input.previousSnapshot != null && input.clearBoundary == null) {
             val pendingOverlayPoints = input.overlayBatches.sumOf { it.points.size }
             if (pendingOverlayPoints > 0) {
@@ -69,8 +109,8 @@ object TrackerHistoryAssembler {
         }
         val snapshot = TrackerHistorySnapshot(
             key = input.key,
-            trunk = trunkPoints,
-            overlay = eligibleOverlay,
+            trunk = resolvedTrunkPoints,
+            overlay = resolvedOverlayPoints,
             points = points,
             committedAtMs = input.nowMs,
             generation = maxOf(input.trunk?.generation ?: 0L, input.nowMs),
