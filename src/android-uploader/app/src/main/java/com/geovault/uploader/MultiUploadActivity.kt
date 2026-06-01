@@ -2,8 +2,8 @@ package com.geovault.uploader
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
@@ -19,15 +19,15 @@ import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
-import com.geovault.uploader.navigation.MultiUploadNavigation
-import com.geovault.uploader.presentation.UploaderAccountViewModel
-import com.geovault.uploader.presentation.QueueUploadViewModel
+import com.geovault.uploader.navigation.UploadNavigation
 import com.geovault.uploader.presentation.SettingsViewModel
+import com.geovault.uploader.presentation.UploadViewModel
+import com.geovault.uploader.presentation.UploaderAccountViewModel
 import com.geovault.uploader.ui.MultiUploadScreen
 import com.geovault.uploader.ui.SettingsScreen
 
 class MultiUploadActivity : ComponentActivity() {
-    private val viewModel: QueueUploadViewModel by viewModels()
+    private val viewModel: UploadViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
     private val accountViewModel: UploaderAccountViewModel by viewModels()
 
@@ -45,7 +45,7 @@ class MultiUploadActivity : ComponentActivity() {
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
                 var invalidFilesDialogNames by rememberSaveable {
                     mutableStateOf(
-                        MultiUploadNavigation.readRejectedFileNames(intent)
+                        UploadNavigation.readRejectedFileNames(intent)
                             .takeIf { it.isNotEmpty() }
                     )
                 }
@@ -63,9 +63,14 @@ class MultiUploadActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     MultiUploadScreen(
                         state = state,
+                        isAuthenticated = accountState.isLoggedIn,
+                        serverUrl = accountState.serverUrl,
+                        isConnecting = accountState.isConnecting,
                         invalidFilesDialogNames = invalidFilesDialogNames,
                         onDismissInvalidFiles = { invalidFilesDialogNames = null },
                         onOpenSettings = { isSettingsOpen = true },
+                        onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
+                        onAuthConnect = accountViewModel::connect,
                         onRename = viewModel::rename,
                         onRemoveItem = viewModel::removeItemAt,
                         onUploadClick = viewModel::startUpload,

@@ -10,6 +10,9 @@ import com.geovault.uploader.data.FileMetadataRepository
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
 import com.geovault.uploader.data.ValidationRepository
+import com.geovault.uploader.domain.ImportFilenameResolver
+import com.geovault.uploader.domain.ImportUploadQueue
+import com.geovault.uploader.domain.PickerSelectionRouter
 
 /**
  * Composition root for app-layer dependencies.
@@ -21,31 +24,49 @@ class UploaderAppServices private constructor(
     private val appContext = context.applicationContext
     private val authServices by lazy { GeovaultAuthServices(appContext) }
 
-    fun uploaderPreferences(): UploaderPreferences = UploaderPreferences.getInstance(appContext)
+    val uploaderPreferences: UploaderPreferences by lazy {
+        UploaderPreferences.getInstance(appContext)
+    }
 
-    fun fileMetadataRepository(): FileMetadataRepository = FileMetadataRepository(appContext.contentResolver)
+    val fileMetadataRepository: FileMetadataRepository by lazy {
+        FileMetadataRepository(appContext.contentResolver)
+    }
 
-    fun uploadRepository(): UploadRepository = UploadRepository(
-        context = appContext,
-        contentResolver = appContext.contentResolver,
-        serverConfigService = authServices,
-        authSessionService = authServices
-    )
+    val uploadRepository: UploadRepository by lazy {
+        UploadRepository(
+            context = appContext,
+            contentResolver = appContext.contentResolver,
+            serverConfigService = authServices,
+            authSessionService = authServices,
+        )
+    }
 
-    fun validationRepository(): ValidationRepository = ValidationRepository(
-        context = appContext,
-        serverConfigService = authServices,
-        authSessionService = authServices
-    )
+    val validationRepository: ValidationRepository by lazy {
+        ValidationRepository(
+            context = appContext,
+            serverConfigService = authServices,
+            authSessionService = authServices,
+        )
+    }
 
-    fun authRepository(): AuthRepository = AuthRepository(
-        serverConfigService = authServices,
-        authSessionService = authServices,
-        oauthPreparationService = authServices,
-        peerServerUrlsProvider = {
-            ServerUrlContract.getServerUrlsFromOtherApps(appContext)
-        }
-    )
+    val authRepository: AuthRepository by lazy {
+        AuthRepository(
+            serverConfigService = authServices,
+            authSessionService = authServices,
+            oauthPreparationService = authServices,
+            peerServerUrlsProvider = {
+                ServerUrlContract.getServerUrlsFromOtherApps(appContext)
+            },
+        )
+    }
+
+    val pickerSelectionRouter: PickerSelectionRouter by lazy {
+        PickerSelectionRouter(fileMetadataRepository)
+    }
+
+    val importUploadQueue: ImportUploadQueue by lazy {
+        ImportUploadQueue(uploadRepository)
+    }
 
     fun initialAuthController(
         invalidServerUrlMessage: String = "Server URL is required. Connect your account to sign in.",

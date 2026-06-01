@@ -2,23 +2,17 @@
 
 A minimal Android app for quickly uploading KML/KMZ/GPX files to your GeoVault server via Android's share intent.
 
-
-
-
 ## Setup
 
 1. Install the APK on your Android device
 2. On first launch it will ask for your GeoVault server URL
 
-
-
 ## Usage
 
-1. Share a KML, KMZ, or GPX file from any app
+1. Share one or more KML, KMZ, or GPX files from any app
 2. Select "GeoVault Uploader" from the share menu
-3. Optionally rename the file (the app automatically appends `_android_upload_<timestamp>` to the filename)
-4. Tap "Upload" to send the file to your server
+3. Review the upload queue, optionally rename files (the app can append `_android_upload_<timestamp>` via settings)
+4. Tap **Upload All** to send files to your server
+5. Tap **Cancel** during an upload to stop the batch; the current file returns to the pending queue
 
-
-
-There is also a `Choose File` when launching the app that opens a filepicker.
+From the app launcher you can validate your connection and use **Choose File** to open the same upload queue.

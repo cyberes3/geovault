@@ -7,77 +7,87 @@ import com.geovault.common.RetrofitClient
 import com.geovault.common.auth.AuthSessionService
 import com.geovault.common.auth.GeovaultAuthServices
 import com.geovault.common.auth.ServerConfigService
-import com.geovault.uploader.model.UploadResult
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Response
-import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
+import com.geovault.uploader.domain.ImportFileUploader
+import com.geovault.uploader.model.ImportUploadOutcome
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.Response
+import okio.BufferedSink
+import okio.source
+import org.json.JSONObject
 
 class UploadRepository(
     private val context: Context,
     private val contentResolver: ContentResolver,
-    private val serverConfigService: ServerConfigService = GeovaultAuthServices(context),
-    private val authSessionService: AuthSessionService = GeovaultAuthServices(context)
-) {
+    private val authServices: GeovaultAuthServices = GeovaultAuthServices(context),
+    private val serverConfigService: ServerConfigService = authServices,
+    private val authSessionService: AuthSessionService = authServices,
+) : ImportFileUploader {
     private val callLock = Any()
     private var activeCall: Call? = null
 
-    fun cancelActiveUpload() {
+    private val httpClient: OkHttpClient by lazy {
+        RetrofitClient.getAuthenticatedOkHttpClient(context)
+            .newBuilder()
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+
+    override fun cancelActiveUpload() {
         synchronized(callLock) {
             activeCall?.cancel()
             activeCall = null
         }
     }
 
-    suspend fun upload(uri: Uri, finalFilename: String): UploadResult {
+    override suspend fun warmAccessToken(): ImportUploadOutcome? = withContext(Dispatchers.IO) {
+        if (!authSessionService.isLoggedIn()) {
+            return@withContext ImportUploadOutcome.Failed("Not signed in")
+        }
+        try {
+            authServices.getValidAccessToken()
+            null
+        } catch (e: Exception) {
+            ImportUploadOutcome.Failed("Connection failed\n${e.message ?: "Unknown error"}")
+        }
+    }
+
+    override suspend fun upload(uri: Uri, finalFilename: String): ImportUploadOutcome {
         val serverUrl = serverConfigService.getNormalizedServerUrl()
-        if (serverUrl.isBlank()) return UploadResult(false, errorMessage = "Missing server URL")
-        if (!authSessionService.isLoggedIn()) return UploadResult(false, errorMessage = "Not signed in")
+        if (serverUrl.isBlank()) return ImportUploadOutcome.Failed("Missing server URL")
+        if (!authSessionService.isLoggedIn()) return ImportUploadOutcome.Failed("Not signed in")
 
-        var tmpFile: File? = null
+        val fileBody = UriRequestBody(
+            contentResolver = contentResolver,
+            uri = uri,
+            contentType = "application/octet-stream".toMediaType(),
+        )
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", finalFilename, fileBody)
+            .build()
+        val request = Request.Builder()
+            .url("$serverUrl/api/item/import/upload")
+            .post(requestBody)
+            .build()
+
         return try {
-            tmpFile = withContext(Dispatchers.IO) {
-                val file = File.createTempFile("geovault-upload-", ".tmp", context.cacheDir)
-                contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(file).use { output -> input.copyTo(output) }
-                } ?: error("Could not read file")
-                file
-            }
-            val uploadFile = tmpFile ?: return UploadResult(false, errorMessage = "Could not read file")
-
-            val requestBody = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart(
-                    "file",
-                    finalFilename,
-                    uploadFile.asRequestBody("application/octet-stream".toMediaType())
-                )
-                .build()
-            val request = Request.Builder()
-                .url("$serverUrl/api/item/import/upload")
-                .post(requestBody)
-                .build()
-
-            val client = RetrofitClient.getAuthenticatedOkHttpClient(context)
-                .newBuilder()
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(60, TimeUnit.SECONDS)
-                .build()
-
             suspendCancellableCoroutine { continuation ->
-                val call = client.newCall(request)
+                val call = httpClient.newCall(request)
                 synchronized(callLock) {
                     activeCall = call
                 }
@@ -85,66 +95,95 @@ class UploadRepository(
                     call.cancel()
                 }
                 call.enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: java.io.IOException) {
+                    override fun onFailure(call: Call, e: IOException) {
                         synchronized(callLock) {
                             if (activeCall === call) activeCall = null
                         }
-                        val message = if (call.isCanceled()) {
-                            "Upload cancelled"
+                        if (!continuation.isActive) return
+                        val outcome = if (call.isCanceled()) {
+                            ImportUploadOutcome.Cancelled
                         } else {
-                            "Connection failed\n${e.message ?: "Unknown error"}"
+                            ImportUploadOutcome.Failed(
+                                "Connection failed\n${e.message ?: "Unknown error"}"
+                            )
                         }
-                        if (continuation.isActive) {
-                            continuation.resume(UploadResult(success = false, errorMessage = message))
-                        }
+                        continuation.resume(outcome)
                     }
 
                     override fun onResponse(call: Call, response: Response) {
                         synchronized(callLock) {
                             if (activeCall === call) activeCall = null
                         }
+                        if (!continuation.isActive) return
                         response.use {
+                            if (call.isCanceled()) {
+                                continuation.resume(ImportUploadOutcome.Cancelled)
+                                return
+                            }
                             if (it.isSuccessful) {
-                                if (continuation.isActive) {
-                                    continuation.resume(UploadResult(success = true, statusCode = it.code))
-                                }
+                                continuation.resume(ImportUploadOutcome.Success)
                                 return
                             }
                             if (it.code == 401) {
                                 authSessionService.handleAuthFailure()
                             }
-                            val payload = try { it.body.string() } catch (_: Exception) { "" }
+                            val payload = try {
+                                it.body.string()
+                            } catch (_: Exception) {
+                                ""
+                            }
                             val serverMessage = try {
                                 if (payload.trimStart().startsWith("{")) {
-                                    JSONObject(payload).optString("error", JSONObject(payload).optString("message", ""))
+                                    JSONObject(payload).optString(
+                                        "error",
+                                        JSONObject(payload).optString("message", "")
+                                    )
                                 } else {
                                     ""
                                 }
                             } catch (_: Exception) {
                                 ""
                             }
-                            if (continuation.isActive) {
-                                continuation.resume(
-                                    UploadResult(
-                                        success = false,
-                                        statusCode = it.code,
-                                        errorMessage = UploadErrorMessageFormatter.fromStatusCode(it.code, serverMessage)
-                                    )
+                            continuation.resume(
+                                ImportUploadOutcome.Failed(
+                                    UploadErrorMessageFormatter.fromStatusCode(it.code, serverMessage)
                                 )
-                            }
+                            )
                         }
                     }
                 })
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            UploadResult(success = false, errorMessage = "Connection failed\n${e.message ?: "Unknown error"}")
+            ImportUploadOutcome.Failed("Connection failed\n${e.message ?: "Unknown error"}")
         } finally {
             synchronized(callLock) {
                 activeCall = null
             }
-            withContext(Dispatchers.IO) {
-                tmpFile?.takeIf { it.exists() }?.delete()
+        }
+    }
+
+    private class UriRequestBody(
+        private val contentResolver: ContentResolver,
+        private val uri: Uri,
+        private val contentType: MediaType?,
+    ) : RequestBody() {
+        override fun contentType(): MediaType? = contentType
+
+        override fun contentLength(): Long {
+            return try {
+                contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                    descriptor.statSize.takeIf { it >= 0L }
+                } ?: -1L
+            } catch (_: Exception) {
+                -1L
+            }
+        }
+
+        override fun writeTo(sink: BufferedSink) {
+            val input = contentResolver.openInputStream(uri) ?: throw IOException("Could not read file")
+            input.use { stream ->
+                sink.writeAll(stream.source())
             }
         }
     }

@@ -23,7 +23,7 @@ class SettingsViewModel(
         application,
         UploaderAppServices.from(application)
     )
-    private val prefs = services.uploaderPreferences()
+    private val prefs = services.uploaderPreferences
 
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state.asStateFlow()

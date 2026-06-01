@@ -3,10 +3,10 @@ package com.geovault.uploader
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,56 +17,42 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.auth.GeoVaultAuthExtras
+import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
-import com.geovault.uploader.data.FileMetadataRepository
+import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.PickerRouteDecision
-import com.geovault.uploader.domain.PickerSelectionRouter
-import com.geovault.uploader.navigation.MultiUploadNavigation
-import com.geovault.uploader.presentation.MainScreenViewModel
+import com.geovault.uploader.navigation.UploadNavigation
+import com.geovault.uploader.presentation.HomeViewModel
 import com.geovault.uploader.presentation.SettingsViewModel
 import com.geovault.uploader.presentation.UploaderAccountViewModel
 import com.geovault.uploader.ui.MainScreen
 import com.geovault.uploader.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: MainScreenViewModel by viewModels()
+    private val viewModel: HomeViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
     private val accountViewModel: UploaderAccountViewModel by viewModels()
-    private val fileMetadataRepository: FileMetadataRepository by lazy {
-        FileMetadataRepository(contentResolver)
-    }
-    private val pickerSelectionRouter: PickerSelectionRouter by lazy {
-        PickerSelectionRouter(fileMetadataRepository)
-    }
-    private val invalidFilesDialogNamesState = mutableStateOf<List<String>?>(null)
+    private val services: UploaderAppServices by lazy { UploaderAppServices.from(application) }
     private lateinit var chooseFilesLauncher: ActivityResultLauncher<Array<String>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         chooseFilesLauncher = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-            routeUrisToUploadTarget(uris.orEmpty(), applyExtensionFilter = true)
+            routeUrisToUpload(uris.orEmpty(), finishAfterStart = false)
         }
         GeoVaultSystemBars.applyAppChrome(activity = this)
-        val incomingRoute = routeIncomingIntentToUploadTarget(intent)
         accountViewModel.initialize()
-        viewModel.initialize(intent, handleFileIntent = !incomingRoute.handled)
+        viewModel.initialize(intent)
         settingsViewModel.initialize()
-        if (incomingRoute.finishedActivity) return
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
                 val accountState by accountViewModel.state.collectAsState()
-                val accountMainState = state.copy(
-                    isAuthenticated = accountState.isLoggedIn,
-                    serverUrl = accountState.serverUrl,
-                    isConnecting = accountState.isConnecting,
-                    oauthUrl = null,
-                )
                 LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
                     viewModel.onAccountStateChanged(accountState)
                 }
@@ -77,22 +63,19 @@ class MainActivity : ComponentActivity() {
                 )
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainScreen(
-                        state = accountMainState,
-                        invalidFilesDialogNames = invalidFilesDialogNamesState.value,
+                        state = state.copy(
+                            isAuthenticated = accountState.isLoggedIn,
+                            serverUrl = accountState.serverUrl,
+                            isConnecting = accountState.isConnecting,
+                        ),
                         onOpenSettings = { isSettingsOpen = true },
                         onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
                         onAuthConnect = accountViewModel::connect,
                         onChooseFileClick = {
-                            chooseFilesLauncher.launch(arrayOf("*/*"))
+                            chooseFilesLauncher.launch(GeoVaultUploadFileTypes.supportedMimeTypes)
                         },
-                        onFilenameChanged = viewModel::onFilenameChanged,
-                        onUploadClick = {
-                            viewModel.uploadCurrentFile(onSuccessClose = { finish() })
-                        },
-                        onCloseClick = { finish() },
                         onDismissImportant = viewModel::clearImportantMessage,
-                        onDismissInvalidFiles = { invalidFilesDialogNamesState.value = null },
-                        onDismissUpdateAvailable = viewModel::clearUpdateAvailable
+                        onDismissUpdateAvailable = viewModel::clearUpdateAvailable,
                     )
                     GeoVaultShellSettingsOverlayHost(
                         visible = isSettingsOpen,
@@ -113,13 +96,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        val incomingRoute = routeIncomingIntentToUploadTarget(intent)
-        viewModel.initialize(intent, handleFileIntent = !incomingRoute.handled)
-    }
-
     override fun onResume() {
         super.onResume()
         accountViewModel.onHostResumed()
@@ -136,57 +112,29 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OAUTH_ERROR = GeoVaultAuthExtras.OAUTH_ERROR_EXTRA_KEY
     }
 
-    private fun routeIncomingIntentToUploadTarget(intent: Intent?): IncomingRouteResult {
-        val incomingUris = when (intent?.action) {
-            Intent.ACTION_SEND_MULTIPLE -> {
-                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
-            }
-            Intent.ACTION_SEND -> {
-                listOfNotNull(intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
-            }
-            else -> emptyList()
-        }
-        if (incomingUris.isEmpty()) return IncomingRouteResult.NotHandled
-        return routeUrisToUploadTarget(incomingUris, applyExtensionFilter = true)
-    }
-
-    private fun routeUrisToUploadTarget(
-        uris: List<Uri>,
-        applyExtensionFilter: Boolean,
-    ): IncomingRouteResult {
-        return when (val decision = pickerSelectionRouter.decide(uris, applyExtensionFilter)) {
-            PickerRouteDecision.NoSelection -> IncomingRouteResult.NotHandled
+    private fun routeUrisToUpload(uris: List<Uri>, finishAfterStart: Boolean) {
+        when (val decision = services.pickerSelectionRouter.decide(uris, applyExtensionFilter = true)) {
+            PickerRouteDecision.NoSelection -> Unit
             is PickerRouteDecision.RejectedOnly -> {
-                invalidFilesDialogNamesState.value = decision.rejectedFileNames
-                IncomingRouteResult.Handled
-            }
-            is PickerRouteDecision.SingleFile -> {
-                invalidFilesDialogNamesState.value = decision.rejectedFileNames.takeIf { it.isNotEmpty() }
-                viewModel.onFileChosen(decision.uri)
-                IncomingRouteResult.Handled
-            }
-            is PickerRouteDecision.MultiFile -> {
                 startActivity(
-                    MultiUploadNavigation.createIntent(
+                    UploadNavigation.createIntent(
                         context = this,
-                        supportedUris = decision.uris,
-                        rejectedFileNames = decision.rejectedFileNames
+                        supportedUris = emptyList(),
+                        rejectedFileNames = decision.rejectedFileNames,
                     )
                 )
-                finish()
-                IncomingRouteResult.Finished
+                if (finishAfterStart) finish()
             }
-        }
-    }
-
-    private data class IncomingRouteResult(
-        val handled: Boolean,
-        val finishedActivity: Boolean,
-    ) {
-        companion object {
-            val NotHandled = IncomingRouteResult(handled = false, finishedActivity = false)
-            val Handled = IncomingRouteResult(handled = true, finishedActivity = false)
-            val Finished = IncomingRouteResult(handled = true, finishedActivity = true)
+            is PickerRouteDecision.SupportedSelection -> {
+                startActivity(
+                    UploadNavigation.createIntent(
+                        context = this,
+                        supportedUris = decision.uris,
+                        rejectedFileNames = decision.rejectedFileNames,
+                    )
+                )
+                if (finishAfterStart) finish()
+            }
         }
     }
 }

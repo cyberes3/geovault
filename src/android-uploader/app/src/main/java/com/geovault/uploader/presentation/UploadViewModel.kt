@@ -8,19 +8,22 @@ import androidx.lifecycle.viewModelScope
 import com.geovault.common.NaturalSort
 import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.FilenamePolicy
+import com.geovault.uploader.domain.ImportUploadQueue
 import com.geovault.uploader.domain.QueueUploadStateMachine
+import com.geovault.uploader.domain.ShareIntentParser
 import com.geovault.uploader.model.FileQueueItem
 import com.geovault.uploader.model.FileStatus
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 data class QueueUploadState(
     val items: List<FileQueueItem> = emptyList(),
     val isUploading: Boolean = false,
-    /** After the user cancels a batch upload, queue rows stay non-removable until a new upload starts. */
     val uploadCancelled: Boolean = false,
     val progressCurrent: Int = 0,
     val progressMax: Int = 0,
@@ -28,7 +31,7 @@ data class QueueUploadState(
     val fileCountLabel: String = "0 files"
 )
 
-class QueueUploadViewModel(
+class UploadViewModel(
     application: Application,
     services: UploaderAppServices,
 ) : AndroidViewModel(application) {
@@ -37,30 +40,27 @@ class QueueUploadViewModel(
         application,
         UploaderAppServices.from(application)
     )
-    private val metadata = services.fileMetadataRepository()
-    private val prefs = services.uploaderPreferences()
-    private val uploader = services.uploadRepository()
+
+    private val metadata = services.fileMetadataRepository
+    private val prefs = services.uploaderPreferences
+    private val importUploadQueue: ImportUploadQueue = services.importUploadQueue
 
     private val _state = MutableStateFlow(QueueUploadState())
     val state: StateFlow<QueueUploadState> = _state.asStateFlow()
 
-    private var cancelled = false
+    private var uploadJob: Job? = null
 
     fun initialize(intent: Intent?) {
-        val items = when (intent?.action) {
-            Intent.ACTION_SEND_MULTIPLE -> {
-                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty().map(::buildItem)
-            }
-            Intent.ACTION_SEND -> {
-                val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                if (uri != null) listOf(buildItem(uri)) else emptyList()
-            }
-            else -> emptyList()
-        }.sortedWith(NaturalSort.naturalOrderBy { it.filename.lowercase(Locale.getDefault()) })
-        _state.value = _state.value.copy(
+        uploadJob?.cancel()
+        uploadJob = null
+        val payload = ShareIntentParser.parse(intent)
+        val items = payload.uris.map(::buildItem).sortedWith(
+            NaturalSort.naturalOrderBy { it.filename.lowercase(Locale.getDefault()) }
+        )
+        _state.value = QueueUploadState(
             items = items,
-            fileCountLabel = "${items.size} file${if (items.size != 1) "s" else ""}",
-            uploadCancelled = false
+            fileCountLabel = fileCountLabel(items.size),
+            uploadCancelled = false,
         )
     }
 
@@ -82,69 +82,34 @@ class QueueUploadViewModel(
         if (index !in items.indices) return
         if (items[index].status != FileStatus.PENDING) return
         items.removeAt(index)
-        val n = items.size
         _state.value = _state.value.copy(
             items = items,
-            fileCountLabel = "$n file${if (n != 1) "s" else ""}"
+            fileCountLabel = fileCountLabel(items.size),
         )
     }
 
     fun cancelUpload() {
-        cancelled = true
-        uploader.cancelActiveUpload()
+        uploadJob?.cancel()
+        importUploadQueue.cancelActiveUpload()
         _state.value = QueueUploadStateMachine.cancelUpload(_state.value)
     }
 
     fun startUpload() {
         if (_state.value.isUploading) return
-        cancelled = false
+        uploadJob?.cancel()
         _state.value = _state.value.copy(uploadCancelled = false)
-        viewModelScope.launch {
-            val allItems = _state.value.items.toMutableList()
-            val validIndexes = allItems.indices.filter { idx ->
-                FilenamePolicy.isSupportedImportType(allItems[idx].filename)
-            }
-            _state.value = QueueUploadStateMachine.startUpload(_state.value, validIndexes.size)
-            if (validIndexes.isEmpty()) {
-                _state.value = _state.value.copy(isUploading = false)
-                return@launch
-            }
-
-            var succeeded = 0
-            var failed = 0
-            validIndexes.forEachIndexed { progress, index ->
-                if (cancelled) return@forEachIndexed
-                allItems[index] = allItems[index].copy(status = FileStatus.UPLOADING, errorMessage = null)
-                _state.value = QueueUploadStateMachine.onProgress(
+        uploadJob = viewModelScope.launch {
+            try {
+                importUploadQueue.runBatch(
                     state = _state.value,
-                    items = allItems.toList(),
-                    progressCurrent = progress,
-                    progressMax = validIndexes.size
+                    suffixEnabled = prefs.isSuffixEnabled(),
+                    onState = { _state.value = it },
                 )
-                val finalName = FilenamePolicy.withOptionalSuffix(allItems[index].filename, prefs.isSuffixEnabled())
-                val result = uploader.upload(allItems[index].uri, finalName)
-                allItems[index] = if (result.success) {
-                    succeeded++
-                    allItems[index].copy(status = FileStatus.SUCCESS, errorMessage = null)
-                } else {
-                    failed++
-                    allItems[index].copy(
-                        status = FileStatus.ERROR,
-                        errorMessage = result.errorMessage ?: "Upload failed"
-                    )
-                }
-                _state.value = _state.value.copy(
-                    items = allItems.toList(),
-                    progressCurrent = progress + 1
-                )
+            } catch (_: CancellationException) {
+                _state.value = QueueUploadStateMachine.cancelUpload(_state.value)
+            } finally {
+                uploadJob = null
             }
-            _state.value = QueueUploadStateMachine.finishUpload(
-                state = _state.value,
-                items = allItems,
-                succeeded = succeeded,
-                failed = failed,
-                cancelled = cancelled
-            )
         }
     }
 
@@ -166,7 +131,11 @@ class QueueUploadViewModel(
             uri = uri,
             filename = filename,
             sizeBytes = size,
-            modifiedAtMs = modifiedAt
+            modifiedAtMs = modifiedAt,
         )
+    }
+
+    private fun fileCountLabel(count: Int): String {
+        return "$count file${if (count != 1) "s" else ""}"
     }
 }

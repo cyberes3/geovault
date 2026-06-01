@@ -18,8 +18,8 @@ data class FileQueueItem(
     val errorMessage: String? = null
 )
 
-data class UploadResult(
-    val success: Boolean,
-    val statusCode: Int? = null,
-    val errorMessage: String? = null
-)
+sealed class ImportUploadOutcome {
+    data object Success : ImportUploadOutcome()
+    data class Failed(val message: String) : ImportUploadOutcome()
+    data object Cancelled : ImportUploadOutcome()
+}

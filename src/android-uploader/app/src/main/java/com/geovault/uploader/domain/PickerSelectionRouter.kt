@@ -1,17 +1,17 @@
 package com.geovault.uploader.domain
 
 import android.net.Uri
-import com.geovault.uploader.data.FileMetadataRepository
-
 sealed interface PickerRouteDecision {
     data object NoSelection : PickerRouteDecision
     data class RejectedOnly(val rejectedFileNames: List<String>) : PickerRouteDecision
-    data class SingleFile(val uri: Uri, val rejectedFileNames: List<String>) : PickerRouteDecision
-    data class MultiFile(val uris: List<Uri>, val rejectedFileNames: List<String>) : PickerRouteDecision
+    data class SupportedSelection(
+        val uris: List<Uri>,
+        val rejectedFileNames: List<String>,
+    ) : PickerRouteDecision
 }
 
 class PickerSelectionRouter(
-    private val fileMetadataRepository: FileMetadataRepository
+    private val filenameResolver: ImportFilenameResolver,
 ) {
     fun decide(uris: List<Uri>, applyExtensionFilter: Boolean): PickerRouteDecision {
         if (uris.isEmpty()) return PickerRouteDecision.NoSelection
@@ -21,7 +21,7 @@ class PickerSelectionRouter(
         } else {
             uris to emptyList()
         }
-        val rejectedNames = rejectedUris.map(fileMetadataRepository::filenameFromUri)
+        val rejectedNames = rejectedUris.map(filenameResolver::filenameFromUri)
 
         if (supportedUris.isEmpty()) {
             return if (rejectedNames.isNotEmpty()) {
@@ -30,20 +30,14 @@ class PickerSelectionRouter(
                 PickerRouteDecision.NoSelection
             }
         }
-        if (supportedUris.size == 1) {
-            return PickerRouteDecision.SingleFile(
-                uri = supportedUris.first(),
-                rejectedFileNames = rejectedNames
-            )
-        }
-        return PickerRouteDecision.MultiFile(
+        return PickerRouteDecision.SupportedSelection(
             uris = supportedUris,
-            rejectedFileNames = rejectedNames
+            rejectedFileNames = rejectedNames,
         )
     }
 
     private fun isSupportedUri(uri: Uri): Boolean {
-        val filename = fileMetadataRepository.filenameFromUri(uri)
+        val filename = filenameResolver.filenameFromUri(uri)
         return FilenamePolicy.isSupportedImportType(filename)
     }
 }

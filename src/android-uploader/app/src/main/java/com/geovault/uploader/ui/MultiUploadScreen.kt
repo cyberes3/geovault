@@ -36,11 +36,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
@@ -65,9 +67,14 @@ import kotlin.math.pow
 @Composable
 fun MultiUploadScreen(
     state: QueueUploadState,
+    isAuthenticated: Boolean,
+    serverUrl: String,
+    isConnecting: Boolean,
     invalidFilesDialogNames: List<String>?,
     onDismissInvalidFiles: () -> Unit,
     onOpenSettings: () -> Unit,
+    onAuthServerUrlChanged: (String) -> Unit,
+    onAuthConnect: () -> Unit,
     onRename: (index: Int, String) -> Unit,
     onRemoveItem: (index: Int) -> Unit,
     onUploadClick: () -> Unit,
@@ -86,11 +93,20 @@ fun MultiUploadScreen(
             )
         }
     ) { padding ->
-        Column(
+        GeoVaultAuthGate(
+            isAuthenticated = isAuthenticated,
+            serverUrl = serverUrl,
+            onServerUrlChanged = onAuthServerUrlChanged,
+            onConnect = onAuthConnect,
+            isConnecting = isConnecting,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .navigationBarsPadding()
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
                 .imePadding()
                 .padding(bottom = 16.dp)
         ) {
@@ -155,9 +171,17 @@ fun MultiUploadScreen(
                             tooltip = stringResource(R.string.tooltip_cancel_upload),
                             modifier = Modifier.fillMaxWidth()
                         )
+                    } else {
+                        GeoVaultSecondaryButton(
+                            text = "Close",
+                            onClick = onCancelClick,
+                            tooltip = stringResource(R.string.tooltip_cancel),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
+        }
         }
     }
     invalidFilesDialogNames?.let { names ->
@@ -231,22 +255,23 @@ private fun FileQueueRow(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(".$ext")
                 }
-                if (removeEnabled) {
-                    IconButton(
-                        onClick = onRemove,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Remove file",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (MaterialTheme.colors.isLight) {
-                                GeoVaultColorTokens.Error
-                            } else {
-                                GeoVaultColorTokens.Dark.Error
-                            }
-                        )
-                    }
+                IconButton(
+                    onClick = onRemove,
+                    enabled = removeEnabled,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .alpha(if (removeEnabled) 1f else 0f),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = if (removeEnabled) "Remove file" else null,
+                        modifier = Modifier.size(20.dp),
+                        tint = if (MaterialTheme.colors.isLight) {
+                            GeoVaultColorTokens.Error
+                        } else {
+                            GeoVaultColorTokens.Dark.Error
+                        }
+                    )
                 }
             }
             Text(
@@ -263,6 +288,7 @@ private fun FileQueueRow(
 }
 
 private fun formatFileSize(sizeBytes: Long): String {
+    if (sizeBytes <= 0L) return "Size unknown"
     if (sizeBytes < 1024L) return "$sizeBytes B"
     val units = arrayOf("KB", "MB", "GB", "TB")
     val base = 1024.0

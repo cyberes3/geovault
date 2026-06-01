@@ -4,10 +4,10 @@ import com.geovault.common.ui.model.GeoVaultActionRenderModel
 import com.geovault.common.ui.model.GeoVaultStatusRenderModel
 import com.geovault.common.ui.model.GeoVaultStatusVisualState
 import com.geovault.uploader.data.ValidationOutcome
-import com.geovault.uploader.presentation.MainScreenState
+import com.geovault.uploader.presentation.HomeScreenState
 
 internal object MainScreenStatusMapper {
-    fun toValidationStatusModel(state: MainScreenState): GeoVaultStatusRenderModel {
+    fun toValidationStatusModel(state: HomeScreenState): GeoVaultStatusRenderModel {
         val visualState = when (state.validationOutcome) {
             ValidationOutcome.Loading -> GeoVaultStatusVisualState.Loading
             ValidationOutcome.Success -> GeoVaultStatusVisualState.Success
