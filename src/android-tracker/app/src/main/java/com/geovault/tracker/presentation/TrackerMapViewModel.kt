@@ -504,7 +504,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
     private var lastObservedTrackingRunning: Boolean? = null
     private var lastObservedLocalRecordingActive: Boolean? = null
-    private var pendingSessionStartRecomposeTrackerId: String? = null
 
         /**
          * STREAM-STATE-MACHINE: tracks whether the previous snapshot represented an active streaming
@@ -679,31 +678,14 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         else -> snap.locallyRecordedTrackerId.trim().ifBlank { snap.selectedTrackerId.trim() }
                     }
                     if (trackerId.isNotEmpty()) {
-                        if (snap.localRecordingActive) {
-                            val sessionStart = activeSessionStartMsForRuntime(snap)
-                            if (sessionStart != null) {
-                                pendingSessionStartRecomposeTrackerId = null
-                                TrackerMapHistoryUiSync.dispatchHistoryClear(
-                                    trackerId = trackerId,
-                                    trackers = trackers,
-                                    dispatcher = historyIntentDispatcher,
-                                    activeSessionStartMs = sessionStart,
-                                )
-                            } else {
-                                pendingSessionStartRecomposeTrackerId = trackerId
-                            }
-                        } else {
-                            pendingSessionStartRecomposeTrackerId = null
-                            TrackerMapHistoryUiSync.dispatchHistoryClear(
-                                trackerId = trackerId,
-                                trackers = trackers,
-                                dispatcher = historyIntentDispatcher,
-                                activeSessionStartMs = null,
-                            )
-                        }
+                        TrackerMapHistoryUiSync.dispatchHistoryClear(
+                            trackerId = trackerId,
+                            trackers = trackers,
+                            dispatcher = historyIntentDispatcher,
+                            activeSessionStartMs = activeSessionStartMsForRuntime(snap),
+                        )
                     }
                 }
-                maybeRecomposeForPendingSessionStart(snap)
                 requestRuntimeTrailReload(reloadReason)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
@@ -1587,19 +1569,17 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         val nextRenderState = buildMapRenderState(snapshot)
         val nextBounds = trailBoundsOrNull(snapshot, nowMs)
         val nextSelectionLockPoint = selectionLockPointOrNull(snapshot)
-        val skipClientWindowFilter = effectiveSession.skipRecentWindowFilterTrackerIds
         val renderSignature =
             "mode=${snapshot.mode}|displayed=${snapshot.plan.displayedTrackerId}|single=${snapshot.singleTrail.size}|" +
                 "multi=${snapshot.renderTrailsByTracker.mapSizes()}|liveHead=${effectiveSession.liveHead}|" +
                 "bounds=${nextBounds.boundsSummary()}|selectionLock=${_uiState.value.selectionLockTrackerId.trim()}|" +
-                "skipFilter=${skipClientWindowFilter.sorted()}|historyKeys=${historyRepository.snapshots.value.size}"
+                "historyKeys=${historyRepository.snapshots.value.size}"
         if (CaptureLogThrottle.shouldLogOnChange("vm_render_package", renderSignature)) {
             GeoVaultCaptureLog.d(
                 TAG,
                 "map_draw_package mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
                     "selected=${snapshot.plan.selectedTrackerId} single=${snapshot.singleTrail.trailSummary()} " +
                     "multi=${snapshot.renderTrailsByTracker.mapSizes()} remote=${snapshot.acceptedRemoteLastPoints.keys.sorted()} " +
-                    "skip_client_window_filter=${skipClientWindowFilter.sorted()} " +
                     "history_snapshot_keys=${historyRepository.snapshots.value.size} " +
                     "liveHead=${effectiveSession.liveHead} bounds=${nextBounds.boundsSummary()} " +
                     "selectionLock=${_uiState.value.selectionLockTrackerId.trim()} selectionPoint=$nextSelectionLockPoint",
@@ -1768,7 +1748,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 trailPointLimit = TRAIL_POINT_LIMIT,
                 sessionWindows = currentSessionWindows(state),
                 visibleTrackerIds = visibleIds,
-                skipRecentWindowFilterTrackerIds = trails.skipRecentWindowFilterTrackerIds,
                 nowMs = nowMs,
             )
         )
@@ -2951,24 +2930,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun activeSessionStartMsForRuntime(runtime: TrackingRuntimeSnapshot): Long? {
         return runtime.sessionStartTimeMs.takeIf { runtime.localRecordingActive && it > 0L }
-    }
-
-    private fun maybeRecomposeForPendingSessionStart(runtime: TrackingRuntimeSnapshot) {
-        val pendingTrackerId = pendingSessionStartRecomposeTrackerId ?: return
-        if (!runtime.localRecordingActive) {
-            pendingSessionStartRecomposeTrackerId = null
-            return
-        }
-        val activeTrackerId = runtime.locallyRecordedTrackerId.trim().ifBlank { runtime.selectedTrackerId.trim() }
-        if (activeTrackerId != pendingTrackerId) return
-        val sessionStart = activeSessionStartMsForRuntime(runtime) ?: return
-        pendingSessionStartRecomposeTrackerId = null
-        TrackerMapHistoryUiSync.dispatchHistoryClear(
-            trackerId = pendingTrackerId,
-            trackers = trackerManagementStateStore.trackers.value,
-            dispatcher = historyIntentDispatcher,
-            activeSessionStartMs = sessionStart,
-        )
     }
 
     private fun setGeometryLoading(isLoading: Boolean) {

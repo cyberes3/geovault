@@ -8,11 +8,13 @@ data class TrackerHistoryComposeInput(
     val key: TrackerHistoryKey,
     val trunk: TrackerHistorySourceBatch?,
     val overlayBatches: List<TrackerHistorySourceBatch>,
-    val activeSessionStartMs: Long? = null,
+    val sessionContext: TrackerHistorySessionContext,
     val clearBoundary: TrackerHistoryClearBoundary? = null,
     val nowMs: Long = System.currentTimeMillis(),
     val previousSnapshot: TrackerHistorySnapshot? = null,
-)
+) {
+    val activeSessionStartMs: Long? get() = sessionContext.activeSessionStartMs
+}
 
 object TrackerHistoryAssembler {
     private const val TAG = "TrackerHistoryAssembler"
@@ -74,6 +76,7 @@ object TrackerHistoryAssembler {
             generation = maxOf(input.trunk?.generation ?: 0L, input.nowMs),
             degradedLocalOnly = input.trunk?.degradedLocalOnly == true,
             complete = input.trunk?.complete ?: false,
+            renderWindowFilterSkipped = input.sessionContext.skipRenderWindowFilter,
         )
         GeoVaultCaptureLog.i(
             TAG,
@@ -113,6 +116,7 @@ object TrackerHistoryAssembler {
         input: TrackerHistoryComposeInput,
     ): List<TrackerHistoryPoint> {
         if (points.isEmpty()) return points
+        if (input.sessionContext.skipRenderWindowFilter) return points
         val window = input.key.window
         if (window.isAll) return points
         val context = TrackerSessionWindowContext(

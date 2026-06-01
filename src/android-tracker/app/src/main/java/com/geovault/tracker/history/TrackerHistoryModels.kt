@@ -184,6 +184,7 @@ data class TrackerHistorySourceBatch(
     val generation: Long = fetchedAtMs,
     val complete: Boolean = true,
     val degradedLocalOnly: Boolean = false,
+    val skipRenderWindowFilter: Boolean = false,
 ) {
     val normalizedTrackerId: String = trackerId.trim()
 }
@@ -204,6 +205,7 @@ data class TrackerHistorySnapshot(
     val isLoading: Boolean = false,
     val degradedLocalOnly: Boolean = false,
     val complete: Boolean = true,
+    val renderWindowFilterSkipped: Boolean = false,
 )
 
 data class TrackerHistoryTransactionResult(

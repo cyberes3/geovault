@@ -10,6 +10,7 @@ import com.geovault.tracker.history.TrackerHistoryIntent
 import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
 import com.geovault.tracker.history.TrackerHistoryKey
 import com.geovault.tracker.history.TrackerHistoryRenderMapper
+import com.geovault.tracker.history.TrackerHistoryRenderWindowPolicy
 import com.geovault.tracker.history.TrackerHistoryRepository
 import com.geovault.tracker.history.TrackerHistorySnapshot
 import com.geovault.tracker.history.TrackerHistorySourceAdapters
@@ -28,7 +29,6 @@ object TrackerMapHistoryUiSync {
     data class TrailsFromHistory(
         val trail: List<QueuedLocation>,
         val allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
-        val skipRecentWindowFilterTrackerIds: Set<String>,
     )
 
     fun historyWindowForTracker(
@@ -70,7 +70,7 @@ object TrackerMapHistoryUiSync {
     }
 
     /**
-     * Whether [TrackerMapSessionEngine] may skip client-side [TrackerMapRecentDataWindowFilterPolicy]
+     * Whether history compose should skip client-side [TrackerMapRecentDataWindowFilterPolicy]
      * for this tracker. Session windows never skip; complete trunks skip only when server
      * [Tracker.geometry_status] window matches settings.
      */
@@ -78,39 +78,12 @@ object TrackerMapHistoryUiSync {
         snapshot: TrackerHistorySnapshot?,
         tracker: Tracker?,
     ): Boolean {
-        if (snapshot == null || !snapshot.complete || snapshot.degradedLocalOnly) return false
-        val settingsWindow = TrackerHistoryWindowResolver.fromTracker(tracker)
-        if (settingsWindow.isCurrentSession || settingsWindow.isSession) return false
-        val statusWindow = tracker?.geometry_status?.window?.trim()?.lowercase().orEmpty()
-        if (statusWindow.isEmpty()) return true
-        return statusWindow == settingsWindow.normalizedKey
-    }
-
-    /**
-     * Re-runs compose for session-keyed windows (no new filter logic — uses [TrackerHistoryAssembler]).
-     */
-    fun recomposeTrackerSnapshot(
-        repository: TrackerHistoryRepository,
-        trackerId: String,
-        trackers: List<Tracker>,
-        activeSessionStartMs: Long?,
-    ): TrackerHistoryTransactionResult? {
-        val normalized = trackerId.trim()
-        if (normalized.isEmpty()) return null
-        val window = historyWindowForTracker(normalized, trackers)
-        if (!window.isCurrentSession && !window.isSession) return null
-        val key = TrackerHistoryKey(normalized, window)
-        val result = repository.composeAndPublish(
-            key = key,
-            activeSessionStartMs = activeSessionStartMs,
+        val window = TrackerHistoryWindowResolver.fromTracker(tracker)
+        return TrackerHistoryRenderWindowPolicy.shouldSkipRenderWindowFilter(
+            snapshot = snapshot,
+            tracker = tracker,
+            window = window,
         )
-        GeoVaultCaptureLog.i(
-            "TrackerHistory",
-            "map_update history_recompose tracker=$normalized window=${window.normalizedKey} " +
-                "sessionStart=${activeSessionStartMs ?: -1} committed=${result.committed} " +
-                "reason=${result.reason} points=${result.snapshot.points.size}",
-        )
-        return result
     }
 
     fun hasAuthoritativeServerTrunk(
@@ -155,7 +128,6 @@ object TrackerMapHistoryUiSync {
         trailPointLimit: Int,
         visibleTrackerIds: Set<String>? = null,
     ): TrailsFromHistory {
-        val skipFilter = mutableSetOf<String>()
         val incompleteTrunks = mutableSetOf<String>()
         val degradedTrunks = mutableSetOf<String>()
         val trails = when (state.mode) {
@@ -166,12 +138,11 @@ object TrackerMapHistoryUiSync {
                 val key = TrackerHistoryKey(trackerId, window)
                 val snapshot = snapshots[key]
                 val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
-                markSnapshotFlags(snapshot, tracker, trackerId, skipFilter, incompleteTrunks, degradedTrunks)
+                markSnapshotFlags(snapshot, tracker, trackerId, incompleteTrunks, degradedTrunks)
                 val trail = TrackerHistoryRenderMapper.toQueuedLocations(snapshot, trailPointLimit)
                 TrailsFromHistory(
                     trail = trail,
                     allQueueTrailsByTracker = state.allQueueTrailsByTracker,
-                    skipRecentWindowFilterTrackerIds = skipFilter,
                 ) to TrackerHistoryDiagnostics.TrailsDrawSummary(
                     singleCount = trail.size,
                     singleTime = TrackerHistoryDiagnostics.queuedTimeRange(trail),
@@ -195,7 +166,7 @@ object TrackerMapHistoryUiSync {
                         val window = historyWindowForTracker(trackerId, trackers)
                         val snapshot = snapshots[TrackerHistoryKey(trackerId, window)]
                         val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
-                        markSnapshotFlags(snapshot, tracker, trackerId, skipFilter, incompleteTrunks, degradedTrunks)
+                        markSnapshotFlags(snapshot, tracker, trackerId, incompleteTrunks, degradedTrunks)
                         TrackerHistoryRenderMapper.toQueuedLocations(snapshot, trailPointLimit)
                     }
                 val activeId = plan.displayedTrackerId.trim()
@@ -204,7 +175,6 @@ object TrackerMapHistoryUiSync {
                 TrailsFromHistory(
                     trail = activeTrail,
                     allQueueTrailsByTracker = multi,
-                    skipRecentWindowFilterTrackerIds = skipFilter,
                 ) to TrackerHistoryDiagnostics.TrailsDrawSummary(
                     singleCount = activeTrail.size,
                     singleTime = TrackerHistoryDiagnostics.queuedTimeRange(activeTrail),
@@ -219,7 +189,7 @@ object TrackerMapHistoryUiSync {
             mode = state.mode.name,
             displayedTrackerId = plan.displayedTrackerId.ifBlank { state.runtime.selectedTrackerId },
             trails = drawSummary,
-            skipClientWindowFilter = skipFilter,
+            skipClientWindowFilter = emptySet(),
         )
         return result
     }
@@ -375,7 +345,6 @@ object TrackerMapHistoryUiSync {
         snapshot: TrackerHistorySnapshot?,
         tracker: Tracker?,
         trackerId: String,
-        skipFilter: MutableSet<String>,
         incompleteTrunks: MutableSet<String>,
         degradedTrunks: MutableSet<String>,
     ) {
@@ -383,8 +352,5 @@ object TrackerMapHistoryUiSync {
         val id = trackerId.trim()
         if (!snapshot.complete) incompleteTrunks += id
         if (snapshot.degradedLocalOnly) degradedTrunks += id
-        if (shouldSkipClientRenderWindowFilter(snapshot, tracker)) {
-            skipFilter += id
-        }
     }
 }

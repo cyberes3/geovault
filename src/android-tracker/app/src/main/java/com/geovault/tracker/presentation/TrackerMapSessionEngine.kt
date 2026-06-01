@@ -24,7 +24,6 @@ data class TrackerMapSessionBuildInput(
      * `_uiState.allQueueTrailsByTracker`.
      */
     val visibleTrackerIds: Set<String>? = null,
-    val skipRecentWindowFilterTrackerIds: Set<String> = emptySet(),
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -35,7 +34,6 @@ data class TrackerMapSessionPointInput(
     val sessionWindows: TrackerMapSessionWindowState = TrackerMapSessionWindowState(),
     /** See [TrackerMapSessionBuildInput.visibleTrackerIds]. */
     val visibleTrackerIds: Set<String>? = null,
-    val skipRecentWindowFilterTrackerIds: Set<String> = emptySet(),
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -68,26 +66,17 @@ object TrackerMapSessionEngine {
             candidateKeys.filter { it in filter }.toSet()
         } ?: candidateKeys
         val tracks = rosterFilteredKeys.associateWith { trackerId ->
-            val rawTrail = normalizedTrails[trackerId].orEmpty()
-            val skipClientFilter = trackerId in input.skipRecentWindowFilterTrackerIds
-            val filteredTrail = if (skipClientFilter) {
-                rawTrail
-            } else {
-                TrackerMapRecentDataWindowFilterPolicy.apply(
-                    points = rawTrail,
-                    context = input.sessionWindows.contextFor(trackerId = trackerId, nowMs = input.nowMs),
-                )
-            }
+            val renderTrail = normalizedTrails[trackerId].orEmpty()
             TrackerHistoryDiagnostics.logSessionDrawFilter(
                 trackerId = trackerId,
                 windowKey = input.sessionWindows.recentDataWindowByTracker[trackerId],
-                skipped = skipClientFilter,
-                rawCount = rawTrail.size,
-                filteredCount = filteredTrail.size,
+                skipped = true,
+                rawCount = renderTrail.size,
+                filteredCount = renderTrail.size,
             )
             TrackerTrackModel(
                 trackerId = trackerId,
-                renderTrail = filteredTrail,
+                renderTrail = renderTrail,
                 remoteHead = acceptedRemoteLastPoints[trackerId],
             )
         }
@@ -95,31 +84,20 @@ object TrackerMapSessionEngine {
         // sessionPlan.displayedTrackerId` in the view model). The plan does not carry a separate
         // activeTrackerId field; displayedTrackerId is the canonical anchor when single-mode.
         val displayedKey = plan.displayedTrackerId.trim().takeIf { it.isNotEmpty() }
-        val skipSingleFilter = displayedKey != null && displayedKey in input.skipRecentWindowFilterTrackerIds
-        val filteredSingleTrail = if (skipSingleFilter) {
-            state.trail
-        } else {
-            TrackerMapRecentDataWindowFilterPolicy.apply(
-                points = state.trail,
-                context = displayedKey
-                    ?.let { input.sessionWindows.contextFor(trackerId = it, nowMs = input.nowMs) }
-                    ?: TrackerSessionWindowContext(windowKey = null, nowMs = input.nowMs),
-            )
-        }
         displayedKey?.let { trackerId ->
             TrackerHistoryDiagnostics.logSessionDrawFilter(
                 trackerId = trackerId,
                 windowKey = input.sessionWindows.recentDataWindowByTracker[trackerId],
-                skipped = skipSingleFilter,
+                skipped = true,
                 rawCount = state.trail.size,
-                filteredCount = filteredSingleTrail.size,
+                filteredCount = state.trail.size,
             )
         }
         return TrackerMapSessionSnapshot(
             uiState = state,
             plan = plan,
             runtime = state.runtime,
-            singleTrail = filteredSingleTrail,
+            singleTrail = state.trail,
             tracks = tracks,
             acceptedRemoteLastPoints = acceptedRemoteLastPoints,
         )
@@ -148,7 +126,6 @@ object TrackerMapSessionEngine {
                     acceptedRemoteTrackerIds = input.snapshot.plan.acceptedRemoteTrackerIds,
                 ),
                 localRuntimeOverlayTrails = reduction.nextState.allQueueTrailsByTracker,
-                skipRecentWindowFilterTrackerIds = input.skipRecentWindowFilterTrackerIds,
                 sessionWindows = input.sessionWindows,
                 visibleTrackerIds = input.visibleTrackerIds,
                 nowMs = input.nowMs,

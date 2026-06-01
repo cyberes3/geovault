@@ -26,6 +26,7 @@ class TrackerHistoryAssemblerTest {
                 key = key,
                 trunk = trunk,
                 overlayBatches = listOf(overlay),
+                sessionContext = sessionContext(key.window),
                 nowMs = 31_000L,
             )
         )
@@ -55,7 +56,7 @@ class TrackerHistoryAssemblerTest {
                 key = key,
                 trunk = null,
                 overlayBatches = listOf(overlay),
-                activeSessionStartMs = activeSessionStart,
+                sessionContext = sessionContext(key.window, activeSessionStartMs = activeSessionStart),
                 nowMs = 61_000L,
             )
         )
@@ -84,7 +85,7 @@ class TrackerHistoryAssemblerTest {
                 key = key,
                 trunk = null,
                 overlayBatches = listOf(overlay),
-                activeSessionStartMs = activeSessionStart,
+                sessionContext = sessionContext(key.window, activeSessionStartMs = activeSessionStart),
                 clearBoundary = TrackerHistoryClearBoundary(
                     trackerId = "tracker-1",
                     clearedAtMs = 11_000L,
@@ -95,6 +96,53 @@ class TrackerHistoryAssemblerTest {
         )
 
         assertEquals(listOf(10_000L), result.snapshot.points.map { it.timestampMs })
+    }
+
+    @Test
+    fun compose_completeServerTrunk_skipsClientWindowFilterAtComposeOnly() {
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("1w"))
+        val nowMs = 10_000_000L
+        val trunk = TrackerHistorySourceBatch(
+            trackerId = "tracker-1",
+            window = key.window,
+            sourceKind = TrackerHistorySourceKind.FILTERED_SERVER_TRUNK,
+            points = listOf(
+                point(nowMs - 3 * 24 * 60 * 60 * 1000L),
+                point(nowMs - 1_000L),
+            ),
+            complete = true,
+            skipRenderWindowFilter = true,
+        )
+
+        val result = TrackerHistoryAssembler.compose(
+            TrackerHistoryComposeInput(
+                key = key,
+                trunk = trunk,
+                overlayBatches = emptyList(),
+                sessionContext = TrackerHistorySessionContext(
+                    activeSessionStartMs = null,
+                    window = key.window,
+                    skipRenderWindowFilter = true,
+                ),
+                nowMs = nowMs,
+            ),
+        )
+
+        assertTrue(result.committed)
+        assertTrue(result.snapshot.renderWindowFilterSkipped)
+        assertEquals(2, result.snapshot.points.size)
+    }
+
+    private fun sessionContext(
+        window: TrackerHistoryWindow,
+        activeSessionStartMs: Long? = null,
+        skipRenderWindowFilter: Boolean = false,
+    ): TrackerHistorySessionContext {
+        return TrackerHistorySessionContext(
+            activeSessionStartMs = activeSessionStartMs,
+            window = window,
+            skipRenderWindowFilter = skipRenderWindowFilter,
+        )
     }
 
     private fun batch(

@@ -11,14 +11,12 @@ data class TrackerMapEffectiveSessionInput(
     val trailPointLimit: Int,
     val sessionWindows: TrackerMapSessionWindowState = TrackerMapSessionWindowState(),
     val visibleTrackerIds: Set<String>? = null,
-    val skipRecentWindowFilterTrackerIds: Set<String> = emptySet(),
     val nowMs: Long = System.currentTimeMillis(),
 )
 
 data class TrackerMapEffectiveSession(
     val snapshot: TrackerMapSessionSnapshot,
     val liveHead: Pair<Double, Double>?,
-    val skipRecentWindowFilterTrackerIds: Set<String> = emptySet(),
 )
 
 object TrackerMapEffectiveSessionProjector {
@@ -34,15 +32,13 @@ object TrackerMapEffectiveSessionProjector {
                 localRuntimeOverlayTrails = state.allQueueTrailsByTracker,
                 sessionWindows = input.sessionWindows,
                 visibleTrackerIds = input.visibleTrackerIds,
-                skipRecentWindowFilterTrackerIds = input.skipRecentWindowFilterTrackerIds,
                 nowMs = input.nowMs,
             )
         )
         val liveHead = resolveLiveHead(snapshot)
         val projectSignature =
             "mode=${state.mode}|displayed=${plan.displayedTrackerId}|single=${state.trail.size}->${snapshot.singleTrail.size}|" +
-                "multi=${snapshot.renderTrailsByTracker.mapValues { it.value.size }}|liveHead=$liveHead|" +
-                "skipFilter=${input.skipRecentWindowFilterTrackerIds.sorted()}"
+                "multi=${snapshot.renderTrailsByTracker.mapValues { it.value.size }}|liveHead=$liveHead"
         if (CaptureLogThrottle.shouldLogOnChange("effective_project", projectSignature)) {
             GeoVaultCaptureLog.d(
                 TAG,
@@ -51,14 +47,12 @@ object TrackerMapEffectiveSessionProjector {
                     "multiRaw=${state.allQueueTrailsByTracker.mapValues { it.value.size }} " +
                     "multiDrawn=${snapshot.renderTrailsByTracker.mapValues { it.value.size }} " +
                     "visible=${input.visibleTrackerIds?.sorted()} " +
-                    "skip_client_window_filter=${input.skipRecentWindowFilterTrackerIds.sorted()} " +
                     "liveHead=$liveHead",
             )
         }
         return TrackerMapEffectiveSession(
             snapshot = snapshot,
             liveHead = liveHead,
-            skipRecentWindowFilterTrackerIds = input.skipRecentWindowFilterTrackerIds,
         )
     }
 

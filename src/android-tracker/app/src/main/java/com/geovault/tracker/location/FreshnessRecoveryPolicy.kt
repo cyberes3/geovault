@@ -1,6 +1,7 @@
 package com.geovault.tracker.location
 
 import android.location.Location
+import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
 import com.geovault.tracker.policy.filter.LocationFilterReasons
 
 enum class FreshnessRecoveryReason(val telemetryValue: String) {
@@ -84,11 +85,17 @@ object FreshnessRecoveryPolicy {
             }
         }
         val reason = input.filterReason ?: return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.NO_POLICY_REASON)
-        if (reason !in input.config.freshnessRecoveryHoldReasons) {
+        if (
+            LocationFilterReasonPolicy.blocksFreshnessAnchorCommit(
+                reason = reason,
+                holdReasons = input.config.freshnessRecoveryHoldReasons,
+                repeatedOutlierSuppressed = input.repeatedOutlierSuppressed,
+            )
+        ) {
+            if (input.repeatedOutlierSuppressed) {
+                return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.REPEATED_OUTLIER)
+            }
             return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.NOT_RECOVERABLE_HOLD, reason)
-        }
-        if (input.repeatedOutlierSuppressed) {
-            return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.REPEATED_OUTLIER)
         }
         val accuracy = input.accuracyMeters
             ?: return FreshnessRecoveryDecision.Blocked(FreshnessRecoveryReason.MISSING_ACCURACY)

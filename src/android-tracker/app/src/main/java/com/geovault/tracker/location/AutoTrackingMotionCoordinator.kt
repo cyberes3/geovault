@@ -2,7 +2,7 @@ package com.geovault.tracker.location
 
 import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import com.geovault.tracker.policy.TrackPointRejectReason
-import com.geovault.tracker.policy.filter.LocationFilterReasons
+import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
 import com.geovault.tracker.services.TrackingMotionMode
 
 class AutoTrackingMotionCoordinator(
@@ -80,14 +80,11 @@ class AutoTrackingMotionCoordinator(
     }
 
     private fun isEvidenceReason(reason: String?): Boolean {
-        return reason == LocationFilterReasons.SPEED_CAP_EXCEEDED ||
-            reason == LocationFilterReasons.SPEED_CAP_UNCONFIRMED
+        return LocationFilterReasonPolicy.isCapEvidence(reason)
     }
 
     private fun isNeutralHoldReason(reason: String?): Boolean {
-        return reason == LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED ||
-            reason == LocationFilterReasons.CANDIDATE_UNCONFIRMED ||
-            reason == LocationFilterReasons.RESUME_UNCONFIRMED
+        return LocationFilterReasonPolicy.isSpatialHold(reason)
     }
 
     private fun isTransientReject(rejectReason: TrackPointRejectReason?): Boolean {

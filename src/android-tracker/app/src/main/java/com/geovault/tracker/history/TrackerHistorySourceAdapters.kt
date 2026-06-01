@@ -62,6 +62,12 @@ object TrackerHistorySourceAdapters {
             fetchedAtMs = fetchedAtMs,
             generation = tracker.updated_at ?: fetchedAtMs,
             complete = complete,
+            skipRenderWindowFilter = TrackerHistoryRenderWindowPolicy.shouldSkipRenderWindowFilter(
+                complete = complete,
+                degradedLocalOnly = false,
+                window = window,
+                geometryStatusWindow = status?.window,
+            ),
         )
     }
 

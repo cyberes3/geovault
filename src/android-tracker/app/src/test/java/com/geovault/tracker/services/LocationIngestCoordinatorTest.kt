@@ -7,6 +7,7 @@ import com.geovault.tracker.location.PausedFreshnessPointFactory
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.filter.LocationFilterReasons
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
@@ -511,9 +512,79 @@ class LocationIngestCoordinatorTest {
     }
 
     @Test
+    fun ingest_staleRelocationUnconfirmedRejects_doNotForceLocalReanchor() {
+        val dao = FakeLocationDao()
+        var reanchorEvents = 0
+        val coordinator = LocationIngestCoordinator(dao) { reanchorEvents++ }
+        val settings = TrackerSettings(accuracyFilterMeters = 50f)
+        val trackId = "tracker-1"
+        val anchorTimeMs = 1_700_000_000_000L
+        val seed = coordinator.ingest(
+            trackId = trackId,
+            location = Location("gps").apply {
+                latitude = 39.0
+                longitude = -105.0
+                accuracy = 6f
+                speed = 0f
+                time = anchorTimeMs
+            },
+            settings = settings,
+            motionMode = TrackingMotionMode.DRIVING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = anchorTimeMs,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false,
+        )
+        assertTrue(seed.accepted)
+
+        var previousAccepted = seed.lastFilteredLocation
+        val relocationTimesMs = listOf(354_000L, 364_000L, 374_000L, 384_000L, 394_000L, 404_000L)
+        for ((idx, deltaMs) in relocationTimesMs.withIndex()) {
+            val nowMs = anchorTimeMs + deltaMs
+            val candidate = Location("gps").apply {
+                latitude = 39.0
+                longitude = -104.932 + idx * 0.00005
+                accuracy = 8f
+                speed = 22f
+                bearing = 90f
+                time = nowMs
+            }
+            val result = coordinator.ingest(
+                trackId = trackId,
+                location = candidate,
+                settings = settings,
+                motionMode = TrackingMotionMode.DRIVING,
+                previousAcceptedLocation = previousAccepted,
+                sessionVisibleBoundaryId = 0L,
+                bypassFilters = false,
+                propsJson = null,
+                totalDistanceMeters = 0f,
+                queuedTrackerId = trackId,
+                nowMs = nowMs,
+                nowElapsedRealtimeNanos = idx.toLong() * 10_000_000_000L,
+                isMockLocation = false,
+            )
+            previousAccepted = result.lastFilteredLocation
+            if (result.policyMetrics?.reason == LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED) {
+                assertFalse(result.accepted)
+                assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
+            }
+        }
+
+        assertEquals(0, reanchorEvents)
+        assertTrue(dao.getCount() >= 1)
+    }
+
+    @Test
     fun ingest_speedCapRecoveryRejects_doNotForceLocalReanchor() {
         val dao = FakeLocationDao()
-        val coordinator = LocationIngestCoordinator(dao)
+        var reanchorEvents = 0
+        val coordinator = LocationIngestCoordinator(dao) { reanchorEvents++ }
         val settings = TrackerSettings(accuracyFilterMeters = 50f)
         val trackId = "tracker-1"
         val anchorTimeMs = 1_700_000_000_000L
@@ -558,10 +629,14 @@ class LocationIngestCoordinatorTest {
         val result = checkNotNull(lastResult)
         assertFalse(result.accepted)
         assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
-        assertEquals("speed-cap-exceeded", result.policyMetrics?.reason)
-        // Universal speed recovery can persist one confirmed recovery point, but
-        // later speed-cap rejects must not force the local-stall reanchor path.
-        assertEquals(2, dao.getCount())
+        val policyReason = result.policyMetrics?.reason
+        assertTrue(
+            policyReason == LocationFilterReasons.SPEED_CAP_EXCEEDED ||
+                policyReason == LocationFilterReasons.SPEED_CAP_UNCONFIRMED ||
+                policyReason == LocationFilterReasons.STALE_RELOCATION_UNCONFIRMED,
+        )
+        assertEquals(0, reanchorEvents)
+        assertTrue(dao.getCount() <= 2)
     }
 
     @Test

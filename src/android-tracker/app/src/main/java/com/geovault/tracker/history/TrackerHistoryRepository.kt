@@ -112,16 +112,21 @@ class TrackerHistoryRepository(
         nowMs: Long = System.currentTimeMillis(),
     ): TrackerHistoryTransactionResult {
         val previous = _snapshots.value[key]
+        val trunk = sourceStore.trunk(key)
         val result = TrackerHistoryAssembler.compose(
             TrackerHistoryComposeInput(
                 key = key,
-                trunk = sourceStore.trunk(key),
+                trunk = trunk,
                 overlayBatches = sourceStore.overlays(key),
-                activeSessionStartMs = activeSessionStartMs,
+                sessionContext = TrackerHistorySessionContext(
+                    activeSessionStartMs = activeSessionStartMs,
+                    window = key.window,
+                    skipRenderWindowFilter = trunk?.skipRenderWindowFilter == true,
+                ),
                 clearBoundary = sourceStore.clearBoundary(key.normalizedTrackerId),
                 nowMs = nowMs,
                 previousSnapshot = previous,
-            )
+            ),
         )
         if (result.committed) {
             _snapshots.value = _snapshots.value + (key to result.snapshot)
