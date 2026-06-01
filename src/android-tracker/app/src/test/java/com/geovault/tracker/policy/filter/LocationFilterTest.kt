@@ -337,7 +337,7 @@ class LocationFilterTest {
         val confirmation = filter.evaluate(
             LocationInput(
                 latitude = 39.0,
-                longitude = -104.9294,
+                longitude = -104.9314,
                 timestampMs = 364_000L,
                 accuracyMeters = 8f,
                 speedMps = 22f,
@@ -345,8 +345,61 @@ class LocationFilterTest {
             )
         )
 
-        assertEquals("stale-relocation-confirmed", confirmation.reason)
         assertEquals(LocationFilterResult.Decision.Commit, confirmation.decision)
+        assertTrue(confirmation.reason != "stale-relocation-confirmed")
+    }
+
+    @Test
+    fun walkingProfile_staleRelocationConfirmation_doesNotRawCommitLargeJump() {
+        val filter = LocationFilter(
+            LocationFilterConfig.fromTuning(
+                tuning = MotionProfileTuning.Walking,
+                trackingAccuracyThresholdMeters = 50.0,
+                maxFutureSkewMs = 0L,
+                freshnessTtlMs = 0L,
+                normalizeSecondsTimestamps = false,
+            )
+        )
+        filter.evaluate(
+            LocationInput(
+                latitude = 39.0,
+                longitude = -105.0,
+                timestampMs = 0L,
+                accuracyMeters = 6f,
+                speedMps = 0f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        val relocation = filter.evaluate(
+            LocationInput(
+                latitude = 39.0,
+                longitude = -104.932,
+                timestampMs = 180_000L,
+                accuracyMeters = 8f,
+                speedMps = 12f,
+                bearingDegrees = 90f,
+            )
+        )
+        val confirmation = filter.evaluate(
+            LocationInput(
+                latitude = 39.0,
+                longitude = -104.9294,
+                timestampMs = 200_000L,
+                accuracyMeters = 8f,
+                speedMps = 12f,
+                bearingDegrees = 90f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Hold, relocation.decision)
+        assertEquals("stale-relocation-unconfirmed", relocation.reason)
+        assertTrue(
+            confirmation.decision == LocationFilterResult.Decision.Hold ||
+                confirmation.decision == LocationFilterResult.Decision.Reject ||
+                confirmation.adjustedLatitude != null
+        )
+        assertTrue(confirmation.reason != "stale-relocation-confirmed")
     }
 
     @Test

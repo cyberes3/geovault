@@ -11,12 +11,10 @@ import org.junit.Test
  * burst at ~18 m/s to verify the same profile-independent filter accepts
  * legitimate fast motion without modification.
  *
- * Replay coordinates are shifted from their source geometry by a fixed
- * offset so relative distances are preserved without retaining the real
- * path. Timestamps and accuracy are reconstructed at the rates a chipset
- * reports during a slow urban walk (1 Hz, 50-65 m envelope). Reported
- * speed is held at near-zero -- the device knows we are stationary even
- * though the lat/lon is dancing.
+ * Replay coordinates are anonymized. Timestamps and accuracy are
+ * reconstructed at the rates a chipset reports during a slow urban walk
+ * (1 Hz, 50-65 m envelope). Reported speed is held at near-zero -- the
+ * device knows we are stationary even though the lat/lon is dancing.
  */
 class LocationFilterPipelineRubberBandReplayTest {
 

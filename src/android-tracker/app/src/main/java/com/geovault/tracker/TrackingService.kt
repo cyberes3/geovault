@@ -31,6 +31,8 @@ import com.geovault.tracker.db.AppDatabase
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingEngineOutput
+import com.geovault.tracker.location.AutoMotionRejectHandling
+import com.geovault.tracker.location.AutoTrackingMotionCoordinator
 import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
 import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
@@ -64,7 +66,6 @@ import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingSyncPolicy
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
 import com.geovault.tracker.policy.TrackPointBus
-import com.geovault.tracker.policy.TrackPointDecisionMetrics
 import com.geovault.tracker.policy.TrackPointEmissionDecision
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointPolicyEngine
@@ -81,6 +82,7 @@ import com.geovault.tracker.runtime.TrackingRuntimeController
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
 import com.geovault.tracker.services.LocationIngestCoordinator
+import com.geovault.tracker.services.LocationIngestResult
 import com.geovault.tracker.services.LocationSessionCoordinator
 import com.geovault.tracker.services.GpsRuntimeEvent
 import com.geovault.tracker.services.GpsRuntimeState
@@ -195,9 +197,11 @@ class TrackingService : Service() {
     private var lastLocationFilterLogSignature: String? = null
     private var lastPositioningDiagnosticSnapshotKey: String? = null
     private val autoTrackingMotionEngine = AutoTrackingMotionEngine()
-    private val autoTrackingMotionEvidenceGate = AutoTrackingMotionEvidenceGate()
-    private var lastAutoMotionCapEvidenceAtMs: Long = 0L
-    private var lastAutoMotionEvidenceAtMs: Long = 0L
+    private val autoTrackingMotionCoordinator = AutoTrackingMotionCoordinator(
+        engine = autoTrackingMotionEngine,
+        evidenceGate = AutoTrackingMotionEvidenceGate(),
+        streakPreserveWindowMs = AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS,
+    )
     private var lastAutoModeChangedAtMs: Long = 0L
     private var autoModeTickJob: Job? = null
     private var locationRequestReapplyRetryJob: Job? = null
@@ -819,8 +823,7 @@ class TrackingService : Service() {
         clearPausedFreshnessProbe(reason = "start_tracking", clearLastFreshnessTimestamp = true)
         lowAccuracyFallbackCandidate = null
         lowAccuracyFallbackCoordinator.onTrackingStopped()
-        lastAutoMotionCapEvidenceAtMs = 0L
-        lastAutoMotionEvidenceAtMs = 0L
+        autoTrackingMotionCoordinator.reset()
         lastAutoModeChangedAtMs = 0L
         lowAccuracyFallbackTimerArmedAtMs = 0L
         lowAccuracyFallbackEmitCountThisSession = 0
@@ -838,7 +841,7 @@ class TrackingService : Service() {
         fastGpsLockLastSummaryAtMs = 0L
         resetElasticDistanceOverride(reason = "start_tracking", reapplyRequest = false)
         autoTrackingMotionEngine.reset(System.currentTimeMillis())
-        autoTrackingMotionEvidenceGate.reset()
+        autoTrackingMotionCoordinator.reset()
         consecutiveStationaryPoints = 0
         stationaryAnchorLocation = null
         updateRuntimeSnapshot {
@@ -919,7 +922,7 @@ class TrackingService : Service() {
         lastAccuracyHoldLogKey = null
         lastLocationFilterLogSignature = null
         lastPositioningDiagnosticSnapshotKey = null
-        autoTrackingMotionEvidenceGate.reset()
+        autoTrackingMotionCoordinator.reset()
         stopAutoModeTick()
         stopFastGpsLockWindow(reason = "tracking_stopped")
         resetElasticDistanceOverride(reason = "tracking_stopped", reapplyRequest = false)
@@ -948,7 +951,7 @@ class TrackingService : Service() {
         stationaryFreshnessCoordinator.onStopped(reason = "cleanup_$reason")
         clearPausedFreshnessProbe(reason = "cleanup_$reason", clearLastFreshnessTimestamp = true)
         significantMotionBridge?.cancel()
-        autoTrackingMotionEvidenceGate.reset()
+        autoTrackingMotionCoordinator.reset()
         watchdogJob?.cancel()
         watchdogJob = null
         stopLocationUpdates()
@@ -1022,7 +1025,7 @@ class TrackingService : Service() {
             return
         }
         val settings = settingsRepository.getSettings()
-        val runtimeContext = currentPositioningRuntimeContext(settings)
+        var runtimeContext = currentPositioningRuntimeContext(settings)
         val previousAcceptedLocation = lastFilteredLocation?.let { Location(it) }
         val nowMs = System.currentTimeMillis()
         val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
@@ -1041,7 +1044,7 @@ class TrackingService : Service() {
         syncRuntimeStateStore()
         val selectedTrackerId = SelectedTrackerPrefs.selectedTrackerId(this)
         if (selectedTrackerId.isEmpty()) return
-        val motionMode = runtimeContext.activeMotionMode
+        var motionMode = runtimeContext.activeMotionMode
         if (
             stationaryFreshnessCoordinator.probeActive &&
             !bypassFilters &&
@@ -1083,6 +1086,40 @@ class TrackingService : Service() {
             isMockLocation = LocationCompat.isMock(location),
             filterConfig = runtimeContext.filterConfig,
         )
+        if (!result.accepted && !bypassFilters && !skipAdaptiveTrackingEffects) {
+            val autoMotionHandling = handleAutoMotionRejectedFix(
+                result = result,
+                location = location,
+                nowMs = nowMs,
+            )
+            if (autoMotionHandling is AutoMotionRejectHandling.Evidence && autoMotionHandling.output.modeChanged) {
+                runtimeContext = currentPositioningRuntimeContext(settings)
+                motionMode = runtimeContext.activeMotionMode
+                result = locationIngestCoordinator.ingest(
+                    trackId = selectedTrackerId,
+                    location = location,
+                    settings = settings,
+                    motionMode = motionMode,
+                    effectiveAccuracyFilterMeters = runtimeContext.effectiveAccuracyThresholdMeters,
+                    previousAcceptedLocation = previousAcceptedLocation,
+                    sessionVisibleBoundaryId = sessionVisibleBoundaryId,
+                    bypassFilters = bypassFilters,
+                    propsJson = pointPropsJson,
+                    totalDistanceMeters = runtimeSnapshot.sessionTotalDistanceMeters,
+                    queuedTrackerId = selectedTrackerId,
+                    nowMs = nowMs,
+                    nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+                    sessionStartTimeMs = runtimeSnapshot.sessionStartTimeMs,
+                    isMockLocation = LocationCompat.isMock(location),
+                    filterConfig = runtimeContext.filterConfig,
+                )
+                runtimeTelemetry.event(
+                    name = "auto_motion_retry",
+                    details = "mode=$motionMode accepted=${result.accepted} " +
+                        "reason=${result.policyMetrics?.reason ?: result.rejectReason ?: "none"}"
+                )
+            }
+        }
         val freshnessRecoveryDecision = freshnessRecoveryController.evaluate(
             FreshnessRecoveryInput(
                 localRecoveryDue = pointFreshnessTracker.shouldForceLocalRecovery(
@@ -1274,34 +1311,11 @@ class TrackingService : Service() {
                     }
                 }
             }
-            val evidenceConsumed = result.policyMetrics?.let { metrics ->
-                processAutoMotionEvidenceIfAvailable(metrics = metrics, eventTimeMs = location.time)
-            } == true
-            if (!evidenceConsumed) {
-                // Rejected fixes are not motion evidence unless the
-                // dedicated evidence gate has confirmed an accurate,
-                // continuous speed-cap sequence. Within a short window
-                // of a confirmed cap-exceeded evidence event though,
-                // ignore BAD_ACCURACY/STALE rejects so a single noisy
-                // duplicate from FusedLocationProvider cannot wipe out
-                // the pending promotion streak.
-                val isTransientReject = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
-                    result.rejectReason == TrackPointRejectReason.STALE
-                val withinCapWindow = lastAutoMotionCapEvidenceAtMs > 0L &&
-                    (nowMs - lastAutoMotionCapEvidenceAtMs) <=
-                    AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS
-                if (!(isTransientReject && withinCapWindow)) {
-                    processAutoTrackingOutput(
-                        output = autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
-                        reason = "rejected_fix"
-                    )
-                } else {
-                    runtimeTelemetry.event(
-                        name = "auto_motion_streak_preserved",
-                        details = "reason=${result.rejectReason} " +
-                            "elapsedSinceCapEvidenceMs=${nowMs - lastAutoMotionCapEvidenceAtMs}"
-                    )
-                }
+            if (bypassFilters || skipAdaptiveTrackingEffects) {
+                processAutoTrackingOutput(
+                    output = autoTrackingMotionEngine.onRejectedFix(eventTimeMs = nowMs),
+                    reason = "rejected_fix"
+                )
             }
             broadcastSessionStats()
             lastSpeedReferenceLocation = Location(location)
@@ -1448,7 +1462,7 @@ class TrackingService : Service() {
                 )
                 pauseGps()
             }
-            autoTrackingMotionEvidenceGate.reset()
+            autoTrackingMotionCoordinator.clearEvidenceCandidate()
             // Auto-mode classification runs on vetted geometry only:
             // effectiveDistance / dt from the position filter's accepted,
             // RSS-corrected metrics. Falling back to chipset speed here is
@@ -2066,7 +2080,7 @@ class TrackingService : Service() {
         return effectivePositioningPreset(motionMode).locationIntervalSec
     }
 
-    private fun resolveActiveMotionMode(@Suppress("UNUSED_PARAMETER") settings: TrackerSettings): TrackingMotionMode {
+    private fun resolveActiveMotionMode(): TrackingMotionMode {
         return autoTrackingMotionEngine.snapshot().mode
     }
 
@@ -2108,7 +2122,7 @@ class TrackingService : Service() {
     private fun currentPositioningRuntimeContext(
         settings: TrackerSettings = settingsRepository.getSettings(),
     ): TrackerPositioningRuntimeContext {
-        val motionMode = resolveActiveMotionMode(settings)
+        val motionMode = resolveActiveMotionMode()
         val preset = effectivePositioningPreset(motionMode, settings)
         val baseDistance = preset.distanceFilterMeters
         return TrackerPositioningRuntimeContext.build(
@@ -2730,7 +2744,7 @@ class TrackingService : Service() {
                 val shouldPersistFallback = shouldPersistFallbackPoint(lastFilteredLocation, fallbackLocation) ||
                     pointFreshnessTracker.shouldForceLocalRecovery(
                         nowMs = fallbackLocation.time,
-                        intervalSec = resolvePointFreshnessIntervalSec(resolveActiveMotionMode(settings)),
+                        intervalSec = resolvePointFreshnessIntervalSec(resolveActiveMotionMode()),
                     )
                 if (!shouldPersistFallback) {
                     runtimeTelemetry.event("fallback_skipped_persist", "reason=accuracy_uncertainty")
@@ -2896,7 +2910,7 @@ class TrackingService : Service() {
         }
         consecutivePushFailures++
         val nowMs = System.currentTimeMillis()
-        val motionMode = resolveActiveMotionMode(settings)
+        val motionMode = resolveActiveMotionMode()
         if (
             pointFreshnessTracker.isLocalFresh(
                 nowMs = nowMs,
@@ -3153,34 +3167,46 @@ class TrackingService : Service() {
         autoModeTickJob = null
     }
 
-    private fun processAutoMotionEvidenceIfAvailable(
-        metrics: TrackPointDecisionMetrics,
-        eventTimeMs: Long,
-    ): Boolean {
-        val evidence = autoTrackingMotionEvidenceGate.evaluate(
-            metrics = metrics,
-            eventTimeMs = eventTimeMs,
-        ) ?: return false
-        lastAutoMotionCapEvidenceAtMs = eventTimeMs
-        lastAutoMotionEvidenceAtMs = System.currentTimeMillis()
-        val modeBefore = autoTrackingMotionEngine.snapshot().mode
-        val output = autoTrackingMotionEngine.onMotionEvidence(
-            speedMps = evidence.speedMps,
-            eventTimeMs = eventTimeMs,
-            confidence = evidence.confidence,
+    private fun handleAutoMotionRejectedFix(
+        result: LocationIngestResult,
+        location: Location,
+        nowMs: Long,
+    ): AutoMotionRejectHandling {
+        val handling = autoTrackingMotionCoordinator.onRejectedOrHeld(
+            metrics = result.policyMetrics,
+            rejectReason = result.rejectReason,
+            eventTimeMs = location.time,
+            nowMs = nowMs,
         )
-        runtimeTelemetry.event(
-            name = "auto_motion_evidence",
-            details = "modeBefore=$modeBefore modeAfter=${output.state.mode} " +
-                "reason=${metrics.reason ?: "unknown"} speed=${evidence.speedMps} " +
-                "accuracy=${metrics.accuracyMeters ?: -1f} dt=${metrics.elapsedSeconds} " +
-                "path=${evidence.path}"
-        )
-        processAutoTrackingOutput(
-            output = output,
-            reason = "motion_evidence_${metrics.reason ?: "unknown"}",
-        )
-        return true
+        when (handling) {
+            is AutoMotionRejectHandling.Evidence -> {
+                runtimeTelemetry.event(
+                    name = "auto_motion_evidence",
+                    details = "modeBefore=${handling.modeBefore} modeAfter=${handling.output.state.mode} " +
+                        "reason=${handling.policyReason ?: "unknown"} speed=${handling.evidence.speedMps} " +
+                        "accuracy=${handling.accuracyMeters ?: -1f} dt=${handling.elapsedSeconds} " +
+                        "path=${handling.evidence.path}"
+                )
+                processAutoTrackingOutput(
+                    output = handling.output,
+                    reason = "motion_evidence_${handling.policyReason ?: "unknown"}",
+                )
+            }
+            is AutoMotionRejectHandling.Preserved -> {
+                runtimeTelemetry.event(
+                    name = "auto_motion_streak_preserved",
+                    details = "rejectReason=${handling.rejectReason} policyReason=${handling.policyReason ?: "none"} " +
+                        "elapsedSinceCapEvidenceMs=${handling.elapsedSinceCapEvidenceMs}"
+                )
+            }
+            is AutoMotionRejectHandling.Rejected -> {
+                processAutoTrackingOutput(
+                    output = handling.output,
+                    reason = "rejected_fix"
+                )
+            }
+        }
+        return handling
     }
 
     private fun processAutoTrackingOutput(output: AutoTrackingEngineOutput, reason: String) {
@@ -3262,7 +3288,7 @@ class TrackingService : Service() {
         stopFastGpsLockWindow(reason = "gps_paused")
         stopLocationUpdates()
         autoTrackingMotionEngine.onGpsPaused(System.currentTimeMillis())
-        autoTrackingMotionEvidenceGate.reset()
+        autoTrackingMotionCoordinator.clearEvidenceCandidate()
         significantMotionBridge?.request()
         sigMotionSensorStartTime = System.currentTimeMillis()
         startSensorWatchdog()
@@ -3412,7 +3438,8 @@ class TrackingService : Service() {
         rejectReason: TrackPointRejectReason?,
         nowMs: Long,
     ): Boolean {
-        val elapsedSinceEvidenceMs = lastAutoMotionEvidenceAtMs
+        val lastMotionEvidenceAtMs = autoTrackingMotionCoordinator.lastEvidenceWallClockMs
+        val elapsedSinceEvidenceMs = lastMotionEvidenceAtMs
             .takeIf { it > 0L }
             ?.let { nowMs - it }
         val elapsedSinceModeChangeMs = lastAutoModeChangedAtMs
@@ -3422,7 +3449,7 @@ class TrackingService : Service() {
             !AutoMotionStabilityPolicy.shouldSuppressFastLock(
                 rejectReason = rejectReason,
                 nowMs = nowMs,
-                lastMotionEvidenceAtMs = lastAutoMotionEvidenceAtMs,
+                lastMotionEvidenceAtMs = lastMotionEvidenceAtMs,
                 lastModeChangedAtMs = lastAutoModeChangedAtMs,
                 windowMs = AUTO_MOTION_FAST_LOCK_SUPPRESS_WINDOW_MS,
             )

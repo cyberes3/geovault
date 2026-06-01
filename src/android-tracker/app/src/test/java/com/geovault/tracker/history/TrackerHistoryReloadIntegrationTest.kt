@@ -145,4 +145,111 @@ class TrackerHistoryReloadIntegrationTest {
         assertFalse(batch.complete)
         assertTrue(batch.degradedLocalOnly)
     }
+
+    @Test
+    fun activeRecording_ignoresStaleCurrentSessionServerTrunk() {
+        val repository = TrackerHistoryRepository()
+        val dispatcher = TrackerHistoryIntentDispatcher(repository)
+        val trackerId = "t1"
+        val window = TrackerHistoryWindow("current_session")
+        val activeSessionStartMs = 1_000L
+
+        dispatcher.dispatch(
+            TrackerHistoryIntent.CommitTrunk(
+                batch = serverTrunk(
+                    trackerId = trackerId,
+                    window = window,
+                    times = listOf(100L, 200L),
+                    startTimestampMs = 100L,
+                ),
+                activeSessionStartMs = null,
+            )
+        )
+        assertEquals(listOf(100L, 200L), repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.map { it.timestampMs })
+
+        dispatcher.dispatch(
+            TrackerHistoryIntent.Clear(
+                boundary = TrackerHistoryClearBoundary(
+                    trackerId = trackerId,
+                    clearedAtMs = activeSessionStartMs,
+                    activeSessionStartMs = activeSessionStartMs,
+                ),
+                window = window,
+            )
+        )
+        assertTrue(repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.isEmpty())
+
+        val ignored = dispatcher.dispatch(
+            TrackerHistoryIntent.CommitTrunk(
+                batch = serverTrunk(
+                    trackerId = trackerId,
+                    window = window,
+                    times = listOf(100L, 200L),
+                    startTimestampMs = 100L,
+                ),
+                activeSessionStartMs = activeSessionStartMs,
+            )
+        )
+        assertFalse(ignored.committed)
+        assertEquals("stale_trunk_before_active_session", ignored.reason)
+        assertTrue(repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.isEmpty())
+
+        dispatcher.dispatch(
+            TrackerHistoryIntent.CommitOverlay(
+                batch = TrackerHistorySourceBatch(
+                    trackerId = trackerId,
+                    window = window,
+                    sourceKind = TrackerHistorySourceKind.LOCAL_LIVE,
+                    points = listOf(
+                        point(
+                            trackerId = trackerId,
+                            timestampMs = 1_200L,
+                            provenance = TrackerHistoryProvenance.LOCAL_LIVE,
+                            startTimestampMs = activeSessionStartMs,
+                        )
+                    ),
+                ),
+                activeSessionStartMs = activeSessionStartMs,
+            )
+        )
+        assertEquals(listOf(1_200L), repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.map { it.timestampMs })
+    }
+
+    private fun serverTrunk(
+        trackerId: String,
+        window: TrackerHistoryWindow,
+        times: List<Long>,
+        startTimestampMs: Long?,
+    ): TrackerHistorySourceBatch {
+        return TrackerHistorySourceBatch(
+            trackerId = trackerId,
+            window = window,
+            sourceKind = TrackerHistorySourceKind.FILTERED_SERVER_TRUNK,
+            points = times.map {
+                point(
+                    trackerId = trackerId,
+                    timestampMs = it,
+                    provenance = TrackerHistoryProvenance.SERVER_GEOMETRY,
+                    startTimestampMs = startTimestampMs,
+                )
+            },
+            complete = true,
+        )
+    }
+
+    private fun point(
+        trackerId: String,
+        timestampMs: Long,
+        provenance: TrackerHistoryProvenance,
+        startTimestampMs: Long? = null,
+    ): TrackerHistoryPoint {
+        return TrackerHistoryPoint(
+            trackerId = trackerId,
+            timestampMs = timestampMs,
+            latitude = 1.0,
+            longitude = 2.0,
+            startTimestampMs = startTimestampMs,
+            provenance = provenance,
+        )
+    }
 }

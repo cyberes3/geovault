@@ -683,10 +683,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             val sessionStart = activeSessionStartMsForRuntime(snap)
                             if (sessionStart != null) {
                                 pendingSessionStartRecomposeTrackerId = null
-                                TrackerMapHistoryUiSync.recomposeTrackerSnapshot(
-                                    repository = historyRepository,
+                                TrackerMapHistoryUiSync.dispatchHistoryClear(
                                     trackerId = trackerId,
                                     trackers = trackers,
+                                    dispatcher = historyIntentDispatcher,
                                     activeSessionStartMs = sessionStart,
                                 )
                             } else {
@@ -2963,10 +2963,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         if (activeTrackerId != pendingTrackerId) return
         val sessionStart = activeSessionStartMsForRuntime(runtime) ?: return
         pendingSessionStartRecomposeTrackerId = null
-        TrackerMapHistoryUiSync.recomposeTrackerSnapshot(
-            repository = historyRepository,
+        TrackerMapHistoryUiSync.dispatchHistoryClear(
             trackerId = pendingTrackerId,
             trackers = trackerManagementStateStore.trackers.value,
+            dispatcher = historyIntentDispatcher,
             activeSessionStartMs = sessionStart,
         )
     }

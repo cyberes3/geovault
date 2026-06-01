@@ -35,6 +35,22 @@ class TrackerHistoryRepository(
         activeSessionStartMs: Long?,
         nowMs: Long = System.currentTimeMillis(),
     ): TrackerHistoryTransactionResult {
+        TrackerHistoryActiveSessionPolicy.staleTrunkReason(
+            batch = batch,
+            activeSessionStartMs = activeSessionStartMs,
+        )?.let { reason ->
+            GeoVaultCaptureLog.w(
+                TAG,
+                "map_update history_trunk_ignored tracker=${batch.normalizedTrackerId} " +
+                    "window=${batch.window.normalizedKey} reason=$reason pts=${batch.points.size} " +
+                    "session=${activeSessionStartMs ?: -1}",
+            )
+            return fallbackForKey(
+                key = TrackerHistoryKey(batch.normalizedTrackerId, batch.window),
+                reason = reason,
+                nowMs = nowMs,
+            )
+        }
         sourceStore.putTrunk(batch)
         lastTrunkFetchedAtMsByTracker[batch.normalizedTrackerId] = nowMs
         if (batch.sourceKind == TrackerHistorySourceKind.FILTERED_SERVER_TRUNK && !batch.complete) {
@@ -120,5 +136,25 @@ class TrackerHistoryRepository(
             )
         }
         return result
+    }
+
+    private fun fallbackForKey(
+        key: TrackerHistoryKey,
+        reason: String,
+        nowMs: Long,
+    ): TrackerHistoryTransactionResult {
+        val previous = _snapshots.value[key] ?: TrackerHistorySnapshot(
+            key = key,
+            trunk = emptyList(),
+            overlay = emptyList(),
+            points = emptyList(),
+            committedAtMs = nowMs,
+            generation = nowMs,
+        )
+        return TrackerHistoryTransactionResult(
+            snapshot = previous,
+            committed = false,
+            reason = reason,
+        )
     }
 }
