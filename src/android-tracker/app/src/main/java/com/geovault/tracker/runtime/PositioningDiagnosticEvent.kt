@@ -1,6 +1,6 @@
 package com.geovault.tracker.runtime
 
-import com.geovault.tracker.services.GpsRuntimeState
+import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.services.ProviderHealthDecision
 import com.geovault.tracker.services.QueueUploadResult
 import com.geovault.tracker.services.QueueUploadScope

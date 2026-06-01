@@ -1,7 +1,7 @@
 package com.geovault.tracker
 
 import android.location.Location
-import com.geovault.tracker.tracking.FallbackPersistencePolicy
+import com.geovault.tracker.positioning.FallbackPersistencePolicy
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test

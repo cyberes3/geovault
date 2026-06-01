@@ -1,7 +1,7 @@
 package com.geovault.tracker.location
 
 import android.location.Location
-import com.geovault.tracker.services.PositioningPresets
+import com.geovault.tracker.positioning.config.PositioningPresets
 import com.geovault.tracker.services.TrackingMotionMode
 import kotlin.math.floor
 

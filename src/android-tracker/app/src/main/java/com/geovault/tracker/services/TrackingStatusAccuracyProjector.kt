@@ -1,4 +1,5 @@
 package com.geovault.tracker.services
+import com.geovault.tracker.positioning.config.GpsRuntimeState
 
 data class TrackingStatusAccuracyInput(
     val isRunning: Boolean,

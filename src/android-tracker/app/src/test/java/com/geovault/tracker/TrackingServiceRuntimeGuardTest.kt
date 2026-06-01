@@ -1,10 +1,10 @@
 package com.geovault.tracker
 
 import android.location.Location
-import com.geovault.tracker.services.GpsRuntimeState
-import com.geovault.tracker.tracking.FallbackTransitionPolicy
-import com.geovault.tracker.tracking.GpsProviderWaitPolicy
-import com.geovault.tracker.tracking.ObservedSpeedResolver
+import com.geovault.tracker.positioning.config.GpsRuntimeState
+import com.geovault.tracker.positioning.FallbackTransitionPolicy
+import com.geovault.tracker.positioning.GpsProviderWaitPolicy
+import com.geovault.tracker.positioning.ObservedSpeedResolver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

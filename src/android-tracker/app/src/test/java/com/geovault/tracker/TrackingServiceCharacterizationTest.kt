@@ -1,7 +1,7 @@
 package com.geovault.tracker
 
-import com.geovault.tracker.services.GpsRuntimeState
-import com.geovault.tracker.tracking.LocationRequestController
+import com.geovault.tracker.positioning.config.GpsRuntimeState
+import com.geovault.tracker.positioning.LocationRequestController
 import com.geovault.tracker.tracking.TrackingServiceIntents
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -1,6 +1,7 @@
 package com.geovault.tracker.services
 
 import com.geovault.tracker.TrackingLocationPolicy
+import com.geovault.tracker.positioning.config.PositioningDensity
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

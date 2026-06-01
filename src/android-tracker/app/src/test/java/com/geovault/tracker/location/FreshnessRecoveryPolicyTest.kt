@@ -2,7 +2,7 @@ package com.geovault.tracker.location
 
 import android.location.Location
 import com.geovault.tracker.policy.filter.FilterReason
-import com.geovault.tracker.services.PositioningPresets
+import com.geovault.tracker.positioning.config.PositioningPresets
 import com.geovault.tracker.services.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Test

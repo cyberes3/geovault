@@ -9,6 +9,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.TrackPointSource
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import com.geovault.tracker.settings.TrackerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

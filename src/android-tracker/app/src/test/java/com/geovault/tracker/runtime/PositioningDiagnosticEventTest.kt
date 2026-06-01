@@ -1,7 +1,7 @@
 package com.geovault.tracker.runtime
 
 import com.geovault.tracker.location.SyncFailureClass
-import com.geovault.tracker.services.GpsRuntimeState
+import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.services.ProviderHealthDecision
 import com.geovault.tracker.services.QueueUploadFailureReason
 import com.geovault.tracker.services.QueueUploadResult

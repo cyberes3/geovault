@@ -10,6 +10,7 @@ import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import com.geovault.tracker.settings.TrackerSettings
 
 data class LocationIngestResult(

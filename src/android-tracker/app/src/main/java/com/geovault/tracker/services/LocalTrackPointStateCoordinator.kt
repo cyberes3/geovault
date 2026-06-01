@@ -11,6 +11,7 @@ import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterReasonPolicy
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs

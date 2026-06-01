@@ -1,4 +1,5 @@
 package com.geovault.tracker.services
+import com.geovault.tracker.positioning.config.GpsRuntimeState
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -1,7 +1,7 @@
 package com.geovault.tracker.location
 
 import com.geovault.common.geo.GeoMath
-import com.geovault.tracker.services.PositioningPresets
+import com.geovault.tracker.positioning.config.PositioningPresets
 import com.geovault.tracker.services.TrackingMotionMode
 
 enum class LowAccuracyFallbackArmDecision {

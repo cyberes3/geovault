@@ -2,6 +2,9 @@ package com.geovault.tracker.services
 
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.policy.filter.MotionProfileTuning
+import com.geovault.tracker.positioning.config.PositioningDensity
+import com.geovault.tracker.positioning.config.PositioningPolicyConfig
+import com.geovault.tracker.positioning.config.PositioningPresets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

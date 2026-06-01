@@ -1,0 +1,151 @@
+package com.geovault.tracker.positioning
+
+import android.app.Service
+import com.geovault.tracker.db.AppDatabase
+import com.geovault.tracker.location.AutoTrackingMotionCoordinator
+import com.geovault.tracker.location.AutoTrackingMotionEngine
+import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
+import com.geovault.tracker.location.FreshnessRecoveryController
+import com.geovault.tracker.location.LowAccuracyFallbackCoordinator
+import com.geovault.tracker.location.RecoveryAnchorStore
+import com.geovault.tracker.location.RepeatedOutlierSuppressor
+import com.geovault.tracker.location.StationaryFreshnessActions
+import com.geovault.tracker.location.StationaryFreshnessCoordinator
+import com.geovault.tracker.location.StationaryPingActions
+import com.geovault.tracker.location.StationaryPingController
+import com.geovault.tracker.location.StationaryRegionStore
+import com.geovault.tracker.positioning.config.PositioningDensity
+import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
+import com.geovault.tracker.runtime.RuntimeTelemetry
+import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
+import com.geovault.tracker.sensor.SignificantMotionResumeBridge
+import com.geovault.tracker.services.LocationIngestCoordinator
+import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.services.PointFreshnessTracker
+import com.geovault.tracker.services.ProviderHealthController
+import com.geovault.tracker.services.QueueUploadEngine
+import com.geovault.tracker.services.RuntimeEventPublisher
+import com.geovault.tracker.services.TrackingNotificationPresenter
+import com.geovault.tracker.services.TrackingSessionCoordinator
+import com.geovault.tracker.settings.TrackerSettingsRepository
+import com.geovault.tracker.tracking.TrackingServiceConstants
+import kotlinx.coroutines.CoroutineScope
+import okhttp3.OkHttpClient
+
+internal class PositioningDependencies(
+    private val runtime: PositioningRuntime,
+    private val service: Service,
+    val serviceScope: CoroutineScope,
+) {
+    lateinit var database: AppDatabase
+        private set
+    lateinit var settingsRepository: TrackerSettingsRepository
+        private set
+    lateinit var sessionCoordinator: TrackingSessionCoordinator
+        private set
+    lateinit var locationIngestCoordinator: LocationIngestCoordinator
+        private set
+    lateinit var trackerLocationPipeline: TrackerLocationPipeline
+        private set
+    lateinit var notificationPresenter: TrackingNotificationPresenter
+        private set
+    lateinit var runtimeEventPublisher: RuntimeEventPublisher
+        private set
+    lateinit var queueUploadEngine: QueueUploadEngine
+        private set
+    lateinit var locationSessionCoordinator: LocationSessionCoordinator
+        private set
+    lateinit var runtimeTelemetry: RuntimeTelemetry
+        private set
+    lateinit var recoveryAnchorStore: RecoveryAnchorStore
+        private set
+    lateinit var stationaryPingController: StationaryPingController
+        private set
+    lateinit var stationaryFreshnessCoordinator: StationaryFreshnessCoordinator
+        private set
+
+    var httpClient: OkHttpClient? = null
+    var significantMotionBridge: SignificantMotionResumeBridge? = null
+
+    val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator { runtime.currentPositioningRecoveryConfig() }
+    val repeatedOutlierSuppressor = RepeatedOutlierSuppressor { runtime.currentPositioningRecoveryConfig() }
+    val freshnessRecoveryController = FreshnessRecoveryController()
+    val providerHealthController = ProviderHealthController(
+        staleFixDeliveryMs = TrackingServiceConstants.FIX_DELIVERY_STALE_MS,
+    )
+    val pointFreshnessTracker = PointFreshnessTracker()
+    val autoTrackingMotionEngine = AutoTrackingMotionEngine()
+    val autoTrackingMotionCoordinator = AutoTrackingMotionCoordinator(
+        engine = autoTrackingMotionEngine,
+        evidenceGate = AutoTrackingMotionEvidenceGate(),
+        streakPreserveWindowMs = TrackingServiceConstants.AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS,
+    )
+
+    fun wire(settingsRepository: TrackerSettingsRepository) {
+        this.settingsRepository = settingsRepository
+        database = AppDatabase.getDatabase(service)
+        sessionCoordinator = TrackingSessionCoordinator()
+        notificationPresenter = TrackingNotificationPresenter(service)
+        runtimeEventPublisher = RuntimeEventPublisher(service.applicationContext)
+        runtimeTelemetry = RuntimeTelemetry(service.applicationContext)
+        recoveryAnchorStore = RecoveryAnchorStore(service.applicationContext)
+        locationSessionCoordinator = LocationSessionCoordinator(service) { error ->
+            runtimeTelemetry.event(
+                "location_request_registration_failed",
+                "type=${error.javaClass.simpleName} message=${error.message.orEmpty()}",
+            )
+            runtime.scheduleLocationRequestReapplyRetry(reason = "async_registration_failure")
+        }
+        locationIngestCoordinator = LocationIngestCoordinator(database.locationDao()) { event ->
+            runtimeTelemetry.event(
+                name = "local_stall_reanchor",
+                details = "stream=${event.streamKey} reason=${event.policyReason ?: "unknown"} " +
+                    "streak=${event.rejectStreak} anchorAgeMs=${event.anchorAgeMs}",
+            )
+        }
+        trackerLocationPipeline = TrackerLocationPipeline(
+            locationIngestCoordinator = locationIngestCoordinator,
+            freshnessRecoveryController = freshnessRecoveryController,
+            repeatedOutlierSuppressor = repeatedOutlierSuppressor,
+        )
+        queueUploadEngine = QueueUploadEngine(
+            context = service.applicationContext,
+            locationDao = database.locationDao(),
+            pushContext = runtime.pushDispatcher,
+            authenticatedClientProvider = { runtime.getAuthenticatedHttpClient() },
+        )
+        significantMotionBridge = SignificantMotionResumeBridge(
+            trigger = SensorManagerSignificantMotionTrigger(service.applicationContext),
+            onResume = { runtime.resumeGps() },
+        )
+        val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
+            .scaleDurationMs(StationaryPingController.DEFAULT_INTERVAL_MS)
+        stationaryPingController = StationaryPingController(
+            scope = serviceScope,
+            initialIntervalMs = initialProbeIntervalMs,
+            actions = object : StationaryPingActions {
+                override fun requestProbe(reason: String) {
+                    runtime.requestStationaryFreshnessProbe(reason = reason)
+                }
+
+                override fun logEvent(name: String, details: String) {
+                    runtimeTelemetry.event(name, details)
+                }
+            },
+        )
+        stationaryFreshnessCoordinator = StationaryFreshnessCoordinator(
+            store = StationaryRegionStore(service.applicationContext),
+            pingController = stationaryPingController,
+            scope = serviceScope,
+            actions = object : StationaryFreshnessActions {
+                override fun logEvent(name: String, details: String) {
+                    runtimeTelemetry.event(name, details)
+                }
+
+                override fun onProbeTimeout() {
+                    runtime.pauseGpsInternal(force = true)
+                }
+            },
+        )
+    }
+}

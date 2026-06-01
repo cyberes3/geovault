@@ -3,8 +3,8 @@ package com.geovault.tracker.services
 import android.content.Context
 import android.location.Location
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.location.UnifiedLocationClient
-import com.geovault.tracker.location.UnifiedLocationSessionRequest
+import com.geovault.tracker.positioning.collection.UnifiedLocationClient
+import com.geovault.tracker.positioning.collection.UnifiedLocationSessionRequest
 import com.google.android.gms.location.LocationRequest
 
 class LocationSessionCoordinator(
