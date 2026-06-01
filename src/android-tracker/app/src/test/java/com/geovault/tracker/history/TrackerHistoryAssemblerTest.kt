@@ -37,9 +37,37 @@ class TrackerHistoryAssemblerTest {
     }
 
     @Test
+    fun compose_currentSession_keepsOnlyActiveSessionOverlayPoints() {
+        val activeSessionStart = 50_000L
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("current_session"))
+        val overlay = TrackerHistorySourceBatch(
+            trackerId = "tracker-1",
+            window = key.window,
+            sourceKind = TrackerHistorySourceKind.LOCAL_LIVE,
+            points = listOf(
+                point(10_000L, provenance = TrackerHistoryProvenance.LOCAL_LIVE, startTimestampMs = 1_000L),
+                point(60_000L, provenance = TrackerHistoryProvenance.LOCAL_LIVE, startTimestampMs = activeSessionStart),
+            ),
+        )
+
+        val result = TrackerHistoryAssembler.compose(
+            TrackerHistoryComposeInput(
+                key = key,
+                trunk = null,
+                overlayBatches = listOf(overlay),
+                activeSessionStartMs = activeSessionStart,
+                nowMs = 61_000L,
+            )
+        )
+
+        assertTrue(result.committed)
+        assertEquals(listOf(60_000L), result.snapshot.points.map { it.timestampMs })
+    }
+
+    @Test
     fun compose_appliesClearBoundaryWithoutDroppingActiveSessionPoints() {
         val activeSessionStart = 5_000L
-        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("session"))
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("current_session"))
         val overlay = TrackerHistorySourceBatch(
             trackerId = "tracker-1",
             window = key.window,

@@ -294,10 +294,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             when (val result = trackerManagementRepository.loadTrackerGeometry(selectedId)) {
                 is RepositoryResult.Success -> {
                     val batch = TrackerHistorySourceAdapters.filteredServerTrunk(result.data)
+                    val runtime = TrackingRuntimeStateStore.state.value
+                    val activeSessionStart = runtime.sessionStartTimeMs.takeIf {
+                        runtime.localRecordingActive && it > 0L &&
+                            runtime.locallyRecordedTrackerId.trim() == selectedId
+                    }
                     val tx = historyIntentDispatcher.dispatch(
                         TrackerHistoryIntent.CommitTrunk(
                             batch = batch,
-                            activeSessionStartMs = null,
+                            activeSessionStartMs = activeSessionStart,
                         ),
                     )
                     GeoVaultCaptureLog.i(

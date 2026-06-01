@@ -671,6 +671,24 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                             "prevLocal=$prevLocalRecording currentLocal=${snap.localRecordingActive}"
                     )
                 }
+                if (recordingTransitioned) {
+                    val trackerId = when {
+                        snap.localRecordingActive -> snap.locallyRecordedTrackerId.trim()
+                        else -> snap.locallyRecordedTrackerId.trim().ifBlank { snap.selectedTrackerId.trim() }
+                    }
+                    if (trackerId.isNotEmpty()) {
+                        TrackerMapHistoryUiSync.recomposeTrackerSnapshot(
+                            repository = historyRepository,
+                            trackerId = trackerId,
+                            trackers = trackerManagementStateStore.trackers.value,
+                            activeSessionStartMs = if (snap.localRecordingActive) {
+                                activeSessionStartMsForRuntime(snap)
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
                 requestRuntimeTrailReload(reloadReason)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
@@ -2770,7 +2788,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                     point = point,
                     trackers = trackerManagementStateStore.trackers.value,
                     dispatcher = historyIntentDispatcher,
-                    activeSessionStartMs = currentActiveSessionStartMs(),
+                    activeSessionStartMs = activeSessionStartMsForRuntime(latest.runtime),
                 )
                 if (overlayCommitted) {
                     shouldUpdate = true
@@ -2918,7 +2936,10 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun currentActiveSessionStartMs(): Long? {
-        val runtime = _uiState.value.runtime
+        return activeSessionStartMsForRuntime(_uiState.value.runtime)
+    }
+
+    private fun activeSessionStartMsForRuntime(runtime: TrackingRuntimeSnapshot): Long? {
         return runtime.sessionStartTimeMs.takeIf { runtime.localRecordingActive && it > 0L }
     }
 

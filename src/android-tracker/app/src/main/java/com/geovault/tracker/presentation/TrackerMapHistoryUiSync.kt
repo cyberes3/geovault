@@ -1,8 +1,10 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.history.TrackerHistoryDiagnostics
+import com.geovault.tracker.history.TrackerHistoryTransactionResult
 import com.geovault.tracker.history.TrackerHistoryClearBoundary
 import com.geovault.tracker.history.TrackerHistoryIntent
 import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
@@ -67,6 +69,50 @@ object TrackerMapHistoryUiSync {
         }
     }
 
+    /**
+     * Whether [TrackerMapSessionEngine] may skip client-side [TrackerMapRecentDataWindowFilterPolicy]
+     * for this tracker. Session windows never skip; complete trunks skip only when server
+     * [Tracker.geometry_status] window matches settings.
+     */
+    fun shouldSkipClientRenderWindowFilter(
+        snapshot: TrackerHistorySnapshot?,
+        tracker: Tracker?,
+    ): Boolean {
+        if (snapshot == null || !snapshot.complete || snapshot.degradedLocalOnly) return false
+        val settingsWindow = TrackerHistoryWindowResolver.fromTracker(tracker)
+        if (settingsWindow.isCurrentSession || settingsWindow.isSession) return false
+        val statusWindow = tracker?.geometry_status?.window?.trim()?.lowercase().orEmpty()
+        if (statusWindow.isEmpty()) return true
+        return statusWindow == settingsWindow.normalizedKey
+    }
+
+    /**
+     * Re-runs compose for session-keyed windows (no new filter logic — uses [TrackerHistoryAssembler]).
+     */
+    fun recomposeTrackerSnapshot(
+        repository: TrackerHistoryRepository,
+        trackerId: String,
+        trackers: List<Tracker>,
+        activeSessionStartMs: Long?,
+    ): TrackerHistoryTransactionResult? {
+        val normalized = trackerId.trim()
+        if (normalized.isEmpty()) return null
+        val window = historyWindowForTracker(normalized, trackers)
+        if (!window.isCurrentSession && !window.isSession) return null
+        val key = TrackerHistoryKey(normalized, window)
+        val result = repository.composeAndPublish(
+            key = key,
+            activeSessionStartMs = activeSessionStartMs,
+        )
+        GeoVaultCaptureLog.i(
+            "TrackerHistory",
+            "map_update history_recompose tracker=$normalized window=${window.normalizedKey} " +
+                "sessionStart=${activeSessionStartMs ?: -1} committed=${result.committed} " +
+                "reason=${result.reason} points=${result.snapshot.points.size}",
+        )
+        return result
+    }
+
     fun hasAuthoritativeServerTrunk(
         snapshots: Map<TrackerHistoryKey, TrackerHistorySnapshot>,
         trackers: List<Tracker>,
@@ -119,7 +165,8 @@ object TrackerMapHistoryUiSync {
                 val window = historyWindowForTracker(trackerId, trackers)
                 val key = TrackerHistoryKey(trackerId, window)
                 val snapshot = snapshots[key]
-                markSnapshotFlags(snapshot, trackerId, skipFilter, incompleteTrunks, degradedTrunks)
+                val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
+                markSnapshotFlags(snapshot, tracker, trackerId, skipFilter, incompleteTrunks, degradedTrunks)
                 val trail = TrackerHistoryRenderMapper.toQueuedLocations(snapshot, trailPointLimit)
                 TrailsFromHistory(
                     trail = trail,
@@ -147,7 +194,8 @@ object TrackerMapHistoryUiSync {
                     .associateWith { trackerId ->
                         val window = historyWindowForTracker(trackerId, trackers)
                         val snapshot = snapshots[TrackerHistoryKey(trackerId, window)]
-                        markSnapshotFlags(snapshot, trackerId, skipFilter, incompleteTrunks, degradedTrunks)
+                        val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
+                        markSnapshotFlags(snapshot, tracker, trackerId, skipFilter, incompleteTrunks, degradedTrunks)
                         TrackerHistoryRenderMapper.toQueuedLocations(snapshot, trailPointLimit)
                     }
                 val activeId = plan.displayedTrackerId.trim()
@@ -325,6 +373,7 @@ object TrackerMapHistoryUiSync {
 
     private fun markSnapshotFlags(
         snapshot: TrackerHistorySnapshot?,
+        tracker: Tracker?,
         trackerId: String,
         skipFilter: MutableSet<String>,
         incompleteTrunks: MutableSet<String>,
@@ -334,7 +383,7 @@ object TrackerMapHistoryUiSync {
         val id = trackerId.trim()
         if (!snapshot.complete) incompleteTrunks += id
         if (snapshot.degradedLocalOnly) degradedTrunks += id
-        if (snapshot.complete && !snapshot.degradedLocalOnly) {
+        if (shouldSkipClientRenderWindowFilter(snapshot, tracker)) {
             skipFilter += id
         }
     }

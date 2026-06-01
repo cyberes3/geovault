@@ -1,6 +1,7 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerGeometryStatus
 import com.geovault.tracker.history.TrackerHistoryKey
 import com.geovault.tracker.history.TrackerHistoryPoint
 import com.geovault.tracker.history.TrackerHistoryProvenance
@@ -70,5 +71,99 @@ class TrackerMapHistoryUiSyncTest {
 
         val degraded = authoritative.copy(degradedLocalOnly = true)
         assertFalse(TrackerMapHistoryUiSync.hasAuthoritativeServerTrunk(mapOf(key to degraded), trackers, "t1"))
+    }
+
+    @Test
+    fun shouldSkipClientRenderWindowFilter_neverSkipsSessionWindows() {
+        val snapshot = completeSnapshot(TrackerHistoryWindow.KEY_CURRENT_SESSION)
+        val tracker = trackerWithWindow(
+            recentDataWindow = TrackerHistoryWindow.KEY_CURRENT_SESSION,
+            statusWindow = TrackerHistoryWindow.KEY_ALL,
+        )
+        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, tracker))
+
+        val sessionSnapshot = completeSnapshot(TrackerHistoryWindow.KEY_SESSION)
+        val sessionTracker = trackerWithWindow(
+            recentDataWindow = TrackerHistoryWindow.KEY_SESSION,
+            statusWindow = TrackerHistoryWindow.KEY_ALL,
+        )
+        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(sessionSnapshot, sessionTracker))
+    }
+
+    @Test
+    fun shouldSkipClientRenderWindowFilter_skipsOnlyWhenStatusWindowMatchesSettings() {
+        val snapshot = completeSnapshot(TrackerHistoryWindow.KEY_ALL)
+        val matching = trackerWithWindow(
+            recentDataWindow = TrackerHistoryWindow.KEY_ALL,
+            statusWindow = TrackerHistoryWindow.KEY_ALL,
+        )
+        assertTrue(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, matching))
+
+        val mismatched = trackerWithWindow(
+            recentDataWindow = TrackerHistoryWindow.KEY_ALL,
+            statusWindow = TrackerHistoryWindow.KEY_CURRENT_SESSION,
+        )
+        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, mismatched))
+
+        val noStatus = Tracker(id = "t1", name = "T1", color = null, settings = mapOf("recent_data_window" to "all"))
+        assertTrue(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(snapshot, noStatus))
+    }
+
+    @Test
+    fun shouldSkipClientRenderWindowFilter_doesNotSkipIncompleteOrDegraded() {
+        val key = TrackerHistoryKey("t1", TrackerHistoryWindow(TrackerHistoryWindow.KEY_ALL))
+        val point = trunkPoint()
+        val incomplete = TrackerHistorySnapshot(
+            key = key,
+            trunk = listOf(point),
+            overlay = emptyList(),
+            points = listOf(point),
+            committedAtMs = 1L,
+            generation = 1L,
+            complete = false,
+            degradedLocalOnly = false,
+        )
+        val tracker = trackerWithWindow(TrackerHistoryWindow.KEY_ALL, TrackerHistoryWindow.KEY_ALL)
+        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(incomplete, tracker))
+
+        val degraded = incomplete.copy(complete = true, degradedLocalOnly = true)
+        assertFalse(TrackerMapHistoryUiSync.shouldSkipClientRenderWindowFilter(degraded, tracker))
+    }
+
+    private fun completeSnapshot(windowKey: String): TrackerHistorySnapshot {
+        val window = TrackerHistoryWindow(windowKey)
+        val key = TrackerHistoryKey("t1", window)
+        val point = trunkPoint()
+        return TrackerHistorySnapshot(
+            key = key,
+            trunk = listOf(point),
+            overlay = emptyList(),
+            points = listOf(point),
+            committedAtMs = 1L,
+            generation = 1L,
+            complete = true,
+            degradedLocalOnly = false,
+        )
+    }
+
+    private fun trunkPoint() = TrackerHistoryPoint(
+        trackerId = "t1",
+        timestampMs = 1L,
+        latitude = 1.0,
+        longitude = 2.0,
+        provenance = TrackerHistoryProvenance.SERVER_GEOMETRY,
+    )
+
+    private fun trackerWithWindow(
+        recentDataWindow: String,
+        statusWindow: String,
+    ): Tracker {
+        return Tracker(
+            id = "t1",
+            name = "T1",
+            color = null,
+            settings = mapOf("recent_data_window" to recentDataWindow),
+            geometry_status = TrackerGeometryStatus(window = statusWindow),
+        )
     }
 }

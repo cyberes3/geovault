@@ -6,6 +6,7 @@ import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.WireTimestampNormalizer
+import com.geovault.tracker.presentation.TrackerMapPointStartTimestampParser
 
 object TrackerHistorySourceAdapters {
     private const val TAG = "TrackerHistorySourceAdapters"
@@ -103,11 +104,18 @@ object TrackerHistorySourceAdapters {
             TrackPointSource.LOCAL_GPS -> TrackerHistorySourceKind.LOCAL_LIVE
             TrackPointSource.REMOTE_STREAM -> TrackerHistorySourceKind.REMOTE_STREAM
         }
+        val resolvedSessionStart = TrackerMapPointStartTimestampParser.parse(event.propsJson)
+            ?: activeSessionStartMs
         return TrackerHistorySourceBatch(
             trackerId = event.trackId.trim(),
             window = window,
             sourceKind = sourceKind,
-            points = listOf(TrackerHistoryPoint.fromTrackPointEvent(event, activeSessionStartMs)),
+            points = listOf(
+                TrackerHistoryPoint.fromTrackPointEvent(
+                    event = event,
+                    startTimestampMs = resolvedSessionStart,
+                ),
+            ),
             fetchedAtMs = fetchedAtMs,
         )
     }

@@ -1,6 +1,8 @@
 package com.geovault.tracker.history
 
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.presentation.TrackerMapRecentDataWindowFilterPolicy
+import com.geovault.tracker.presentation.TrackerSessionWindowContext
 
 data class TrackerHistoryComposeInput(
     val key: TrackerHistoryKey,
@@ -20,18 +22,22 @@ object TrackerHistoryAssembler {
         if (trackerId.isEmpty()) {
             return fallback(input, reason = "blank_tracker")
         }
-        val trunkPoints = input.trunk
-            ?.points
-            .orEmpty()
-            .filter { it.trackerId.trim() == trackerId }
-            .sortedBy { it.timestampMs }
+        val trunkPoints = filterPointsForRecentDataWindow(
+            points = input.trunk
+                ?.points
+                .orEmpty()
+                .filter { it.trackerId.trim() == trackerId },
+            input = input,
+        ).sortedBy { it.timestampMs }
         val trunkKeys = trunkPoints.map { it.key }.toSet()
-        val eligibleOverlay = input.overlayBatches
-            .flatMap { it.points }
-            .filter { it.trackerId.trim() == trackerId }
-            .filter { it.key !in trunkKeys }
-            .filter { point -> point.isAfterClearBoundary(input.clearBoundary) }
-            .filter { point -> point.isEligibleForWindow(input, trunkPoints) }
+        val eligibleOverlay = filterPointsForRecentDataWindow(
+            points = input.overlayBatches
+                .flatMap { it.points }
+                .filter { it.trackerId.trim() == trackerId }
+                .filter { it.key !in trunkKeys }
+                .filter { point -> point.isAfterClearBoundary(input.clearBoundary) },
+            input = input,
+        )
             .dedupeOverlay()
             .sortedBy { it.timestampMs }
         val points = (trunkPoints + eligibleOverlay)
@@ -98,21 +104,35 @@ object TrackerHistoryAssembler {
         )
     }
 
-    private fun TrackerHistoryPoint.isEligibleForWindow(
+    /**
+     * Uses the same rules as map render ([TrackerMapRecentDataWindowFilterPolicy]) so history
+     * snapshots match what the user selected (current session, session, rolling windows).
+     */
+    private fun filterPointsForRecentDataWindow(
+        points: List<TrackerHistoryPoint>,
         input: TrackerHistoryComposeInput,
-        trunkPoints: List<TrackerHistoryPoint>,
-    ): Boolean {
+    ): List<TrackerHistoryPoint> {
+        if (points.isEmpty()) return points
         val window = input.key.window
-        if (window.isAll) return true
-        if (window.isCurrentSession || window.isSession) {
-            return input.activeSessionStartMs != null && startTimestampMs == input.activeSessionStartMs
-        }
-        val rollingDuration = window.rollingDurationMs
-        if (rollingDuration != null) {
-            return timestampMs >= input.nowMs - rollingDuration
-        }
-        val trunkTailTime = trunkPoints.lastOrNull()?.timestampMs
-        return trunkTailTime == null || timestampMs >= trunkTailTime
+        if (window.isAll) return points
+        val context = TrackerSessionWindowContext(
+            windowKey = window.normalizedKey,
+            nowMs = input.nowMs,
+            currentSessionStartMs = input.activeSessionStartMs,
+        )
+        val filteredKeys = TrackerMapRecentDataWindowFilterPolicy
+            .apply(points.map { it.toQueuedLocation() }, context)
+            .map { loc ->
+                TrackerHistoryPointKey.from(
+                    trackerId = loc.trackerId,
+                    timestampMs = loc.time,
+                    latitude = loc.latitude,
+                    longitude = loc.longitude,
+                    startTimestampMs = loc.startTimestampMs,
+                )
+            }
+            .toSet()
+        return points.filter { it.key in filteredKeys }
     }
 
     private fun TrackerHistoryPoint.isAfterClearBoundary(boundary: TrackerHistoryClearBoundary?): Boolean {
