@@ -1,5 +1,6 @@
 package com.geovault.tracker.data
 
+import android.app.Application
 import android.content.Context
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.NaturalSort
@@ -23,6 +24,7 @@ import com.geovault.tracker.TrackerCoordinatesResponse
 import com.geovault.tracker.TrackerCreateRequest
 import com.geovault.tracker.TrackerSettingsRequest
 import com.geovault.tracker.UsersResponse
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.toDomainModel
 import com.geovault.tracker.toDomainModels
 import kotlinx.coroutines.Dispatchers
@@ -161,6 +163,11 @@ class ApiTrackerManagementRepository(
                         mergedTracker
                     }
                     stateStore.publishTracker(merged)
+                    GeoVaultCaptureLog.i(
+                        TAG,
+                        "map_update geometry_status tracker=${merged.id} status=${merged.geometry_status} " +
+                            "coords=${merged.geometry?.coordinates?.size ?: 0} params=${merged.point_params?.size ?: 0}"
+                    )
                     RepositoryResult.Success(merged) as Any
                 }
                 is RepositoryResult.Failure -> networkResult as Any
@@ -213,6 +220,13 @@ class ApiTrackerManagementRepository(
                         mergedById.values.toList()
                     }
                     mergedTrackers.forEach { tracker -> stateStore.publishTracker(tracker) }
+                    mergedTrackers.forEach { tracker ->
+                        GeoVaultCaptureLog.i(
+                            TAG,
+                            "map_update geometry_status tracker=${tracker.id} status=${tracker.geometry_status} " +
+                                "coords=${tracker.geometry?.coordinates?.size ?: 0} params=${tracker.point_params?.size ?: 0}"
+                        )
+                    }
                     RepositoryResult.Success(mergedTrackers) as Any
                 }
                 is RepositoryResult.Failure -> networkResult as Any
@@ -358,6 +372,9 @@ class ApiTrackerManagementRepository(
         cachedApi = null
         readRequestGate.clear()
         stateStore.clearAll()
+        TrackerAppServices.from(appContext.applicationContext as Application)
+            .trackerHistoryRepository()
+            .reset()
     }
 
     override fun getTrackerFromCache(trackerId: String): Tracker? {

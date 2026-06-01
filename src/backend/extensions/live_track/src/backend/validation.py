@@ -86,11 +86,22 @@ class TrackerCheckResponse(BaseModel):
     name: Optional[str] = Field(default=None, description="Tracker name when valid")
 
 
+class TrackerGeometryStatusResponse(BaseModel):
+    """Factual transport status for byte-bounded filtered geometry responses."""
+
+    window: str = "all"
+    returned_count: int = 0
+    total_filtered_count: int = 0
+    is_truncated: bool = False
+    params_align_with_coords: bool = True
+
+
 class TrackerListItemResponse(BaseModel):
     id: str
     name: str
     color: Optional[str] = None
     point_params: list[dict] = Field(default_factory=list)
+    geometry_status: Optional[TrackerGeometryStatusResponse] = None
     bbox: Optional[list[float]] = None
     settings: dict = Field(default_factory=dict)
     visibility: Optional[str] = None

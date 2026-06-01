@@ -681,6 +681,12 @@ class TrackingService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        GeoVaultCaptureLog.i(
+            TAG,
+            "lifecycle_correlation event=task_removed isTracking=$isTracking startupInProgress=$startupInProgress " +
+                "gpsState=$gpsRuntimeState lifecycle=${controlState.lifecycleState} generation=$trackingGeneration " +
+                "rootAction=${rootIntent?.action ?: "none"}"
+        )
         TrackingRuntimeController.get(applicationContext).handle(
             com.geovault.tracker.runtime.RuntimeCommand(
                 type = com.geovault.tracker.runtime.RuntimeCommandType.TASK_REMOVED,

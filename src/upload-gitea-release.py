@@ -5,6 +5,7 @@ Build a signed Android app release and upload it as a Gitea draft release.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import os
 import re
@@ -88,6 +89,51 @@ APP_CONFIGS = {
 def die(msg: str) -> None:
     print(msg, file=sys.stderr)
     raise SystemExit(1)
+
+
+APP_TEMP_SLUG_RE = re.compile(r'^APP_TEMP_SLUG="([^"]+)"', re.MULTILINE)
+
+
+def parse_app_temp_slug(build_script: Path) -> str | None:
+    if not build_script.is_file():
+        return None
+    match = APP_TEMP_SLUG_RE.search(build_script.read_text())
+    return match.group(1) if match else None
+
+
+def cleanup_staged_apk_temp_files(app_temp_slug: str) -> None:
+    """Remove staged APK copies left in /tmp by build-android.sh."""
+    tmp_dirs: list[Path] = []
+    tmpdir = os.environ.get("TMPDIR", "").strip()
+    if tmpdir:
+        tmp_dirs.append(Path(tmpdir))
+    tmp_dirs.append(Path("/tmp"))
+
+    patterns = (
+        f"{app_temp_slug}-debug-apk-*.apk",
+        f"{app_temp_slug}-release-apk-*.apk",
+    )
+    seen: set[Path] = set()
+    for tmp_dir in tmp_dirs:
+        try:
+            resolved = tmp_dir.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        for pattern in patterns:
+            for path in tmp_dir.glob(pattern):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
+
+def register_staged_apk_temp_cleanup(build_script: Path) -> None:
+    slug = parse_app_temp_slug(build_script)
+    if slug:
+        atexit.register(cleanup_staged_apk_temp_files, slug)
 
 
 def load_env(env_path: Path) -> None:
@@ -405,6 +451,7 @@ def main() -> None:
     load_env(env_path)
 
     app_config_key, app_dir = resolve_app_dir(script_dir, args.app_folder)
+    register_staged_apk_temp_cleanup(app_dir / BUILD_SCRIPT_NAME)
     config = load_config(env_path, APP_CONFIGS[app_config_key], script_dir)
     source_repo_dir, target_commitish = assert_release_source_is_ready(app_dir, config.gitea_repo)
 

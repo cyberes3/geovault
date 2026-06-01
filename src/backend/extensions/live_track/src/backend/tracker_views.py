@@ -282,6 +282,7 @@ def _bounded_track_geometry_payload(track: LiveTrack, is_owner: bool, max_bytes:
     window_key = (track.settings or {}).get("recent_data_window")
     if window_key:
         coords, point_params = _filter_coords_by_recent_window(coords, point_params, window_key)
+    total_filtered_count = len(coords)
 
     if not is_owner:
         if not getattr(track, "share_params_with_recipients", False):
@@ -316,6 +317,13 @@ def _bounded_track_geometry_payload(track: LiveTrack, is_owner: bool, max_bytes:
         response_payload["shared_with_emails"] = [e for e in emails if e]
 
     params_align_with_coords = len(point_params) == len(coords)
+    response_payload["geometry_status"] = {
+        "window": window_key or "all",
+        "returned_count": 0,
+        "total_filtered_count": total_filtered_count,
+        "is_truncated": False,
+        "params_align_with_coords": params_align_with_coords,
+    }
     take_last = _fit_tail_count_to_max_bytes(
         response_payload,
         coords,
@@ -346,6 +354,13 @@ def _bounded_track_geometry_payload(track: LiveTrack, is_owner: bool, max_bytes:
         response_payload["point_params"] = normalized_params
         response_payload["bbox"] = _bbox_from_normalized_coords(normalized_coords)
 
+    response_payload["geometry_status"] = {
+        "window": window_key or "all",
+        "returned_count": len(normalized_coords),
+        "total_filtered_count": total_filtered_count,
+        "is_truncated": len(normalized_coords) < total_filtered_count,
+        "params_align_with_coords": params_align_with_coords,
+    }
     return response_payload
 
 
@@ -682,7 +697,7 @@ def tracker_subscribers(request, tracker_id):
 @handle_404
 @csrf_exempt
 def tracker_get_geometry(request, tracker_id):
-    """GET trackers/<id>/geometry/ — full geometry + all point_params (for map, params table, etc.). ?all=true bypasses recent_data_window filter."""
+    """GET trackers/<id>/geometry/ — byte-bounded filtered geometry by default; ?all=true is explicit full history."""
     track = _get_track_for_user_or_404(request.user, tracker_id)
     is_owner = track.user_id == request.user.id
     all_data = request.GET.get("all", "").lower() == "true"

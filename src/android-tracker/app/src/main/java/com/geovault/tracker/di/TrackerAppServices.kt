@@ -15,6 +15,7 @@ import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.data.TrackerDetailRepositoryImpl
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerManagementStateStore
+import com.geovault.tracker.history.TrackerHistoryRepository
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
 import com.geovault.tracker.settings.TrackerSettingsWritePolicy
@@ -40,6 +41,8 @@ class TrackerAppServices private constructor(private val appContext: Context) {
     }
 
     private val trackerManagementStateStore by lazy { TrackerManagementStateStore() }
+
+    private val trackerHistoryRepository by lazy { TrackerHistoryRepository() }
 
     private val trackerAndGroupManagementRepository by lazy {
         ApiTrackerManagementRepository(appContext, trackerManagementStateStore)
@@ -71,6 +74,8 @@ class TrackerAppServices private constructor(private val appContext: Context) {
     fun groupManagementRepository(): GroupManagementRepository = trackerAndGroupManagementRepository
 
     fun trackerManagementStateStore(): TrackerManagementStateStore = trackerManagementStateStore
+
+    fun trackerHistoryRepository(): TrackerHistoryRepository = trackerHistoryRepository
 
     fun trackerDetailRepository(): TrackerDetailRepository = trackerDetailRepository
 

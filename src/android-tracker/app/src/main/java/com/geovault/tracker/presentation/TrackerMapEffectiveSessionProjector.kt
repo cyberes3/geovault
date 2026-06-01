@@ -11,6 +11,7 @@ data class TrackerMapEffectiveSessionInput(
     val trailPointLimit: Int,
     val sessionWindows: TrackerMapSessionWindowState = TrackerMapSessionWindowState(),
     val visibleTrackerIds: Set<String>? = null,
+    val skipRecentWindowFilterTrackerIds: Set<String> = emptySet(),
     val nowMs: Long = System.currentTimeMillis(),
 )
 
@@ -25,47 +26,32 @@ object TrackerMapEffectiveSessionProjector {
     fun project(input: TrackerMapEffectiveSessionInput): TrackerMapEffectiveSession {
         val state = input.state
         val plan = input.plan
-        val renderTrails = allQueueTrailsWithLocalRuntimeOverlay(
-            mode = state.mode,
-            runtime = state.runtime,
-            groupTrackerIds = plan.groupTrackerIds,
-            allQueueTrailsByTracker = state.allQueueTrailsByTracker,
-            trailPointLimit = input.trailPointLimit,
-        )
-        val singleTrail = singleTrailWithLocalRuntimeOverlay(
-            mode = state.mode,
-            runtime = state.runtime,
-            displayedTrackerId = plan.displayedTrackerId,
-            trail = state.trail,
-            trailPointLimit = input.trailPointLimit,
-        )
-        val effectiveState = if (singleTrail === state.trail) {
-            state
-        } else {
-            state.copy(trail = singleTrail)
-        }
         val snapshot = TrackerMapSessionEngine.build(
             TrackerMapSessionBuildInput(
-                state = effectiveState,
+                state = state,
                 plan = plan,
-                localRuntimeOverlayTrails = renderTrails,
+                localRuntimeOverlayTrails = state.allQueueTrailsByTracker,
                 sessionWindows = input.sessionWindows,
                 visibleTrackerIds = input.visibleTrackerIds,
+                skipRecentWindowFilterTrackerIds = input.skipRecentWindowFilterTrackerIds,
                 nowMs = input.nowMs,
             )
         )
         val liveHead = resolveLiveHead(snapshot)
         val projectSignature =
             "mode=${state.mode}|displayed=${plan.displayedTrackerId}|single=${state.trail.size}->${snapshot.singleTrail.size}|" +
-                "multi=${snapshot.renderTrailsByTracker.mapValues { it.value.size }}|liveHead=$liveHead"
+                "multi=${snapshot.renderTrailsByTracker.mapValues { it.value.size }}|liveHead=$liveHead|" +
+                "skipFilter=${input.skipRecentWindowFilterTrackerIds.sorted()}"
         if (CaptureLogThrottle.shouldLogOnChange("effective_project", projectSignature)) {
             GeoVaultCaptureLog.d(
                 TAG,
-                "map_update effective_project mode=${state.mode} displayed=${plan.displayedTrackerId} " +
-                    "singleRaw=${state.trail.size} singleEffective=${snapshot.singleTrail.size} " +
+                "map_draw_session mode=${state.mode} displayed=${plan.displayedTrackerId} " +
+                    "singleRaw=${state.trail.size} singleDrawn=${snapshot.singleTrail.size} " +
                     "multiRaw=${state.allQueueTrailsByTracker.mapValues { it.value.size }} " +
-                    "multiEffective=${snapshot.renderTrailsByTracker.mapValues { it.value.size }} " +
-                    "visible=${input.visibleTrackerIds?.sorted()} liveHead=$liveHead"
+                    "multiDrawn=${snapshot.renderTrailsByTracker.mapValues { it.value.size }} " +
+                    "visible=${input.visibleTrackerIds?.sorted()} " +
+                    "skip_client_window_filter=${input.skipRecentWindowFilterTrackerIds.sorted()} " +
+                    "liveHead=$liveHead",
             )
         }
         return TrackerMapEffectiveSession(

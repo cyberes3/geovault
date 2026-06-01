@@ -104,24 +104,26 @@ class TrackerMapSessionEngineTest {
 
     @Test
     fun reducePoint_preservesRuntimeOverlayTracksFromInputSnapshot() {
+        val localTrail = listOf(
+            queued(
+                trackerId = "local",
+                id = 0L,
+                time = 10L,
+                prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME,
+            ),
+        )
         val initial = TrackerMapSessionEngine.build(
             TrackerMapSessionBuildInput(
-                state = TrackerMapUiState(mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER),
+                state = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+                    allQueueTrailsByTracker = mapOf("local" to localTrail),
+                ),
                 plan = plan(
                     mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
                     acceptedRemoteTrackerIds = setOf("remote"),
                     remoteSubscriptionIds = setOf("remote"),
                 ),
-                localRuntimeOverlayTrails = mapOf(
-                    "local" to listOf(
-                        queued(
-                            trackerId = "local",
-                            id = 0L,
-                            time = 10L,
-                            prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS_RUNTIME,
-                        )
-                    )
-                ),
+                localRuntimeOverlayTrails = mapOf("local" to localTrail),
             )
         )
 

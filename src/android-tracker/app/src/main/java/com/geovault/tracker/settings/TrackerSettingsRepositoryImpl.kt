@@ -95,6 +95,16 @@ class TrackerSettingsRepositoryImpl(
         enqueueMutation("set_group_mode_fit_only_active_trackers") { it.copy(groupModeFitOnlyActiveTrackers = enabled) }
 
     override fun setWasTrackingBeforeExit(value: Boolean) {
+        val current = state.value
+        if (current.isReady && current.wasTrackingBeforeExit == value) {
+            logEvent(
+                name = "intent_ignored",
+                reason = "set_was_tracking_before_exit",
+                opId = null,
+                extra = "cause=no_op current=$value"
+            )
+            return
+        }
         val opId = nextOpId()
         enqueueCommand(
             SettingsCommand(
@@ -110,6 +120,16 @@ class TrackerSettingsRepositoryImpl(
     }
 
     override fun clearWasTrackingBeforeExit() {
+        val current = state.value
+        if (current.isReady && !current.wasTrackingBeforeExit) {
+            logEvent(
+                name = "intent_ignored",
+                reason = "clear_was_tracking_before_exit",
+                opId = null,
+                extra = "cause=no_op current=false"
+            )
+            return
+        }
         val opId = nextOpId()
         enqueueCommand(
             SettingsCommand(
@@ -128,6 +148,19 @@ class TrackerSettingsRepositoryImpl(
         name: String,
         transform: (TrackerSettings) -> TrackerSettings
     ) {
+        val currentState = state.value
+        if (currentState.isReady) {
+            val nextSettings = writePolicy.sanitize(transform(currentState.settings))
+            if (nextSettings == currentState.settings) {
+                logEvent(
+                    name = "intent_ignored",
+                    reason = name,
+                    opId = null,
+                    extra = "cause=no_op settings=${settingsSummary(currentState.settings)}"
+                )
+                return
+            }
+        }
         val opId = nextOpId()
         enqueueCommand(
             SettingsCommand(

@@ -206,7 +206,16 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = trackerId,
-            trail = listOf(serverTail),
+            trail = listOf(
+                serverTail,
+                sessionPoint(
+                    trackerId = trackerId,
+                    time = sessionStart + 200L,
+                    latitude = 41.0,
+                    longitude = -75.0,
+                    startTimestampMs = sessionStart,
+                ),
+            ),
         )
 
         val projected = TrackerMapEffectiveSessionProjector.project(
@@ -256,7 +265,18 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = trackerId,
-            trail = listOf(olderPoint, previousPoint, serverCurrentPoint),
+            trail = listOf(
+                olderPoint,
+                previousPoint,
+                serverCurrentPoint,
+                sessionPoint(
+                    trackerId = trackerId,
+                    time = 10_200L,
+                    latitude = 4.0,
+                    longitude = 4.0,
+                    startTimestampMs = sessionStart,
+                ),
+            ),
         )
 
         val projected = TrackerMapEffectiveSessionProjector.project(
@@ -272,7 +292,10 @@ class TrackerMapViewModelStreamingContractsTest {
             )
         )
 
-        assertEquals(listOf(previousPoint.time, serverCurrentPoint.time, 10_200L), projected.snapshot.singleTrail.map { it.time })
+        assertEquals(
+            listOf(previousPoint.time, serverCurrentPoint.time, 10_200L),
+            projected.snapshot.singleTrail.map { it.time },
+        )
         assertEquals(4.0 to 4.0, projected.liveHead)
     }
 

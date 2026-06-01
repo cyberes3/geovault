@@ -43,8 +43,7 @@ data class TrackerMapServerTrailResult(
 
 /**
  * IO seam for [TrackerMapTrailLoader]. Function-typed so the loader can be exercised as a pure
- * unit without a `TrackerMapViewModel` instance, mirroring the style of
- * [TrackerMapTrailDataCoordinator].
+ * unit without a `TrackerMapViewModel` instance.
  */
 class TrackerMapTrailLoaderOps(
     val loadSingleServer: suspend (trackerId: String, existingTrailMinTimeMs: Long?) -> TrackerMapServerTrailResult,

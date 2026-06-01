@@ -14,6 +14,7 @@ fun TrackerDto.toDomainModel(): Tracker {
         settings = settings?.toMapAny(),
         geometry = geometry?.let { GeoJsonLineString(type = it.type, coordinates = it.coordinates) },
         point_params = point_params?.map { it.toMapAny() },
+        geometry_status = geometry_status?.toDomainModel(),
         last_point = last_point,
         bbox = bbox,
         tracker_secret = tracker_secret,
@@ -40,6 +41,16 @@ fun TrackerCoordinatesResponseDto.toDomainModel(): TrackerCoordinatesResponse {
     return TrackerCoordinatesResponse(
         coordinates = coordinates,
         point_params = point_params?.map { it.toMapAny() }
+    )
+}
+
+private fun TrackerGeometryStatusDto.toDomainModel(): TrackerGeometryStatus {
+    return TrackerGeometryStatus(
+        window = window ?: "all",
+        returned_count = returned_count ?: 0,
+        total_filtered_count = total_filtered_count ?: returned_count ?: 0,
+        is_truncated = is_truncated ?: false,
+        params_align_with_coords = params_align_with_coords ?: true,
     )
 }
 

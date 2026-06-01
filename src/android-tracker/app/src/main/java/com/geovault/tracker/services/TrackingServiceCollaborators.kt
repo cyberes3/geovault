@@ -34,11 +34,11 @@ class LocationIngestCoordinator(
     private val locationDao: LocationDao,
     private val onForcedLocalReanchor: (LocalReanchorEvent) -> Unit = {},
 ) {
-    private val localTrackPointState = LocalTrackPointStateCoordinator(onForcedLocalReanchor)
+    private val positioningEngine = PositioningEngine(onForcedLocalReanchor)
 
     @Synchronized
     fun resetSession(trackId: String) {
-        localTrackPointState.resetSession(trackId)
+        positioningEngine.resetSession(trackId)
     }
 
     fun ingest(
@@ -108,7 +108,7 @@ class LocationIngestCoordinator(
         }
 
         val bypassCanonical = if (bypassFilters) {
-            localTrackPointState.eventForLocation(
+            positioningEngine.eventForLocation(
                 trackId = trackId,
                 location = location,
                 isMockLocation = isMockLocation,
@@ -118,7 +118,7 @@ class LocationIngestCoordinator(
             null
         }
         if (bypassCanonical != null) {
-            when (localTrackPointState.validateBypass(trackId = trackId, canonical = bypassCanonical)) {
+            when (positioningEngine.validateBypass(trackId = trackId, canonical = bypassCanonical)) {
                 TrackPointRejectReason.DUPLICATE -> {
                     return ignored(
                         previousAcceptedLocation = previousAcceptedLocation,
@@ -154,7 +154,7 @@ class LocationIngestCoordinator(
         )
         val insertedId = locationDao.insert(queued)
         if (bypassCanonical != null) {
-            localTrackPointState.acceptBypass(
+            positioningEngine.acceptBypass(
                 trackId = trackId,
                 canonical = bypassCanonical,
                 config = filterConfig,
@@ -191,7 +191,7 @@ class LocationIngestCoordinator(
         nowMs: Long,
         nowElapsedRealtimeNanos: Long,
     ): com.geovault.tracker.policy.TrackPointDecision {
-        val event = localTrackPointState.eventForLocation(
+        val event = positioningEngine.eventForLocation(
             trackId = trackId,
             location = location,
             isMockLocation = isMockLocation,
@@ -199,7 +199,7 @@ class LocationIngestCoordinator(
         )
         // Pipeline derives "previous" from pipeline-local accepted state.
         // This intentionally avoids anchoring policy to bypass-only points.
-        return localTrackPointState.evaluate(
+        return positioningEngine.evaluate(
             trackId = trackId,
             event = event,
             nowMs = nowMs,

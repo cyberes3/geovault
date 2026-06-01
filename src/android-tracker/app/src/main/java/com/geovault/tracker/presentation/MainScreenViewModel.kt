@@ -27,6 +27,9 @@ import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerSessionBootstrap
+import com.geovault.tracker.history.TrackerHistoryIntent
+import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
+import com.geovault.tracker.history.TrackerHistorySourceAdapters
 import com.geovault.tracker.TrackingService
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
@@ -65,6 +68,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerManagementRepository()
     private val sessionBootstrap: TrackerSessionBootstrap =
         TrackerAppServices.from(application).trackerSessionBootstrap()
+    private val historyRepository = TrackerAppServices.from(application).trackerHistoryRepository()
+    private val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
     private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Tracker.versionCheckSession(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
@@ -287,7 +292,20 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val selectedId = SelectedTrackerPrefs.selectedTrackerId(app).trim()
             if (selectedId.isEmpty()) return@launch
             when (val result = trackerManagementRepository.loadTrackerGeometry(selectedId)) {
-                is RepositoryResult.Success -> Unit
+                is RepositoryResult.Success -> {
+                    val batch = TrackerHistorySourceAdapters.filteredServerTrunk(result.data)
+                    val tx = historyIntentDispatcher.dispatch(
+                        TrackerHistoryIntent.CommitTrunk(
+                            batch = batch,
+                            activeSessionStartMs = null,
+                        ),
+                    )
+                    GeoVaultCaptureLog.i(
+                        TAG,
+                        "map_update history_preload_startup tracker=$selectedId window=${batch.window.normalizedKey} " +
+                            "committed=${tx.committed} pts=${tx.snapshot.points.size}",
+                    )
+                }
                 is RepositoryResult.Failure ->
                     GeoVaultCaptureLog.w(
                         "MainScreenViewModel",

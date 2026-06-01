@@ -122,9 +122,9 @@ class TrackerMapTrailLoaderTest {
     }
 
     @Test
-    fun loadAndMerge_groupWithSelfWhileRecording_preservesOwnServerHistory() {
-        // End-to-end MULTI_SERVER merge: recording user in a group must keep server history for
-        // their tracker plus queue and in-flight live points as overlays.
+    fun load_multiServer_keepsServerTrailsSeparateFromQueueOverlays() {
+        // MULTI_SERVER loader must return server geometry per tracker and queue overlays in a
+        // separate map so history can compose trunk + overlay without clobbering server history.
         val ownerServer = listOf(
             point("me", time = 100L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
             point("me", time = 110L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_SERVER_GEOMETRY),
@@ -136,10 +136,6 @@ class TrackerMapTrailLoaderTest {
         val ownerQueue = listOf(
             point("me", time = 150L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
         )
-        val ownerLiveAppendsInState = listOf(
-            point("me", time = 160L, prov = TrackerMapPointProvenancePolicy.PROVENANCE_LOCAL_GPS),
-        )
-
         val ops = ops(
             multiServer = { _, _ -> mapOf("me" to ownerServer, "peer" to peerServer) },
             queue = { id -> if (id == "me") ownerQueue else emptyList() },
@@ -154,25 +150,12 @@ class TrackerMapTrailLoaderTest {
         val loaded = runBlocking {
             TrackerMapTrailLoader.load(plan, existingTrailMinTimeMs = null, existingMultiMinTimes = emptyMap(), ops = ops)
         }
-        val merged = TrackerMapTrailMergePolicy.mergeServerTrailsWithLiveOverlays(
-            serverTrails = loaded.serverTrails,
-            currentTrails = mapOf("me" to ownerLiveAppendsInState),
-            allowedLiveOverlayTrackerIds = plan.trackerIds + setOfNotNull(plan.overlayTrackerId),
-            trailPointLimit = 100,
-            extraLiveOverlaysByTracker = loaded.queueOverlaysByTracker,
-        )
 
-        assertEquals(setOf("me", "peer"), merged.keys)
-        assertEquals(
-            "own tracker keeps full server history with queue + live tail spliced on top",
-            listOf(100L, 110L, 120L, 150L, 160L),
-            merged.getValue("me").map { it.time },
-        )
-        assertEquals(listOf(200L), merged.getValue("peer").map { it.time })
-    }
-
-    private fun setOfNotNull(value: String?): Set<String> {
-        return value?.let { setOf(it) }.orEmpty()
+        assertEquals(setOf("me", "peer"), loaded.serverTrails.keys)
+        assertEquals(ownerServer, loaded.serverTrails["me"])
+        assertEquals(peerServer, loaded.serverTrails["peer"])
+        assertEquals(ownerQueue, loaded.queueOverlaysByTracker["me"])
+        assertEquals(ownerServer, loaded.singleTrailSeed)
     }
 
     @Test

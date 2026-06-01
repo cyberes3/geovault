@@ -2096,6 +2096,12 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(coords[0][0], -121.0)
         self.assertEqual(coords[0][1], 38.0)
         self.assertEqual(len(data.get("point_params", [])), 1)
+        status = data.get("geometry_status") or {}
+        self.assertEqual(status.get("window"), "1h")
+        self.assertEqual(status.get("returned_count"), 1)
+        self.assertEqual(status.get("total_filtered_count"), 1)
+        self.assertFalse(status.get("is_truncated"))
+        self.assertTrue(status.get("params_align_with_coords"))
 
     def test_geometry_recent_window_empty_falls_back_to_latest_point(self):
         """GET geometry keeps latest point when recent_data_window would otherwise hide all points."""
@@ -2892,6 +2898,10 @@ class TestLiveTrackAPI(TestCase):
         returned_params = data.get("point_params", [])
         self.assertLess(len(returned_coords), len(coords))
         self.assertEqual(len(returned_coords), len(returned_params))
+        status = data.get("geometry_status") or {}
+        self.assertEqual(status.get("returned_count"), len(returned_coords))
+        self.assertEqual(status.get("total_filtered_count"), len(coords))
+        self.assertTrue(status.get("is_truncated"))
         if returned_coords:
             self.assertEqual(returned_coords[-1][2], coords[-1][2], "Newest point should be retained")
 
@@ -2995,6 +3005,10 @@ class TestLiveTrackAPI(TestCase):
         returned_params = entry.get("point_params", [])
         self.assertLess(len(returned_coords), len(coords))
         self.assertEqual(len(returned_coords), len(returned_params))
+        status = entry.get("geometry_status") or {}
+        self.assertEqual(status.get("returned_count"), len(returned_coords))
+        self.assertEqual(status.get("total_filtered_count"), len(coords))
+        self.assertTrue(status.get("is_truncated"))
         if returned_coords:
             self.assertEqual(returned_coords[-1][2], coords[-1][2], "Newest point should be retained")
 

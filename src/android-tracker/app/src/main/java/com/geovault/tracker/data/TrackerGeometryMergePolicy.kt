@@ -22,6 +22,11 @@ object TrackerGeometryMergePolicy {
             settings = incoming.settings ?: existing.settings,
             geometry = incoming.geometry ?: existing.geometry,
             point_params = mergedPointParams,
+            geometry_status = when {
+                incoming.geometry_status != null -> incoming.geometry_status
+                incomingHasGeometry -> null
+                else -> existing.geometry_status
+            },
             last_point = incoming.last_point ?: existing.last_point,
             bbox = incoming.bbox ?: existing.bbox,
             tracker_secret = incoming.tracker_secret ?: existing.tracker_secret,

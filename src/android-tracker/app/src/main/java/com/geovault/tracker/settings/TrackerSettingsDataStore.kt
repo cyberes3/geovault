@@ -82,6 +82,14 @@ class TrackerSettingsDataStore(context: Context) {
         store.edit { prefs ->
             val current = toRecord(prefs)
             val next = transform(current)
+            if (next == current) {
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "datastore_write_ignored reason=$reason cause=no_op schema=${current.schemaVersion} " +
+                        "wasTrackingBeforeExit=${current.wasTrackingBeforeExit} settings=${settingsSummary(current.settings)}"
+                )
+                return@edit
+            }
             GeoVaultCaptureLog.i(
                 TAG,
                 "datastore_write reason=$reason schema=${next.schemaVersion} wasTrackingBeforeExit=${next.wasTrackingBeforeExit} settings=${settingsSummary(next.settings)}"

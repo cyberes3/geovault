@@ -15,6 +15,7 @@ data class Tracker(
     @IgnoredOnParcel val settings: Map<String, Any?>? = null,
     val geometry: GeoJsonLineString? = null,
     @IgnoredOnParcel val point_params: List<Map<String, Any?>>? = null,
+    @IgnoredOnParcel val geometry_status: TrackerGeometryStatus? = null,
     val last_point: List<Double>? = null,
     val bbox: List<Double>? = null,
     val tracker_secret: String? = null,
@@ -42,6 +43,14 @@ data class GeoJsonLineString(
     val type: String,
     val coordinates: List<List<Double>>
 ) : Parcelable
+
+data class TrackerGeometryStatus(
+    val window: String = "all",
+    val returned_count: Int = 0,
+    val total_filtered_count: Int = 0,
+    val is_truncated: Boolean = false,
+    val params_align_with_coords: Boolean = true,
+)
 
 @Serializable
 data class TrackerCreateRequest(
@@ -206,6 +215,7 @@ data class TrackerDto(
     val settings: JsonObject? = null,
     val geometry: GeoJsonLineStringDto? = null,
     @SerialName("point_params") val point_params: List<JsonObject>? = null,
+    @SerialName("geometry_status") val geometry_status: TrackerGeometryStatusDto? = null,
     @SerialName("last_point") val last_point: List<Double>? = null,
     val bbox: List<Double>? = null,
     @SerialName("tracker_secret") val tracker_secret: String? = null,
@@ -223,6 +233,14 @@ data class TrackerDto(
     @SerialName("world_share_id") val world_share_id: String? = null,
     @SerialName("world_share_url") val world_share_url: String? = null,
     @SerialName("shared_with_emails") val shared_with_emails: List<String>? = null
+)
+
+data class TrackerGeometryStatusDto(
+    val window: String? = null,
+    @SerialName("returned_count") val returned_count: Int? = null,
+    @SerialName("total_filtered_count") val total_filtered_count: Int? = null,
+    @SerialName("is_truncated") val is_truncated: Boolean? = null,
+    @SerialName("params_align_with_coords") val params_align_with_coords: Boolean? = null,
 )
 
 data class TrackerCoordinatesResponseDto(

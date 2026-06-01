@@ -2,8 +2,10 @@ package com.geovault.tracker.data
 
 import com.geovault.tracker.GeoJsonLineString
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.TrackerGeometryStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TrackerGeometryMergePolicyTest {
@@ -78,6 +80,33 @@ class TrackerGeometryMergePolicyTest {
 
         assertEquals(listOf(listOf(10.0, 20.0)), merged.geometry?.coordinates)
         assertEquals(listOf(mapOf("starttimestamp" to 90L)), merged.point_params)
+    }
+
+    @Test
+    fun merged_clearsStaleGeometryStatus_whenIncomingGeometryOmitsStatus() {
+        val existing = tracker(
+            id = "t1",
+            name = "Existing",
+            geometryCoords = listOf(listOf(1.0, 2.0)),
+            color = "#112233",
+        ).copy(
+            geometry_status = TrackerGeometryStatus(
+                window = "1h",
+                returned_count = 1,
+                total_filtered_count = 10,
+                is_truncated = true,
+            ),
+        )
+        val incoming = tracker(
+            id = "t1",
+            name = "Existing",
+            geometryCoords = listOf(listOf(3.0, 4.0)),
+            color = "#112233",
+        )
+
+        val merged = TrackerGeometryMergePolicy.merged(existing = existing, incoming = incoming)
+
+        assertNull(merged.geometry_status)
     }
 
     @Test

@@ -3,8 +3,12 @@ package com.geovault.tracker.data
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.presentation.TrackerMapTrailDataCoordinator
+import com.geovault.tracker.presentation.TrackerMapServerTrailResult
 import com.geovault.tracker.presentation.TrackerMapSessionRequestDeduper
+import com.geovault.tracker.presentation.TrackerMapTrailLoader
+import com.geovault.tracker.presentation.TrackerMapTrailLoaderOps
+import com.geovault.tracker.presentation.TrackerMapTrailReloadPlan
+import com.geovault.tracker.presentation.TrackerMapTrailSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -176,17 +180,37 @@ class LaunchNetworkCallDedupeSimulationTest {
         recorder: EndpointRecorder,
         deduper: TrackerMapSessionRequestDeduper,
     ) {
-        TrackerMapTrailDataCoordinator.loadSingleTrackerTrail(
-            trackerId = trackerId,
-            existingTrailMinTimeMs = null,
-            loadTrackerGeometry = { id ->
-                deduper.loadOnce("geometry:$id") {
-                    recorder.record("GET /api/extensions/live-track/trackers/$id/geometry/")
-                    RepositoryResult.Success(Tracker(id = id, name = "Tracker", color = null))
+        val ops = TrackerMapTrailLoaderOps(
+            loadSingleServer = { id, _ ->
+                when (
+                    val result = deduper.loadOnce("geometry:$id") {
+                        recorder.record("GET /api/extensions/live-track/trackers/$id/geometry/")
+                        RepositoryResult.Success(
+                            TrackerMapServerTrailResult(
+                                trailsByTracker = mapOf(id to emptyList()),
+                                authoritativeTrackerIds = setOf(id),
+                            ),
+                        )
+                    }
+                ) {
+                    is RepositoryResult.Success -> result.data
+                    is RepositoryResult.Failure -> TrackerMapServerTrailResult(emptyMap(), emptySet())
                 }
             },
-            loadQueueTrail = { emptyList<QueuedLocation>() },
-            mapCoordinatesToTrail = { _, _, _, _ -> emptyList() },
+            loadMultiServer = { _, _ ->
+                TrackerMapServerTrailResult(emptyMap(), emptySet())
+            },
+            loadQueue = { emptyList() },
+        )
+        TrackerMapTrailLoader.load(
+            plan = TrackerMapTrailReloadPlan(
+                source = TrackerMapTrailSource.SINGLE_SERVER,
+                singleTrackerId = trackerId,
+                activeTrackerId = trackerId,
+            ),
+            existingTrailMinTimeMs = null,
+            existingMultiMinTimes = emptyMap(),
+            ops = ops,
         )
     }
 

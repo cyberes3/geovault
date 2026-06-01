@@ -100,7 +100,7 @@ data class MotionProfileTuning(
             rollingWindowSeconds = 5.0,
             kinematicCap = KinematicCapConfig.Default,
             movementCandidate = MovementCandidateConfig(
-                enabled = false,
+                enabled = true,
                 suspectDistanceMeters = 300.0,
                 suspectAccuracyMeters = 60.0,
                 suspectImpliedSpeedMps = 35.0,

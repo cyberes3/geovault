@@ -119,13 +119,15 @@ class TrackerMapSessionEngineRosterFilterTest {
 
     @Test
     fun reducePoint_keepsNextSnapshotTracksRosterFiltered() {
+        val visibleTrail = listOf(queued("visible", 10L))
         val initial = TrackerMapSessionEngine.build(
             TrackerMapSessionBuildInput(
-                state = TrackerMapUiState(mode = TrackerMapDisplayMode.ALL_QUEUE),
-                plan = plan(acceptedRemoteTrackerIds = setOf("visible", "hidden")),
-                localRuntimeOverlayTrails = mapOf(
-                    "visible" to listOf(queued("visible", 10L)),
+                state = TrackerMapUiState(
+                    mode = TrackerMapDisplayMode.ALL_QUEUE,
+                    allQueueTrailsByTracker = mapOf("visible" to visibleTrail),
                 ),
+                plan = plan(acceptedRemoteTrackerIds = setOf("visible", "hidden")),
+                localRuntimeOverlayTrails = mapOf("visible" to visibleTrail),
                 visibleTrackerIds = setOf("visible"),
             )
         )
