@@ -79,11 +79,36 @@ export async function compareCommits(env, origin, codeOwner, codeRepo, baseCommi
   return { status, totalCommits: Number.isFinite(totalCommits) ? totalCommits : null };
 }
 
-export function isReleaseCommitNewer(compare) {
-  const status = compare.status;
+/**
+ * Whether the release commit is strictly newer than the local build.
+ *
+ * @param {object} forwardCompare Gitea compare local...release (commits on release not in local).
+ * @param {object | null} reverseCompare When forward is `diverged`, compare release...local.
+ */
+export function isReleaseCommitNewer(forwardCompare, reverseCompare = null) {
+  const status = forwardCompare?.status;
   if (status === 'ahead') return true;
   if (status === 'identical' || status === 'behind') return false;
-  if (compare.totalCommits != null) return compare.totalCommits > 0;
+
+  if (status === 'diverged' && reverseCompare) {
+    const reverseStatus = reverseCompare.status;
+    if (reverseStatus === 'ahead' || reverseStatus === 'identical') {
+      return false;
+    }
+    if (reverseStatus === 'behind') {
+      return true;
+    }
+    if (reverseStatus === 'diverged') {
+      const releaseOnly = forwardCompare.totalCommits ?? 0;
+      const localOnly = reverseCompare.totalCommits ?? 0;
+      if (releaseOnly === 0) return false;
+      if (localOnly >= releaseOnly) return false;
+      return true;
+    }
+    return false;
+  }
+
+  // Unknown / missing compare data: do not prompt without proof the release is ahead.
   return false;
 }
 

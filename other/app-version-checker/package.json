@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node bundle-assets.js",
     "deploy": "npm run build && wrangler deploy",
-    "dev": "npm run build && wrangler dev"
+    "dev": "npm run build && wrangler dev",
+    "test": "node --test src/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.65.0"

@@ -93,7 +93,7 @@ export async function runCheck(env, payload) {
     };
   }
 
-  const compare = await compareCommits(
+  const forwardCompare = await compareCommits(
     env,
     match.origin,
     match.codeOwner,
@@ -101,7 +101,18 @@ export async function runCheck(env, payload) {
     localSha,
     resolved
   );
-  const newer = isReleaseCommitNewer(compare);
+  let reverseCompare = null;
+  if (forwardCompare.status === 'diverged') {
+    reverseCompare = await compareCommits(
+      env,
+      match.origin,
+      match.codeOwner,
+      match.codeRepoName,
+      resolved,
+      localSha
+    );
+  }
+  const newer = isReleaseCommitNewer(forwardCompare, reverseCompare);
 
   return {
     status: 200,

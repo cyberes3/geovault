@@ -60,6 +60,8 @@ Returns JSON:
 **Success (200):** JSON includes:
 
 - `isLatest` — `true` if the installed build is up to date, `false` if a newer release commit exists per Gitea compare.
+  For diverged histories (e.g. after a rebase), the worker compares both directions so dev builds ahead of the published
+  tag are not treated as outdated.
 - `latestApkUrl`, `releasePageUrl`, `releaseTag`, `releaseCommitSha`, `localCommitSha`
 - `appName`, `versionLabel`, `releasesRepo`, `codeRepo`
 
