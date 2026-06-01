@@ -18,6 +18,7 @@ data class TrackerMapEffectiveSessionInput(
 data class TrackerMapEffectiveSession(
     val snapshot: TrackerMapSessionSnapshot,
     val liveHead: Pair<Double, Double>?,
+    val skipRecentWindowFilterTrackerIds: Set<String> = emptySet(),
 )
 
 object TrackerMapEffectiveSessionProjector {
@@ -57,6 +58,7 @@ object TrackerMapEffectiveSessionProjector {
         return TrackerMapEffectiveSession(
             snapshot = snapshot,
             liveHead = liveHead,
+            skipRecentWindowFilterTrackerIds = input.skipRecentWindowFilterTrackerIds,
         )
     }
 
