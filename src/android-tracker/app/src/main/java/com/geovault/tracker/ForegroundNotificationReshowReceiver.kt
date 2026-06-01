@@ -9,6 +9,7 @@ import com.geovault.tracker.runtime.RuntimeCommand
 import com.geovault.tracker.runtime.RuntimeCommandType
 import com.geovault.tracker.runtime.RuntimeTrigger
 import com.geovault.tracker.runtime.TrackingRuntimeController
+import com.geovault.tracker.tracking.TrackingServiceIntents
 
 /**
  * NOTIF-FGS-ESCALATION: notification-dismiss intents arrive while the app may be in the
@@ -23,7 +24,7 @@ class ForegroundNotificationReshowReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val pkg = context.packageName
         when (intent?.action) {
-            TrackingService.NOTIFICATION_DISMISSED_ACTION -> {
+            TrackingServiceIntents.NOTIFICATION_DISMISSED_ACTION -> {
                 TrackingRuntimeController.get(context.applicationContext).handle(
                     RuntimeCommand(
                         type = RuntimeCommandType.RESHOW_FOREGROUND,

@@ -1,7 +1,9 @@
 package com.geovault.tracker.startup
 
 import android.content.Intent
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
+import com.geovault.tracker.tracking.TrackingServiceConstants
 
 data class BootStartupSnapshot(
     val action: String?,
@@ -50,7 +52,7 @@ object BootStartupPolicy {
         if (!snapshot.gpsProviderEnabled) {
             blockers += BootStartupBlocker.GpsProviderDisabled
         }
-        if (!TrackingService.hasValidSelectedTrackerId(snapshot.selectedTrackerId)) {
+        if (!TrackingServiceIntents.hasValidSelectedTrackerId(snapshot.selectedTrackerId)) {
             blockers += BootStartupBlocker.InvalidSelectedTracker
         }
         return BootStartupDecision(

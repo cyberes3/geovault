@@ -11,6 +11,8 @@ import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.startup.WatchdogColdStartArmer
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
 
 class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListener {
 
@@ -33,7 +35,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
             TrackingRecoveryCoordinator.markIntentionalStop(hookContext, reason = "app_reset")
             hookContext.startService(
                 Intent(hookContext, TrackingService::class.java).apply {
-                    action = TrackingService.ACTION_STOP
+                    action = TrackingServiceIntents.ACTION_STOP
                 }
             )
             hookContext.startService(

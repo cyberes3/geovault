@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -24,7 +26,7 @@ class TrackingServiceDeliveryHelperTest {
         val result = TrackingServiceDeliveryHelper.deliver(
             context = context,
             intent = Intent(context, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_LOCATION_UPDATE
+                action = TrackingServiceIntents.ACTION_LOCATION_UPDATE
             },
             source = TrackingServiceDeliverySource.FusedLocationUpdate,
             starter = starter,
@@ -45,7 +47,7 @@ class TrackingServiceDeliveryHelperTest {
         val result = TrackingServiceDeliveryHelper.deliver(
             context = context,
             intent = Intent(context, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_LOCATION_UPDATE
+                action = TrackingServiceIntents.ACTION_LOCATION_UPDATE
             },
             source = TrackingServiceDeliverySource.FusedLocationUpdate,
             starter = starter,
@@ -58,7 +60,7 @@ class TrackingServiceDeliveryHelperTest {
         assertTrue(escalated.requiresForegroundServiceStart())
         assertEquals(
             TrackingServiceDeliverySource.FusedLocationUpdate.logName,
-            escalated.getStringExtra(TrackingService.EXTRA_BACKGROUND_WAKEUP_SOURCE)
+            escalated.getStringExtra(TrackingServiceIntents.EXTRA_BACKGROUND_WAKEUP_SOURCE)
         )
     }
 
@@ -70,7 +72,7 @@ class TrackingServiceDeliveryHelperTest {
         val result = TrackingServiceDeliveryHelper.deliver(
             context = context,
             intent = Intent(context, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_LOCATION_UPDATE
+                action = TrackingServiceIntents.ACTION_LOCATION_UPDATE
             },
             source = TrackingServiceDeliverySource.FusedLocationUpdate,
             starter = starter,
@@ -84,14 +86,14 @@ class TrackingServiceDeliveryHelperTest {
     @Test
     fun requiresForegroundPromotion_escalatedWakeupPathsPromote() {
         assertTrue(
-            TrackingService.requiresForegroundPromotion(
-                TrackingService.Companion.StartupCommandPath.LocationUpdate,
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.StartupCommandPath.LocationUpdate,
                 foregroundStartRequired = true,
             )
         )
         assertFalse(
-            TrackingService.requiresForegroundPromotion(
-                TrackingService.Companion.StartupCommandPath.LocationUpdate,
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.StartupCommandPath.LocationUpdate,
                 foregroundStartRequired = false,
             )
         )
@@ -116,6 +118,6 @@ class TrackingServiceDeliveryHelperTest {
     }
 
     private fun Intent.requiresForegroundServiceStart(): Boolean {
-        return getBooleanExtra(TrackingService.EXTRA_FOREGROUND_SERVICE_START_REQUIRED, false)
+        return getBooleanExtra(TrackingServiceIntents.EXTRA_FOREGROUND_SERVICE_START_REQUIRED, false)
     }
 }

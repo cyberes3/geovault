@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import com.geovault.tracker.runtime.RuntimeTelemetry
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.tracking.TrackingServiceIntents
 
 internal enum class TrackingServiceDeliverySource(val logName: String) {
     FusedLocationUpdate("fused_location_update"),
@@ -123,8 +124,8 @@ internal object TrackingServiceDeliveryHelper {
         telemetry: RuntimeTelemetry,
     ): TrackingServiceDeliveryResult {
         val foregroundIntent = Intent(originalIntent).apply {
-            putExtra(TrackingService.EXTRA_FOREGROUND_SERVICE_START_REQUIRED, true)
-            putExtra(TrackingService.EXTRA_BACKGROUND_WAKEUP_SOURCE, source.logName)
+            putExtra(TrackingServiceIntents.EXTRA_FOREGROUND_SERVICE_START_REQUIRED, true)
+            putExtra(TrackingServiceIntents.EXTRA_BACKGROUND_WAKEUP_SOURCE, source.logName)
         }
         return try {
             GeoVaultCaptureLog.i(TAG, "deliver source=${source.logName} action=$action path=startForegroundService")

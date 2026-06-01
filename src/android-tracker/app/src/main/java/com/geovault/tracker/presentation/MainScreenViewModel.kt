@@ -30,7 +30,9 @@ import com.geovault.tracker.data.TrackerSessionBootstrap
 import com.geovault.tracker.history.TrackerHistoryIntent
 import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
 import com.geovault.tracker.history.TrackerHistorySourceAdapters
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
+import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -214,7 +216,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
         app.startService(
             Intent(app, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_SEND_MANUAL_POINT
+                action = TrackingServiceIntents.ACTION_SEND_MANUAL_POINT
             }
         )
     }

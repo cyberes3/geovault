@@ -74,7 +74,7 @@
             android:permission="com.geovault.common.permission.READ_SERVER_URL" />
 
         <service
-            android:name=".TrackingService"
+            android:name=".tracking.TrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
         <service

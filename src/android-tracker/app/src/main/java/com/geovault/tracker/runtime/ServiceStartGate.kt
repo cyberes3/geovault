@@ -7,7 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
+import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlin.math.min
 
 data class StartGateDecision(
@@ -63,7 +65,7 @@ class ServiceStartGate(private val context: Context) {
             .apply()
 
         val intent = Intent(appContext, TrackingService::class.java).apply {
-            action = TrackingService.ACTION_START
+            action = TrackingServiceIntents.ACTION_START
             setPackage(appContext.packageName)
         }
         return try {
@@ -139,7 +141,7 @@ class ServiceStartGate(private val context: Context) {
     private fun scheduleRetry(retryInMs: Long) {
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val retryIntent = Intent(appContext, TrackingService::class.java).apply {
-            action = TrackingService.ACTION_START
+            action = TrackingServiceIntents.ACTION_START
             setPackage(appContext.packageName)
         }
         val pendingIntent = PendingIntent.getService(

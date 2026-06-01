@@ -3,6 +3,7 @@ package com.geovault.tracker
 import android.content.Context
 import android.location.Location
 import androidx.test.core.app.ApplicationProvider
+import com.geovault.tracker.tracking.TrackingServiceIntents
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,12 +24,12 @@ class TrackingServiceLocationUpdateIntentTest {
             time = 1234L
         }
 
-        val intent = TrackingService.buildLocationUpdateIntent(context, listOf(original))
+        val intent = TrackingServiceIntents.buildLocationUpdateIntent(context, listOf(original))
         original.latitude = 99.0
 
-        val extracted = TrackingService.extractLocationUpdateIntentLocations(intent)
+        val extracted = TrackingServiceIntents.extractLocationUpdateIntentLocations(intent)
 
-        assertEquals(TrackingService.ACTION_LOCATION_UPDATE, intent.action)
+        assertEquals(TrackingServiceIntents.ACTION_LOCATION_UPDATE, intent.action)
         assertEquals(1, extracted.size)
         assertEquals(10.0, extracted.single().latitude, 0.0)
         assertEquals(20.0, extracted.single().longitude, 0.0)
@@ -39,13 +40,13 @@ class TrackingServiceLocationUpdateIntentTest {
     @Test
     fun extractLocationUpdateIntentLocations_ignoresOtherActions() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val intent = TrackingService.buildLocationUpdateIntent(
+        val intent = TrackingServiceIntents.buildLocationUpdateIntent(
             context = context,
-            locations = listOf(Location("gps"))
+            locations = listOf(Location("gps")),
         ).apply {
-            action = TrackingService.ACTION_RESHOW_FOREGROUND
+            action = TrackingServiceIntents.ACTION_RESHOW_FOREGROUND
         }
 
-        assertTrue(TrackingService.extractLocationUpdateIntentLocations(intent).isEmpty())
+        assertTrue(TrackingServiceIntents.extractLocationUpdateIntentLocations(intent).isEmpty())
     }
 }

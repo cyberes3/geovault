@@ -1,6 +1,8 @@
 package com.geovault.tracker
 
 import com.geovault.tracker.services.GpsRuntimeState
+import com.geovault.tracker.tracking.LocationRequestController
+import com.geovault.tracker.tracking.TrackingServiceIntents
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,56 +16,47 @@ class TrackingServiceCharacterizationTest {
     @Test
     fun startupCommandRouting_preservesServiceEntrySemantics() {
         assertTrue(
-            TrackingService.requiresForegroundPromotion(
-                TrackingService.resolveStartupCommandPath(TrackingService.ACTION_START)
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_START)
             )
         )
         assertFalse(
-            TrackingService.requiresForegroundPromotion(
-                TrackingService.resolveStartupCommandPath(TrackingService.ACTION_LOCATION_UPDATE)
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_LOCATION_UPDATE)
             )
         )
         assertFalse(
-            TrackingService.requiresForegroundPromotion(
-                TrackingService.resolveStartupCommandPath(null)
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.resolveStartupCommandPath(null)
             )
         )
     }
 
     @Test
     fun expectsActiveFixDelivery_onlyForCollectingStates() {
-        val service = TrackingService()
-        setTracking(service, true)
-
-        setGpsState(service, GpsRuntimeState.RUNNING)
-        assertTrue(invokeExpectsActiveFixDelivery(service))
-
-        setGpsState(service, GpsRuntimeState.PAUSED_FOR_MOTION)
-        assertFalse(invokeExpectsActiveFixDelivery(service))
-
-        setGpsState(service, GpsRuntimeState.WAITING_FOR_PROVIDER)
-        assertFalse(invokeExpectsActiveFixDelivery(service))
-
-        setTracking(service, false)
-        setGpsState(service, GpsRuntimeState.RUNNING)
-        assertFalse(invokeExpectsActiveFixDelivery(service))
-    }
-
-    private fun setTracking(service: TrackingService, value: Boolean) {
-        val field = service.javaClass.getDeclaredField("isTracking")
-        field.isAccessible = true
-        field.set(service, value)
-    }
-
-    private fun setGpsState(service: TrackingService, state: GpsRuntimeState) {
-        val field = service.javaClass.getDeclaredField("gpsRuntimeState")
-        field.isAccessible = true
-        field.set(service, state)
-    }
-
-    private fun invokeExpectsActiveFixDelivery(service: TrackingService): Boolean {
-        val method = service.javaClass.getDeclaredMethod("expectsActiveFixDelivery")
-        method.isAccessible = true
-        return method.invoke(service) as Boolean
+        assertTrue(
+            LocationRequestController.expectsActiveFixDelivery(
+                isTracking = true,
+                gpsRuntimeState = GpsRuntimeState.RUNNING,
+            )
+        )
+        assertFalse(
+            LocationRequestController.expectsActiveFixDelivery(
+                isTracking = true,
+                gpsRuntimeState = GpsRuntimeState.PAUSED_FOR_MOTION,
+            )
+        )
+        assertFalse(
+            LocationRequestController.expectsActiveFixDelivery(
+                isTracking = true,
+                gpsRuntimeState = GpsRuntimeState.WAITING_FOR_PROVIDER,
+            )
+        )
+        assertFalse(
+            LocationRequestController.expectsActiveFixDelivery(
+                isTracking = false,
+                gpsRuntimeState = GpsRuntimeState.RUNNING,
+            )
+        )
     }
 }

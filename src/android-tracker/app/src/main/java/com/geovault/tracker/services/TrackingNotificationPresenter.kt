@@ -8,7 +8,9 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.geovault.tracker.MainActivity
 import com.geovault.tracker.R
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceConstants
+import com.geovault.tracker.tracking.TrackingServiceIntents
 
 class TrackingNotificationPresenter(private val context: Context) {
     fun buildTrackingNotification(snapshot: TrackingRuntimeSnapshot): Notification {
@@ -27,7 +29,7 @@ class TrackingNotificationPresenter(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE
         )
         val stopIntent = Intent(context, TrackingService::class.java).apply {
-            action = TrackingService.ACTION_STOP
+            action = TrackingServiceIntents.ACTION_STOP
             setPackage(context.packageName)
         }
         val stopPendingIntent = PendingIntent.getService(
@@ -36,7 +38,7 @@ class TrackingNotificationPresenter(private val context: Context) {
             stopIntent,
             PendingIntent.FLAG_IMMUTABLE
         )
-        val dismissIntent = Intent(TrackingService.NOTIFICATION_DISMISSED_ACTION).apply {
+        val dismissIntent = Intent(TrackingServiceIntents.NOTIFICATION_DISMISSED_ACTION).apply {
             setPackage(context.packageName)
         }
         val dismissPendingIntent = PendingIntent.getBroadcast(
@@ -48,7 +50,7 @@ class TrackingNotificationPresenter(private val context: Context) {
         val status = context.getString(statusTextRes(uiStatus))
         val counts = context.getString(R.string.tracking_notification_counts_line, sentCount, queuedCount)
         val text = "$status\n$counts"
-        return NotificationCompat.Builder(context, TrackingService.CHANNEL_ID)
+        return NotificationCompat.Builder(context, TrackingServiceConstants.CHANNEL_ID)
             .setContentTitle(context.getString(R.string.live_tracker_title))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
@@ -68,7 +70,7 @@ class TrackingNotificationPresenter(private val context: Context) {
     fun updateForegroundNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(
-            TrackingService.NOTIFICATION_ID,
+            TrackingServiceConstants.NOTIFICATION_ID,
             buildTrackingNotification(sentCount, queuedCount, uiStatus)
         )
     }

@@ -2,7 +2,9 @@ package com.geovault.tracker.runtime
 
 import android.content.Context
 import android.content.Intent
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
+import com.geovault.tracker.tracking.TrackingServiceConstants
 
 class RuntimeEffectDispatcher(
     context: Context,
@@ -18,7 +20,7 @@ class RuntimeEffectDispatcher(
     override fun dispatchStop() {
         appContext.startService(
             Intent(appContext, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_STOP
+                action = TrackingServiceIntents.ACTION_STOP
                 setPackage(appContext.packageName)
             }
         )
@@ -27,7 +29,7 @@ class RuntimeEffectDispatcher(
     override fun reshowForeground() {
         appContext.startService(
             Intent(appContext, TrackingService::class.java).apply {
-                action = TrackingService.ACTION_RESHOW_FOREGROUND
+                action = TrackingServiceIntents.ACTION_RESHOW_FOREGROUND
                 setPackage(appContext.packageName)
             }
         )

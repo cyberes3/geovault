@@ -4,7 +4,9 @@ import android.content.Context
 import android.location.LocationManager
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.SelectedTrackerPrefs
-import com.geovault.tracker.TrackingService
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
+import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.location.TrackingPermissionGate
 
 data class RuntimeHealthEvaluation(
@@ -74,7 +76,7 @@ class RuntimeHealthPolicy(private val context: Context) {
             )
         }
         val trackerId = SelectedTrackerPrefs.selectedTrackerId(appContext)
-        if (!TrackingService.hasValidSelectedTrackerId(trackerId)) {
+        if (!TrackingServiceIntents.hasValidSelectedTrackerId(trackerId)) {
             return RuntimeHealthEvaluation(
                 isHealthy = false,
                 shouldRecover = false,

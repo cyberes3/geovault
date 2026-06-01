@@ -1,39 +1,35 @@
 package com.geovault.tracker
 
 import com.geovault.tracker.runtime.RuntimeTrigger
+import com.geovault.tracker.tracking.TrackingServiceIntents
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TrackingServiceProcessRestartTest {
-
     @Test
     fun nullIntentAction_mapsToStopNoRestart_notStartTracking() {
-        assertFalse(TrackingService.shouldRestartTrackingAfterProcessDeath())
-        val path = TrackingService.resolveStartupCommandPath(action = null)
-        assertFalse(TrackingService.requiresForegroundPromotion(path))
+        assertFalse(TrackingServiceIntents.shouldRestartTrackingAfterProcessDeath())
+        val path = TrackingServiceIntents.resolveStartupCommandPath(action = null)
+        assertFalse(TrackingServiceIntents.requiresForegroundPromotion(path))
     }
 
     @Test
     fun explicitStartAction_requiresForegroundPromotion() {
-        val path = TrackingService.resolveStartupCommandPath(TrackingService.ACTION_START)
-        assertTrue(TrackingService.requiresForegroundPromotion(path))
+        val path = TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_START)
+        assertTrue(TrackingServiceIntents.requiresForegroundPromotion(path))
     }
 
     @Test
     fun locationUpdateAction_doesNotRequireForegroundPromotion() {
-        val path = TrackingService.resolveStartupCommandPath(TrackingService.ACTION_LOCATION_UPDATE)
-        assertFalse(TrackingService.requiresForegroundPromotion(path))
+        val path = TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_LOCATION_UPDATE)
+        assertFalse(TrackingServiceIntents.requiresForegroundPromotion(path))
     }
 
     @Test
     fun runtimeTriggerMapping_mapsProcessRestartAndWatchdogTick() {
-        assertEquals(RuntimeTrigger.PROCESS_RESTART, invokeMapRuntimeTrigger("process_restart"))
-        assertEquals(RuntimeTrigger.WATCHDOG_TICK, invokeMapRuntimeTrigger("watchdog_tick"))
-    }
-
-    private fun invokeMapRuntimeTrigger(trigger: String): RuntimeTrigger {
-        return TrackingService.mapRuntimeTrigger(trigger)
+        assertEquals(RuntimeTrigger.PROCESS_RESTART, TrackingServiceIntents.mapRuntimeTrigger("process_restart"))
+        assertEquals(RuntimeTrigger.WATCHDOG_TICK, TrackingServiceIntents.mapRuntimeTrigger("watchdog_tick"))
     }
 }

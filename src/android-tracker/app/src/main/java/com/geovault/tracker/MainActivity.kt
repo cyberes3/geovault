@@ -23,6 +23,8 @@ import com.geovault.tracker.presentation.TrackerAccountViewModel
 import com.geovault.tracker.presentation.LiveTrackStreamingTargetCoordinator
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingRuntimeStateStore
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
 import com.geovault.tracker.ui.MainScreen
 
 class MainActivity : ComponentActivity() {
@@ -41,8 +43,8 @@ class MainActivity : ComponentActivity() {
     private var trackingErrorReceiverRegistered = false
     private val trackingErrorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != TrackingService.ACTION_TRACKING_ERROR) return
-            intent.getStringExtra(TrackingService.EXTRA_TRACKING_ERROR_MESSAGE)
+            if (intent?.action != TrackingServiceIntents.ACTION_TRACKING_ERROR) return
+            intent.getStringExtra(TrackingServiceIntents.EXTRA_TRACKING_ERROR_MESSAGE)
                 ?.takeIf { it.isNotBlank() }
                 ?.let { viewModel.showExternalError(it) }
         }
@@ -151,7 +153,7 @@ class MainActivity : ComponentActivity() {
             ContextCompat.registerReceiver(
                 this,
                 trackingErrorReceiver,
-                IntentFilter(TrackingService.ACTION_TRACKING_ERROR),
+                IntentFilter(TrackingServiceIntents.ACTION_TRACKING_ERROR),
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
             trackingErrorReceiverRegistered = true
@@ -171,7 +173,7 @@ class MainActivity : ComponentActivity() {
             TrackerAppServices.from(application).trackerSettingsRepository().clearWasTrackingBeforeExit()
             startService(
                 Intent(this, TrackingService::class.java).apply {
-                    action = TrackingService.ACTION_STOP
+                    action = TrackingServiceIntents.ACTION_STOP
                 }
             )
             viewModel.showExternalError(getString(R.string.location_permission_revoked))
@@ -187,7 +189,7 @@ class MainActivity : ComponentActivity() {
     private fun handleIntentAction(intent: Intent?) {
         val action = intent?.action ?: return
         when (action) {
-            TrackingService.ACTION_STOP -> {
+            TrackingServiceIntents.ACTION_STOP -> {
                 TrackerAppServices.from(application).trackerSettingsRepository().clearWasTrackingBeforeExit()
                 startService(Intent(this, TrackingService::class.java).apply {
                     this.action = action
