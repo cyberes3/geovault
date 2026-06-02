@@ -113,6 +113,12 @@ internal object QueueUploadOutcomePolicy {
             exceptionClass = exceptionClass,
         )
     }
+
+    fun lastPointSentAtMsAfterRowsDeleted(
+        previousLastPointSentAtMs: Long,
+        visibleRowsSent: Int,
+        uploadedAtMs: Long,
+    ): Long = if (visibleRowsSent > 0) uploadedAtMs else previousLastPointSentAtMs
 }
 
 /**

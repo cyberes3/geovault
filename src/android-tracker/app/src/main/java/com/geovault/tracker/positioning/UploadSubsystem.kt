@@ -226,7 +226,11 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
             rt.deps.pointFreshnessTracker.markUploadSucceeded(uploadedAtMs)
             rt.projection.updateRuntimeSnapshot {
                 it.copy(
-                    lastPointSentAtMs = if (result.visibleRowsSent > 0) uploadedAtMs else it.lastPointSentAtMs,
+                    lastPointSentAtMs = QueueUploadOutcomePolicy.lastPointSentAtMsAfterRowsDeleted(
+                        previousLastPointSentAtMs = it.lastPointSentAtMs,
+                        visibleRowsSent = result.visibleRowsSent,
+                        uploadedAtMs = uploadedAtMs,
+                    ),
                     lastUploadSucceededAtMs = rt.deps.pointFreshnessTracker.lastUploadSucceededAtMs,
                 )
             }

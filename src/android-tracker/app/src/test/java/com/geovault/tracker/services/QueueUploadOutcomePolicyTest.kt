@@ -67,4 +67,28 @@ class QueueUploadOutcomePolicyTest {
         assertEquals(QueueUploadFailureReason.HTTP_PERMANENT, result.failureReason)
         assertEquals(401, result.httpStatusCode)
     }
+
+    @Test
+    fun lastPointSentAtMsAfterRowsDeleted_visibleRowsSentRefreshesTimestamp() {
+        assertEquals(
+            20_000L,
+            QueueUploadOutcomePolicy.lastPointSentAtMsAfterRowsDeleted(
+                previousLastPointSentAtMs = 5_000L,
+                visibleRowsSent = 2,
+                uploadedAtMs = 20_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun lastPointSentAtMsAfterRowsDeleted_backlogOnlyKeepsPreviousTimestamp() {
+        assertEquals(
+            5_000L,
+            QueueUploadOutcomePolicy.lastPointSentAtMsAfterRowsDeleted(
+                previousLastPointSentAtMs = 5_000L,
+                visibleRowsSent = 0,
+                uploadedAtMs = 20_000L,
+            ),
+        )
+    }
 }

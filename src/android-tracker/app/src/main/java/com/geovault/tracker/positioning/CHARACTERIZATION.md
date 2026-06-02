@@ -8,13 +8,16 @@ Regression tests for behaviors that must not change when refactoring `positionin
 |------|----------------|-----------|
 | Commands | Every `TrackingServiceIntents.StartupCommandPath` and foreground-promotion rules | `TrackingServiceCharacterizationTest` |
 | Provider / GPS FSM | `GpsRuntimeStateMachine` transitions (pause, provider wait, fallback) | `positioning/config/GpsRuntimeStateMachineTest` |
-| Runtime provider projection | Collecting vs paused vs waiting affects fix-delivery expectation | `PositioningRuntimeProviderCharacterizationTest` |
-| Ingest gate | `TrackingRuntimeOrchestrator.shouldProcessLocationUpdate` when paused / bypassed | `FixIngestCharacterizationTest`, `TrackingRuntimeOrchestratorTest` |
-| Paused freshness | Stationary region + probe eligibility while GPS paused | `PausedFreshnessCharacterizationTest` |
-| Fallback + pause | Fallback timer / emit policy across GPS states | `RecoveryCharacterizationTest`, `TrackingServiceFallbackPersistenceTest` |
-| Recovery anchor | `RecoveryAnchorStore` save/load/clear round-trip | `RecoveryAnchorRestartTest` |
-| Upload → snapshot | Queue result updates snapshot fields | `UploadSnapshotCharacterizationTest`, `RuntimeSnapshotProjectorTest`, `UploadLivenessStateTest` |
-| UI status | `TrackingUiStatusResolver` sequences from runtime snapshot | `PositioningStatusProjectionCharacterizationTest` |
+| Fix delivery | `LocationRequestController.expectsActiveFixDelivery` across collecting / paused / fallback / waiting | `TrackingServiceCharacterizationTest` |
+| Ingest gate | `TrackingRuntimeOrchestrator.shouldProcessLocationUpdate` when paused, waiting, or bypassed | `TrackingRuntimeOrchestratorTest` |
+| Paused freshness | Stationary region, probe timeout, sparse intervals | `location/StationaryFreshnessCoordinatorTest` |
+| Fallback persistence | First fallback point without a previous accept | `TrackingServiceFallbackPersistenceTest` |
+| Recovery anchor | `RecoveryAnchorStore` save/load/clear round-trip | `positioning/RecoveryAnchorRestartTest` |
+| Upload liveness | Failure posture, skipped results, success timestamps | `UploadLivenessStateTest`, `TrackingServiceUploadCharacterizationTest` |
+| Upload → snapshot timestamps | `lastPointSentAtMs` only advances when visible rows were sent | `QueueUploadOutcomePolicyTest` (wired from `UploadSubsystem.applyQueueUploadResult`) |
+| Runtime store projection | `gpsCollecting` on shared runtime state | `TrackingRuntimeStateStoreTest` |
+| UI status | `TrackingUiStatusResolver` from runtime snapshot fields | `TrackingUiStatusResolverTest` |
+| Layer boundary | No `com.geovault.common.maps` imports under `positioning/` | `PositioningLayerMapsImportTest` |
 
 ## Manual smoke (release checklist)
 

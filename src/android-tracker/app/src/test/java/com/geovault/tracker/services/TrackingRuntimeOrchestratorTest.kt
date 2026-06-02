@@ -33,6 +33,41 @@ class TrackingRuntimeOrchestratorTest {
     }
 
     @Test
+    fun shouldProcessLocationUpdate_blocksWhenNotTracking() {
+        assertFalse(
+            TrackingRuntimeOrchestrator.shouldProcessLocationUpdate(
+                RuntimeLocationGateInput(
+                    isTracking = false,
+                    gpsState = GpsRuntimeState.RUNNING,
+                    allowWhenGpsPaused = false,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun shouldProcessLocationUpdate_blocksWaitingForProviderUnlessBypassed() {
+        assertFalse(
+            TrackingRuntimeOrchestrator.shouldProcessLocationUpdate(
+                RuntimeLocationGateInput(
+                    isTracking = true,
+                    gpsState = GpsRuntimeState.WAITING_FOR_PROVIDER,
+                    allowWhenGpsPaused = false,
+                ),
+            ),
+        )
+        assertTrue(
+            TrackingRuntimeOrchestrator.shouldProcessLocationUpdate(
+                RuntimeLocationGateInput(
+                    isTracking = true,
+                    gpsState = GpsRuntimeState.WAITING_FOR_PROVIDER,
+                    allowWhenGpsPaused = true,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun shouldAttemptFastLock_rejectsNonAccuracyReasonWithMeasuredAccuracy() {
         val shouldStart = TrackingRuntimeOrchestrator.shouldAttemptFastLock(
             FastLockTriggerInput(

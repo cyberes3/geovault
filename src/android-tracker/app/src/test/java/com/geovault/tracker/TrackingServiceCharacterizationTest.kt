@@ -97,6 +97,12 @@ class TrackingServiceCharacterizationTest {
                 gpsRuntimeState = GpsRuntimeState.WAITING_FOR_PROVIDER,
             )
         )
+        assertTrue(
+            LocationRequestController.expectsActiveFixDelivery(
+                isTracking = true,
+                gpsRuntimeState = GpsRuntimeState.FALLBACK_PENDING,
+            ),
+        )
         assertFalse(
             LocationRequestController.expectsActiveFixDelivery(
                 isTracking = false,

@@ -1,31 +1,13 @@
-package com.geovault.tracker.positioning
+package com.geovault.tracker.services
 
-import com.geovault.tracker.positioning.config.GpsRuntimeEvent
-import com.geovault.tracker.positioning.config.GpsRuntimeState
-import com.geovault.tracker.positioning.config.GpsRuntimeStateMachine
-import com.geovault.tracker.services.TrackingRuntimeStateStore
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class PositioningRuntimeProviderCharacterizationTest {
+class TrackingRuntimeStateStoreTest {
 
     @Test
-    fun providerDisabledFromRunning_entersWaitingState() {
-        var state = GpsRuntimeState.RUNNING
-        state = GpsRuntimeStateMachine.transition(state, GpsRuntimeEvent.PROVIDER_DISABLED)
-        assertEquals(GpsRuntimeState.WAITING_FOR_PROVIDER, state)
-        assertFalse(
-            LocationRequestController.expectsActiveFixDelivery(
-                isTracking = true,
-                gpsRuntimeState = state,
-            ),
-        )
-    }
-
-    @Test
-    fun trackingRuntimeStateStore_reflectsGpsCollectingFlag() {
+    fun update_reflectsRecordingRuntimeGpsCollectingFlag() {
         val before = TrackingRuntimeStateStore.state.value
         try {
             TrackingRuntimeStateStore.update {
