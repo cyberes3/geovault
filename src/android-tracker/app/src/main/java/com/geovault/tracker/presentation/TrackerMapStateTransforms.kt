@@ -25,8 +25,13 @@ enum class TrackerMapDisplayMode {
 object TrackerMapStateTransforms {
 
     const val MAX_TRACK_JUMP_METERS: Float = 5f * 1609.344f
-    /** Break line segments when fixes are separated by a long stationary/relocation gap. */
+    /** Break line segments when fixes are separated by a long gap (history / not recording). */
     const val MAX_TRACK_TIME_GAP_MS: Long = 5L * 60L * 1_000L
+    /**
+     * While locally recording, the filter may hold fixes for several minutes without persisting
+     * a trail point; use a wider gap so the live trail does not fragment into orphan segments.
+     */
+    const val MAX_TRACK_TIME_GAP_WHILE_RECORDING_MS: Long = 15L * 60L * 1_000L
     private val accuracyCircleResolver = TrackerAccuracyCircleResolver()
 
     fun buildRenderState(
@@ -96,6 +101,7 @@ object TrackerMapStateTransforms {
             allQueueTrailsByTracker = allQueueTrailsByTracker,
             trackerColorById = trackerColorById,
             singleTrackerLineColorHex = singleLineColorHex,
+            runtime = runtime,
         )
         val markerFeatures = mutableListOf<TrackerMarkerRenderFeature>()
         if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
@@ -286,24 +292,36 @@ object TrackerMapStateTransforms {
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
         trackerColorById: Map<String, String>,
         singleTrackerLineColorHex: String,
+        runtime: TrackingRuntimeSnapshot,
     ): List<MapRenderLine> {
+        val maxTimeGapMs = maxTimeGapMsForRuntime(runtime)
         return if (
             (mode == TrackerMapDisplayMode.ALL_QUEUE || mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) &&
             allQueueTrailsByTracker.isNotEmpty()
         ) {
-            buildAllQueueLines(allQueueTrailsByTracker, trackerColorById)
+            buildAllQueueLines(allQueueTrailsByTracker, trackerColorById, maxTimeGapMs)
         } else {
             buildSegmentedLines(
                 lineIdPrefix = "tracker-trail",
                 points = effectiveTrail,
                 lineColorHex = singleTrackerLineColorHex,
+                maxTimeGapMs = maxTimeGapMs,
             )
+        }
+    }
+
+    internal fun maxTimeGapMsForRuntime(runtime: TrackingRuntimeSnapshot): Long {
+        return if (runtime.localRecordingActive) {
+            MAX_TRACK_TIME_GAP_WHILE_RECORDING_MS
+        } else {
+            MAX_TRACK_TIME_GAP_MS
         }
     }
 
     private fun buildAllQueueLines(
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>>,
         trackerColorById: Map<String, String>,
+        maxTimeGapMs: Long,
     ): List<MapRenderLine> {
         return allQueueTrailsByTracker.entries
             .sortedBy { it.key }
@@ -313,6 +331,7 @@ object TrackerMapStateTransforms {
                     lineIdPrefix = "all-track-$trackerId",
                     points = queuedLocations,
                     lineColorHex = color,
+                    maxTimeGapMs = maxTimeGapMs,
                 )
             }
     }
@@ -329,12 +348,13 @@ object TrackerMapStateTransforms {
         lineIdPrefix: String,
         points: List<QueuedLocation>,
         lineColorHex: String,
+        maxTimeGapMs: Long = MAX_TRACK_TIME_GAP_MS,
     ): List<MapRenderLine> {
         if (points.isEmpty()) return emptyList()
         val sessionGroups = groupAdjacentBySession(points)
         val lines = mutableListOf<MapRenderLine>()
         sessionGroups.forEachIndexed { sessionIndex, group ->
-            val timeGroups = splitByTimeGap(group, MAX_TRACK_TIME_GAP_MS)
+            val timeGroups = splitByTimeGap(group, maxTimeGapMs)
             timeGroups.forEachIndexed { timeIndex, timeGroup ->
                 val coords = timeGroup.map { it.latitude to it.longitude }
                 val distanceSegments = geoVaultSplitTrackByDistance(coords, MAX_TRACK_JUMP_METERS)

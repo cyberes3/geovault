@@ -1,4 +1,4 @@
-package com.geovault.tracker.presentation
+package com.geovault.tracker.history
 
 import com.geovault.tracker.db.QueuedLocation
 import org.junit.Assert.assertEquals
@@ -6,19 +6,19 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TrackerSessionAttributionPolicyTest {
+class TrackerHistorySessionAttributionTest {
 
     @Test
     fun emptyPoints_noAuthoritative_yieldsEmpty() {
-        val out = TrackerSessionAttributionPolicy.segment(emptyList())
+        val out = TrackerHistorySessionAttribution.segment(emptyList())
         assertTrue(out.isEmpty())
     }
 
     @Test
     fun emptyPoints_authoritative_yieldsSingleEmptySegment() {
-        val out = TrackerSessionAttributionPolicy.segment(
+        val out = TrackerHistorySessionAttribution.segment(
             points = emptyList(),
-            context = TrackerSessionAttributionContext(currentSessionStartMs = 5_000L),
+            context = TrackerHistorySessionAttributionContext(currentSessionStartMs = 5_000L),
         )
         assertEquals(1, out.size)
         assertEquals(5_000L, out.single().startTimestampMs)
@@ -28,7 +28,7 @@ class TrackerSessionAttributionPolicyTest {
     @Test
     fun singlePoint_synthesizesSegmentFromTime() {
         val p = point(time = 500L)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(p))
+        val out = TrackerHistorySessionAttribution.segment(listOf(p))
         assertEquals(1, out.size)
         assertEquals(500L, out.single().startTimestampMs)
         assertSame(p, out.single().points.single())
@@ -41,7 +41,7 @@ class TrackerSessionAttributionPolicyTest {
         val p1 = point(time = 10L, startTimestampMs = s1)
         val p2 = point(time = 20L, startTimestampMs = s2)
         val p3 = point(time = 30L, startTimestampMs = s1)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(p1, p2, p3))
+        val out = TrackerHistorySessionAttribution.segment(listOf(p1, p2, p3))
         assertEquals(listOf(s1, s2), out.map { it.startTimestampMs })
         assertEquals(listOf(p1, p3), out[0].points)
         assertEquals(listOf(p2), out[1].points)
@@ -56,7 +56,7 @@ class TrackerSessionAttributionPolicyTest {
         val after = point(time = 7_000L)
         val anchorS1 = point(time = 1_500L, startTimestampMs = s1)
         val anchorS2 = point(time = 5_500L, startTimestampMs = s2)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(pre, between, after, anchorS1, anchorS2))
+        val out = TrackerHistorySessionAttribution.segment(listOf(pre, between, after, anchorS1, anchorS2))
         val s1Segment = out.first { it.startTimestampMs == s1 }
         val s2Segment = out.first { it.startTimestampMs == s2 }
         assertTrue(pre in s1Segment.points)
@@ -71,9 +71,9 @@ class TrackerSessionAttributionPolicyTest {
         val sPrev = 1_000L
         val authoritative = 5_000L
         val pPrev = point(time = 100L, startTimestampMs = sPrev)
-        val out = TrackerSessionAttributionPolicy.segment(
+        val out = TrackerHistorySessionAttribution.segment(
             points = listOf(pPrev),
-            context = TrackerSessionAttributionContext(currentSessionStartMs = authoritative),
+            context = TrackerHistorySessionAttributionContext(currentSessionStartMs = authoritative),
         )
         assertEquals(listOf(sPrev, authoritative), out.map { it.startTimestampMs })
         assertEquals(listOf(pPrev), out[0].points)
@@ -86,9 +86,9 @@ class TrackerSessionAttributionPolicyTest {
         // override, only one segment exists at that boundary.
         val authoritative = 5_000L
         val current = point(time = 5_500L, startTimestampMs = authoritative)
-        val out = TrackerSessionAttributionPolicy.segment(
+        val out = TrackerHistorySessionAttribution.segment(
             points = listOf(current),
-            context = TrackerSessionAttributionContext(currentSessionStartMs = authoritative),
+            context = TrackerHistorySessionAttributionContext(currentSessionStartMs = authoritative),
         )
         assertEquals(listOf(authoritative), out.map { it.startTimestampMs })
         assertEquals(listOf(current), out.single().points)
@@ -101,9 +101,9 @@ class TrackerSessionAttributionPolicyTest {
         val serverPoint = point(time = authoritative + 100L, startTimestampMs = serverRounded)
         val runtimePoint = point(time = authoritative + 200L, startTimestampMs = authoritative)
 
-        val out = TrackerSessionAttributionPolicy.segment(
+        val out = TrackerHistorySessionAttribution.segment(
             points = listOf(serverPoint, runtimePoint),
-            context = TrackerSessionAttributionContext(currentSessionStartMs = authoritative),
+            context = TrackerHistorySessionAttributionContext(currentSessionStartMs = authoritative),
         )
 
         assertEquals(listOf(authoritative), out.map { it.startTimestampMs })
@@ -117,9 +117,9 @@ class TrackerSessionAttributionPolicyTest {
         val previousPoint = point(time = 9_000L, startTimestampMs = farStart)
         val runtimePoint = point(time = 10_500L, startTimestampMs = authoritative)
 
-        val out = TrackerSessionAttributionPolicy.segment(
+        val out = TrackerHistorySessionAttribution.segment(
             points = listOf(previousPoint, runtimePoint),
-            context = TrackerSessionAttributionContext(currentSessionStartMs = authoritative),
+            context = TrackerHistorySessionAttributionContext(currentSessionStartMs = authoritative),
         )
 
         assertEquals(listOf(authoritative, farStart), out.map { it.startTimestampMs })
@@ -130,7 +130,7 @@ class TrackerSessionAttributionPolicyTest {
         val first = point(time = 1_000L, startTimestampMs = 10_000L)
         val second = point(time = 2_000L, startTimestampMs = 10_498L)
 
-        val out = TrackerSessionAttributionPolicy.segment(points = listOf(first, second))
+        val out = TrackerHistorySessionAttribution.segment(points = listOf(first, second))
 
         assertEquals(listOf(10_000L, 10_498L), out.map { it.startTimestampMs })
     }
@@ -140,7 +140,7 @@ class TrackerSessionAttributionPolicyTest {
         val p1 = point(time = 100L)
         val p2 = point(time = 200L)
         val p3 = point(time = 50L)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(p1, p2, p3))
+        val out = TrackerHistorySessionAttribution.segment(listOf(p1, p2, p3))
         assertEquals(1, out.size)
         assertEquals(p1.time, out.single().startTimestampMs)
         assertEquals(listOf(p1, p2, p3), out.single().points)
@@ -153,7 +153,7 @@ class TrackerSessionAttributionPolicyTest {
         val pBefore = point(time = 500L)
         val pAfterS1 = point(time = 1_500L, startTimestampMs = s1)
         val pAfterS2 = point(time = 2_500L, startTimestampMs = s2)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(pBefore, pAfterS1, pAfterS2))
+        val out = TrackerHistorySessionAttribution.segment(listOf(pBefore, pAfterS1, pAfterS2))
         assertTrue(pBefore in out.first { it.startTimestampMs == s1 }.points)
     }
 
@@ -162,7 +162,7 @@ class TrackerSessionAttributionPolicyTest {
         val p1 = point(time = 10L, startTimestampMs = 3_000L)
         val p2 = point(time = 20L, startTimestampMs = 1_000L)
         val p3 = point(time = 30L, startTimestampMs = 2_000L)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(p1, p2, p3))
+        val out = TrackerHistorySessionAttribution.segment(listOf(p1, p2, p3))
         assertEquals(listOf(1_000L, 2_000L, 3_000L), out.map { it.startTimestampMs })
     }
 
@@ -172,7 +172,7 @@ class TrackerSessionAttributionPolicyTest {
         val a = point(time = 30L, startTimestampMs = s1)
         val b = point(time = 10L, startTimestampMs = s1)
         val c = point(time = 20L, startTimestampMs = s1)
-        val out = TrackerSessionAttributionPolicy.segment(listOf(a, b, c))
+        val out = TrackerHistorySessionAttribution.segment(listOf(a, b, c))
         assertEquals(listOf(a, b, c), out.single().points)
     }
 

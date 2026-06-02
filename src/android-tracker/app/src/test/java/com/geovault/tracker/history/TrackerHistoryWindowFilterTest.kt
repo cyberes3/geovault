@@ -1,4 +1,4 @@
-package com.geovault.tracker.presentation
+package com.geovault.tracker.history
 
 import com.geovault.tracker.db.QueuedLocation
 import org.junit.Assert.assertEquals
@@ -6,7 +6,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TrackerMapRecentDataWindowFilterPolicyTest {
+class TrackerHistoryWindowFilterTest {
 
     @Test
     fun nullKey_isIdentity() {
@@ -298,9 +298,9 @@ class TrackerMapRecentDataWindowFilterPolicyTest {
         key: String?,
         currentSessionStartMs: Long? = null,
     ): List<QueuedLocation> {
-        return TrackerMapRecentDataWindowFilterPolicy.apply(
+        return TrackerHistoryWindowFilter.apply(
             points = points,
-            context = TrackerSessionWindowContext(
+            context = TrackerHistoryWindowContext(
                 windowKey = key,
                 nowMs = NOW,
                 currentSessionStartMs = currentSessionStartMs,

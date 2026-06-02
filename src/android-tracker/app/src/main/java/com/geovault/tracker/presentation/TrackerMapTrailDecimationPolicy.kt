@@ -1,6 +1,9 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.history.TrackerHistorySessionAttribution
+import com.geovault.tracker.history.TrackerHistorySessionAttributionContext
+import com.geovault.tracker.history.TrackerHistorySessionSegment
 import java.util.TreeSet
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -23,9 +26,9 @@ object TrackerMapTrailDecimationPolicy {
     fun fitToCount(points: List<QueuedLocation>, target: Int): List<QueuedLocation> {
         if (target <= 0) return emptyList()
         if (points.size <= target) return points
-        val segments = TrackerSessionAttributionPolicy.segment(
+        val segments = TrackerHistorySessionAttribution.segment(
             points = points,
-            context = TrackerSessionAttributionContext(),
+            context = TrackerHistorySessionAttributionContext(),
         )
         if (segments.isEmpty()) return points
         if (segments.size == 1) return points.takeLast(target)
@@ -89,7 +92,7 @@ object TrackerMapTrailDecimationPolicy {
      */
     private fun buildSegmentIndices(
         points: List<QueuedLocation>,
-        segments: List<TrackerSessionSegment>,
+        segments: List<TrackerHistorySessionSegment>,
     ): List<List<Int>> {
         val identityIndex = java.util.IdentityHashMap<QueuedLocation, Int>(points.size)
         for ((idx, point) in points.withIndex()) {

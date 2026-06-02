@@ -145,7 +145,8 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
                     val (eventName, details) = PositioningDiagnosticEvent.providerHealth(decision)
                     rt.deps.runtimeTelemetry.event(
                         eventName,
-                        "$details gpsState=rt.state.gpsRuntimeState collectionPace=rt.state.collectionPace lastAppliedAt=${rt.state.lastLocationRequestAppliedAtMs}",
+                        "$details gpsState=${rt.state.gpsRuntimeState} collectionPace=${rt.state.collectionPace} " +
+                            "lastAppliedAt=${rt.state.lastLocationRequestAppliedAtMs}",
                     )
                 }
                 if (decision is ProviderHealthDecision.ReapplyRequest) {

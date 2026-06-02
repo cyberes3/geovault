@@ -1,8 +1,6 @@
 package com.geovault.tracker.history
 
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.presentation.TrackerMapRecentDataWindowFilterPolicy
-import com.geovault.tracker.presentation.TrackerSessionWindowContext
 
 data class TrackerHistoryComposeInput(
     val key: TrackerHistoryKey,
@@ -32,12 +30,18 @@ object TrackerHistoryAssembler {
             input = input,
         ).sortedBy { it.timestampMs }
         val trunkKeys = trunkPoints.map { it.key }.toSet()
+        val rawOverlayCandidates = input.overlayBatches
+            .flatMap { it.points }
+            .filter { it.trackerId.trim() == trackerId }
+            .filter { it.key !in trunkKeys }
+            .filter { point -> point.isAfterClearBoundary(input.clearBoundary) }
+        val sessionFilteredOverlay = TrackerHistoryOverlayEligibilityPolicy.filterOverlayCandidates(
+            trunkPoints = trunkPoints,
+            overlayCandidates = rawOverlayCandidates,
+            activeSessionStartMs = input.activeSessionStartMs,
+        )
         val eligibleOverlay = filterPointsForRecentDataWindow(
-            points = input.overlayBatches
-                .flatMap { it.points }
-                .filter { it.trackerId.trim() == trackerId }
-                .filter { it.key !in trunkKeys }
-                .filter { point -> point.isAfterClearBoundary(input.clearBoundary) },
+            points = sessionFilteredOverlay,
             input = input,
         )
             .dedupeOverlay()
@@ -64,11 +68,18 @@ object TrackerHistoryAssembler {
                             .filter { it.trackerId.trim() == trackerId },
                         input = retryInput,
                     ).sortedBy { it.timestampMs }
+                    val retryRawOverlay = input.overlayBatches
+                        .flatMap { it.points }
+                        .filter { it.trackerId.trim() == trackerId }
+                        .filter { point -> point.isAfterClearBoundary(input.clearBoundary) }
+                    val retryTrunkKeys = resolvedTrunkPoints.map { it.key }.toSet()
+                    val retrySessionOverlay = TrackerHistoryOverlayEligibilityPolicy.filterOverlayCandidates(
+                        trunkPoints = resolvedTrunkPoints,
+                        overlayCandidates = retryRawOverlay.filter { it.key !in retryTrunkKeys },
+                        activeSessionStartMs = effectiveSessionStartMs,
+                    )
                     resolvedOverlayPoints = filterPointsForRecentDataWindow(
-                        points = input.overlayBatches
-                            .flatMap { it.points }
-                            .filter { it.trackerId.trim() == trackerId }
-                            .filter { point -> point.isAfterClearBoundary(input.clearBoundary) },
+                        points = retrySessionOverlay,
                         input = retryInput,
                     )
                         .dedupeOverlay()
@@ -148,8 +159,7 @@ object TrackerHistoryAssembler {
     }
 
     /**
-     * Uses the same rules as map render ([TrackerMapRecentDataWindowFilterPolicy]) so history
-     * snapshots match what the user selected (current session, session, rolling windows).
+     * Applies [TrackerHistoryWindowFilter] so snapshots match the tracker's recent_data_window.
      */
     private fun filterPointsForRecentDataWindow(
         points: List<TrackerHistoryPoint>,
@@ -159,12 +169,12 @@ object TrackerHistoryAssembler {
         if (input.sessionContext.skipRenderWindowFilter) return points
         val window = input.key.window
         if (window.isAll) return points
-        val context = TrackerSessionWindowContext(
+        val context = TrackerHistoryWindowContext(
             windowKey = window.normalizedKey,
             nowMs = input.nowMs,
             currentSessionStartMs = input.activeSessionStartMs,
         )
-        val filteredKeys = TrackerMapRecentDataWindowFilterPolicy
+        val filteredKeys = TrackerHistoryWindowFilter
             .apply(points.map { it.toQueuedLocation() }, context)
             .map { loc ->
                 TrackerHistoryPointKey.from(

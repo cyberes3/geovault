@@ -17,6 +17,29 @@ class LocationFilterReasonPolicyTest {
     }
 
     @Test
+    fun blocksForcedLocalReanchor_excludesStaleRelocationUnconfirmed() {
+        assertFalse(
+            LocationFilterReasonPolicy.blocksForcedLocalReanchor(
+                FilterReason.STALE_RELOCATION_UNCONFIRMED,
+            ),
+        )
+    }
+
+    @Test
+    fun blocksForcedLocalReanchor_includesResumeAndCandidateUnconfirmed() {
+        assertTrue(
+            LocationFilterReasonPolicy.blocksForcedLocalReanchor(
+                FilterReason.RESUME_UNCONFIRMED,
+            ),
+        )
+        assertTrue(
+            LocationFilterReasonPolicy.blocksForcedLocalReanchor(
+                FilterReason.CANDIDATE_UNCONFIRMED,
+            ),
+        )
+    }
+
+    @Test
     fun blocksFreshnessAnchorCommit_whenRepeatedOutlierSuppressed() {
         assertTrue(
             LocationFilterReasonPolicy.blocksFreshnessAnchorCommit(

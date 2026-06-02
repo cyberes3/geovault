@@ -169,23 +169,6 @@ object TrackerHistoryDiagnostics {
         )
     }
 
-    fun logSessionDrawFilter(
-        trackerId: String,
-        windowKey: String?,
-        skipped: Boolean,
-        rawCount: Int,
-        filteredCount: Int,
-    ) {
-        if (!skipped && rawCount == filteredCount) return
-        val signature = "$trackerId|$windowKey|$skipped|$rawCount|$filteredCount"
-        if (!CaptureLogThrottle.shouldLogOnChange("map_draw_window_filter", signature)) return
-        GeoVaultCaptureLog.d(
-            TAG,
-            "map_draw_filter tracker=$trackerId window=$windowKey skipped=$skipped " +
-                "raw=$rawCount filtered=$filteredCount",
-        )
-    }
-
     data class TrailsDrawSummary(
         val singleCount: Int,
         val singleTime: String,

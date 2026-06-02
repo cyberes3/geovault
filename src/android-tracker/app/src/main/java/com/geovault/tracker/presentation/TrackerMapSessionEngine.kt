@@ -1,14 +1,12 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.history.TrackerHistoryDiagnostics
 import com.geovault.tracker.policy.TrackPointEvent
 
 data class TrackerMapSessionBuildInput(
     val state: TrackerMapUiState,
     val plan: TrackerMapStreamingPlan,
     val localRuntimeOverlayTrails: Map<String, List<QueuedLocation>> = emptyMap(),
-    val sessionWindows: TrackerMapSessionWindowState = TrackerMapSessionWindowState(),
     /**
      * Render-time roster filter. `null` means "no filter, render every tracker we have data
      * for" (used by SINGLE_SESSION, whose single-trail path is unaffected by this map, and
@@ -31,7 +29,6 @@ data class TrackerMapSessionPointInput(
     val snapshot: TrackerMapSessionSnapshot,
     val point: TrackPointEvent,
     val trailPointLimit: Int,
-    val sessionWindows: TrackerMapSessionWindowState = TrackerMapSessionWindowState(),
     /** See [TrackerMapSessionBuildInput.visibleTrackerIds]. */
     val visibleTrackerIds: Set<String>? = null,
     val nowMs: Long = System.currentTimeMillis(),
@@ -67,13 +64,6 @@ object TrackerMapSessionEngine {
         } ?: candidateKeys
         val tracks = rosterFilteredKeys.associateWith { trackerId ->
             val renderTrail = normalizedTrails[trackerId].orEmpty()
-            TrackerHistoryDiagnostics.logSessionDrawFilter(
-                trackerId = trackerId,
-                windowKey = input.sessionWindows.recentDataWindowByTracker[trackerId],
-                skipped = true,
-                rawCount = renderTrail.size,
-                filteredCount = renderTrail.size,
-            )
             TrackerTrackModel(
                 trackerId = trackerId,
                 renderTrail = renderTrail,
@@ -83,16 +73,6 @@ object TrackerMapSessionEngine {
         // Single-trail renders the displayed tracker (mirrors `activeTrackerId =
         // sessionPlan.displayedTrackerId` in the view model). The plan does not carry a separate
         // activeTrackerId field; displayedTrackerId is the canonical anchor when single-mode.
-        val displayedKey = plan.displayedTrackerId.trim().takeIf { it.isNotEmpty() }
-        displayedKey?.let { trackerId ->
-            TrackerHistoryDiagnostics.logSessionDrawFilter(
-                trackerId = trackerId,
-                windowKey = input.sessionWindows.recentDataWindowByTracker[trackerId],
-                skipped = true,
-                rawCount = state.trail.size,
-                filteredCount = state.trail.size,
-            )
-        }
         return TrackerMapSessionSnapshot(
             uiState = state,
             plan = plan,
@@ -126,7 +106,6 @@ object TrackerMapSessionEngine {
                     acceptedRemoteTrackerIds = input.snapshot.plan.acceptedRemoteTrackerIds,
                 ),
                 localRuntimeOverlayTrails = reduction.nextState.allQueueTrailsByTracker,
-                sessionWindows = input.sessionWindows,
                 visibleTrackerIds = input.visibleTrackerIds,
                 nowMs = input.nowMs,
             )

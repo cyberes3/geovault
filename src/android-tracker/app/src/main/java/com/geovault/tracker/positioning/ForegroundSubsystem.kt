@@ -106,6 +106,11 @@ internal class ForegroundSubsystem(private val rt: PositioningRuntime) {
     }
 
     fun stopSelfSafelyAfterStartup(reason: String) {
+        if (rt.lifecycle.isTrackingActiveOrStarting()) {
+            rt.lifecycle.transitionToStoppedState(failureReason = reason)
+        } else {
+            SessionResetCoordinator(rt).applyForStop()
+        }
         rt.lifecycle.cleanupServiceResources(reason = reason)
         rt.lifecycle.stopServiceInstance(reason = reason)
     }

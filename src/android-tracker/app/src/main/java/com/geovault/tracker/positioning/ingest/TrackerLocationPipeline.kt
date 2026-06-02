@@ -62,8 +62,10 @@ data class TrackerLocationPipelineOutput(
 )
 
 /**
- * Ordered fix-ingest pipeline: primary ingest, auto-motion retry, outlier pre-check,
- * then freshness recovery bypass ingest.
+ * Ordered fix-ingest pipeline: primary ingest, auto-motion retry, freshness recovery
+ * (with repeatedOutlierSuppressed=false, matching monolithic TrackingService), then optional
+ * bypass ingest. Outlier suppression runs on the reject path in [FixIngestSubsystem] after
+ * freshness, not here.
  */
 class TrackerLocationPipeline(
     private val locationIngestCoordinator: LocationIngestCoordinator,
@@ -110,12 +112,6 @@ class TrackerLocationPipeline(
             }
         }
 
-        val repeatedOutlierSuppressed = if (input.ingestMode == FixIngestMode.Live) {
-            evaluateRepeatedOutlierSuppressed(result = result, input = input)
-        } else {
-            false
-        }
-
         val freshnessRecoveryDecision = if (input.ingestMode == FixIngestMode.Live) {
             freshnessRecoveryController.evaluate(
                 FreshnessRecoveryInput(
@@ -127,7 +123,7 @@ class TrackerLocationPipeline(
                     effectiveAccuracyThresholdMeters = motionContext.effectiveAccuracyThresholdMeters,
                     candidateLocation = input.location,
                     anchor = input.recoveryAnchor,
-                    repeatedOutlierSuppressed = repeatedOutlierSuppressed,
+                    repeatedOutlierSuppressed = false,
                     nowMs = input.nowMs,
                     config = input.recoveryConfig,
                 ),
@@ -171,9 +167,28 @@ class TrackerLocationPipeline(
             motionContext = motionContext,
             motionModeChanged = motionModeChanged,
             autoMotionHandling = autoMotionHandling,
-            repeatedOutlierSuppressed = repeatedOutlierSuppressed,
+            repeatedOutlierSuppressed = false,
             freshnessRecoveryDecision = freshnessRecoveryDecision,
         )
+    }
+
+    fun evaluateRepeatedOutlierSuppressedOnReject(
+        result: LocationIngestResult,
+        candidate: Location,
+        anchor: Location?,
+        effectiveAccuracyThresholdMeters: Float,
+        nowMs: Long,
+    ): Boolean {
+        if (result.accepted) return false
+        val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
+            result.rejectReason == TrackPointRejectReason.STALE
+        if (!rejectedForLock) return false
+        return repeatedOutlierSuppressor.evaluate(
+            candidate = candidate,
+            anchor = anchor,
+            effectiveAccuracyThresholdMeters = effectiveAccuracyThresholdMeters,
+            nowMs = nowMs,
+        ).suppress
     }
 
     private fun ingest(
@@ -200,19 +215,4 @@ class TrackerLocationPipeline(
         )
     }
 
-    private fun evaluateRepeatedOutlierSuppressed(
-        result: LocationIngestResult,
-        input: TrackerLocationPipelineInput,
-    ): Boolean {
-        if (result.accepted) return false
-        val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
-            result.rejectReason == TrackPointRejectReason.STALE
-        if (!rejectedForLock) return false
-        return repeatedOutlierSuppressor.evaluate(
-            candidate = input.location,
-            anchor = input.outlierSuppressorAnchor,
-            effectiveAccuracyThresholdMeters = input.motionContext.effectiveAccuracyThresholdMeters,
-            nowMs = input.nowMs,
-        ).suppress
-    }
 }

@@ -513,7 +513,62 @@ class LocationIngestCoordinatorTest {
     }
 
     @Test
-    fun ingest_staleRelocationUnconfirmedRejects_doNotForceLocalReanchor() {
+    fun ingest_postStopCatchUpGps_rejectsStaleRelocationThenForceReanchors() {
+        val dao = FakeLocationDao()
+        var reanchorEvents = 0
+        val coordinator = LocationIngestCoordinator(dao) { reanchorEvents++ }
+        val settings = TrackerSettings(accuracyFilterMeters = 50f)
+        val trackId = PostStopCatchUpGpsFixture.TRACKER_ID
+
+        val seed = coordinator.ingest(
+            trackId = trackId,
+            location = PostStopCatchUpGpsFixture.anchorLocation(),
+            settings = settings,
+            motionMode = TrackingMotionMode.DRIVING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = PostStopCatchUpGpsFixture.ANCHOR_TIME_MS,
+            nowElapsedRealtimeNanos = 0L,
+            isMockLocation = false,
+        )
+        assertTrue(seed.accepted)
+
+        var previousAccepted = seed.lastFilteredLocation
+        var staleRelocationCount = 0
+        for ((idx, fix) in PostStopCatchUpGpsFixture.catchUpCandidates.withIndex()) {
+            val result = coordinator.ingest(
+                trackId = trackId,
+                location = PostStopCatchUpGpsFixture.catchUpLocation(fix),
+                settings = settings,
+                motionMode = TrackingMotionMode.DRIVING,
+                previousAcceptedLocation = previousAccepted,
+                sessionVisibleBoundaryId = 0L,
+                bypassFilters = false,
+                propsJson = null,
+                totalDistanceMeters = 0f,
+                queuedTrackerId = trackId,
+                nowMs = fix.timeMs,
+                nowElapsedRealtimeNanos = (idx + 1).toLong() * 10_000_000_000L,
+                isMockLocation = false,
+            )
+            previousAccepted = result.lastFilteredLocation
+            if (result.policyMetrics?.reason == FilterReason.STALE_RELOCATION_UNCONFIRMED.wireValue) {
+                staleRelocationCount++
+                assertFalse(result.accepted)
+                assertEquals(TrackPointRejectReason.JUMP, result.rejectReason)
+            }
+        }
+        assertTrue(staleRelocationCount >= 4)
+        assertEquals(1, reanchorEvents)
+        assertTrue(dao.getCount() >= 1)
+    }
+
+    @Test
+    fun ingest_staleRelocationUnconfirmedRejects_forceLocalReanchorAfterStreak() {
         val dao = FakeLocationDao()
         var reanchorEvents = 0
         val coordinator = LocationIngestCoordinator(dao) { reanchorEvents++ }
@@ -544,12 +599,13 @@ class LocationIngestCoordinatorTest {
         assertTrue(seed.accepted)
 
         var previousAccepted = seed.lastFilteredLocation
-        val relocationTimesMs = listOf(354_000L, 364_000L, 374_000L, 384_000L, 394_000L, 404_000L)
+        // Large leaps every 20s (catch-up GPS pattern) — too far apart for twin-fix confirm, all stale-relocation HOLDs.
+        val relocationTimesMs = listOf(200_000L, 220_000L, 240_000L, 260_000L, 280_000L, 300_000L)
         for ((idx, deltaMs) in relocationTimesMs.withIndex()) {
             val nowMs = anchorTimeMs + deltaMs
             val candidate = Location("gps").apply {
                 latitude = 39.0
-                longitude = -104.932 + idx * 0.00005
+                longitude = -104.95 + idx * 0.05
                 accuracy = 8f
                 speed = 22f
                 bearing = 90f
@@ -577,7 +633,7 @@ class LocationIngestCoordinatorTest {
             }
         }
 
-        assertEquals(0, reanchorEvents)
+        assertEquals(1, reanchorEvents)
         assertTrue(dao.getCount() >= 1)
     }
 
@@ -601,8 +657,8 @@ class LocationIngestCoordinatorTest {
         repeat(PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
             val nowMs = anchorTimeMs + 4 * 60_000L + (idx + 1) * 20_000L
             val candidate = Location("gps").apply {
-                latitude = 12.0000
-                longitude = -45.0000 + (idx + 1) * 0.0040
+                latitude = 12.0000 + (idx + 1) * 0.0004
+                longitude = -45.0000 + (idx + 1) * 0.0004
                 accuracy = 8f
                 speed = 22f
                 bearing = 90f
@@ -633,8 +689,7 @@ class LocationIngestCoordinatorTest {
         val policyReason = result.policyMetrics?.reason
         assertTrue(
             policyReason == FilterReason.SPEED_CAP_EXCEEDED.wireValue ||
-                policyReason == FilterReason.SPEED_CAP_UNCONFIRMED.wireValue ||
-                policyReason == FilterReason.STALE_RELOCATION_UNCONFIRMED.wireValue,
+                policyReason == FilterReason.SPEED_CAP_UNCONFIRMED.wireValue,
         )
         assertEquals(0, reanchorEvents)
         assertTrue(dao.getCount() <= 2)

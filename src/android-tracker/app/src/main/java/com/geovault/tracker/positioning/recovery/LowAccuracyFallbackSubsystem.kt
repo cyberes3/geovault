@@ -158,7 +158,9 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
         rt.state.lowAccuracyFallbackLastRejectSummaryAtMs = nowMs
         rt.deps.runtimeTelemetry.event(
             "fallback_reject_summary",
-            "rejected=rt.state.lowAccuracyFallbackRejectedFixCountThisSession armed=rt.state.lowAccuracyFallbackArmCountThisSession emitted=${rt.state.lowAccuracyFallbackEmitCountThisSession}"
+            "rejected=${rt.state.lowAccuracyFallbackRejectedFixCountThisSession} " +
+                "armed=${rt.state.lowAccuracyFallbackArmCountThisSession} " +
+                "emitted=${rt.state.lowAccuracyFallbackEmitCountThisSession}"
         )
     }
 

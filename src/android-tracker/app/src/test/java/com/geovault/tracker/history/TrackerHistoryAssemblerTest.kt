@@ -139,6 +139,67 @@ class TrackerHistoryAssemblerTest {
     }
 
     @Test
+    fun compose_serverTrunkWithNewerLocalOverlay_appendsEligibleOverlay() {
+        val activeStart = 5_000L
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("current_session"))
+        val trunk = TrackerHistorySourceBatch(
+            trackerId = "tracker-1",
+            window = key.window,
+            sourceKind = TrackerHistorySourceKind.FILTERED_SERVER_TRUNK,
+            points = listOf(50L, 60L, 70L).map {
+                point(it, TrackerHistoryProvenance.SERVER_GEOMETRY, activeStart)
+            },
+        )
+        val overlay = TrackerHistorySourceBatch(
+            trackerId = "tracker-1",
+            window = key.window,
+            sourceKind = TrackerHistorySourceKind.LOCAL_QUEUE,
+            points = listOf(point(80L, TrackerHistoryProvenance.LOCAL_QUEUE, activeStart)),
+        )
+
+        val result = TrackerHistoryAssembler.compose(
+            TrackerHistoryComposeInput(
+                key = key,
+                trunk = trunk,
+                overlayBatches = listOf(overlay),
+                sessionContext = sessionContext(key.window, activeSessionStartMs = activeStart),
+                nowMs = 100L,
+            ),
+        )
+
+        assertTrue(result.committed)
+        assertEquals(listOf(50L, 60L, 70L, 80L), result.snapshot.points.map { it.timestampMs })
+    }
+
+    @Test
+    fun compose_emptyResultWithPreviousSnapshot_defers() {
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("1h"))
+        val previous = TrackerHistorySnapshot(
+            key = key,
+            trunk = listOf(point(10_000L, provenance = TrackerHistoryProvenance.SERVER_GEOMETRY)),
+            overlay = emptyList(),
+            points = listOf(point(10_000L, provenance = TrackerHistoryProvenance.SERVER_GEOMETRY)),
+            committedAtMs = 1L,
+            generation = 1L,
+        )
+
+        val result = TrackerHistoryAssembler.compose(
+            TrackerHistoryComposeInput(
+                key = key,
+                trunk = null,
+                overlayBatches = emptyList(),
+                sessionContext = sessionContext(key.window),
+                nowMs = 20_000L,
+                previousSnapshot = previous,
+            ),
+        )
+
+        assertEquals(false, result.committed)
+        assertEquals("empty_snapshot_deferred", result.reason)
+        assertEquals(previous.points.size, result.snapshot.points.size)
+    }
+
+    @Test
     fun compose_completeServerTrunk_skipsClientWindowFilterAtComposeOnly() {
         val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("1w"))
         val nowMs = 10_000_000L

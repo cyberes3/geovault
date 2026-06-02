@@ -155,7 +155,6 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         var result = pipelineOutput.result
         runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
         motionMode = pipelineOutput.motionContext.motionMode
-        val repeatedOutlierSuppressed = pipelineOutput.repeatedOutlierSuppressed
         if (pipelineOutput.motionModeChanged) {
             rt.deps.runtimeTelemetry.event(
                 name = "auto_motion_retry",
@@ -263,10 +262,17 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
                 result.rejectReason == TrackPointRejectReason.STALE
             if (rejectedForLock) {
+                val outlierDecision = rt.deps.repeatedOutlierSuppressor.evaluate(
+                    candidate = location,
+                    anchor = rt.state.lastFilteredLocation,
+                    effectiveAccuracyThresholdMeters = pipelineOutput.motionContext.effectiveAccuracyThresholdMeters,
+                    nowMs = nowMs,
+                )
+                val repeatedOutlierSuppressed = outlierDecision.suppress
                 if (repeatedOutlierSuppressed) {
                     rt.deps.runtimeTelemetry.event(
                         "repeated_outlier_suppressed",
-                        "reason=pipeline_pre_freshness repeats=-1 " +
+                        "reason=${outlierDecision.reason} repeats=${outlierDecision.repeatCount} " +
                             "accuracy=${if (location.hasAccuracy()) location.accuracy else -1f} " +
                             "lat=${location.latitude} lon=${location.longitude}"
                     )
@@ -413,7 +419,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             if (stationaryDecision.reason != "disabled") {
                 rt.deps.runtimeTelemetry.event(
                     name = "stationary_update",
-                    details = "from=rt.state.consecutiveStationaryPoints to=${stationaryDecision.consecutive} " +
+                    details = "from=${rt.state.consecutiveStationaryPoints} to=${stationaryDecision.consecutive} " +
                         "shouldPause=${stationaryDecision.shouldPause} reason=${stationaryDecision.reason} " +
                         "accuracy=${if (stationaryReferenceLocation.hasAccuracy()) stationaryReferenceLocation.accuracy else -1f} " +
                         "adjustmentReason=${adjustmentReason ?: "none"} " +
@@ -518,7 +524,6 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
                 }
             }
         }
-        rt.notifyFixProcessed(accepted = true, pointPersisted = result.pointPersisted)
     }
 
     suspend fun processLocationUpdateSerialized(

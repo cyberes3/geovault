@@ -224,7 +224,7 @@ private class LocalTrackReanchorPolicy {
     }
 
     private fun isExpectedRecoveryReason(policyReason: String?): Boolean {
-        return LocationFilterReasonPolicy.isExpectedRecoveryHold(FilterReason.fromWire(policyReason))
+        return LocationFilterReasonPolicy.blocksForcedLocalReanchor(FilterReason.fromWire(policyReason))
     }
 }
 

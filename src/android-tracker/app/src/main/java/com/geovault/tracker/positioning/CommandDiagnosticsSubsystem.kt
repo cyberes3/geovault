@@ -3,6 +3,7 @@ import com.geovault.tracker.positioning.PositioningRuntime
 import android.content.Intent
 import android.location.Location
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.positioning.RecordingPace
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
 
@@ -34,9 +35,9 @@ internal class CommandDiagnosticsSubsystem(private val rt: PositioningRuntime) {
             ?.accuracy
         val source = intent?.getStringExtra(TrackingServiceIntents.EXTRA_BACKGROUND_WAKEUP_SOURCE) ?: "direct"
         val details = "path=$path foregroundStartRequired=$foregroundStartRequired source=$source " +
-            "rt.state.isTracking=rt.state.isTracking rt.state.startupInProgress=rt.state.startupInProgress gpsState=rt.state.gpsRuntimeState " +
-            "collectionPace=rt.state.collectionPace " +
-            "paused=rt.state.collectionPace == RecordingPace.Stationary} " +
+            "isTracking=${rt.state.isTracking} startupInProgress=${rt.state.startupInProgress} gpsState=${rt.state.gpsRuntimeState} " +
+            "collectionPace=${rt.state.collectionPace} " +
+            "paused=${rt.state.collectionPace == RecordingPace.Stationary} " +
             "incomingCount=${incomingLocations.size} " +
             "lastRawAgeMs=${locationAgeMs ?: -1L} lastRawAccuracy=${locationAccuracyMeters ?: -1f} " +
             "provider=${diagnosticLocation?.provider ?: "none"}"
@@ -62,7 +63,7 @@ internal class CommandDiagnosticsSubsystem(private val rt: PositioningRuntime) {
         }
         rt.deps.runtimeTelemetry.event(
             "location_update_received",
-            "count=${locations.size} gpsState=rt.state.gpsRuntimeState " +
+            "count=${locations.size} gpsState=${rt.state.gpsRuntimeState} " +
                 "foregroundStartRequired=${intent?.getBooleanExtra(TrackingServiceIntents.EXTRA_FOREGROUND_SERVICE_START_REQUIRED, false) == true}"
         )
         locations.forEach { location ->

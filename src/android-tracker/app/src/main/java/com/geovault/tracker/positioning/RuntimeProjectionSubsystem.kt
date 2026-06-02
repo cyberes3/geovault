@@ -319,7 +319,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
             !rt.state.isTracking && rt.state.gpsRuntimeState != GpsRuntimeState.INACTIVE -> {
                 rt.deps.runtimeTelemetry.event(
                     "runtime_invariant_violation",
-                    "state=rt.state.gpsRuntimeState while rt.state.isTracking=false"
+                    "state=${rt.state.gpsRuntimeState} while isTracking=${rt.state.isTracking}"
                 )
             }
             rt.state.isTracking && rt.state.gpsRuntimeState == GpsRuntimeState.INACTIVE -> {

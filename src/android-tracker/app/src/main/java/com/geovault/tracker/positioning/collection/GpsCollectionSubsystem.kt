@@ -254,7 +254,6 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
                 details = "from=$previous to=$next event=$event reason=$reason"
             )
             rt.state.gpsRuntimeState = next
-            rt.notifyCollectionStateChanged()
         } else {
             rt.state.gpsRuntimeState = next
         }

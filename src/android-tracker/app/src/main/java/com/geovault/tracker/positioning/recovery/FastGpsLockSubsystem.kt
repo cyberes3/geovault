@@ -302,7 +302,10 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
         rt.state.fastGpsLockLastSummaryAtMs = nowMs
         rt.deps.runtimeTelemetry.event(
             "fast_lock_summary",
-            "samples=rt.state.fastGpsLockSampleCount starts=rt.state.fastGpsLockStartCountThisSession stops=rt.state.fastGpsLockStopCountThisSession timeouts=${rt.state.fastGpsLockTimeoutCountThisSession}"
+            "samples=${rt.state.fastGpsLockSampleCount} " +
+                "starts=${rt.state.fastGpsLockStartCountThisSession} " +
+                "stops=${rt.state.fastGpsLockStopCountThisSession} " +
+                "timeouts=${rt.state.fastGpsLockTimeoutCountThisSession}"
         )
     }
 

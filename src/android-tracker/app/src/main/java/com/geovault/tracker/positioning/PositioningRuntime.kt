@@ -38,11 +38,6 @@ import kotlinx.coroutines.withContext
 internal class PositioningRuntime(
     val ports: PositioningAndroidPorts,
 ) {
-    interface Listener {
-        fun onFixProcessed(accepted: Boolean, pointPersisted: Boolean) {}
-        fun onCollectionStateChanged() {}
-    }
-
     val state = PositioningSessionState()
     val service: TrackingService get() = ports.service
 
@@ -53,7 +48,6 @@ internal class PositioningRuntime(
     internal val pushDispatcher: CoroutineDispatcher = Dispatchers.IO
 
     internal lateinit var deps: PositioningDependencies
-    internal var listener: Listener = object : Listener {}
 
     internal lateinit var utilities: PositioningHostUtilities
     internal lateinit var contextBuilder: PositioningContextBuilder
@@ -271,11 +265,4 @@ internal class PositioningRuntime(
         TrackingServiceLifecycleGate.markDestroyed()
     }
 
-    internal fun notifyFixProcessed(accepted: Boolean, pointPersisted: Boolean) {
-        listener.onFixProcessed(accepted, pointPersisted)
-    }
-
-    internal fun notifyCollectionStateChanged() {
-        listener.onCollectionStateChanged()
-    }
 }

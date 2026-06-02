@@ -16,6 +16,18 @@ object LocationFilterReasonPolicy {
         return isSpatialHold(reason) || reason == FilterReason.SPEED_CAP_EXCEEDED
     }
 
+    /**
+     * Policy reasons that suppress forced local reanchor after a JUMP reject streak.
+     * Matches pre-de4fc52b allowlist: stale-relocation is intentionally excluded so catch-up
+     * GPS leaps can reanchor when twin-fix confirmation cannot complete.
+     */
+    fun blocksForcedLocalReanchor(reason: FilterReason?): Boolean {
+        return reason == FilterReason.RESUME_UNCONFIRMED ||
+            reason == FilterReason.CANDIDATE_UNCONFIRMED ||
+            reason == FilterReason.SPEED_CAP_UNCONFIRMED ||
+            reason == FilterReason.SPEED_CAP_EXCEEDED
+    }
+
     fun isCapEvidence(reason: FilterReason?): Boolean {
         return reason == FilterReason.SPEED_CAP_EXCEEDED ||
             reason == FilterReason.SPEED_CAP_UNCONFIRMED

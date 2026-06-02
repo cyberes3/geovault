@@ -43,7 +43,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
         }
         rt.deps.runtimeTelemetry.event(
             "stationary_ping_received",
-            "reason=$reason state=rt.state.gpsRuntimeState lastRaw=${rt.commands.summarizeLocationForTelemetry(rt.state.latestObservedRawLocation)} " +
+            "reason=$reason state=${rt.state.gpsRuntimeState} lastRaw=${rt.commands.summarizeLocationForTelemetry(rt.state.latestObservedRawLocation)} " +
                 "lastAccepted=${rt.commands.summarizeLocationForTelemetry(rt.state.lastFilteredLocation)}"
         )
         if (rt.state.gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
@@ -174,7 +174,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
         rt.deps.stationaryFreshnessCoordinator.startProbe(
             nowMs = nowMs,
             timeoutMs = TrackingServiceConstants.PAUSED_FRESHNESS_PROBE_TIMEOUT_MS,
-            details = "state=rt.state.gpsRuntimeState consecutiveStationary=rt.state.consecutiveStationaryPoints " +
+            details = "state=${rt.state.gpsRuntimeState} consecutiveStationary=${rt.state.consecutiveStationaryPoints} " +
                 "anchorAgeMs=${anchorAgeMs ?: -1L}",
         )
     }

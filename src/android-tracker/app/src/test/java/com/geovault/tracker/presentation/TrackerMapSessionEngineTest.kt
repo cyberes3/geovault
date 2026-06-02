@@ -150,7 +150,7 @@ class TrackerMapSessionEngineTest {
     }
 
     @Test
-    fun build_currentSession_filtersOlderSessionsFromMultiTrail() {
+    fun build_multiTrail_passesThroughOverlayTrailsUnfiltered() {
         val s1 = 1_000L
         val s2 = 2_000L
         val snapshot = TrackerMapSessionEngine.build(
@@ -166,18 +166,15 @@ class TrackerMapSessionEngineTest {
                         queued("tracker-a", id = 0L, time = 30L, prov = "local_gps", startTimestampMs = s2),
                     )
                 ),
-                sessionWindows = TrackerMapSessionWindowState(
-                    recentDataWindowByTracker = mapOf("tracker-a" to "current_session"),
-                ),
                 nowMs = 1_000_000L,
             )
         )
         val track = snapshot.tracks.getValue("tracker-a")
-        assertEquals(listOf(30L), track.renderTrail.map { it.time })
+        assertEquals(listOf(10L, 20L, 30L), track.renderTrail.map { it.time })
     }
 
     @Test
-    fun build_appliesPerTrackerWindowIndependently() {
+    fun build_multiTrail_keepsAllPointsPerTracker() {
         val s1 = 1_000L
         val s2 = 2_000L
         val snapshot = TrackerMapSessionEngine.build(
@@ -194,21 +191,15 @@ class TrackerMapSessionEngineTest {
                         queued("tracker-b", id = 0L, time = 20L, prov = "local_gps", startTimestampMs = s2),
                     ),
                 ),
-                sessionWindows = TrackerMapSessionWindowState(
-                    recentDataWindowByTracker = mapOf(
-                        "tracker-a" to "current_session",
-                        "tracker-b" to "all",
-                    ),
-                ),
                 nowMs = 1_000_000L,
             )
         )
-        assertEquals(listOf(20L), snapshot.tracks.getValue("tracker-a").renderTrail.map { it.time })
+        assertEquals(listOf(10L, 20L), snapshot.tracks.getValue("tracker-a").renderTrail.map { it.time })
         assertEquals(listOf(10L, 20L), snapshot.tracks.getValue("tracker-b").renderTrail.map { it.time })
     }
 
     @Test
-    fun build_singleTrail_appliesActiveTrackerWindow() {
+    fun build_singleTrail_passesThroughStateTrailUnfiltered() {
         val s1 = 1_000L
         val s2 = 2_000L
         val snapshot = TrackerMapSessionEngine.build(
@@ -226,17 +217,14 @@ class TrackerMapSessionEngineTest {
                     displayedTrackerId = "active",
                 ),
                 localRuntimeOverlayTrails = emptyMap(),
-                sessionWindows = TrackerMapSessionWindowState(
-                    recentDataWindowByTracker = mapOf("active" to "current_session"),
-                ),
                 nowMs = 1_000_000L,
             )
         )
-        assertEquals(listOf(30L), snapshot.singleTrail.map { it.time })
+        assertEquals(listOf(10L, 30L), snapshot.singleTrail.map { it.time })
     }
 
     @Test
-    fun build_singleTrailWithRestoredLocalTrail_keepsPreviousAndCurrentSessions() {
+    fun build_singleTrailWithRestoredLocalTrail_keepsAllPoints() {
         val older = 1_000L
         val previous = 2_000L
         val current = 3_000L
@@ -265,15 +253,11 @@ class TrackerMapSessionEngineTest {
                     mode = TrackerMapDisplayMode.SINGLE_SESSION,
                     displayedTrackerId = "active",
                 ),
-                sessionWindows = TrackerMapSessionWindowState(
-                    recentDataWindowByTracker = mapOf("active" to "session"),
-                    currentSessionStartByTracker = mapOf("active" to current),
-                ),
                 nowMs = 1_000_000L,
             )
         )
 
-        assertEquals(listOf(30L, 40L, 50L), snapshot.singleTrail.map { it.time })
+        assertEquals(listOf(10L, 20L, 30L, 40L, 50L), snapshot.singleTrail.map { it.time })
     }
 
     private fun plan(

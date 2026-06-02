@@ -223,10 +223,6 @@ class TrackerMapViewModelStreamingContractsTest {
                 state = state,
                 plan = singlePlan(trackerId),
                 trailPointLimit = 100,
-                sessionWindows = TrackerMapSessionWindowState(
-                    recentDataWindowByTracker = mapOf(trackerId to "current_session"),
-                    currentSessionStartByTracker = mapOf(trackerId to sessionStart),
-                ),
                 nowMs = sessionStart + 1_000L,
             )
         )
@@ -238,13 +234,11 @@ class TrackerMapViewModelStreamingContractsTest {
     }
 
     @Test
-    fun effectiveProject_sessionNearServerStart_keepsPreviousAndRuntimeOverlayHead() {
+    fun effectiveProject_preFilteredSessionTrail_keepsRuntimeOverlayHead() {
         val trackerId = "tracker-1"
-        val older = 1_000L
         val previous = 2_000L
         val sessionStart = 10_000L
         val roundedServerStart = 10_498L
-        val olderPoint = sessionPoint(trackerId, time = 1_100L, latitude = 1.0, longitude = 1.0, startTimestampMs = older)
         val previousPoint = sessionPoint(trackerId, time = 2_100L, latitude = 2.0, longitude = 2.0, startTimestampMs = previous)
         val serverCurrentPoint = sessionPoint(
             trackerId = trackerId,
@@ -252,6 +246,13 @@ class TrackerMapViewModelStreamingContractsTest {
             latitude = 3.0,
             longitude = 3.0,
             startTimestampMs = roundedServerStart,
+        )
+        val runtimePoint = sessionPoint(
+            trackerId = trackerId,
+            time = 10_200L,
+            latitude = 4.0,
+            longitude = 4.0,
+            startTimestampMs = sessionStart,
         )
         val state = TrackerMapUiState(
             runtime = TrackingRuntimeSnapshot(
@@ -265,18 +266,7 @@ class TrackerMapViewModelStreamingContractsTest {
             ),
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             displayedTrackerId = trackerId,
-            trail = listOf(
-                olderPoint,
-                previousPoint,
-                serverCurrentPoint,
-                sessionPoint(
-                    trackerId = trackerId,
-                    time = 10_200L,
-                    latitude = 4.0,
-                    longitude = 4.0,
-                    startTimestampMs = sessionStart,
-                ),
-            ),
+            trail = listOf(previousPoint, serverCurrentPoint, runtimePoint),
         )
 
         val projected = TrackerMapEffectiveSessionProjector.project(
@@ -284,16 +274,12 @@ class TrackerMapViewModelStreamingContractsTest {
                 state = state,
                 plan = singlePlan(trackerId),
                 trailPointLimit = 100,
-                sessionWindows = TrackerMapSessionWindowState(
-                    recentDataWindowByTracker = mapOf(trackerId to "session"),
-                    currentSessionStartByTracker = mapOf(trackerId to sessionStart),
-                ),
                 nowMs = 11_000L,
             )
         )
 
         assertEquals(
-            listOf(previousPoint.time, serverCurrentPoint.time, 10_200L),
+            listOf(previousPoint.time, serverCurrentPoint.time, runtimePoint.time),
             projected.snapshot.singleTrail.map { it.time },
         )
         assertEquals(4.0 to 4.0, projected.liveHead)

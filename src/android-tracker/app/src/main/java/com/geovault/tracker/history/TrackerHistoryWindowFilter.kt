@@ -1,36 +1,14 @@
-package com.geovault.tracker.presentation
+package com.geovault.tracker.history
 
 import com.geovault.tracker.db.QueuedLocation
 
-/**
- * Recent-data-window selection on the map: drives the visible point subset for a
- * tracker's trail. Mirrors the server's `recent_data_window` selector
- * (`src/backend/extensions/live_track/src/backend/helpers.py`).
- *
- * Recognized keys:
- *  - `1min`, `1h`, `1d`, `1w`, `1m`: rolling time window from `nowMs`.
- *  - `current_session`: only the latest session.
- *  - `session`: latest two sessions (previous + current).
- *  - null / `all` / unknown: identity.
- *
- * Session-keyed selections delegate session attribution to
- * [TrackerSessionAttributionPolicy], which uses the authoritative current-session
- * start (when supplied) plus per-point starttimestamps to assign every point to
- * exactly one segment. The filter then keeps the last 1 (current_session) or last 2
- * (session) segments.
- *
- * Latest-point fallback parity with the server: if filtering would drop every point
- * of an otherwise non-empty trail, the most recent input point is preserved so the
- * marker still has a position.
- */
-data class TrackerSessionWindowContext(
+data class TrackerHistoryWindowContext(
     val windowKey: String?,
     val nowMs: Long,
     val currentSessionStartMs: Long? = null,
 )
 
-object TrackerMapRecentDataWindowFilterPolicy {
-
+object TrackerHistoryWindowFilter {
     private const val MS_PER_SEC = 1_000L
     private const val MS_PER_MIN = 60L * MS_PER_SEC
     private const val MS_PER_HOUR = 60L * MS_PER_MIN
@@ -46,11 +24,11 @@ object TrackerMapRecentDataWindowFilterPolicy {
         "1m" to MS_PER_MONTH,
     )
 
-    fun apply(points: List<QueuedLocation>, context: TrackerSessionWindowContext): List<QueuedLocation> {
+    fun apply(points: List<QueuedLocation>, context: TrackerHistoryWindowContext): List<QueuedLocation> {
         if (points.isEmpty()) return points
         val key = context.windowKey?.trim()?.lowercase()
         if (key.isNullOrEmpty() || key == "all") return points
-        val result = when (key) {
+        return when (key) {
             "current_session" -> filterCurrentSession(points, context.currentSessionStartMs)
             "session" -> withLatestPointFallback(
                 original = points,
@@ -64,7 +42,6 @@ object TrackerMapRecentDataWindowFilterPolicy {
                 )
             }
         }
-        return result
     }
 
     private fun filterCurrentSession(
@@ -81,14 +58,11 @@ object TrackerMapRecentDataWindowFilterPolicy {
         currentSessionStartMs: Long?,
         keep: Int,
     ): List<QueuedLocation> {
-        val segments = TrackerSessionAttributionPolicy.segment(
+        val segments = TrackerHistorySessionAttribution.segment(
             points = points,
-            context = TrackerSessionAttributionContext(currentSessionStartMs = currentSessionStartMs),
+            context = TrackerHistorySessionAttributionContext(currentSessionStartMs = currentSessionStartMs),
         )
         if (segments.isEmpty()) return emptyList()
-        // Identity membership: a point's segment is the one the attributor placed it in,
-        // and segments hold the original instances. IdentityHashMap keeps lookup O(1) and
-        // sidesteps the data-class structural equality cost.
         val keptIdentity = java.util.IdentityHashMap<QueuedLocation, Boolean>()
         for (segment in segments.takeLast(keep)) {
             for (point in segment.points) keptIdentity[point] = true
