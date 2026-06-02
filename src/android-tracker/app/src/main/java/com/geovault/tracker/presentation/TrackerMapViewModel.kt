@@ -21,6 +21,7 @@ import com.geovault.tracker.history.TrackerHistoryIntent
 import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
 import com.geovault.tracker.history.TrackerHistoryRefreshPolicy
 import com.geovault.tracker.history.TrackerHistoryRepository
+import com.geovault.tracker.history.TrackerHistorySessionBoundary
 import com.geovault.tracker.history.TrackerHistorySourceAdapters
 import com.geovault.tracker.history.TrackerHistoryKey
 import com.geovault.tracker.history.TrackerHistoryDiagnostics
@@ -502,6 +503,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     private val historyRepository: TrackerHistoryRepository =
         TrackerAppServices.from(application).trackerHistoryRepository()
     private val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
+    private val historySessionBoundary = TrackerHistorySessionBoundary()
     private var lastObservedTrackingRunning: Boolean? = null
     private var lastObservedLocalRecordingActive: Boolean? = null
 
@@ -678,14 +680,27 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                         else -> snap.locallyRecordedTrackerId.trim().ifBlank { snap.selectedTrackerId.trim() }
                     }
                     if (trackerId.isNotEmpty()) {
-                        TrackerMapHistoryUiSync.dispatchHistoryClear(
-                            trackerId = trackerId,
-                            trackers = trackers,
-                            dispatcher = historyIntentDispatcher,
-                            activeSessionStartMs = activeSessionStartMsForRuntime(snap),
-                        )
+                        if (snap.localRecordingActive) {
+                            historySessionBoundary.onRecordingStarted(
+                                trackerId = trackerId,
+                                trackers = trackers,
+                                sessionStartMs = activeSessionStartMsForRuntime(snap),
+                                repository = historyRepository,
+                            )
+                        } else {
+                            historySessionBoundary.onRecordingStopped(
+                                trackerId = trackerId,
+                                trackers = trackers,
+                                dispatcher = historyIntentDispatcher,
+                            )
+                        }
                     }
                 }
+                historySessionBoundary.onRuntimeUpdated(
+                    runtime = snap,
+                    trackers = trackerManagementStateStore.trackers.value,
+                    repository = historyRepository,
+                )
                 requestRuntimeTrailReload(reloadReason)
                 refreshStreamTargets()
                 if (runtimeResyncDecision.restartDisplayedStreaming) {
@@ -1272,6 +1287,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             state = nextState,
             preservedSingleTrackerId = preservedSingleTrackerId,
         )
+        reprojectTrailsFromRepository("map_context_transition")
         pendingReopenSingleTrackerLoadId = pendingReopenTrackerId
         pendingFitAfterReload = true
         lastTrailLoadSeed = null
@@ -1301,6 +1317,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         evaluateResumeAfterBackground(allowZeroGap = pendingInitialTrackerForMap || pendingResumeEvaluation)
+        reprojectTrailsFromRepository("map_surface_visible")
         bumpReconcileToken()
     }
 
@@ -1751,6 +1768,19 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
                 nowMs = nowMs,
             )
         )
+    }
+
+    private fun reprojectTrailsFromRepository(reason: String) {
+        if (!mapReady || !mapSurfaceVisible) return
+        val snapshots = historyRepository.snapshots.value
+        if (snapshots.isEmpty()) return
+        val state = _uiState.value
+        val plan = projectSession(state)
+        GeoVaultCaptureLog.d(
+            TAG,
+            "map_update vm_trail_reproject reason=$reason snapshot_keys=${snapshots.size}",
+        )
+        _uiState.value = applyHistoryTrailsToState(state, plan)
     }
 
     private fun applyHistoryTrailsToState(

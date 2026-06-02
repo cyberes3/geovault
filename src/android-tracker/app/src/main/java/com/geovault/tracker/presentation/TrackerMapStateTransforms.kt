@@ -25,6 +25,8 @@ enum class TrackerMapDisplayMode {
 object TrackerMapStateTransforms {
 
     const val MAX_TRACK_JUMP_METERS: Float = 5f * 1609.344f
+    /** Break line segments when fixes are separated by a long stationary/relocation gap. */
+    const val MAX_TRACK_TIME_GAP_MS: Long = 5L * 60L * 1_000L
     private val accuracyCircleResolver = TrackerAccuracyCircleResolver()
 
     fun buildRenderState(
@@ -332,17 +334,38 @@ object TrackerMapStateTransforms {
         val sessionGroups = groupAdjacentBySession(points)
         val lines = mutableListOf<MapRenderLine>()
         sessionGroups.forEachIndexed { sessionIndex, group ->
-            val coords = group.map { it.latitude to it.longitude }
-            val distanceSegments = geoVaultSplitTrackByDistance(coords, MAX_TRACK_JUMP_METERS)
-            distanceSegments.forEachIndexed { distanceIndex, segment ->
-                lines += MapRenderLine(
-                    id = "$lineIdPrefix-$sessionIndex-$distanceIndex",
-                    coordinates = segment,
-                    lineColorHex = lineColorHex,
-                )
+            val timeGroups = splitByTimeGap(group, MAX_TRACK_TIME_GAP_MS)
+            timeGroups.forEachIndexed { timeIndex, timeGroup ->
+                val coords = timeGroup.map { it.latitude to it.longitude }
+                val distanceSegments = geoVaultSplitTrackByDistance(coords, MAX_TRACK_JUMP_METERS)
+                distanceSegments.forEachIndexed { distanceIndex, segment ->
+                    lines += MapRenderLine(
+                        id = "$lineIdPrefix-$sessionIndex-$timeIndex-$distanceIndex",
+                        coordinates = segment,
+                        lineColorHex = lineColorHex,
+                    )
+                }
             }
         }
         return lines
+    }
+
+    private fun splitByTimeGap(points: List<QueuedLocation>, maxGapMs: Long): List<List<QueuedLocation>> {
+        if (points.isEmpty()) return emptyList()
+        if (points.size == 1) return listOf(points)
+        val groups = mutableListOf<MutableList<QueuedLocation>>()
+        var current = mutableListOf(points.first())
+        for (index in 1 until points.size) {
+            val point = points[index]
+            val previous = points[index - 1]
+            if (point.time - previous.time > maxGapMs) {
+                groups += current
+                current = mutableListOf()
+            }
+            current += point
+        }
+        groups += current
+        return groups
     }
 
     private fun groupAdjacentBySession(points: List<QueuedLocation>): List<List<QueuedLocation>> {

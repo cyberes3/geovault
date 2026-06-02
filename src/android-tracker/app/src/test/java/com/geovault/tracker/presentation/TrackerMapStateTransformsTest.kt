@@ -551,6 +551,67 @@ class TrackerMapStateTransformsTest {
     }
 
     @Test
+    fun buildRenderState_singleSession_splitsLineOnLongTimeGapWithinSession() {
+        val sessionStart = 1_000L
+        val gapMs = TrackerMapStateTransforms.MAX_TRACK_TIME_GAP_MS + 60_000L
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    trackerId = "t1",
+                    time = 10L,
+                    latitude = 39.70,
+                    longitude = -105.20,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                    startTimestampMs = sessionStart,
+                ),
+                QueuedLocation(
+                    trackerId = "t1",
+                    time = 20L,
+                    latitude = 39.7005,
+                    longitude = -105.2005,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                    startTimestampMs = sessionStart,
+                ),
+                QueuedLocation(
+                    trackerId = "t1",
+                    time = 20L + gapMs,
+                    latitude = 39.71,
+                    longitude = -105.21,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                    startTimestampMs = sessionStart,
+                ),
+                QueuedLocation(
+                    trackerId = "t1",
+                    time = 30L + gapMs,
+                    latitude = 39.7105,
+                    longitude = -105.2105,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                    startTimestampMs = sessionStart,
+                ),
+            ),
+            runtime = TrackingRuntimeSnapshot(),
+            displayedTrackerId = "t1",
+        )
+
+        assertEquals(2, render.lines.size)
+        assertEquals("tracker-trail-0-0-0", render.lines[0].id)
+        assertEquals("tracker-trail-0-1-0", render.lines[1].id)
+    }
+
+    @Test
     fun buildRenderState_singleSession_splitsAdjacentPointsByDifferentSessionStart() {
         // SESSION-AWARE LINE SPLIT: two adjacent points at the same physical location but
         // belonging to different recording sessions must produce two separate lines, not a
@@ -592,8 +653,8 @@ class TrackerMapStateTransformsTest {
 
         assertEquals(2, render.lines.size)
         assertEquals(listOf(2, 2), render.lines.map { it.coordinates.size })
-        assertEquals("tracker-trail-0-0", render.lines[0].id)
-        assertEquals("tracker-trail-1-0", render.lines[1].id)
+        assertEquals("tracker-trail-0-0-0", render.lines[0].id)
+        assertEquals("tracker-trail-1-0-0", render.lines[1].id)
     }
 
     @Test

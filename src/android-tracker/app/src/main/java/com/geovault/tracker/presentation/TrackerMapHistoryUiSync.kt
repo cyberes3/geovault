@@ -86,6 +86,30 @@ object TrackerMapHistoryUiSync {
         )
     }
 
+    fun recomposeTrackerSnapshot(
+        repository: TrackerHistoryRepository,
+        trackerId: String,
+        trackers: List<Tracker>,
+        activeSessionStartMs: Long?,
+    ): TrackerHistoryTransactionResult? {
+        val normalized = trackerId.trim()
+        if (normalized.isEmpty()) return null
+        val window = historyWindowForTracker(normalized, trackers)
+        if (!window.isCurrentSession && !window.isSession) return null
+        val key = TrackerHistoryKey(normalized, window)
+        val result = repository.composeAndPublish(
+            key = key,
+            activeSessionStartMs = activeSessionStartMs,
+        )
+        GeoVaultCaptureLog.i(
+            "TrackerHistory",
+            "map_update history_recompose tracker=$normalized window=${window.normalizedKey} " +
+                "sessionStart=${activeSessionStartMs ?: -1} committed=${result.committed} " +
+                "reason=${result.reason} points=${result.snapshot.points.size}",
+        )
+        return result
+    }
+
     fun hasAuthoritativeServerTrunk(
         snapshots: Map<TrackerHistoryKey, TrackerHistorySnapshot>,
         trackers: List<Tracker>,

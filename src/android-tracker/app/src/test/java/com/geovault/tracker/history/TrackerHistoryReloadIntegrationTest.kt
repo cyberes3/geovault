@@ -190,6 +190,40 @@ class TrackerHistoryReloadIntegrationTest {
     }
 
     @Test
+    fun activeRecording_clipsMixedCurrentSessionServerTrunk() {
+        val repository = TrackerHistoryRepository()
+        val dispatcher = TrackerHistoryIntentDispatcher(repository)
+        val trackerId = "t1"
+        val window = TrackerHistoryWindow("current_session")
+        val activeSessionStartMs = 1_000L
+
+        dispatcher.dispatch(
+            TrackerHistoryIntent.Clear(
+                boundary = TrackerHistoryClearBoundary(
+                    trackerId = trackerId,
+                    clearedAtMs = activeSessionStartMs,
+                    activeSessionStartMs = activeSessionStartMs,
+                ),
+                window = window,
+            ),
+        )
+
+        val clipped = dispatcher.dispatch(
+            TrackerHistoryIntent.CommitTrunk(
+                batch = serverTrunk(
+                    trackerId = trackerId,
+                    window = window,
+                    times = listOf(100L, 1_200L),
+                    startTimestampMs = activeSessionStartMs,
+                ),
+                activeSessionStartMs = activeSessionStartMs,
+            ),
+        )
+        assertTrue(clipped.committed)
+        assertEquals(listOf(1_200L), repository.snapshotFor(TrackerHistoryKey(trackerId, window))!!.points.map { it.timestampMs })
+    }
+
+    @Test
     fun activeRecording_ignoresStaleCurrentSessionServerTrunk() {
         val repository = TrackerHistoryRepository()
         val dispatcher = TrackerHistoryIntentDispatcher(repository)

@@ -35,32 +35,46 @@ class TrackerHistoryRepository(
         activeSessionStartMs: Long?,
         nowMs: Long = System.currentTimeMillis(),
     ): TrackerHistoryTransactionResult {
-        TrackerHistoryActiveSessionPolicy.staleTrunkReason(
+        val prepared = TrackerHistoryActiveSessionPolicy.prepareTrunkForCommit(
             batch = batch,
             activeSessionStartMs = activeSessionStartMs,
-        )?.let { reason ->
-            GeoVaultCaptureLog.w(
-                TAG,
-                "map_update history_trunk_ignored tracker=${batch.normalizedTrackerId} " +
-                    "window=${batch.window.normalizedKey} reason=$reason pts=${batch.points.size} " +
-                    "session=${activeSessionStartMs ?: -1}",
-            )
-            return fallbackForKey(
-                key = TrackerHistoryKey(batch.normalizedTrackerId, batch.window),
-                reason = reason,
-                nowMs = nowMs,
-            )
+        )
+        val trunkBatch = when (prepared) {
+            is TrackerHistoryTrunkPrepareResult.Reject -> {
+                GeoVaultCaptureLog.w(
+                    TAG,
+                    "map_update history_trunk_ignored tracker=${batch.normalizedTrackerId} " +
+                        "window=${batch.window.normalizedKey} reason=${prepared.reason} pts=${batch.points.size} " +
+                        "session=${activeSessionStartMs ?: -1}",
+                )
+                return fallbackForKey(
+                    key = TrackerHistoryKey(batch.normalizedTrackerId, batch.window),
+                    reason = prepared.reason,
+                    nowMs = nowMs,
+                )
+            }
+            is TrackerHistoryTrunkPrepareResult.Commit -> {
+                if (prepared.clipped) {
+                    GeoVaultCaptureLog.i(
+                        TAG,
+                        "map_update history_trunk_clipped tracker=${batch.normalizedTrackerId} " +
+                            "window=${batch.window.normalizedKey} before=${batch.points.size} " +
+                            "after=${prepared.batch.points.size} session=${activeSessionStartMs ?: -1}",
+                    )
+                }
+                prepared.batch
+            }
         }
-        sourceStore.putTrunk(batch)
-        lastTrunkFetchedAtMsByTracker[batch.normalizedTrackerId] = nowMs
-        if (batch.sourceKind == TrackerHistorySourceKind.FILTERED_SERVER_TRUNK && !batch.complete) {
+        sourceStore.putTrunk(trunkBatch)
+        lastTrunkFetchedAtMsByTracker[trunkBatch.normalizedTrackerId] = nowMs
+        if (trunkBatch.sourceKind == TrackerHistorySourceKind.FILTERED_SERVER_TRUNK && !trunkBatch.complete) {
             GeoVaultCaptureLog.i(
                 TAG,
-                "map_update history_trunk_truncated tracker=${batch.normalizedTrackerId} " +
-                    "window=${batch.window.normalizedKey} points=${batch.points.size}",
+                "map_update history_trunk_truncated tracker=${trunkBatch.normalizedTrackerId} " +
+                    "window=${trunkBatch.window.normalizedKey} points=${trunkBatch.points.size}",
             )
         }
-        val key = TrackerHistoryKey(batch.normalizedTrackerId, batch.window)
+        val key = TrackerHistoryKey(trunkBatch.normalizedTrackerId, trunkBatch.window)
         return composeAndPublish(key = key, activeSessionStartMs = activeSessionStartMs, nowMs = nowMs)
     }
 
