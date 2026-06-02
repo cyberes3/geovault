@@ -7,14 +7,15 @@ Unified recording-time positioning for android-tracker. `PositioningRuntime` is 
 | Area | Responsibility |
 |------|----------------|
 | `PositioningRuntime.kt` | Facade: lifecycle, listeners, subsystem wiring (~310 LOC) |
-| `PositioningSessionState.kt` | Sole mutable session bag; `resetForStart()` / `resetForStop()` |
+| `PositioningSessionState.kt` | Sole mutable session bag; `resetForStart()` / `resetForStop()` clear all session fields |
+| `SessionResetCoordinator.kt` | Ordered dependency + subsystem resets on session start/stop |
 | `PositioningConfig.kt` / `PositioningContext.kt` | Immutable context per fix (includes `RecordingPace`) |
 | `PositioningDependencies.kt` | Wires DB, upload, coordinators, pipeline |
 | `PositioningAndroidPorts.kt` | Service, notification id, selected tracker id |
 | `PositioningHostUtilities.kt` | Publish, haptics, device/battery helpers |
 | `PositioningContextBuilder.kt` | Settings → `PositioningContext`, recovery config |
 | `RuntimeProjectionSubsystem.kt` | Snapshot, notification, control state |
-| `SessionLifecycleSubsystem.kt` | Start/stop, location updates, resets |
+| `SessionLifecycleSubsystem.kt` | Start/stop, location updates, FSM/snapshot/jobs (resets via coordinator) |
 | `ForegroundSubsystem.kt` | FGS promotion, safe stop |
 | `CommandDiagnosticsSubsystem.kt` | Background wakeup + location-update commands |
 | `ManualFixSubsystem.kt` | Manual send point |

@@ -18,6 +18,7 @@ Regression tests for behaviors that must not change when refactoring `positionin
 | Runtime store projection | `gpsCollecting` on shared runtime state | `TrackingRuntimeStateStoreTest` |
 | UI status | `TrackingUiStatusResolver` from runtime snapshot fields | `TrackingUiStatusResolverTest` |
 | Layer boundary | No `com.geovault.common.maps` imports under `positioning/` | `PositioningLayerMapsImportTest` |
+| Session state resets | `resetForStart` / `resetForStop` clear upload, boundaries, adaptive, and job handles | `PositioningSessionStateResetTest` |
 
 ## Manual smoke (release checklist)
 

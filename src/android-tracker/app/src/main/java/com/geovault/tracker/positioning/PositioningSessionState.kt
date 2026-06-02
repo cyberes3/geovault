@@ -89,17 +89,50 @@ internal class PositioningSessionState {
     val collectionPace: RecordingPace
         get() = RecordingPace.from(gpsRuntimeState)
 
+    /**
+     * Clears session-scoped mutable state for a new recording session: adaptive filters,
+     * upload liveness, recovery anchor, upload failure counters, ordering counter, and
+     * in-flight session [Job] handles.
+     */
     fun resetForStart() {
+        cancelSessionJobs()
         resetAdaptiveStateForStart()
+        consecutivePushFailures = 0
+        lastSyncFailureClass = SyncFailureClass.NONE
+        localTrackPointOrderingCounter.set(0)
         uploadLivenessState = UploadLivenessState()
         recoveryAnchorState = null
     }
 
+    /**
+     * Clears session diagnostics, boundaries, upload posture, locations, anchor, and
+     * cancels session [Job] handles when recording stops.
+     */
     fun resetForStop() {
+        cancelSessionJobs()
         resetDiagnosticsForStop()
+        consecutivePushFailures = 0
+        lastSyncFailureClass = SyncFailureClass.NONE
+        sessionVisibleBoundaryId = 0L
+        sessionBoundaryForBacklogId = 0L
     }
 
-    fun resetAdaptiveStateForStart() {
+    fun cancelSessionJobs() {
+        lowAccuracyFallbackJob?.cancel()
+        lowAccuracyFallbackJob = null
+        fastGpsLockWindowJob?.cancel()
+        fastGpsLockWindowJob = null
+        autoModeTickJob?.cancel()
+        autoModeTickJob = null
+        locationRequestReapplyRetryJob?.cancel()
+        locationRequestReapplyRetryJob = null
+        fixDeliveryWatchdogJob?.cancel()
+        fixDeliveryWatchdogJob = null
+        watchdogJob?.cancel()
+        watchdogJob = null
+    }
+
+    private fun resetAdaptiveStateForStart() {
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
         lastLocationFilterLogSignature = null
@@ -135,7 +168,7 @@ internal class PositioningSessionState {
         elasticitySpeedBucket = 0
     }
 
-    fun resetDiagnosticsForStop() {
+    private fun resetDiagnosticsForStop() {
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
         lastLocationFilterLogSignature = null

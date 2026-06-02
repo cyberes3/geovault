@@ -93,19 +93,15 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.state.trackingGeneration++
         val runGeneration = rt.state.trackingGeneration
         val selectedTrackerId = rt.ports.selectedTrackerId()
-        if (selectedTrackerId.isNotEmpty()) {
-            rt.deps.locationIngestCoordinator.resetSession(selectedTrackerId)
-        }
         rt.state.sessionVisibleBoundaryId = withContext(Dispatchers.IO) {
             rt.deps.database.locationDao().getMaxId()
         }
         rt.state.sessionBoundaryForBacklogId = rt.state.sessionVisibleBoundaryId
         val sessionStartedAtMs = System.currentTimeMillis()
-        rt.deps.pointFreshnessTracker.reset(sessionStartedAtMs = sessionStartedAtMs)
-        rt.deps.repeatedOutlierSuppressor.reset()
-        rt.deps.providerHealthController.reset()
-        rt.deps.stationaryFreshnessCoordinator.resetSession()
-        rt.state.resetForStart()
+        SessionResetCoordinator(rt).applyForStart(
+            selectedTrackerId = selectedTrackerId,
+            sessionStartedAtMs = sessionStartedAtMs,
+        )
         if (selectedTrackerId.isNotEmpty()) {
             rt.projection.restoreLocalFreshnessFromDatabase(
                 trackerId = selectedTrackerId,
@@ -116,12 +112,6 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.collection.transitionGpsState(GpsRuntimeEvent.TRACKING_STARTED, "perform_start_tracking")
         rt.projection.transitionControlState(TrackingControlEvent.StartSucceeded)
         rt.motion.startAutoModeTickIfNeeded()
-        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "start_tracking", clearLastFreshnessTimestamp = true)
-        rt.deps.lowAccuracyFallbackCoordinator.onTrackingStopped()
-        rt.recovery.fastLock.resetFastGpsLockSamples()
-        rt.motion.resetElasticDistanceOverride(reason = "start_tracking", reapplyRequest = false)
-        rt.deps.autoTrackingMotionEngine.reset(System.currentTimeMillis())
-        rt.deps.autoTrackingMotionCoordinator.reset()
         rt.projection.updateRuntimeSnapshot {
             rt.deps.sessionCoordinator.transitionToRunning(
                 previous = it,
@@ -179,20 +169,7 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.lifecycle.setStartupInProgress(false)
         rt.state.startupReadyForEvents = false
         rt.collection.transitionGpsState(GpsRuntimeEvent.TRACKING_STOPPED, "transition_to_stopped_state")
-        rt.deps.stationaryFreshnessCoordinator.onStopped(reason = "tracking_stopped")
-        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "tracking_stopped", clearLastFreshnessTimestamp = true)
-        rt.deps.lowAccuracyFallbackCoordinator.onTrackingStopped()
-        rt.deps.repeatedOutlierSuppressor.reset()
-        rt.deps.freshnessRecoveryController.reset()
-        rt.deps.providerHealthController.reset()
-        rt.deps.recoveryAnchorStore.clear()
-        rt.deps.stationaryFreshnessCoordinator.clearRegion()
-        rt.deps.pointFreshnessTracker.reset(sessionStartedAtMs = 0L)
-        rt.state.resetForStop()
-        rt.deps.autoTrackingMotionCoordinator.reset()
-        rt.motion.stopAutoModeTick()
-        rt.recovery.fastLock.stopFastGpsLockWindow(reason = "tracking_stopped")
-        rt.motion.resetElasticDistanceOverride(reason = "tracking_stopped", reapplyRequest = false)
+        SessionResetCoordinator(rt).applyForStop()
         rt.projection.updateRuntimeSnapshot {
             rt.deps.sessionCoordinator.transitionToStopped(
                 previous = it,
@@ -211,16 +188,9 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.upload.stopRetryJob()
         rt.upload.stopPreflightMonitor()
         rt.upload.stopBacklogUploader()
-        rt.motion.stopAutoModeTick()
-        rt.recovery.fastLock.stopFastGpsLockWindow(reason = "cleanup")
         rt.collection.unregisterGpsProviderReceiverIfNeeded()
         rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = false)
-        rt.deps.stationaryFreshnessCoordinator.onStopped(reason = "cleanup_$reason")
-        rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "cleanup_$reason", clearLastFreshnessTimestamp = true)
         rt.deps.significantMotionBridge?.cancel()
-        rt.deps.autoTrackingMotionCoordinator.reset()
-        rt.state.watchdogJob?.cancel()
-        rt.state.watchdogJob = null
         rt.lifecycle.stopLocationUpdates()
         TrackPointBus.resumeLocalDelivery()
         if (rt.state.startupForegroundPromoted) {
