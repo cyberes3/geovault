@@ -1,6 +1,4 @@
-TODO:
-- Oauth
-- Celery for background workers (replacement cleanup and allow extensions to register workers so the pwa generator can do its thing)
+Move import processing to celery
 
 Pay some stupid retard to draw us SVGs of our various icons
 
@@ -10,11 +8,6 @@ Sharing between users:
 - Different share levels: view only or allow edit
 
 Upload and attach photos to features, add full screen photo gallery viewer
-
-Some sort of live tracking platform like hawk does
-- If a track was updated within the last 10 minutes, it is a live track and should have a direction arrow on it
-- Some way to record and push to server from an app. Use GPSLogger with %ALL
-- If a track has not been updated in the last 24 hours set it back to a normal non-live track
 
 Auto scrape inreach track and auto-import them
 - http://share.garmin.com/Feed/Share/{ID}?d1=2000-01-01T00:00:00Z&d2=3000-01-01T00:00:00Z
