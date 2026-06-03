@@ -7,6 +7,7 @@ import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.common.logging.GeoVaultPointRecordingLog
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.tracker.BuildConfig
@@ -19,6 +20,7 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
     override fun onCreate() {
         super.onCreate()
         GeoVaultCaptureLog.init(this)
+        GeoVaultPointRecordingLog.init(this)
         GeoVaultAppVersionLog.log(this, BuildConfig.GIT_COMMIT_SHA)
         GeovaultAuthManager.init(
             context = this,

@@ -17,20 +17,20 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class GeoVaultCaptureLogStoreTest {
+class GeoVaultPointRecordingLogStoreTest {
 
     private lateinit var context: Context
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        context.cacheDir.resolve(GeoVaultCaptureLogStore.DB_NAME).delete()
-        context.getDatabasePath(GeoVaultCaptureLogStore.DB_NAME).delete()
+        context.cacheDir.resolve(GeoVaultPointRecordingLogStore.DB_NAME).delete()
+        context.getDatabasePath(GeoVaultPointRecordingLogStore.DB_NAME).delete()
     }
 
     @Test
     fun prune_dropsOldestWhenOverMax() {
-        val store = GeoVaultCaptureLogStore(context, maxStoredBytes = 14_000)
+        val store = GeoVaultPointRecordingLogStore(context, maxStoredBytes = 14_000)
         val chunk = "x".repeat(3_200)
         repeat(5) {
             store.insertLog(Log.INFO, "tag", chunk, null)
@@ -46,7 +46,7 @@ class GeoVaultCaptureLogStoreTest {
 
     @Test
     fun streamLogs_retainsChronologicalOrder() {
-        val store = GeoVaultCaptureLogStore(context, maxStoredBytes = 500_000)
+        val store = GeoVaultPointRecordingLogStore(context, maxStoredBytes = 500_000)
         store.insertLog(Log.WARN, "t1", "first-line", null)
         store.insertLog(Log.ERROR, "t2", "second-line", null)
         val out = ByteArrayOutputStream()
@@ -58,33 +58,8 @@ class GeoVaultCaptureLogStoreTest {
     }
 
     @Test
-    fun streamLogs_pagedWritesAllRowsInOrder() {
-        val store = GeoVaultCaptureLogStore(context, maxStoredBytes = 500_000)
-        repeat(7) { index ->
-            store.insertLog(Log.INFO, "tag", "line-$index", null)
-        }
-        val bounds = store.snapshotBounds()
-        val out = ByteArrayOutputStream()
-        val writer = OutputStreamWriter(out, StandardCharsets.UTF_8)
-
-        val result = store.streamLogsAsText(
-            writer = writer,
-            maxIdInclusive = bounds.maxId,
-            pageSize = 2,
-        )
-        writer.flush()
-        val text = out.toString(StandardCharsets.UTF_8)
-
-        assertEquals(7L, result.rowsWritten)
-        repeat(7) { index ->
-            assertTrue(text.contains("line-$index"))
-        }
-        assertTrue(text.indexOf("line-0") < text.indexOf("line-6"))
-    }
-
-    @Test
     fun streamLogs_respectsSnapshotMaxId() {
-        val store = GeoVaultCaptureLogStore(context, maxStoredBytes = 500_000)
+        val store = GeoVaultPointRecordingLogStore(context, maxStoredBytes = 500_000)
         store.insertLog(Log.INFO, "tag", "before-snapshot", null)
         val bounds = store.snapshotBounds()
         store.insertLog(Log.INFO, "tag", "after-snapshot", null)
@@ -106,7 +81,7 @@ class GeoVaultCaptureLogStoreTest {
 
     @Test
     fun snapshotBounds_emptyStoreReturnsZeroes() {
-        val store = GeoVaultCaptureLogStore(context, maxStoredBytes = 500_000)
+        val store = GeoVaultPointRecordingLogStore(context, maxStoredBytes = 500_000)
 
         val bounds = store.snapshotBounds()
 

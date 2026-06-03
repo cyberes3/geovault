@@ -1,6 +1,6 @@
 # Capture replay fixtures
 
-Committed JSON under this directory is produced from a **local** capture log. Coordinates are anonymized in memory during extraction; originals are never stored in git.
+Committed JSON under this directory is produced from a **local** point recording export. Coordinates are anonymized in memory during extraction; originals are never stored in git.
 
 ## CI
 
@@ -13,19 +13,26 @@ cd src/android-tracker
 
 ## Regenerate a session (maintainer)
 
-All extractor arguments are required (no defaults). The capture must contain `positioning_raw_fix` lines from `FixIngestSubsystem`; legacy decision traces are not accepted as replay input.
+Build with point recording enabled, capture a drive, export, then extract:
 
 ```bash
 cd src/android-tracker
+./build-android.sh debug --add-recording --install
+# reproduce scenario on device
+./download-point-recording-log.sh
+```
 
-python3 scripts/extract_capture_replay.py write /path/to/capture.txt.gz \
+All extractor arguments are required (no defaults). The export must contain `positioning_raw_fix` lines from `FixIngestSubsystem` (written only when `--add-recording` is compiled in).
+
+```bash
+python3 scripts/extract_capture_replay.py write /tmp/MyApp_point-recording_....txt.gz \
   --session traffic_jam_2026_06_02 \
   --start 2026-06-02T22:30:00Z \
   --end 2026-06-02T22:46:00Z \
   --output app/src/test/resources/replay/traffic_jam_2026_06_02.json \
   --settings-json /path/to/replay_settings.json
 
-python3 scripts/extract_capture_replay.py check /path/to/capture.txt.gz \
+python3 scripts/extract_capture_replay.py check /tmp/MyApp_point-recording_....txt.gz \
   --session traffic_jam_2026_06_02 \
   --start 2026-06-02T22:30:00Z \
   --end 2026-06-02T22:46:00Z \
@@ -37,8 +44,10 @@ python3 scripts/extract_capture_replay.py check /path/to/capture.txt.gz \
 
 Optional: `--track-id <uuid>` when the log contains multiple tracks.
 
+Use `./build-android.sh ... --add-logging` and `./download-capture-log.sh` only when you need full diagnostic capture (e.g. `positioning_decision_trace` for `expectedEvents` golden lines). Replay **raw fixes** come from the point recording DB.
+
 ## Rules
 
-- Never commit capture logs (`.txt`, `.gz`) or unshifted extracts.
+- Never commit capture or point recording logs (`.txt`, `.gz`) or unshifted extracts.
 - Commit only shifted replay JSON.
 - Review PRs for coordinates that look like an identifiable region cluster.

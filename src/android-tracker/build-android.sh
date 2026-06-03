@@ -49,6 +49,7 @@ SKIP_MINIFY=false
 INSTALL=false
 OLD_VERSION=false
 ADD_LOGGING=false
+ADD_RECORDING=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -67,10 +68,14 @@ for arg in "$@"; do
         --add-logging)
             ADD_LOGGING=true
             ;;
+        --add-recording)
+            ADD_RECORDING=true
+            ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version] [--add-logging]"
+            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version] [--add-logging] [--add-recording]"
             echo "  --add-logging compiles capture logging into both debug and release APKs (sets -PGEOVAULT_ADD_LOGGING=true)."
+            echo "  --add-recording compiles point recording logging for replay captures (sets -PGEOVAULT_ADD_RECORDING=true)."
             exit 1
             ;;
     esac
@@ -95,6 +100,9 @@ if [ "$SKIP_MINIFY" = true ]; then
 fi
 if [ "$ADD_LOGGING" = true ]; then
     GRADLE_ARGS+=("-PGEOVAULT_ADD_LOGGING=true")
+fi
+if [ "$ADD_RECORDING" = true ]; then
+    GRADLE_ARGS+=("-PGEOVAULT_ADD_RECORDING=true")
 fi
 
 if [ "$BUILD_TYPE" = "release" ]; then
@@ -173,6 +181,9 @@ restore_staged_apk() {
 echo "Building Android app ($BUILD_TYPE)..."
 if [ "$ADD_LOGGING" = true ]; then
     echo "Capture logging is enabled for this build"
+fi
+if [ "$ADD_RECORDING" = true ]; then
+    echo "Point recording logging is enabled for this build"
 fi
 if ! ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"; then
     echo "Removing Gradle build outputs after failed build..."

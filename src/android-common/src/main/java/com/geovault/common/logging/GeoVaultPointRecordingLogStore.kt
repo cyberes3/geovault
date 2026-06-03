@@ -2,11 +2,11 @@ package com.geovault.common.logging
 
 import android.content.Context
 
-internal typealias GeoVaultCaptureLogSnapshotBounds = GeoVaultBufferedLogSnapshotBounds
+internal typealias GeoVaultPointRecordingLogSnapshotBounds = GeoVaultBufferedLogSnapshotBounds
 
-internal typealias GeoVaultCaptureLogStreamResult = GeoVaultBufferedLogStreamResult
+internal typealias GeoVaultPointRecordingLogStreamResult = GeoVaultBufferedLogStreamResult
 
-internal class GeoVaultCaptureLogStore(
+internal class GeoVaultPointRecordingLogStore(
     context: Context,
     maxStoredBytes: Long = MAX_STORED_BYTES,
 ) : GeoVaultBufferedLogSqliteStore(
@@ -16,7 +16,7 @@ internal class GeoVaultCaptureLogStore(
     ) {
 
     companion object {
-        internal const val DB_NAME = "geovault_capture_log.sqlite"
+        internal const val DB_NAME = "geovault_point_recording.sqlite"
 
         internal const val MAX_STORED_BYTES = 100L * 1024L * 1024L
     }

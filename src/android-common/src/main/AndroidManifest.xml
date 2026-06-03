@@ -24,6 +24,13 @@
                 <action android:name="com.geovault.common.EXPORT_CAPTURE_LOG" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".logging.GeoVaultPointRecordingLogExportReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.geovault.common.EXPORT_POINT_RECORDING_LOG" />
+            </intent-filter>
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.geovault.updatefileprovider"
