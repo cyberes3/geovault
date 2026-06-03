@@ -1,9 +1,9 @@
-package com.geovault.common.logging
+package com.geovault.tracker.logging
 
 import android.app.Application
 import android.content.Context
 import android.util.Log
-import com.geovault.common.BuildConfig
+import com.geovault.tracker.BuildConfig
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean

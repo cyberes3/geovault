@@ -20,20 +20,20 @@ class GeoVaultLoggingDatabasePathsTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        context.cacheDir.resolve(GeoVaultPointRecordingLogStore.DB_NAME).delete()
-        context.getDatabasePath(GeoVaultPointRecordingLogStore.DB_NAME).delete()
+        context.cacheDir.resolve(GeoVaultCaptureLogStore.DB_NAME).delete()
+        context.getDatabasePath(GeoVaultCaptureLogStore.DB_NAME).delete()
     }
 
     @Test
     fun storeInit_deletesLegacyDatabaseInDatabasesDir() {
-        val legacyFile = context.getDatabasePath(GeoVaultPointRecordingLogStore.DB_NAME)
+        val legacyFile = context.getDatabasePath(GeoVaultCaptureLogStore.DB_NAME)
         legacyFile.parentFile?.mkdirs()
         assertTrue(legacyFile.createNewFile())
 
-        val store = GeoVaultPointRecordingLogStore(context)
+        val store = GeoVaultCaptureLogStore(context)
         store.readableDatabase.close()
 
         assertFalse(legacyFile.exists())
-        assertTrue(File(context.cacheDir, GeoVaultPointRecordingLogStore.DB_NAME).exists())
+        assertTrue(File(context.cacheDir, GeoVaultCaptureLogStore.DB_NAME).exists())
     }
 }

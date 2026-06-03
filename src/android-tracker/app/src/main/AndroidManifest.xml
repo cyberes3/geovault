@@ -114,6 +114,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".logging.GeoVaultPointRecordingLogExportReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.geovault.tracker.EXPORT_POINT_RECORDING_LOG" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

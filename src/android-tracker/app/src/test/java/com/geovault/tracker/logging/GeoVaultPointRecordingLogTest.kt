@@ -1,4 +1,4 @@
-package com.geovault.common.logging
+package com.geovault.tracker.logging
 
 import org.junit.Test
 

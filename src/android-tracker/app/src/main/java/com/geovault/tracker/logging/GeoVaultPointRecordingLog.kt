@@ -1,8 +1,8 @@
-package com.geovault.common.logging
+package com.geovault.tracker.logging
 
 import android.app.Application
 import android.util.Log
-import com.geovault.common.BuildConfig
+import com.geovault.tracker.BuildConfig
 
 /**
  * Persists high-volume positioning replay lines (`positioning_raw_fix`) to a separate SQLite DB

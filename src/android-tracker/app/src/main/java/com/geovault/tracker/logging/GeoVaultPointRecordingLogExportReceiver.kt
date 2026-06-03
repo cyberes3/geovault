@@ -1,14 +1,14 @@
-package com.geovault.common.logging
+package com.geovault.tracker.logging
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.geovault.common.BuildConfig
+import com.geovault.tracker.BuildConfig
 
 /**
  * Dumps point recording logs to Downloads via MediaStore. Trigger with
- * `adb shell am broadcast -a com.geovault.common.EXPORT_POINT_RECORDING_LOG -p <package>`.
+ * `adb shell am broadcast -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG -p <package>`.
  */
 class GeoVaultPointRecordingLogExportReceiver : BroadcastReceiver() {
 

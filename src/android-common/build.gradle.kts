@@ -42,9 +42,6 @@ abstract class GeoVaultSharedModuleCompileLockService :
 val geoVaultCaptureLoggingEnabled =
     project.findProperty("GEOVAULT_ADD_LOGGING")?.toString() == "true"
 
-val geoVaultPointRecordingEnabled =
-    project.findProperty("GEOVAULT_ADD_RECORDING")?.toString() == "true"
-
 val geoVaultSharedModuleCompileLock = gradle.sharedServices.registerIfAbsent(
     "geoVaultSharedModuleCompileLock",
     GeoVaultSharedModuleCompileLockService::class,
@@ -80,11 +77,6 @@ android {
             "boolean",
             "GEOVAULT_CAPTURE_LOGGING_ENABLED",
             if (geoVaultCaptureLoggingEnabled) "true" else "false",
-        )
-        buildConfigField(
-            "boolean",
-            "GEOVAULT_POINT_RECORDING_ENABLED",
-            if (geoVaultPointRecordingEnabled) "true" else "false",
         )
     }
 

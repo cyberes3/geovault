@@ -13,19 +13,19 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-internal data class GeoVaultBufferedLogSnapshotBounds(
+data class GeoVaultBufferedLogSnapshotBounds(
     val minId: Long,
     val maxId: Long,
     val rowCount: Long,
     val approxBytes: Long,
 )
 
-internal data class GeoVaultBufferedLogStreamResult(
+data class GeoVaultBufferedLogStreamResult(
     val rowsWritten: Long,
     val lastId: Long,
 )
 
-internal open class GeoVaultBufferedLogSqliteStore(
+open class GeoVaultBufferedLogSqliteStore(
     context: Context,
     private val dbFileName: String,
     private val maxStoredBytes: Long,

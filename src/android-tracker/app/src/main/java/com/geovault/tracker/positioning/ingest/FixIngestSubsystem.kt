@@ -4,7 +4,7 @@ import android.location.Location
 import androidx.core.location.LocationCompat
 import com.geovault.common.geo.GeoCoordinates
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.logging.GeoVaultPointRecordingLog
+import com.geovault.tracker.logging.GeoVaultPointRecordingLog
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.FreshnessRecoveryDecision
 import com.geovault.tracker.location.LowAccuracyFallbackArmDecision

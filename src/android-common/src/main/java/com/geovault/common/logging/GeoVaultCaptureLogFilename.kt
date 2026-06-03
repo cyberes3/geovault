@@ -4,7 +4,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-internal object GeoVaultCaptureLogFilename {
+object GeoVaultCaptureLogFilename {
 
     private val INVALID_FILENAME_CHARS = charArrayOf('/', '\\', ':', '*', '?', '"', '<', '>', '|')
 

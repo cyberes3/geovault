@@ -1,5 +1,6 @@
-package com.geovault.common.logging
+package com.geovault.tracker.logging
 
+import com.geovault.common.logging.GeoVaultCaptureLogFilename
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter

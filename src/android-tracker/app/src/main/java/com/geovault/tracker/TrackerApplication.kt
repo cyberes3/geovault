@@ -7,7 +7,7 @@ import com.geovault.common.AppResetFlow
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.logging.GeoVaultPointRecordingLog
+import com.geovault.tracker.logging.GeoVaultPointRecordingLog
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.tracker.BuildConfig

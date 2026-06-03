@@ -70,6 +70,9 @@ fun versionCodeForBuild(): Int {
     return unix.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
 }
 
+val geoVaultPointRecordingEnabled =
+    project.findProperty("GEOVAULT_ADD_RECORDING")?.toString() == "true"
+
 android {
     namespace = "com.geovault.tracker"
     compileSdk = 36
@@ -81,6 +84,11 @@ android {
         versionCode = versionCodeForBuild()
         versionName = versionNameForBuild()
         buildConfigField("String", "GIT_COMMIT_SHA", "\"${gitCommitFullForBuild()}\"")
+        buildConfigField(
+            "boolean",
+            "GEOVAULT_POINT_RECORDING_ENABLED",
+            if (geoVaultPointRecordingEnabled) "true" else "false",
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

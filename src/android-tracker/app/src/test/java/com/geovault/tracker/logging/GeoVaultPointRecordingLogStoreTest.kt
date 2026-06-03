@@ -1,4 +1,4 @@
-package com.geovault.common.logging
+package com.geovault.tracker.logging
 
 import android.content.Context
 import android.util.Log

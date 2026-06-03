@@ -22,6 +22,8 @@ cd src/android-tracker
 ./download-point-recording-log.sh
 ```
 
+Export is triggered via `com.geovault.tracker.EXPORT_POINT_RECORDING_LOG` (see `download-point-recording-log.sh`).
+
 All extractor arguments are required (no defaults). The export must contain `positioning_raw_fix` lines from `FixIngestSubsystem` (written only when `--add-recording` is compiled in).
 
 ```bash

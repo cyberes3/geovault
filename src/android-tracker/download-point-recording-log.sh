@@ -13,7 +13,7 @@ if ! command -v adb >/dev/null 2>&1; then
 fi
 
 echo "Requesting point-recording-log export from $PACKAGE_NAME..."
-adb shell am broadcast -a com.geovault.common.EXPORT_POINT_RECORDING_LOG -p "$PACKAGE_NAME" >/dev/null
+adb shell am broadcast -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG -p "$PACKAGE_NAME" >/dev/null
 
 echo "Bringing app to foreground so Android does not freeze the export worker..."
 adb shell monkey -p "$PACKAGE_NAME" 1 >/dev/null || true
