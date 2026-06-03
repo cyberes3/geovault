@@ -23,26 +23,18 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
         motionMode: TrackingMotionMode,
     ): Location {
         val anchor = rt.state.lastFilteredLocation
-        val useAnchor = anchor != null &&
-            rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
-                nowMs = nowMs,
-                intervalSec = rt.contextBuilder.resolvePointFreshnessIntervalSec(motionMode),
-            )
+        val localRecoveryDue = rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
+            nowMs = nowMs,
+            intervalSec = rt.contextBuilder.resolvePointFreshnessIntervalSec(motionMode),
+        )
         rt.deps.runtimeTelemetry.event(
             "fallback_candidate_selected",
-            "source=${if (useAnchor) "anchor" else "rejected_fix"} " +
+            "source=rejected_fix " +
+                "localRecoveryDue=$localRecoveryDue " +
                 "localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
                 "rejectedAccuracy=${if (rejectedLocation.hasAccuracy()) rejectedLocation.accuracy else -1f} " +
                 "anchorAccuracy=${if (anchor?.hasAccuracy() == true) anchor.accuracy else -1f}"
         )
-        if (useAnchor) {
-            return Location(anchor).apply {
-                time = nowMs
-                elapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
-                provider = "low_accuracy_fallback_anchor:${rejectedLocation.provider ?: "gps"}"
-                if (rejectedLocation.hasAccuracy()) accuracy = rejectedLocation.accuracy
-            }
-        }
         return Location(rejectedLocation)
     }
 

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "walk_short_drive_walk_2026_06_03",
+  "trackId": "walk-short-drive-walk-synthetic",
+  "wallBaseMs": 1780500000000,
+  "elapsedRealtimeBaseNanos": 1780500000000000000,
+  "settings": {
+    "accuracyFilterMeters": 50.0,
+    "lowAccuracyFallbackEnabled": true,
+    "lowAccuracyFallbackTimeoutSec": 60,
+    "sendExtendedData": true,
+    "significantDataOnly": true,
+    "sparseTracking": false,
+    "startOnBoot": false,
+    "startTrackingOnLaunch": false,
+    "keepScreenOnWhileViewingMap": true,
+    "groupModeFitOnlyActiveTrackers": true
+  },
+  "initialState": {
+    "mode": "WALKING",
+    "sessionBoundaryId": 0
+  },
+  "rawFixes": [
+    { "index": 0, "wallOffsetMs": 0, "elapsedRealtimeOffsetNanos": 0, "gpsTimeMs": 1780500000000, "lat": 39.0000000, "lon": -105.0000000, "accuracy": 12.0, "speedMps": 0.8 },
+    { "index": 1, "wallOffsetMs": 15000, "elapsedRealtimeOffsetNanos": 15000000000, "gpsTimeMs": 1780500015000, "lat": 39.0000900, "lon": -105.0000000, "accuracy": 11.0, "speedMps": 0.8 },
+    { "index": 2, "wallOffsetMs": 30000, "elapsedRealtimeOffsetNanos": 30000000000, "gpsTimeMs": 1780500030000, "lat": 39.0001800, "lon": -105.0000000, "accuracy": 10.0, "speedMps": 0.8 },
+    { "index": 3, "wallOffsetMs": 45000, "elapsedRealtimeOffsetNanos": 45000000000, "gpsTimeMs": 1780500045000, "lat": 39.0002700, "lon": -105.0000000, "accuracy": 10.0, "speedMps": 0.8 },
+    { "index": 4, "wallOffsetMs": 60000, "elapsedRealtimeOffsetNanos": 60000000000, "gpsTimeMs": 1780500060000, "lat": 39.0003600, "lon": -105.0000000, "accuracy": 11.0, "speedMps": 0.8 },
+    { "index": 5, "wallOffsetMs": 75000, "elapsedRealtimeOffsetNanos": 75000000000, "gpsTimeMs": 1780500075000, "lat": 39.0004500, "lon": -105.0000000, "accuracy": 12.0, "speedMps": 0.8 },
+    { "index": 6, "wallOffsetMs": 90000, "elapsedRealtimeOffsetNanos": 90000000000, "gpsTimeMs": 1780500090000, "lat": 39.0005400, "lon": -105.0000000, "accuracy": 10.0, "speedMps": 0.8 },
+    { "index": 7, "wallOffsetMs": 105000, "elapsedRealtimeOffsetNanos": 105000000000, "gpsTimeMs": 1780500105000, "lat": 39.0006300, "lon": -105.0000000, "accuracy": 11.0, "speedMps": 0.8 },
+    { "index": 8, "wallOffsetMs": 135000, "elapsedRealtimeOffsetNanos": 135000000000, "gpsTimeMs": 1780500135000, "lat": 39.0007000, "lon": -104.9973000, "accuracy": 14.0, "speedMps": 1.2 },
+    { "index": 9, "wallOffsetMs": 155000, "elapsedRealtimeOffsetNanos": 155000000000, "gpsTimeMs": 1780500155000, "lat": 39.0007700, "lon": -104.9972500, "accuracy": 13.0, "speedMps": 1.0 },
+    { "index": 10, "wallOffsetMs": 175000, "elapsedRealtimeOffsetNanos": 175000000000, "gpsTimeMs": 1780500175000, "lat": 39.0008400, "lon": -104.9972200, "accuracy": 12.0, "speedMps": 1.0 },
+    { "index": 11, "wallOffsetMs": 195000, "elapsedRealtimeOffsetNanos": 195000000000, "gpsTimeMs": 1780500195000, "lat": 39.0009100, "lon": -104.9971800, "accuracy": 12.0, "speedMps": 1.0 },
+    { "index": 12, "wallOffsetMs": 215000, "elapsedRealtimeOffsetNanos": 215000000000, "gpsTimeMs": 1780500215000, "lat": 39.0009800, "lon": -104.9971500, "accuracy": 12.0, "speedMps": 1.0 },
+    { "index": 13, "wallOffsetMs": 235000, "elapsedRealtimeOffsetNanos": 235000000000, "gpsTimeMs": 1780500235000, "lat": 39.0010500, "lon": -104.9971200, "accuracy": 12.0, "speedMps": 1.0 },
+    { "index": 14, "wallOffsetMs": 255000, "elapsedRealtimeOffsetNanos": 255000000000, "gpsTimeMs": 1780500255000, "lat": 39.0011200, "lon": -104.9970900, "accuracy": 12.0, "speedMps": 1.0 }
+  ],
+  "assertions": {
+    "finalMode": "WALKING",
+    "minPersistedPoints": 2,
+    "expectedMotionRetryCountMin": 0,
+    "maxDecisionMismatches": 0,
+    "requiredEvents": []
+  }
+}

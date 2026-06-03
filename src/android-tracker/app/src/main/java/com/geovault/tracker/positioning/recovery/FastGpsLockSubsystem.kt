@@ -79,7 +79,7 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
                 nowMs = nowMs,
                 lastMotionEvidenceAtMs = lastMotionEvidenceAtMs,
                 lastModeChangedAtMs = rt.state.lastAutoModeChangedAtMs,
-                windowMs = TrackingServiceConstants.AUTO_MOTION_FAST_LOCK_SUPPRESS_WINDOW_MS,
+                windowMs = rt.contextBuilder.currentPositioningRuntimeContext().fastLockConfig.autoMotionSuppressWindowMs,
             )
         ) {
             return false
@@ -112,7 +112,7 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
         rt.state.fastGpsLockWindowJob?.cancel()
         val runGeneration = rt.state.trackingGeneration
         rt.state.fastGpsLockWindowJob = rt.ingestScope.launch {
-            delay(TrackingServiceConstants.FAST_GPS_LOCK_WINDOW_MS)
+            delay(rt.contextBuilder.currentPositioningRuntimeContext().fastLockConfig.windowMs)
             if (!rt.state.isTracking || runGeneration != rt.state.trackingGeneration || !rt.state.isFastGpsLockWindowActive) return@launch
             val best = selectBestFastGpsLockSample(
                 desiredAccuracyMeters = accuracyFilterMeters,
@@ -212,7 +212,9 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
             rt.state.fastGpsLockFreshestSample = sample
         }
         val threshold = rt.contextBuilder.currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
-        val earlyExitSampleWindow = rt.state.fastGpsLockSampleCount in TrackingServiceConstants.FAST_GPS_LOCK_EARLY_EXIT_MIN_SAMPLES..TrackingServiceConstants.FAST_GPS_LOCK_MIN_SAMPLES
+        val fastLockConfig = rt.contextBuilder.currentPositioningRuntimeContext().fastLockConfig
+        val earlyExitSampleWindow = rt.state.fastGpsLockSampleCount in
+            fastLockConfig.earlyExitMinSamples..fastLockConfig.minSamples
         if (earlyExitSampleWindow && isFreshAccurateLocation(sample, threshold)) {
             rt.recovery.fastLock.stopFastGpsLockWindow(reason = "early_lock_recovered")
             rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = true)
@@ -243,7 +245,7 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
                 nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
                 eventElapsedRealtimeNanos = freshest.elapsedRealtimeNanos
             )
-            if (ageMs in 0..TrackingServiceConstants.FAST_GPS_LOCK_MAX_SAMPLE_AGE_MS) {
+            if (ageMs in 0..rt.contextBuilder.currentPositioningRuntimeContext().fastLockConfig.maxSampleAgeMs) {
                 return Location(freshest)
             }
         }
@@ -263,7 +265,7 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
             nowElapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos(),
             eventElapsedRealtimeNanos = location.elapsedRealtimeNanos
         )
-        return ageMs in 0..TrackingServiceConstants.FAST_GPS_LOCK_MAX_LAST_LOCATION_AGE_MS
+        return ageMs in 0..rt.contextBuilder.currentPositioningRuntimeContext().fastLockConfig.maxLastLocationAgeMs
     }
 
     fun isMoreAccurateSample(candidate: Location, currentBest: Location?): Boolean {
@@ -297,7 +299,8 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
 
     fun maybeLogFastGpsLockSummary(nowMs: Long) {
         if (!rt.state.isFastGpsLockWindowActive) return
-        if (nowMs - rt.state.fastGpsLockLastSummaryAtMs < TrackingServiceConstants.FAST_GPS_LOCK_SUMMARY_INTERVAL_MS) return
+        val summaryIntervalMs = rt.contextBuilder.currentPositioningRuntimeContext().fastLockConfig.summaryIntervalMs
+        if (nowMs - rt.state.fastGpsLockLastSummaryAtMs < summaryIntervalMs) return
         rt.state.fastGpsLockLastSummaryAtMs = nowMs
         rt.deps.runtimeTelemetry.event(
             "fast_lock_summary",

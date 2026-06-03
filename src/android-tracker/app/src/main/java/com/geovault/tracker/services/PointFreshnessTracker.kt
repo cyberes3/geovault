@@ -1,5 +1,7 @@
 package com.geovault.tracker.services
 
+import com.geovault.tracker.location.PositioningRecoveryConfig
+
 /**
  * Tracks point freshness as a recording concern, independent of upload state.
  *
@@ -75,7 +77,7 @@ class PointFreshnessTracker {
 
     companion object {
         private const val MIN_LOCAL_FRESHNESS_GAP_MS = 60_000L
-        private const val MAX_LOCAL_FRESHNESS_GAP_MS = 90_000L
+        private val MAX_LOCAL_FRESHNESS_GAP_MS = PositioningRecoveryConfig.DEFAULT_MAX_LOCAL_POINT_GAP_MS
         private const val INTERVAL_MULTIPLIER = 3L
 
         fun maxAllowedPointGapMsForInterval(intervalSec: Long): Long {

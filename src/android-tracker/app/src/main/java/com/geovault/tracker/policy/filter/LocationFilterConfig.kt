@@ -1,5 +1,22 @@
 package com.geovault.tracker.policy.filter
 
+private const val GENERIC_MAX_IMPLIED_SPEED_MPS = 60.0
+private const val GENERIC_MAX_BURST_DISTANCE_METERS = 300.0
+private const val GENERIC_BURST_WINDOW_SECONDS = 10.0
+private const val GENERIC_ROLLING_WINDOW_SECONDS = 5.0
+
+private val GenericMovementCandidateConfig = MovementCandidateConfig(
+    enabled = true,
+    suspectDistanceMeters = 300.0,
+    suspectAccuracyMeters = 60.0,
+    suspectImpliedSpeedMps = 35.0,
+    consistencyMeters = 100.0,
+    confirmationWindowMs = 15_000L,
+    requiredConsistentFixes = 1,
+    requiredPromotableFixes = 1,
+    promotionAccuracyMeters = 80.0,
+)
+
 /**
  * Configuration for the per-stream [LocationFilter] pipeline plus the
  * surviving non-filter gates that the [com.geovault.tracker.policy.TrackPointPolicyEngine]
@@ -60,15 +77,15 @@ data class LocationFilterConfig(
     val useKalman: Boolean = true,
     val kalmanProfile: KalmanProfile = KalmanProfile.Default,
     val policy: LocationFilterPolicy = LocationFilterPolicy.Conservative,
-    val maxImpliedSpeedMps: Double = MotionProfileTuning.Driving.maxImpliedSpeedMps,
-    val maxBurstDistanceMeters: Double = MotionProfileTuning.Driving.maxBurstDistanceMeters,
-    val burstWindowSeconds: Double = MotionProfileTuning.Driving.burstWindowSeconds,
+    val maxImpliedSpeedMps: Double = GENERIC_MAX_IMPLIED_SPEED_MPS,
+    val maxBurstDistanceMeters: Double = GENERIC_MAX_BURST_DISTANCE_METERS,
+    val burstWindowSeconds: Double = GENERIC_BURST_WINDOW_SECONDS,
     val trackingAccuracyThresholdMeters: Double = 100.0,
-    val rollingWindowSeconds: Double = MotionProfileTuning.Driving.rollingWindowSeconds,
-    val kinematicCap: KinematicCapConfig = MotionProfileTuning.Driving.kinematicCap,
-    val movementCandidate: MovementCandidateConfig = MotionProfileTuning.Driving.movementCandidate,
-    val speedRecovery: SpeedRecoveryConfig = MotionProfileTuning.Driving.speedRecovery,
-    val anchorHealth: AnchorHealthConfig = MotionProfileTuning.Driving.anchorHealth,
+    val rollingWindowSeconds: Double = GENERIC_ROLLING_WINDOW_SECONDS,
+    val kinematicCap: KinematicCapConfig = KinematicCapConfig.Default,
+    val movementCandidate: MovementCandidateConfig = GenericMovementCandidateConfig,
+    val speedRecovery: SpeedRecoveryConfig = SpeedRecoveryConfig.Disabled,
+    val anchorHealth: AnchorHealthConfig = AnchorHealthConfig.Default,
     val staleAnchorMinAgeMs: Long = 2L * 60L * 1000L,
     val staleAnchorMinDistanceMeters: Double = 600.0,
     val resumeConfirmationMinDistanceMeters: Double = 150.0,

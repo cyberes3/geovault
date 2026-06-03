@@ -6,8 +6,7 @@ package com.geovault.tracker.policy.filter
  * The values here describe physical plausibility, not UI preferences. The
  * request interval and distance filter still live with the tracking service;
  * this object owns how much trust the filter should place in a single fix.
- * The structure mirrors a library-style configuration surface: profiles are
- * presets over generic knobs, not special cases for a particular route.
+ * Profiles are presets over generic knobs, not special cases for a particular route.
  */
 data class MotionProfileTuning(
     val maxImpliedSpeedMps: Double,

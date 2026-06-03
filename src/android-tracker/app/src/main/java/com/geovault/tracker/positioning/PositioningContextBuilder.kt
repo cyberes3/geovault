@@ -165,14 +165,15 @@ internal class PositioningContextBuilder(private val rt: PositioningRuntime) {
         nowElapsedRealtimeNanos: Long,
     ): Location {
         val sourceProvider = sourceLocation.provider?.takeIf { it.isNotBlank() } ?: "gps"
-        return anchor.toLocation(providerPrefix = "freshness_recovery").apply {
+        return Location(sourceLocation).apply {
             time = nowMs
             elapsedRealtimeNanos = nowElapsedRealtimeNanos
             provider = "freshness_recovery:$sourceProvider"
-            if (sourceLocation.hasAccuracy()) accuracy = sourceLocation.accuracy
             extras = (extras ?: Bundle()).apply {
                 putBoolean(TrackingServiceConstants.EXTRAS_KEY_FRESHNESS_RECOVERY, true)
                 putString(TrackingServiceConstants.EXTRAS_KEY_FRESHNESS_RECOVERY_SOURCE_PROVIDER, sourceProvider)
+                putDouble("freshness_recovery_anchor_lat", anchor.latitude)
+                putDouble("freshness_recovery_anchor_lon", anchor.longitude)
             }
         }
     }
@@ -188,7 +189,7 @@ internal class PositioningContextBuilder(private val rt: PositioningRuntime) {
             trackerId = trackerId,
             sessionBoundaryId = rt.state.sessionVisibleBoundaryId,
             location = location,
-            radiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            radiusMeters = rt.contextBuilder.currentPositioningRuntimeContext().stationaryRadiusMeters,
             source = source,
             motionMode = motionMode,
         )

@@ -15,6 +15,11 @@ import com.geovault.tracker.settings.TrackerSettings
 
 data class LocationIngestResult(
     val accepted: Boolean,
+    val emissionDecision: TrackPointEmissionDecision = if (accepted) {
+        TrackPointEmissionDecision.COMMIT
+    } else {
+        TrackPointEmissionDecision.REJECT
+    },
     val rejectReason: TrackPointRejectReason? = null,
     val adjustmentReason: String? = null,
     val trackPointQuality: TrackPointQuality? = null,
@@ -93,6 +98,7 @@ class LocationIngestCoordinator(
                     accuracy = accuracy,
                     propsJson = propsJson,
                     rejectReason = decision.rejectReason,
+                    emissionDecision = decision.emissionDecision,
                     currentSessionDistanceMeters = totalDistanceMeters,
                     policyMetrics = decision.metrics,
                 )
@@ -214,11 +220,13 @@ class LocationIngestCoordinator(
         accuracy: Float?,
         propsJson: String?,
         rejectReason: TrackPointRejectReason?,
+        emissionDecision: TrackPointEmissionDecision = TrackPointEmissionDecision.REJECT,
         currentSessionDistanceMeters: Float,
         policyMetrics: TrackPointDecisionMetrics? = null,
     ): LocationIngestResult {
         return LocationIngestResult(
             accepted = false,
+            emissionDecision = emissionDecision,
             rejectReason = rejectReason,
             adjustmentReason = null,
             pointPersisted = false,
@@ -258,6 +266,7 @@ class LocationIngestCoordinator(
         )
         return LocationIngestResult(
             accepted = true,
+            emissionDecision = TrackPointEmissionDecision.SNAP_INTERNAL,
             rejectReason = null,
             adjustmentReason = TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED,
             pointPersisted = false,

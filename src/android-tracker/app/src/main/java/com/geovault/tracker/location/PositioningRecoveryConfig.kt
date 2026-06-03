@@ -21,6 +21,7 @@ data class PositioningRecoveryConfig(
     val fallbackDuplicateDistanceMeters: Float = DEFAULT_FALLBACK_DUPLICATE_DISTANCE_METERS,
 ) {
     companion object {
+        const val DEFAULT_MAX_LOCAL_POINT_GAP_MS = 90_000L
         const val DEFAULT_FRESHNESS_PROBE_WINDOW_MS = 90_000L
         const val DEFAULT_MIN_PROMOTABLE_PROBE_FIXES = 2
         const val DEFAULT_FALLBACK_DUPLICATE_TIME_DELTA_MS = 1_000L

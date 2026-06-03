@@ -1,8 +1,6 @@
 package com.geovault.tracker.location
 
 import com.geovault.common.geo.GeoMath
-import com.geovault.tracker.positioning.config.PositioningPresets
-import com.geovault.tracker.services.TrackingMotionMode
 
 enum class LowAccuracyFallbackArmDecision {
     START_TIMER,
@@ -34,7 +32,10 @@ enum class LowAccuracyFallbackLoopDecision(val telemetryValue: String) {
  */
 internal class LowAccuracyFallbackCoordinator(
     private val configProvider: () -> PositioningRecoveryConfig = {
-        PositioningPresets.forMotionMode(TrackingMotionMode.WALKING).recoveryConfig(maxLocalPointGapMs = 90_000L)
+        PositioningRecoveryConfig(
+            maxLocalPointGapMs = PositioningRecoveryConfig.DEFAULT_MAX_LOCAL_POINT_GAP_MS,
+            recoverySpeedCapMps = Float.MAX_VALUE,
+        )
     },
 ) {
     private data class CandidateFingerprint(

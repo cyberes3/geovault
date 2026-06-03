@@ -98,7 +98,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
                     val probeState = rt.deps.stationaryFreshnessCoordinator.recordPoorAccuracyFix(nowMs)
                     if (
                         probeState.poorAccuracyFixes >= TrackingServiceConstants.PAUSED_FRESHNESS_MAX_POOR_ACCURACY_FIXES ||
-                        probeState.probeAgeMs >= TrackingServiceConstants.PAUSED_FRESHNESS_PROBE_TIMEOUT_MS
+                        probeState.probeAgeMs >= runtimeContext.recoveryConfig.freshnessProbeWindowMs
                     ) {
                         rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "poor_accuracy_timeout")
                         if (rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
@@ -182,7 +182,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
         }
         rt.deps.stationaryFreshnessCoordinator.startProbe(
             nowMs = nowMs,
-            timeoutMs = TrackingServiceConstants.PAUSED_FRESHNESS_PROBE_TIMEOUT_MS,
+            timeoutMs = rt.contextBuilder.currentPositioningRuntimeContext().recoveryConfig.freshnessProbeWindowMs,
             details = "state=${rt.state.gpsRuntimeState} consecutiveStationary=${rt.state.consecutiveStationaryPoints} " +
                 "anchorAgeMs=${anchorAgeMs ?: -1L}",
         )

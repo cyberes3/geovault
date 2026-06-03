@@ -1,11 +1,18 @@
 package com.geovault.tracker.positioning.motion
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
+import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.AutoMotionRejectHandling
 import com.geovault.tracker.location.AutoTrackingEngineOutput
+import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
+import com.geovault.tracker.policy.TrackPointEmissionDecision
+import com.geovault.tracker.policy.TrackPointPolicyEngine
+import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeState
+import com.geovault.tracker.positioning.config.PositioningElasticityConfig
 import com.geovault.tracker.services.LocationIngestResult
-import com.geovault.tracker.tracking.TrackingServiceConstants
+import com.geovault.tracker.services.TrackingMotionMode
+import com.geovault.tracker.settings.TrackerSettings
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,6 +83,105 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         return handling
     }
 
+    fun handleAcceptedAdaptiveTrackingEffects(
+        result: LocationIngestResult,
+        rawLocation: Location,
+        runtimeContext: PositioningContext,
+        settings: TrackerSettings,
+        motionMode: TrackingMotionMode,
+        activeMotionHint: Boolean,
+        observedSpeedMps: Float?,
+        nowMs: Long,
+    ) {
+        val stationaryRadius = runtimeContext.stationaryRadiusMeters
+        val adjustmentReason = result.adjustmentReason
+        val localPointFresh = rt.deps.pointFreshnessTracker.isLocalFresh(
+            nowMs = nowMs,
+            intervalSec = runtimeContext.pointFreshnessIntervalSec,
+        )
+        val filterConfirmedStillness = result.emissionDecision == TrackPointEmissionDecision.SNAP_INTERNAL &&
+            adjustmentReason == TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED &&
+            localPointFresh
+        val filterIntervened = adjustmentReason != null && !filterConfirmedStillness
+        val stationaryConfidence = result.policyMetrics?.stationaryConfidence
+        val stationaryReferenceLocation = result.lastFilteredLocation ?: rawLocation
+        val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = rt.state.stationaryAnchorLocation,
+            location = stationaryReferenceLocation,
+            stationaryRadiusMeters = stationaryRadius,
+            currentConsecutive = rt.state.consecutiveStationaryPoints,
+            significantMotionOnly = settings.significantDataOnly,
+            activeMotionHint = activeMotionHint,
+            filterIntervened = filterIntervened,
+            filterConfirmedStillness = filterConfirmedStillness,
+            confidence = stationaryConfidence,
+        )
+        if (stationaryDecision.reason != "disabled") {
+            rt.deps.runtimeTelemetry.event(
+                name = "stationary_update",
+                details = "from=${rt.state.consecutiveStationaryPoints} to=${stationaryDecision.consecutive} " +
+                    "shouldPause=${stationaryDecision.shouldPause} reason=${stationaryDecision.reason} " +
+                    "accuracy=${if (stationaryReferenceLocation.hasAccuracy()) stationaryReferenceLocation.accuracy else -1f} " +
+                    "adjustmentReason=${adjustmentReason ?: "none"} " +
+                    "confirmedStillness=$filterConfirmedStillness " +
+                    "filterIntervened=$filterIntervened " +
+                    "confidence=${stationaryConfidence?.score ?: -1.0} " +
+                    "oscillating=${stationaryConfidence?.isOscillating ?: false}"
+            )
+        }
+        rt.state.consecutiveStationaryPoints = stationaryDecision.consecutive
+        rt.state.stationaryAnchorLocation = when (rt.state.consecutiveStationaryPoints) {
+            0 -> null
+            1 -> Location(stationaryReferenceLocation)
+            else -> rt.state.stationaryAnchorLocation
+        }
+        val pauseEligibility = StationaryPauseEligibilityPolicy.evaluate(
+            stationaryPolicyWantsPause = stationaryDecision.shouldPause,
+            localPointFresh = localPointFresh,
+            fallbackPending = rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate(),
+            providerAvailable = rt.utilities.isGpsProviderEnabled(),
+        )
+        if (stationaryDecision.shouldPause && !pauseEligibility.shouldPause) {
+            rt.deps.runtimeTelemetry.event(
+                "stationary_pause_blocked",
+                "reason=${pauseEligibility.reason.telemetryValue} " +
+                    "localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
+                    "fallbackPending=${rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate()}"
+            )
+        }
+        if (pauseEligibility.shouldPause) {
+            rt.collection.enterStationaryRegion(
+                anchorLocation = rt.state.stationaryAnchorLocation ?: stationaryReferenceLocation,
+                nowMs = nowMs,
+                motionMode = motionMode,
+                radiusMeters = stationaryRadius,
+            )
+            rt.collection.pauseGps()
+        }
+        rt.deps.autoTrackingMotionCoordinator.clearEvidenceCandidate()
+        val vettedSpeedMps = result.policyMetrics?.let { metrics ->
+            if (metrics.elapsedSeconds > 0.0) {
+                (metrics.effectiveDistanceMeters / metrics.elapsedSeconds).toFloat()
+                    .coerceAtLeast(0f)
+            } else {
+                0f
+            }
+        } ?: 0f
+        rt.motion.processAutoTrackingOutput(
+            output = rt.deps.autoTrackingMotionEngine.onAcceptedFix(
+                speedMps = vettedSpeedMps,
+                eventTimeMs = nowMs
+            ),
+            reason = "accepted_fix"
+        )
+        rt.motion.maybeApplyElasticDistanceFilter(
+            observedSpeedMps = observedSpeedMps,
+            measuredAccuracyMeters = (result.lastFilteredLocation ?: rawLocation)
+                .takeIf { it.hasAccuracy() }
+                ?.accuracy
+        )
+    }
+
     fun processAutoTrackingOutput(output: AutoTrackingEngineOutput, reason: String) {
         if (output.modeChanged) {
             rt.state.lastAutoModeChangedAtMs = rt.deps.clock.wallTimeMs()
@@ -99,18 +205,20 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             return
         }
         if (rt.state.isFastGpsLockWindowActive) return
-        val mode = rt.deps.autoTrackingMotionEngine.snapshot().mode
-        val baseDistanceMeters = rt.contextBuilder.effectivePositioningPreset(mode).distanceFilterMeters
-        if (baseDistanceMeters <= 0f) return
         val runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext()
+        val baseDistanceMeters = runtimeContext.baseDistanceFilterMeters
+        if (baseDistanceMeters <= 0f) return
         val accuracyThresholdMeters = runtimeContext.effectiveAccuracyThresholdMeters
         if (measuredAccuracyMeters == null || measuredAccuracyMeters > accuracyThresholdMeters) return
-        val nextBucket = computeElasticitySpeedBucket(observedSpeedMps)
-        val nextDistance = computeElasticDistanceFilterMeters(baseDistanceMeters, nextBucket)
+        val elasticityConfig = runtimeContext.elasticityConfig
+        val nextBucket = computeElasticitySpeedBucket(observedSpeedMps, elasticityConfig)
+        val nextDistance = computeElasticDistanceFilterMeters(baseDistanceMeters, nextBucket, elasticityConfig)
         if (!nextDistance.isFinite() || nextDistance < baseDistanceMeters) return
         val currentDistance = rt.state.elasticDistanceOverrideMeters ?: baseDistanceMeters
         val distanceDelta = kotlin.math.abs(nextDistance - currentDistance)
-        if (nextBucket == rt.state.elasticitySpeedBucket && distanceDelta < TrackingServiceConstants.ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS) return
+        if (nextBucket == rt.state.elasticitySpeedBucket &&
+            distanceDelta < elasticityConfig.reapplyDistanceDeltaMeters
+        ) return
         rt.state.elasticitySpeedBucket = nextBucket
         rt.state.elasticDistanceOverrideMeters = if (nextBucket > 0) nextDistance else null
         rt.locationRequests.reapplyLocationRequestIfActive("elasticity_update")
@@ -132,17 +240,24 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         }
     }
 
-    fun computeElasticitySpeedBucket(speedMps: Float?): Int {
+    fun computeElasticitySpeedBucket(
+        speedMps: Float?,
+        config: PositioningElasticityConfig = PositioningElasticityConfig.Default,
+    ): Int {
         if (speedMps == null || !speedMps.isFinite() || speedMps <= 0f) return 0
-        val bucket = kotlin.math.round(speedMps / TrackingServiceConstants.ELASTICITY_SPEED_BUCKET_SIZE_MPS).toInt()
-        return bucket.coerceIn(0, TrackingServiceConstants.ELASTICITY_MAX_SPEED_BUCKET)
+        val bucket = kotlin.math.round(speedMps / config.speedBucketSizeMps).toInt()
+        return bucket.coerceIn(0, config.maxSpeedBucket)
     }
 
-    fun computeElasticDistanceFilterMeters(baseDistanceMeters: Float, speedBucket: Int): Float {
+    fun computeElasticDistanceFilterMeters(
+        baseDistanceMeters: Float,
+        speedBucket: Int,
+        config: PositioningElasticityConfig = PositioningElasticityConfig.Default,
+    ): Float {
         val base = baseDistanceMeters.coerceAtLeast(0f)
         if (speedBucket <= 0 || base <= 0f) return base
-        val extra = base * TrackingServiceConstants.ELASTICITY_MULTIPLIER * speedBucket.toFloat()
-        return (base + extra).coerceAtMost(TrackingServiceConstants.ELASTICITY_MAX_DISTANCE_FILTER_METERS)
+        val extra = base * config.multiplier * speedBucket.toFloat()
+        return (base + extra).coerceAtMost(config.maxDistanceFilterMeters)
     }
 
 }

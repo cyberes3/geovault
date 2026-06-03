@@ -2,6 +2,7 @@ package com.geovault.tracker.positioning.config
 import com.geovault.tracker.services.TrackingMotionMode
 
 import com.geovault.tracker.policy.filter.LocationFilterConfig
+import com.geovault.tracker.policy.filter.MotionProfileTuning
 
 /**
  * Builds internal positioning policy configs from speed-selected presets.
@@ -18,9 +19,8 @@ object PositioningPolicyConfig {
 
     fun ingestConfig(
         maxAccuracyMeters: Float,
-        motionMode: TrackingMotionMode,
+        tuning: MotionProfileTuning,
     ): LocationFilterConfig {
-        val tuning = PositioningPresets.forMotionMode(motionMode).filterTuning
         return LocationFilterConfig.fromTuning(
             tuning = tuning,
             trackingAccuracyThresholdMeters = maxAccuracyMeters.toDouble(),
@@ -29,6 +29,14 @@ object PositioningPolicyConfig {
             normalizeSecondsTimestamps = false,
         )
     }
+
+    fun ingestConfig(
+        maxAccuracyMeters: Float,
+        motionMode: TrackingMotionMode,
+    ): LocationFilterConfig = ingestConfig(
+        maxAccuracyMeters = maxAccuracyMeters,
+        tuning = PositioningPresets.forMotionMode(motionMode).filterTuning,
+    )
 
     fun fallbackTransitionConfig(): LocationFilterConfig {
         return LocationFilterConfig.Default.copy(

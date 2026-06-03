@@ -5,10 +5,7 @@ import androidx.core.location.LocationCompat
 import com.geovault.common.geo.GeoCoordinates
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.logging.GeoVaultPointRecordingLog
-import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.FreshnessRecoveryDecision
-import com.geovault.tracker.location.LowAccuracyFallbackArmDecision
-import com.geovault.tracker.location.StationaryPauseEligibilityPolicy
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
@@ -272,53 +269,14 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             val rejectedForLock = result.rejectReason == TrackPointRejectReason.BAD_ACCURACY ||
                 result.rejectReason == TrackPointRejectReason.STALE
             if (rejectedForLock) {
-                val outlierDecision = rt.deps.repeatedOutlierSuppressor.evaluate(
-                    candidate = location,
-                    anchor = rt.state.lastFilteredLocation,
+                rt.recovery.handleRejectedFixRecovery(
+                    result = result,
+                    rejectedLocation = location,
+                    settings = settings,
+                    motionMode = motionMode,
                     effectiveAccuracyThresholdMeters = pipelineOutput.motionContext.effectiveAccuracyThresholdMeters,
                     nowMs = nowMs,
                 )
-                val repeatedOutlierSuppressed = outlierDecision.suppress
-                if (repeatedOutlierSuppressed) {
-                    rt.deps.runtimeTelemetry.event(
-                        "repeated_outlier_suppressed",
-                        "reason=${outlierDecision.reason} repeats=${outlierDecision.repeatCount} " +
-                            "accuracy=${if (location.hasAccuracy()) location.accuracy else -1f} " +
-                            "lat=${location.latitude} lon=${location.longitude}"
-                    )
-                }
-                val fastLockSuppressed = repeatedOutlierSuppressed || rt.recovery.fastLock.shouldSuppressFastLockForAutoMotion(
-                    rejectReason = result.rejectReason,
-                    nowMs = nowMs,
-                )
-                if (!fastLockSuppressed) {
-                    rt.recovery.fastLock.maybeStartFastGpsLockWindow(
-                        measuredAccuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
-                        rejectReason = result.rejectReason
-                    )
-                }
-                if (settings.lowAccuracyFallbackEnabled && !repeatedOutlierSuppressed) {
-                    rt.collection.transitionGpsState(GpsRuntimeEvent.FIX_REJECTED, "rejected_for_lock:${result.rejectReason}")
-                    rt.state.lowAccuracyFallbackRejectedFixCountThisSession++
-                    rt.recovery.fallback.maybeLogFallbackRejectSummary(nowMs)
-                    rt.state.lowAccuracyFallbackCandidate = rt.recovery.fallback.selectLowAccuracyFallbackCandidate(
-                        rejectedLocation = location,
-                        nowMs = nowMs,
-                        motionMode = motionMode,
-                    )
-                    val armDecision = rt.deps.lowAccuracyFallbackCoordinator.onRejectedFixForLock(
-                        fallbackEligible = true,
-                        candidateLatitude = location.latitude,
-                        candidateLongitude = location.longitude,
-                        candidateTimestampMs = location.time
-                    )
-                    if (armDecision == LowAccuracyFallbackArmDecision.START_TIMER) {
-                        rt.collection.transitionGpsState(GpsRuntimeEvent.FALLBACK_TIMER_ARMED, "fallback_timer_armed")
-                        rt.state.lowAccuracyFallbackArmCountThisSession++
-                        rt.state.lowAccuracyFallbackTimerArmedAtMs = nowMs
-                        rt.recovery.fallback.ensureLowAccuracyFallbackTimerRunning()
-                    }
-                }
             }
             if (bypassFilters || skipAdaptiveTrackingEffects) {
                 rt.motion.processAutoTrackingOutput(
@@ -403,99 +361,15 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = true)
         }
         if (!skipAdaptiveTrackingEffects) {
-            val stationaryRadius = runtimeContext.stationaryRadiusMeters
-            val adjustmentReason = result.adjustmentReason
-            // `UNCERTAINTY_SUPPRESSED` is positive evidence the device hasn't
-            // moved (filter snapped to anchor because raw displacement was
-            // inside the joint accuracy envelope). Other adjustments
-            // (`OUTLIER_CAPPED`, etc.) are pessimistic: hold the counter
-            // rather than advance it.
-            val filterConfirmedStillness = adjustmentReason ==
-                TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
-            val filterIntervened = adjustmentReason != null && !filterConfirmedStillness
-            val stationaryConfidence = result.policyMetrics?.stationaryConfidence
-            val stationaryReferenceLocation = result.lastFilteredLocation ?: location
-            val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
-                lastLocation = rt.state.stationaryAnchorLocation,
-                location = stationaryReferenceLocation,
-                stationaryRadiusMeters = stationaryRadius,
-                currentConsecutive = rt.state.consecutiveStationaryPoints,
-                significantMotionOnly = settings.significantDataOnly,
+            rt.motion.handleAcceptedAdaptiveTrackingEffects(
+                result = result,
+                rawLocation = location,
+                runtimeContext = runtimeContext,
+                settings = settings,
+                motionMode = motionMode,
                 activeMotionHint = activeMotionHint,
-                filterIntervened = filterIntervened,
-                filterConfirmedStillness = filterConfirmedStillness,
-                confidence = stationaryConfidence,
-            )
-            if (stationaryDecision.reason != "disabled") {
-                rt.deps.runtimeTelemetry.event(
-                    name = "stationary_update",
-                    details = "from=${rt.state.consecutiveStationaryPoints} to=${stationaryDecision.consecutive} " +
-                        "shouldPause=${stationaryDecision.shouldPause} reason=${stationaryDecision.reason} " +
-                        "accuracy=${if (stationaryReferenceLocation.hasAccuracy()) stationaryReferenceLocation.accuracy else -1f} " +
-                        "adjustmentReason=${adjustmentReason ?: "none"} " +
-                        "confirmedStillness=$filterConfirmedStillness " +
-                        "filterIntervened=$filterIntervened " +
-                        "confidence=${stationaryConfidence?.score ?: -1.0} " +
-                        "oscillating=${stationaryConfidence?.isOscillating ?: false}"
-                )
-            }
-            rt.state.consecutiveStationaryPoints = stationaryDecision.consecutive
-            rt.state.stationaryAnchorLocation = when (rt.state.consecutiveStationaryPoints) {
-                0 -> null
-                1 -> Location(stationaryReferenceLocation)
-                else -> rt.state.stationaryAnchorLocation
-            }
-            val pauseEligibility = StationaryPauseEligibilityPolicy.evaluate(
-                stationaryPolicyWantsPause = stationaryDecision.shouldPause,
-                localPointFresh = rt.deps.pointFreshnessTracker.isLocalFresh(
-                    nowMs = nowMs,
-                    intervalSec = runtimeContext.pointFreshnessIntervalSec,
-                ),
-                fallbackPending = rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate(),
-                providerAvailable = rt.utilities.isGpsProviderEnabled(),
-            )
-            if (stationaryDecision.shouldPause && !pauseEligibility.shouldPause) {
-                rt.deps.runtimeTelemetry.event(
-                    "stationary_pause_blocked",
-                    "reason=${pauseEligibility.reason.telemetryValue} " +
-                        "localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L} " +
-                        "fallbackPending=${rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate()}"
-                )
-            }
-            if (pauseEligibility.shouldPause) {
-                rt.collection.enterStationaryRegion(
-                    anchorLocation = rt.state.stationaryAnchorLocation ?: stationaryReferenceLocation,
-                    nowMs = nowMs,
-                    motionMode = motionMode,
-                    radiusMeters = stationaryRadius,
-                )
-                rt.collection.pauseGps()
-            }
-            rt.deps.autoTrackingMotionCoordinator.clearEvidenceCandidate()
-            // Auto-mode classification runs on vetted geometry only:
-            // effectiveDistance / dt from the position filter's accepted,
-            // RSS-corrected metrics. Falling back to chipset speed here is
-            // what previously let phantom multipath bursts thrash modes.
-            val vettedSpeedMps = result.policyMetrics?.let { metrics ->
-                if (metrics.elapsedSeconds > 0.0) {
-                    (metrics.effectiveDistanceMeters / metrics.elapsedSeconds).toFloat()
-                        .coerceAtLeast(0f)
-                } else {
-                    0f
-                }
-            } ?: 0f
-            rt.motion.processAutoTrackingOutput(
-                output = rt.deps.autoTrackingMotionEngine.onAcceptedFix(
-                    speedMps = vettedSpeedMps,
-                    eventTimeMs = nowMs
-                ),
-                reason = "accepted_fix"
-            )
-            rt.motion.maybeApplyElasticDistanceFilter(
                 observedSpeedMps = observedSpeedMps,
-                measuredAccuracyMeters = (result.lastFilteredLocation ?: location)
-                    .takeIf { it.hasAccuracy() }
-                    ?.accuracy
+                nowMs = nowMs,
             )
         }
         if (result.pointPersisted) {
