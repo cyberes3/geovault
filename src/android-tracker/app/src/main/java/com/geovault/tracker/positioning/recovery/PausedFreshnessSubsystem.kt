@@ -1,7 +1,9 @@
 package com.geovault.tracker.positioning.recovery
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
+import android.os.SystemClock
 import androidx.core.location.LocationCompat
+import com.geovault.tracker.policy.CanonicalTimeNormalizer
 import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.AutoMotionRejectHandling
 import com.geovault.tracker.location.AutoTrackingEngineOutput
@@ -170,7 +172,15 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
     }
 
     fun markPausedFreshnessProbeStarted(nowMs: Long) {
-        val anchorAgeMs = rt.state.lastFilteredLocation?.time?.let { nowMs - it }
+        val anchor = rt.state.lastFilteredLocation
+        val anchorAgeMs = anchor?.let {
+            CanonicalTimeNormalizer.ageMs(
+                nowMs = nowMs,
+                eventMs = it.time,
+                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                eventElapsedRealtimeNanos = it.elapsedRealtimeNanos.takeIf { nanos -> nanos > 0L },
+            )
+        }
         rt.deps.stationaryFreshnessCoordinator.startProbe(
             nowMs = nowMs,
             timeoutMs = TrackingServiceConstants.PAUSED_FRESHNESS_PROBE_TIMEOUT_MS,

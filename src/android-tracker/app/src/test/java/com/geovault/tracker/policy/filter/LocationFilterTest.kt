@@ -299,8 +299,8 @@ class LocationFilterTest {
         val filter = LocationFilter(LocationFilterConfig.Default)
         filter.evaluate(
             LocationInput(
-                latitude = 39.0,
-                longitude = -105.0,
+                latitude = 52.88,
+                longitude = -116.22,
                 timestampMs = 0L,
                 accuracyMeters = 6f,
                 speedMps = 0f,
@@ -309,8 +309,8 @@ class LocationFilterTest {
         )
         val indoorDrift = filter.evaluate(
             LocationInput(
-                latitude = 39.0002,
-                longitude = -104.9998,
+                latitude = 52.8802,
+                longitude = -116.2198,
                 timestampMs = 60_000L,
                 accuracyMeters = 140f,
                 speedMps = 0f,
@@ -322,8 +322,8 @@ class LocationFilterTest {
 
         val relocation = filter.evaluate(
             LocationInput(
-                latitude = 39.0,
-                longitude = -104.932,
+                latitude = 52.88,
+                longitude = -116.152,
                 timestampMs = 354_000L,
                 accuracyMeters = 8f,
                 speedMps = 22f,
@@ -336,8 +336,8 @@ class LocationFilterTest {
 
         val confirmation = filter.evaluate(
             LocationInput(
-                latitude = 39.0,
-                longitude = -104.9314,
+                latitude = 52.88,
+                longitude = -116.1514,
                 timestampMs = 364_000L,
                 accuracyMeters = 8f,
                 speedMps = 22f,
@@ -368,8 +368,8 @@ class LocationFilterTest {
         )
         filter.evaluate(
             LocationInput(
-                latitude = 39.0,
-                longitude = -105.0,
+                latitude = 52.88,
+                longitude = -116.22,
                 timestampMs = 0L,
                 accuracyMeters = 6f,
                 speedMps = 0f,
@@ -379,8 +379,8 @@ class LocationFilterTest {
 
         val relocation = filter.evaluate(
             LocationInput(
-                latitude = 39.0,
-                longitude = -104.932,
+                latitude = 52.88,
+                longitude = -116.152,
                 timestampMs = 180_000L,
                 accuracyMeters = 8f,
                 speedMps = 12f,
@@ -389,8 +389,8 @@ class LocationFilterTest {
         )
         val confirmation = filter.evaluate(
             LocationInput(
-                latitude = 39.0,
-                longitude = -104.9294,
+                latitude = 52.88,
+                longitude = -116.1494,
                 timestampMs = 200_000L,
                 accuracyMeters = 8f,
                 speedMps = 12f,

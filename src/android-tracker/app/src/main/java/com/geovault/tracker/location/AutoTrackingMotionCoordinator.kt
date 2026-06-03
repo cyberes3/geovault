@@ -42,7 +42,7 @@ class AutoTrackingMotionCoordinator(
                 val modeBefore = engine.snapshot().mode
                 val output = engine.onMotionEvidence(
                     speedMps = evidence.speedMps,
-                    eventTimeMs = eventTimeMs,
+                    eventTimeMs = nowMs,
                     confidence = evidence.confidence,
                 )
                 return AutoMotionRejectHandling.Evidence(
@@ -94,11 +94,11 @@ class AutoTrackingMotionCoordinator(
     }
 
     private fun isWithinCapEvidenceWindow(nowMs: Long): Boolean {
-        return lastCapEvidenceAtMs > 0L && nowMs - lastCapEvidenceAtMs <= streakPreserveWindowMs
+        return lastEvidenceWallClockMs > 0L && nowMs - lastEvidenceWallClockMs <= streakPreserveWindowMs
     }
 
     private fun elapsedSinceCapEvidence(nowMs: Long): Long {
-        return lastCapEvidenceAtMs.takeIf { it > 0L }?.let { nowMs - it } ?: -1L
+        return lastEvidenceWallClockMs.takeIf { it > 0L }?.let { nowMs - it } ?: -1L
     }
 }
 

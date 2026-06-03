@@ -47,8 +47,8 @@ class PositioningEngineTest {
         return TrackPointEvent(
             source = TrackPointSource.LOCAL_GPS,
             trackId = "tracker-1",
-            lon = -105.0 + (time / 1_000_000.0),
-            lat = 39.0 + (time / 1_000_000.0),
+            lon = -96.29 + (time / 1_000_000.0),
+            lat = 54.93 + (time / 1_000_000.0),
             timestampMs = time,
             accuracyMeters = accuracy,
             elapsedRealtimeNanos = time * 1_000L,

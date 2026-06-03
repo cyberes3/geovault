@@ -159,16 +159,17 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
         trackerId: String,
         sessionStartedAtMs: Long,
     ) {
+        val restoreWallMs = System.currentTimeMillis()
         rt.state.recoveryAnchorState = rt.deps.recoveryAnchorStore.load(
             trackerId = trackerId,
             sessionBoundaryId = rt.state.sessionVisibleBoundaryId,
         )
         rt.state.recoveryAnchorState?.let { anchor ->
-            rt.deps.pointFreshnessTracker.seedLocalPointPersistedAt(anchor.timestampMs)
+            rt.deps.pointFreshnessTracker.seedLocalPointPersistedAt(restoreWallMs)
             rt.deps.runtimeTelemetry.event(
                 "recovery_anchor_restored",
                 "trackerId=$trackerId source=${anchor.source} persistedAtMs=${anchor.timestampMs} " +
-                    "localAgeMs=${sessionStartedAtMs - anchor.timestampMs}"
+                    "localAgeMs=0"
             )
         }
         rt.deps.stationaryFreshnessCoordinator.restore(
@@ -187,11 +188,11 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
                 .lastOrNull()
         } ?: return
         if (latestPoint.time <= 0L) return
-        rt.deps.pointFreshnessTracker.seedLocalPointPersistedAt(latestPoint.time)
+        rt.deps.pointFreshnessTracker.seedLocalPointPersistedAt(restoreWallMs)
         rt.deps.runtimeTelemetry.event(
             "freshness_restored_from_db",
             "trackerId=$trackerId persistedAtMs=${latestPoint.time} " +
-                "localAgeMs=${sessionStartedAtMs - latestPoint.time} " +
+                "localAgeMs=0 " +
                 "sessionBoundaryId=${rt.state.sessionVisibleBoundaryId}"
         )
     }

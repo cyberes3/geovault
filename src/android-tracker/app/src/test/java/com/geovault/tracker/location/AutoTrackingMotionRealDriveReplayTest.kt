@@ -13,18 +13,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Synthetic regression test inspired by the symptoms observed in the
- * morning real drive: FusedLocationProvider duplicate / stale fixes
- * (BAD_ACCURACY) interleaved with genuine cap-exceeded fixes. Before
- * the streak-preserve fix those stale rejects wiped the pending
- * promotion counter and stretched the transition to DRIVING past 4
- * minutes. The fixture below uses synthetic coordinates and synthetic
- * timestamps (lat=0, lon near -45.0, t0=0) chosen to produce the
- * implied speeds we want to drive through the engine; no captured
- * lat/lon or timestamps are embedded.
+ * Synthetic regression: duplicate low-accuracy fixes interleaved with
+ * cap-exceeded samples while promotion to DRIVING is pending. Uses
+ * synthetic coordinates (lat=0, lon near -45.0, t0=0) to drive implied
+ * speeds through the engine.
  *
- * With the auto-mode driving promotion changes, the engine should
- * reach DRIVING within 60 s of the first cap-exceeded sample.
+ * Expect DRIVING within 60 s of the first cap-exceeded sample when
+ * transient BAD_ACCURACY rejects preserve the promotion streak.
  */
 class AutoTrackingMotionRealDriveReplayTest {
 
@@ -143,11 +138,8 @@ class AutoTrackingMotionRealDriveReplayTest {
                     confidence = evidence.confidence,
                 )
             }
-            // Note: the production TrackingService streak-preserve fix
-            // also skips onRejectedFix for BAD_ACCURACY rejects within a
-            // short window of a confirmed cap-exceeded evidence event.
-            // The replay applies the same rule: a transient BAD_ACCURACY
-            // does not clear a pending promotion streak.
+            // Match production: transient BAD_ACCURACY within the cap-evidence
+            // preserve window must not clear a pending promotion streak.
             else if (result.rejectReason != TrackPointRejectReason.BAD_ACCURACY &&
                 result.rejectReason != TrackPointRejectReason.STALE
             ) {

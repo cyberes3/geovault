@@ -184,9 +184,10 @@ class AutoTrackingMotionEngine(
         val decayWindowMs = elapsedMs - decayGraceMs
         val decayFactor = exp(-decayWindowMs.toDouble() / decayHalfLifeMs.toDouble()).toFloat()
         val decayedSpeed = (state.smoothedSpeedMps * decayFactor).coerceAtLeast(0f)
+        val preservePromotionStreak = state.consecutiveAboveUpper > 0
         state = state.copy(
             smoothedSpeedMps = decayedSpeed,
-            consecutiveAboveUpper = 0,
+            consecutiveAboveUpper = if (preservePromotionStreak) state.consecutiveAboveUpper else 0,
             lastObservedSpeedMps = 0f,
         )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)

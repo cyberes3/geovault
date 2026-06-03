@@ -16,8 +16,8 @@ class RepeatedOutlierSuppressorTest {
     @Test
     fun repeatedFarLowAccuracyFix_isSuppressedAfterFirstObservation() {
         val suppressor = RepeatedOutlierSuppressor()
-        val anchor = location(lat = 39.97, lon = -105.78, accuracy = 8f)
-        val ghost = location(lat = 39.99507141, lon = -105.86210632, accuracy = 3452f)
+        val anchor = location(lat = 56.09, lon = -100.90, accuracy = 8f)
+        val ghost = location(lat = 56.11507141, lon = -100.98210632, accuracy = 3452f)
 
         val first = suppressor.evaluate(
             candidate = ghost,
@@ -41,8 +41,8 @@ class RepeatedOutlierSuppressorTest {
     @Test
     fun accurateFarFix_isNotSuppressed() {
         val suppressor = RepeatedOutlierSuppressor()
-        val anchor = location(lat = 39.97, lon = -105.78, accuracy = 8f)
-        val moved = location(lat = 39.99, lon = -105.81, accuracy = 12f)
+        val anchor = location(lat = 56.09, lon = -100.90, accuracy = 8f)
+        val moved = location(lat = 56.11, lon = -100.93, accuracy = 12f)
 
         val decision = suppressor.evaluate(
             candidate = moved,

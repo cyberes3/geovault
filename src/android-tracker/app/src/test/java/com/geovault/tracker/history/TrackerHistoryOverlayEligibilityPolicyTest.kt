@@ -91,8 +91,8 @@ class TrackerHistoryOverlayEligibilityPolicyTest {
         return TrackerHistoryPoint(
             trackerId = "local",
             timestampMs = time,
-            latitude = 40.0,
-            longitude = -105.0,
+            latitude = 54.56,
+            longitude = -111.45,
             accuracy = 5f,
             startTimestampMs = sessionStart,
             provenance = provenance,

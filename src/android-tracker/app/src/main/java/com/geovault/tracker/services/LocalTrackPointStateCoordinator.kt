@@ -211,7 +211,11 @@ private class LocalTrackReanchorPolicy {
         if (reason != TrackPointRejectReason.JUMP) return null
         if (isExpectedRecoveryReason(policyReason)) return null
         val previous = previousByTrack ?: return null
-        val anchorAgeMs = nowMs - previous.timestampMs
+        val anchorAgeMs = CanonicalTimeNormalizer.ageMs(
+            nowMs = nowMs,
+            eventMs = previous.timestampMs,
+            eventElapsedRealtimeNanos = previous.elapsedRealtimeNanos,
+        )
         if (anchorAgeMs < PositioningPolicyConfig.LOCAL_STALL_REANCHOR_MIN_ANCHOR_AGE_MS) return null
         val nextStreak = currentJumpRejectStreak + 1L
         if (nextStreak < PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD) return null

@@ -578,8 +578,8 @@ class LocationIngestCoordinatorTest {
         val seed = coordinator.ingest(
             trackId = trackId,
             location = Location("gps").apply {
-                latitude = 39.0
-                longitude = -105.0
+                latitude = 53.67
+                longitude = -114.34
                 accuracy = 6f
                 speed = 0f
                 time = anchorTimeMs
@@ -604,8 +604,8 @@ class LocationIngestCoordinatorTest {
         for ((idx, deltaMs) in relocationTimesMs.withIndex()) {
             val nowMs = anchorTimeMs + deltaMs
             val candidate = Location("gps").apply {
-                latitude = 39.0
-                longitude = -104.95 + idx * 0.05
+                latitude = 53.67
+                longitude = -114.29 + idx * 0.05
                 accuracy = 8f
                 speed = 22f
                 bearing = 90f

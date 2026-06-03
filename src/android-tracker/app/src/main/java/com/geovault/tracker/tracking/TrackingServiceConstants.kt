@@ -37,7 +37,8 @@ object TrackingServiceConstants {
     const val ELASTICITY_MAX_SPEED_BUCKET = 8
     const val ELASTICITY_MAX_DISTANCE_FILTER_METERS = 10_000f
     const val ELASTICITY_REAPPLY_DISTANCE_DELTA_METERS = 0.5f
-    const val AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS = 10_000L
+    // Covers typical fused-GPS inter-fix spacing while cap-evidence streak is pending.
+    const val AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS = 45_000L
     const val AUTO_MOTION_FAST_LOCK_SUPPRESS_WINDOW_MS = 15_000L
     const val AUTO_MOTION_REQUEST_REAPPLY_DEBOUNCE_MS = 10_000L
     const val MOTION_HINT_FLOOR_MPS = 1.0f
