@@ -12,8 +12,15 @@ import com.geovault.tracker.tracking.TrackingService
 import com.geovault.tracker.tracking.TrackingServiceConstants
 import com.geovault.tracker.tracking.TrackingServiceIntents
 
-class TrackingNotificationPresenter(private val context: Context) {
-    fun buildTrackingNotification(snapshot: TrackingRuntimeSnapshot): Notification {
+interface TrackingNotificationGateway {
+    fun buildTrackingNotification(snapshot: TrackingRuntimeSnapshot): Notification
+    fun buildTrackingNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus): Notification
+    fun updateForegroundNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus)
+    fun updateForegroundNotification(snapshot: TrackingRuntimeSnapshot)
+}
+
+class TrackingNotificationPresenter(private val context: Context) : TrackingNotificationGateway {
+    override fun buildTrackingNotification(snapshot: TrackingRuntimeSnapshot): Notification {
         return buildTrackingNotification(
             sentCount = snapshot.pointsSentThisSession,
             queuedCount = snapshot.queuedPointsVisible,
@@ -21,7 +28,7 @@ class TrackingNotificationPresenter(private val context: Context) {
         )
     }
 
-    fun buildTrackingNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus): Notification {
+    override fun buildTrackingNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus): Notification {
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
@@ -67,7 +74,7 @@ class TrackingNotificationPresenter(private val context: Context) {
             .build()
     }
 
-    fun updateForegroundNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus) {
+    override fun updateForegroundNotification(sentCount: Int, queuedCount: Int, uiStatus: TrackingUiStatus) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(
             TrackingServiceConstants.NOTIFICATION_ID,
@@ -75,7 +82,7 @@ class TrackingNotificationPresenter(private val context: Context) {
         )
     }
 
-    fun updateForegroundNotification(snapshot: TrackingRuntimeSnapshot) {
+    override fun updateForegroundNotification(snapshot: TrackingRuntimeSnapshot) {
         updateForegroundNotification(
             sentCount = snapshot.pointsSentThisSession,
             queuedCount = snapshot.queuedPointsVisible,

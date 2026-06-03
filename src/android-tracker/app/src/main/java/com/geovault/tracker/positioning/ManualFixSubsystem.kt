@@ -2,7 +2,6 @@ package com.geovault.tracker.positioning
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
 import android.os.Bundle
-import android.os.SystemClock
 import android.widget.Toast
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.R
@@ -63,8 +62,8 @@ internal class ManualFixSubsystem(private val rt: PositioningRuntime) {
 
     fun buildManualSendLocation(source: Location): Location {
         return Location(source).apply {
-            time = System.currentTimeMillis()
-            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+            time = rt.deps.clock.wallTimeMs()
+            elapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
             val sourceProvider = source.provider?.takeIf { it.isNotBlank() } ?: "fused"
             provider = "manual_send:$sourceProvider"
             val mergedExtras = Bundle().apply {

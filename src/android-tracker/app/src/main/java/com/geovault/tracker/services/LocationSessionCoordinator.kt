@@ -7,10 +7,18 @@ import com.geovault.tracker.positioning.collection.UnifiedLocationClient
 import com.geovault.tracker.positioning.collection.UnifiedLocationSessionRequest
 import com.google.android.gms.location.LocationRequest
 
+interface LocationSessionGateway {
+    fun startSession(request: LocationRequest): Boolean
+    fun stopSession()
+    fun isGpsProviderEnabled(): Boolean
+    fun isLocationServicesEnabled(): Boolean
+    fun getLastLocation(onSuccess: (Location?) -> Unit, onFailure: (Throwable) -> Unit)
+}
+
 class LocationSessionCoordinator(
     context: Context,
     private val onSessionError: (Throwable) -> Unit = {},
-) {
+) : LocationSessionGateway {
     private companion object {
         private const val TAG = "LocationSessionCoordinator"
     }
@@ -18,7 +26,7 @@ class LocationSessionCoordinator(
     private val appContext = context.applicationContext
     private val unifiedLocationClient = UnifiedLocationClient(appContext)
 
-    fun startSession(
+    override fun startSession(
         request: LocationRequest
     ): Boolean {
         if (!unifiedLocationClient.hasLocationPermission()) return false
@@ -31,19 +39,19 @@ class LocationSessionCoordinator(
         )
     }
 
-    fun stopSession() {
+    override fun stopSession() {
         unifiedLocationClient.stopSession()
     }
 
-    fun isGpsProviderEnabled(): Boolean {
+    override fun isGpsProviderEnabled(): Boolean {
         return unifiedLocationClient.isGpsProviderEnabled()
     }
 
-    fun isLocationServicesEnabled(): Boolean {
+    override fun isLocationServicesEnabled(): Boolean {
         return unifiedLocationClient.isLocationServicesEnabled()
     }
 
-    fun getLastLocation(
+    override fun getLastLocation(
         onSuccess: (Location?) -> Unit,
         onFailure: (Throwable) -> Unit
     ) {

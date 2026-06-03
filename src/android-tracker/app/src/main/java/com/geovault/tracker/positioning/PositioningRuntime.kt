@@ -11,7 +11,6 @@ import android.os.IBinder
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.TrackingRecoveryCoordinator
-import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.positioning.collection.GpsCollectionSubsystem
 import com.geovault.tracker.positioning.collection.LocationRequestSubsystem
 import com.geovault.tracker.positioning.ingest.FixIngestSubsystem
@@ -37,6 +36,7 @@ import kotlinx.coroutines.withContext
 
 internal class PositioningRuntime(
     val ports: PositioningAndroidPorts,
+    internal val environment: PositioningRuntimeEnvironment = ProductionPositioningRuntimeEnvironment,
 ) {
     val state = PositioningSessionState()
     val service: TrackingService get() = ports.service
@@ -78,7 +78,7 @@ internal class PositioningRuntime(
             }
         }
         val locationSnapshot = Location(location)
-        state.lastFixDeliveryAtMs = System.currentTimeMillis()
+        state.lastFixDeliveryAtMs = deps.clock.wallTimeMs()
         deps.providerHealthController.markFixDelivered(state.lastFixDeliveryAtMs)
         state.latestObservedRawLocation = Location(locationSnapshot)
         ingestScope.launch {
@@ -98,7 +98,7 @@ internal class PositioningRuntime(
     }
 
     private val settingsRepositoryLazy by lazy {
-        TrackerAppServices.from(service.application).trackerSettingsRepository()
+        environment.settingsRepository(service)
     }
 
     private fun wireSubsystems() {
@@ -121,7 +121,12 @@ internal class PositioningRuntime(
         TrackingServiceLifecycleGate.markStarting()
         try {
             GeoVaultCaptureLog.d(TrackingServiceConstants.TAG, "onCreate")
-            deps = PositioningDependencies(runtime = this, service = service, serviceScope = serviceScope)
+            deps = PositioningDependencies(
+                runtime = this,
+                service = service,
+                serviceScope = serviceScope,
+                environment = environment,
+            )
             wireSubsystems()
             deps.wire(settingsRepositoryLazy)
             SelectedTrackerManager.syncRuntimeSelectedTracker(service)

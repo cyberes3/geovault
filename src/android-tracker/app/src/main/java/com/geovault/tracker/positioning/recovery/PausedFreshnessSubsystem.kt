@@ -1,7 +1,6 @@
 package com.geovault.tracker.positioning.recovery
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
-import android.os.SystemClock
 import androidx.core.location.LocationCompat
 import com.geovault.tracker.policy.CanonicalTimeNormalizer
 import com.geovault.tracker.TrackingLocationPolicy
@@ -57,7 +56,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
             rt.deps.runtimeTelemetry.event("stationary_ping_deferred", "reason=$reason state=${rt.state.gpsRuntimeState}")
             return true
         }
-        rt.recovery.pausedFreshness.markPausedFreshnessProbeStarted(nowMs = System.currentTimeMillis())
+        rt.recovery.pausedFreshness.markPausedFreshnessProbeStarted(nowMs = rt.deps.clock.wallTimeMs())
         rt.collection.resumeGps(reason = "stationary_ping_resume")
         return true
     }
@@ -177,7 +176,7 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
             CanonicalTimeNormalizer.ageMs(
                 nowMs = nowMs,
                 eventMs = it.time,
-                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                nowElapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos(),
                 eventElapsedRealtimeNanos = it.elapsedRealtimeNanos.takeIf { nanos -> nanos > 0L },
             )
         }

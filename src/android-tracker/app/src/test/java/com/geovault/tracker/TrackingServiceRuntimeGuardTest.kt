@@ -36,7 +36,7 @@ class TrackingServiceRuntimeGuardTest {
             time = 1_500L
         }
         assertFalse(
-            FallbackTransitionPolicy.shouldEmitFallbackForTransition(previous, candidate, 1_500L)
+            FallbackTransitionPolicy.shouldEmitFallbackForTransition(previous, candidate, 1_500L, 1_500_000_000L)
         )
     }
 
@@ -53,7 +53,7 @@ class TrackingServiceRuntimeGuardTest {
             time = 15_000L
         }
         assertTrue(
-            FallbackTransitionPolicy.shouldEmitFallbackForTransition(previous, candidate, 15_000L)
+            FallbackTransitionPolicy.shouldEmitFallbackForTransition(previous, candidate, 15_000L, 15_000_000_000L)
         )
     }
 
@@ -64,7 +64,7 @@ class TrackingServiceRuntimeGuardTest {
             longitude = 0.2
             time = 2_000L
         }
-        assertTrue(FallbackTransitionPolicy.shouldEmitFallbackForTransition(null, candidate, 2_000L))
+        assertTrue(FallbackTransitionPolicy.shouldEmitFallbackForTransition(null, candidate, 2_000L, 2_000_000_000L))
     }
 
     @Test
@@ -80,7 +80,7 @@ class TrackingServiceRuntimeGuardTest {
             time = 21_000L
         }
         assertFalse(
-            FallbackTransitionPolicy.shouldEmitFallbackForTransition(previous, candidate, 21_000L)
+            FallbackTransitionPolicy.shouldEmitFallbackForTransition(previous, candidate, 21_000L, 21_000_000_000L)
         )
     }
 

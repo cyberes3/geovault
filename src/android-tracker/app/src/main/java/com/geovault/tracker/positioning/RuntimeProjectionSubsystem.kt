@@ -1,7 +1,6 @@
 package com.geovault.tracker.positioning
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.content.Intent
-import android.os.SystemClock
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.location.TrackingControlPlane
 import com.geovault.tracker.location.TrackingLifecycleState
@@ -66,7 +65,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
         extraTransform: ((TrackingRuntimeSnapshot) -> TrackingRuntimeSnapshot)? = null,
     ): TrackingRuntimeSnapshot {
         val threshold = rt.contextBuilder.currentPositioningRuntimeContext().effectiveAccuracyThresholdMeters
-        val nowElapsedMs = SystemClock.elapsedRealtime()
+        val nowElapsedMs = rt.deps.clock.elapsedRealtimeMs()
         return rt.projection.updateRuntimeSnapshot { snapshot ->
             val decision = RuntimeAccuracyHoldPolicy.next(
                 previous = snapshot,
@@ -100,7 +99,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
             rt.projection.logPointEmissionTroubleTransition(
                 previous = rt.state.lastLoggedPointEmissionTrouble,
                 current = pointEmissionTrouble,
-                nowMs = System.currentTimeMillis(),
+                nowMs = rt.deps.clock.wallTimeMs(),
             )
             rt.state.lastLoggedPointEmissionTrouble = pointEmissionTrouble
             val withAccuracy = snapshot.copy(
@@ -159,7 +158,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
         trackerId: String,
         sessionStartedAtMs: Long,
     ) {
-        val restoreWallMs = System.currentTimeMillis()
+        val restoreWallMs = rt.deps.clock.wallTimeMs()
         rt.state.recoveryAnchorState = rt.deps.recoveryAnchorStore.load(
             trackerId = trackerId,
             sessionBoundaryId = rt.state.sessionVisibleBoundaryId,
@@ -210,7 +209,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
         val selectedTrackerId = rt.ports.selectedTrackerId()
         val snapshotForStatus = synchronized(rt.state.runtimeSnapshotLock) { rt.state.runtimeSnapshot }
         val providerDecision = rt.deps.providerHealthController.evaluate(
-            nowMs = System.currentTimeMillis(),
+            nowMs = rt.deps.clock.wallTimeMs(),
             isTracking = rt.state.isTracking,
             expectsActiveFixDelivery = rt.locationRequests.expectsActiveFixDelivery(),
             gpsProviderAvailable = gpsOk,
@@ -272,7 +271,7 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
 
     fun maybeLogPositioningDiagnosticSnapshot(snapshot: TrackingRuntimeSnapshot) {
         val providerDecision = rt.deps.providerHealthController.evaluate(
-            nowMs = System.currentTimeMillis(),
+            nowMs = rt.deps.clock.wallTimeMs(),
             isTracking = rt.state.isTracking,
             expectsActiveFixDelivery = rt.locationRequests.expectsActiveFixDelivery(),
             gpsProviderAvailable = snapshot.gpsProviderEnabled,
@@ -281,8 +280,8 @@ internal class RuntimeProjectionSubsystem(private val rt: PositioningRuntime) {
             gpsState = rt.state.gpsRuntimeState,
             motionMode = snapshot.activeMotionMode,
             providerHealth = providerDecision.reason.telemetryValue,
-            localAgeMs = rt.deps.pointFreshnessTracker.localPointAgeMs(System.currentTimeMillis()),
-            uploadAgeMs = rt.deps.pointFreshnessTracker.uploadAgeMs(System.currentTimeMillis()),
+            localAgeMs = rt.deps.pointFreshnessTracker.localPointAgeMs(rt.deps.clock.wallTimeMs()),
+            uploadAgeMs = rt.deps.pointFreshnessTracker.uploadAgeMs(rt.deps.clock.wallTimeMs()),
             recoveryProbe = if (snapshot.activePointEmissionTrouble) {
                 snapshot.pointEmissionTroubleReason ?: "active"
             } else {

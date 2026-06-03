@@ -141,10 +141,10 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         rt.motion.resetElasticDistanceOverride(reason = "gps_paused", reapplyRequest = false)
         rt.recovery.fastLock.stopFastGpsLockWindow(reason = "gps_paused")
         rt.lifecycle.stopLocationUpdates()
-        rt.deps.autoTrackingMotionEngine.onGpsPaused(System.currentTimeMillis())
+        rt.deps.autoTrackingMotionEngine.onGpsPaused(rt.deps.clock.wallTimeMs())
         rt.deps.autoTrackingMotionCoordinator.clearEvidenceCandidate()
         rt.deps.significantMotionBridge?.request()
-        rt.state.sigMotionSensorStartTime = System.currentTimeMillis()
+        rt.state.sigMotionSensorStartTime = rt.deps.clock.wallTimeMs()
         rt.collection.startSensorWatchdog()
         rt.deps.stationaryFreshnessCoordinator.schedulePausedPing(
             reason = "pause_for_motion",
@@ -163,11 +163,11 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
             ) {
                 delay(60_000L)
                 rt.collection.requestStationaryFreshnessProbeIfDue(reason = "sensor_watchdog")
-                val age = System.currentTimeMillis() - rt.state.sigMotionSensorStartTime
+                val age = rt.deps.clock.wallTimeMs() - rt.state.sigMotionSensorStartTime
                 if (age > 5 * 60_000L) {
                     rt.deps.significantMotionBridge?.cancel()
                     rt.deps.significantMotionBridge?.request()
-                    rt.state.sigMotionSensorStartTime = System.currentTimeMillis()
+                    rt.state.sigMotionSensorStartTime = rt.deps.clock.wallTimeMs()
                     rt.deps.runtimeTelemetry.event("sensor_watchdog_refresh", "ageMs=$age")
                 }
             }
@@ -185,7 +185,7 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         val dueAtMs = rt.deps.stationaryFreshnessCoordinator.nextFreshnessDueAtMs(
             intervalMs = rt.contextBuilder.currentPositioningRuntimeContext().stationaryProbeIntervalMs
         ) ?: return
-        val nowMs = System.currentTimeMillis()
+        val nowMs = rt.deps.clock.wallTimeMs()
         if (nowMs < dueAtMs) return
         rt.deps.runtimeTelemetry.event(
             "stationary_ping_due_reconciled",
@@ -223,7 +223,7 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         rt.state.consecutiveStationaryPoints = 0
         rt.state.stationaryAnchorLocation = null
         rt.deps.stationaryFreshnessCoordinator.clearRegion()
-        rt.deps.autoTrackingMotionEngine.onGpsResumed(System.currentTimeMillis())
+        rt.deps.autoTrackingMotionEngine.onGpsResumed(rt.deps.clock.wallTimeMs())
         rt.state.watchdogJob?.cancel()
         rt.state.watchdogJob = null
         if (rt.state.gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER) {

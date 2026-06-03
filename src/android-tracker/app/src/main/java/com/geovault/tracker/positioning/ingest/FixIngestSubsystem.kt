@@ -1,7 +1,6 @@
 package com.geovault.tracker.positioning.ingest
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
-import android.os.SystemClock
 import androidx.core.location.LocationCompat
 import com.geovault.common.geo.GeoCoordinates
 import com.geovault.common.logging.GeoVaultCaptureLog
@@ -42,6 +41,18 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             )
             return
         }
+        val nowMs = rt.deps.clock.wallTimeMs()
+        val nowElapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
+        logRawFixForReplay(
+            location = location,
+            trackId = rt.ports.selectedTrackerId(),
+            nowMs = nowMs,
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
+            bypassFilters = bypassFilters,
+            propsJson = propsJson,
+            allowWhenGpsPaused = allowWhenGpsPaused,
+            skipAdaptiveTrackingEffects = skipAdaptiveTrackingEffects,
+        )
         if (
             !TrackingRuntimeOrchestrator.shouldProcessLocationUpdate(
                 RuntimeLocationGateInput(
@@ -56,8 +67,6 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         val settings = rt.deps.settingsRepository.getSettings()
         var runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(settings)
         val previousAcceptedLocation = rt.state.lastFilteredLocation?.let { Location(it) }
-        val nowMs = System.currentTimeMillis()
-        val nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         if (rt.state.isFastGpsLockWindowActive) {
             rt.recovery.fastLock.recordFastGpsLockSample(
                 location = location,
@@ -541,6 +550,49 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
                 allowWhenGpsPaused = allowWhenGpsPaused,
                 skipAdaptiveTrackingEffects = skipAdaptiveTrackingEffects,
             )
+        }
+    }
+
+    private fun logRawFixForReplay(
+        location: Location,
+        trackId: String,
+        nowMs: Long,
+        nowElapsedRealtimeNanos: Long,
+        bypassFilters: Boolean,
+        propsJson: String?,
+        allowWhenGpsPaused: Boolean,
+        skipAdaptiveTrackingEffects: Boolean,
+    ) {
+        GeoVaultCaptureLog.i(
+            TrackingServiceConstants.TAG,
+            "positioning_raw_fix " +
+                "track=$trackId " +
+                "wall=$nowMs " +
+                "elapsedNanos=$nowElapsedRealtimeNanos " +
+                "time=${location.time} " +
+                "lat=${location.latitude} " +
+                "lon=${location.longitude} " +
+                "acc=${if (location.hasAccuracy()) location.accuracy else -1f} " +
+                "speed=${if (location.hasSpeed()) location.speed else "none"} " +
+                "bearing=${if (location.hasBearing()) location.bearing else "none"} " +
+                "provider=${location.provider ?: "unknown"} " +
+                "mock=${LocationCompat.isMock(location)} " +
+                "gpsState=${rt.state.gpsRuntimeState} " +
+                "trackingGeneration=${rt.state.trackingGeneration} " +
+                "allowWhenGpsPaused=$allowWhenGpsPaused " +
+                "bypassFilters=$bypassFilters " +
+                "skipAdaptiveTrackingEffects=$skipAdaptiveTrackingEffects " +
+                "propsKind=${propsKind(propsJson)}",
+        )
+    }
+
+    private fun propsKind(propsJson: String?): String {
+        if (propsJson.isNullOrBlank()) return "none"
+        return when {
+            propsJson.contains("manual_send") -> "manual_send"
+            propsJson.contains("paused_freshness") -> "paused_freshness"
+            propsJson.contains("low_accuracy_fallback") -> "low_accuracy_fallback"
+            else -> "provided"
         }
     }
 

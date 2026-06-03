@@ -4,7 +4,6 @@ import com.geovault.tracker.positioning.FallbackTransitionPolicy
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
 import android.os.Bundle
-import android.os.SystemClock
 import com.geovault.tracker.location.LowAccuracyFallbackLoopDecision
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
 import com.geovault.tracker.positioning.config.GpsRuntimeState
@@ -39,7 +38,7 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
         if (useAnchor) {
             return Location(anchor).apply {
                 time = nowMs
-                elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                elapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
                 provider = "low_accuracy_fallback_anchor:${rejectedLocation.provider ?: "gps"}"
                 if (rejectedLocation.hasAccuracy()) accuracy = rejectedLocation.accuracy
             }
@@ -51,7 +50,7 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
         if (rt.state.lowAccuracyFallbackJob?.isActive == true) return
         val runGeneration = rt.state.trackingGeneration
         rt.state.lowAccuracyFallbackJob = rt.serviceScope.launch(Dispatchers.IO) {
-            rt.state.lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
+            rt.state.lowAccuracyFallbackTimerArmedAtMs = rt.deps.clock.wallTimeMs()
             while (rt.state.isTracking && runGeneration == rt.state.trackingGeneration) {
                 val timeoutSec = TrackerSettings.clampLowAccuracyFallbackTimeoutSec(
                     rt.deps.settingsRepository.getSettings().lowAccuracyFallbackTimeoutSec
@@ -82,8 +81,8 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
                 rt.state.lastLowAccuracyFallbackWaitReason = null
                 val fallbackLocation = Location(candidate).apply {
                     provider = "low_accuracy_fallback:${candidate.provider ?: "gps"}"
-                    time = System.currentTimeMillis()
-                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                    time = rt.deps.clock.wallTimeMs()
+                    elapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
                     extras = (extras ?: Bundle()).apply {
                         putBoolean(TrackingServiceConstants.EXTRAS_KEY_LOW_ACCURACY_FALLBACK, true)
                         putString(TrackingServiceConstants.EXTRAS_KEY_FALLBACK_SOURCE_PROVIDER, candidate.provider ?: "gps")
@@ -106,7 +105,7 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
                 )
                 rt.state.lowAccuracyFallbackEmitCountThisSession++
                 rt.collection.transitionGpsState(GpsRuntimeEvent.FALLBACK_EMITTED, "fallback_emitted")
-                rt.state.lowAccuracyFallbackTimerArmedAtMs = System.currentTimeMillis()
+                rt.state.lowAccuracyFallbackTimerArmedAtMs = rt.deps.clock.wallTimeMs()
                 val shouldPersistFallback = rt.recovery.fallback.shouldPersistFallbackPoint(rt.state.lastFilteredLocation, fallbackLocation) ||
                     rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
                         nowMs = fallbackLocation.time,
@@ -172,6 +171,7 @@ internal class LowAccuracyFallbackSubsystem(private val rt: PositioningRuntime) 
         previousAcceptedLocation,
         fallbackCandidateLocation,
         nowMs,
+        rt.deps.clock.elapsedRealtimeNanos(),
     )
 
     fun shouldPersistFallbackPoint(

@@ -3,8 +3,13 @@ package com.geovault.tracker.runtime
 import android.content.Context
 import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.positioning.time.PositioningClock
+import com.geovault.tracker.positioning.time.SystemPositioningClock
 
-class RuntimeTelemetry(context: Context) {
+class RuntimeTelemetry(
+    context: Context,
+    private val clock: PositioningClock = SystemPositioningClock,
+) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -20,7 +25,7 @@ class RuntimeTelemetry(context: Context) {
             return
         }
         if (persistRing) {
-            val line = "${System.currentTimeMillis()}|$name|$details"
+            val line = "${clock.wallTimeMs()}|$name|$details"
             synchronized(this) {
                 val entries = prefs.getString(KEY_RING, "")
                     .orEmpty()

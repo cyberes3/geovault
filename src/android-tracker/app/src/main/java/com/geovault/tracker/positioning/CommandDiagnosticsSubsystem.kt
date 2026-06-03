@@ -19,7 +19,7 @@ internal class CommandDiagnosticsSubsystem(private val rt: PositioningRuntime) {
         ) {
             return
         }
-        val nowMs = System.currentTimeMillis()
+        val nowMs = rt.deps.clock.wallTimeMs()
         val incomingLocations = if (path == TrackingServiceIntents.StartupCommandPath.LocationUpdate) {
             TrackingServiceIntents.extractLocationUpdateIntentLocations(intent)
         } else {
@@ -47,7 +47,7 @@ internal class CommandDiagnosticsSubsystem(private val rt: PositioningRuntime) {
 
     fun summarizeLocationForTelemetry(location: Location?): String {
         if (location == null) return "none"
-        val ageMs = location.time.takeIf { it > 0L }?.let { System.currentTimeMillis() - it }
+        val ageMs = location.time.takeIf { it > 0L }?.let { rt.deps.clock.wallTimeMs() - it }
         val accuracy = if (location.hasAccuracy()) location.accuracy else null
         return "provider=${location.provider ?: "unknown"},ageMs=${ageMs ?: -1L},accuracy=${accuracy ?: -1f}"
     }

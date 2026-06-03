@@ -97,42 +97,13 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
             rt.deps.database.locationDao().getMaxId()
         }
         rt.state.sessionBoundaryForBacklogId = rt.state.sessionVisibleBoundaryId
-        val sessionStartedAtMs = System.currentTimeMillis()
-        SessionResetCoordinator(rt).applyForStart(
+        val sessionStartedAtMs = rt.deps.clock.wallTimeMs()
+        initializeTrackingSession(
+            trigger = trigger,
             selectedTrackerId = selectedTrackerId,
             sessionStartedAtMs = sessionStartedAtMs,
         )
-        if (selectedTrackerId.isNotEmpty()) {
-            rt.projection.restoreLocalFreshnessFromDatabase(
-                trackerId = selectedTrackerId,
-                sessionStartedAtMs = sessionStartedAtMs,
-            )
-        }
-        rt.state.isTracking = true
-        rt.collection.transitionGpsState(GpsRuntimeEvent.TRACKING_STARTED, "perform_start_tracking")
-        rt.projection.transitionControlState(TrackingControlEvent.StartSucceeded)
-        rt.motion.startAutoModeTickIfNeeded()
-        rt.projection.updateRuntimeSnapshot {
-            rt.deps.sessionCoordinator.transitionToRunning(
-                previous = it,
-                nowMs = sessionStartedAtMs,
-                sessionVisibleBoundaryId = rt.state.sessionVisibleBoundaryId
-            )
-        }
-
-        rt.deps.settingsRepository.setWasTrackingBeforeExit(true)
-        TrackingRecoveryCoordinator.markTrackingStarted(rt.ports.service.applicationContext)
-        rt.deps.runtimeEventPublisher.publish(
-            type = RuntimeServiceEventType.TRACKING_STARTED,
-            reason = "start_tracking",
-            trigger = TrackingServiceIntents.mapRuntimeTrigger(trigger)
-        )
-        rt.recovery.jobs.startRecoveryHeartbeat()
-        rt.collection.ensureGpsProviderReceiverRegistered()
-        rt.upload.startRetryJob(runGeneration)
-        rt.upload.startBacklogUploader(rt.state.sessionBoundaryForBacklogId, runGeneration)
-        rt.upload.startPreflightMonitor(runGeneration)
-        rt.projection.syncRuntimeStateStore()
+        startRuntimeBackgroundJobs(runGeneration)
 
         try {
             rt.lifecycle.startLocationUpdates()
@@ -149,6 +120,67 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         } finally {
             TrackPointBus.resumeLocalDelivery()
         }
+    }
+
+    suspend fun startReplaySession(trigger: String, startWallMs: Long) {
+        TrackPointBus.pauseLocalDelivery()
+        rt.state.trackingGeneration++
+        val selectedTrackerId = rt.ports.selectedTrackerId()
+        rt.state.sessionVisibleBoundaryId = withContext(Dispatchers.IO) {
+            rt.deps.database.locationDao().getMaxId()
+        }
+        rt.state.sessionBoundaryForBacklogId = rt.state.sessionVisibleBoundaryId
+        initializeTrackingSession(
+            trigger = trigger,
+            selectedTrackerId = selectedTrackerId,
+            sessionStartedAtMs = startWallMs,
+        )
+        TrackPointBus.resumeLocalDelivery()
+    }
+
+    private suspend fun initializeTrackingSession(
+        trigger: String,
+        selectedTrackerId: String,
+        sessionStartedAtMs: Long,
+    ) {
+        SessionResetCoordinator(rt).applyForStart(
+            selectedTrackerId = selectedTrackerId,
+            sessionStartedAtMs = sessionStartedAtMs,
+        )
+        if (selectedTrackerId.isNotEmpty()) {
+            rt.projection.restoreLocalFreshnessFromDatabase(
+                trackerId = selectedTrackerId,
+                sessionStartedAtMs = sessionStartedAtMs,
+            )
+        }
+        rt.state.isTracking = true
+        rt.collection.transitionGpsState(GpsRuntimeEvent.TRACKING_STARTED, "perform_start_tracking")
+        rt.projection.transitionControlState(TrackingControlEvent.StartSucceeded)
+        rt.projection.updateRuntimeSnapshot {
+            rt.deps.sessionCoordinator.transitionToRunning(
+                previous = it,
+                nowMs = sessionStartedAtMs,
+                sessionVisibleBoundaryId = rt.state.sessionVisibleBoundaryId
+            )
+        }
+        rt.deps.settingsRepository.setWasTrackingBeforeExit(true)
+        TrackingRecoveryCoordinator.markTrackingStarted(rt.ports.service.applicationContext)
+        rt.deps.runtimeEventPublisher.publish(
+            type = RuntimeServiceEventType.TRACKING_STARTED,
+            reason = "start_tracking",
+            trigger = TrackingServiceIntents.mapRuntimeTrigger(trigger)
+        )
+        rt.projection.syncRuntimeStateStore()
+    }
+
+    private fun startRuntimeBackgroundJobs(runGeneration: Int) {
+        rt.motion.startAutoModeTickIfNeeded()
+        rt.recovery.jobs.startRecoveryHeartbeat()
+        rt.collection.ensureGpsProviderReceiverRegistered()
+        rt.upload.startRetryJob(runGeneration)
+        rt.upload.startBacklogUploader(rt.state.sessionBoundaryForBacklogId, runGeneration)
+        rt.upload.startPreflightMonitor(runGeneration)
+        rt.projection.syncRuntimeStateStore()
     }
 
     fun stopTracking(reason: String, failureReason: String? = null) {

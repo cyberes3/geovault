@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Extract positioning_decision_trace (+ motion milestones) from a capture log into
-anonymized replay JSON for android-tracker unit tests.
+Extract anonymized end-to-end positioning replay artifacts from tracker capture logs.
 
-One-way anonymization: random ~900–1100 mi translation applied in memory only.
-Original coordinates are never written to disk.
+Requires positioning_raw_fix lines in the capture log (logged at FixIngestSubsystem
+entry). One-way anonymization: random ~900-1100 mi translation applied in memory only.
+Original coordinates, the translation vector, and random seed are never written.
 
 Usage:
   python3 scripts/extract_capture_replay.py write LOG \\
-    --session SESSION --start ISO --end ISO --output PATH.json
+    --session SESSION --start ISO --end ISO --output PATH.json --settings-json PATH.json
   python3 scripts/extract_capture_replay.py check LOG \\
-    --session SESSION --start ISO --end ISO --output PATH.json
+    --session SESSION --start ISO --end ISO --output PATH.json --settings-json PATH.json
   python3 scripts/extract_capture_replay.py validate \\
     --session SESSION --output PATH.json
 """
@@ -25,16 +25,39 @@ import re
 import secrets
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Any, BinaryIO, Iterator, TextIO
+from typing import Any, Iterator, TextIO
 
 METERS_PER_MILE = 1609.344
 MILES_MIN = 900.0
 MILES_MAX = 1100.0
 METERS_PER_DEGREE_LAT = 111_320.0
+SCHEMA_VERSION = 2
+EXTRACTOR_VERSION = "schema-v2-runtime-replay"
 
-SCHEMA_VERSION = 1
+ISO_TS_RE = re.compile(r"^(?P<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\s+")
+
+RAW_FIX_RE = re.compile(
+    r"positioning_raw_fix\s+"
+    r"track=(?P<track>\S*)\s+"
+    r"wall=(?P<wall>\d+)\s+"
+    r"elapsedNanos=(?P<elapsedNanos>\d+)\s+"
+    r"time=(?P<time>\d+)\s+"
+    r"lat=(?P<lat>[-\d.eE+]+)\s+"
+    r"lon=(?P<lon>[-\d.eE+]+)\s+"
+    r"acc=(?P<acc>[-\d.eE+]+)\s+"
+    r"speed=(?P<speed>\S+)\s+"
+    r"bearing=(?P<bearing>\S+)\s+"
+    r"provider=(?P<provider>\S+)\s+"
+    r"mock=(?P<mock>true|false)\s+"
+    r"gpsState=(?P<gpsState>\S+)\s+"
+    r"trackingGeneration=(?P<trackingGeneration>-?\d+)\s+"
+    r"allowWhenGpsPaused=(?P<allowWhenGpsPaused>true|false)\s+"
+    r"bypassFilters=(?P<bypassFilters>true|false)\s+"
+    r"skipAdaptiveTrackingEffects=(?P<skipAdaptiveTrackingEffects>true|false)\s+"
+    r"propsKind=(?P<propsKind>\S+)"
+)
 
 TRACE_RE = re.compile(
     r"positioning_decision_trace\s+"
@@ -74,16 +97,33 @@ MODE_CHANGED_RE = re.compile(
     r"path=(?P<path>\S+)"
 )
 
-ISO_TS_RE = re.compile(
-    r"^(?P<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\s+"
-)
+
+@dataclass
+class RawFix:
+    track_id: str
+    wall_ms: int
+    elapsed_realtime_nanos: int
+    gps_time_ms: int
+    lat: float
+    lon: float
+    accuracy: float
+    speed_mps: float | None
+    bearing_deg: float | None
+    provider: str
+    mock: bool
+    gps_state: str
+    tracking_generation: int
+    allow_when_gps_paused: bool
+    bypass_filters: bool
+    skip_adaptive_tracking_effects: bool
+    props_kind: str
 
 
 @dataclass
-class RawFrame:
+class DecisionTrace:
     track_id: str
+    wall_ms: int
     gps_time_ms: int
-    wall_now_ms: int
     lat: float
     lon: float
     accuracy: float
@@ -100,8 +140,8 @@ class RawFrame:
 
 
 @dataclass
-class RawMilestone:
-    wall_now_ms: int
+class Milestone:
+    wall_ms: int
     kind: str
     mode_before: str | None
     mode_after: str | None
@@ -112,24 +152,407 @@ class RawMilestone:
     path: str | None
 
 
+@dataclass
+class CaptureEvents:
+    raw_fixes: list[RawFix]
+    decision_traces: list[DecisionTrace]
+    milestones: list[Milestone]
+
+
+class CaptureLogReader:
+    def iter_window(self, path: Path, start_ms: int, end_ms: int) -> Iterator[tuple[int, str]]:
+        with self._open(path) as stream:
+            for line in stream:
+                wall_ms = self._line_wall_ms(line)
+                if wall_ms is None or wall_ms < start_ms or wall_ms > end_ms:
+                    continue
+                yield wall_ms, line
+
+    def _open(self, path: Path) -> TextIO:
+        if path.suffix == ".gz":
+            return gzip.open(path, "rt", encoding="utf-8", errors="replace")
+        return path.open("r", encoding="utf-8", errors="replace")
+
+    def _line_wall_ms(self, line: str) -> int | None:
+        match = ISO_TS_RE.match(line)
+        if not match:
+            return None
+        return parse_iso_ms(match.group("iso"))
+
+
+class CaptureEventParser:
+    def parse(self, log_path: Path, track_id: str | None, start_ms: int, end_ms: int) -> CaptureEvents:
+        raw_fixes: list[RawFix] = []
+        decision_traces: list[DecisionTrace] = []
+        milestones: list[Milestone] = []
+        reader = CaptureLogReader()
+        for wall_ms, line in reader.iter_window(log_path, start_ms, end_ms):
+            raw_match = RAW_FIX_RE.search(line)
+            if raw_match:
+                parsed = self._raw_fix(raw_match)
+                if track_id is None or parsed.track_id == track_id:
+                    raw_fixes.append(parsed)
+                continue
+
+            trace_match = TRACE_RE.search(line)
+            if trace_match:
+                parsed = self._decision_trace(trace_match)
+                if track_id is None or parsed.track_id == track_id:
+                    decision_traces.append(parsed)
+                continue
+
+            evidence_match = MOTION_EVIDENCE_RE.search(line)
+            if evidence_match:
+                milestones.append(
+                    Milestone(
+                        wall_ms=wall_ms,
+                        kind="auto_motion_evidence",
+                        mode_before=evidence_match.group("modeBefore"),
+                        mode_after=evidence_match.group("modeAfter"),
+                        reason=evidence_match.group("reason"),
+                        speed_mps=float(evidence_match.group("speed")),
+                        accuracy_meters=float(evidence_match.group("accuracy")),
+                        elapsed_seconds=float(evidence_match.group("dt")),
+                        path=evidence_match.group("path"),
+                    )
+                )
+                continue
+
+            mode_match = MODE_CHANGED_RE.search(line)
+            if mode_match:
+                milestones.append(
+                    Milestone(
+                        wall_ms=wall_ms,
+                        kind="auto_mode_changed",
+                        mode_before=None,
+                        mode_after=mode_match.group("mode"),
+                        reason=mode_match.group("reason"),
+                        speed_mps=None,
+                        accuracy_meters=None,
+                        elapsed_seconds=None,
+                        path=mode_match.group("path"),
+                    )
+                )
+        return CaptureEvents(raw_fixes=raw_fixes, decision_traces=decision_traces, milestones=milestones)
+
+    def _raw_fix(self, match: re.Match[str]) -> RawFix:
+        return RawFix(
+            track_id=match.group("track"),
+            wall_ms=int(match.group("wall")),
+            elapsed_realtime_nanos=int(match.group("elapsedNanos")),
+            gps_time_ms=int(match.group("time")),
+            lat=float(match.group("lat")),
+            lon=float(match.group("lon")),
+            accuracy=float(match.group("acc")),
+            speed_mps=parse_optional_float(match.group("speed")),
+            bearing_deg=parse_optional_float(match.group("bearing")),
+            provider=match.group("provider"),
+            mock=parse_bool(match.group("mock")),
+            gps_state=match.group("gpsState"),
+            tracking_generation=int(match.group("trackingGeneration")),
+            allow_when_gps_paused=parse_bool(match.group("allowWhenGpsPaused")),
+            bypass_filters=parse_bool(match.group("bypassFilters")),
+            skip_adaptive_tracking_effects=parse_bool(match.group("skipAdaptiveTrackingEffects")),
+            props_kind=match.group("propsKind"),
+        )
+
+    def _decision_trace(self, match: re.Match[str]) -> DecisionTrace:
+        return DecisionTrace(
+            track_id=match.group("track"),
+            wall_ms=int(match.group("now")),
+            gps_time_ms=int(match.group("ts")),
+            lat=float(match.group("lat")),
+            lon=float(match.group("lon")),
+            accuracy=float(match.group("acc")),
+            accepted=parse_bool(match.group("accepted")),
+            emission=match.group("emission"),
+            reject=match.group("reject"),
+            policy=match.group("policy"),
+            raw_distance_meters=float(match.group("raw")),
+            effective_distance_meters=float(match.group("effective")),
+            elapsed_seconds=float(match.group("dt")),
+            implied_speed_mps=float(match.group("speed")),
+            committed_lat=parse_committed(match.group("committedLat")),
+            committed_lon=parse_committed(match.group("committedLon")),
+        )
+
+
+class ReplayAnonymizer:
+    def __init__(self, reference_lat: float) -> None:
+        self.dlat, self.dlon = random_translation_meters(reference_lat)
+
+    def coord(self, lat: float, lon: float) -> tuple[float, float]:
+        return lat + self.dlat, lon + self.dlon
+
+    def optional_coord(self, lat: float | None, lon: float | None) -> tuple[float | None, float | None]:
+        if lat is None or lon is None:
+            return None, None
+        return self.coord(lat, lon)
+
+
+class ReplaySessionBuilder:
+    def build(
+        self,
+        session_id: str,
+        events: CaptureEvents,
+        settings: dict[str, Any],
+        start_ms: int,
+        end_ms: int,
+    ) -> dict[str, Any]:
+        if not events.raw_fixes:
+            raise ValueError(
+                "no positioning_raw_fix lines found in capture window; "
+                "re-capture with a build that logs positioning_raw_fix at ingest"
+            )
+
+        reference_lat = events.raw_fixes[0].lat
+        anonymizer = ReplayAnonymizer(reference_lat)
+        wall_base_ms = min(fix.wall_ms for fix in events.raw_fixes)
+        elapsed_base_nanos = min(fix.elapsed_realtime_nanos for fix in events.raw_fixes)
+        track_id = events.raw_fixes[0].track_id
+
+        shifted_fixes = [
+            self._raw_fix_json(index, fix, wall_base_ms, elapsed_base_nanos, anonymizer)
+            for index, fix in enumerate(events.raw_fixes)
+        ]
+        expected_events = [
+            self._trace_json(trace, wall_base_ms, anonymizer)
+            for trace in events.decision_traces
+        ]
+        expected_events.extend(self._milestone_json(milestone, wall_base_ms) for milestone in events.milestones)
+        expected_events.sort(key=lambda item: item["wallOffsetMs"])
+
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "sessionId": session_id,
+            "trackId": track_id,
+            "wallBaseMs": wall_base_ms,
+            "elapsedRealtimeBaseNanos": elapsed_base_nanos,
+            "settings": settings,
+            "initialState": {
+                "mode": self._initial_mode(events.milestones),
+                "sessionBoundaryId": 0,
+            },
+            "rawFixes": shifted_fixes,
+            "expectedEvents": expected_events,
+            "assertions": self._assertions(events),
+            "source": {
+                "captureLabel": session_id,
+                "windowStartMs": start_ms,
+                "windowEndMs": end_ms,
+                "extractorVersion": EXTRACTOR_VERSION,
+                "inputKind": "positioning_raw_fix",
+                "fidelity": "raw_fix_runtime_replay",
+            },
+        }
+
+    def _raw_fix_json(
+        self,
+        index: int,
+        fix: RawFix,
+        wall_base_ms: int,
+        elapsed_base_nanos: int,
+        anonymizer: ReplayAnonymizer,
+    ) -> dict[str, Any]:
+        lat, lon = anonymizer.coord(fix.lat, fix.lon)
+        return {
+            "index": index,
+            "wallOffsetMs": fix.wall_ms - wall_base_ms,
+            "elapsedRealtimeOffsetNanos": fix.elapsed_realtime_nanos - elapsed_base_nanos,
+            "gpsTimeMs": fix.gps_time_ms,
+            "lat": lat,
+            "lon": lon,
+            "accuracy": fix.accuracy,
+            "speedMps": fix.speed_mps,
+            "bearingDeg": fix.bearing_deg,
+            "provider": fix.provider,
+            "mock": fix.mock,
+            "gpsState": fix.gps_state,
+            "trackingGeneration": fix.tracking_generation,
+            "allowWhenGpsPaused": fix.allow_when_gps_paused,
+            "bypassFilters": fix.bypass_filters,
+            "skipAdaptiveTrackingEffects": fix.skip_adaptive_tracking_effects,
+            "propsKind": fix.props_kind,
+        }
+
+    def _trace_json(
+        self,
+        trace: DecisionTrace,
+        wall_base_ms: int,
+        anonymizer: ReplayAnonymizer,
+    ) -> dict[str, Any]:
+        lat, lon = anonymizer.coord(trace.lat, trace.lon)
+        committed_lat, committed_lon = anonymizer.optional_coord(trace.committed_lat, trace.committed_lon)
+        return {
+            "kind": "positioning_decision_trace",
+            "wallOffsetMs": trace.wall_ms - wall_base_ms,
+            "gpsTimeMs": trace.gps_time_ms,
+            "lat": lat,
+            "lon": lon,
+            "accuracy": trace.accuracy,
+            "accepted": trace.accepted,
+            "emission": trace.emission,
+            "reject": trace.reject,
+            "policy": trace.policy,
+            "rawDistanceMeters": trace.raw_distance_meters,
+            "effectiveDistanceMeters": trace.effective_distance_meters,
+            "elapsedSeconds": trace.elapsed_seconds,
+            "impliedSpeedMps": trace.implied_speed_mps,
+            "committedLat": committed_lat,
+            "committedLon": committed_lon,
+        }
+
+    def _milestone_json(self, milestone: Milestone, wall_base_ms: int) -> dict[str, Any]:
+        return {
+            "kind": milestone.kind,
+            "wallOffsetMs": milestone.wall_ms - wall_base_ms,
+            "modeBefore": milestone.mode_before,
+            "modeAfter": milestone.mode_after,
+            "reason": milestone.reason,
+            "speedMps": milestone.speed_mps,
+            "accuracyMeters": milestone.accuracy_meters,
+            "elapsedSeconds": milestone.elapsed_seconds,
+            "path": milestone.path,
+        }
+
+    def _initial_mode(self, milestones: list[Milestone]) -> str:
+        for milestone in milestones:
+            if milestone.kind == "auto_mode_changed" and milestone.mode_after:
+                return milestone.mode_after
+        return "WALKING"
+
+    def _assertions(self, events: CaptureEvents) -> dict[str, Any]:
+        first_cap = next(
+            (
+                item
+                for item in events.milestones
+                if item.kind == "auto_motion_evidence"
+                and item.reason == "speed-cap-exceeded"
+                and item.path == "FAST_EMIT"
+            ),
+            None,
+        )
+        required: list[dict[str, Any]] = []
+        if first_cap is not None:
+            wall_base_ms = min(fix.wall_ms for fix in events.raw_fixes)
+            required.append(
+                {
+                    "kind": "auto_motion_evidence",
+                    "reason": "speed-cap-exceeded",
+                    "path": "FAST_EMIT",
+                    "withinMs": 60_000,
+                    "fromWallOffsetMs": first_cap.wall_ms - wall_base_ms,
+                }
+            )
+        return {
+            "finalMode": "DRIVING",
+            "minPersistedPoints": 0,
+            "expectedMotionRetryCountMin": 1,
+            "maxDecisionMismatches": 0,
+            "requiredEvents": required,
+        }
+
+
+class ReplayValidator:
+    def validate(self, artifact: dict[str, Any], expected_session: str) -> None:
+        self._require(artifact.get("schemaVersion") == SCHEMA_VERSION, "schemaVersion must be 2")
+        self._require(artifact.get("sessionId") == expected_session, "sessionId mismatch")
+        self._require(isinstance(artifact.get("settings"), dict), "settings must be an object")
+        self._require(isinstance(artifact.get("initialState"), dict), "initialState must be an object")
+        self._require(isinstance(artifact.get("source"), dict), "source must be an object")
+        self._require(artifact["source"].get("inputKind") == "positioning_raw_fix", "inputKind must be positioning_raw_fix")
+
+        raw_fixes = artifact.get("rawFixes")
+        self._require(isinstance(raw_fixes, list) and raw_fixes, "rawFixes must be non-empty")
+        expected_events = artifact.get("expectedEvents")
+        self._require(isinstance(expected_events, list), "expectedEvents must be an array")
+        assertions = artifact.get("assertions")
+        self._require(isinstance(assertions, dict), "assertions must be an object")
+
+        previous_wall = -1
+        previous_elapsed = -1
+        for index, raw_fix in enumerate(raw_fixes):
+            self._validate_raw_fix(raw_fix, index)
+            wall = raw_fix["wallOffsetMs"]
+            elapsed = raw_fix["elapsedRealtimeOffsetNanos"]
+            self._require(wall >= previous_wall, f"rawFixes[{index}] wallOffsetMs is not monotonic")
+            self._require(
+                elapsed >= previous_elapsed,
+                f"rawFixes[{index}] elapsedRealtimeOffsetNanos is not monotonic",
+            )
+            previous_wall = wall
+            previous_elapsed = elapsed
+
+        for index, event in enumerate(expected_events):
+            self._require(isinstance(event, dict), f"expectedEvents[{index}] must be an object")
+            self._require(isinstance(event.get("kind"), str), f"expectedEvents[{index}] missing kind")
+            self._require(isinstance(event.get("wallOffsetMs"), int), f"expectedEvents[{index}] missing wallOffsetMs")
+
+    def invariant_view(self, artifact: dict[str, Any]) -> dict[str, Any]:
+        def strip_coords(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {
+                    key: strip_coords(item)
+                    for key, item in value.items()
+                    if key not in {"lat", "lon", "committedLat", "committedLon"}
+                }
+            if isinstance(value, list):
+                return [strip_coords(item) for item in value]
+            return value
+
+        return strip_coords(artifact)
+
+    def _validate_raw_fix(self, raw_fix: Any, index: int) -> None:
+        self._require(isinstance(raw_fix, dict), f"rawFixes[{index}] must be an object")
+        for key in [
+            "wallOffsetMs",
+            "elapsedRealtimeOffsetNanos",
+            "gpsTimeMs",
+            "lat",
+            "lon",
+            "accuracy",
+            "provider",
+            "mock",
+            "bypassFilters",
+            "allowWhenGpsPaused",
+            "skipAdaptiveTrackingEffects",
+        ]:
+            self._require(key in raw_fix, f"rawFixes[{index}] missing {key}")
+        self._require(isinstance(raw_fix["wallOffsetMs"], int), f"rawFixes[{index}] wallOffsetMs must be int")
+        self._require(
+            isinstance(raw_fix["elapsedRealtimeOffsetNanos"], int),
+            f"rawFixes[{index}] elapsedRealtimeOffsetNanos must be int",
+        )
+        self._require(isinstance(raw_fix["lat"], (int, float)), f"rawFixes[{index}] lat must be numeric")
+        self._require(isinstance(raw_fix["lon"], (int, float)), f"rawFixes[{index}] lon must be numeric")
+
+    def _require(self, condition: bool, message: str) -> None:
+        if not condition:
+            raise ValueError(message)
+
+
+class ReplayWriter:
+    def write(self, path: Path, artifact: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(artifact, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+
+    def read(self, path: Path) -> dict[str, Any]:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+
 def parse_iso_ms(iso: str) -> int:
     dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
     return int(dt.timestamp() * 1000)
 
 
-def open_log(path: Path) -> TextIO:
-    if path.suffix == ".gz":
-        return gzip.open(path, "rt", encoding="utf-8", errors="replace")
-    return path.open("r", encoding="utf-8", errors="replace")
+def parse_bool(value: str) -> bool:
+    return value == "true"
 
 
-def iter_log_lines(stream: TextIO) -> Iterator[tuple[int | None, str]]:
-    for line in stream:
-        wall_ms: int | None = None
-        m = ISO_TS_RE.match(line)
-        if m:
-            wall_ms = parse_iso_ms(m.group("iso"))
-        yield wall_ms, line
+def parse_optional_float(value: str) -> float | None:
+    if value == "none":
+        return None
+    return float(value)
 
 
 def parse_committed(value: str) -> float | None:
@@ -149,402 +572,92 @@ def random_translation_meters(ref_lat: float) -> tuple[float, float]:
     return dlat, dlon
 
 
-def shift_coord(lat: float, lon: float, dlat: float, dlon: float) -> tuple[float, float]:
-    return lat + dlat, lon + dlon
+def load_settings(path: Path) -> dict[str, Any]:
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError("--settings-json must point to a JSON object")
+    return loaded
 
 
-def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+def build_artifact(args: argparse.Namespace) -> dict[str, Any]:
+    events = CaptureEventParser().parse(
+        log_path=args.log,
+        track_id=args.track_id,
+        start_ms=parse_iso_ms(args.start),
+        end_ms=parse_iso_ms(args.end),
+    )
+    return ReplaySessionBuilder().build(
+        session_id=args.session,
+        events=events,
+        settings=load_settings(args.settings_json),
+        start_ms=parse_iso_ms(args.start),
+        end_ms=parse_iso_ms(args.end),
+    )
 
 
-def extract_from_log(
-    log_path: Path,
-    track_id: str | None,
-    start_ms: int,
-    end_ms: int,
-) -> tuple[list[RawFrame], list[RawMilestone]]:
-    frames: list[RawFrame] = []
-    milestones: list[RawMilestone] = []
-
-    with open_log(log_path) as stream:
-        for wall_ms, line in iter_log_lines(stream):
-            if wall_ms is None or wall_ms < start_ms or wall_ms > end_ms:
-                continue
-
-            trace = TRACE_RE.search(line)
-            if trace:
-                tid = trace.group("track")
-                if track_id and tid != track_id:
-                    continue
-                frames.append(
-                    RawFrame(
-                        track_id=tid,
-                        gps_time_ms=int(trace.group("ts")),
-                        wall_now_ms=int(trace.group("now")),
-                        lat=float(trace.group("lat")),
-                        lon=float(trace.group("lon")),
-                        accuracy=float(trace.group("acc")),
-                        accepted=trace.group("accepted") == "true",
-                        emission=trace.group("emission"),
-                        reject=trace.group("reject"),
-                        policy=trace.group("policy"),
-                        raw_distance_meters=float(trace.group("raw")),
-                        effective_distance_meters=float(trace.group("effective")),
-                        elapsed_seconds=float(trace.group("dt")),
-                        implied_speed_mps=float(trace.group("speed")),
-                        committed_lat=parse_committed(trace.group("committedLat")),
-                        committed_lon=parse_committed(trace.group("committedLon")),
-                    )
-                )
-                continue
-
-            ev = MOTION_EVIDENCE_RE.search(line)
-            if ev:
-                milestones.append(
-                    RawMilestone(
-                        wall_now_ms=wall_ms,
-                        kind="auto_motion_evidence",
-                        mode_before=ev.group("modeBefore"),
-                        mode_after=ev.group("modeAfter"),
-                        reason=ev.group("reason"),
-                        speed_mps=float(ev.group("speed")),
-                        accuracy_meters=float(ev.group("accuracy")),
-                        elapsed_seconds=float(ev.group("dt")),
-                        path=ev.group("path"),
-                    )
-                )
-                continue
-
-            ch = MODE_CHANGED_RE.search(line)
-            if ch:
-                milestones.append(
-                    RawMilestone(
-                        wall_now_ms=wall_ms,
-                        kind="auto_mode_changed",
-                        mode_before=None,
-                        mode_after=ch.group("mode"),
-                        reason=ch.group("reason"),
-                        speed_mps=None,
-                        accuracy_meters=None,
-                        elapsed_seconds=None,
-                        path=ch.group("path"),
-                    )
-                )
-
-    frames.sort(key=lambda f: f.wall_now_ms)
-    milestones.sort(key=lambda m: m.wall_now_ms)
-    return frames, milestones
-
-
-def build_session(
-    frames: list[RawFrame],
-    milestones: list[RawMilestone],
-    session_id: str,
-) -> dict[str, Any]:
-    if not frames:
-        raise ValueError("no positioning_decision_trace frames in window")
-
-    ref_lat = frames[0].lat
-    dlat, dlon = random_translation_meters(ref_lat)
-    wall_base = frames[0].wall_now_ms
-    track = frames[0].track_id
-
-    out_frames: list[dict[str, Any]] = []
-    for f in frames:
-        lat, lon = shift_coord(f.lat, f.lon, dlat, dlon)
-        committed_lat = (
-            shift_coord(f.committed_lat, f.committed_lon, dlat, dlon)[0]
-            if f.committed_lat is not None and f.committed_lon is not None
-            else None
-        )
-        committed_lon = (
-            shift_coord(f.committed_lat, f.committed_lon, dlat, dlon)[1]
-            if f.committed_lat is not None and f.committed_lon is not None
-            else None
-        )
-        out_frames.append(
-            {
-                "gpsTimeMs": f.gps_time_ms,
-                "wallOffsetMs": f.wall_now_ms - wall_base,
-                "lat": lat,
-                "lon": lon,
-                "accuracy": f.accuracy,
-                "accepted": f.accepted,
-                "emission": f.emission,
-                "reject": f.reject,
-                "policy": f.policy,
-                "rawDistanceMeters": f.raw_distance_meters,
-                "effectiveDistanceMeters": f.effective_distance_meters,
-                "elapsedSeconds": f.elapsed_seconds,
-                "impliedSpeedMps": f.implied_speed_mps,
-                "committedLat": committed_lat,
-                "committedLon": committed_lon,
-            }
-        )
-
-    out_milestones: list[dict[str, Any]] = []
-    for m in milestones:
-        out_milestones.append(
-            {
-                "wallOffsetMs": m.wall_now_ms - wall_base,
-                "kind": m.kind,
-                "modeBefore": m.mode_before,
-                "modeAfter": m.mode_after,
-                "reason": m.reason,
-                "speedMps": m.speed_mps,
-                "accuracyMeters": m.accuracy_meters,
-                "elapsedSeconds": m.elapsed_seconds,
-                "path": m.path,
-            }
-        )
-
-    return {
-        "schemaVersion": SCHEMA_VERSION,
-        "sessionId": session_id,
-        "trackId": track,
-        "wallBaseMs": wall_base,
-        "frameCount": len(out_frames),
-        "frames": out_frames,
-        "milestones": out_milestones,
-    }
-
-
-def load_session(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def validate_session(session: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    if session.get("schemaVersion") != SCHEMA_VERSION:
-        errors.append(f"unsupported schemaVersion={session.get('schemaVersion')}")
-    frames = session.get("frames") or []
-    if not frames:
-        errors.append("frames is empty")
-    if session.get("frameCount") != len(frames):
-        errors.append("frameCount does not match frames length")
-
-    prev_wall: int | None = None
-    prev_lat: float | None = None
-    prev_lon: float | None = None
-    for i, frame in enumerate(frames):
-        wall = frame.get("wallOffsetMs")
-        if wall is None:
-            errors.append(f"frame[{i}] missing wallOffsetMs")
-            continue
-        if prev_wall is not None and wall < prev_wall:
-            errors.append(f"frame[{i}] wallOffsetMs regressed")
-        prev_wall = wall
-
-        for key in (
-            "gpsTimeMs",
-            "lat",
-            "lon",
-            "accuracy",
-            "policy",
-            "rawDistanceMeters",
-            "effectiveDistanceMeters",
-            "elapsedSeconds",
-            "impliedSpeedMps",
-        ):
-            if key not in frame:
-                errors.append(f"frame[{i}] missing {key}")
-
-        lat, lon = frame.get("lat"), frame.get("lon")
-        if lat is not None and lon is not None and prev_lat is not None and prev_lon is not None:
-            if haversine_m(prev_lat, prev_lon, lat, lon) > 5_000.0:
-                errors.append(f"frame[{i}] hop >5km (sanity)")
-        if lat is not None and lon is not None:
-            prev_lat, prev_lon = lat, lon
-
-    return errors
-
-
-def invariant_view(session: dict[str, Any]) -> dict[str, Any]:
-    frames_out: list[dict[str, Any]] = []
-    prev_lat: float | None = None
-    prev_lon: float | None = None
-    for frame in session["frames"]:
-        lat, lon = frame["lat"], frame["lon"]
-        step_m = None
-        if prev_lat is not None and prev_lon is not None:
-            step_m = haversine_m(prev_lat, prev_lon, lat, lon)
-        prev_lat, prev_lon = lat, lon
-        frames_out.append(
-            {
-                "gpsTimeMs": frame["gpsTimeMs"],
-                "wallOffsetMs": frame["wallOffsetMs"],
-                "accuracy": frame["accuracy"],
-                "accepted": frame["accepted"],
-                "emission": frame["emission"],
-                "reject": frame["reject"],
-                "policy": frame["policy"],
-                "rawDistanceMeters": frame["rawDistanceMeters"],
-                "effectiveDistanceMeters": frame["effectiveDistanceMeters"],
-                "elapsedSeconds": frame["elapsedSeconds"],
-                "impliedSpeedMps": frame["impliedSpeedMps"],
-                "stepMeters": step_m,
-            }
-        )
-    milestones_out = [
-        {
-            "wallOffsetMs": m["wallOffsetMs"],
-            "kind": m["kind"],
-            "modeBefore": m.get("modeBefore"),
-            "modeAfter": m.get("modeAfter"),
-            "reason": m.get("reason"),
-            "speedMps": m.get("speedMps"),
-            "accuracyMeters": m.get("accuracyMeters"),
-            "elapsedSeconds": m.get("elapsedSeconds"),
-            "path": m.get("path"),
-        }
-        for m in session.get("milestones", [])
-    ]
-    return {
-        "trackId": session["trackId"],
-        "frameCount": session["frameCount"],
-        "frames": frames_out,
-        "milestones": milestones_out,
-    }
-
-
-def compare_invariant(committed: dict[str, Any], regenerated: dict[str, Any]) -> list[str]:
-    a = invariant_view(committed)
-    b = invariant_view(regenerated)
-    mismatches: list[str] = []
-    if a["trackId"] != b["trackId"]:
-        mismatches.append(f"trackId {a['trackId']} != {b['trackId']}")
-    if a["frameCount"] != b["frameCount"]:
-        mismatches.append(f"frameCount {a['frameCount']} != {b['frameCount']}")
-    for i, (fa, fb) in enumerate(zip(a["frames"], b["frames"])):
-        for key in fa:
-            va, vb = fa[key], fb.get(key)
-            if isinstance(va, float):
-                if vb is None or abs(va - vb) > 1e-3:
-                    mismatches.append(f"frame[{i}].{key}: {va} != {vb}")
-            elif va != vb:
-                mismatches.append(f"frame[{i}].{key}: {va} != {vb}")
-    if len(a["frames"]) != len(b["frames"]):
-        mismatches.append("frame list length differs")
-    if a["milestones"] != b["milestones"]:
-        mismatches.append("milestones differ")
-    return mismatches
-
-
-def add_extract_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("log_path", type=Path, help="Capture log .txt or .txt.gz")
-    parser.add_argument("--session", required=True, help="Session identifier written into JSON")
-    parser.add_argument("--start", required=True, help="Window start ISO-8601 UTC")
-    parser.add_argument("--end", required=True, help="Window end ISO-8601 UTC")
-    parser.add_argument("--output", type=Path, required=True, help="Committed replay JSON path")
-    parser.add_argument("--track-id", default=None, help="Optional filter by track UUID")
-
-
-def add_validate_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--session", required=True, help="Expected sessionId in committed JSON")
-    parser.add_argument("--output", type=Path, required=True, help="Committed replay JSON path")
-
-
-def run_validate(output_path: Path, session_id: str) -> int:
-    if not output_path.is_file():
-        print(f"missing committed session: {output_path}", file=sys.stderr)
-        return 1
-    session = load_session(output_path)
-    if session.get("sessionId") != session_id:
-        print(
-            f"sessionId mismatch: file={session.get('sessionId')} expected={session_id}",
-            file=sys.stderr,
-        )
-        return 1
-    errors = validate_session(session)
-    if errors:
-        for err in errors:
-            print(err, file=sys.stderr)
-        return 1
-    print(f"ok: {output_path} ({session['frameCount']} frames)")
+def command_write(args: argparse.Namespace) -> int:
+    artifact = build_artifact(args)
+    ReplayValidator().validate(artifact, expected_session=args.session)
+    ReplayWriter().write(args.output, artifact)
+    print(f"wrote {args.output} ({len(artifact['rawFixes'])} raw fixes)")
     return 0
 
 
-def extract_session_from_log(
-    log_path: Path,
-    session_id: str,
-    start_iso: str,
-    end_iso: str,
-    track_id: str | None,
-) -> dict[str, Any]:
-    if not log_path.is_file():
-        print(f"log not found: {log_path}", file=sys.stderr)
-        raise SystemExit(1)
-    start_ms = parse_iso_ms(start_iso)
-    end_ms = parse_iso_ms(end_iso)
-    frames, milestones = extract_from_log(log_path, track_id, start_ms, end_ms)
-    if not frames:
-        print("no frames extracted", file=sys.stderr)
-        raise SystemExit(1)
-    return build_session(frames, milestones, session_id)
+def command_check(args: argparse.Namespace) -> int:
+    artifact = build_artifact(args)
+    validator = ReplayValidator()
+    validator.validate(artifact, expected_session=args.session)
+    committed = ReplayWriter().read(args.output)
+    validator.validate(committed, expected_session=args.session)
+    if validator.invariant_view(artifact) != validator.invariant_view(committed):
+        print("replay invariant mismatch", file=sys.stderr)
+        return 1
+    print(f"ok: {args.output}")
+    return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Extract anonymized capture replay JSON")
+def command_validate(args: argparse.Namespace) -> int:
+    artifact = ReplayWriter().read(args.output)
+    ReplayValidator().validate(artifact, expected_session=args.session)
+    source = artifact["source"]
+    print(
+        f"ok: {args.output} ({len(artifact['rawFixes'])} raw fixes, "
+        f"{source.get('inputKind')})"
+    )
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Build and validate android-tracker replay fixtures")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    write_parser = subparsers.add_parser("write", help="Write anonymized replay JSON")
-    add_extract_args(write_parser)
+    for name, handler in (("write", command_write), ("check", command_check)):
+        command = subparsers.add_parser(name)
+        command.add_argument("log", type=Path)
+        command.add_argument("--session", required=True)
+        command.add_argument("--start", required=True)
+        command.add_argument("--end", required=True)
+        command.add_argument("--output", required=True, type=Path)
+        command.add_argument("--settings-json", required=True, type=Path)
+        command.add_argument("--track-id", help="Optional filter by track UUID")
+        command.set_defaults(func=handler)
 
-    check_parser = subparsers.add_parser("check", help="Shift-invariant compare to committed JSON")
-    add_extract_args(check_parser)
+    validate = subparsers.add_parser("validate")
+    validate.add_argument("--session", required=True)
+    validate.add_argument("--output", required=True, type=Path)
+    validate.set_defaults(func=command_validate)
+    return parser
 
-    validate_parser = subparsers.add_parser("validate", help="Validate committed JSON schema")
-    add_validate_args(validate_parser)
 
-    args = parser.parse_args()
-
-    if args.command == "validate":
-        return run_validate(args.output, args.session)
-
-    session = extract_session_from_log(
-        log_path=args.log_path,
-        session_id=args.session,
-        start_iso=args.start,
-        end_iso=args.end,
-        track_id=args.track_id,
-    )
-
-    if args.command == "write":
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(session, indent=2) + "\n", encoding="utf-8")
-        print(
-            f"wrote {args.output} ({session['frameCount']} frames, "
-            f"{len(session['milestones'])} milestones)"
-        )
-        return 0
-
-    if args.command == "check":
-        if not args.output.is_file():
-            print(f"missing committed session: {args.output}", file=sys.stderr)
-            return 1
-        committed = load_session(args.output)
-        if committed.get("sessionId") != args.session:
-            print(
-                f"sessionId mismatch: file={committed.get('sessionId')} expected={args.session}",
-                file=sys.stderr,
-            )
-            return 1
-        mismatches = compare_invariant(committed, session)
-        if mismatches:
-            for m in mismatches:
-                print(m, file=sys.stderr)
-            return 1
-        print(f"ok: log matches committed session invariants ({session['frameCount']} frames)")
-        return 0
-
-    parser.error(f"unknown command: {args.command}")
-    return 2
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except Exception as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

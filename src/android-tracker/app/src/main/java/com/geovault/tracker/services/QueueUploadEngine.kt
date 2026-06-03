@@ -164,18 +164,28 @@ internal class QueueInFlightClaimSet {
     }
 }
 
+interface QueueUploadGateway {
+    suspend fun push(
+        scope: QueueUploadScope,
+        trackerId: String,
+        serverUrl: String,
+        config: QueueUploadConfig,
+        onBatchUploaded: suspend (visibleSentCount: Int) -> Unit
+    ): QueueUploadResult
+}
+
 class QueueUploadEngine(
     private val context: Context,
     private val locationDao: LocationDao,
     private val pushContext: CoroutineContext,
     private val authenticatedClientProvider: () -> OkHttpClient
-) {
+) : QueueUploadGateway {
     private val appContext = context.applicationContext
     private val livePushSemaphore = Semaphore(2)
     private val backlogPushSemaphore = Semaphore(1)
     private val inFlightClaims = QueueInFlightClaimSet()
 
-    suspend fun push(
+    override suspend fun push(
         scope: QueueUploadScope,
         trackerId: String,
         serverUrl: String,

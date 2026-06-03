@@ -1,16 +1,22 @@
 package com.geovault.tracker.sensor
 
+interface SignificantMotionResumeGateway {
+    fun request()
+    fun cancel()
+    fun isAvailable(): Boolean
+}
+
 class SignificantMotionResumeBridge(
     private val trigger: SignificantMotionTrigger,
     private val onResume: () -> Unit
-) {
-    fun request() {
+) : SignificantMotionResumeGateway {
+    override fun request() {
         trigger.request(onResume)
     }
 
-    fun cancel() {
+    override fun cancel() {
         trigger.cancel()
     }
 
-    fun isAvailable(): Boolean = trigger.isAvailable()
+    override fun isAvailable(): Boolean = trigger.isAvailable()
 }

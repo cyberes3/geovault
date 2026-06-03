@@ -17,15 +17,14 @@ import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.positioning.config.PositioningDensity
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
 import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
-import com.geovault.tracker.sensor.SignificantMotionResumeBridge
+import com.geovault.tracker.sensor.SignificantMotionResumeGateway
 import com.geovault.tracker.services.LocationIngestCoordinator
-import com.geovault.tracker.services.LocationSessionCoordinator
+import com.geovault.tracker.services.LocationSessionGateway
 import com.geovault.tracker.services.PointFreshnessTracker
 import com.geovault.tracker.services.ProviderHealthController
-import com.geovault.tracker.services.QueueUploadEngine
+import com.geovault.tracker.services.QueueUploadGateway
 import com.geovault.tracker.services.RuntimeEventPublisher
-import com.geovault.tracker.services.TrackingNotificationPresenter
+import com.geovault.tracker.services.TrackingNotificationGateway
 import com.geovault.tracker.services.TrackingSessionCoordinator
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.tracking.TrackingServiceConstants
@@ -36,7 +35,10 @@ internal class PositioningDependencies(
     private val runtime: PositioningRuntime,
     private val service: Service,
     val serviceScope: CoroutineScope,
+    private val environment: PositioningRuntimeEnvironment = ProductionPositioningRuntimeEnvironment,
 ) {
+    val clock = environment.clock
+
     lateinit var database: AppDatabase
         private set
     lateinit var settingsRepository: TrackerSettingsRepository
@@ -47,13 +49,13 @@ internal class PositioningDependencies(
         private set
     lateinit var trackerLocationPipeline: TrackerLocationPipeline
         private set
-    lateinit var notificationPresenter: TrackingNotificationPresenter
+    lateinit var notificationPresenter: TrackingNotificationGateway
         private set
     lateinit var runtimeEventPublisher: RuntimeEventPublisher
         private set
-    lateinit var queueUploadEngine: QueueUploadEngine
+    lateinit var queueUploadEngine: QueueUploadGateway
         private set
-    lateinit var locationSessionCoordinator: LocationSessionCoordinator
+    lateinit var locationSessionCoordinator: LocationSessionGateway
         private set
     lateinit var runtimeTelemetry: RuntimeTelemetry
         private set
@@ -65,7 +67,7 @@ internal class PositioningDependencies(
         private set
 
     var httpClient: OkHttpClient? = null
-    var significantMotionBridge: SignificantMotionResumeBridge? = null
+    var significantMotionBridge: SignificantMotionResumeGateway? = null
 
     val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator {
         runtime.contextBuilder.currentPositioningRecoveryConfig()
@@ -87,13 +89,13 @@ internal class PositioningDependencies(
 
     fun wire(settingsRepository: TrackerSettingsRepository) {
         this.settingsRepository = settingsRepository
-        database = AppDatabase.getDatabase(service)
+        database = environment.database(service)
         sessionCoordinator = TrackingSessionCoordinator()
-        notificationPresenter = TrackingNotificationPresenter(service)
+        notificationPresenter = environment.notificationPresenter(service)
         runtimeEventPublisher = RuntimeEventPublisher(service.applicationContext)
-        runtimeTelemetry = RuntimeTelemetry(service.applicationContext)
-        recoveryAnchorStore = RecoveryAnchorStore(service.applicationContext)
-        locationSessionCoordinator = LocationSessionCoordinator(service) { error ->
+        runtimeTelemetry = environment.runtimeTelemetry(service)
+        recoveryAnchorStore = environment.recoveryAnchorStore(service)
+        locationSessionCoordinator = environment.locationSessionCoordinator(service) { error ->
             runtimeTelemetry.event(
                 "location_request_registration_failed",
                 "type=${error.javaClass.simpleName} message=${error.message.orEmpty()}",
@@ -112,14 +114,15 @@ internal class PositioningDependencies(
             freshnessRecoveryController = freshnessRecoveryController,
             repeatedOutlierSuppressor = repeatedOutlierSuppressor,
         )
-        queueUploadEngine = QueueUploadEngine(
-            context = service.applicationContext,
-            locationDao = database.locationDao(),
+        queueUploadEngine = environment.queueUploadEngine(
+            service = service,
+            database = database,
             pushContext = runtime.pushDispatcher,
             authenticatedClientProvider = { runtime.upload.getAuthenticatedHttpClient() },
         )
-        significantMotionBridge = SignificantMotionResumeBridge(
-            trigger = SensorManagerSignificantMotionTrigger(service.applicationContext),
+        significantMotionBridge = environment.significantMotionBridge(
+            service = service,
+            serviceScope = serviceScope,
             onResume = { runtime.collection.resumeGps() },
         )
         val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
@@ -138,7 +141,7 @@ internal class PositioningDependencies(
             },
         )
         stationaryFreshnessCoordinator = StationaryFreshnessCoordinator(
-            store = StationaryRegionStore(service.applicationContext),
+            store = environment.stationaryRegionStore(service),
             pingController = stationaryPingController,
             scope = serviceScope,
             actions = object : StationaryFreshnessActions {

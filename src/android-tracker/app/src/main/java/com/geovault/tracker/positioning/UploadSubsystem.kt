@@ -186,7 +186,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
                     rt.projection.updateRuntimeSnapshot {
                         it.copy(
                             pointsSentThisSession = it.pointsSentThisSession + sentDelta,
-                            lastPointSentAtMs = System.currentTimeMillis(),
+                            lastPointSentAtMs = rt.deps.clock.wallTimeMs(),
                         )
                     }
                 }
@@ -218,11 +218,11 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
         rt.state.lastSyncFailureClass = result.failureClass
         rt.state.uploadLivenessState = rt.state.uploadLivenessState.onUploadResult(
             result = result,
-            nowMs = System.currentTimeMillis(),
+            nowMs = rt.deps.clock.wallTimeMs(),
             updateFailureCounters = shouldUpdateCounters,
         )
         if (result.rowsDeleted > 0) {
-            val uploadedAtMs = System.currentTimeMillis()
+            val uploadedAtMs = rt.deps.clock.wallTimeMs()
             rt.deps.pointFreshnessTracker.markUploadSucceeded(uploadedAtMs)
             rt.projection.updateRuntimeSnapshot {
                 it.copy(
@@ -241,7 +241,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
             return
         }
         rt.state.consecutivePushFailures++
-        val nowMs = System.currentTimeMillis()
+        val nowMs = rt.deps.clock.wallTimeMs()
         val motionMode = rt.contextBuilder.resolveActiveMotionMode()
         if (
             rt.deps.pointFreshnessTracker.isLocalFresh(
@@ -267,7 +267,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
 
     fun trimQueuedLocationsRetention(trackerId: String) {
         if (trackerId.isBlank()) return
-        val cutoff = System.currentTimeMillis() - TrackingServiceConstants.MAX_QUEUE_AGE_MS
+        val cutoff = rt.deps.clock.wallTimeMs() - TrackingServiceConstants.MAX_QUEUE_AGE_MS
         val deletedByAge = rt.deps.database.locationDao().deleteOlderThanForTracker(trackerId, cutoff)
         val count = rt.deps.database.locationDao().getCountForTracker(trackerId)
         val deletedBySize = if (count > TrackingServiceConstants.MAX_QUEUE_SIZE) {

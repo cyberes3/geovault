@@ -182,22 +182,24 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-val replaySessionId = "traffic_jam_2026_06_02"
-val replayJsonPath =
-    layout.projectDirectory.file("src/test/resources/replay/$replaySessionId.json").asFile.path
+val replayJsonFiles = layout.projectDirectory.dir("src/test/resources/replay")
+    .asFileTree
+    .matching {
+        include("*.json")
+    }
 
 tasks.register<Exec>("validateCaptureReplay") {
     group = "verification"
     description = "Validate committed capture replay JSON schema and invariants"
     workingDir = rootProject.projectDir
     commandLine(
-        "python3",
-        "scripts/extract_capture_replay.py",
-        "validate",
-        "--session",
-        replaySessionId,
-        "--output",
-        replayJsonPath,
+        "bash",
+        "-lc",
+        replayJsonFiles.files.sortedBy { it.name }.joinToString(separator = " && ") { replayJson ->
+            val sessionId = replayJson.nameWithoutExtension
+            "python3 scripts/extract_capture_replay.py validate --session " +
+                "'$sessionId' --output '${replayJson.path}'"
+        },
     )
 }
 
@@ -209,7 +211,7 @@ afterEvaluate {
         testClassesDirs = debugUnitTest.get().testClassesDirs
         classpath = debugUnitTest.get().classpath
         filter {
-            includeTestsMatching("com.geovault.tracker.replay.*")
+            includeTestsMatching("com.geovault.tracker.replay.runtime.*")
         }
     }
 }

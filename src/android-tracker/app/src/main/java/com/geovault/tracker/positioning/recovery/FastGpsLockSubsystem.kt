@@ -2,7 +2,6 @@ package com.geovault.tracker.positioning.recovery
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.location.Location
 import android.os.Bundle
-import android.os.SystemClock
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.AutoMotionStabilityPolicy
 import com.geovault.tracker.R
@@ -23,7 +22,7 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
         measuredAccuracyMeters: Float?,
         rejectReason: TrackPointRejectReason? = null
     ) {
-        val nowMs = System.currentTimeMillis()
+        val nowMs = rt.deps.clock.wallTimeMs()
         if (shouldSuppressFastLockForAutoMotion(rejectReason = rejectReason, nowMs = nowMs)) {
             return
         }
@@ -117,15 +116,15 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
             if (!rt.state.isTracking || runGeneration != rt.state.trackingGeneration || !rt.state.isFastGpsLockWindowActive) return@launch
             val best = selectBestFastGpsLockSample(
                 desiredAccuracyMeters = accuracyFilterMeters,
-                nowMs = System.currentTimeMillis(),
-                nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                nowMs = rt.deps.clock.wallTimeMs(),
+                nowElapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
             )
             rt.state.fastGpsLockTimeoutCountThisSession++
             rt.collection.transitionGpsState(GpsRuntimeEvent.FAST_LOCK_TIMEOUT, "fast_gps_lock_timeout")
             if (best != null) {
                 val fallbackLocation = Location(best).apply {
-                    time = System.currentTimeMillis()
-                    elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+                    time = rt.deps.clock.wallTimeMs()
+                    elapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos()
                     val sourceProvider = best.provider?.takeIf { it.isNotBlank() } ?: "fused"
                     provider = "fast_lock_timeout:$sourceProvider"
                     extras = (extras ?: Bundle()).apply {
@@ -256,12 +255,12 @@ internal class FastGpsLockSubsystem(private val rt: PositioningRuntime) {
     fun isFreshAccurateLocation(location: Location?, accuracyFilterMeters: Float): Boolean {
         location ?: return false
         if (!location.hasAccuracy() || location.accuracy > accuracyFilterMeters) return false
-        val nowMs = System.currentTimeMillis()
+        val nowMs = rt.deps.clock.wallTimeMs()
         val normalizedTimestampMs = CanonicalTimeNormalizer.normalizeTimestampMs(location.time, nowMs)
         val ageMs = CanonicalTimeNormalizer.ageMs(
             nowMs = nowMs,
             eventMs = normalizedTimestampMs,
-            nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            nowElapsedRealtimeNanos = rt.deps.clock.elapsedRealtimeNanos(),
             eventElapsedRealtimeNanos = location.elapsedRealtimeNanos
         )
         return ageMs in 0..TrackingServiceConstants.FAST_GPS_LOCK_MAX_LAST_LOCATION_AGE_MS

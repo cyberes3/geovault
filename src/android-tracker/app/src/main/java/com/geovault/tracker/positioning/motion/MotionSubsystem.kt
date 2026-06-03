@@ -17,12 +17,16 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         rt.state.autoModeTickJob = rt.serviceScope.launch {
             while (rt.state.isTracking) {
                 delay(5_000L)
-                rt.motion.processAutoTrackingOutput(
-                    output = rt.deps.autoTrackingMotionEngine.onTick(System.currentTimeMillis()),
-                    reason = "periodic_decay_tick"
-                )
+                rt.motion.processAutoModeTick()
             }
         }
+    }
+
+    fun processAutoModeTick(nowMs: Long = rt.deps.clock.wallTimeMs()) {
+        rt.motion.processAutoTrackingOutput(
+            output = rt.deps.autoTrackingMotionEngine.onTick(nowMs),
+            reason = "periodic_decay_tick",
+        )
     }
 
     fun stopAutoModeTick() {
@@ -74,7 +78,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
 
     fun processAutoTrackingOutput(output: AutoTrackingEngineOutput, reason: String) {
         if (output.modeChanged) {
-            rt.state.lastAutoModeChangedAtMs = System.currentTimeMillis()
+            rt.state.lastAutoModeChangedAtMs = rt.deps.clock.wallTimeMs()
             rt.motion.resetElasticDistanceOverride(reason = "auto_mode_changed_$reason", reapplyRequest = false)
             rt.locationRequests.reapplyLocationRequestIfActive("auto_mode_$reason")
             rt.deps.runtimeTelemetry.event(

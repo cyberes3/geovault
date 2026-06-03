@@ -1,7 +1,6 @@
 package com.geovault.tracker.positioning
 
 import android.location.Location
-import android.os.SystemClock
 import com.geovault.tracker.policy.TrackPointEmissionDecision
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointPolicyEngine
@@ -14,6 +13,7 @@ object FallbackTransitionPolicy {
         previousAcceptedLocation: Location?,
         fallbackCandidateLocation: Location,
         nowMs: Long,
+        nowElapsedRealtimeNanos: Long,
     ): Boolean {
         if (previousAcceptedLocation == null) return true
         val trackId = TrackingServiceConstants.FALLBACK_TRANSITION_TRACK_ID
@@ -22,13 +22,13 @@ object FallbackTransitionPolicy {
         TrackPointPolicyEngine.evaluate(
             event = trackPointEventFromLocation(previousAcceptedLocation, trackId),
             nowMs = previousAcceptedLocation.time,
-            nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             config = config,
         )
         val decision = TrackPointPolicyEngine.evaluate(
             event = trackPointEventFromLocation(fallbackCandidateLocation, trackId),
             nowMs = nowMs,
-            nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+            nowElapsedRealtimeNanos = nowElapsedRealtimeNanos,
             config = config,
         )
         return decision.accepted || decision.emissionDecision == TrackPointEmissionDecision.SNAP_INTERNAL

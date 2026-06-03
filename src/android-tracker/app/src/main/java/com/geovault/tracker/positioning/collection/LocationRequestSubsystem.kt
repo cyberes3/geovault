@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 
 internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
     fun applyCurrentLocationRequest(reason: String): Boolean {
+        if (!rt.environment.platformLocationRequestsEnabled) return true
         if (!rt.state.isTracking) return false
         if (
             rt.state.gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION ||
@@ -57,7 +58,7 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
             val started = rt.deps.locationSessionCoordinator.startSession(request = request)
             if (!started) return false
             rt.state.lastAppliedLocationRequestKey = requestKey
-            rt.state.lastLocationRequestAppliedAtMs = System.currentTimeMillis()
+            rt.state.lastLocationRequestAppliedAtMs = rt.deps.clock.wallTimeMs()
             rt.deps.providerHealthController.markRequestApplied(rt.state.lastLocationRequestAppliedAtMs)
             rt.state.locationRequestReapplyRetryJob?.cancel()
             rt.state.locationRequestReapplyRetryJob = null
@@ -74,6 +75,7 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
     }
 
     fun reapplyLocationRequestIfActive(reason: String) {
+        if (!rt.environment.platformLocationRequestsEnabled) return
         if (
             !rt.state.isTracking ||
             rt.state.gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION ||
@@ -82,7 +84,7 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
             return
         }
         if (rt.locationRequests.shouldDebounceLocationRequestReapply(reason)) {
-            val elapsedMs = System.currentTimeMillis() - rt.state.lastLocationRequestAppliedAtMs
+            val elapsedMs = rt.deps.clock.wallTimeMs() - rt.state.lastLocationRequestAppliedAtMs
             rt.deps.runtimeTelemetry.event(
                 "location_request_reapply_suppressed",
                 "reason=$reason elapsedMs=$elapsedMs"
@@ -104,13 +106,14 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
     fun shouldDebounceLocationRequestReapply(reason: String): Boolean {
         return AutoMotionStabilityPolicy.shouldDebounceLocationRequestReapply(
             reason = reason,
-            nowMs = System.currentTimeMillis(),
+            nowMs = rt.deps.clock.wallTimeMs(),
             lastAppliedAtMs = rt.state.lastLocationRequestAppliedAtMs,
             debounceMs = TrackingServiceConstants.AUTO_MOTION_REQUEST_REAPPLY_DEBOUNCE_MS,
         )
     }
 
     fun scheduleLocationRequestReapplyRetry(reason: String) {
+        if (!rt.environment.platformLocationRequestsEnabled) return
         if (!rt.state.isTracking || rt.state.locationRequestReapplyRetryJob?.isActive == true) return
         val runGeneration = rt.state.trackingGeneration
         rt.state.locationRequestReapplyRetryJob = rt.serviceScope.launch {
@@ -122,13 +125,14 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
     }
 
     fun startFixDeliveryWatchdog() {
+        if (!rt.environment.platformLocationRequestsEnabled) return
         if (rt.state.fixDeliveryWatchdogJob?.isActive == true) return
         val runGeneration = rt.state.trackingGeneration
         rt.state.fixDeliveryWatchdogJob = rt.serviceScope.launch {
             while (rt.state.isTracking && runGeneration == rt.state.trackingGeneration) {
                 delay(TrackingServiceConstants.FIX_DELIVERY_WATCHDOG_INTERVAL_MS)
                 if (!rt.state.isTracking || runGeneration != rt.state.trackingGeneration) continue
-                val nowMs = System.currentTimeMillis()
+                val nowMs = rt.deps.clock.wallTimeMs()
                 val runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext(rt.deps.settingsRepository.getSettings())
                 val localRecoveryDue = rt.deps.pointFreshnessTracker.shouldForceLocalRecovery(
                     nowMs = nowMs,
