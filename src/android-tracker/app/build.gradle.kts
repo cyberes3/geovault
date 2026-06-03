@@ -181,3 +181,35 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+val replaySessionId = "traffic_jam_2026_06_02"
+val replayJsonPath =
+    layout.projectDirectory.file("src/test/resources/replay/$replaySessionId.json").asFile.path
+
+tasks.register<Exec>("validateCaptureReplay") {
+    group = "verification"
+    description = "Validate committed capture replay JSON schema and invariants"
+    workingDir = rootProject.projectDir
+    commandLine(
+        "python3",
+        "scripts/extract_capture_replay.py",
+        "validate",
+        "--session",
+        replaySessionId,
+        "--output",
+        replayJsonPath,
+    )
+}
+
+afterEvaluate {
+    val debugUnitTest = tasks.named<Test>("testDebugUnitTest")
+    tasks.register<Test>("testCaptureReplay") {
+        group = "verification"
+        description = "Run capture replay unit tests"
+        testClassesDirs = debugUnitTest.get().testClassesDirs
+        classpath = debugUnitTest.get().classpath
+        filter {
+            includeTestsMatching("com.geovault.tracker.replay.*")
+        }
+    }
+}

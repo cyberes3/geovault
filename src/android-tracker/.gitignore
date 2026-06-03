@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Capture replay: never commit raw extracts or device logs
+**/replay/*_raw.json
+**/replay/*.unshifted.*
+**/*capture*.txt
+**/*capture*.txt.gz
