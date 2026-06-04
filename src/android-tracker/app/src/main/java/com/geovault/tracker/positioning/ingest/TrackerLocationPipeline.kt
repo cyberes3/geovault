@@ -8,7 +8,10 @@ import com.geovault.tracker.location.FreshnessRecoveryInput
 import com.geovault.tracker.location.PositioningRecoveryConfig
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.RepeatedOutlierSuppressor
+import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.services.LocationIngestCoordinator
@@ -159,6 +162,20 @@ class TrackerLocationPipeline(
                     isMockLocation = input.isMockLocation,
                     filterConfig = motionContext.filterConfig,
                 )
+                if (result.pointPersisted) {
+                    // The bypass committed the freshness-anchor point at the old parking
+                    // location. The ingest already seeded the filter there, but the next
+                    // live fix on the highway would appear as an implausible jump from
+                    // that stale anchor. Re-seed the filter at the actual current GPS
+                    // position so the filter evaluates subsequent fixes from where the
+                    // device actually is now.
+                    TrackPointPolicyEngine.seedAccepted(
+                        source = TrackPointSource.LOCAL_GPS,
+                        trackId = input.trackId,
+                        event = buildCurrentPositionSeedEvent(input),
+                        config = motionContext.filterConfig,
+                    )
+                }
             }
         }
 
@@ -189,6 +206,22 @@ class TrackerLocationPipeline(
             effectiveAccuracyThresholdMeters = effectiveAccuracyThresholdMeters,
             nowMs = nowMs,
         ).suppress
+    }
+
+    private fun buildCurrentPositionSeedEvent(input: TrackerLocationPipelineInput): TrackPointEvent {
+        val loc = input.location
+        return TrackPointEvent(
+            source = TrackPointSource.LOCAL_GPS,
+            trackId = input.trackId,
+            lon = loc.longitude,
+            lat = loc.latitude,
+            timestampMs = input.nowMs,
+            accuracyMeters = if (loc.hasAccuracy()) loc.accuracy else null,
+            elapsedRealtimeNanos = loc.elapsedRealtimeNanos.takeIf { it > 0L }
+                ?: input.nowElapsedRealtimeNanos,
+            gpsSpeedMps = if (loc.hasSpeed()) loc.speed else null,
+            gpsBearingDeg = if (loc.hasBearing()) loc.bearing else null,
+        )
     }
 
     private fun ingest(

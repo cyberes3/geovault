@@ -11,6 +11,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
 import com.geovault.tracker.positioning.PointEmissionTrouble
 import com.geovault.tracker.positioning.config.GpsRuntimeEvent
+import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.ingest.FixIngestMode
 import com.geovault.tracker.positioning.ingest.TrackerLocationMotionContext
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipelineInput
@@ -371,6 +372,21 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
                 observedSpeedMps = observedSpeedMps,
                 nowMs = nowMs,
             )
+        }
+        // Exit the stationary region on the first persisted non-snap point after GPS
+        // resumed. Guards:
+        //  - skipAdaptiveTrackingEffects: excludes paused-freshness and bypass paths
+        //  - gpsRuntimeState not paused: handleAcceptedAdaptiveTrackingEffects may have
+        //    just re-paused GPS (user still stationary); don't exit a freshly-entered region
+        //  - not UNCERTAINTY_SUPPRESSED: snap-to-anchor confirms stillness, not movement
+        if (result.pointPersisted &&
+            !skipAdaptiveTrackingEffects &&
+            rt.deps.stationaryFreshnessCoordinator.hasRegion &&
+            rt.state.gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
+            rt.state.gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED &&
+            result.adjustmentReason != TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
+        ) {
+            rt.collection.exitStationaryRegion("confirmed_movement")
         }
         if (result.pointPersisted) {
             GeoVaultCaptureLog.d(

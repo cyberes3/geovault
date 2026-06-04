@@ -4,6 +4,7 @@ import android.location.Location
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.policy.TrackPointRejectReason
+import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.filter.LocationFilterConfig
 import com.geovault.tracker.policy.filter.FilterReason
 import com.geovault.tracker.db.LocationDao
@@ -198,6 +199,195 @@ class TrackerLocationPipelineTest {
         assertEquals(FreshnessRecoveryDecision.Inactive, output.freshnessRecoveryDecision)
         assertFalse(output.motionModeChanged)
         assertEquals(null, output.autoMotionHandling)
+    }
+
+    @Test
+    fun commitAnchor_reSeedsFilterAtCurrentGpsPositionNotAnchor() {
+        // Scenario: user parks (anchor at origin), sig-motion fires, ResumeAnchorGate
+        // is armed, GPS gets a highway fix 50 km away → RESUME_UNCONFIRMED hold.
+        // After 2 probe fixes, CommitAnchor fires and the bypass commits the parking-lot
+        // recovery anchor. Without the re-seed fix, the filter's previousAccepted would
+        // stay at the parking lot with a current timestamp, so the very next highway fix
+        // (~11 m away, 31 seconds later) would imply ~1613 m/s — a JUMP reject.
+        // With the fix, the filter is re-seeded at the current GPS position and the
+        // follow-up fix is accepted.
+        val dao = FakeLocationDao()
+        val coordinator = LocationIngestCoordinator(dao)
+        val freshnessController = FreshnessRecoveryController()
+        val pipeline = TrackerLocationPipeline(
+            locationIngestCoordinator = coordinator,
+            freshnessRecoveryController = freshnessController,
+            repeatedOutlierSuppressor = RepeatedOutlierSuppressor(),
+        )
+        val trackId = "tracker-1"
+        val settings = TrackerSettings(accuracyFilterMeters = 50f)
+        val t0 = 1_700_000_000_000L
+
+        // Commit the pre-pause anchor at position A (parking lot, origin).
+        // Use LocationFilterConfig.Default so that the same config is active for every
+        // subsequent ingest in this test — prevents filterFor from calling applyConfig
+        // and clearing resumeAnchorGate before the highway fix is evaluated.
+        val anchorResult = coordinator.ingest(
+            trackId = trackId,
+            location = Location("gps").apply {
+                latitude = 0.0
+                longitude = 0.0
+                accuracy = 10f
+                time = t0
+                elapsedRealtimeNanos = t0 * 1_000_000L
+            },
+            settings = settings,
+            motionMode = TrackingMotionMode.DRIVING,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = t0,
+            nowElapsedRealtimeNanos = t0 * 1_000_000L,
+            isMockLocation = false,
+            filterConfig = LocationFilterConfig.Default,
+        )
+        assertTrue(anchorResult.accepted)
+
+        // Significant-motion fires → GPS resumes → ResumeAnchorGate armed.
+        // The next fix far from the anchor will be held as RESUME_UNCONFIRMED.
+        TrackPointPolicyEngine.notifyMotionChanged(TrackPointSource.LOCAL_GPS, trackId)
+
+        val recoveryAnchor = RecoveryAnchorState.fromLocation(
+            trackerId = trackId,
+            sessionBoundaryId = 0L,
+            location = anchorResult.lastFilteredLocation!!,
+            radiusMeters = 30f,
+            source = "test",
+            motionMode = TrackingMotionMode.DRIVING,
+        )
+
+        // Highway GPS fix: 50 km north, 1 hour after parking.
+        // ResumeAnchorGate fires (armed + fix > resumeConfirmationMinDistanceMeters=150m,
+        // no large-displacement threshold on Default config) → RESUME_UNCONFIRMED hold.
+        // isPlausibleMove: max(30, 60 * 3600 * 1.25 + 20) = 270020 m > 50000 m → passes.
+        val t1 = t0 + 60 * 60_000L  // 1 hour later
+        val highwayLat = 0.45  // ~50 km north of origin
+        val highwayLon = 0.0
+        val highwayFix = Location("gps").apply {
+            latitude = highwayLat
+            longitude = highwayLon
+            accuracy = 10f
+            speed = 25f
+            time = t1
+            elapsedRealtimeNanos = t1 * 1_000_000L
+        }
+        val recoveryConfig = PositioningRecoveryConfig(
+            maxLocalPointGapMs = 120_000L,
+            recoverySpeedCapMps = 60f,
+        )
+
+        // Pre-advance the freshness controller to the CommitAnchor threshold.
+        // Two manual probe evaluations with RESUME_UNCONFIRMED (a freshnessRecoveryHold)
+        // bring promotableProbeFixes to 1. The pipeline's third internal evaluation
+        // (inside processFix) will push it to CommitAnchor.
+        val probeInput = FreshnessRecoveryInput(
+            localRecoveryDue = true,
+            accepted = false,
+            pointPersisted = false,
+            filterReason = FilterReason.fromWire("resume-unconfirmed"),
+            accuracyMeters = 10f,
+            effectiveAccuracyThresholdMeters = 50f,
+            candidateLocation = highwayFix,
+            anchor = recoveryAnchor,
+            repeatedOutlierSuppressed = false,
+            nowMs = t1,
+            config = recoveryConfig,
+        )
+        val d1 = freshnessController.evaluate(probeInput)
+        assertEquals(FreshnessRecoveryReason.PROBE_STARTED, d1.reason)
+        val d2 = freshnessController.evaluate(probeInput.copy(nowMs = t1 + 1_000L))
+        assertEquals(FreshnessRecoveryReason.PROBE_WAIT, d2.reason)
+
+        // processFix: the live ingest of the highway fix is held by
+        // ResumeAnchorGate (RESUME_UNCONFIRMED) so result.pointPersisted=false.
+        // The freshness controller (now at promotableFixes=1) evaluates to CommitAnchor.
+        val nowMs = t1 + 2_000L
+        val output = pipeline.processFix(
+            input = pipelineInput(
+                trackId = trackId,
+                location = highwayFix,
+                settings = settings,
+                previousAcceptedLocation = anchorResult.lastFilteredLocation,
+                nowMs = nowMs,
+                motionMode = TrackingMotionMode.DRIVING,
+                localRecoveryDue = true,
+                anchor = recoveryAnchor,
+            ).let { base ->
+                base.copy(
+                    recoveryConfig = recoveryConfig,
+                    nowMs = nowMs,
+                    nowElapsedRealtimeNanos = nowMs * 1_000_000L,
+                )
+            },
+            onAutoMotionRejected = { _, _, _ ->
+                AutoMotionRejectHandling.Rejected(
+                    output = AutoTrackingEngineOutput(
+                        state = AutoTrackingMotionState(mode = TrackingMotionMode.DRIVING),
+                        modeChanged = false,
+                    ),
+                    rejectReason = null,
+                    policyReason = null,
+                )
+            },
+            refreshMotionContext = { motionContext(TrackingMotionMode.DRIVING) },
+            buildFreshnessRecoveryLocation = { anchor, _, recoveryNowMs, recoveryNanos ->
+                anchor.toLocation(providerPrefix = "freshness_recovery").apply {
+                    time = recoveryNowMs
+                    elapsedRealtimeNanos = recoveryNanos
+                }
+            },
+        )
+
+        assertEquals(
+            "CommitAnchor must fire on the 3rd probe fix",
+            FreshnessRecoveryDecision.CommitAnchor,
+            output.freshnessRecoveryDecision
+        )
+        assertTrue("CommitAnchor bypass must persist", output.result.pointPersisted)
+
+        // The critical invariant: the filter is now seeded at the HIGHWAY position,
+        // not at the parking-lot anchor. A follow-up fix 11 m north of the highway
+        // fix (31 seconds after the bypass commit) must be accepted without JUMP.
+        // If the filter were still at the parking lot, the implied speed would be
+        // ~50000 / 31 ≈ 1613 m/s — well above the 60 m/s DRIVING cap → JUMP reject.
+        val followUpTime = nowMs + 31_000L
+        val followUp = coordinator.ingest(
+            trackId = trackId,
+            location = Location("gps").apply {
+                latitude = highwayLat + 0.0001  // ~11 m north of highway fix
+                longitude = highwayLon
+                accuracy = 10f
+                speed = 25f
+                time = followUpTime
+                elapsedRealtimeNanos = followUpTime * 1_000_000L
+            },
+            settings = settings,
+            motionMode = TrackingMotionMode.DRIVING,
+            effectiveAccuracyFilterMeters = 50f,
+            previousAcceptedLocation = null,
+            sessionVisibleBoundaryId = 0L,
+            bypassFilters = false,
+            propsJson = null,
+            totalDistanceMeters = 0f,
+            queuedTrackerId = trackId,
+            nowMs = followUpTime,
+            nowElapsedRealtimeNanos = followUpTime * 1_000_000L,
+            isMockLocation = false,
+            filterConfig = LocationFilterConfig.Default,
+        )
+
+        assertTrue(
+            "Follow-up fix at highway must be accepted (filter must be seeded at GPS position, not parking-lot anchor)",
+            followUp.accepted,
+        )
     }
 
     private fun pipelineInput(

@@ -65,7 +65,11 @@ private val GenericMovementCandidateConfig = MovementCandidateConfig(
  * @property resumeConfirmationMaxAccuracyMeters maximum reported accuracy
  *   for fixes that can participate in substantial resume confirmation.
  * @property resumeConfirmationWindowMs candidate lifetime. A late follow-up
- *   starts a new candidate instead of promoting stale evidence.
+ *   starts a new candidate instead of promoting stale evidence. Should exceed
+ *   the profile's typical fix interval so the second fix can arrive in time.
+ * @property resumeConfirmationLargeDisplacementMeters raw anchor-to-fix
+ *   distance above which a single good fix is enough to confirm relocation,
+ *   bypassing the twin-fix consistency check entirely. Set 0 to disable.
  * @property maxFutureSkewMs reject fixes whose normalized event time is
  *   more than this far in the future (clock skew protection).
  * @property freshnessTtlMs reject fixes that are older than this at ingest
@@ -92,6 +96,7 @@ data class LocationFilterConfig(
     val resumeConfirmationConsistencyMeters: Double = 75.0,
     val resumeConfirmationMaxAccuracyMeters: Double = 50.0,
     val resumeConfirmationWindowMs: Long = 20_000L,
+    val resumeConfirmationLargeDisplacementMeters: Double = 0.0,
     val maxFutureSkewMs: Long = 60_000L,
     val freshnessTtlMs: Long = 30_000L,
     val normalizeSecondsTimestamps: Boolean = true,
@@ -131,7 +136,8 @@ data class LocationFilterConfig(
             resumeConfirmationMinDistanceMeters != other.resumeConfirmationMinDistanceMeters ||
             resumeConfirmationConsistencyMeters != other.resumeConfirmationConsistencyMeters ||
             resumeConfirmationMaxAccuracyMeters != other.resumeConfirmationMaxAccuracyMeters ||
-            resumeConfirmationWindowMs != other.resumeConfirmationWindowMs
+            resumeConfirmationWindowMs != other.resumeConfirmationWindowMs ||
+            resumeConfirmationLargeDisplacementMeters != other.resumeConfirmationLargeDisplacementMeters
     }
 
     companion object {
@@ -153,6 +159,8 @@ data class LocationFilterConfig(
             movementCandidate = tuning.movementCandidate,
             speedRecovery = tuning.speedRecovery,
             anchorHealth = tuning.anchorHealth,
+            resumeConfirmationWindowMs = tuning.resumeConfirmationWindowMs,
+            resumeConfirmationLargeDisplacementMeters = tuning.resumeConfirmationLargeDisplacementMeters,
             maxFutureSkewMs = maxFutureSkewMs,
             freshnessTtlMs = freshnessTtlMs,
             normalizeSecondsTimestamps = normalizeSecondsTimestamps,

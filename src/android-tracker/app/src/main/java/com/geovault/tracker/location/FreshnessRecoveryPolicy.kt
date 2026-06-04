@@ -166,7 +166,13 @@ class FreshnessRecoveryController {
             }
             FreshnessRecoveryDecision.Inactive -> reset()
             is FreshnessRecoveryDecision.Blocked -> {
-                // Keep the probe alive for later fixes until the bounded window expires.
+                if (decision.reason == FreshnessRecoveryReason.PROBE_EXPIRED) {
+                    // Probe window elapsed without a promotable commit. Reset so the
+                    // next overdue cycle can start a fresh probe rather than staying
+                    // permanently stuck in the expired state.
+                    reset()
+                }
+                // Otherwise keep the probe alive for later fixes.
             }
         }
         return decision

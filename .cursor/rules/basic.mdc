@@ -10,6 +10,12 @@ THE FIRST STEP IN ANY TASK IS TO READ THIS FILE!!!!
 
 When creating plans in planning mode, do not make a "plan to make a plan". All planning should be done in the planning stage.
 
+NEVER attribute commits to Cursor, the agent, or `cursoragent@cursor.com`. This includes:
+- `Co-authored-by: Cursor <cursoragent@cursor.com>` (or any variant) in commit messages
+- Setting `GIT_AUTHOR_*` / `GIT_COMMITTER_*` to Cursor or `cursoragent@cursor.com`
+
+Commits must use only the repository user's configured git identity. When writing commit messages (including HEREDOC bodies), do not append co-author trailers or other attribution lines for the agent. If a commit message already contains such a line, remove it before committing — do not reintroduce it on amend.
+
 We like titles like `Example Title` in this case instead of `Example title`.
 
 External repos are provided for you in the `external sources/` directory. This folder is read-only. If you need to reference the source code of a library please check here before fetching GitHub.

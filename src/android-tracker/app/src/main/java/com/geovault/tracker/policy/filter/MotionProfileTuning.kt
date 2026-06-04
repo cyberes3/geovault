@@ -17,6 +17,21 @@ data class MotionProfileTuning(
     val movementCandidate: MovementCandidateConfig,
     val speedRecovery: SpeedRecoveryConfig,
     val anchorHealth: AnchorHealthConfig,
+    /**
+     * Candidate lifetime for twin-fix resume confirmation. Must exceed the
+     * profile's typical fix interval so the second fix can arrive before the
+     * candidate expires. Walking ~10 s → 45 s; biking ~15 s → 30 s;
+     * driving ~30 s → 60 s.
+     */
+    val resumeConfirmationWindowMs: Long,
+    /**
+     * Raw anchor-to-fix distance above which a single good fix is sufficient
+     * to confirm relocation, bypassing the twin-fix consistency check. At
+     * highway speeds the two-fix window expires before a second fix arrives
+     * and spatial consistency is impossible between fixes hundreds of metres
+     * apart. Set 0 to disable the fast path.
+     */
+    val resumeConfirmationLargeDisplacementMeters: Double,
 ) {
     companion object {
         val Walking: MotionProfileTuning = MotionProfileTuning(
@@ -47,6 +62,8 @@ data class MotionProfileTuning(
                 disagreementDistanceMeters = 45.0,
                 suspectAccuracyMeters = 30.0,
             ),
+            resumeConfirmationWindowMs = 45_000L,
+            resumeConfirmationLargeDisplacementMeters = 300.0,
         )
 
         val Biking: MotionProfileTuning = MotionProfileTuning(
@@ -90,6 +107,8 @@ data class MotionProfileTuning(
                 disagreementDistanceMeters = 90.0,
                 suspectAccuracyMeters = 40.0,
             ),
+            resumeConfirmationWindowMs = 30_000L,
+            resumeConfirmationLargeDisplacementMeters = 500.0,
         )
 
         val Driving: MotionProfileTuning = MotionProfileTuning(
@@ -111,6 +130,8 @@ data class MotionProfileTuning(
             ),
             speedRecovery = SpeedRecoveryConfig.Disabled,
             anchorHealth = AnchorHealthConfig.Default,
+            resumeConfirmationWindowMs = 60_000L,
+            resumeConfirmationLargeDisplacementMeters = 800.0,
         )
     }
 }

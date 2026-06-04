@@ -1244,6 +1244,78 @@ class LocationFilterTest {
         assertEquals(20_000L, filter.lastAcceptedTimestampMs)
     }
 
+    @Test
+    fun motionChangeReset_largeDisplacementAboveThreshold_confirmsOnSingleFix() {
+        // A single good fix that is clearly far from the pre-pause anchor (highway
+        // driving scenario) should confirm relocation immediately without waiting for
+        // a second spatially-consistent fix.
+        val config = LocationFilterConfig.Default.copy(
+            resumeConfirmationLargeDisplacementMeters = 400.0,
+            resumeConfirmationWindowMs = 60_000L,
+        )
+        val filter = LocationFilter(config)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 0f,
+            )
+        )
+        filter.onMotionChanged()
+
+        // ~530 m east of anchor — above the 400 m fast-confirm threshold.
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.0959,
+                timestampMs = 30L * 60L * 1000L,
+                accuracyMeters = 10f,
+                speedMps = 20f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Commit, result.decision)
+        assertEquals(FilterReason.MOTION_RESUME_CONFIRMED, result.reason)
+    }
+
+    @Test
+    fun motionChangeReset_displacementBelowLargeThreshold_stillRequiresTwinFix() {
+        // A fix between the min-distance and large-displacement thresholds must still
+        // go through the two-fix spatial confirmation path.
+        val config = LocationFilterConfig.Default.copy(
+            resumeConfirmationMinDistanceMeters = 150.0,
+            resumeConfirmationLargeDisplacementMeters = 800.0,
+            resumeConfirmationWindowMs = 60_000L,
+        )
+        val filter = LocationFilter(config)
+        filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.1011,
+                timestampMs = 0L,
+                accuracyMeters = 5f,
+                speedMps = 0f,
+            )
+        )
+        filter.onMotionChanged()
+
+        // ~530 m east — above min-distance but below the 800 m large-displacement threshold.
+        val result = filter.evaluate(
+            LocationInput(
+                latitude = 24.7097,
+                longitude = -81.0959,
+                timestampMs = 30L * 60L * 1000L,
+                accuracyMeters = 10f,
+                speedMps = 15f,
+            )
+        )
+
+        assertEquals(LocationFilterResult.Decision.Hold, result.decision)
+        assertEquals(FilterReason.RESUME_UNCONFIRMED, result.reason)
+    }
+
     /**
      * First-fix bypasses the Kalman smoother: the very first observation
      * is accepted verbatim because [LocationFilter] short-circuits to

@@ -135,6 +135,34 @@ class FreshnessRecoveryPolicyTest {
     }
 
     @Test
+    fun controller_probeExpired_allowsNewProbeOnNextDueCycle() {
+        val controller = FreshnessRecoveryController()
+        val baseMs = 1_000_000L
+        val windowMs = 30_000L
+        val recoveryConfig = PositioningPresets
+            .forMotionMode(TrackingMotionMode.WALKING)
+            .recoveryConfig(maxLocalPointGapMs = 90_000L)
+            .copy(freshnessProbeWindowMs = windowMs)
+
+        fun evalAt(nowMs: Long) = controller.evaluate(
+            input(nowMs = nowMs).copy(config = recoveryConfig)
+        )
+
+        // First fix starts the probe.
+        val start = evalAt(baseMs)
+        assertEquals(FreshnessRecoveryReason.PROBE_STARTED, start.reason)
+
+        // Advance beyond the probe window — probe expires.
+        val expired = evalAt(baseMs + windowMs + 1L)
+        assertEquals(FreshnessRecoveryReason.PROBE_EXPIRED, expired.reason)
+
+        // The controller must have reset so the next overdue cycle starts a fresh probe
+        // rather than staying stuck in the expired state forever.
+        val restarted = evalAt(baseMs + windowMs + 2L)
+        assertEquals(FreshnessRecoveryReason.PROBE_STARTED, restarted.reason)
+    }
+
+    @Test
     fun activeProbe_repeatedOutlierBlocksAnchorCommit() {
         val decision = FreshnessRecoveryPolicy.evaluate(
             input = input(repeatedOutlierSuppressed = true),

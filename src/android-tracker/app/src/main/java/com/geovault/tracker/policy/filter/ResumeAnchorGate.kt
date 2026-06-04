@@ -24,6 +24,16 @@ internal class ResumeAnchorGate {
             clear()
             return Decision.ContinueRegular
         }
+        // A single accurate fix very far from the pre-pause anchor is unambiguous
+        // evidence of relocation. Requiring a twin-fix confirmation is impossible at
+        // highway speeds where the fix interval exceeds the confirmation window and
+        // the inter-fix distance dwarfs the spatial consistency threshold.
+        if (config.resumeConfirmationLargeDisplacementMeters > 0 &&
+            metrics.rawDistanceMeters >= config.resumeConfirmationLargeDisplacementMeters
+        ) {
+            clear()
+            return Decision.Confirmed
+        }
         return when (confirmationGate.evaluate(input, config)) {
             SpatialConfirmationGate.Decision.Hold -> Decision.Hold
             SpatialConfirmationGate.Decision.Confirmed -> {

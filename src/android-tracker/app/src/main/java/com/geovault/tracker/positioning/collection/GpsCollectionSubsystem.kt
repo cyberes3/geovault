@@ -73,7 +73,15 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         if (rt.state.gpsRuntimeState == GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED) {
             rt.deps.stationaryFreshnessCoordinator.onProviderPaused(reason = reason)
         } else {
-            rt.deps.stationaryFreshnessCoordinator.onResumed(reason = "provider_disabled")
+            // GPS was running when the provider died. If there is an active stationary
+            // region (e.g. a false sig-motion had woken GPS before the ping fired),
+            // defer the ping rather than cancel it so it can resume when the provider
+            // comes back. Without an active region the ping is moot anyway.
+            if (rt.deps.stationaryFreshnessCoordinator.hasRegion) {
+                rt.deps.stationaryFreshnessCoordinator.onProviderPaused(reason = reason)
+            } else {
+                rt.deps.stationaryFreshnessCoordinator.onResumed(reason = "provider_disabled")
+            }
         }
         rt.motion.resetElasticDistanceOverride(reason = "gps_provider_disabled", reapplyRequest = false)
         rt.recovery.fastLock.stopFastGpsLockWindow(reason = "gps_provider_disabled")
@@ -219,10 +227,6 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
             rt.recovery.fallback.ensureLowAccuracyFallbackTimerRunning()
             rt.deps.runtimeTelemetry.event("fallback_preserved_on_resume", "reason=$reason")
         }
-        rt.deps.stationaryFreshnessCoordinator.onResumed(reason = reason)
-        rt.state.consecutiveStationaryPoints = 0
-        rt.state.stationaryAnchorLocation = null
-        rt.deps.stationaryFreshnessCoordinator.clearRegion()
         rt.deps.autoTrackingMotionEngine.onGpsResumed(rt.deps.clock.wallTimeMs())
         rt.state.watchdogJob?.cancel()
         rt.state.watchdogJob = null
@@ -242,6 +246,21 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         }
         rt.projection.syncRuntimeStateStore()
         rt.projection.updateNotificationFromDb(broadcastStats = true)
+    }
+
+    /**
+     * Single exit point for the stationary region. Called only when confirmed
+     * movement evidence arrives (first persisted non-snap track point after a
+     * resume), NOT on raw GPS wake signals like significant-motion interrupts.
+     * Keeping this separate from [resumeGps] ensures the ping timer and region
+     * state survive false-alarm wakeups and are only torn down on real motion.
+     */
+    fun exitStationaryRegion(reason: String) {
+        rt.deps.stationaryFreshnessCoordinator.onResumed(reason = reason)
+        rt.state.consecutiveStationaryPoints = 0
+        rt.state.stationaryAnchorLocation = null
+        rt.deps.stationaryFreshnessCoordinator.clearRegion()
+        rt.deps.runtimeTelemetry.event("stationary_region_exited", "reason=$reason")
     }
 
     fun transitionGpsState(event: GpsRuntimeEvent, reason: String) {

@@ -16,7 +16,7 @@ echo "Requesting capture-log export from $PACKAGE_NAME..."
 adb shell am broadcast -a com.geovault.common.EXPORT_CAPTURE_LOG -p "$PACKAGE_NAME" >/dev/null
 
 echo "Bringing app to foreground so Android does not freeze the export worker..."
-adb shell monkey -p "$PACKAGE_NAME" 1 >/dev/null || true
+adb shell am start -n "$PACKAGE_NAME/.MainActivity" >/dev/null 2>&1 || true
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 done_line=""

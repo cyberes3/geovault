@@ -478,10 +478,16 @@ class LocationIngestCoordinatorTest {
 
         var previousAccepted = seed.lastFilteredLocation
         var lastResult: LocationIngestResult? = null
+        // Each fix moves ~111m north from the previous. This keeps all raw displacements
+        // from the pre-pause anchor (10.0) between 222m and 777m — above the
+        // resumeConfirmationMinDistanceMeters (150m) so the gate stays armed, and below
+        // the Driving fast-confirm threshold (800m) so no single-fix bypass fires.
+        // The 111m inter-fix step also exceeds resumeConfirmationConsistencyMeters (75m),
+        // preventing twin-fix confirmation, so every fix returns RESUME_UNCONFIRMED.
         repeat(PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
             val nowMs = anchorTimeMs + 4 * 60_000L + idx * 1_000L
             val candidate = Location("gps").apply {
-                latitude = 10.010 + idx * 0.002
+                latitude = 10.002 + idx * 0.001
                 longitude = 20.0
                 accuracy = 5f
                 time = nowMs

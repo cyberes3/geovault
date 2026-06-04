@@ -152,6 +152,42 @@ class StationaryPingControllerTest {
     }
 
     @Test
+    fun pingTimerSurvivesGpsResumeWithNoResumedCall() = runTest {
+        // Verifies the new region-lifecycle contract: resumeGps() no longer calls
+        // onResumed(). A false significant-motion wakeup must not cancel the ping
+        // timer — only exitStationaryRegion() (which calls onResumed()) may do so.
+        val actions = RecordingActions()
+        val controller = controller(actions)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+
+        // Sig-motion fires: GPS resumes but onResumed is NOT called (the fix).
+        // The timer keeps running.
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS)
+        runCurrent()
+
+        assertEquals(listOf("interval_elapsed"), actions.requests)
+        assertTrue(actions.events.none { it.name == "stationary_ping_cancelled" })
+    }
+
+    @Test
+    fun pingTimerCancelledOnlyWhenOnResumedCalled() = runTest {
+        // exitStationaryRegion() calls onResumed() — this remains the one path
+        // that should cancel the timer. Verify the cancellation semantics still work.
+        val actions = RecordingActions()
+        val controller = controller(actions)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS / 2)
+        controller.onResumed(reason = "confirmed_movement")
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS)
+        runCurrent()
+
+        assertTrue(actions.requests.isEmpty())
+        assertTrue(actions.events.any { it.name == "stationary_ping_cancelled" })
+    }
+
+    @Test
     fun onPausedAfterDueProbe_schedulesNextCycle() = runTest {
         val actions = RecordingActions()
         val controller = controller(actions)

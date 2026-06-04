@@ -37,9 +37,24 @@ internal class PausedFreshnessSubsystem(private val rt: PositioningRuntime) {
         if (rt.state.gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
             rt.state.gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED
         ) {
-            rt.deps.stationaryFreshnessCoordinator.onResumed(reason = "not_paused")
-            rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "stationary_ping_not_paused")
-            rt.deps.runtimeTelemetry.event("stationary_ping_skipped", "reason=$reason state=${rt.state.gpsRuntimeState}")
+            // GPS is already active (e.g. a false significant-motion woke GPS
+            // between the ping being scheduled and it firing). Keep the stationary
+            // region alive and, if fixes are arriving, let the in-flight GPS session
+            // serve as the probe without a separate resumeGps call.
+            if (rt.deps.stationaryFreshnessCoordinator.hasRegion) {
+                rt.deps.runtimeTelemetry.event(
+                    "stationary_ping_probe_direct",
+                    "reason=$reason state=${rt.state.gpsRuntimeState}"
+                )
+                rt.recovery.pausedFreshness.markPausedFreshnessProbeStarted(nowMs = rt.deps.clock.wallTimeMs())
+            } else {
+                // No active region — the ping is stale, nothing to probe.
+                rt.recovery.pausedFreshness.clearPausedFreshnessProbe(reason = "stationary_ping_not_paused")
+                rt.deps.runtimeTelemetry.event(
+                    "stationary_ping_skipped",
+                    "reason=$reason state=${rt.state.gpsRuntimeState}"
+                )
+            }
             return true
         }
         rt.deps.runtimeTelemetry.event(
