@@ -1,7 +1,6 @@
 package com.geovault.places
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import com.geovault.common.ClipboardCopyHelper
 import com.geovault.common.auth.GeoVaultAuthExtras
-import com.geovault.common.intent.GeoVaultExternalIntents
 import com.geovault.common.intent.getSerializableExtraCompat
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -240,15 +238,21 @@ class MainActivity : ComponentActivity() {
                                             editLauncher.launch(i)
                                         },
                                         onNavigatePlace = { feature ->
-                                            val url = PlacesAppServices.from(application).navigationRepository()
-                                                .buildMapsSearchUrl(feature)
-                                            if (url != null) {
-                                                if (launchMapIntent(Uri.parse(url))) {
-                                                    PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                                        feature,
-                                                        GeovaultAuthManager.getServerUrl(this@MainActivity)
-                                                    )
-                                                }
+                                            val navigationRepository = PlacesAppServices.from(application).navigationRepository()
+                                            if (navigationRepository.openInGoogleMaps(
+                                                    context = this@MainActivity,
+                                                    feature = feature,
+                                                    onUnavailable = {
+                                                        viewModel.showExternalError(
+                                                            PlacesOfflineBehaviorPolicy.MAP_APP_UNAVAILABLE_MESSAGE,
+                                                        )
+                                                    },
+                                                )
+                                            ) {
+                                                navigationRepository.trackNavigation(
+                                                    feature,
+                                                    GeovaultAuthManager.getServerUrl(this@MainActivity),
+                                                )
                                             }
                                         },
                                         onViewDescription = { feature ->
@@ -316,15 +320,21 @@ class MainActivity : ComponentActivity() {
                                             selectedTab = PlacesTab.LIST.name
                                         },
                                         onNavigate = { feature ->
-                                            val url = PlacesAppServices.from(application).navigationRepository()
-                                                .buildMapsSearchUrl(feature)
-                                            if (url != null) {
-                                                if (launchMapIntent(Uri.parse(url))) {
-                                                    PlacesAppServices.from(application).navigationRepository().trackNavigation(
-                                                        feature = feature,
-                                                        serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
-                                                    )
-                                                }
+                                            val navigationRepository = PlacesAppServices.from(application).navigationRepository()
+                                            if (navigationRepository.openInGoogleMaps(
+                                                    context = this@MainActivity,
+                                                    feature = feature,
+                                                    onUnavailable = {
+                                                        viewModel.showExternalError(
+                                                            PlacesOfflineBehaviorPolicy.MAP_APP_UNAVAILABLE_MESSAGE,
+                                                        )
+                                                    },
+                                                )
+                                            ) {
+                                                navigationRepository.trackNavigation(
+                                                    feature = feature,
+                                                    serverUrl = GeovaultAuthManager.getServerUrl(this@MainActivity),
+                                                )
                                             }
                                         },
                                         onLaunchArgsConsumed = {
@@ -379,8 +389,4 @@ class MainActivity : ComponentActivity() {
         accountViewModel.onOauthUrlConsumed()
     }
 
-    private fun launchMapIntent(uri: Uri): Boolean =
-        GeoVaultExternalIntents.launchMap(activity = this, uri = uri) {
-            viewModel.showExternalError(PlacesOfflineBehaviorPolicy.MAP_APP_UNAVAILABLE_MESSAGE)
-        }
 }

@@ -838,34 +838,25 @@ export default {
     };
 
     const googleMapsUrl = (place) => {
-      const lat = place.geometry.coordinates[1];
-      const lon = place.geometry.coordinates[0];
-      return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      const lat = Number(place.geometry.coordinates[1]).toFixed(8);
+      const lon = Number(place.geometry.coordinates[0]).toFixed(8);
+      const name = (place.properties.name || '').trim();
+      let q = `${lat},${lon}`;
+      if (name) {
+        const safeName = name.replaceAll('(', ' ').replaceAll(')', ' ');
+        q += `(${safeName})`;
+      }
+      return `https://maps.google.com/?q=${encodeURIComponent(q)}`;
     };
 
     const openInGoogleMaps = (place) => {
-      const lat = place.geometry.coordinates[1];
-      const lon = place.geometry.coordinates[0];
-      const name = encodeURIComponent(place.properties.name || 'Place');
       const url = googleMapsUrl(place);
 
       api.post(`/features/${place.properties.database_id}/navigate/`).catch(() => {
       });
 
       if (isMobile.value) {
-        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-        const isAndroid = /android/i.test(userAgent);
-        const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-
-        if (isAndroid) {
-          // geo: intent for Android (allows user to choose app)
-          window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${name})`;
-        } else if (isIOS) {
-          // maps: scheme for iOS (Apple Maps or system default)
-          window.location.href = `maps://?ll=${lat},${lon}&q=${name}`;
-        } else {
-          window.location.href = url;
-        }
+        window.location.href = url;
       } else {
         window.open(url, '_blank');
       }

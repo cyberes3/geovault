@@ -1,6 +1,7 @@
 package com.geovault.places.data
 
 import android.content.Context
+import com.geovault.common.maps.external.GeoVaultExternalMapLauncher
 import com.geovault.common.settings.GeoVaultPrefsStore
 import com.geovault.common.settings.PrefKey
 import com.geovault.places.domain.NavigationRetryFlusher
@@ -10,9 +11,6 @@ import com.google.gson.reflect.TypeToken
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.util.Locale
 
 class NavigationTrackingRepository(private val context: Context) : NavigationRetryFlusher {
     private val store = GeoVaultPrefsStore(
@@ -29,15 +27,20 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         store.preloadAllDataBlocking()
     }
 
-    fun buildMapsSearchUrl(feature: Feature): String? {
+    fun openInGoogleMaps(
+        context: Context,
+        feature: Feature,
+        onUnavailable: () -> Unit,
+    ): Boolean {
         val coords = feature.geometry.coordinates
-        if (coords.size < 2) return null
-        val lon = coords[0]
-        val lat = coords[1]
-        val latString = String.format(Locale.US, "%.${COORDINATE_PRECISION_DP}f", lat)
-        val lonString = String.format(Locale.US, "%.${COORDINATE_PRECISION_DP}f", lon)
-        val encoded = URLEncoder.encode("$latString,$lonString", StandardCharsets.UTF_8.toString())
-        return "https://www.google.com/maps/search/?api=1&query=$encoded"
+        if (coords.size < 2) return false
+        return GeoVaultExternalMapLauncher.open(
+            context = context,
+            latitude = coords[1],
+            longitude = coords[0],
+            label = feature.properties.name,
+            onUnavailable = onUnavailable,
+        )
     }
 
     fun trackNavigation(feature: Feature, serverUrl: String) {
@@ -108,6 +111,5 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         private const val SCHEMA_VERSION = 1
         private val KEY_PENDING_NAVIGATION_IDS = PrefKey.StringKey("pending_navigation_ids", "[]")
         private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_PENDING_NAVIGATION_IDS)
-        private const val COORDINATE_PRECISION_DP = 8
     }
 }
