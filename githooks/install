@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -e
+
+hooks_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(dirname "$hooks_dir")
+
+git -C "$repo_root" config core.hooksPath "$hooks_dir"
+printf 'Git hooks installed from %s\n' "$hooks_dir"

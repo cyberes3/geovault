@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Strip Co-authored-by trailers (e.g. added automatically by Cursor).
+commit_msg_file=$1
+tmp=$(mktemp) || exit 1
+trap 'rm -f "$tmp"' EXIT
+
+if ! grep -qiE '^[[:space:]]*co-authored-by:' "$commit_msg_file"; then
+	exit 0
+fi
+
+grep -viE '^[[:space:]]*co-authored-by:' "$commit_msg_file" >"$tmp" || true
+# Remove trailing blank lines left after stripping trailers.
+while [ -s "$tmp" ] && [ "$(tail -n 1 "$tmp" | tr -d '[:space:]')" = "" ]; do
+	head -n -1 "$tmp" >"${tmp}.trim" && mv "${tmp}.trim" "$tmp"
+done
+mv "$tmp" "$commit_msg_file"
+trap - EXIT
+
+printf 'WARNING: Removed Co-authored-by trailer(s) from the commit message.\n' >&2
