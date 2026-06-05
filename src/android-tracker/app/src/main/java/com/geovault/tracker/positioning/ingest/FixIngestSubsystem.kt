@@ -104,6 +104,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         // term would carry stale velocity from a prior drive across a
         // long gap and permanently block the stationary counter.
         val activeMotionHint = (observedSpeedMps ?: 0f) > TrackingServiceConstants.MOTION_HINT_FLOOR_MPS
+            || rt.deps.activityHintSource?.currentHint(nowMs) != null
         val pointPropsJson = propsJson
         val pipelineOutput = rt.deps.trackerLocationPipeline.processFix(
             input = TrackerLocationPipelineInput(

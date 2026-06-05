@@ -24,7 +24,7 @@ cd src/android-tracker
 
 Export is triggered via `com.geovault.tracker.EXPORT_POINT_RECORDING_LOG` (see `download-point-recording-log.sh`).
 
-All extractor arguments are required (no defaults). The export must contain `positioning_raw_fix` lines from `FixIngestSubsystem` (written only when `--add-recording` is compiled in).
+All extractor arguments are required (no defaults). The export must contain `positioning_raw_fix` lines from `FixIngestSubsystem` (written only when `--add-recording` is compiled in). If the export also contains `positioning_activity_transition` lines from `ActivityRecognitionHintRecorder`, they are embedded under `activityTransitions` in the fixture and replayed chronologically alongside raw fixes. Sessions with no AAR events produce an empty `activityTransitions: []` list and replay identically to pre-AAR fixtures.
 
 ```bash
 python3 scripts/extract_capture_replay.py write /tmp/MyApp_point-recording_....txt.gz \

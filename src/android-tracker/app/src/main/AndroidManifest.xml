@@ -21,6 +21,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="com.geovault.common.permission.READ_SERVER_URL" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <!-- HTTP is intentionally supported for self-hosted/internal GeoVault servers. -->
     <application
@@ -121,6 +122,10 @@
                 <action android:name="com.geovault.tracker.EXPORT_POINT_RECORDING_LOG" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".aar.ActivityTransitionUpdateReceiver"
+            android:exported="false" />
 
     </application>
 

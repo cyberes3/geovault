@@ -29,4 +29,7 @@ object TrackingServiceConstants {
     const val AUTO_MOTION_CAP_EVIDENCE_STREAK_PRESERVE_WINDOW_MS = 45_000L
     const val AUTO_MOTION_REQUEST_REAPPLY_DEBOUNCE_MS = 10_000L
     const val MOTION_HINT_FLOOR_MPS = 1.0f
+
+    const val AAR_SCRUTINY_WINDOW_MS = 45_000L
+    const val AAR_SCRUTINY_INTERVAL_SEC = 2L
 }

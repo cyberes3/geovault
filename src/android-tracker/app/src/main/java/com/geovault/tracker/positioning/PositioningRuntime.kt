@@ -265,6 +265,8 @@ internal class PositioningRuntime(
         lifecycle.cleanupServiceResources(reason = "on_destroy")
         deps.significantMotionBridge?.cancel()
         deps.significantMotionBridge = null
+        deps.activityHintSource?.stop()
+        deps.activityHintSource = null
         deps.stationaryFreshnessCoordinator.onStopped(reason = "on_destroy")
         serviceJob.cancel()
         TrackingServiceLifecycleGate.markDestroyed()

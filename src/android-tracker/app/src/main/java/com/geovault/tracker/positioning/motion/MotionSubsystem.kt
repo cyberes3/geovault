@@ -13,6 +13,7 @@ import com.geovault.tracker.positioning.config.PositioningElasticityConfig
 import com.geovault.tracker.services.LocationIngestResult
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
+import com.geovault.tracker.tracking.TrackingServiceConstants
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -30,10 +31,59 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
     }
 
     fun processAutoModeTick(nowMs: Long = rt.deps.clock.wallTimeMs()) {
+        processAarScrutinyWindow(nowMs)
         rt.motion.processAutoTrackingOutput(
             output = rt.deps.autoTrackingMotionEngine.onTick(nowMs),
             reason = "periodic_decay_tick",
         )
+    }
+
+    private fun processAarScrutinyWindow(nowMs: Long) {
+        val hint = rt.deps.activityHintSource?.currentHint(nowMs)
+        when {
+            hint != null -> {
+                val newUntilMs = nowMs + TrackingServiceConstants.AAR_SCRUTINY_WINDOW_MS
+                if (newUntilMs > rt.state.aarScrutinyWindowUntilMs) {
+                    val wasAlreadyOpen = rt.state.aarScrutinyWindowUntilMs > nowMs
+                    rt.state.aarScrutinyWindowUntilMs = newUntilMs
+                    when {
+                        rt.state.gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION -> {
+                            val gpsStateBeforeResume = rt.state.gpsRuntimeState
+                            rt.collection.resumeGps("aar_hint")
+                            rt.deps.runtimeTelemetry.event(
+                                "aar_stationary_resumed",
+                                "gpsState=$gpsStateBeforeResume",
+                            )
+                        }
+                        wasAlreadyOpen -> {
+                            rt.deps.runtimeTelemetry.event(
+                                "aar_scrutiny_extended",
+                                "untilMs=$newUntilMs",
+                            )
+                        }
+                        else -> {
+                            val applied = rt.locationRequests.applyCurrentLocationRequest("aar_scrutiny_enter")
+                            if (applied) {
+                                rt.deps.runtimeTelemetry.event(
+                                    "aar_scrutiny_opened",
+                                    "gpsState=${rt.state.gpsRuntimeState} intervalSec=${TrackingServiceConstants.AAR_SCRUTINY_INTERVAL_SEC}",
+                                )
+                            } else {
+                                rt.deps.runtimeTelemetry.event(
+                                    "aar_scrutiny_open_deferred",
+                                    "gpsState=${rt.state.gpsRuntimeState}",
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            rt.state.aarScrutinyWindowUntilMs > 0L && nowMs >= rt.state.aarScrutinyWindowUntilMs -> {
+                rt.state.aarScrutinyWindowUntilMs = 0L
+                rt.deps.runtimeTelemetry.event("aar_scrutiny_expired", "")
+                rt.locationRequests.reapplyLocationRequestIfActive("aar_scrutiny_exit")
+            }
+        }
     }
 
     fun stopAutoModeTick() {

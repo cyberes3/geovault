@@ -29,17 +29,23 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
         }
         if (!TrackingPermissionGate.hasLocationPermission(rt.ports.service)) return false
         val runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext()
-        val intervalSec = runtimeContext.locationIntervalSec
+        val nowMs = rt.deps.clock.wallTimeMs()
+        val aarScrutinyActive = rt.state.aarScrutinyWindowUntilMs > nowMs
         val distanceFilter = runtimeContext.distanceFilterMeters
+        val effectiveIntervalSec = when {
+            rt.state.isFastGpsLockWindowActive -> runtimeContext.locationIntervalSec
+            aarScrutinyActive -> TrackingServiceConstants.AAR_SCRUTINY_INTERVAL_SEC
+            else -> runtimeContext.locationIntervalSec
+        }
         val requestKey = LocationRequestKey(
-            intervalSec = intervalSec,
+            intervalSec = effectiveIntervalSec,
             distanceFilterMeters = distanceFilter,
             fastLock = rt.state.isFastGpsLockWindowActive,
         )
         if (rt.state.lastAppliedLocationRequestKey == requestKey) {
             rt.deps.runtimeTelemetry.decision(
                 name = "location_request_unchanged",
-                details = "reason=$reason intervalSec=$intervalSec distance=$distanceFilter fastLock=${rt.state.isFastGpsLockWindowActive}"
+                details = "reason=$reason intervalSec=$effectiveIntervalSec distance=$distanceFilter fastLock=${rt.state.isFastGpsLockWindowActive} aarScrutiny=$aarScrutinyActive"
             )
             rt.locationRequests.startFixDeliveryWatchdog()
             return true
@@ -49,8 +55,8 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
         } else {
             TrackingLocationRequestPolicy.buildNormalRequest(
                 TrackingLocationRequestInput(
-                    intervalSec = intervalSec,
-                    distanceFilterMeters = distanceFilter
+                    intervalSec = effectiveIntervalSec,
+                    distanceFilterMeters = distanceFilter,
                 )
             )
         }
@@ -64,7 +70,7 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
             rt.state.locationRequestReapplyRetryJob = null
             rt.deps.runtimeTelemetry.decision(
                 name = "location_request_applied",
-                details = "reason=$reason intervalSec=$intervalSec distance=$distanceFilter fastLock=${rt.state.isFastGpsLockWindowActive}"
+                details = "reason=$reason intervalSec=$effectiveIntervalSec distance=$distanceFilter fastLock=${rt.state.isFastGpsLockWindowActive} aarScrutiny=$aarScrutinyActive"
             )
             rt.locationRequests.startFixDeliveryWatchdog()
             true

@@ -97,6 +97,18 @@ MODE_CHANGED_RE = re.compile(
     r"path=(?P<path>\S+)"
 )
 
+ACTIVITY_TRANSITION_RE = re.compile(
+    r"positioning_activity_transition\s+"
+    r"track=(?P<track>\S*)\s+"
+    r"wall=(?P<wall>\d+)\s+"
+    r"elapsedNanos=(?P<elapsedNanos>\d+)\s+"
+    r"time=(?P<time>\d+)\s+"
+    r"activity=(?P<activity>\S+)\s+"
+    r"transition=(?P<transition>\S+)\s+"
+    r"trackingGeneration=(?P<trackingGeneration>-?\d+)\s+"
+    r"hintActive=(?P<hintActive>true|false)"
+)
+
 
 @dataclass
 class RawFix:
@@ -153,10 +165,23 @@ class Milestone:
 
 
 @dataclass
+class ActivityTransition:
+    track_id: str
+    wall_ms: int
+    elapsed_realtime_nanos: int
+    event_time_ms: int
+    activity: str
+    transition: str
+    tracking_generation: int
+    hint_active: bool
+
+
+@dataclass
 class CaptureEvents:
     raw_fixes: list[RawFix]
     decision_traces: list[DecisionTrace]
     milestones: list[Milestone]
+    activity_transitions: list[ActivityTransition]
 
 
 class CaptureLogReader:
@@ -185,6 +210,7 @@ class CaptureEventParser:
         raw_fixes: list[RawFix] = []
         decision_traces: list[DecisionTrace] = []
         milestones: list[Milestone] = []
+        activity_transitions: list[ActivityTransition] = []
         reader = CaptureLogReader()
         for wall_ms, line in reader.iter_window(log_path, start_ms, end_ms):
             raw_match = RAW_FIX_RE.search(line)
@@ -233,7 +259,19 @@ class CaptureEventParser:
                         path=mode_match.group("path"),
                     )
                 )
-        return CaptureEvents(raw_fixes=raw_fixes, decision_traces=decision_traces, milestones=milestones)
+                continue
+
+            transition_match = ACTIVITY_TRANSITION_RE.search(line)
+            if transition_match:
+                parsed = self._activity_transition(transition_match)
+                if track_id is None or parsed.track_id == track_id:
+                    activity_transitions.append(parsed)
+        return CaptureEvents(
+            raw_fixes=raw_fixes,
+            decision_traces=decision_traces,
+            milestones=milestones,
+            activity_transitions=activity_transitions,
+        )
 
     def _raw_fix(self, match: re.Match[str]) -> RawFix:
         return RawFix(
@@ -254,6 +292,18 @@ class CaptureEventParser:
             bypass_filters=parse_bool(match.group("bypassFilters")),
             skip_adaptive_tracking_effects=parse_bool(match.group("skipAdaptiveTrackingEffects")),
             props_kind=match.group("propsKind"),
+        )
+
+    def _activity_transition(self, match: re.Match[str]) -> ActivityTransition:
+        return ActivityTransition(
+            track_id=match.group("track"),
+            wall_ms=int(match.group("wall")),
+            elapsed_realtime_nanos=int(match.group("elapsedNanos")),
+            event_time_ms=int(match.group("time")),
+            activity=match.group("activity"),
+            transition=match.group("transition"),
+            tracking_generation=int(match.group("trackingGeneration")),
+            hint_active=parse_bool(match.group("hintActive")),
         )
 
     def _decision_trace(self, match: re.Match[str]) -> DecisionTrace:
@@ -322,6 +372,11 @@ class ReplaySessionBuilder:
         expected_events.extend(self._milestone_json(milestone, wall_base_ms) for milestone in events.milestones)
         expected_events.sort(key=lambda item: item["wallOffsetMs"])
 
+        activity_transitions = [
+            self._activity_transition_json(t, wall_base_ms, elapsed_base_nanos)
+            for t in events.activity_transitions
+        ]
+
         return {
             "schemaVersion": SCHEMA_VERSION,
             "sessionId": session_id,
@@ -334,6 +389,7 @@ class ReplaySessionBuilder:
                 "sessionBoundaryId": 0,
             },
             "rawFixes": shifted_fixes,
+            "activityTransitions": activity_transitions,
             "expectedEvents": expected_events,
             "assertions": self._assertions(events),
             "source": {
@@ -413,6 +469,21 @@ class ReplaySessionBuilder:
             "accuracyMeters": milestone.accuracy_meters,
             "elapsedSeconds": milestone.elapsed_seconds,
             "path": milestone.path,
+        }
+
+    def _activity_transition_json(
+        self,
+        transition: ActivityTransition,
+        wall_base_ms: int,
+        elapsed_base_nanos: int,
+    ) -> dict[str, Any]:
+        return {
+            "wallOffsetMs": transition.wall_ms - wall_base_ms,
+            "elapsedRealtimeOffsetNanos": transition.elapsed_realtime_nanos - elapsed_base_nanos,
+            "eventTimeMs": transition.event_time_ms,
+            "activity": transition.activity,
+            "transitionType": transition.transition,
+            "hintActive": transition.hint_active,
         }
 
     def _initial_mode(self, milestones: list[Milestone]) -> str:

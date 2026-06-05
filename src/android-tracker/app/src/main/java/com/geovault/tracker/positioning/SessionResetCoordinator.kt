@@ -38,5 +38,6 @@ internal class SessionResetCoordinator(private val rt: PositioningRuntime) {
         rt.motion.stopAutoModeTick()
         rt.recovery.fastLock.stopFastGpsLockWindow(reason = "tracking_stopped")
         rt.motion.resetElasticDistanceOverride(reason = "tracking_stopped", reapplyRequest = false)
+        rt.deps.activityHintSource?.stop()
     }
 }

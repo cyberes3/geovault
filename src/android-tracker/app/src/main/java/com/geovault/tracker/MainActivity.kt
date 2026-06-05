@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainScreenViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
     private val accountViewModel: TrackerAccountViewModel by viewModels()
+
     private var streamingErrorReceiverRegistered = false
     private var trackingErrorReceiverRegistered = false
     private val trackingErrorReceiver = object : BroadcastReceiver() {
