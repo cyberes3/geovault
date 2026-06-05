@@ -14,7 +14,9 @@ import com.google.android.gms.location.ActivityTransitionResult
 class ActivityTransitionUpdateReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (!ActivityTransitionResult.hasResult(intent)) {
+        val hasResult = ActivityTransitionResult.hasResult(intent)
+        GeoVaultCaptureLog.d(TAG, "aar_receiver_invoked hasResult=$hasResult")
+        if (!hasResult) {
             GeoVaultCaptureLog.w(TAG, "ActivityTransitionUpdateReceiver: intent has no result, ignoring")
             return
         }

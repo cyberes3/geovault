@@ -96,20 +96,115 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
-    fun demotion_isSingleSample() {
-        // We want to drop to lower-power tracking quickly when motion
-        // stops. Demotion is single-sample below the lower bound.
+    fun demotion_singleLowSample_doesNotDemoteBikingToWalking() {
+        // A single sample below the lower bound is not enough to demote;
+        // the demotion streak guard requires two consecutive samples.
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)
-        // Force-promote to BIKING via two high-speed accepted samples.
         engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 1_000L)
         engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 2_000L)
         assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+        // Decay EMA to near-zero so the next accepted fix drives the
+        // decision speed below BIKING_TO_WALKING_LOWER_MPS (1.2 m/s).
+        engine.onTick(nowMs = 300_000L)
 
-        // A single low sample drives the smoothed speed below the 1.2
-        // lower bound and demotes.
-        repeat(20) { engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = (it + 3) * 1_000L) }
-        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+        val out = engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_001L)
+        assertEquals(TrackingMotionMode.BIKING, out.state.mode)
+        assertFalse(out.modeChanged)
+        assertEquals(1, out.state.consecutiveBelowLower)
+    }
+
+    @Test
+    fun demotion_requiresTwoConsecutiveSamples_bikingToWalking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+        engine.onTick(nowMs = 300_000L)
+
+        // First below-lower: streak=1, still BIKING.
+        engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_001L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // Second consecutive below-lower: streak=2, demotes.
+        val out = engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_002L)
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+        assertTrue(out.modeChanged)
+    }
+
+    @Test
+    fun demotion_singleLowSample_doesNotDemoteDrivingToBiking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        engine.onTick(nowMs = 300_000L)
+
+        val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_001L)
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+        assertFalse(out.modeChanged)
+        assertEquals(1, out.state.consecutiveBelowLower)
+    }
+
+    @Test
+    fun demotion_requiresTwoConsecutiveSamples_drivingToBiking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        engine.onTick(nowMs = 300_000L)
+
+        // First below-lower: streak=1, still DRIVING.
+        engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_001L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        // Second consecutive below-lower: streak=2, demotes.
+        val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_002L)
+        assertEquals(TrackingMotionMode.BIKING, out.state.mode)
+        assertTrue(out.modeChanged)
+    }
+
+    @Test
+    fun demotion_streakInterruptedByNeutralSpeed_resetsCounter() {
+        // A sample in the neutral band resets the below-lower streak;
+        // the subsequent single low sample must not demote.
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        engine.onTick(nowMs = 300_000L)
+
+        engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_001L)   // streak=1
+        assertEquals(1, engine.snapshot().consecutiveBelowLower)
+
+        // Neutral speed (between 5.5 and 9.0 for DRIVING) resets streak.
+        engine.onAcceptedFix(speedMps = 7.0f, eventTimeMs = 300_002L)
+        assertEquals(0, engine.snapshot().consecutiveBelowLower)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_003L)  // streak=1 again
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+    }
+
+    @Test
+    fun demotion_streakInterruptedByRejectedFix_resetsCounter() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        engine.onTick(nowMs = 300_000L)
+
+        engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_001L)  // streak=1
+        engine.onRejectedFix(eventTimeMs = 300_002L)                    // clears streak
+        assertEquals(0, engine.snapshot().consecutiveBelowLower)
+
+        val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_003L)  // streak=1
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
     }
 
     @Test

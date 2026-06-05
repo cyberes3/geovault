@@ -5,11 +5,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.sensor.ActivityHint
 import com.geovault.tracker.sensor.ActivityHintSource
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionEvent
@@ -34,6 +38,10 @@ internal class ActivityRecognitionHintBridge(
     private var pendingIntent: PendingIntent? = null
     private var recorder: ActivityRecognitionHintRecorder? = null
 
+    private val handler = Handler(Looper.getMainLooper())
+    private var registrationTimeoutJob: Runnable? = null
+    private var registrationAttempt = 0
+
     @Volatile
     private var activeTrackingGeneration: Int = -1
 
@@ -48,11 +56,13 @@ internal class ActivityRecognitionHintBridge(
         activeTrackingGeneration = trackingGeneration
         recorder = ActivityRecognitionHintRecorder(trackId, trackingGeneration)
         instance = this
+        registrationAttempt = 0
         registerTransitionUpdates(context)
         GeoVaultCaptureLog.d(TAG, "aar_bridge_start trackId=$trackId generation=$trackingGeneration")
     }
 
     override fun stop() {
+        cancelRegistrationTimeout()
         val pi = pendingIntent
         if (pi != null) {
             runCatching {
@@ -67,6 +77,7 @@ internal class ActivityRecognitionHintBridge(
         pendingIntent = null
         recorder = null
         store.clear()
+        registrationAttempt = 0
         activeTrackingGeneration = -1
         if (instance === this) instance = null
         GeoVaultCaptureLog.d(TAG, "aar_bridge_stop")
@@ -106,6 +117,17 @@ internal class ActivityRecognitionHintBridge(
     }
 
     private fun registerTransitionUpdates(context: Context) {
+        val gmsStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
+        val gmsAvailable = gmsStatus == ConnectionResult.SUCCESS
+        val transitionCount = buildTransitions().size
+        GeoVaultCaptureLog.d(TAG, "aar_requesting transitions=$transitionCount gmsAvailable=$gmsAvailable attempt=$registrationAttempt")
+
+        if (!gmsAvailable) {
+            GeoVaultCaptureLog.e(TAG, "aar_registration_failed reason=gms_unavailable gmsStatus=$gmsStatus")
+            deactivate()
+            return
+        }
+
         val intent = Intent(context, ActivityTransitionUpdateReceiver::class.java).apply {
             action = ACTION_TRANSITION_UPDATE
         }
@@ -117,23 +139,68 @@ internal class ActivityRecognitionHintBridge(
         )
         pendingIntent = pi
 
+        scheduleRegistrationTimeout()
+
         val request = ActivityTransitionRequest(buildTransitions())
         runCatching {
             ActivityRecognition.getClient(context)
                 .requestActivityTransitionUpdates(request, pi)
                 .addOnSuccessListener {
+                    cancelRegistrationTimeout()
+                    registrationAttempt = 0
                     GeoVaultCaptureLog.d(TAG, "aar_registered transitions=${buildTransitions().size}")
                 }
                 .addOnFailureListener { e ->
+                    cancelRegistrationTimeout()
                     GeoVaultCaptureLog.e(TAG, "aar_registration_failed reason=${e.message}")
-                    if (instance === this@ActivityRecognitionHintBridge) instance = null
-                    activeTrackingGeneration = -1
+                    deactivate()
+                }
+                .addOnCompleteListener { task ->
+                    GeoVaultCaptureLog.d(
+                        TAG,
+                        "aar_registration_complete isSuccess=${task.isSuccessful} isCancelled=${task.isCanceled} exception=${task.exception?.message}",
+                    )
                 }
         }.onFailure { e ->
+            cancelRegistrationTimeout()
             GeoVaultCaptureLog.e(TAG, "aar_registration_failed reason=${e.message}")
-            if (instance === this) instance = null
-            activeTrackingGeneration = -1
+            deactivate()
         }
+        GeoVaultCaptureLog.d(TAG, "aar_registration_dispatched attempt=$registrationAttempt")
+    }
+
+    private fun scheduleRegistrationTimeout() {
+        cancelRegistrationTimeout()
+        val attempt = registrationAttempt
+        val job = Runnable {
+            registrationTimeoutJob = null
+            if (attempt < AAR_MAX_RETRIES) {
+                registrationAttempt = attempt + 1
+                GeoVaultCaptureLog.w(
+                    TAG,
+                    "aar_registration_retry attempt=$registrationAttempt no_callback_after=${AAR_REGISTRATION_TIMEOUT_MS}ms",
+                )
+                registerTransitionUpdates(context)
+            } else {
+                GeoVaultCaptureLog.e(
+                    TAG,
+                    "aar_registration_failed_permanent attempts=${attempt + 1} no_callback_after=${AAR_REGISTRATION_TIMEOUT_MS}ms",
+                )
+                deactivate()
+            }
+        }
+        registrationTimeoutJob = job
+        handler.postDelayed(job, AAR_REGISTRATION_TIMEOUT_MS)
+    }
+
+    private fun cancelRegistrationTimeout() {
+        registrationTimeoutJob?.let { handler.removeCallbacks(it) }
+        registrationTimeoutJob = null
+    }
+
+    private fun deactivate() {
+        if (instance === this) instance = null
+        activeTrackingGeneration = -1
     }
 
     private fun buildTransitions(): List<ActivityTransition> {
@@ -167,6 +234,8 @@ internal class ActivityRecognitionHintBridge(
         private const val TAG = "GeoVaultAAR"
         private const val ACTION_TRANSITION_UPDATE = "com.geovault.tracker.AAR_TRANSITION_UPDATE"
         private const val REQUEST_CODE = 0x4141_5200
+        private const val AAR_REGISTRATION_TIMEOUT_MS = 30_000L
+        private const val AAR_MAX_RETRIES = 3
 
         private fun hasActivityRecognitionPermission(context: Context): Boolean =
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==

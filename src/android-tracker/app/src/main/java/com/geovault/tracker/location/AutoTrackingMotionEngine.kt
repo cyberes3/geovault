@@ -4,12 +4,21 @@ import com.geovault.tracker.services.TrackingMotionMode
 import kotlin.math.exp
 import kotlin.math.max
 
+/**
+ * [consecutiveAboveUpper] counts consecutive accepted samples strictly above the upper
+ * threshold for the current mode (promotion evidence).
+ *
+ * [consecutiveBelowLower] counts consecutive accepted samples strictly below the lower
+ * threshold for the current mode (demotion evidence). Both counters reset on any
+ * rejected fix, on a mode change, and on [onTick] decay.
+ */
 data class AutoTrackingMotionState(
     val mode: TrackingMotionMode = TrackingMotionMode.WALKING,
     val smoothedSpeedMps: Float = 0f,
     val lastEvidenceAtMs: Long = 0L,
     val isGpsPaused: Boolean = false,
     val consecutiveAboveUpper: Int = 0,
+    val consecutiveBelowLower: Int = 0,
     val lastObservedSpeedMps: Float = 0f,
 )
 
@@ -48,10 +57,10 @@ enum class AutoTrackingMotionEvidenceConfidence {
  *
  * Promotion (WALKING -> BIKING -> DRIVING) requires
  * [PROMOTE_CONSECUTIVE_REQUIRED] consecutive accepted samples above the
- * upper threshold. A single high sample is held in a counter and decays
- * naturally if the next sample is below the upper threshold. Demotion
- * is single-sample so we drop back to lower-power tracking quickly when
- * motion stops.
+ * upper threshold. Demotion (DRIVING -> BIKING -> WALKING) is symmetric:
+ * it requires [DEMOTE_CONSECUTIVE_REQUIRED] consecutive accepted samples
+ * below the lower threshold before the mode drops. A single noisy sample
+ * is absorbed without flipping the mode in either direction.
  */
 class AutoTrackingMotionEngine(
     private val speedSmoothingAlpha: Float = 0.30f,
@@ -64,6 +73,7 @@ class AutoTrackingMotionEngine(
         private const val BIKING_TO_DRIVING_UPPER_MPS = 9.0f
         private const val DRIVING_TO_BIKING_LOWER_MPS = 5.5f
         private const val PROMOTE_CONSECUTIVE_REQUIRED = 2
+        private const val DEMOTE_CONSECUTIVE_REQUIRED = 2
         // Skip the WALKING->BIKING->DRIVING ladder when the *observed*
         // speed clearly exceeds the BIKING upper. The threshold is
         // intentionally well above the per-sample upper so a phantom
@@ -85,6 +95,7 @@ class AutoTrackingMotionEngine(
             lastEvidenceAtMs = nowMs,
             isGpsPaused = false,
             consecutiveAboveUpper = 0,
+            consecutiveBelowLower = 0,
             lastObservedSpeedMps = 0f,
         )
         val changed = state.mode != next.mode
@@ -151,6 +162,7 @@ class AutoTrackingMotionEngine(
         state = state.copy(
             lastEvidenceAtMs = eventTimeMs,
             consecutiveAboveUpper = 0,
+            consecutiveBelowLower = 0,
             lastObservedSpeedMps = 0f,
         )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
@@ -188,6 +200,7 @@ class AutoTrackingMotionEngine(
         state = state.copy(
             smoothedSpeedMps = decayedSpeed,
             consecutiveAboveUpper = if (preservePromotionStreak) state.consecutiveAboveUpper else 0,
+            consecutiveBelowLower = 0,
             lastObservedSpeedMps = 0f,
         )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
@@ -202,11 +215,13 @@ class AutoTrackingMotionEngine(
             current = nextState.mode,
             speedMps = decisionSpeedMps,
             consecutiveAboveUpper = nextState.consecutiveAboveUpper,
+            consecutiveBelowLower = nextState.consecutiveBelowLower,
             drivingEvidence = drivingEvidence,
         )
         val resolved = nextState.copy(
             mode = decision.mode,
-            consecutiveAboveUpper = decision.streak,
+            consecutiveAboveUpper = decision.aboveStreak,
+            consecutiveBelowLower = decision.belowStreak,
         )
         val changed = state.mode != resolved.mode
         state = resolved
@@ -220,21 +235,29 @@ class AutoTrackingMotionEngine(
 
     private data class ModeDecision(
         val mode: TrackingMotionMode,
-        val streak: Int,
+        val aboveStreak: Int,
+        val belowStreak: Int,
         val path: TransitionPath,
     )
 
     /**
-     * Returns the next mode and updated streak counter.
+     * Returns the next mode and updated streak counters.
      *
      * Promotion requires [PROMOTE_CONSECUTIVE_REQUIRED] consecutive
-     * samples strictly above the upper threshold. A single noisy sample
-     * is absorbed without flipping the mode. Demotion is single-sample.
+     * samples strictly above the upper threshold. Demotion requires
+     * [DEMOTE_CONSECUTIVE_REQUIRED] consecutive samples strictly below
+     * the lower threshold. Both use the same count so single noisy
+     * samples in either direction are absorbed without flipping the mode.
+     *
+     * [consecutiveAboveUpper] tracks the upward (promotion) streak.
+     * [consecutiveBelowLower] tracks the downward (demotion) streak.
+     * Both reset when a sample falls in the neutral band or on a mode change.
      */
     private fun selectMode(
         current: TrackingMotionMode,
         speedMps: Float,
         consecutiveAboveUpper: Int,
+        consecutiveBelowLower: Int,
         drivingEvidence: Boolean,
     ): ModeDecision {
         return when (current) {
@@ -253,37 +276,48 @@ class AutoTrackingMotionEngine(
                             TrackingMotionMode.BIKING
                         }
                         val path = if (skip) TransitionPath.SKIP_TO_DRIVING else TransitionPath.LADDER
-                        ModeDecision(target, 0, path)
+                        ModeDecision(target, 0, 0, path)
                     } else {
-                        ModeDecision(TrackingMotionMode.WALKING, streak, TransitionPath.NONE)
+                        ModeDecision(TrackingMotionMode.WALKING, streak, 0, TransitionPath.NONE)
                     }
                 } else {
-                    ModeDecision(TrackingMotionMode.WALKING, 0, TransitionPath.NONE)
+                    ModeDecision(TrackingMotionMode.WALKING, 0, 0, TransitionPath.NONE)
                 }
             }
             TrackingMotionMode.BIKING -> {
                 when {
                     speedMps > BIKING_TO_DRIVING_UPPER_MPS -> {
                         if (drivingEvidence) {
-                            return ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.SKIP_TO_DRIVING)
+                            return ModeDecision(TrackingMotionMode.DRIVING, 0, 0, TransitionPath.SKIP_TO_DRIVING)
                         }
                         val streak = consecutiveAboveUpper + 1
                         if (streak >= PROMOTE_CONSECUTIVE_REQUIRED) {
-                            ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.LADDER)
+                            ModeDecision(TrackingMotionMode.DRIVING, 0, 0, TransitionPath.LADDER)
                         } else {
-                            ModeDecision(TrackingMotionMode.BIKING, streak, TransitionPath.NONE)
+                            ModeDecision(TrackingMotionMode.BIKING, streak, 0, TransitionPath.NONE)
                         }
                     }
-                    speedMps < BIKING_TO_WALKING_LOWER_MPS ->
-                        ModeDecision(TrackingMotionMode.WALKING, 0, TransitionPath.LADDER)
-                    else -> ModeDecision(TrackingMotionMode.BIKING, 0, TransitionPath.NONE)
+                    speedMps < BIKING_TO_WALKING_LOWER_MPS -> {
+                        val streak = consecutiveBelowLower + 1
+                        if (streak >= DEMOTE_CONSECUTIVE_REQUIRED) {
+                            ModeDecision(TrackingMotionMode.WALKING, 0, 0, TransitionPath.LADDER)
+                        } else {
+                            ModeDecision(TrackingMotionMode.BIKING, 0, streak, TransitionPath.NONE)
+                        }
+                    }
+                    else -> ModeDecision(TrackingMotionMode.BIKING, 0, 0, TransitionPath.NONE)
                 }
             }
             TrackingMotionMode.DRIVING -> {
                 if (speedMps < DRIVING_TO_BIKING_LOWER_MPS) {
-                    ModeDecision(TrackingMotionMode.BIKING, 0, TransitionPath.LADDER)
+                    val streak = consecutiveBelowLower + 1
+                    if (streak >= DEMOTE_CONSECUTIVE_REQUIRED) {
+                        ModeDecision(TrackingMotionMode.BIKING, 0, 0, TransitionPath.LADDER)
+                    } else {
+                        ModeDecision(TrackingMotionMode.DRIVING, 0, streak, TransitionPath.NONE)
+                    }
                 } else {
-                    ModeDecision(TrackingMotionMode.DRIVING, 0, TransitionPath.NONE)
+                    ModeDecision(TrackingMotionMode.DRIVING, 0, 0, TransitionPath.NONE)
                 }
             }
         }
