@@ -1,5 +1,6 @@
 package com.geovault.common.auth
 
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -86,6 +87,26 @@ class CommonInitialAuthControllerTest {
     }
 
     @Test
+    fun `prepareOAuthConnection uses timeout message for SocketTimeoutException`() {
+        val serverConfig = FakeServerConfigService(
+            normalizedUrl = "http://example.test",
+            canonicalResult = Result.failure(SocketTimeoutException("timeout")),
+        )
+        val controller = newController(
+            serverConfig = serverConfig,
+            connectTimeoutMessage = "Timed out.",
+        )
+
+        val result = runSuspend { controller.prepareOAuthConnection("http://example.test") }
+
+        assertTrue(result is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer)
+        assertEquals(
+            "Timed out.",
+            (result as CommonInitialAuthController.OAuthPreparationResult.UnreachableServer).message,
+        )
+    }
+
+    @Test
     fun `configured server wins over peer fallback`() {
         val serverConfig = FakeServerConfigService(normalizedUrl = "https://kept.example").also {
             it.savedUrl = "https://configured.example"
@@ -103,12 +124,14 @@ class CommonInitialAuthControllerTest {
         authSession: FakeAuthSessionService = FakeAuthSessionService(),
         oauth: FakeOAuthPreparationService = FakeOAuthPreparationService(),
         peers: () -> Set<String> = { emptySet() },
+        connectTimeoutMessage: String = "Connection timed out. Check the server URL and try again.",
     ): CommonInitialAuthController {
         return CommonInitialAuthController(
             serverConfigService = serverConfig,
             authSessionService = authSession,
             oauthPreparationService = oauth,
             peerServerUrlsProvider = peers,
+            connectTimeoutMessage = connectTimeoutMessage,
         )
     }
 

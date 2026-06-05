@@ -14,7 +14,7 @@ NEVER attribute commits to Cursor, the agent, or `cursoragent@cursor.com`. This 
 - `Co-authored-by: Cursor <cursoragent@cursor.com>` (or any variant) in commit messages
 - Setting `GIT_AUTHOR_*` / `GIT_COMMITTER_*` to Cursor or `cursoragent@cursor.com`
 
-Commits must use only the repository user's configured git identity. When writing commit messages (including HEREDOC bodies), do not append co-author trailers or other attribution lines for the agent. If a commit message already contains such a line, remove it before committing — do not reintroduce it on amend.
+DO NOT add Cursor as a co-Author when committing!!
 
 We like titles like `Example Title` in this case instead of `Example title`.
 

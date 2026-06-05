@@ -11,11 +11,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.geovault.common.R
+import com.geovault.common.auth.GeoVaultAuthConnectErrors
 import com.geovault.common.ui.modifier.dismissKeyboardOnOutsideTap
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
 import androidx.compose.ui.unit.dp
 
@@ -37,9 +43,10 @@ data class GeoVaultAuthExtraAction(
  * While [isConnecting] is true, the primary button shows [connectingButtonText] with disabled styling but remains
  * tappable so users can restart OAuth flow if needed. [isConnecting] should stay true from connect through
  * browser handoff until the host clears it on resume (see [com.geovault.common.auth.AuthConnectUiLifecycle]).
- * Callers should
- * not also show a separate “connecting to server” snackbar or toast for the same flow; reserve overlays for errors or
- * unrelated notices.
+ *
+ * Connect failures (invalid URL, unreachable server, timeout, OAuth callback errors) are published to
+ * [GeoVaultAuthConnectErrors] and shown as a snackbar on this view. Callers should not duplicate those
+ * messages at screen level.
  */
 @Composable
 fun GeoVaultInitialAuthView(
@@ -57,14 +64,27 @@ fun GeoVaultInitialAuthView(
     connectButtonTooltip: String? = null,
     inputEnabled: Boolean = true,
     extraActions: List<GeoVaultAuthExtraAction> = emptyList(),
-    captureOutsideTapAcrossParent: Boolean = true
+    captureOutsideTapAcrossParent: Boolean = true,
 ) {
+    val connectErrorMessage by GeoVaultAuthConnectErrors.message.collectAsState()
     val connectState = rememberConnectingButtonState(
         isConnecting = isConnecting,
-        onConnect = onConnect,
+        onConnect = {
+            GeoVaultAuthConnectErrors.clear()
+            onConnect()
+        },
     )
     val resolvedConnectTooltip = connectButtonTooltip
         ?: stringResource(R.string.gv_common_auth_connect_tooltip)
+
+    val snackbarModel = remember(connectErrorMessage, connectState.isEffectivelyConnecting) {
+        val message = connectErrorMessage?.trim().orEmpty()
+        if (message.isNotBlank() && !connectState.isEffectivelyConnecting) {
+            GeoVaultSnackbarModel(id = "auth_connect_error", message = message)
+        } else {
+            null
+        }
+    }
 
     val containerModifier = if (captureOutsideTapAcrossParent) {
         Modifier.fillMaxSize().then(modifier)
@@ -127,5 +147,10 @@ fun GeoVaultInitialAuthView(
                 }
             }
         }
+        GeoVaultSnackbarHost(
+            model = snackbarModel,
+            onDismiss = { GeoVaultAuthConnectErrors.clear() },
+            onAction = { GeoVaultAuthConnectErrors.clear() },
+        )
     }
 }

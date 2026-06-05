@@ -46,6 +46,8 @@
     <string name="gv_common_search_clear_tooltip">Clear the search field.</string>
     <string name="gv_common_subview_close_tooltip">Close this screen and return to the previous view.</string>
     <string name="gv_common_auth_connect_tooltip">Sign in with your GeoVault account using the server URL above. While connecting, tap again to cancel and retry.</string>
+    <string name="gv_common_auth_connect_timeout">Connection timed out. Check the server URL and try again.</string>
+    <string name="gv_common_auth_connect_unreachable">Could not reach server. Check the server URL and your connection.</string>
     <string name="gv_common_auth_disconnect_tooltip">Sign out on this device.</string>
     <string name="gv_external_map_unavailable">No map app available to open this location.</string>
 </resources>

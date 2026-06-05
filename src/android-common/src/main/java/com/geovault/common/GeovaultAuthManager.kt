@@ -7,6 +7,7 @@ import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsIntent
+import com.geovault.common.auth.GeoVaultAuthConnectTimeouts
 import com.geovault.common.auth.GeoVaultAuthStore
 import com.geovault.common.net.GeoVaultServerTransportProbe
 import kotlinx.serialization.SerialName
@@ -137,8 +138,14 @@ object GeovaultAuthManager {
         }
         resolveExecutor.execute {
             val client = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(
+                    GeoVaultAuthConnectTimeouts.SERVER_URL_RESOLVE_TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS,
+                )
+                .readTimeout(
+                    GeoVaultAuthConnectTimeouts.SERVER_URL_RESOLVE_TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS,
+                )
                 .followRedirects(true)
                 .build()
             val request = Request.Builder().url("$base/").head().build()

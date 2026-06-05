@@ -41,9 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.geovault.common.ui.components.rememberConnectingButtonState
 import com.geovault.common.ui.components.GeoVaultInitialAuthView
-import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -296,44 +294,20 @@ fun SettingsScreen(
                 thickness = 1.dp,
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
             )
-            Text(
-                text = stringResource(R.string.server_url_label),
-                style = MaterialTheme.typography.subtitle2,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            GeoVaultInput(
-                value = accountState.serverUrl,
-                onValueChange = onServerUrlChanged,
-                placeholder = "geovault.example.com",
-                enabled = true,
-                readOnly = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-            )
-            val connectState = rememberConnectingButtonState(
-                isConnecting = accountState.isConnecting,
+            GeoVaultInitialAuthView(
+                serverUrl = accountState.serverUrl,
+                onServerUrlChanged = onServerUrlChanged,
                 onConnect = onConnect,
-            )
-            GeoVaultPrimaryButton(
-                text = if (connectState.isEffectivelyConnecting) "Connecting..." else stringResource(R.string.connect_account),
-                onClick = { connectState.onClick() },
-                enabled = true,
-                visuallyDisabled = connectState.isEffectivelyConnecting,
-                tooltip = stringResource(R.string.tooltip_settings_connect),
+                isConnecting = accountState.isConnecting,
+                serverUrlLabel = stringResource(R.string.server_url_label),
+                connectButtonText = stringResource(R.string.connect_account),
+                connectingButtonText = "Connecting...",
+                connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
+                captureOutsideTapAcrossParent = false,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
             )
-            val accountInfoMessage = accountState.infoMessage
-            if (!accountInfoMessage.isNullOrBlank() && !connectState.isEffectivelyConnecting) {
-                Text(
-                    text = accountInfoMessage,
-                    color = geoVaultContentSecondaryColor(),
-                    style = MaterialTheme.typography.body2,
-                    modifier = Modifier.padding(bottom = 16.dp),
-                )
-            }
         } else {
             val loggedInEmail = accountState.loggedInText
                 .removePrefix("Logged in as")

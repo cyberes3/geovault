@@ -61,6 +61,19 @@ class GeoVaultAccountControllerTest {
     }
 
     @Test
+    fun invalidServerUrlClearsConnectingAndSetsMessage() = runBlocking {
+        val services = FakeAuthServices(normalizedUrl = "")
+        val controller = newController(services)
+
+        controller.onServerUrlChanged("   ")
+        controller.connect()
+        delay(10)
+
+        assertFalse(controller.state.value.isConnecting)
+        assertEquals("Server URL is required.", controller.state.value.infoMessage)
+    }
+
+    @Test
     fun errorClearsConnectingAndSetsMessage() = runBlocking {
         val services = FakeAuthServices(
             resolveResult = Result.failure(IllegalStateException("no route"))
@@ -90,16 +103,17 @@ class GeoVaultAccountControllerTest {
 
 }
 
-private class FakeAuthServices(
-    private val resolveResult: Result<String> = Result.success("https://example.com"),
-) : ServerConfigService, AuthSessionService, OAuthPreparationService {
+    private class FakeAuthServices(
+        private val normalizedUrl: String = "https://example.com",
+        private val resolveResult: Result<String> = Result.success("https://example.com"),
+    ) : ServerConfigService, AuthSessionService, OAuthPreparationService {
     private var serverUrl: String = ""
 
     override fun getServerUrl(): String = serverUrl
     override fun setServerUrl(url: String, commit: Boolean) {
         serverUrl = url
     }
-    override fun normalizeServerUrl(url: String): String = url.trim().prependHttpsIfMissing()
+        override fun normalizeServerUrl(url: String): String = normalizedUrl
     override fun getNormalizedServerUrl(): String = normalizeServerUrl(serverUrl)
     override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
         callback(resolveResult)

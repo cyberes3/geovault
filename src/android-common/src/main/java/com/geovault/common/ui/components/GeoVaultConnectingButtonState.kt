@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.geovault.common.auth.GeoVaultAuthConnectTimeouts
 import kotlinx.coroutines.delay
 
 class GeoVaultConnectingButtonState internal constructor(
@@ -19,7 +20,7 @@ class GeoVaultConnectingButtonState internal constructor(
 fun rememberConnectingButtonState(
     isConnecting: Boolean,
     onConnect: () -> Unit,
-    timeoutMs: Long = 5000L,
+    timeoutMs: Long = GeoVaultAuthConnectTimeouts.serverUrlResolveTimeoutMs,
 ): GeoVaultConnectingButtonState {
     var localConnecting by rememberSaveable { mutableStateOf(false) }
     var awaitingExternalStart by rememberSaveable { mutableStateOf(false) }

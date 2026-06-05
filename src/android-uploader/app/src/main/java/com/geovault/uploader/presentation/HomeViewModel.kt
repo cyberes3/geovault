@@ -53,13 +53,7 @@ class HomeViewModel(
 
     private var validateJob: Job? = null
 
-    fun initialize(intent: Intent?) {
-        intent?.getStringExtra(MainActivity.EXTRA_OAUTH_ERROR)?.let { msg ->
-            _state.update {
-                it.copy(importantSnackbar = GeoVaultSnackbarModel(id = newImportantId(), message = msg))
-            }
-        }
-    }
+    fun initialize(intent: Intent?) = Unit
 
     fun onHostResumed() = Unit
 

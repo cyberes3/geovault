@@ -56,6 +56,12 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
                     viewModel.onAccountStateChanged(accountState)
                 }
+                LaunchedEffect(Unit) {
+                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
+                        accountViewModel.showExternalError(error)
+                        intent.removeExtra(EXTRA_OAUTH_ERROR)
+                    }
+                }
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
                 GeoVaultOAuthBrowserEffect(
                     oauthUrl = accountState.oauthUrl,

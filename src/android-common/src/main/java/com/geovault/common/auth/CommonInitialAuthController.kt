@@ -2,6 +2,8 @@ package com.geovault.common.auth
 
 import android.net.Uri
 import android.util.Log
+import java.io.IOException
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -14,6 +16,7 @@ class CommonInitialAuthController(
     private val peerServerUrlsProvider: () -> Set<String>,
     private val invalidServerUrlMessage: String = "Server URL is required.",
     private val unreachableServerMessage: String = "Could not reach server.",
+    private val connectTimeoutMessage: String = "Connection timed out. Check the server URL and try again.",
 ) {
     sealed interface OAuthPreparationResult {
         data class Ready(val oauthUrl: String) : OAuthPreparationResult
@@ -71,7 +74,8 @@ class CommonInitialAuthController(
             },
             onFailure = { e ->
                 Log.w(TAG, "prepareOAuthConnection: server unreachable — ${e.javaClass.simpleName}: ${e.message}")
-                OAuthPreparationResult.UnreachableServer(message = unreachableServerMessage)
+                val message = if (e.isConnectTimeout()) connectTimeoutMessage else unreachableServerMessage
+                OAuthPreparationResult.UnreachableServer(message = message)
             }
         )
     }
@@ -79,5 +83,19 @@ class CommonInitialAuthController(
     fun revokeCurrentSessionTokens() {
         Log.i(TAG, "revokeCurrentSessionTokens")
         authSessionService.revokeCurrentSession()
+    }
+
+    private fun Throwable.isConnectTimeout(): Boolean {
+        var current: Throwable? = this
+        while (current != null) {
+            if (current is SocketTimeoutException) {
+                return true
+            }
+            if (current is IOException && current.message?.contains("timeout", ignoreCase = true) == true) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 }

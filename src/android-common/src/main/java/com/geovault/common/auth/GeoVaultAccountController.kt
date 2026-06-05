@@ -28,6 +28,9 @@ class GeoVaultAccountController(
     val state: StateFlow<GeoVaultAccountUiState> = _state.asStateFlow()
 
     fun initialize() {
+        GeoVaultAuthConnectErrors.setOnClearListener {
+            _state.update { it.copy(infoMessage = null) }
+        }
         refreshAuthState()
     }
 
@@ -47,7 +50,8 @@ class GeoVaultAccountController(
         authConnect.launch(
             rawServerUrl = _state.value.serverUrl,
             onConnecting = {
-                _state.update { it.copy(isConnecting = true, infoMessage = null) }
+                clearConnectError()
+                _state.update { it.copy(isConnecting = true) }
             },
             onResult = ::applyOAuthPreparationResult,
         )
@@ -58,11 +62,22 @@ class GeoVaultAccountController(
     }
 
     fun showExternalError(message: String) {
-        _state.update { it.copy(isConnecting = false, oauthUrl = null, infoMessage = message) }
+        _state.update { it.copy(isConnecting = false, oauthUrl = null) }
+        publishConnectError(message)
     }
 
     fun clearInfoMessage() {
+        clearConnectError()
+    }
+
+    private fun clearConnectError() {
+        GeoVaultAuthConnectErrors.clear(notifyListener = false)
         _state.update { it.copy(infoMessage = null) }
+    }
+
+    private fun publishConnectError(message: String) {
+        GeoVaultAuthConnectErrors.show(message)
+        _state.update { it.copy(infoMessage = message) }
     }
 
     fun disconnect(mainActivityClass: Class<*>) {
@@ -79,19 +94,21 @@ class GeoVaultAccountController(
     private fun applyOAuthPreparationResult(result: CommonInitialAuthController.OAuthPreparationResult) {
         when (result) {
             is CommonInitialAuthController.OAuthPreparationResult.Ready -> {
+                clearConnectError()
                 _state.update {
                     it.copy(
                         serverUrl = authController.getConfiguredServerUrlOrPeerDefault(),
                         oauthUrl = result.oauthUrl,
-                        infoMessage = null,
                     )
                 }
             }
             is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl -> {
-                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
+                _state.update { it.copy(isConnecting = false) }
+                publishConnectError(result.message)
             }
             is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer -> {
-                _state.update { it.copy(isConnecting = false, infoMessage = result.message) }
+                _state.update { it.copy(isConnecting = false) }
+                publishConnectError(result.message)
             }
         }
     }
