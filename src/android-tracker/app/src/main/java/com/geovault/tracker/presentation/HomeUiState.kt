@@ -14,7 +14,10 @@ data class HomePermissionSnapshot(
     val hasActivityRecognition: Boolean = false,
 ) {
     val readyForTracking: Boolean
-        get() = hasForegroundLocation && hasBackgroundLocation && hasPostNotifications
+        get() = hasForegroundLocation &&
+            hasBackgroundLocation &&
+            hasPostNotifications &&
+            hasActivityRecognition
 }
 
 data class HomeUiState(

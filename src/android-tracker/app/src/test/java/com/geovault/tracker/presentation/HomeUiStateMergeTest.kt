@@ -26,6 +26,7 @@ class HomeUiStateMergeTest {
             hasForegroundLocation = true,
             hasBackgroundLocation = true,
             hasPostNotifications = true,
+            hasActivityRecognition = true,
         )
         val merged = mergeHomeUiState(runtime, perms, statusMessage = "hint")
         assertTrue(merged.isTracking)

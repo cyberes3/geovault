@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
             streamingErrorReceiverRegistered = true
         }
         if (isTrackingServiceActiveOrStarting() &&
-            !TrackingPermissionGate.hasLocationPermission(this)
+            !TrackingPermissionGate.hasRequiredPermissionsForTracking(this)
         ) {
             TrackerAppServices.from(application).trackerSettingsRepository().clearWasTrackingBeforeExit()
             startService(
