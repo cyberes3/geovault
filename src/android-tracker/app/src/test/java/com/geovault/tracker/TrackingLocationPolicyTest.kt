@@ -108,7 +108,7 @@ class TrackingLocationPolicyTest {
     }
 
     @Test
-    fun stationaryUpdate_activeMotionHint_resetsAndNoPause() {
+    fun stationaryUpdate_activeSpeedHint_resetsAndNoPause() {
         val base = Location("test").apply {
             latitude = 1.0
             longitude = 1.0
@@ -126,7 +126,7 @@ class TrackingLocationPolicyTest {
             stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             currentConsecutive = 2,
             significantMotionOnly = true,
-            activeMotionHint = true,
+            activeSpeedHint = true,
         )
 
         assertEquals(0, result.consecutive)
@@ -267,11 +267,11 @@ class TrackingLocationPolicyTest {
     /**
      * `filterConfirmedStillness` (filter snapped to anchor as
      * `uncertainty-suppressed`) is positive evidence the device hasn't
-     * moved. It must advance the counter regardless of `activeMotionHint`
-     * stickiness from a prior drive's smoothed speed.
+     * moved. It must advance the counter even when `activeSpeedHint`
+     * would otherwise reset it.
      */
     @Test
-    fun stationaryUpdate_filterConfirmedStillness_advancesEvenWithActiveMotionHint() {
+    fun stationaryUpdate_filterConfirmedStillness_advancesEvenWithActiveSpeedHint() {
         val anchor = Location("test").apply {
             latitude = 0.0
             longitude = 0.0
@@ -290,7 +290,7 @@ class TrackingLocationPolicyTest {
             stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             currentConsecutive = 2,
             significantMotionOnly = true,
-            activeMotionHint = true,
+            activeSpeedHint = true,
             filterConfirmedStillness = true,
         )
         assertEquals(3, result.consecutive)

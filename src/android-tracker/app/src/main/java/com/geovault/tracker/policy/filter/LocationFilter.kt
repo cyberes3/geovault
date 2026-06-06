@@ -147,7 +147,7 @@ class LocationFilter(
      * The filter is intentionally motion-agnostic: standstill is decided
      * from the GPS signal itself (RSS-corrected effective distance,
      * reported speed, jerk, stability) rather than from an upstream
-     * motion-hint boolean that can lag the chipset state.
+     * upstream speed-hint boolean that can lag the chipset state.
      */
     fun evaluate(input: LocationInput): LocationFilterResult {
         val accuracy = input.accuracyMeters?.toDouble()

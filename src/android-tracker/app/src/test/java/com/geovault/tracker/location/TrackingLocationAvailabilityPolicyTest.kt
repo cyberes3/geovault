@@ -6,12 +6,11 @@ import org.junit.Test
 
 class TrackingLocationAvailabilityPolicyTest {
     @Test
-    fun canStartTracking_requiresPreciseBackgroundNotificationActivityRecognitionAndLocationServices() {
+    fun canStartTracking_requiresPreciseBackgroundNotificationAndLocationServices() {
         val ready = TrackingLocationAvailabilityInput(
             hasFineLocationPermission = true,
             hasBackgroundLocationPermission = true,
             hasNotificationPermission = true,
-            hasActivityRecognitionPermission = true,
             locationServicesEnabled = true,
         )
 
@@ -19,11 +18,6 @@ class TrackingLocationAvailabilityPolicyTest {
         assertFalse(
             TrackingLocationAvailabilityPolicy.canStartTracking(
                 ready.copy(hasFineLocationPermission = false)
-            )
-        )
-        assertFalse(
-            TrackingLocationAvailabilityPolicy.canStartTracking(
-                ready.copy(hasActivityRecognitionPermission = false)
             )
         )
         assertFalse(

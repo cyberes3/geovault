@@ -103,8 +103,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         // only on the *current* observed chipset speed; an EMA-smoothed
         // term would carry stale velocity from a prior drive across a
         // long gap and permanently block the stationary counter.
-        val activeMotionHint = (observedSpeedMps ?: 0f) > TrackingServiceConstants.MOTION_HINT_FLOOR_MPS
-            || rt.deps.activityHintSource?.currentHint(nowMs) != null
+        val activeSpeedHint = (observedSpeedMps ?: 0f) > TrackingServiceConstants.ACTIVE_SPEED_FLOOR_MPS
         val pointPropsJson = propsJson
         val pipelineOutput = rt.deps.trackerLocationPipeline.processFix(
             input = TrackerLocationPipelineInput(
@@ -369,7 +368,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
                 runtimeContext = runtimeContext,
                 settings = settings,
                 motionMode = motionMode,
-                activeMotionHint = activeMotionHint,
+                activeSpeedHint = activeSpeedHint,
                 observedSpeedMps = observedSpeedMps,
                 nowMs = nowMs,
             )

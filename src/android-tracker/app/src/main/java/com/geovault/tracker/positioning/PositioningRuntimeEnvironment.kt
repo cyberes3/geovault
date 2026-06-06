@@ -7,8 +7,6 @@ import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.positioning.time.PositioningClock
 import com.geovault.tracker.positioning.time.SystemPositioningClock
 import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.aar.ActivityRecognitionHintBridge
-import com.geovault.tracker.sensor.ActivityHintSource
 import com.geovault.tracker.sensor.SensorManagerSignificantMotionTrigger
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
 import com.geovault.tracker.sensor.SignificantMotionResumeBridge
@@ -57,8 +55,6 @@ internal interface PositioningRuntimeEnvironment {
         serviceScope: CoroutineScope,
         onResume: () -> Unit,
     ): SignificantMotionResumeGateway?
-
-    fun activityHintSource(service: Service): ActivityHintSource?
 }
 
 internal object ProductionPositioningRuntimeEnvironment : PositioningRuntimeEnvironment {
@@ -107,7 +103,4 @@ internal object ProductionPositioningRuntimeEnvironment : PositioningRuntimeEnvi
         trigger = SensorManagerSignificantMotionTrigger(service.applicationContext),
         onResume = onResume,
     )
-
-    override fun activityHintSource(service: Service): ActivityHintSource =
-        ActivityRecognitionHintBridge(service.applicationContext)
 }

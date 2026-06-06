@@ -71,7 +71,7 @@ object TrackingLocationPolicy {
         stationaryRadiusMeters: Float,
         currentConsecutive: Int,
         significantMotionOnly: Boolean,
-        activeMotionHint: Boolean = false,
+        activeSpeedHint: Boolean = false,
         filterIntervened: Boolean = false,
         filterConfirmedStillness: Boolean = false,
         confidence: StationaryConfidence? = null,
@@ -82,12 +82,11 @@ object TrackingLocationPolicy {
         // `filterConfirmedStillness` is positive evidence the device hasn't
         // moved (filter snapped to anchor because the displacement was
         // inside the joint accuracy envelope). It supersedes both
-        // `activeMotionHint` (which can be sticky from a prior drive's
-        // smoothed speed) and `filterIntervened` (which is the same event
-        // viewed pessimistically).
+        // `activeSpeedHint` (current observed chipset speed above the speed
+        // floor) and `filterIntervened` (the same event viewed pessimistically).
         if (!filterConfirmedStillness) {
-            if (activeMotionHint) {
-                return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_motion_hint")
+            if (activeSpeedHint) {
+                return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_speed_hint")
             }
             if (filterIntervened) {
                 return StationaryDecision(

@@ -42,7 +42,7 @@ internal class PositioningEndToEndReplayDriver(
                 trigger = "capture_replay",
                 startWallMs = session.wallBaseMs,
             )
-            feedMergedTimeline(runtime, clock, environment)
+            feedMergedTimeline(runtime, clock)
         }
 
         return PositioningEndToEndReplayResult(
@@ -55,46 +55,24 @@ internal class PositioningEndToEndReplayDriver(
     private suspend fun feedMergedTimeline(
         runtime: PositioningRuntime,
         clock: ReplayPositioningClock,
-        environment: ReplayRuntimeEnvironment,
     ) {
-        val fixes = session.rawFixes.map { ReplayEvent.Fix(it.wallTimeMs(session), it) }
-        val transitions = session.activityTransitions.map { ReplayEvent.Transition(it.wallTimeMs(session), it) }
-        val events = (fixes + transitions).sortedBy { it.wallMs }
-
+        val fixes = session.rawFixes.sortedBy { it.wallTimeMs(session) }
         var previousWallMs = session.wallBaseMs
-        for (event in events) {
-            injectMotionTicks(runtime, clock, previousWallMs, event.wallMs)
-            when (event) {
-                is ReplayEvent.Fix -> {
-                    val fix = event.dto
-                    clock.advanceTo(
-                        wallTimeMs = event.wallMs,
-                        elapsedRealtimeNanos = fix.elapsedRealtimeNanos(session),
-                    )
-                    runtime.fixIngest.processLocationUpdateSerialized(
-                        location = fix.toLocation(session),
-                        bypassFilters = fix.bypassFilters,
-                        allowWhenGpsPaused = fix.allowWhenGpsPaused,
-                        skipAdaptiveTrackingEffects = fix.skipAdaptiveTrackingEffects,
-                    )
-                }
-                is ReplayEvent.Transition -> {
-                    clock.advanceTo(
-                        wallTimeMs = event.wallMs,
-                        elapsedRealtimeNanos = session.elapsedRealtimeBaseNanos + (event.wallMs - session.wallBaseMs) * 1_000_000L,
-                    )
-                    environment.replayActivityHintSource.applyTransition(event.dto)
-                }
-            }
-            previousWallMs = event.wallMs
+        for (fix in fixes) {
+            val wallMs = fix.wallTimeMs(session)
+            injectMotionTicks(runtime, clock, previousWallMs, wallMs)
+            clock.advanceTo(
+                wallTimeMs = wallMs,
+                elapsedRealtimeNanos = fix.elapsedRealtimeNanos(session),
+            )
+            runtime.fixIngest.processLocationUpdateSerialized(
+                location = fix.toLocation(session),
+                bypassFilters = fix.bypassFilters,
+                allowWhenGpsPaused = fix.allowWhenGpsPaused,
+                skipAdaptiveTrackingEffects = fix.skipAdaptiveTrackingEffects,
+            )
+            previousWallMs = wallMs
         }
-    }
-
-    private sealed interface ReplayEvent {
-        val wallMs: Long
-
-        data class Fix(override val wallMs: Long, val dto: CaptureReplayRawFixDto) : ReplayEvent
-        data class Transition(override val wallMs: Long, val dto: CaptureReplayActivityTransitionDto) : ReplayEvent
     }
 
     private fun injectMotionTicks(

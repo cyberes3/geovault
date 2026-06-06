@@ -103,11 +103,6 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
             selectedTrackerId = selectedTrackerId,
             sessionStartedAtMs = sessionStartedAtMs,
         )
-        rt.deps.activityHintSource?.start(
-            context = rt.ports.service,
-            trackId = selectedTrackerId,
-            trackingGeneration = rt.state.trackingGeneration,
-        )
         startRuntimeBackgroundJobs(runGeneration)
 
         try {
@@ -139,11 +134,6 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
             trigger = trigger,
             selectedTrackerId = selectedTrackerId,
             sessionStartedAtMs = startWallMs,
-        )
-        rt.deps.activityHintSource?.start(
-            context = rt.ports.service,
-            trackId = selectedTrackerId,
-            trackingGeneration = rt.state.trackingGeneration,
         )
         TrackPointBus.resumeLocalDelivery()
     }
@@ -233,7 +223,6 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.collection.unregisterGpsProviderReceiverIfNeeded()
         rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = false)
         rt.deps.significantMotionBridge?.cancel()
-        rt.deps.activityHintSource?.stop()
         rt.lifecycle.stopLocationUpdates()
         TrackPointBus.resumeLocalDelivery()
         if (rt.state.startupForegroundPromoted) {

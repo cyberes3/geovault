@@ -14,22 +14,9 @@ data class CaptureReplaySessionDto(
     val settings: CaptureReplaySettingsDto,
     val initialState: CaptureReplayInitialStateDto,
     val rawFixes: List<CaptureReplayRawFixDto>,
-    val activityTransitions: List<CaptureReplayActivityTransitionDto> = emptyList(),
     val expectedEvents: List<CaptureReplayExpectedEventDto> = emptyList(),
     val assertions: CaptureReplayAssertionsDto = CaptureReplayAssertionsDto(),
 )
-
-@Serializable
-data class CaptureReplayActivityTransitionDto(
-    val wallOffsetMs: Long,
-    val elapsedRealtimeOffsetNanos: Long,
-    val eventTimeMs: Long,
-    val activity: String,
-    val transitionType: String,
-    val hintActive: Boolean,
-) {
-    fun wallTimeMs(session: CaptureReplaySessionDto): Long = session.wallBaseMs + wallOffsetMs
-}
 
 @Serializable
 data class CaptureReplaySettingsDto(

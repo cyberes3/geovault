@@ -12,7 +12,6 @@ import com.geovault.tracker.BuildConfig
  *
  * Recorded line types:
  * - `positioning_raw_fix` — GPS fixes from [com.geovault.tracker.positioning.ingest.FixIngestSubsystem]
- * - `positioning_activity_transition` — GMS activity-transition events from [com.geovault.tracker.aar.ActivityRecognitionHintRecorder]
  */
 object GeoVaultPointRecordingLog {
 

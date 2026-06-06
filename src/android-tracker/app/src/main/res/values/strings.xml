@@ -31,7 +31,7 @@
     <string name="recovery_channel_description">Alerts when tracking needs attention</string>
     <string name="no_tracker_selected_go_to_settings">Select a tracker before starting. Trackers tab → Edit → Selected tracker</string>
     <string name="tracker_validation_failed_go_to_settings">Selected tracker is no longer valid. Choose another tracker in settings.</string>
-    <string name="location_permissions_required">Location, notification, and activity recognition permissions are required for tracking.</string>
+    <string name="location_permissions_required">Location and notification permissions are required for tracking.</string>
     <string name="location_permission_needed_first">Allow location to continue.</string>
     <string name="background_location_permission_required">Allow all-the-time location access for tracking.</string>
     <string name="notification_permission_required">Allow notifications so tracking can run in the foreground.</string>
@@ -86,7 +86,6 @@
     <string name="grant_notification_permission">Grant Notification Permission</string>
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
     <string name="grant_exact_alarm_permission">Allow Exact Alarms</string>
-    <string name="grant_activity_recognition_permission">Allow Activity Recognition</string>
     <string name="not_tracking">Not Tracking</string>
     <string name="tracking_active">Tracking Active</string>
     <string name="preparing">Preparing</string>
@@ -115,7 +114,6 @@
     <string name="tooltip_grant_notifications">Allow notifications so the system is less likely to stop background tracking.</string>
     <string name="tooltip_grant_battery">Open battery settings so the app is not overly restricted while tracking.</string>
     <string name="tooltip_grant_exact_alarm">Grant exact alarm permission if Android requires it for reliable scheduling.</string>
-    <string name="tooltip_grant_activity_recognition">Allow activity recognition so the tracker can detect motion sooner after you have been still.</string>
     <string name="tooltip_start_stop_tracking">Start sending points for the selected tracker, or stop the current session.</string>
     <string name="tooltip_tracking_params">View live readings such as speed and accuracy for the active track.</string>
     <string name="tooltip_manual_send_point">Upload your current position once without changing the tracking session.</string>

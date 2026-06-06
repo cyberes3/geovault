@@ -4,7 +4,6 @@ data class TrackingLocationAvailabilityInput(
     val hasFineLocationPermission: Boolean,
     val hasBackgroundLocationPermission: Boolean,
     val hasNotificationPermission: Boolean,
-    val hasActivityRecognitionPermission: Boolean,
     val locationServicesEnabled: Boolean,
 )
 
@@ -13,7 +12,6 @@ object TrackingLocationAvailabilityPolicy {
         return input.hasFineLocationPermission &&
             input.hasBackgroundLocationPermission &&
             input.hasNotificationPermission &&
-            input.hasActivityRecognitionPermission &&
             input.locationServicesEnabled
     }
 

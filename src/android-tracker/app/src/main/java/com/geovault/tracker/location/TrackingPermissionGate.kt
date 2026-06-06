@@ -34,8 +34,7 @@ object TrackingPermissionGate {
     fun hasRequiredPermissionsForTracking(context: Context): Boolean {
         return hasLocationPermission(context) &&
             hasBackgroundLocationPermission(context) &&
-            hasNotificationPermission(context) &&
-            hasActivityRecognitionPermission(context)
+            hasNotificationPermission(context)
     }
 
     fun canStartTracking(context: Context): Boolean {
@@ -44,15 +43,9 @@ object TrackingPermissionGate {
                 hasFineLocationPermission = hasLocationPermission(context),
                 hasBackgroundLocationPermission = hasBackgroundLocationPermission(context),
                 hasNotificationPermission = hasNotificationPermission(context),
-                hasActivityRecognitionPermission = hasActivityRecognitionPermission(context),
                 locationServicesEnabled = isLocationServicesEnabled(context),
             )
         )
-    }
-
-    fun hasActivityRecognitionPermission(context: Context): Boolean {
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==
-            PackageManager.PERMISSION_GRANTED
     }
 
     fun hasBatteryOptimizationExemption(context: Context): Boolean {

@@ -12,7 +12,6 @@ import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.positioning.PositioningRuntimeEnvironment
 import com.geovault.tracker.positioning.time.PositioningClock
 import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.sensor.ActivityHintSource
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
 import com.geovault.tracker.services.LocationSessionGateway
 import com.geovault.tracker.services.QueueUploadConfig
@@ -87,10 +86,6 @@ internal class ReplayRuntimeEnvironment(
         serviceScope: CoroutineScope,
         onResume: () -> Unit,
     ): SignificantMotionResumeGateway? = null
-
-    val replayActivityHintSource = ReplayActivityHintSource()
-
-    override fun activityHintSource(service: Service): ActivityHintSource = replayActivityHintSource
 }
 
 private class ReplaySettingsRepository(

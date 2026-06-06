@@ -48,8 +48,8 @@ class AutoTrackingMotionEngineTest {
         engine.reset(nowMs = 0L)
         engine.onAcceptedFix(speedMps = 1.2f, eventTimeMs = 1_000L)
         val before = engine.snapshot().smoothedSpeedMps
-        // Old API used to feed a speed hint here; new contract just
-        // bumps lastEvidenceAtMs.
+        // Rejected fixes do not change smoothed speed; they only bump
+        // lastEvidenceAtMs.
         val out = engine.onRejectedFix(eventTimeMs = 2_000L)
         assertEquals(before, out.state.smoothedSpeedMps, 0.0001f)
         assertEquals(2_000L, out.state.lastEvidenceAtMs)

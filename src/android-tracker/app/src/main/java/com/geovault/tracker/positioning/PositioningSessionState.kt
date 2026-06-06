@@ -61,7 +61,6 @@ internal class PositioningSessionState {
     var fastGpsLockStopCountThisSession: Int = 0
     var fastGpsLockTimeoutCountThisSession: Int = 0
     var fastGpsLockLastSummaryAtMs: Long = 0L
-    var aarScrutinyWindowUntilMs: Long = 0L
     var sigMotionSensorStartTime: Long = 0L
     var watchdogJob: Job? = null
     var consecutiveStationaryPoints: Int = 0
@@ -112,7 +111,6 @@ internal class PositioningSessionState {
     fun resetForStop() {
         cancelSessionJobs()
         resetDiagnosticsForStop()
-        aarScrutinyWindowUntilMs = 0L
         consecutivePushFailures = 0
         lastSyncFailureClass = SyncFailureClass.NONE
         sessionVisibleBoundaryId = 0L
@@ -135,7 +133,6 @@ internal class PositioningSessionState {
     }
 
     private fun resetAdaptiveStateForStart() {
-        aarScrutinyWindowUntilMs = 0L
         lastLoggedPointEmissionTrouble = PointEmissionTrouble.None
         lastAccuracyHoldLogKey = null
         lastLocationFilterLogSignature = null

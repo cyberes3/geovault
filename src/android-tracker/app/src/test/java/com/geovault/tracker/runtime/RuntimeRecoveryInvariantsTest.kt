@@ -289,7 +289,6 @@ class RuntimeRecoveryInvariantsTest {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_BACKGROUND_LOCATION,
             Manifest.permission.POST_NOTIFICATIONS,
-            Manifest.permission.ACTIVITY_RECOGNITION,
         )
         SelectedTrackerPrefs.setSelectedTracker(
             appContext,

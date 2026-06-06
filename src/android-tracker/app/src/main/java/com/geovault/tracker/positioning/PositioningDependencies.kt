@@ -17,7 +17,6 @@ import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.positioning.config.PositioningDensity
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
 import com.geovault.tracker.runtime.RuntimeTelemetry
-import com.geovault.tracker.sensor.ActivityHintSource
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
 import com.geovault.tracker.services.LocationIngestCoordinator
 import com.geovault.tracker.services.LocationSessionGateway
@@ -69,7 +68,6 @@ internal class PositioningDependencies(
 
     var httpClient: OkHttpClient? = null
     var significantMotionBridge: SignificantMotionResumeGateway? = null
-    var activityHintSource: ActivityHintSource? = null
 
     val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator {
         runtime.contextBuilder.currentPositioningRecoveryConfig()
@@ -127,7 +125,6 @@ internal class PositioningDependencies(
             serviceScope = serviceScope,
             onResume = { runtime.collection.resumeGps() },
         )
-        activityHintSource = environment.activityHintSource(service)
         val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
             .scaleDurationMs(StationaryPingController.DEFAULT_INTERVAL_MS)
         stationaryPingController = StationaryPingController(
