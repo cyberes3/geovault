@@ -32,6 +32,7 @@ internal class RuntimeTelemetryStore(
 
     init {
         setWriteAheadLoggingEnabled(true)
+        deleteLegacySharedPreferencesRing(context.applicationContext)
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -149,5 +150,19 @@ internal class RuntimeTelemetryStore(
         fun deleteStore(context: Context) {
             deleteCacheDatabaseFiles(context, DB_FILE_NAME)
         }
+
+        /**
+         * Removes the pre-SQLite SharedPreferences ring (`tracking_runtime_telemetry_v2`).
+         * Safe to call on every store open; the legacy file is no longer read or written.
+         */
+        fun deleteLegacySharedPreferencesRing(context: Context) {
+            context.applicationContext
+                .getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply()
+        }
+
+        private const val LEGACY_PREFS_NAME = "tracking_runtime_telemetry_v2"
     }
 }

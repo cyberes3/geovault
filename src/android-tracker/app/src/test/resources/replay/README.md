@@ -28,17 +28,17 @@ All extractor arguments are required (no defaults). The export must contain `pos
 
 ```bash
 python3 scripts/extract_capture_replay.py write /tmp/MyApp_point-recording_....txt.gz \
-  --session traffic_jam_2026_06_02 \
-  --start 2026-06-02T22:30:00Z \
-  --end 2026-06-02T22:46:00Z \
-  --output app/src/test/resources/replay/traffic_jam_2026_06_02.json \
+  --session walk_short_drive_walk_2026_06_03 \
+  --start 2026-06-03T12:00:00Z \
+  --end 2026-06-03T12:05:00Z \
+  --output app/src/test/resources/replay/walk_short_drive_walk_2026_06_03.json \
   --settings-json /path/to/replay_settings.json
 
 python3 scripts/extract_capture_replay.py check /tmp/MyApp_point-recording_....txt.gz \
-  --session traffic_jam_2026_06_02 \
-  --start 2026-06-02T22:30:00Z \
-  --end 2026-06-02T22:46:00Z \
-  --output app/src/test/resources/replay/traffic_jam_2026_06_02.json \
+  --session walk_short_drive_walk_2026_06_03 \
+  --start 2026-06-03T12:00:00Z \
+  --end 2026-06-03T12:05:00Z \
+  --output app/src/test/resources/replay/walk_short_drive_walk_2026_06_03.json \
   --settings-json /path/to/replay_settings.json
 
 ./gradlew :app:testCaptureReplay
@@ -46,7 +46,7 @@ python3 scripts/extract_capture_replay.py check /tmp/MyApp_point-recording_....t
 
 Optional: `--track-id <uuid>` when the log contains multiple tracks.
 
-Use `./build-android.sh ... --add-logging` and `./download-capture-log.sh` only when you need full diagnostic capture (e.g. `positioning_decision_trace` for `expectedEvents` golden lines). Replay **raw fixes** come from the point recording DB.
+Use `./build-android.sh ... --add-logging` and `./download-capture-log.sh` only when you need full diagnostic capture. Replay **raw fixes** come from the point recording DB.
 
 ## Rules
 
