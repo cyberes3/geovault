@@ -98,7 +98,7 @@ data class CaptureReplayExpectedEventDto(
 data class CaptureReplayAssertionsDto(
     val finalMode: String = "DRIVING",
     val minPersistedPoints: Int = 0,
-    val expectedMotionRetryCountMin: Int = 0,
+    val expectedMotionSeedCountMin: Int = 0,
     val maxDecisionMismatches: Int = 0,
     val requiredEvents: List<CaptureReplayRequiredEventDto> = emptyList(),
 )

@@ -98,7 +98,7 @@ class AutoTrackingMotionEngineTest {
     @Test
     fun demotion_singleLowSample_doesNotDemoteBikingToWalking() {
         // A single sample below the lower bound is not enough to demote;
-        // the demotion streak guard requires two consecutive samples.
+        // the demotion streak guard requires three consecutive samples.
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)
         engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 1_000L)
@@ -115,7 +115,7 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
-    fun demotion_requiresTwoConsecutiveSamples_bikingToWalking() {
+    fun demotion_requiresThreeConsecutiveSamples_bikingToWalking() {
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)
         engine.onAcceptedFix(speedMps = 12f, eventTimeMs = 1_000L)
@@ -127,8 +127,12 @@ class AutoTrackingMotionEngineTest {
         engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_001L)
         assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
 
-        // Second consecutive below-lower: streak=2, demotes.
-        val out = engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_002L)
+        // Second consecutive: streak=2, still BIKING (threshold is 3).
+        engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_002L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // Third consecutive: streak=3, demotes.
+        val out = engine.onAcceptedFix(speedMps = 0.0f, eventTimeMs = 300_003L)
         assertEquals(TrackingMotionMode.WALKING, out.state.mode)
         assertTrue(out.modeChanged)
     }
@@ -149,7 +153,7 @@ class AutoTrackingMotionEngineTest {
     }
 
     @Test
-    fun demotion_requiresTwoConsecutiveSamples_drivingToBiking() {
+    fun demotion_requiresThreeConsecutiveSamples_drivingToBiking() {
         val engine = AutoTrackingMotionEngine()
         engine.reset(nowMs = 0L)
         engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
@@ -161,8 +165,12 @@ class AutoTrackingMotionEngineTest {
         engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_001L)
         assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
 
-        // Second consecutive below-lower: streak=2, demotes.
-        val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_002L)
+        // Second consecutive: streak=2, still DRIVING (threshold is 3).
+        engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_002L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        // Third consecutive: streak=3, demotes.
+        val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_003L)
         assertEquals(TrackingMotionMode.BIKING, out.state.mode)
         assertTrue(out.modeChanged)
     }
@@ -205,6 +213,90 @@ class AutoTrackingMotionEngineTest {
 
         val out = engine.onAcceptedFix(speedMps = 2.0f, eventTimeMs = 300_003L)  // streak=1
         assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+    }
+
+    @Test
+    fun onGpsPaused_doesNotDecaySmoothedSpeed_unlikeAcceptedFixAtZero() {
+        // onGpsPaused() must preserve smoothedSpeedMps so that the
+        // consecutive-demotion streak is not advanced by a zero-speed
+        // stationary pause. MotionSubsystem relies on this: it skips
+        // onAcceptedFix when GPS is being paused and calls onGpsPaused
+        // (via pauseGps) instead.
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        val smoothedBeforePause = engine.snapshot().smoothedSpeedMps
+
+        engine.onGpsPaused(nowMs = 3_000L)
+
+        val smoothedAfterPause = engine.snapshot().smoothedSpeedMps
+        assertTrue(
+            "onGpsPaused must not decay smoothedSpeedMps (was $smoothedBeforePause, got $smoothedAfterPause)",
+            smoothedAfterPause == smoothedBeforePause,
+        )
+        assertEquals(0, engine.snapshot().consecutiveBelowLower)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+    }
+
+    /**
+     * Regression proof for the GPS-pause oscillation bug.
+     *
+     * Before the fix, [com.geovault.tracker.positioning.motion.MotionSubsystem] called
+     * [onAcceptedFix] with speed 0 unconditionally even when
+     * [com.geovault.tracker.collection.GpsCollectionController.pauseGps] had already
+     * called [onGpsPaused] for the same event.
+     *
+     * Each [onAcceptedFix] call updates the EMA smoother: `nextSmoothed = 0.7 * prev`.
+     * After enough GPS-pause cycles the smoother crosses below
+     * `DRIVING_TO_BIKING_LOWER_MPS` (5.5 m/s), and [DEMOTE_CONSECUTIVE_REQUIRED] (3)
+     * consecutive below-threshold readings then demote DRIVING → BIKING — even while
+     * the vehicle is momentarily stationary and will shortly resume driving speed.
+     *
+     * The fix adds a guard in MotionSubsystem: when GPS is being paused, [onAcceptedFix]
+     * is skipped. This test confirms both paths side by side: bug path demotes DRIVING;
+     * fix path keeps it.
+     */
+    @Test
+    fun acceptedFixAtZero_afterGpsPaused_decaysSmootherAndDemotesDriving() {
+        fun engineInDriving(): Pair<AutoTrackingMotionEngine, Long> {
+            val engine = AutoTrackingMotionEngine()
+            engine.reset(nowMs = 0L)
+            var ts = 1_000L
+            repeat(10) { engine.onAcceptedFix(speedMps = 22f, eventTimeMs = ts); ts += 1_000L }
+            assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+            return engine to ts
+        }
+
+        // Bug path: every GPS-pause cycle also feeds onAcceptedFix(0), which decays
+        // the smoother (0.7^n factor) until it drops below the lower threshold and
+        // three consecutive below-threshold decisions demote DRIVING → BIKING.
+        val (bugEngine, bugTs0) = engineInDriving()
+        var bugTs = bugTs0
+        repeat(8) {
+            bugEngine.onGpsPaused(nowMs = bugTs)
+            bugEngine.onAcceptedFix(speedMps = 0f, eventTimeMs = bugTs)
+            bugTs += 20_000L
+        }
+        assertEquals(
+            "bug path: repeated zero-speed accepted fixes during GPS-pause cycles demote DRIVING",
+            TrackingMotionMode.BIKING,
+            bugEngine.snapshot().mode,
+        )
+
+        // Fix path: only onGpsPaused is fed; the smoother is untouched.
+        val (fixEngine, fixTs0) = engineInDriving()
+        var fixTs = fixTs0
+        repeat(8) {
+            fixEngine.onGpsPaused(nowMs = fixTs)
+            fixTs += 20_000L
+        }
+        assertEquals(
+            "fix path: onGpsPaused alone does not decay the smoother or demote DRIVING",
+            TrackingMotionMode.DRIVING,
+            fixEngine.snapshot().mode,
+        )
     }
 
     @Test

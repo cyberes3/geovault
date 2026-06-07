@@ -6,6 +6,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -61,6 +65,13 @@ class WalkShortDriveWalkEndToEndReplayTest {
                 line.contains("|fallback_candidate_selected|") && line.contains("source=anchor")
             }
             assertEquals("fallback must not reinforce the stale anchor", 0, staleAnchorFallbacks)
+
+            val maxJumpMeters = maxConsecutiveTrackPointJumpMeters(result.telemetryLines)
+            assertTrue(
+                "no committed track_point step should exceed ${MaxAllowedJumpMeters}m at mode-promotion; " +
+                    "largest observed was %.0fm".format(maxJumpMeters),
+                maxJumpMeters <= MaxAllowedJumpMeters,
+            )
         } finally {
             result.close()
         }
@@ -78,9 +89,37 @@ class WalkShortDriveWalkEndToEndReplayTest {
             .minOrNull()
     }
 
+    private fun maxConsecutiveTrackPointJumpMeters(telemetryLines: List<String>): Double {
+        data class LatLon(val lat: Double, val lon: Double)
+
+        fun parseLine(line: String): LatLon? {
+            val lat = Regex("""lat=([-\d.]+)""").find(line)?.groupValues?.get(1)?.toDoubleOrNull()
+            val lon = Regex("""lon=([-\d.]+)""").find(line)?.groupValues?.get(1)?.toDoubleOrNull()
+            return if (lat != null && lon != null) LatLon(lat, lon) else null
+        }
+
+        fun haversineMeters(a: LatLon, b: LatLon): Double {
+            val r = 6_371_000.0
+            val dLat = Math.toRadians(b.lat - a.lat)
+            val dLon = Math.toRadians(b.lon - a.lon)
+            val sinDLat = sin(dLat / 2)
+            val sinDLon = sin(dLon / 2)
+            val h = sinDLat * sinDLat +
+                cos(Math.toRadians(a.lat)) * cos(Math.toRadians(b.lat)) * sinDLon * sinDLon
+            return 2 * r * asin(sqrt(h))
+        }
+
+        val points = telemetryLines
+            .filter { it.contains("|track_point|") }
+            .mapNotNull { parseLine(it) }
+
+        return points.zipWithNext { a, b -> haversineMeters(a, b) }.maxOrNull() ?: 0.0
+    }
+
     private companion object {
         private const val SessionResource = "walk_short_drive_walk_2026_06_03"
         private const val RelocationOffsetMs = 135_000L
         private const val FreshnessWindowMs = 120_000L
+        private const val MaxAllowedJumpMeters = 300.0
     }
 }

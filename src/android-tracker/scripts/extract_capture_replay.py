@@ -447,10 +447,14 @@ class ReplaySessionBuilder:
                     "fromWallOffsetMs": first_cap.wall_ms - wall_base_ms,
                 }
             )
+        seed_count = sum(
+            1 for m in events.milestones
+            if m.kind == "auto_mode_changed" and m.mode_after is not None
+        )
         return {
             "finalMode": "DRIVING",
             "minPersistedPoints": 0,
-            "expectedMotionRetryCountMin": 1,
+            "expectedMotionSeedCountMin": seed_count,
             "maxDecisionMismatches": 0,
             "requiredEvents": required,
         }

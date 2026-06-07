@@ -56,11 +56,12 @@ enum class AutoTrackingMotionEvidenceConfidence {
  * rejected cannot push the smoother across a hysteresis threshold.
  *
  * Promotion (WALKING -> BIKING -> DRIVING) requires
- * [PROMOTE_CONSECUTIVE_REQUIRED] consecutive accepted samples above the
- * upper threshold. Demotion (DRIVING -> BIKING -> WALKING) is symmetric:
- * it requires [DEMOTE_CONSECUTIVE_REQUIRED] consecutive accepted samples
- * below the lower threshold before the mode drops. A single noisy sample
- * is absorbed without flipping the mode in either direction.
+ * [PROMOTE_CONSECUTIVE_REQUIRED] consecutive accepted samples above the upper
+ * threshold. Demotion (DRIVING -> BIKING -> WALKING) is asymmetric: it requires
+ * [DEMOTE_CONSECUTIVE_REQUIRED] consecutive samples (a higher bar than promotion)
+ * so that brief decelerations — traffic lights, junctions, stationary GPS probes —
+ * do not trigger a spurious mode drop. A single noisy sample is absorbed without
+ * flipping the mode in either direction.
  */
 class AutoTrackingMotionEngine(
     private val speedSmoothingAlpha: Float = 0.30f,
@@ -73,7 +74,7 @@ class AutoTrackingMotionEngine(
         private const val BIKING_TO_DRIVING_UPPER_MPS = 9.0f
         private const val DRIVING_TO_BIKING_LOWER_MPS = 5.5f
         private const val PROMOTE_CONSECUTIVE_REQUIRED = 2
-        private const val DEMOTE_CONSECUTIVE_REQUIRED = 2
+        private const val DEMOTE_CONSECUTIVE_REQUIRED = 3
         // Skip the WALKING->BIKING->DRIVING ladder when the *observed*
         // speed clearly exceeds the BIKING upper. The threshold is
         // intentionally well above the per-sample upper so a phantom
@@ -243,11 +244,10 @@ class AutoTrackingMotionEngine(
     /**
      * Returns the next mode and updated streak counters.
      *
-     * Promotion requires [PROMOTE_CONSECUTIVE_REQUIRED] consecutive
-     * samples strictly above the upper threshold. Demotion requires
-     * [DEMOTE_CONSECUTIVE_REQUIRED] consecutive samples strictly below
-     * the lower threshold. Both use the same count so single noisy
-     * samples in either direction are absorbed without flipping the mode.
+     * Promotion requires [PROMOTE_CONSECUTIVE_REQUIRED] consecutive samples strictly
+     * above the upper threshold. Demotion requires [DEMOTE_CONSECUTIVE_REQUIRED]
+     * consecutive samples strictly below the lower threshold; the higher demotion bar
+     * absorbs brief decelerations without flipping the mode.
      *
      * [consecutiveAboveUpper] tracks the upward (promotion) streak.
      * [consecutiveBelowLower] tracks the downward (demotion) streak.

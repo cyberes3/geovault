@@ -65,10 +65,10 @@ data class TrackerLocationPipelineOutput(
 )
 
 /**
- * Ordered fix-ingest pipeline: primary ingest, auto-motion retry, freshness recovery
- * (with repeatedOutlierSuppressed=false, matching monolithic TrackingService), then optional
- * bypass ingest. Outlier suppression runs on the reject path in [FixIngestSubsystem] after
- * freshness, not here.
+ * Ordered fix-ingest pipeline: primary ingest, auto-motion seeding on mode promotion,
+ * freshness recovery (with repeatedOutlierSuppressed=false, matching monolithic TrackingService),
+ * then optional bypass ingest. Outlier suppression runs on the reject path in [FixIngestSubsystem]
+ * after freshness, not here.
  */
 class TrackerLocationPipeline(
     private val locationIngestCoordinator: LocationIngestCoordinator,
@@ -111,7 +111,16 @@ class TrackerLocationPipeline(
             if (autoMotionHandling is AutoMotionRejectHandling.Evidence && autoMotionHandling.output.modeChanged) {
                 motionContext = refreshMotionContext()
                 motionModeChanged = true
-                result = ingest(input, motionContext)
+                // Seed the filter at the evidence-fix location without emitting a track point.
+                // Re-ingesting the same fix against the new (wider) profile would commit the
+                // full accumulated stale-anchor distance in one step, causing a visible jump.
+                // Instead, subsequent fixes evaluate from this seeded anchor under the new mode.
+                TrackPointPolicyEngine.seedAccepted(
+                    source = TrackPointSource.LOCAL_GPS,
+                    trackId = input.trackId,
+                    event = buildCurrentPositionSeedEvent(input),
+                    config = motionContext.filterConfig,
+                )
             }
         }
 

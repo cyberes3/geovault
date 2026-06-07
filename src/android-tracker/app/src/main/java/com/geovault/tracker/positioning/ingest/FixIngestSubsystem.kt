@@ -165,9 +165,8 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
         motionMode = pipelineOutput.motionContext.motionMode
         if (pipelineOutput.motionModeChanged) {
             rt.deps.runtimeTelemetry.event(
-                name = "auto_motion_retry",
-                details = "mode=$motionMode accepted=${result.accepted} " +
-                    "reason=${result.policyMetrics?.reason ?: result.rejectReason ?: "none"}"
+                name = "auto_motion_seeded",
+                details = "mode=$motionMode"
             )
         }
         val freshnessRecoveryDecision = pipelineOutput.freshnessRecoveryDecision

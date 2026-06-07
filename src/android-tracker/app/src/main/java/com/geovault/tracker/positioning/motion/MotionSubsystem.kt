@@ -149,7 +149,8 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
                     "fallbackPending=${rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate()}"
             )
         }
-        if (pauseEligibility.shouldPause) {
+        val gpsBeingPaused = pauseEligibility.shouldPause
+        if (gpsBeingPaused) {
             rt.collection.enterStationaryRegion(
                 anchorLocation = rt.state.stationaryAnchorLocation ?: stationaryReferenceLocation,
                 nowMs = nowMs,
@@ -159,21 +160,26 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             rt.collection.pauseGps()
         }
         rt.deps.autoTrackingMotionCoordinator.clearEvidenceCandidate()
-        val vettedSpeedMps = result.policyMetrics?.let { metrics ->
-            if (metrics.elapsedSeconds > 0.0) {
-                (metrics.effectiveDistanceMeters / metrics.elapsedSeconds).toFloat()
-                    .coerceAtLeast(0f)
-            } else {
-                0f
-            }
-        } ?: 0f
-        rt.motion.processAutoTrackingOutput(
-            output = rt.deps.autoTrackingMotionEngine.onAcceptedFix(
-                speedMps = vettedSpeedMps,
-                eventTimeMs = nowMs
-            ),
-            reason = "accepted_fix"
-        )
+        if (!gpsBeingPaused) {
+            // When GPS is being paused, pauseGps() already called onGpsPaused() internally.
+            // Calling onAcceptedFix(0) here would override that signal and feed a zero-speed
+            // sample into the smoother, corrupting the consecutive-demotion streak.
+            val vettedSpeedMps = result.policyMetrics?.let { metrics ->
+                if (metrics.elapsedSeconds > 0.0) {
+                    (metrics.effectiveDistanceMeters / metrics.elapsedSeconds).toFloat()
+                        .coerceAtLeast(0f)
+                } else {
+                    0f
+                }
+            } ?: 0f
+            rt.motion.processAutoTrackingOutput(
+                output = rt.deps.autoTrackingMotionEngine.onAcceptedFix(
+                    speedMps = vettedSpeedMps,
+                    eventTimeMs = nowMs
+                ),
+                reason = "accepted_fix"
+            )
+        }
         rt.motion.maybeApplyElasticDistanceFilter(
             observedSpeedMps = observedSpeedMps,
             measuredAccuracyMeters = (result.lastFilteredLocation ?: rawLocation)
