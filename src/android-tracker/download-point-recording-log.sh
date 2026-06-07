@@ -12,11 +12,12 @@ if ! command -v adb >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Requesting point-recording-log export from $PACKAGE_NAME..."
-adb shell am broadcast -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG -p "$PACKAGE_NAME" >/dev/null
-
 echo "Bringing app to foreground so Android does not freeze the export worker..."
 adb shell am start -n "$PACKAGE_NAME/.MainActivity" >/dev/null 2>&1 || true
+sleep 1
+
+echo "Requesting point-recording-log export from $PACKAGE_NAME..."
+adb shell am broadcast -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG -p "$PACKAGE_NAME" >/dev/null
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 done_line=""

@@ -194,6 +194,65 @@ class AutoTrackingMotionEvidenceGateTest {
         assertNull(reversed)
     }
 
+    /**
+     * Mirrors the highway-drive scenario: a stale-relocation-unconfirmed hold
+     * interleaves every pair of speed-cap-exceeded fixes. The GPS interval is
+     * 20 s, so consecutive cap-evidence observations land at t=0 and t=40 s —
+     * the device travels ~1 320 m between them at 33 m/s.
+     *
+     * With the old code the continuity allowance used metrics.elapsedSeconds (20 s),
+     * giving 33 × 20 × 1.5 = 990 m < 1 320 m → continuity failed and the
+     * HANDSHAKE never fired. With the fix the allowance uses the actual
+     * observation gap (40 s): 33 × 40 × 1.5 = 1 980 m > 1 320 m → passes.
+     */
+    /**
+     * When isContinuous fails (the new fix is geographically inconsistent with
+     * the stored prior), the prior context is invalidated. A strong fix in this
+     * position should fire FAST_EMIT, identical to the true first-observation path,
+     * rather than silently swallowing the evidence.
+     */
+    @Test
+    fun evaluate_discontinuousStrongFix_fastEmitsAfterContextInvalidated() {
+        val gate = AutoTrackingMotionEvidenceGate()
+
+        // Seed: weak accuracy — stores observation but no FAST_EMIT
+        assertNull(
+            gate.evaluate(
+                metrics = metrics(lat = 39.0, lon = -104.0, speedMps = 22.0, accuracyMeters = 18f),
+                eventTimeMs = 0L,
+            )
+        )
+        // Discontinuous strong fix: jumps far in the wrong direction so isContinuous
+        // fails, but accuracy is tight and speed is high → FAST_EMIT should fire.
+        val result = gate.evaluate(
+            metrics = metrics(lat = 38.0, lon = -105.5, speedMps = 22.0, accuracyMeters = 5f),
+            eventTimeMs = 20_000L,
+        )
+
+        assertNotNull(result)
+        assertEquals(EvidencePath.FAST_EMIT, result!!.path)
+    }
+
+    @Test
+    fun evaluate_sparseGap_continuityUsesObservationTimestampGap() {
+        val gate = AutoTrackingMotionEvidenceGate()
+
+        // seed — accuracy above fastEmitAccuracyMeters so no FAST_EMIT
+        val seed = gate.evaluate(
+            metrics = metrics(lat = 39.0000, lon = -104.0000, speedMps = 33.0, accuracyMeters = 15f),
+            eventTimeMs = 0L,
+        )
+        // 40 s later (one stale-relocation hold interleaved, per-fix interval still 20 s)
+        val second = gate.evaluate(
+            metrics = metrics(lat = 39.0119, lon = -104.0000, speedMps = 33.0, accuracyMeters = 15f),
+            eventTimeMs = 40_000L,
+        )
+
+        assertNull(seed)
+        assertNotNull(second)
+        assertEquals(EvidencePath.HANDSHAKE, second!!.path)
+    }
+
     @Test
     fun evaluate_strongFirstFixRequiresLowSpeedFloor() {
         // Walking-speed cap rejects (which can only happen if our cap is

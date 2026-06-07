@@ -2,10 +2,6 @@ package com.geovault.common.logging
 
 import android.content.Context
 
-internal typealias GeoVaultCaptureLogSnapshotBounds = GeoVaultBufferedLogSnapshotBounds
-
-internal typealias GeoVaultCaptureLogStreamResult = GeoVaultBufferedLogStreamResult
-
 internal class GeoVaultCaptureLogStore(
     context: Context,
     maxStoredBytes: Long = MAX_STORED_BYTES,

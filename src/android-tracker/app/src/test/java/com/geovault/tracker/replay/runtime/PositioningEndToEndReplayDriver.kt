@@ -1,11 +1,11 @@
 package com.geovault.tracker.replay.runtime
 
-import android.content.Context
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.policy.TrackPointCrossSourceState
 import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.positioning.PositioningAndroidPorts
 import com.geovault.tracker.positioning.PositioningRuntime
+import com.geovault.tracker.runtime.RuntimeTelemetryStore
 import com.geovault.tracker.tracking.TrackingService
 import kotlinx.coroutines.runBlocking
 import org.robolectric.Robolectric
@@ -23,7 +23,7 @@ internal class PositioningEndToEndReplayDriver(
         )
         val service = Robolectric.buildService(TrackingService::class.java).get()
         val appContext = service.applicationContext
-        clearTelemetry(appContext)
+        RuntimeTelemetryStore.deleteStore(appContext)
         SelectedTrackerPrefs.setSelectedTracker(
             context = appContext,
             trackerId = session.trackId,
@@ -92,16 +92,8 @@ internal class PositioningEndToEndReplayDriver(
         }
     }
 
-    private fun clearTelemetry(context: Context) {
-        context.getSharedPreferences(TelemetryPrefsName, Context.MODE_PRIVATE)
-            .edit()
-            .clear()
-            .commit()
-    }
-
     private companion object {
         private const val TickIntervalMs = 5_000L
-        private const val TelemetryPrefsName = "tracking_runtime_telemetry_v2"
     }
 }
 
@@ -117,13 +109,7 @@ internal class PositioningEndToEndReplayResult(
         )
 
     val telemetryLines: List<String>
-        get() = service.applicationContext
-            .getSharedPreferences(TelemetryPrefsName, Context.MODE_PRIVATE)
-            .getString(TelemetryKeyRing, "")
-            .orEmpty()
-            .lineSequence()
-            .filter { it.isNotBlank() }
-            .toList()
+        get() = runtime.deps.runtimeTelemetry.readAllLines()
 
     override fun close() {
         if (runtime.state.isTracking) {
@@ -131,10 +117,5 @@ internal class PositioningEndToEndReplayResult(
         }
         runtime.onDestroy()
         environment.replayDatabase.close()
-    }
-
-    private companion object {
-        private const val TelemetryPrefsName = "tracking_runtime_telemetry_v2"
-        private const val TelemetryKeyRing = "ring"
     }
 }

@@ -54,6 +54,14 @@ class AutoTrackingMotionCoordinator(
                     elapsedSeconds = metrics.elapsedSeconds,
                 )
             }
+            // Gate has stored its first observation but the HANDSHAKE is not yet complete.
+            // Preserve gate state and engine streak so the next cap-evidence fix can
+            // finish the handshake. Do not reset the gate or call onRejectedFix here.
+            return AutoMotionRejectHandling.Preserved(
+                rejectReason = rejectReason,
+                policyReason = policyReason,
+                elapsedSinceCapEvidenceMs = elapsedSinceCapEvidence(nowMs),
+            )
         }
 
         if (isNeutralHoldReason(policyReason)) {

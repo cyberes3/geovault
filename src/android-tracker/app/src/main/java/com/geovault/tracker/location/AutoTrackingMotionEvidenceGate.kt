@@ -88,8 +88,20 @@ class AutoTrackingMotionEvidenceGate(
             }
             return null
         }
-        if (!isContinuous(previous = previous, current = observation, metrics = metrics)) {
+        if (!isContinuous(previous = previous, current = observation)) {
             lastObservation = observation
+            // Only treat this as a fresh first observation if the fix is
+            // spatially dislocated — i.e. too far from the stored prior for
+            // the prior context to remain meaningful (GPS gap, tunnels, etc.).
+            // A pure course reversal while still nearby is suspicious and must
+            // not trigger FAST_EMIT; the caller should wait for the next fix.
+            if (isSpatiallyDislocated(previous, observation) && isStrongFirstFix(observation)) {
+                return AutoTrackingMotionEvidence(
+                    speedMps = observation.speedMps.toFloat(),
+                    confidence = AutoTrackingMotionEvidenceConfidence.High,
+                    path = EvidencePath.FAST_EMIT,
+                )
+            }
             return null
         }
         lastObservation = observation.copy(courseDegrees = courseDegrees(previous, observation))
@@ -127,9 +139,9 @@ class AutoTrackingMotionEvidenceGate(
     private fun isContinuous(
         previous: Observation,
         current: Observation,
-        metrics: TrackPointDecisionMetrics,
     ): Boolean {
-        if (current.timestampMs - previous.timestampMs !in 0L..(config.maxDtSeconds * 1000.0).toLong()) {
+        val gapMs = current.timestampMs - previous.timestampMs
+        if (gapMs !in 0L..(config.maxDtSeconds * 1000.0).toLong()) {
             return false
         }
         if (abs(current.speedMps - previous.speedMps) > config.maxSpeedDeltaMps) return false
@@ -140,7 +152,11 @@ class AutoTrackingMotionEvidenceGate(
             current.longitude,
         )
         val accuracyAllowance = previous.accuracyMeters + current.accuracyMeters
-        val motionAllowance = current.speedMps * metrics.elapsedSeconds * config.continuitySpeedMultiplier
+        // Use the actual gap between stored observations, not the per-fix GPS interval.
+        // When a stale-relocation hold interleaves two cap-evidence fixes, the gap is
+        // ~2× the GPS polling interval, and the device travels proportionally further.
+        val gapSeconds = gapMs / 1000.0
+        val motionAllowance = current.speedMps * gapSeconds * config.continuitySpeedMultiplier
         val allowance = max(config.minContinuityMeters, max(accuracyAllowance, motionAllowance))
         if (distanceMeters > allowance) return false
         val previousCourse = previous.courseDegrees ?: courseDegrees(previous, current)
@@ -150,6 +166,31 @@ class AutoTrackingMotionEvidenceGate(
             if (courseDelta > config.maxCourseDeltaDegrees) return false
         }
         return true
+    }
+
+    /**
+     * Returns true when the spatial distance between [previous] and [current]
+     * exceeds what the implied speed and time gap can account for. In that case
+     * the stored prior context is no longer meaningful and [current] should be
+     * evaluated as a fresh first observation.
+     *
+     * A pure course reversal while still in the same vicinity does NOT satisfy
+     * this condition — [isSpatiallyDislocated] returns false — so such fixes
+     * are held for the next continuity cycle rather than triggering FAST_EMIT.
+     */
+    private fun isSpatiallyDislocated(previous: Observation, current: Observation): Boolean {
+        val gapMs = current.timestampMs - previous.timestampMs
+        val gapSeconds = gapMs / 1000.0
+        val distanceMeters = GeoMath.haversineMeters(
+            previous.latitude,
+            previous.longitude,
+            current.latitude,
+            current.longitude,
+        )
+        val accuracyAllowance = previous.accuracyMeters + current.accuracyMeters
+        val motionAllowance = current.speedMps * gapSeconds * config.continuitySpeedMultiplier
+        val allowance = max(config.minContinuityMeters, max(accuracyAllowance, motionAllowance))
+        return distanceMeters > allowance
     }
 
     private fun courseDegrees(from: Observation, to: Observation): Double? {

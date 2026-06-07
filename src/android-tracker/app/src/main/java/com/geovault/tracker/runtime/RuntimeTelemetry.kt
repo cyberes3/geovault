@@ -10,8 +10,7 @@ class RuntimeTelemetry(
     context: Context,
     private val clock: PositioningClock = SystemPositioningClock,
 ) {
-    private val appContext = context.applicationContext
-    private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val store = RuntimeTelemetryStore(context.applicationContext)
 
     fun event(
         name: String,
@@ -25,17 +24,7 @@ class RuntimeTelemetry(
             return
         }
         if (persistRing) {
-            val line = "${clock.wallTimeMs()}|$name|$details"
-            synchronized(this) {
-                val entries = prefs.getString(KEY_RING, "")
-                    .orEmpty()
-                    .lineSequence()
-                    .filter { it.isNotBlank() }
-                    .toMutableList()
-                entries.add(line)
-                val trimmed = if (entries.size > MAX_ENTRIES) entries.takeLast(MAX_ENTRIES) else entries
-                prefs.edit().putString(KEY_RING, trimmed.joinToString("\n")).apply()
-            }
+            store.insert(wallTimeMs = clock.wallTimeMs(), name = name, details = details)
         }
         GeoVaultCaptureLog.i(TAG, "$name $details")
     }
@@ -55,12 +44,12 @@ class RuntimeTelemetry(
         )
     }
 
+    fun readAllLines(): List<String> = store.readAllLines()
+
+    fun clear() = store.clear()
+
     fun dumpToLogcat(reason: String) {
-        val entries = prefs.getString(KEY_RING, "")
-            .orEmpty()
-            .lineSequence()
-            .filter { it.isNotBlank() }
-            .toList()
+        val entries = store.readAllLines()
         GeoVaultCaptureLog.i(TAG, "dump reason=$reason entries=${entries.size}")
         entries.forEachIndexed { index, entry ->
             GeoVaultCaptureLog.i(TAG, "entry[${index + 1}/${entries.size}] $entry")
@@ -69,9 +58,6 @@ class RuntimeTelemetry(
 
     companion object {
         private const val TAG = "TrackingRuntimeTelemetry"
-        private const val PREFS_NAME = "tracking_runtime_telemetry_v2"
-        private const val KEY_RING = "ring"
-        private const val MAX_ENTRIES = 400
 
         private fun summarize(state: RuntimeState): String {
             return "lifecycle=${state.lifecycleState},desired=${state.shouldBeRunning},intentionalStop=${state.lastIntentionalStop},lastFailure=${state.lastFailure?.reason ?: "none"},lastTrigger=${state.lastStartTrigger ?: "none"},lastHeartbeat=${state.lastHeartbeatAtMs}"
