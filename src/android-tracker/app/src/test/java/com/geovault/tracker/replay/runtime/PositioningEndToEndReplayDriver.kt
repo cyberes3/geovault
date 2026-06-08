@@ -6,6 +6,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.positioning.PositioningAndroidPorts
 import com.geovault.tracker.positioning.PositioningRuntime
 import com.geovault.tracker.runtime.RuntimeTelemetryStore
+import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.tracking.TrackingService
 import kotlinx.coroutines.runBlocking
 import org.robolectric.Robolectric
@@ -42,6 +43,7 @@ internal class PositioningEndToEndReplayDriver(
                 trigger = "capture_replay",
                 startWallMs = session.wallBaseMs,
             )
+            applyInitialMode(runtime)
             feedMergedTimeline(runtime, clock)
         }
 
@@ -50,6 +52,15 @@ internal class PositioningEndToEndReplayDriver(
             environment = environment,
             service = service,
         )
+    }
+
+    private fun applyInitialMode(runtime: PositioningRuntime) {
+        val mode = TrackingMotionMode.entries.firstOrNull {
+            it.name == session.initialState.mode
+        } ?: return
+        if (mode != TrackingMotionMode.WALKING) {
+            runtime.deps.autoTrackingMotionEngine.overrideInitialMode(mode)
+        }
     }
 
     private suspend fun feedMergedTimeline(

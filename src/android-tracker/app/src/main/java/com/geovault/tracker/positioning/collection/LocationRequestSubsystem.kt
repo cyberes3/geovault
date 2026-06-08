@@ -153,13 +153,10 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
                     )
                 }
                 if (decision is ProviderHealthDecision.ReapplyRequest) {
-                    if (decision.staleFreshness) {
-                        rt.deps.freshnessRecoveryController.reset()
-                        rt.deps.runtimeTelemetry.event(
-                            "freshness_probe_reset",
-                            "reason=callback_silent_provider_reapply localAgeMs=${rt.deps.pointFreshnessTracker.localPointAgeMs(nowMs) ?: -1L}"
-                        )
-                    }
+                    // Do not reset the freshness probe on a callback-silent reapply.
+                    // Resetting here would restart the probe window timer every 30 s,
+                    // potentially pushing the actual probe timeout out indefinitely on
+                    // devices that fire a reapply every watchdog cycle.
                     rt.state.lastAppliedLocationRequestKey = null
                     rt.locationRequests.reapplyLocationRequestIfActive(reason = "fix_delivery_stale")
                 }

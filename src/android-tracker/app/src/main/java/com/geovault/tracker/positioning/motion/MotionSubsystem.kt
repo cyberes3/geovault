@@ -135,11 +135,16 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             1 -> Location(stationaryReferenceLocation)
             else -> rt.state.stationaryAnchorLocation
         }
+        val sensorFusionHighConfidence = stationaryConfidence?.let {
+            it.score > TrackingLocationPolicy.FAST_ADVANCE_SCORE ||
+                (it.isOscillating && it.score > TrackingLocationPolicy.OSCILLATING_FAST_ADVANCE_SCORE)
+        } ?: false
         val pauseEligibility = StationaryPauseEligibilityPolicy.evaluate(
             stationaryPolicyWantsPause = stationaryDecision.shouldPause,
             localPointFresh = localPointFresh,
             fallbackPending = rt.deps.lowAccuracyFallbackCoordinator.hasPendingCandidate(),
             providerAvailable = rt.utilities.isGpsProviderEnabled(),
+            sensorFusionHighConfidence = sensorFusionHighConfidence,
         )
         if (stationaryDecision.shouldPause && !pauseEligibility.shouldPause) {
             rt.deps.runtimeTelemetry.event(

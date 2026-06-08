@@ -39,6 +39,14 @@ data class PositioningPresetValues(
     val stationaryAccuracyCeilingMeters: Float = TrackingLocationPolicy.STATIONARY_ACCURACY_CEILING_METERS,
     val elasticityConfig: PositioningElasticityConfig = PositioningElasticityConfig.Default,
     val fastLockConfig: PositioningFastLockConfig = PositioningFastLockConfig.Default,
+    /**
+     * How long (ms) the freshness-probe phase is allowed to run before
+     * giving up and accepting a recovery candidate as-is. Default
+     * [com.geovault.tracker.location.PositioningRecoveryConfig.DEFAULT_FRESHNESS_PROBE_WINDOW_MS]
+     * (90 s) is fine for walking/biking. DRIVING uses a longer window
+     * because a parked car may go minutes without a usable fix.
+     */
+    val freshnessProbeWindowMs: Long = PositioningRecoveryConfig.DEFAULT_FRESHNESS_PROBE_WINDOW_MS,
 ) {
     fun withDensity(density: PositioningDensity): PositioningPresetValues {
         if (density == PositioningDensity.Normal) return this
@@ -51,6 +59,7 @@ data class PositioningPresetValues(
     fun recoveryConfig(maxLocalPointGapMs: Long): PositioningRecoveryConfig {
         return PositioningRecoveryConfig(
             maxLocalPointGapMs = maxLocalPointGapMs,
+            freshnessProbeWindowMs = freshnessProbeWindowMs,
             recoverySpeedCapMps = recoverySpeedCapMps,
         )
     }
@@ -129,6 +138,7 @@ object PositioningPresets {
                 accuracyThresholdMeters = TrackerSettings.INTERNAL_ACCURACY_FILTER_METERS,
                 filterTuning = MotionProfileTuning.Driving,
                 recoverySpeedCapMps = MotionProfileTuning.Driving.maxImpliedSpeedMps.toFloat(),
+                freshnessProbeWindowMs = 200_000L,
             )
         }
     }

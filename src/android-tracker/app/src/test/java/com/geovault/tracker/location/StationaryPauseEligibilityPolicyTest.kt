@@ -8,16 +8,48 @@ import org.junit.Test
 class StationaryPauseEligibilityPolicyTest {
 
     @Test
-    fun staleLocalPoint_blocksPauseEvenWhenStationaryPolicyWantsPause() {
+    fun evaluate_stalePoint_noConfidence_blocks() {
         val decision = StationaryPauseEligibilityPolicy.evaluate(
             stationaryPolicyWantsPause = true,
             localPointFresh = false,
             fallbackPending = false,
             providerAvailable = true,
+            sensorFusionHighConfidence = false,
         )
 
         assertFalse(decision.shouldPause)
         assertEquals(StationaryPauseEligibilityReason.STALE_LOCAL_POINT, decision.reason)
+    }
+
+    @Test
+    fun evaluate_stalePoint_highConfidence_allows() {
+        // Sensor-fusion (IMU/barometer) confidence is GPS-independent:
+        // a stale committed trail must not block the pause when the IMU
+        // says the device has not moved.
+        val decision = StationaryPauseEligibilityPolicy.evaluate(
+            stationaryPolicyWantsPause = true,
+            localPointFresh = false,
+            fallbackPending = false,
+            providerAvailable = true,
+            sensorFusionHighConfidence = true,
+        )
+
+        assertTrue(decision.shouldPause)
+        assertEquals(StationaryPauseEligibilityReason.ALLOWED, decision.reason)
+    }
+
+    @Test
+    fun evaluate_freshPoint_noConfidence_allows() {
+        val decision = StationaryPauseEligibilityPolicy.evaluate(
+            stationaryPolicyWantsPause = true,
+            localPointFresh = true,
+            fallbackPending = false,
+            providerAvailable = true,
+            sensorFusionHighConfidence = false,
+        )
+
+        assertTrue(decision.shouldPause)
+        assertEquals(StationaryPauseEligibilityReason.ALLOWED, decision.reason)
     }
 
     @Test
@@ -40,6 +72,7 @@ class StationaryPauseEligibilityPolicyTest {
             localPointFresh = true,
             fallbackPending = false,
             providerAvailable = true,
+            sensorFusionHighConfidence = false,
         )
 
         assertTrue(decision.shouldPause)

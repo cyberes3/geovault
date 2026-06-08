@@ -9,8 +9,11 @@ import kotlin.math.max
  * threshold for the current mode (promotion evidence).
  *
  * [consecutiveBelowLower] counts consecutive accepted samples strictly below the lower
- * threshold for the current mode (demotion evidence). Both counters reset on any
- * rejected fix, on a mode change, and on [onTick] decay.
+ * threshold for the current mode (demotion evidence). The counter resets on any
+ * rejected fix or a mode change. [onTick] decays the smoothed speed but deliberately
+ * leaves [consecutiveBelowLower] untouched so that demotion evidence accumulates across
+ * GPS-quiet gaps (e.g. a 2-minute distance-filter interval while stationary in DRIVING
+ * mode).
  */
 data class AutoTrackingMotionState(
     val mode: TrackingMotionMode = TrackingMotionMode.WALKING,
@@ -105,6 +108,15 @@ class AutoTrackingMotionEngine(
     }
 
     /**
+     * Overrides the current mode without going through promotion logic. Only valid immediately
+     * after [reset] — for example to restore a known mode when replaying a mid-session window.
+     * Callers must not use this to bypass the normal evidence accumulation path.
+     */
+    internal fun overrideInitialMode(mode: TrackingMotionMode) {
+        state = state.copy(mode = mode)
+    }
+
+    /**
      * Feed the smoother with the speed of an accepted fix. [speedMps]
      * MUST come from a vetted source (the position filter's effective
      * distance over dt), never directly from `Location.speed`.
@@ -169,15 +181,23 @@ class AutoTrackingMotionEngine(
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
     }
 
+    /**
+     * GPS transitioning to a stationary pause is zero-speed evidence and
+     * should contribute to the demotion streak just like any other slow
+     * sample. Routing through [setStateWithTransition] lets three pause
+     * events (possibly interleaved with actual slow fixes) accumulate the
+     * required [DEMOTE_CONSECUTIVE_REQUIRED] count and trigger a demotion.
+     */
     fun onGpsPaused(nowMs: Long): AutoTrackingEngineOutput {
-        val current = state
-        val next = current.copy(
-            isGpsPaused = true,
-            lastEvidenceAtMs = max(current.lastEvidenceAtMs, nowMs),
-            lastObservedSpeedMps = 0f,
+        return setStateWithTransition(
+            nextState = state.copy(
+                isGpsPaused = true,
+                lastEvidenceAtMs = max(state.lastEvidenceAtMs, nowMs),
+                lastObservedSpeedMps = 0f,
+                consecutiveAboveUpper = 0,
+            ),
+            decisionSpeedMps = 0f,
         )
-        state = next
-        return AutoTrackingEngineOutput(state = state, modeChanged = false)
     }
 
     fun onGpsResumed(nowMs: Long): AutoTrackingEngineOutput {
@@ -189,6 +209,17 @@ class AutoTrackingMotionEngine(
         return AutoTrackingEngineOutput(state = state, modeChanged = false)
     }
 
+    /**
+     * Periodic speed decay. Decays [smoothedSpeedMps] toward zero when no
+     * evidence has arrived for longer than [decayGraceMs]. The demotion
+     * streak ([consecutiveBelowLower]) is intentionally **not** reset here:
+     * resetting it would erase legitimate evidence accumulated over a GPS-
+     * quiet period (e.g. while the distance filter is holding back deliveries
+     * on a parked device), making it impossible to reach [DEMOTE_CONSECUTIVE_REQUIRED].
+     * A non-zero [consecutiveBelowLower] is evaluated at the next
+     * [onAcceptedFix] / [onGpsPaused] call; an above-threshold speed there
+     * will reset the counter naturally via [selectMode].
+     */
     fun onTick(nowMs: Long): AutoTrackingEngineOutput {
         val elapsedMs = nowMs - state.lastEvidenceAtMs
         if (elapsedMs <= decayGraceMs) {
@@ -197,11 +228,9 @@ class AutoTrackingMotionEngine(
         val decayWindowMs = elapsedMs - decayGraceMs
         val decayFactor = exp(-decayWindowMs.toDouble() / decayHalfLifeMs.toDouble()).toFloat()
         val decayedSpeed = (state.smoothedSpeedMps * decayFactor).coerceAtLeast(0f)
-        val preservePromotionStreak = state.consecutiveAboveUpper > 0
         state = state.copy(
             smoothedSpeedMps = decayedSpeed,
-            consecutiveAboveUpper = if (preservePromotionStreak) state.consecutiveAboveUpper else 0,
-            consecutiveBelowLower = 0,
+            consecutiveAboveUpper = 0,
             lastObservedSpeedMps = 0f,
         )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)

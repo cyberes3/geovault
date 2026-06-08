@@ -58,12 +58,17 @@ object TrackingLocationPolicy {
      *     positively confirms stillness ([filterConfirmedStillness] -- e.g.
      *     `uncertainty-suppressed` snap to anchor). Generic filter
      *     intervention ([filterIntervened] without confirmed stillness)
-     *     holds the counter rather than advancing it.
+     *     holds the counter rather than advancing it, unless (a) the counter
+     *     has already reached the pause threshold — in which case the pause
+     *     decision is still honoured — or (b) the IMU/barometer confidence
+     *     signal independently indicates stillness (see rule 3).
      *  3. Multi-signal [confidence] can fast-advance the counter past the
      *     usual 3-tick floor: `score > 0.6` (confident stillness) or
      *     `isOscillating && score > 0.5` (confident rubber-banding) jump
      *     straight to the pause threshold so we don't waste a minute of
-     *     polling proving what we already know.
+     *     polling proving what we already know. This also fires when
+     *     [filterIntervened] is true: sensor-fusion evidence is
+     *     GPS-independent and does not require a fresh committed trail.
      */
     fun stationaryUpdate(
         lastLocation: Location?,
@@ -89,6 +94,31 @@ object TrackingLocationPolicy {
                 return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_speed_hint")
             }
             if (filterIntervened) {
+                // Rule 2a: the counter already reached the threshold before this
+                // filter-intervened fix arrived (e.g. a brief motion-resume while
+                // the device is otherwise stationary).
+                if (currentConsecutive >= PAUSE_THRESHOLD) {
+                    return StationaryDecision(
+                        consecutive = currentConsecutive,
+                        shouldPause = true,
+                        reason = "filter_intervened",
+                    )
+                }
+                // Rule 3 / Rule 2b: sensor-fusion confidence is GPS-independent;
+                // it can fast-advance the counter even when the GPS trail is stale.
+                // Requires an anchor to already be established (currentConsecutive > 0).
+                if (currentConsecutive > 0 && confidence != null) {
+                    val fastAdvance = confidence.score > FAST_ADVANCE_SCORE ||
+                        (confidence.isOscillating && confidence.score > OSCILLATING_FAST_ADVANCE_SCORE)
+                    if (fastAdvance) {
+                        val newConsecutive = maxOf(currentConsecutive + 1, PAUSE_THRESHOLD)
+                        return StationaryDecision(
+                            consecutive = newConsecutive,
+                            shouldPause = true,
+                            reason = "confidence_fast_advance",
+                        )
+                    }
+                }
                 return StationaryDecision(
                     consecutive = currentConsecutive,
                     shouldPause = false,
@@ -145,8 +175,8 @@ object TrackingLocationPolicy {
 
     private const val GPS_MOTION_FLOOR_MPS = 1.0f
     private const val PAUSE_THRESHOLD = 3
-    private const val FAST_ADVANCE_SCORE = 0.6
-    private const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
+    internal const val FAST_ADVANCE_SCORE = 0.6
+    internal const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
 
     /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest

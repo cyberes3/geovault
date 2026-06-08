@@ -160,6 +160,7 @@ data class LocationFilterConfig(
             speedRecovery = tuning.speedRecovery,
             anchorHealth = tuning.anchorHealth,
             resumeConfirmationWindowMs = tuning.resumeConfirmationWindowMs,
+            resumeConfirmationConsistencyMeters = tuning.resumeConfirmationConsistencyMeters,
             resumeConfirmationLargeDisplacementMeters = tuning.resumeConfirmationLargeDisplacementMeters,
             maxFutureSkewMs = maxFutureSkewMs,
             freshnessTtlMs = freshnessTtlMs,

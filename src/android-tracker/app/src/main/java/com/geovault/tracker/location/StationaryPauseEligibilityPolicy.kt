@@ -18,6 +18,11 @@ data class StationaryPauseEligibilityDecision(
  *
  * The stationary policy may prove stillness, but GPS should only sleep when
  * the persisted local trail is fresh and no recovery path is pending.
+ *
+ * The [sensorFusionHighConfidence] bypass exempts the staleness check when
+ * barometer/IMU evidence independently confirms the device has not moved.
+ * That signal is GPS-independent, so it remains valid even when the last
+ * committed point is old.
  */
 object StationaryPauseEligibilityPolicy {
     fun evaluate(
@@ -25,6 +30,7 @@ object StationaryPauseEligibilityPolicy {
         localPointFresh: Boolean,
         fallbackPending: Boolean,
         providerAvailable: Boolean,
+        sensorFusionHighConfidence: Boolean = false,
     ): StationaryPauseEligibilityDecision {
         if (!stationaryPolicyWantsPause) {
             return StationaryPauseEligibilityDecision(
@@ -38,7 +44,7 @@ object StationaryPauseEligibilityPolicy {
                 reason = StationaryPauseEligibilityReason.PROVIDER_UNAVAILABLE,
             )
         }
-        if (!localPointFresh) {
+        if (!localPointFresh && !sensorFusionHighConfidence) {
             return StationaryPauseEligibilityDecision(
                 shouldPause = false,
                 reason = StationaryPauseEligibilityReason.STALE_LOCAL_POINT,

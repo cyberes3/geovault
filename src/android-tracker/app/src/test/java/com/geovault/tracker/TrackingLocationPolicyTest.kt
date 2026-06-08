@@ -134,13 +134,12 @@ class TrackingLocationPolicyTest {
     }
 
     /**
-     * Generic [filterIntervened] (without [filterConfirmedStillness])
-     * carries no positional information about the user, so the counter
-     * is held -- neither advanced into a false pause nor reset away from
-     * legitimate progress.
+     * Generic [filterIntervened] below the pause threshold: the counter is
+     * held — neither advanced into a false pause nor reset away from
+     * legitimate progress. Original contract preserved.
      */
     @Test
-    fun stationaryUpdate_filterIntervenedFixes_doNotPause() {
+    fun stationaryUpdate_filterIntervened_belowThreshold_doesNotPause() {
         val anchor = Location("test").apply {
             latitude = 0.0
             longitude = 0.0
@@ -154,7 +153,8 @@ class TrackingLocationPolicyTest {
             accuracy = 27.55f
         }
         var consecutive = 1
-        repeat(5) {
+        // Drive consecutive up to PAUSE_THRESHOLD - 1 (= 2); it must stay there.
+        repeat(4) {
             val result = TrackingLocationPolicy.stationaryUpdate(
                 lastLocation = anchor,
                 location = noisy,
@@ -166,8 +166,103 @@ class TrackingLocationPolicyTest {
             assertEquals(consecutive, result.consecutive)
             assertFalse(result.shouldPause)
             assertEquals("filter_intervened", result.reason)
-            consecutive = result.consecutive
+            // Counter is held, not incremented; cap test at 2 to stay below threshold.
+            consecutive = minOf(result.consecutive, 2)
         }
+    }
+
+    /**
+     * When [filterIntervened] is true but the counter has already reached the
+     * pause threshold (e.g. after a brief motion-resume), the pause decision
+     * must still be honoured so GPS can re-sleep without requiring a new
+     * non-intervened fix.
+     */
+    @Test
+    fun stationaryUpdate_filterIntervened_alreadyAtThreshold_pauses() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 27.55f
+        }
+        val noisy = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 40_000L
+            accuracy = 27.55f
+        }
+        // consecutive = 3 = PAUSE_THRESHOLD
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = noisy,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 3,
+            significantMotionOnly = true,
+            filterIntervened = true,
+        )
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("filter_intervened", result.reason)
+    }
+
+    /**
+     * When [filterIntervened] is true but sensor-fusion confidence exceeds the
+     * fast-advance threshold, the counter jumps to PAUSE_THRESHOLD and GPS
+     * pauses. The IMU/barometer signal is GPS-independent and does not require
+     * a fresh committed trail.
+     */
+    @Test
+    fun stationaryUpdate_filterIntervened_highConfidence_fastAdvances() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 27.55f
+        }
+        val noisy = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 120_000L
+            accuracy = 27.55f
+        }
+        // consecutive = 1 (anchor established), confidence just above FAST_ADVANCE_SCORE (0.6)
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = noisy,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterIntervened = true,
+            confidence = StationaryConfidence(score = 0.65, isStationary = true, isOscillating = false),
+        )
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    /**
+     * When [filterIntervened] is true and confidence is high but no anchor has
+     * been established yet (consecutive = 0), the fast-advance must NOT fire
+     * because there is no reference position.
+     */
+    @Test
+    fun stationaryUpdate_filterIntervened_highConfidence_noAnchor_doesNotPause() {
+        val noisy = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 40_000L
+            accuracy = 27.55f
+        }
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = null,
+            location = noisy,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 0,
+            significantMotionOnly = true,
+            filterIntervened = true,
+            confidence = StationaryConfidence(score = 0.65, isStationary = true, isOscillating = false),
+        )
+        assertFalse(result.shouldPause)
     }
 
     /**

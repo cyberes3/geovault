@@ -25,6 +25,13 @@ data class MotionProfileTuning(
      */
     val resumeConfirmationWindowMs: Long,
     /**
+     * Maximum distance between the held resume candidate and a follow-up fix
+     * for the two fixes to be considered spatially consistent. A looser value
+     * allows for greater GPS scatter at speed; a tighter value rejects a
+     * follow-up that arrived after significant movement.
+     */
+    val resumeConfirmationConsistencyMeters: Double,
+    /**
      * Raw anchor-to-fix distance above which a single good fix is sufficient
      * to confirm relocation, bypassing the twin-fix consistency check. At
      * highway speeds the two-fix window expires before a second fix arrives
@@ -63,6 +70,7 @@ data class MotionProfileTuning(
                 suspectAccuracyMeters = 30.0,
             ),
             resumeConfirmationWindowMs = 45_000L,
+            resumeConfirmationConsistencyMeters = 75.0,
             resumeConfirmationLargeDisplacementMeters = 300.0,
         )
 
@@ -108,6 +116,7 @@ data class MotionProfileTuning(
                 suspectAccuracyMeters = 40.0,
             ),
             resumeConfirmationWindowMs = 30_000L,
+            resumeConfirmationConsistencyMeters = 100.0,
             resumeConfirmationLargeDisplacementMeters = 500.0,
         )
 
@@ -131,7 +140,8 @@ data class MotionProfileTuning(
             speedRecovery = SpeedRecoveryConfig.Disabled,
             anchorHealth = AnchorHealthConfig.Default,
             resumeConfirmationWindowMs = 60_000L,
-            resumeConfirmationLargeDisplacementMeters = 800.0,
+            resumeConfirmationConsistencyMeters = 150.0,
+            resumeConfirmationLargeDisplacementMeters = 400.0,
         )
     }
 }

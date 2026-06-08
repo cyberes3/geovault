@@ -17,7 +17,7 @@
     "groupModeFitOnlyActiveTrackers": true
   },
   "initialState": {
-    "mode": "BIKING",
+    "mode": "WALKING",
     "sessionBoundaryId": 0
   },
   "rawFixes": [
