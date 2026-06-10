@@ -23,7 +23,7 @@ The backend venv is at src/backend/venv
 Always use top-level imports in Python, not lazy/local/function level!
 Do not re-export modules or use __all__. Instead, do direct imports.
 
-Run tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests. More instructions available at src/tests/README.md.
+Run backend python tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests. More instructions available at src/tests/README.md.
 YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh src/tests/test_api/test_app_releases.py`
 
 Don't pile Django routes in the base views.py file. Instead, create new files to organize them in a manageable way.
