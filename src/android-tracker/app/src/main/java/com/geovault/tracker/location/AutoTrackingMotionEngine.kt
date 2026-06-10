@@ -5,15 +5,17 @@ import kotlin.math.exp
 import kotlin.math.max
 
 /**
- * [consecutiveAboveUpper] counts consecutive accepted samples strictly above the upper
- * threshold for the current mode (promotion evidence).
+ * [consecutiveAboveUpper] counts consecutive samples strictly above the upper threshold
+ * for the current mode (promotion evidence).
  *
- * [consecutiveBelowLower] counts consecutive accepted samples strictly below the lower
- * threshold for the current mode (demotion evidence). The counter resets on any
- * rejected fix or a mode change. [onTick] decays the smoothed speed but deliberately
- * leaves [consecutiveBelowLower] untouched so that demotion evidence accumulates across
- * GPS-quiet gaps (e.g. a 2-minute distance-filter interval while stationary in DRIVING
- * mode).
+ * [consecutiveBelowLower] counts consecutive samples strictly below the lower threshold
+ * for the current mode (demotion evidence).
+ *
+ * Both counters are intentionally **preserved** across [onTick] calls so that streaks
+ * accumulate even when GPS is quiet (e.g. distance-filter gaps in DRIVING mode or
+ * speed-cap-rejected fixes during mode-deadlock in WALKING mode). They reset naturally
+ * through [selectMode] when a sample arrives on the opposite side of the hysteresis band,
+ * and on any rejected fix via [onRejectedFix].
  */
 data class AutoTrackingMotionState(
     val mode: TrackingMotionMode = TrackingMotionMode.WALKING,
@@ -211,14 +213,20 @@ class AutoTrackingMotionEngine(
 
     /**
      * Periodic speed decay. Decays [smoothedSpeedMps] toward zero when no
-     * evidence has arrived for longer than [decayGraceMs]. The demotion
-     * streak ([consecutiveBelowLower]) is intentionally **not** reset here:
-     * resetting it would erase legitimate evidence accumulated over a GPS-
-     * quiet period (e.g. while the distance filter is holding back deliveries
-     * on a parked device), making it impossible to reach [DEMOTE_CONSECUTIVE_REQUIRED].
-     * A non-zero [consecutiveBelowLower] is evaluated at the next
-     * [onAcceptedFix] / [onGpsPaused] call; an above-threshold speed there
-     * will reset the counter naturally via [selectMode].
+     * evidence has arrived for longer than [decayGraceMs].
+     *
+     * Neither [consecutiveBelowLower] nor [consecutiveAboveUpper] is reset
+     * here. Resetting either counter would erase legitimate evidence accumulated
+     * across GPS-quiet gaps — for example:
+     * - A device parked in DRIVING mode may only receive a fix every 100 m of
+     *   distance-filtered movement; demotion streaks must survive the gaps.
+     * - A device accelerating from WALKING receives speed-cap-rejected fixes
+     *   that feed [onMotionEvidence] / the HANDSHAKE path; promotion streaks
+     *   that survive a quiet tick cannot be allowed to reset or the mode will
+     *   never leave WALKING during the filter deadlock period.
+     *
+     * Both counters reset naturally through [selectMode] the next time a sample
+     * falls on the opposite side of the hysteresis threshold.
      */
     fun onTick(nowMs: Long): AutoTrackingEngineOutput {
         val elapsedMs = nowMs - state.lastEvidenceAtMs
@@ -230,7 +238,6 @@ class AutoTrackingMotionEngine(
         val decayedSpeed = (state.smoothedSpeedMps * decayFactor).coerceAtLeast(0f)
         state = state.copy(
             smoothedSpeedMps = decayedSpeed,
-            consecutiveAboveUpper = 0,
             lastObservedSpeedMps = 0f,
         )
         return AutoTrackingEngineOutput(state = state, modeChanged = false)

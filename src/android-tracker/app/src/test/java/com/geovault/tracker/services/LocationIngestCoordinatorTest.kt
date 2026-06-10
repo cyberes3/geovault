@@ -448,7 +448,10 @@ class LocationIngestCoordinatorTest {
     fun ingest_resumeUnconfirmedRejects_doNotForceLocalReanchor() {
         val dao = FakeLocationDao()
         val coordinator = LocationIngestCoordinator(dao)
-        val settings = TrackerSettings(accuracyFilterMeters = 25f)
+        // Allow 60 m accuracy through the accuracy filter. The resume-confirmation twin-fix
+        // gate rejects fixes with accuracy > resumeConfirmationMaxAccuracyMeters (50 m), so
+        // every post-resume fix is held as RESUME_UNCONFIRMED without ever confirming.
+        val settings = TrackerSettings(accuracyFilterMeters = 100f)
         val trackId = "tracker-1"
         val anchorTimeMs = 1_700_000_000_000L
         val anchor = Location("gps").apply {
@@ -478,18 +481,17 @@ class LocationIngestCoordinatorTest {
 
         var previousAccepted = seed.lastFilteredLocation
         var lastResult: LocationIngestResult? = null
-        // Each fix moves ~111m north from the previous. This keeps all raw displacements
-        // from the pre-pause anchor (10.0) between 222m and 777m — above the
-        // resumeConfirmationMinDistanceMeters (150m) so the gate stays armed, and below
-        // the Driving fast-confirm threshold (800m) so no single-fix bypass fires.
-        // The 111m inter-fix step also exceeds resumeConfirmationConsistencyMeters (75m),
-        // preventing twin-fix confirmation, so every fix returns RESUME_UNCONFIRMED.
+        // Each fix is ~40m north of the previous, starting at ~155m from the anchor.
+        // accuracy = 60m > resumeConfirmationMaxAccuracyMeters (50m): the twin-fix quality
+        // gate never arms, so no fix can twin-confirm. Total displacement stays below the
+        // Driving large-displacement single-fix threshold (400m), preventing fast-confirm.
+        // Every fix therefore returns RESUME_UNCONFIRMED regardless of inter-fix spacing.
         repeat(PositioningPolicyConfig.LOCAL_STALL_REJECT_STREAK_THRESHOLD.toInt()) { idx ->
-            val nowMs = anchorTimeMs + 4 * 60_000L + idx * 1_000L
+            val nowMs = anchorTimeMs + 4 * 60_000L + idx * 5_000L
             val candidate = Location("gps").apply {
-                latitude = 10.002 + idx * 0.001
+                latitude = 10.0014 + idx * 0.00036  // ~155m + idx*40m from anchor, max ~355m
                 longitude = 20.0
-                accuracy = 5f
+                accuracy = 60f
                 time = nowMs
             }
             val result = coordinator.ingest(

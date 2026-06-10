@@ -42,6 +42,29 @@ object TrackingLocationPolicy {
     )
 
     /**
+     * True when multi-modal sensor confidence clears the fast-advance threshold.
+     * Encapsulates the threshold so it is defined once across all call sites.
+     * Does NOT require a prior GPS anchor; use [confidenceCanFastAdvance] inside
+     * [stationaryUpdate] where the anchor invariant must be enforced.
+     */
+    internal fun isHighConfidence(confidence: StationaryConfidence?): Boolean {
+        if (confidence == null) return false
+        return confidence.score > FAST_ADVANCE_SCORE ||
+            (confidence.isOscillating && confidence.score > OSCILLATING_FAST_ADVANCE_SCORE)
+    }
+
+    /**
+     * True when sensor-fusion confidence may accelerate the stationary evidence
+     * counter inside [stationaryUpdate]. Requires [currentConsecutive] > 0:
+     * confidence strengthens an anchor GPS has already confirmed; it cannot
+     * establish the first anchor from scratch.
+     */
+    private fun confidenceCanFastAdvance(
+        currentConsecutive: Int,
+        confidence: StationaryConfidence?,
+    ): Boolean = currentConsecutive > 0 && isHighConfidence(confidence)
+
+    /**
      * Updates stationary state from a single accepted fix.
      *
      * The upstream [com.geovault.tracker.policy.filter.LocationFilter]
@@ -69,6 +92,8 @@ object TrackingLocationPolicy {
      *     polling proving what we already know. This also fires when
      *     [filterIntervened] is true: sensor-fusion evidence is
      *     GPS-independent and does not require a fresh committed trail.
+     *     Requires [currentConsecutive] > 0: confidence accelerates
+     *     existing GPS evidence; it cannot create the first anchor.
      */
     fun stationaryUpdate(
         lastLocation: Location?,
@@ -106,18 +131,13 @@ object TrackingLocationPolicy {
                 }
                 // Rule 3 / Rule 2b: sensor-fusion confidence is GPS-independent;
                 // it can fast-advance the counter even when the GPS trail is stale.
-                // Requires an anchor to already be established (currentConsecutive > 0).
-                if (currentConsecutive > 0 && confidence != null) {
-                    val fastAdvance = confidence.score > FAST_ADVANCE_SCORE ||
-                        (confidence.isOscillating && confidence.score > OSCILLATING_FAST_ADVANCE_SCORE)
-                    if (fastAdvance) {
-                        val newConsecutive = maxOf(currentConsecutive + 1, PAUSE_THRESHOLD)
-                        return StationaryDecision(
-                            consecutive = newConsecutive,
-                            shouldPause = true,
-                            reason = "confidence_fast_advance",
-                        )
-                    }
+                if (confidenceCanFastAdvance(currentConsecutive, confidence)) {
+                    val newConsecutive = maxOf(currentConsecutive + 1, PAUSE_THRESHOLD)
+                    return StationaryDecision(
+                        consecutive = newConsecutive,
+                        shouldPause = true,
+                        reason = "confidence_fast_advance",
+                    )
                 }
                 return StationaryDecision(
                     consecutive = currentConsecutive,
@@ -151,12 +171,7 @@ object TrackingLocationPolicy {
         }
 
         val baseAdvance = if (withinRadius || filterConfirmedStillness) currentConsecutive + 1 else 1
-        val confidenceFastAdvance = when {
-            confidence == null -> false
-            confidence.score > FAST_ADVANCE_SCORE -> true
-            confidence.isOscillating && confidence.score > OSCILLATING_FAST_ADVANCE_SCORE -> true
-            else -> false
-        }
+        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence)
         val newConsecutive = if (confidenceFastAdvance) {
             maxOf(baseAdvance, PAUSE_THRESHOLD)
         } else {
@@ -175,8 +190,8 @@ object TrackingLocationPolicy {
 
     private const val GPS_MOTION_FLOOR_MPS = 1.0f
     private const val PAUSE_THRESHOLD = 3
-    internal const val FAST_ADVANCE_SCORE = 0.6
-    internal const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
+    private const val FAST_ADVANCE_SCORE = 0.6
+    private const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
 
     /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest

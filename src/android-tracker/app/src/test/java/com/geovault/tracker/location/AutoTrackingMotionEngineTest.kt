@@ -500,4 +500,80 @@ class AutoTrackingMotionEngineTest {
         assertTrue(out.modeChanged)
         assertEquals(TrackingMotionMode.BIKING, out.state.mode)
     }
+
+    /**
+     * Regression guard for the WALKING-mode promotion deadlock.
+     *
+     * Previously, [onTick] reset [consecutiveAboveUpper] to 0. In WALKING mode
+     * the distance filter raises the bar so GPS fixes arrive infrequently; the
+     * promotion HANDSHAKE path feeds evidence via [onMotionEvidence], which uses
+     * the same [consecutiveAboveUpper] counter. If [onTick] fires between two
+     * evidence events (very likely given ~20 s GPS intervals vs ~3 min ticks),
+     * the streak resets to 0 and promotion never reaches
+     * [PROMOTE_CONSECUTIVE_REQUIRED]. The result is the mode staying stuck in
+     * WALKING while the device is at highway speed, eventually leading to a
+     * local-stall reanchor and a large map jump.
+     *
+     * The fix preserves [consecutiveAboveUpper] across ticks symmetrically with
+     * [consecutiveBelowLower].
+     */
+    @Test
+    fun onTick_afterGrace_preservesPromotionStreak() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+
+        // First high-speed evidence arms the streak at 1.
+        engine.onMotionEvidence(
+            speedMps = 22f,
+            eventTimeMs = 1_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+        assertEquals(1, engine.snapshot().consecutiveAboveUpper)
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        // A decay tick fires before the next evidence arrives.
+        engine.onTick(nowMs = 60_000L)
+
+        // Streak must still be 1 — not reset to 0.
+        assertEquals(
+            "onTick must not reset consecutiveAboveUpper",
+            1,
+            engine.snapshot().consecutiveAboveUpper,
+        )
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        // Second evidence after the tick crosses PROMOTE_CONSECUTIVE_REQUIRED=2 → DRIVING.
+        val out = engine.onMotionEvidence(
+            speedMps = 22f,
+            eventTimeMs = 61_000L,
+            confidence = AutoTrackingMotionEvidenceConfidence.High,
+        )
+        assertTrue("promotion must fire after tick gap", out.modeChanged)
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+    }
+
+    /**
+     * Symmetric with [onTick_afterGrace_preservesDemotionStreak]: a promotion
+     * streak accumulated via accepted fixes must also survive a quiet decay tick.
+     */
+    @Test
+    fun onTick_afterGrace_preservesAcceptedFixPromotionStreak() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        assertEquals(1, engine.snapshot().consecutiveAboveUpper)
+
+        engine.onTick(nowMs = 60_000L)
+
+        assertEquals(
+            "onTick must not reset consecutiveAboveUpper",
+            1,
+            engine.snapshot().consecutiveAboveUpper,
+        )
+
+        val out = engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 61_000L)
+        assertTrue(out.modeChanged)
+        assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
+    }
 }

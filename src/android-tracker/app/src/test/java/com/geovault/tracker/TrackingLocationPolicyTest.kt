@@ -428,7 +428,8 @@ class TrackingLocationPolicyTest {
     /**
      * Multi-signal confidence above 0.6 fast-advances the counter past
      * the 3-tick threshold so we don't waste a minute of polling proving
-     * what we already know.
+     * what we already know. Requires [currentConsecutive] > 0 — confidence
+     * accelerates existing GPS evidence but cannot create the first anchor.
      */
     @Test
     fun stationaryUpdate_highConfidence_fastAdvancesToPause() {
@@ -449,7 +450,7 @@ class TrackingLocationPolicyTest {
             lastLocation = anchor,
             location = close,
             stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
-            currentConsecutive = 0,
+            currentConsecutive = 1,
             significantMotionOnly = true,
             confidence = confidence,
         )
@@ -462,6 +463,7 @@ class TrackingLocationPolicyTest {
      * Confident rubber-band oscillation (score > 0.5, isOscillating
      * true) is the textbook indoor-multipath signature -- jump straight
      * to pause rather than waiting for raw geometry to confirm.
+     * Requires [currentConsecutive] > 0.
      */
     @Test
     fun stationaryUpdate_oscillatingConfidence_fastAdvancesToPause() {
@@ -482,10 +484,76 @@ class TrackingLocationPolicyTest {
             lastLocation = anchor,
             location = close,
             stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 1,
+            significantMotionOnly = true,
+            confidence = confidence,
+        )
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    /**
+     * The fast-advance invariant: sensor-fusion confidence requires [currentConsecutive] > 0
+     * to fire. When the counter is 0 (no GPS anchor yet), confidence is ignored and the
+     * counter advances by 1 normally. This prevents an immediate re-pause after a
+     * significant-motion reset where the device is genuinely still.
+     */
+    @Test
+    fun stationaryUpdate_confidenceFastAdvance_doesNotFireWhenCounterIsZero() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val close = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 8f
+        }
+        val confidence = StationaryConfidence(score = 0.90, isStationary = true, isOscillating = false)
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = close,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
             currentConsecutive = 0,
             significantMotionOnly = true,
             confidence = confidence,
         )
+        assertEquals(1, result.consecutive)
+        assertFalse(result.shouldPause)
+    }
+
+    /**
+     * Companion to the counter=0 test above: once at least one GPS fix has established
+     * the anchor (counter=1), the same high confidence correctly jumps straight to the
+     * pause threshold.
+     */
+    @Test
+    fun stationaryUpdate_confidenceFastAdvance_firesWhenCounterIsOne() {
+        val anchor = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 0L
+            accuracy = 8f
+        }
+        val close = Location("test").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = 20_000L
+            accuracy = 8f
+        }
+        val confidence = StationaryConfidence(score = 0.90, isStationary = true, isOscillating = false)
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor,
+            location = close,
+            stationaryRadiusMeters = TrackingLocationPolicy.DEFAULT_STATIONARY_RADIUS_METERS,
+            currentConsecutive = 1,
+            significantMotionOnly = true,
+            confidence = confidence,
+        )
+        assertEquals(3, result.consecutive)
         assertTrue(result.shouldPause)
         assertEquals("confidence_fast_advance", result.reason)
     }

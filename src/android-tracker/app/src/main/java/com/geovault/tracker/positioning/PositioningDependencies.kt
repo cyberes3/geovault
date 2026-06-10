@@ -123,7 +123,7 @@ internal class PositioningDependencies(
         significantMotionBridge = environment.significantMotionBridge(
             service = service,
             serviceScope = serviceScope,
-            onResume = { runtime.collection.resumeGps() },
+            onResume = { runtime.collection.onSignificantMotion() },
         )
         val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
             .scaleDurationMs(StationaryPingController.DEFAULT_INTERVAL_MS)

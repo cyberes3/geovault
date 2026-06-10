@@ -15,10 +15,11 @@ import org.junit.Test
  * turn kept the wide interval — an unrecoverable spiral for the remainder of
  * the drive.
  *
- * Fix: [DEMOTE_CONSECUTIVE_REQUIRED] = 2 consecutive below-lower accepted
- * fixes are required before any downward mode transition, matching the
- * existing [PROMOTE_CONSECUTIVE_REQUIRED] = 2 guard on promotion. The fix is
- * applied symmetrically to both DRIVING → BIKING and BIKING → WALKING.
+ * Fix: [DEMOTE_CONSECUTIVE_REQUIRED] = 3 consecutive below-lower accepted
+ * fixes are required before any downward mode transition, giving demotion
+ * a higher bar than promotion ([PROMOTE_CONSECUTIVE_REQUIRED] = 2) so that
+ * brief decelerations (traffic lights, junctions) do not spiral the mode.
+ * Applied symmetrically to both DRIVING → BIKING and BIKING → WALKING.
  *
  * Coordinates and timestamps are entirely synthetic.
  */
@@ -103,9 +104,9 @@ class AutoTrackingMotionDemotionRegressionTest {
     }
 
     @Test
-    fun driving_twoConsecutiveLowSpeedFixes_demotesToBiking() {
-        // Legitimate stop (red light, parking): two consecutive fixes both
-        // below the lower threshold must still demote correctly.
+    fun driving_threeConsecutiveLowSpeedFixes_demotesToBiking() {
+        // Legitimate stop (red light, parking): three consecutive fixes all
+        // below the lower threshold must demote DRIVING → BIKING.
         val engine = buildEngineInDriving()
         engine.onTick(nowMs = BASE_MS + 300_000L)
 
@@ -113,8 +114,11 @@ class AutoTrackingMotionDemotionRegressionTest {
         assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
 
         engine.onAcceptedFix(speedMps = 0f, eventTimeMs = BASE_MS + 300_002L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        engine.onAcceptedFix(speedMps = 0f, eventTimeMs = BASE_MS + 300_003L)
         assertEquals(
-            "Two consecutive below-lower fixes must demote from DRIVING to BIKING",
+            "Three consecutive below-lower fixes must demote from DRIVING to BIKING",
             TrackingMotionMode.BIKING,
             engine.snapshot().mode,
         )
@@ -165,7 +169,7 @@ class AutoTrackingMotionDemotionRegressionTest {
     }
 
     @Test
-    fun biking_twoConsecutiveLowSpeedFixes_demotesToWalking() {
+    fun biking_threeConsecutiveLowSpeedFixes_demotesToWalking() {
         val engine = buildEngineInBiking()
         engine.onTick(nowMs = BASE_MS + 300_000L)
 
@@ -173,8 +177,11 @@ class AutoTrackingMotionDemotionRegressionTest {
         assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
 
         engine.onAcceptedFix(speedMps = 0f, eventTimeMs = BASE_MS + 300_002L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        engine.onAcceptedFix(speedMps = 0f, eventTimeMs = BASE_MS + 300_003L)
         assertEquals(
-            "Two consecutive below-lower fixes must demote from BIKING to WALKING",
+            "Three consecutive below-lower fixes must demote from BIKING to WALKING",
             TrackingMotionMode.WALKING,
             engine.snapshot().mode,
         )

@@ -202,7 +202,21 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
         rt.recovery.pausedFreshness.requestStationaryFreshnessProbe(reason = reason)
     }
 
-    fun resumeGps(reason: String = "significant_motion_resume") {
+    /**
+     * Called by the significant-motion sensor when the IMU detects physical device movement.
+     *
+     * Resets the stationary-evidence counter before resuming GPS so the first post-resume fix
+     * is not immediately re-classified as stationary based on stale accumulated evidence.
+     * The [com.geovault.tracker.positioning.config.PositioningSessionState.stationaryAnchorLocation]
+     * is intentionally preserved: a false-alarm wakeup can still anchor correctly on the first
+     * accepted fix, while genuine movement reaches [exitStationaryRegion] instead.
+     */
+    fun onSignificantMotion() {
+        rt.state.consecutiveStationaryPoints = 0
+        resumeGps(reason = "significant_motion_resume")
+    }
+
+    fun resumeGps(reason: String) {
         if (
             !rt.state.isTracking ||
             (rt.state.gpsRuntimeState != GpsRuntimeState.PAUSED_FOR_MOTION &&
