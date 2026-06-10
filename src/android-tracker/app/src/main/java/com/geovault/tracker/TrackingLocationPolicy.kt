@@ -21,11 +21,11 @@ object TrackingLocationPolicy {
 
     const val AUTO_START_PROFILE_INDEX = 0
     const val WALKING_INTERVAL_SEC = 20L
-    const val WALKING_DISTANCE_FILTER_METERS = 7f
+    const val WALKING_DISTANCE_FILTER_METERS = 0f
     const val BIKING_INTERVAL_SEC = 15L
-    const val BIKING_DISTANCE_FILTER_METERS = 30f
+    const val BIKING_DISTANCE_FILTER_METERS = 0f
     const val DRIVING_INTERVAL_SEC = 10L
-    const val DRIVING_DISTANCE_FILTER_METERS = 100f
+    const val DRIVING_DISTANCE_FILTER_METERS = 0f
 
     /**
      * Outcome of a single [stationaryUpdate] call. [consecutive] is the next

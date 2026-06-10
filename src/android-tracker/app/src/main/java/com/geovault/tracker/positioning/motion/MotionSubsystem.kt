@@ -11,6 +11,7 @@ import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.PositioningElasticityConfig
 import com.geovault.tracker.logging.GeoVaultPointRecordingLog
+import com.geovault.tracker.policy.filter.StationaryConfidence
 import com.geovault.tracker.sensor.ImuClassification
 import com.geovault.tracker.sensor.ImuMotionContext
 import com.geovault.tracker.services.LocationIngestResult
@@ -200,7 +201,10 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             1 -> Location(stationaryReferenceLocation)
             else -> rt.state.stationaryAnchorLocation
         }
-        val sensorFusionHighConfidence = TrackingLocationPolicy.isHighConfidence(stationaryConfidence)
+        val sensorFusionHighConfidence = computeSensorFusionHighConfidence(
+            stationaryConfidence = stationaryConfidence,
+            imuClassification = currentImuContext?.classification,
+        )
         val pauseEligibility = StationaryPauseEligibilityPolicy.evaluate(
             stationaryPolicyWantsPause = stationaryDecision.shouldPause,
             localPointFresh = localPointFresh,
@@ -356,5 +360,21 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             ImuClassification.VEHICULAR  -> currentMode == TrackingMotionMode.WALKING
             else -> false
         }
+
+        /**
+         * Returns whether sensor fusion evidence is high-confidence enough to bypass the
+         * [com.geovault.tracker.location.StationaryPauseEligibilityPolicy.STALE_LOCAL_POINT] gate.
+         *
+         * [ImuClassification.STATIONARY] satisfies this independently of GPS-derived
+         * [stationaryConfidence]: the inertial sensor has confirmed no movement without any
+         * GPS measurement required, making a stale committed trail irrelevant.
+         *
+         * Exposed as `internal` so unit tests can verify this path directly.
+         */
+        internal fun computeSensorFusionHighConfidence(
+            stationaryConfidence: StationaryConfidence?,
+            imuClassification: ImuClassification?,
+        ): Boolean = TrackingLocationPolicy.isHighConfidence(stationaryConfidence) ||
+            imuClassification == ImuClassification.STATIONARY
     }
 }

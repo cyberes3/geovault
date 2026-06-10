@@ -1,5 +1,6 @@
 package com.geovault.tracker.positioning.motion
 
+import com.geovault.tracker.policy.filter.StationaryConfidence
 import com.geovault.tracker.sensor.ImuClassification
 import com.geovault.tracker.services.TrackingMotionMode
 import org.junit.Assert.assertFalse
@@ -91,6 +92,86 @@ class ImuAttentionBoostTest {
         )
         assertFalse(
             MotionSubsystem.computeBoostNeeded(ImuClassification.UNKNOWN, TrackingMotionMode.DRIVING)
+        )
+    }
+
+    // endregion
+
+    // region computeSensorFusionHighConfidence
+
+    @Test
+    fun imuStationary_noGpsConfidence_highConfidence() {
+        // IMU STATIONARY independently bypasses the STALE_LOCAL_POINT gate even when
+        // GPS-derived stationary confidence is absent.
+        assertTrue(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = null,
+                imuClassification = ImuClassification.STATIONARY,
+            )
+        )
+    }
+
+    @Test
+    fun imuPedestrian_noGpsConfidence_notHighConfidence() {
+        assertFalse(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = null,
+                imuClassification = ImuClassification.PEDESTRIAN,
+            )
+        )
+    }
+
+    @Test
+    fun imuVehicular_noGpsConfidence_notHighConfidence() {
+        assertFalse(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = null,
+                imuClassification = ImuClassification.VEHICULAR,
+            )
+        )
+    }
+
+    @Test
+    fun imuUnknown_noGpsConfidence_notHighConfidence() {
+        assertFalse(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = null,
+                imuClassification = ImuClassification.UNKNOWN,
+            )
+        )
+    }
+
+    @Test
+    fun noImu_noGpsConfidence_notHighConfidence() {
+        assertFalse(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = null,
+                imuClassification = null,
+            )
+        )
+    }
+
+    @Test
+    fun imuStationary_withLowGpsConfidence_stillHighConfidence() {
+        // IMU STATIONARY should dominate regardless of GPS confidence level.
+        val lowConfidence = StationaryConfidence(score = 0.1, isStationary = false, isOscillating = false)
+        assertTrue(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = lowConfidence,
+                imuClassification = ImuClassification.STATIONARY,
+            )
+        )
+    }
+
+    @Test
+    fun noImu_highGpsConfidence_highConfidence() {
+        // GPS-derived high confidence still triggers the bypass when IMU is absent.
+        val highConfidence = StationaryConfidence(score = 0.9, isStationary = true, isOscillating = false)
+        assertTrue(
+            MotionSubsystem.computeSensorFusionHighConfidence(
+                stationaryConfidence = highConfidence,
+                imuClassification = null,
+            )
         )
     }
 

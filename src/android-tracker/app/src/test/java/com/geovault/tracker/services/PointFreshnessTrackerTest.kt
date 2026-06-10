@@ -70,6 +70,40 @@ class PointFreshnessTrackerTest {
     }
 
     @Test
+    fun internalAccept_withStalePersistedPoint_isFresh() {
+        // UNCERTAINTY_SUPPRESSED snaps keep the trail fresh for GPS pause even when the
+        // last persisted trail point is beyond the freshness window.
+        val tracker = PointFreshnessTracker()
+        tracker.reset(sessionStartedAtMs = 1_000L)
+        tracker.markLocalPointPersisted(nowMs = 1_000L)
+        tracker.markInternalAccepted(nowMs = 90_000L)
+
+        assertTrue(tracker.isLocalFresh(nowMs = 110_000L, intervalSec = 15L))
+        // shouldForceLocalRecovery is persisted-only: probe still fires to commit a real point.
+        assertTrue(tracker.shouldForceLocalRecovery(nowMs = 110_000L, intervalSec = 15L))
+    }
+
+    @Test
+    fun internalAccept_withNoPersistedPoint_isFresh() {
+        // Snap-only session: no persisted point yet, but internal accepts keep isLocalFresh true.
+        val tracker = PointFreshnessTracker()
+        tracker.reset(sessionStartedAtMs = 1_000L)
+        tracker.markInternalAccepted(nowMs = 10_000L)
+
+        assertTrue(tracker.isLocalFresh(nowMs = 40_000L, intervalSec = 15L))
+    }
+
+    @Test
+    fun staleInternalAccept_noPersistedPoint_isNotFresh() {
+        // Both timestamps are old: isLocalFresh must return false.
+        val tracker = PointFreshnessTracker()
+        tracker.reset(sessionStartedAtMs = 1_000L)
+        tracker.markInternalAccepted(nowMs = 1_000L)
+
+        assertFalse(tracker.isLocalFresh(nowMs = 100_000L, intervalSec = 15L))
+    }
+
+    @Test
     fun uploadFreshness_isTrackedSeparatelyFromLocalFreshness() {
         val tracker = PointFreshnessTracker()
         tracker.reset(sessionStartedAtMs = 1_000L)

@@ -61,7 +61,13 @@ class PointFreshnessTracker {
     }
 
     fun isLocalFresh(nowMs: Long, intervalSec: Long): Boolean {
-        return localPointAgeMs(nowMs)?.let { it <= maxAllowedPointGapMs(intervalSec) } == true
+        // An internally-accepted fix (e.g. UNCERTAINTY_SUPPRESSED while stationary) confirms
+        // GPS is active and the device position is known. Allow GPS pause based on either
+        // timestamp so a stationary device receiving only snap fixes is not held running by
+        // STALE_LOCAL_POINT when no new trail point is needed.
+        val referenceMs = maxOf(lastLocalPointPersistedAtMs, lastInternalAcceptedAtMs)
+        if (referenceMs == 0L) return false
+        return nowMs - referenceMs <= maxAllowedPointGapMs(intervalSec)
     }
 
     fun shouldForceLocalRecovery(nowMs: Long, intervalSec: Long): Boolean {

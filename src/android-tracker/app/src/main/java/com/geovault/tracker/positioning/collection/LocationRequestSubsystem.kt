@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
     companion object {
         private const val IMU_BOOST_MAX_INTERVAL_SEC = 10L
-        private const val IMU_BOOST_MAX_DISTANCE_METERS = 30f
     }
 
     fun applyCurrentLocationRequest(reason: String): Boolean {
@@ -43,9 +42,7 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
         val requestIntervalSec = if (imuBoostActive)
             runtimeContext.locationIntervalSec.coerceAtMost(IMU_BOOST_MAX_INTERVAL_SEC)
         else runtimeContext.locationIntervalSec
-        val requestDistance = if (imuBoostActive)
-            runtimeContext.distanceFilterMeters.coerceAtMost(IMU_BOOST_MAX_DISTANCE_METERS)
-        else runtimeContext.distanceFilterMeters
+        val requestDistance = runtimeContext.distanceFilterMeters
 
         val requestKey = LocationRequestKey(
             intervalSec = requestIntervalSec,
