@@ -10,6 +10,7 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.PositioningElasticityConfig
+import com.geovault.tracker.sensor.ImuMotionContext
 import com.geovault.tracker.services.LocationIngestResult
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.settings.TrackerSettings
@@ -18,6 +19,38 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal class MotionSubsystem(private val rt: PositioningRuntime) {
+
+    /**
+     * Most recent stable IMU classification. Written by [onImuMotionUpdate] on the main thread
+     * (sensor callbacks are routed via [android.os.Handler] to the main looper), and read on the
+     * same thread inside [handleAcceptedAdaptiveTrackingEffects]. @Volatile defends against any
+     * future threading changes without requiring explicit synchronisation.
+     */
+    @Volatile private var currentImuContext: ImuMotionContext? = null
+
+    /**
+     * Called by [ImuMotionClassifier] on every stable classification emission (~every 15 s).
+     * Updates the local IMU context, logs the classification, applies IMU mode constraints to
+     * the engine, and propagates any resulting mode change through the normal output pipeline.
+     */
+    fun onImuMotionUpdate(ctx: ImuMotionContext) {
+        currentImuContext = ctx
+        rt.deps.runtimeTelemetry.event(
+            name = "imu_classification",
+            details = "class=${ctx.classification} confidence=${ctx.confidence} " +
+                "variance=${ctx.accelerationVarianceMps4} stepRate=${ctx.stepRatePerMinute}",
+        )
+        val output = rt.deps.autoTrackingMotionEngine.onImuClassification(ctx)
+        output.imuConstraintSnapshot?.let { snapshot ->
+            rt.deps.runtimeTelemetry.event(
+                name = "imu_constraint_changed",
+                details = "ceiling=${snapshot.ceiling} floor=${snapshot.floor} " +
+                    "pedestrianStreak=${snapshot.pedestrianStreak} vehicularStreak=${snapshot.vehicularStreak}",
+            )
+        }
+        processAutoTrackingOutput(output, reason = "imu_constraint")
+    }
+
     fun startAutoModeTickIfNeeded() {
         if (!rt.state.isTracking) return
         if (rt.state.autoModeTickJob?.isActive == true) return
@@ -105,6 +138,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         val filterIntervened = adjustmentReason != null && !filterConfirmedStillness
         val stationaryConfidence = result.policyMetrics?.stationaryConfidence
         val stationaryReferenceLocation = result.lastFilteredLocation ?: rawLocation
+        val imuClassification = currentImuContext?.classification
         val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
             lastLocation = rt.state.stationaryAnchorLocation,
             location = stationaryReferenceLocation,
@@ -115,6 +149,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             filterIntervened = filterIntervened,
             filterConfirmedStillness = filterConfirmedStillness,
             confidence = stationaryConfidence,
+            imuClassification = imuClassification,
         )
         if (stationaryDecision.reason != "disabled") {
             rt.deps.runtimeTelemetry.event(
@@ -126,7 +161,8 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
                     "confirmedStillness=$filterConfirmedStillness " +
                     "filterIntervened=$filterIntervened " +
                     "confidence=${stationaryConfidence?.score ?: -1.0} " +
-                    "oscillating=${stationaryConfidence?.isOscillating ?: false}"
+                    "oscillating=${stationaryConfidence?.isOscillating ?: false} " +
+                    "imu=${imuClassification ?: "none"}"
             )
         }
         rt.state.consecutiveStationaryPoints = stationaryDecision.consecutive

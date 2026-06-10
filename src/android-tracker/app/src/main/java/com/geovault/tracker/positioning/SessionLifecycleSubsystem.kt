@@ -180,6 +180,7 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.upload.startRetryJob(runGeneration)
         rt.upload.startBacklogUploader(rt.state.sessionBoundaryForBacklogId, runGeneration)
         rt.upload.startPreflightMonitor(runGeneration)
+        rt.deps.imuMotionClassifier?.start()
         rt.projection.syncRuntimeStateStore()
     }
 
@@ -223,6 +224,7 @@ internal class SessionLifecycleSubsystem(private val rt: PositioningRuntime) {
         rt.collection.unregisterGpsProviderReceiverIfNeeded()
         rt.recovery.fallback.cancelLowAccuracyFallbackTimer(clearCandidate = false)
         rt.deps.significantMotionBridge?.cancel()
+        rt.deps.imuMotionClassifier?.stop()
         rt.lifecycle.stopLocationUpdates()
         TrackPointBus.resumeLocalDelivery()
         if (rt.state.startupForegroundPromoted) {

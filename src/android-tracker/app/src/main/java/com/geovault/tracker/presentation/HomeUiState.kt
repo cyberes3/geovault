@@ -11,6 +11,7 @@ data class HomePermissionSnapshot(
     val hasPostNotifications: Boolean = false,
     val hasBatteryOptimizationExemption: Boolean = false,
     val hasExactAlarmPermission: Boolean = false,
+    val hasActivityRecognition: Boolean = false,
 ) {
     val readyForTracking: Boolean
         get() = hasForegroundLocation &&

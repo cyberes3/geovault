@@ -17,6 +17,7 @@ import com.geovault.tracker.location.StationaryRegionStore
 import com.geovault.tracker.positioning.config.PositioningDensity
 import com.geovault.tracker.positioning.ingest.TrackerLocationPipeline
 import com.geovault.tracker.runtime.RuntimeTelemetry
+import com.geovault.tracker.sensor.ImuMotionClassifier
 import com.geovault.tracker.sensor.SignificantMotionResumeGateway
 import com.geovault.tracker.services.LocationIngestCoordinator
 import com.geovault.tracker.services.LocationSessionGateway
@@ -68,6 +69,7 @@ internal class PositioningDependencies(
 
     var httpClient: OkHttpClient? = null
     var significantMotionBridge: SignificantMotionResumeGateway? = null
+    var imuMotionClassifier: ImuMotionClassifier? = null
 
     val lowAccuracyFallbackCoordinator = LowAccuracyFallbackCoordinator {
         runtime.contextBuilder.currentPositioningRecoveryConfig()
@@ -124,6 +126,10 @@ internal class PositioningDependencies(
             service = service,
             serviceScope = serviceScope,
             onResume = { runtime.collection.onSignificantMotion() },
+        )
+        imuMotionClassifier = ImuMotionClassifier(
+            context = service.applicationContext,
+            onClassification = { ctx -> runtime.motion.onImuMotionUpdate(ctx) },
         )
         val initialProbeIntervalMs = PositioningDensity.from(settingsRepository.getSettings())
             .scaleDurationMs(StationaryPingController.DEFAULT_INTERVAL_MS)

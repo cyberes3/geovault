@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import android.location.Location
 import com.geovault.tracker.policy.filter.StationaryConfidence
+import com.geovault.tracker.sensor.ImuClassification
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -557,4 +558,294 @@ class TrackingLocationPolicyTest {
         assertTrue(result.shouldPause)
         assertEquals("confidence_fast_advance", result.reason)
     }
+
+    // region IMU classification integration
+
+    @Test
+    fun stationaryUpdate_imuPedestrian_blocksGpsPause() {
+        // Without IMU, three stationary fixes → pause. With PEDESTRIAN IMU, must not pause.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close1 = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+        val close2 = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 20_000L; accuracy = 5f }
+
+        val r1 = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = null, location = anchor,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true, imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        assertEquals(0, r1.consecutive)
+        assertFalse(r1.shouldPause)
+        assertEquals("active_speed_hint", r1.reason)
+
+        val r2 = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close1,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true, imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        assertEquals(0, r2.consecutive)
+        assertFalse(r2.shouldPause)
+
+        val r3 = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = close1, location = close2,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true, imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        assertEquals(0, r3.consecutive)
+        assertFalse(r3.shouldPause)
+    }
+
+    @Test
+    fun stationaryUpdate_imuPedestrian_filterConfirmedStillnessStillPauses() {
+        // filterConfirmedStillness supersedes the IMU PEDESTRIAN active-speed-hint.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val same = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = same,
+            stationaryRadiusMeters = 50f, currentConsecutive = 2,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        // consecutive=3, shouldPause=true (filterConfirmedStillness wins over PEDESTRIAN)
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+    }
+
+    @Test
+    fun stationaryUpdate_imuStationary_fastAdvancesCounter() {
+        // IMU STATIONARY contributes to confidenceCanFastAdvance even without GPS confidence.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,  // counter > 0 required
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+        // fast-advance: consecutive jumps to at least PAUSE_THRESHOLD=3
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    @Test
+    fun stationaryUpdate_imuStationary_doesNotFastAdvanceWhenCounterIsZero() {
+        // Fast-advance requires currentConsecutive > 0 even with IMU STATIONARY.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,  // counter = 0 → no fast-advance
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+        // Normal advance: consecutive=1, no pause
+        assertEquals(1, result.consecutive)
+        assertFalse(result.shouldPause)
+    }
+
+    @Test
+    fun stationaryUpdate_imuUnknown_behavesLikeNoImu() {
+        // UNKNOWN classification should have no effect on stationary logic.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val withImu = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.UNKNOWN,
+        )
+        val withoutImu = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+        )
+        assertEquals(withoutImu.consecutive, withImu.consecutive)
+        assertEquals(withoutImu.shouldPause, withImu.shouldPause)
+        assertEquals(withoutImu.reason, withImu.reason)
+    }
+
+    @Test
+    fun stationaryUpdate_imuVehicular_behavesLikeNoImu() {
+        // VEHICULAR classification is handled by the motion engine, not stationary policy.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val withImu = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.VEHICULAR,
+        )
+        val withoutImu = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+        )
+        assertEquals(withoutImu.consecutive, withImu.consecutive)
+        assertEquals(withoutImu.shouldPause, withImu.shouldPause)
+    }
+
+    @Test
+    fun stationaryUpdate_imuStationary_filterIntervenedFastAdvance() {
+        // IMU STATIONARY should fast-advance even when filterIntervened=true (GPS-independent signal).
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val location = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = location,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterIntervened = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    // --- additional IMU edge cases ---
+
+    /**
+     * IMU PEDESTRIAN active-speed-hint is suppressed when [significantMotionOnly] is false —
+     * the entire stationary system is disabled regardless of IMU state.
+     */
+    @Test
+    fun stationaryUpdate_pedestrianImu_significantMotionFalse_returnsDisabled() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 5_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = false,
+            imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("disabled", result.reason)
+    }
+
+    /**
+     * IMU STATIONARY with [currentConsecutive] already at the pause threshold (3):
+     * fast-advance clamps to max(4, 3)=4 but [shouldPause] is already true, so the
+     * result must remain paused and the counter must not drop below the threshold.
+     */
+    @Test
+    fun stationaryUpdate_imuStationary_counterAlreadyAtThreshold_remainsPaused() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 5_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 3,
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+        assertTrue(result.shouldPause)
+        assertTrue("counter must not drop below threshold", result.consecutive >= 3)
+    }
+
+    /**
+     * IMU STATIONARY must fast-advance the counter even when the fix is geometrically
+     * outside the stationary radius. The IMU signal is GPS-independent — it
+     * provides evidence of stillness even when the GPS anchor is stale or drifted.
+     */
+    @Test
+    fun stationaryUpdate_imuStationary_outsideRadius_fastAdvancesDespiteGeometry() {
+        val anchor = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f
+        }
+        val farAway = Location("test").apply {
+            // ~111 m away — clearly outside a 50 m radius
+            latitude = 0.001; longitude = 0.0; time = 5_000L; accuracy = 5f
+        }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = farAway,
+            stationaryRadiusMeters = 50f, currentConsecutive = 2,
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    /**
+     * When both [activeSpeedHint] and [imuClassification]=PEDESTRIAN are true the
+     * result is the same active-speed-hint early return — no double handling.
+     */
+    @Test
+    fun stationaryUpdate_pedestrianImuAndActiveSpeedHintBothTrue_returnsActiveSpeedHint() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 5_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 2,
+            significantMotionOnly = true,
+            activeSpeedHint = true,
+            imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("active_speed_hint", result.reason)
+    }
+
+    /**
+     * A null [imuClassification] (no IMU context available) must be identical in
+     * behaviour to passing [ImuClassification.UNKNOWN] — it must not affect the
+     * stationary counter in any way.
+     */
+    @Test
+    fun stationaryUpdate_nullImu_identicalToUnknownImu() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 5_000L; accuracy = 5f }
+
+        val withNull = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true, imuClassification = null,
+        )
+        val withUnknown = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true, imuClassification = ImuClassification.UNKNOWN,
+        )
+        assertEquals(withNull.consecutive, withUnknown.consecutive)
+        assertEquals(withNull.shouldPause, withUnknown.shouldPause)
+        assertEquals(withNull.reason, withUnknown.reason)
+    }
+
+    /**
+     * IMU PEDESTRIAN must block GPS pause even when the fix is geometrically
+     * outside the stationary radius — the active-speed-hint fires before the
+     * geometry check, so location drift cannot falsely override a walking user.
+     */
+    @Test
+    fun stationaryUpdate_pedestrianImu_outsideRadius_stillBlocksPause() {
+        val anchor = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f
+        }
+        val farAway = Location("test").apply {
+            latitude = 0.001; longitude = 0.0; time = 5_000L; accuracy = 5f
+        }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = farAway,
+            stationaryRadiusMeters = 50f, currentConsecutive = 2,
+            significantMotionOnly = true,
+            imuClassification = ImuClassification.PEDESTRIAN,
+        )
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("active_speed_hint", result.reason)
+    }
+
+    // endregion
 }

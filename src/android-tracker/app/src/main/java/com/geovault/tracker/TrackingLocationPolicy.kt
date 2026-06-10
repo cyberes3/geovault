@@ -2,6 +2,7 @@ package com.geovault.tracker
 
 import android.location.Location
 import com.geovault.tracker.policy.filter.StationaryConfidence
+import com.geovault.tracker.sensor.ImuClassification
 
 /**
  * Pure logic for stationary detection and location request timing.
@@ -54,15 +55,21 @@ object TrackingLocationPolicy {
     }
 
     /**
-     * True when sensor-fusion confidence may accelerate the stationary evidence
+     * True when sensor-fusion or IMU evidence may accelerate the stationary evidence
      * counter inside [stationaryUpdate]. Requires [currentConsecutive] > 0:
      * confidence strengthens an anchor GPS has already confirmed; it cannot
      * establish the first anchor from scratch.
+     *
+     * [ImuClassification.STATIONARY] satisfies this gate independently of GPS
+     * confidence — the inertial sensor has confirmed no motion without any GPS
+     * measurement required.
      */
     private fun confidenceCanFastAdvance(
         currentConsecutive: Int,
         confidence: StationaryConfidence?,
-    ): Boolean = currentConsecutive > 0 && isHighConfidence(confidence)
+        imuClassification: ImuClassification?,
+    ): Boolean = currentConsecutive > 0 &&
+        (isHighConfidence(confidence) || imuClassification == ImuClassification.STATIONARY)
 
     /**
      * Updates stationary state from a single accepted fix.
@@ -105,6 +112,7 @@ object TrackingLocationPolicy {
         filterIntervened: Boolean = false,
         filterConfirmedStillness: Boolean = false,
         confidence: StationaryConfidence? = null,
+        imuClassification: ImuClassification? = null,
     ): StationaryDecision {
         if (!significantMotionOnly) {
             return StationaryDecision(consecutive = 0, shouldPause = false, reason = "disabled")
@@ -114,8 +122,14 @@ object TrackingLocationPolicy {
         // inside the joint accuracy envelope). It supersedes both
         // `activeSpeedHint` (current observed chipset speed above the speed
         // floor) and `filterIntervened` (the same event viewed pessimistically).
+        //
+        // IMU PEDESTRIAN acts as a guaranteed active-speed signal — the user is
+        // on foot, so GPS pausing must be suppressed. `filterConfirmedStillness`
+        // still takes precedence (the filter proved lat/lon unchanged, which
+        // is stronger evidence than the IMU alone).
+        val effectiveActiveSpeedHint = activeSpeedHint || imuClassification == ImuClassification.PEDESTRIAN
         if (!filterConfirmedStillness) {
-            if (activeSpeedHint) {
+            if (effectiveActiveSpeedHint) {
                 return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_speed_hint")
             }
             if (filterIntervened) {
@@ -131,7 +145,8 @@ object TrackingLocationPolicy {
                 }
                 // Rule 3 / Rule 2b: sensor-fusion confidence is GPS-independent;
                 // it can fast-advance the counter even when the GPS trail is stale.
-                if (confidenceCanFastAdvance(currentConsecutive, confidence)) {
+                // IMU STATIONARY also satisfies this gate independently.
+                if (confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification)) {
                     val newConsecutive = maxOf(currentConsecutive + 1, PAUSE_THRESHOLD)
                     return StationaryDecision(
                         consecutive = newConsecutive,
@@ -171,7 +186,7 @@ object TrackingLocationPolicy {
         }
 
         val baseAdvance = if (withinRadius || filterConfirmedStillness) currentConsecutive + 1 else 1
-        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence)
+        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification)
         val newConsecutive = if (confidenceFastAdvance) {
             maxOf(baseAdvance, PAUSE_THRESHOLD)
         } else {

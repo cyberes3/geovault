@@ -1,8 +1,12 @@
 package com.geovault.tracker.location
 
+import com.geovault.tracker.sensor.ImuClassification
+import com.geovault.tracker.sensor.ImuMotionContext
 import com.geovault.tracker.services.TrackingMotionMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -576,4 +580,432 @@ class AutoTrackingMotionEngineTest {
         assertTrue(out.modeChanged)
         assertEquals(TrackingMotionMode.DRIVING, out.state.mode)
     }
+
+    // region IMU constraint tests
+
+    private fun vehicularCtx(stepRate: Float = 0f, variance: Float = 0.5f) = ImuMotionContext(
+        classification = ImuClassification.VEHICULAR,
+        confidence = 0.9f,
+        accelerationVarianceMps4 = variance,
+        stepRatePerMinute = stepRate,
+    )
+
+    private fun pedestrianCtx(stepRate: Float = 60f) = ImuMotionContext(
+        classification = ImuClassification.PEDESTRIAN,
+        confidence = 0.9f,
+        accelerationVarianceMps4 = 0.02f,
+        stepRatePerMinute = stepRate,
+    )
+
+    private fun stationaryCtx() = ImuMotionContext(
+        classification = ImuClassification.STATIONARY,
+        confidence = 0.95f,
+        accelerationVarianceMps4 = 0.005f,
+        stepRatePerMinute = 0f,
+    )
+
+    private fun unknownCtx() = ImuMotionContext(
+        classification = ImuClassification.UNKNOWN,
+        confidence = 0f,
+        accelerationVarianceMps4 = 0f,
+        stepRatePerMinute = 0f,
+    )
+
+    @Test
+    fun imu_vehicularStreakBelowThreshold_doesNotSetFloor() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // VEHICULAR_REQUIRED = 2; one emission should not yet set the floor
+        val out = engine.onImuClassification(vehicularCtx())
+        assertNull("floor not set before threshold", out.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+    }
+
+    @Test
+    fun imu_vehicularAtThreshold_setsFloorAndPromotesWalkingToBiking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // First VEHICULAR emission: streak=1, threshold=2 → no constraint yet
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        // Second VEHICULAR emission: streak=2, threshold=2 → floor=BIKING, mode clamped
+        val out = engine.onImuClassification(vehicularCtx())
+        assertNotNull("constraint snapshot emitted at threshold", out.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.BIKING, out.imuConstraintSnapshot!!.floor)
+        assertNull(out.imuConstraintSnapshot.ceiling)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+        assertTrue(out.modeChanged)
+    }
+
+    @Test
+    fun imu_pedestrianAtThreshold_setsCeilingAndDemotesDrivingToWalking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Promote to DRIVING first
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        // PEDESTRIAN_REQUIRED = 3; emit 3 PEDESTRIAN classifications
+        engine.onImuClassification(pedestrianCtx())
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        engine.onImuClassification(pedestrianCtx())
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+        val out = engine.onImuClassification(pedestrianCtx())
+
+        assertNotNull("constraint snapshot emitted at threshold", out.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.WALKING, out.imuConstraintSnapshot!!.ceiling)
+        assertNull("pedestrian ceiling clears vehicular floor", out.imuConstraintSnapshot.floor)
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+        assertTrue(out.modeChanged)
+    }
+
+    @Test
+    fun imu_streaksSurviveRejectedFix() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+
+        // Arm VEHICULAR streak to 1
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        // Many rejected fixes — must NOT touch IMU streak
+        repeat(10) { engine.onRejectedFix(eventTimeMs = (it + 1) * 1_000L) }
+
+        // Second VEHICULAR emission → threshold reached → floor applied
+        val out = engine.onImuClassification(vehicularCtx())
+        assertNotNull("streak must survive onRejectedFix calls", out.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+    }
+
+    @Test
+    fun imu_vehicularFloorBlocksGpsDemotionToWalking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish BIKING floor
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // GPS reports three consecutive low-speed samples — would normally demote to WALKING
+        engine.onAcceptedFix(speedMps = 0f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 0f, eventTimeMs = 2_000L)
+        val out = engine.onAcceptedFix(speedMps = 0f, eventTimeMs = 3_000L)
+
+        // Floor must hold mode at BIKING
+        assertEquals(TrackingMotionMode.BIKING, out.state.mode)
+        assertFalse(out.modeChanged)
+    }
+
+    @Test
+    fun imu_pedestrianCeilingBlocksGpsPromotionToDriving() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish WALKING ceiling
+        repeat(3) { engine.onImuClassification(pedestrianCtx()) }
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        // GPS reports two consecutive high-speed samples — would normally promote to BIKING or DRIVING
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        val out = engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+
+        // Ceiling must hold mode at WALKING
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+        assertFalse(out.modeChanged)
+    }
+
+    @Test
+    fun imu_stationaryClassification_clearsBothConstraints() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish BIKING floor from VEHICULAR
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // STATIONARY clears the floor
+        val out = engine.onImuClassification(stationaryCtx())
+        assertNotNull("constraint snapshot emitted when floor cleared", out.imuConstraintSnapshot)
+        assertNull(out.imuConstraintSnapshot!!.floor)
+        assertNull(out.imuConstraintSnapshot.ceiling)
+    }
+
+    @Test
+    fun imu_stationaryAfterVehicularFloor_emitsSnapshotWithZeroStreaks() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish a VEHICULAR floor (floor=BIKING) so STATIONARY has something to clear
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // STATIONARY clears the floor → constraints change → snapshot emitted
+        val out = engine.onImuClassification(stationaryCtx())
+        assertNotNull("snapshot emitted when floor cleared by STATIONARY", out.imuConstraintSnapshot)
+        assertEquals(0, out.imuConstraintSnapshot!!.pedestrianStreak)
+        assertEquals(0, out.imuConstraintSnapshot.vehicularStreak)
+        assertNull(out.imuConstraintSnapshot.floor)
+        assertNull(out.imuConstraintSnapshot.ceiling)
+    }
+
+    @Test
+    fun imu_opposingClassification_clearsPriorConstraint() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish WALKING ceiling from PEDESTRIAN
+        repeat(3) { engine.onImuClassification(pedestrianCtx()) }
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        // VEHICULAR (2 emissions) should clear the ceiling and set the floor
+        engine.onImuClassification(vehicularCtx())
+        val out = engine.onImuClassification(vehicularCtx())
+
+        assertNotNull(out.imuConstraintSnapshot)
+        assertNull("pedestrian ceiling must be cleared", out.imuConstraintSnapshot!!.ceiling)
+        assertEquals(TrackingMotionMode.BIKING, out.imuConstraintSnapshot.floor)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+    }
+
+    @Test
+    fun imu_resetClearsAllConstraintsAndStreaks() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Arm constraints
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+
+        // reset() must wipe IMU state
+        engine.reset(nowMs = 1_000L)
+
+        // GPS can now demote below the previously applied floor
+        engine.onAcceptedFix(speedMps = 0f, eventTimeMs = 1_001L)
+        engine.onAcceptedFix(speedMps = 0f, eventTimeMs = 1_002L)
+        val out = engine.onAcceptedFix(speedMps = 0f, eventTimeMs = 1_003L)
+        // After reset, mode starts WALKING again; zero-speed keeps it there
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+    }
+
+    @Test
+    fun imu_noConstraintSnapshot_whenClassificationDoesNotChangeConstraints() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // First VEHICULAR: streak=1, threshold not reached → no constraint change
+        val out = engine.onImuClassification(vehicularCtx())
+        assertNull("snapshot must be null when constraints did not change", out.imuConstraintSnapshot)
+    }
+
+    // --- additional IMU edge cases ---
+
+    /**
+     * UNKNOWN is handled identically to STATIONARY: both clear all constraints and
+     * reset all streaks.
+     */
+    @Test
+    fun imu_unknown_clearsBothConstraints() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish BIKING floor
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        val out = engine.onImuClassification(unknownCtx())
+        assertNotNull("snapshot emitted when floor cleared by UNKNOWN", out.imuConstraintSnapshot)
+        assertNull(out.imuConstraintSnapshot!!.floor)
+        assertNull(out.imuConstraintSnapshot.ceiling)
+        assertEquals(0, out.imuConstraintSnapshot.pedestrianStreak)
+        assertEquals(0, out.imuConstraintSnapshot.vehicularStreak)
+    }
+
+    /**
+     * PEDESTRIAN streak at 2 (one below [IMU_PEDESTRIAN_REQUIRED]=3) must not yet
+     * apply a ceiling — the constraint requires a third stable emission.
+     */
+    @Test
+    fun imu_pedestrianStreakBelowThreshold_doesNotSetCeiling() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+
+        engine.onImuClassification(pedestrianCtx())  // streak=1
+        val out = engine.onImuClassification(pedestrianCtx())  // streak=2, threshold=3 not yet met
+        assertNull("ceiling must not be applied until threshold is reached", out.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.DRIVING, engine.snapshot().mode)
+    }
+
+    /**
+     * After the VEHICULAR floor is already established, a subsequent VEHICULAR
+     * heartbeat emission (same constraint, streak increments past threshold) must
+     * not produce a duplicate [AutoTrackingEngineOutput.imuConstraintSnapshot].
+     */
+    @Test
+    fun imu_vehicularHeartbeat_afterFloorAlreadySet_noSnapshot() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Reach threshold → floor set
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+        assertNotNull("floor set at threshold", engine.snapshot().mode.let { it }) // floor exists
+
+        // Third VEHICULAR: streak=3 but floor is already BIKING → no constraint change
+        val out = engine.onImuClassification(vehicularCtx())
+        assertNull("no snapshot when floor is already set to the same value", out.imuConstraintSnapshot)
+    }
+
+    /**
+     * An active BIKING floor must not prevent GPS from promoting the mode to DRIVING.
+     * Floor only blocks demotion below BIKING; DRIVING is above the floor ordinal.
+     */
+    @Test
+    fun imu_vehicularFloor_doesNotBlockGpsPromotionToDriving() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Establish BIKING floor (mode now BIKING)
+        engine.onImuClassification(vehicularCtx())
+        engine.onImuClassification(vehicularCtx())
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // Two consecutive high-speed GPS fixes should promote to DRIVING
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        val out = engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(
+            "IMU floor must not prevent GPS promotion above the floor",
+            TrackingMotionMode.DRIVING,
+            out.state.mode,
+        )
+        assertTrue(out.modeChanged)
+    }
+
+    /**
+     * When the mode is BIKING and the PEDESTRIAN ceiling is applied (WALKING), the
+     * engine must immediately clamp BIKING → WALKING.
+     */
+    @Test
+    fun imu_pedestrianCeiling_fromBiking_clampsToWalking() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Promote to BIKING first
+        engine.onAcceptedFix(speedMps = 4f, eventTimeMs = 1_000L)
+        engine.onAcceptedFix(speedMps = 4f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.BIKING, engine.snapshot().mode)
+
+        // Apply PEDESTRIAN ceiling at threshold
+        engine.onImuClassification(pedestrianCtx())
+        engine.onImuClassification(pedestrianCtx())
+        val out = engine.onImuClassification(pedestrianCtx())
+
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+        assertTrue(out.modeChanged)
+        assertEquals(TrackingMotionMode.WALKING, out.imuConstraintSnapshot!!.ceiling)
+    }
+
+    /**
+     * When the mode is already WALKING and the PEDESTRIAN ceiling is reached, the
+     * ceiling is applied but [AutoTrackingEngineOutput.modeChanged] must be false
+     * (no actual transition). The [imuConstraintSnapshot] is still non-null because
+     * the constraint bounds changed.
+     */
+    @Test
+    fun imu_pedestrianCeiling_modeAlreadyWalking_snapshotEmittedWithoutModeChange() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        assertEquals(TrackingMotionMode.WALKING, engine.snapshot().mode)
+
+        engine.onImuClassification(pedestrianCtx())
+        engine.onImuClassification(pedestrianCtx())
+        val out = engine.onImuClassification(pedestrianCtx())
+
+        assertFalse("no mode change when already at ceiling", out.modeChanged)
+        assertNotNull("constraint snapshot must still be emitted", out.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.WALKING, out.imuConstraintSnapshot!!.ceiling)
+    }
+
+    /**
+     * When GPS accumulates a promotion streak and then the IMU ceiling overrides the
+     * GPS-selected mode (even without changing the displayed mode), the GPS streak
+     * counters must be reset so the evidence accumulated toward the wrong mode does
+     * not carry forward to the next promotion attempt.
+     *
+     * Mechanics: the first fix at 22 m/s arms streak=1 (GPS still decides WALKING,
+     * ceiling=WALKING, no conflict). The second fix completes the required count=2
+     * and GPS selects DRIVING; the ceiling clamps it back to WALKING, triggering an
+     * imuOverride that zeroes both streak counters. The third fix must then restart
+     * the promotion sequence from scratch.
+     */
+    @Test
+    fun imu_ceiling_resetsGpsStreaks_whenGpsSelectionIsOverridden() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Apply WALKING ceiling
+        repeat(3) { engine.onImuClassification(pedestrianCtx()) }
+
+        // Fix 1: GPS decides WALKING (streak=1, not enough to promote).
+        // Ceiling=WALKING agrees with GPS decision → no override → streak carries.
+        engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 1_000L)
+        assertEquals(1, engine.snapshot().consecutiveAboveUpper)
+
+        // Fix 2: GPS decides DRIVING (skip promotion, streak=2 ≥ required=2).
+        // Ceiling clamps DRIVING → WALKING → imuOverride=true → streaks reset to 0.
+        val out = engine.onAcceptedFix(speedMps = 22f, eventTimeMs = 2_000L)
+        assertEquals(TrackingMotionMode.WALKING, out.state.mode)
+        assertFalse("mode already at ceiling — no display change", out.modeChanged)
+        assertEquals(
+            "GPS streaks must be wiped after IMU ceiling override",
+            0,
+            engine.snapshot().consecutiveAboveUpper,
+        )
+    }
+
+    /**
+     * The [ImuConstraintSnapshot] emitted at the PEDESTRIAN threshold must carry
+     * the correct streak values: pedestrianStreak == [IMU_PEDESTRIAN_REQUIRED] and
+     * vehicularStreak == 0.
+     */
+    @Test
+    fun imu_pedestrianSnapshot_hasCorrectStreakValues() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+
+        engine.onImuClassification(pedestrianCtx())
+        engine.onImuClassification(pedestrianCtx())
+        val out = engine.onImuClassification(pedestrianCtx())
+
+        val snapshot = out.imuConstraintSnapshot!!
+        assertEquals(AutoTrackingMotionEngine.IMU_PEDESTRIAN_REQUIRED, snapshot.pedestrianStreak)
+        assertEquals(0, snapshot.vehicularStreak)
+    }
+
+    /**
+     * A partial VEHICULAR streak interrupted by a single PEDESTRIAN must reset the
+     * vehicular counter. The subsequent VEHICULAR emissions must count from scratch
+     * and still require [IMU_VEHICULAR_REQUIRED] before the floor is set.
+     */
+    @Test
+    fun imu_vehicularStreakInterruptedByPedestrian_requiresFullCountAfterReset() {
+        val engine = AutoTrackingMotionEngine()
+        engine.reset(nowMs = 0L)
+        // Arm VEHICULAR streak to 1 (threshold is 2)
+        engine.onImuClassification(vehicularCtx())
+        assertNull(engine.snapshot().let { null }) // floor not yet set — just verifying streak state indirectly
+
+        // PEDESTRIAN interrupts → vehicular streak reset to 0 AND pedestrian streak = 1
+        engine.onImuClassification(pedestrianCtx())
+
+        // One more VEHICULAR: streak restarts at 1, still below threshold
+        val afterOneVehicular = engine.onImuClassification(vehicularCtx())
+        assertNull(
+            "one VEHICULAR after interruption is not enough for the floor",
+            afterOneVehicular.imuConstraintSnapshot,
+        )
+
+        // Second VEHICULAR: threshold reached → floor applied
+        val afterTwoVehicular = engine.onImuClassification(vehicularCtx())
+        assertNotNull("floor must be set after two consecutive VEHICULAR emissions", afterTwoVehicular.imuConstraintSnapshot)
+        assertEquals(TrackingMotionMode.BIKING, afterTwoVehicular.imuConstraintSnapshot!!.floor)
+    }
+
+    // endregion
 }

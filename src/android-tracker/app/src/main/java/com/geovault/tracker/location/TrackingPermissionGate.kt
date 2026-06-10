@@ -48,6 +48,11 @@ object TrackingPermissionGate {
         )
     }
 
+    fun hasActivityRecognitionPermission(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
     fun hasBatteryOptimizationExemption(context: Context): Boolean {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
         return powerManager.isIgnoringBatteryOptimizations(context.packageName)

@@ -67,9 +67,12 @@ import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInfoDialog
 import com.geovault.common.ui.components.GeoVaultNavTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.time.rememberNowMs
+import com.geovault.tracker.sensor.ImuMotionClassifier
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.TrackerParamsSeed
 import com.geovault.tracker.R
@@ -141,6 +144,11 @@ fun HomeScreen(
     ) {
         homeViewModel.refreshPermissionSnapshot()
     }
+    val activityRecognitionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        homeViewModel.refreshPermissionSnapshot()
+    }
 
     GeoVaultNavTabShell(
         title = stringResource(R.string.home_title),
@@ -162,10 +170,22 @@ fun HomeScreen(
                 perms.hasBackgroundLocation &&
                 perms.hasPostNotifications &&
                 perms.hasBatteryOptimizationExemption &&
-                perms.hasExactAlarmPermission
+                perms.hasExactAlarmPermission &&
+                perms.hasActivityRecognition
             val trackerParamsArgs = homeTrackerParamsRouteArgsOrNull(homeState)
             val showInlineButtons = homeState.isTracking && homeState.selectedTrackerId.isNotBlank()
             val isRunningOrPreparing = homeState.isTracking || isPreparingToTrack
+
+            val imuAvailable = remember(context) { ImuMotionClassifier.isAvailable(context) }
+            var imuSnackbarDismissed by rememberSaveable { mutableStateOf(false) }
+            val imuSnackbarModel = if (!imuAvailable && !imuSnackbarDismissed) {
+                GeoVaultSnackbarModel(
+                    id = "imu_unavailable",
+                    message = stringResource(R.string.imu_unavailable_snackbar),
+                )
+            } else {
+                null
+            }
 
             Box(modifier = Modifier.fillMaxSize()) {
                 if (!hasAllRequiredPermissions) {
@@ -175,6 +195,7 @@ fun HomeScreen(
                         hasPostNotifications = perms.hasPostNotifications,
                         hasBatteryExemption = perms.hasBatteryOptimizationExemption,
                         hasExactAlarm = perms.hasExactAlarmPermission,
+                        hasActivityRecognition = perms.hasActivityRecognition,
                         onGrantForeground = {
                             if (TrackingPermissionGate.hasAnyLocationPermission(context)) {
                                 showPreciseLocationRequiredDialog = true
@@ -195,6 +216,9 @@ fun HomeScreen(
                         },
                         onGrantBattery = { openBatteryOptimizationSettings(context) },
                         onGrantExactAlarm = { openExactAlarmSettings(context) },
+                        onGrantActivityRecognition = {
+                            activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                        },
                     )
                 } else {
                     TrackingContainer(
@@ -216,6 +240,11 @@ fun HomeScreen(
                 if (!isServerAccessible && !isConnecting) {
                     ServerFailureOverlay(modifier = Modifier.fillMaxSize())
                 }
+                GeoVaultSnackbarHost(
+                    model = imuSnackbarModel,
+                    onDismiss = { imuSnackbarDismissed = true },
+                    onAction = {},
+                )
             }
         },
         tabOverlay = { TrackerParamsOverlayLayer() },
@@ -254,11 +283,13 @@ private fun PermissionsContainer(
     hasPostNotifications: Boolean,
     hasBatteryExemption: Boolean,
     hasExactAlarm: Boolean,
+    hasActivityRecognition: Boolean,
     onGrantForeground: () -> Unit,
     onGrantBackground: () -> Unit,
     onGrantNotifications: () -> Unit,
     onGrantBattery: () -> Unit,
     onGrantExactAlarm: () -> Unit,
+    onGrantActivityRecognition: () -> Unit,
 ) {
     val context = LocalContext.current
     Column(
@@ -333,6 +364,15 @@ private fun PermissionsContainer(
                 text = stringResource(R.string.grant_exact_alarm_permission),
                 onClick = onGrantExactAlarm,
                 tooltip = stringResource(R.string.tooltip_grant_exact_alarm),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        if (!hasActivityRecognition) {
+            GeoVaultPrimaryButton(
+                text = stringResource(R.string.grant_activity_recognition),
+                onClick = onGrantActivityRecognition,
+                tooltip = stringResource(R.string.tooltip_grant_activity_recognition),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
