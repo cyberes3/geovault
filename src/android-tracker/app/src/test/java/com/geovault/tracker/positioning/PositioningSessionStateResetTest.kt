@@ -32,6 +32,7 @@ class PositioningSessionStateResetTest {
         assertEquals(0, state.lowAccuracyFallbackEmitCountThisSession)
         assertNull(state.lastFilteredLocation)
         assertNull(state.elasticDistanceOverrideMeters)
+        assertFalse(state.imuAttentionBoostActive)
     }
 
     @Test
@@ -84,6 +85,7 @@ class PositioningSessionStateResetTest {
             elasticitySpeedBucket = 2
             gpsRuntimeState = GpsRuntimeState.RUNNING
             lastFixDeliveryAtMs = 5_000L
+            imuAttentionBoostActive = true
         }
     }
 }

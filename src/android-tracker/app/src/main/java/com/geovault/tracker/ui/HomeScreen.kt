@@ -149,6 +149,11 @@ fun HomeScreen(
     ) {
         homeViewModel.refreshPermissionSnapshot()
     }
+    val otherSensorsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        homeViewModel.refreshPermissionSnapshot()
+    }
 
     GeoVaultNavTabShell(
         title = stringResource(R.string.home_title),
@@ -171,7 +176,8 @@ fun HomeScreen(
                 perms.hasPostNotifications &&
                 perms.hasBatteryOptimizationExemption &&
                 perms.hasExactAlarmPermission &&
-                perms.hasActivityRecognition
+                perms.hasActivityRecognition &&
+                perms.hasOtherSensors
             val trackerParamsArgs = homeTrackerParamsRouteArgsOrNull(homeState)
             val showInlineButtons = homeState.isTracking && homeState.selectedTrackerId.isNotBlank()
             val isRunningOrPreparing = homeState.isTracking || isPreparingToTrack
@@ -196,6 +202,7 @@ fun HomeScreen(
                         hasBatteryExemption = perms.hasBatteryOptimizationExemption,
                         hasExactAlarm = perms.hasExactAlarmPermission,
                         hasActivityRecognition = perms.hasActivityRecognition,
+                        hasOtherSensors = perms.hasOtherSensors,
                         onGrantForeground = {
                             if (TrackingPermissionGate.hasAnyLocationPermission(context)) {
                                 showPreciseLocationRequiredDialog = true
@@ -218,6 +225,9 @@ fun HomeScreen(
                         onGrantExactAlarm = { openExactAlarmSettings(context) },
                         onGrantActivityRecognition = {
                             activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                        },
+                        onGrantOtherSensors = {
+                            otherSensorsLauncher.launch("android.permission.OTHER_SENSORS")
                         },
                     )
                 } else {
@@ -284,12 +294,14 @@ private fun PermissionsContainer(
     hasBatteryExemption: Boolean,
     hasExactAlarm: Boolean,
     hasActivityRecognition: Boolean,
+    hasOtherSensors: Boolean,
     onGrantForeground: () -> Unit,
     onGrantBackground: () -> Unit,
     onGrantNotifications: () -> Unit,
     onGrantBattery: () -> Unit,
     onGrantExactAlarm: () -> Unit,
     onGrantActivityRecognition: () -> Unit,
+    onGrantOtherSensors: () -> Unit,
 ) {
     val context = LocalContext.current
     Column(
@@ -373,6 +385,15 @@ private fun PermissionsContainer(
                 text = stringResource(R.string.grant_activity_recognition),
                 onClick = onGrantActivityRecognition,
                 tooltip = stringResource(R.string.tooltip_grant_activity_recognition),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        if (!hasOtherSensors) {
+            GeoVaultPrimaryButton(
+                text = stringResource(R.string.grant_other_sensors),
+                onClick = onGrantOtherSensors,
+                tooltip = stringResource(R.string.tooltip_grant_other_sensors),
                 modifier = Modifier.fillMaxWidth(),
             )
         }

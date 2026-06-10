@@ -15,7 +15,7 @@ import kotlin.math.sqrt
 
 /**
  * Classifies device motion from AOSP inertial sensors, providing a GPS-independent
- * signal that breaks the circular dependency between GPS filtering and motion mode.
+ * hint that the GPS system uses to adjust its sampling rate.
  *
  * Uses [Sensor.TYPE_LINEAR_ACCELERATION] to compute acceleration variance over a 10 s
  * rolling window, and [Sensor.TYPE_STEP_DETECTOR] to measure step rate over a 30 s
@@ -24,13 +24,14 @@ import kotlin.math.sqrt
  *
  * A classification is only emitted once it has been **stable for [STABILITY_REQUIRED_MS]**,
  * then re-emitted every [HEARTBEAT_MS] as a heartbeat. This stability gate prevents
- * transient sensor noise from influencing the mode engine.
+ * transient sensor noise from triggering spurious GPS request changes.
  *
  * Degrades gracefully:
+ * - No linear acceleration / no [android.permission.OTHER_SENSORS] (GrapheneOS): STATIONARY
+ *   and VEHICULAR classification unavailable; PEDESTRIAN still works from steps alone.
  * - No step detector / no [android.Manifest.permission.ACTIVITY_RECOGNITION]: PEDESTRIAN
  *   classification unavailable; STATIONARY and VEHICULAR still work from variance alone.
- * - No linear acceleration: STATIONARY and VEHICULAR unavailable; only PEDESTRIAN from steps.
- * - Neither sensor: always emits UNKNOWN (equivalent to no IMU, system unchanged).
+ * - Neither sensor: always emits UNKNOWN (GPS-only mode, system operates unchanged).
  */
 class ImuMotionClassifier(
     private val context: Context,
@@ -52,8 +53,14 @@ class ImuMotionClassifier(
 
     private var accelListener: SensorEventListener? = null
     private var stepListener: SensorEventListener? = null
+    private var isRunning: Boolean = false
 
     fun start() {
+        if (isRunning) return
+        if (sensorManager == null) return
+
+        isRunning = true
+
         // Anchor the stability window to now so the first sensor events don't
         // inherit a stale pendingClassificationSinceMs of 0 and emit prematurely.
         pendingClassificationSinceMs = clock()
@@ -61,29 +68,34 @@ class ImuMotionClassifier(
         val linearAccelAvailable = linearAccelSensor != null
         val stepDetectorAvailable = stepDetectorSensor != null
         val activityRecognitionGranted = hasActivityRecognitionPermission()
+        val otherSensorsGranted = hasOtherSensorsPermission()
 
         GeoVaultCaptureLog.i(
             TAG,
             "imu_classifier_started linearAccelAvailable=$linearAccelAvailable " +
                 "stepDetectorAvailable=$stepDetectorAvailable " +
-                "activityRecognitionGranted=$activityRecognitionGranted",
+                "activityRecognitionGranted=$activityRecognitionGranted " +
+                "otherSensorsGranted=$otherSensorsGranted",
         )
 
-        if (sensorManager == null) return
-
         linearAccelSensor?.let { sensor ->
-            val listener = object : SensorEventListener {
-                override fun onSensorChanged(event: SensorEvent) = onAccelEvent(event)
-                override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
+            if (otherSensorsGranted) {
+                val listener = object : SensorEventListener {
+                    override fun onSensorChanged(event: SensorEvent) = onAccelEvent(event)
+                    override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
+                }
+                val registered = sensorManager.registerListener(
+                    listener,
+                    sensor,
+                    SensorManager.SENSOR_DELAY_NORMAL,
+                    ACCEL_MAX_REPORT_LATENCY_US,
+                    mainHandler,
+                )
+                GeoVaultCaptureLog.i(TAG, "imu_accel_register registered=$registered")
+                if (registered) accelListener = listener
+            } else {
+                GeoVaultCaptureLog.i(TAG, "imu_sensor_fallback reason=other_sensors_not_granted")
             }
-            sensorManager.registerListener(
-                listener,
-                sensor,
-                SensorManager.SENSOR_DELAY_NORMAL,
-                ACCEL_MAX_REPORT_LATENCY_US,
-                mainHandler,
-            )
-            accelListener = listener
         }
 
         stepDetectorSensor?.let { sensor ->
@@ -92,14 +104,15 @@ class ImuMotionClassifier(
                     override fun onSensorChanged(event: SensorEvent) = onStepEvent(event)
                     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
                 }
-                sensorManager.registerListener(
+                val registered = sensorManager.registerListener(
                     listener,
                     sensor,
                     SensorManager.SENSOR_DELAY_FASTEST,
                     STEP_MAX_REPORT_LATENCY_US,
                     mainHandler,
                 )
-                stepListener = listener
+                GeoVaultCaptureLog.i(TAG, "imu_step_register registered=$registered")
+                if (registered) stepListener = listener
             } else {
                 GeoVaultCaptureLog.i(TAG, "imu_sensor_fallback reason=activity_recognition_not_granted")
             }
@@ -107,6 +120,8 @@ class ImuMotionClassifier(
     }
 
     fun stop() {
+        if (!isRunning) return
+        isRunning = false
         sensorManager?.let { sm ->
             accelListener?.let { sm.unregisterListener(it) }
             stepListener?.let { sm.unregisterListener(it) }
@@ -217,10 +232,28 @@ class ImuMotionClassifier(
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==
             PackageManager.PERMISSION_GRANTED
 
+    /**
+     * On stock Android, [Manifest.permission.OTHER_SENSORS] is a normal permission that is
+     * auto-granted. On GrapheneOS it is promoted to a user-controlled runtime permission.
+     * Checking via [ContextCompat.checkSelfPermission] is safe on both platforms: stock Android
+     * returns [PackageManager.PERMISSION_GRANTED] automatically; GrapheneOS reflects the actual
+     * user choice.
+     */
+    private fun hasOtherSensorsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, OTHER_SENSORS_PERMISSION) ==
+            PackageManager.PERMISSION_GRANTED
+
     private data class AccelSample(val timestampMs: Long, val magnitude: Float)
 
     companion object {
         private const val TAG = "ImuMotionClassifier"
+
+        /**
+         * On GrapheneOS this permission is promoted to a runtime permission gating access to
+         * [android.hardware.Sensor.TYPE_LINEAR_ACCELERATION]. On stock Android it is a normal
+         * (auto-granted) permission; checking it there always returns GRANTED.
+         */
+        private const val OTHER_SENSORS_PERMISSION = "android.permission.OTHER_SENSORS"
 
         /**
          * Returns true if the device has at least one sensor that [ImuMotionClassifier] can use.
@@ -232,7 +265,6 @@ class ImuMotionClassifier(
             return sm.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION) != null ||
                 sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) != null
         }
-
 
         /**
          * Pure classification dispatch. Exposed as `internal` so unit tests can exercise all

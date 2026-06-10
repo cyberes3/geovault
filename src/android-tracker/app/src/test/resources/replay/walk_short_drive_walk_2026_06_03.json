@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "sessionId": "walk_short_drive_walk_2026_06_03",
   "trackId": "walk-short-drive-walk-synthetic",
   "wallBaseMs": 1780500000000,
@@ -247,6 +247,7 @@
       "skipAdaptiveTrackingEffects": false
     }
   ],
+  "imuEvents": [],
   "expectedEvents": [],
   "assertions": {
     "finalMode": "WALKING",

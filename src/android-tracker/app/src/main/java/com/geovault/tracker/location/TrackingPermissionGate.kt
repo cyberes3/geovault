@@ -53,6 +53,15 @@ object TrackingPermissionGate {
             PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * On stock Android [OTHER_SENSORS_PERMISSION] is a normal permission and is always granted.
+     * On GrapheneOS it is a runtime permission that the user must explicitly allow.
+     */
+    fun hasOtherSensorsPermission(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(context, OTHER_SENSORS_PERMISSION) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
     fun hasBatteryOptimizationExemption(context: Context): Boolean {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
         return powerManager.isIgnoringBatteryOptimizations(context.packageName)
@@ -72,4 +81,6 @@ object TrackingPermissionGate {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
         return runCatching { LocationManagerCompat.isLocationEnabled(locationManager) }.getOrDefault(false)
     }
+
+    private const val OTHER_SENSORS_PERMISSION = "android.permission.OTHER_SENSORS"
 }

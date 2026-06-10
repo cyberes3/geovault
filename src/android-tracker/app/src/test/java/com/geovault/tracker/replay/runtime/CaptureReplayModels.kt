@@ -1,6 +1,8 @@
 package com.geovault.tracker.replay.runtime
 
 import android.location.Location
+import com.geovault.tracker.sensor.ImuClassification
+import com.geovault.tracker.sensor.ImuMotionContext
 import com.geovault.tracker.settings.TrackerSettings
 import kotlinx.serialization.Serializable
 
@@ -14,6 +16,7 @@ data class CaptureReplaySessionDto(
     val settings: CaptureReplaySettingsDto,
     val initialState: CaptureReplayInitialStateDto,
     val rawFixes: List<CaptureReplayRawFixDto>,
+    val imuEvents: List<CaptureReplayImuEventDto> = emptyList(),
     val expectedEvents: List<CaptureReplayExpectedEventDto> = emptyList(),
     val assertions: CaptureReplayAssertionsDto = CaptureReplayAssertionsDto(),
 )
@@ -84,6 +87,28 @@ data class CaptureReplayRawFixDto(
             bearingDeg?.let { bearing = it }
         }
     }
+}
+
+@Serializable
+data class CaptureReplayImuEventDto(
+    val wallOffsetMs: Long,
+    val elapsedRealtimeOffsetNanos: Long,
+    val classification: String,
+    val confidence: Float,
+    val accelerationVarianceMps4: Float,
+    val stepRatePerMinute: Float,
+) {
+    fun wallTimeMs(session: CaptureReplaySessionDto): Long = session.wallBaseMs + wallOffsetMs
+
+    fun elapsedRealtimeNanos(session: CaptureReplaySessionDto): Long =
+        session.elapsedRealtimeBaseNanos + elapsedRealtimeOffsetNanos
+
+    fun toContext(): ImuMotionContext = ImuMotionContext(
+        classification = ImuClassification.valueOf(classification),
+        confidence = confidence,
+        accelerationVarianceMps4 = accelerationVarianceMps4,
+        stepRatePerMinute = stepRatePerMinute,
+    )
 }
 
 @Serializable

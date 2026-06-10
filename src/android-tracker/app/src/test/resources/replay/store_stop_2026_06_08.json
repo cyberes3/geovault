@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "sessionId": "lowes_stop_2026_06_08",
   "trackId": "6068d65c-9f93-4c68-bc79-577b84b4ef5d",
   "wallBaseMs": 1780931563721,
@@ -915,6 +915,7 @@
       "propsKind": "none"
     }
   ],
+  "imuEvents": [],
   "expectedEvents": [],
   "assertions": {
     "finalMode": "DRIVING",

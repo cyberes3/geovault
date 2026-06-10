@@ -12,6 +12,7 @@ import com.geovault.tracker.BuildConfig
  *
  * Recorded line types:
  * - `positioning_raw_fix` — GPS fixes from [com.geovault.tracker.positioning.ingest.FixIngestSubsystem]
+ * - `positioning_imu_classification` — stable IMU classification emissions from [com.geovault.tracker.positioning.motion.MotionSubsystem]
  */
 object GeoVaultPointRecordingLog {
 

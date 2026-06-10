@@ -33,8 +33,8 @@ METERS_PER_MILE = 1609.344
 MILES_MIN = 900.0
 MILES_MAX = 1100.0
 METERS_PER_DEGREE_LAT = 111_320.0
-SCHEMA_VERSION = 2
-EXTRACTOR_VERSION = "schema-v2-runtime-replay"
+SCHEMA_VERSION = 1
+EXTRACTOR_VERSION = "schema-v1"
 
 ISO_TS_RE = re.compile(r"^(?P<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\s+")
 
@@ -97,6 +97,17 @@ MODE_CHANGED_RE = re.compile(
     r"path=(?P<path>\S+)"
 )
 
+IMU_CLASSIFICATION_RE = re.compile(
+    r"positioning_imu_classification\s+"
+    r"track=(?P<track>\S*)\s+"
+    r"wall=(?P<wall>\d+)\s+"
+    r"elapsedNanos=(?P<elapsedNanos>\d+)\s+"
+    r"class=(?P<cls>\S+)\s+"
+    r"confidence=(?P<confidence>[-\d.eE+]+)\s+"
+    r"variance=(?P<variance>[-\d.eE+]+)\s+"
+    r"stepRate=(?P<stepRate>[-\d.eE+]+)"
+)
+
 @dataclass
 class RawFix:
     track_id: str
@@ -152,10 +163,22 @@ class Milestone:
 
 
 @dataclass
+class ImuClassificationEvent:
+    track_id: str
+    wall_ms: int
+    elapsed_realtime_nanos: int
+    classification: str
+    confidence: float
+    variance: float
+    step_rate: float
+
+
+@dataclass
 class CaptureEvents:
     raw_fixes: list[RawFix]
     decision_traces: list[DecisionTrace]
     milestones: list[Milestone]
+    imu_events: list[ImuClassificationEvent]
 
 
 class CaptureLogReader:
@@ -184,6 +207,7 @@ class CaptureEventParser:
         raw_fixes: list[RawFix] = []
         decision_traces: list[DecisionTrace] = []
         milestones: list[Milestone] = []
+        imu_events: list[ImuClassificationEvent] = []
         reader = CaptureLogReader()
         for wall_ms, line in reader.iter_window(log_path, start_ms, end_ms):
             raw_match = RAW_FIX_RE.search(line)
@@ -191,6 +215,13 @@ class CaptureEventParser:
                 parsed = self._raw_fix(raw_match)
                 if track_id is None or parsed.track_id == track_id:
                     raw_fixes.append(parsed)
+                continue
+
+            imu_match = IMU_CLASSIFICATION_RE.search(line)
+            if imu_match:
+                parsed = self._imu_event(imu_match)
+                if track_id is None or parsed.track_id == track_id:
+                    imu_events.append(parsed)
                 continue
 
             trace_match = TRACE_RE.search(line)
@@ -236,6 +267,18 @@ class CaptureEventParser:
             raw_fixes=raw_fixes,
             decision_traces=decision_traces,
             milestones=milestones,
+            imu_events=imu_events,
+        )
+
+    def _imu_event(self, match: re.Match[str]) -> ImuClassificationEvent:
+        return ImuClassificationEvent(
+            track_id=match.group("track"),
+            wall_ms=int(match.group("wall")),
+            elapsed_realtime_nanos=int(match.group("elapsedNanos")),
+            classification=match.group("cls"),
+            confidence=float(match.group("confidence")),
+            variance=float(match.group("variance")),
+            step_rate=float(match.group("stepRate")),
         )
 
     def _raw_fix(self, match: re.Match[str]) -> RawFix:
@@ -318,6 +361,10 @@ class ReplaySessionBuilder:
             self._raw_fix_json(index, fix, wall_base_ms, elapsed_base_nanos, anonymizer)
             for index, fix in enumerate(events.raw_fixes)
         ]
+        shifted_imu_events = [
+            self._imu_event_json(event, wall_base_ms, elapsed_base_nanos)
+            for event in events.imu_events
+        ]
         expected_events = [
             self._trace_json(trace, wall_base_ms, anonymizer)
             for trace in events.decision_traces
@@ -337,6 +384,7 @@ class ReplaySessionBuilder:
                 "sessionBoundaryId": 0,
             },
             "rawFixes": shifted_fixes,
+            "imuEvents": shifted_imu_events,
             "expectedEvents": expected_events,
             "assertions": self._assertions(events),
             "source": {
@@ -344,7 +392,7 @@ class ReplaySessionBuilder:
                 "windowStartMs": start_ms,
                 "windowEndMs": end_ms,
                 "extractorVersion": EXTRACTOR_VERSION,
-                "inputKind": "positioning_raw_fix",
+                "inputKind": "positioning_raw_fix+imu_classification",
                 "fidelity": "raw_fix_runtime_replay",
             },
         }
@@ -376,6 +424,21 @@ class ReplaySessionBuilder:
             "bypassFilters": fix.bypass_filters,
             "skipAdaptiveTrackingEffects": fix.skip_adaptive_tracking_effects,
             "propsKind": fix.props_kind,
+        }
+
+    def _imu_event_json(
+        self,
+        event: ImuClassificationEvent,
+        wall_base_ms: int,
+        elapsed_base_nanos: int,
+    ) -> dict[str, Any]:
+        return {
+            "wallOffsetMs": event.wall_ms - wall_base_ms,
+            "elapsedRealtimeOffsetNanos": event.elapsed_realtime_nanos - elapsed_base_nanos,
+            "classification": event.classification,
+            "confidence": event.confidence,
+            "accelerationVarianceMps4": event.variance,
+            "stepRatePerMinute": event.step_rate,
         }
 
     def _trace_json(
@@ -462,12 +525,13 @@ class ReplaySessionBuilder:
 
 class ReplayValidator:
     def validate(self, artifact: dict[str, Any], expected_session: str) -> None:
-        self._require(artifact.get("schemaVersion") == SCHEMA_VERSION, "schemaVersion must be 2")
+        self._require(artifact.get("schemaVersion") == SCHEMA_VERSION, f"schemaVersion must be {SCHEMA_VERSION}")
         self._require(artifact.get("sessionId") == expected_session, "sessionId mismatch")
         self._require(isinstance(artifact.get("settings"), dict), "settings must be an object")
         self._require(isinstance(artifact.get("initialState"), dict), "initialState must be an object")
         self._require(isinstance(artifact.get("source"), dict), "source must be an object")
-        self._require(artifact["source"].get("inputKind") == "positioning_raw_fix", "inputKind must be positioning_raw_fix")
+        imu_events = artifact.get("imuEvents")
+        self._require(isinstance(imu_events, list), "imuEvents must be an array")
 
         raw_fixes = artifact.get("rawFixes")
         self._require(isinstance(raw_fixes, list) and raw_fixes, "rawFixes must be non-empty")
@@ -606,7 +670,8 @@ def command_write(args: argparse.Namespace) -> int:
     artifact = build_artifact(args)
     ReplayValidator().validate(artifact, expected_session=args.session)
     ReplayWriter().write(args.output, artifact)
-    print(f"wrote {args.output} ({len(artifact['rawFixes'])} raw fixes)")
+    imu_count = len(artifact.get("imuEvents", []))
+    print(f"wrote {args.output} ({len(artifact['rawFixes'])} raw fixes, {imu_count} IMU events)")
     return 0
 
 
@@ -627,9 +692,10 @@ def command_validate(args: argparse.Namespace) -> int:
     artifact = ReplayWriter().read(args.output)
     ReplayValidator().validate(artifact, expected_session=args.session)
     source = artifact["source"]
+    imu_count = len(artifact.get("imuEvents", []))
     print(
         f"ok: {args.output} ({len(artifact['rawFixes'])} raw fixes, "
-        f"{source.get('inputKind')})"
+        f"{imu_count} IMU events, {source.get('inputKind')})"
     )
     return 0
 

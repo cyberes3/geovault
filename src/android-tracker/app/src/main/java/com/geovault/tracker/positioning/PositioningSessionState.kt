@@ -48,6 +48,7 @@ internal class PositioningSessionState {
     var fixDeliveryWatchdogJob: Job? = null
     var elasticDistanceOverrideMeters: Float? = null
     var elasticitySpeedBucket: Int = 0
+    var imuAttentionBoostActive: Boolean = false
     var lastSpeedReferenceLocation: Location? = null
     var isFastGpsLockWindowActive: Boolean = false
     var isFastGpsLockPriming: Boolean = false
@@ -166,6 +167,7 @@ internal class PositioningSessionState {
         lastSpeedReferenceLocation = null
         elasticDistanceOverrideMeters = null
         elasticitySpeedBucket = 0
+        imuAttentionBoostActive = false
     }
 
     private fun resetDiagnosticsForStop() {

@@ -3,7 +3,7 @@ package com.geovault.tracker.replay.runtime
 import kotlinx.serialization.json.Json
 
 object CaptureReplaySessionLoader {
-    private const val SupportedSchemaVersion = 2
+    private const val SupportedSchemaVersion = 1
 
     private val json = Json {
         ignoreUnknownKeys = true

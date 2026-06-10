@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "sessionId": "highway_mode_deadlock_2026_06_09",
   "trackId": "6068d65c-9f93-4c68-bc79-577b84b4ef5d",
   "wallBaseMs": 1781010505653,
@@ -2538,5 +2538,6 @@
       "speedMps": 32.5,
       "bearingDeg": 22.6
     }
-  ]
+  ],
+  "imuEvents": []
 }

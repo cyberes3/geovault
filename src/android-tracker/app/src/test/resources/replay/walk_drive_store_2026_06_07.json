@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "sessionId": "walk_drive_store_2026_06_07",
   "trackId": "6068d65c-9f93-4c68-bc79-577b84b4ef5d",
   "wallBaseMs": 1780854431425,
@@ -2245,6 +2245,7 @@
       "propsKind": "none"
     }
   ],
+  "imuEvents": [],
   "expectedEvents": [
     {
       "kind": "positioning_decision_trace",

@@ -60,6 +60,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             hasBatteryOptimizationExemption = TrackingPermissionGate.hasBatteryOptimizationExemption(ctx),
             hasExactAlarmPermission = TrackingPermissionGate.hasExactAlarmPermission(ctx),
             hasActivityRecognition = TrackingPermissionGate.hasActivityRecognitionPermission(ctx),
+            hasOtherSensors = TrackingPermissionGate.hasOtherSensorsPermission(ctx),
         )
     }
 

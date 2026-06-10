@@ -18,6 +18,7 @@ internal class SessionResetCoordinator(private val rt: PositioningRuntime) {
         )
         rt.deps.autoTrackingMotionEngine.reset(sessionStartedAtMs)
         rt.deps.autoTrackingMotionCoordinator.reset()
+        rt.motion.clearSessionImuState()
     }
 
     fun applyForStop() {

@@ -18,6 +18,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
+    companion object {
+        private const val IMU_BOOST_MAX_INTERVAL_SEC = 10L
+        private const val IMU_BOOST_MAX_DISTANCE_METERS = 30f
+    }
+
     fun applyCurrentLocationRequest(reason: String): Boolean {
         if (!rt.environment.platformLocationRequestsEnabled) return true
         if (!rt.state.isTracking) return false
@@ -29,16 +34,28 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
         }
         if (!TrackingPermissionGate.hasLocationPermission(rt.ports.service)) return false
         val runtimeContext = rt.contextBuilder.currentPositioningRuntimeContext()
-        val distanceFilter = runtimeContext.distanceFilterMeters
+
+        // When the IMU attention boost is active, tighten the GPS request so evidence
+        // accumulates faster to confirm or disprove the IMU observation. This cap is
+        // applied only to the location request; all other PositioningContext consumers
+        // (freshness tracker, max gap) continue to use the unmodified runtimeContext.
+        val imuBoostActive = rt.state.imuAttentionBoostActive
+        val requestIntervalSec = if (imuBoostActive)
+            runtimeContext.locationIntervalSec.coerceAtMost(IMU_BOOST_MAX_INTERVAL_SEC)
+        else runtimeContext.locationIntervalSec
+        val requestDistance = if (imuBoostActive)
+            runtimeContext.distanceFilterMeters.coerceAtMost(IMU_BOOST_MAX_DISTANCE_METERS)
+        else runtimeContext.distanceFilterMeters
+
         val requestKey = LocationRequestKey(
-            intervalSec = runtimeContext.locationIntervalSec,
-            distanceFilterMeters = distanceFilter,
+            intervalSec = requestIntervalSec,
+            distanceFilterMeters = requestDistance,
             fastLock = rt.state.isFastGpsLockWindowActive,
         )
         if (rt.state.lastAppliedLocationRequestKey == requestKey) {
             rt.deps.runtimeTelemetry.decision(
                 name = "location_request_unchanged",
-                details = "reason=$reason intervalSec=${runtimeContext.locationIntervalSec} distance=$distanceFilter fastLock=${rt.state.isFastGpsLockWindowActive}"
+                details = "reason=$reason intervalSec=$requestIntervalSec distance=$requestDistance fastLock=${rt.state.isFastGpsLockWindowActive} imuBoost=$imuBoostActive"
             )
             rt.locationRequests.startFixDeliveryWatchdog()
             return true
@@ -48,8 +65,8 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
         } else {
             TrackingLocationRequestPolicy.buildNormalRequest(
                 TrackingLocationRequestInput(
-                    intervalSec = runtimeContext.locationIntervalSec,
-                    distanceFilterMeters = distanceFilter,
+                    intervalSec = requestIntervalSec,
+                    distanceFilterMeters = requestDistance,
                 )
             )
         }
@@ -63,7 +80,7 @@ internal class LocationRequestSubsystem(private val rt: PositioningRuntime) {
             rt.state.locationRequestReapplyRetryJob = null
             rt.deps.runtimeTelemetry.decision(
                 name = "location_request_applied",
-                details = "reason=$reason intervalSec=${runtimeContext.locationIntervalSec} distance=$distanceFilter fastLock=${rt.state.isFastGpsLockWindowActive}"
+                details = "reason=$reason intervalSec=$requestIntervalSec distance=$requestDistance fastLock=${rt.state.isFastGpsLockWindowActive} imuBoost=$imuBoostActive"
             )
             rt.locationRequests.startFixDeliveryWatchdog()
             true

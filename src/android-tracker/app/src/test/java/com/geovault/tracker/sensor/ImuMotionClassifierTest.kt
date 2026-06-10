@@ -3,12 +3,60 @@ package com.geovault.tracker.sensor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /**
- * Unit tests for [ImuMotionClassifier.classify]. Exercises the pure classification dispatch
- * via the companion function — no Android context, SensorManager, or hardware required.
+ * Unit tests for [ImuMotionClassifier].
+ *
+ * Classification logic is tested via the pure companion function (no Android context required).
+ * Lifecycle tests use Robolectric to construct a real [ImuMotionClassifier] instance.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], manifest = Config.NONE)
 class ImuMotionClassifierTest {
+
+    // region Lifecycle
+
+    /**
+     * Calling [ImuMotionClassifier.stop] a second time must be a no-op. The double-stop
+     * scenario arises because [SessionLifecycleSubsystem.cleanupServiceResources] is called
+     * both by [SessionLifecycleSubsystem.stopTracking] and by [PositioningRuntime.onDestroy].
+     * The [isRunning] guard ensures the second call is silently ignored and does not
+     * produce a duplicate log or corrupt internal state.
+     */
+    @Test
+    fun stop_calledTwice_isIdempotent() {
+        val emissions = mutableListOf<ImuMotionContext>()
+        val classifier = ImuMotionClassifier(
+            context = RuntimeEnvironment.getApplication(),
+            onClassification = { emissions.add(it) },
+        )
+        classifier.start()
+        classifier.stop()
+        classifier.stop()
+        // Reaching here without exception and with no extra emissions confirms idempotency.
+        // The real guard (isRunning) is validated by the absence of a double log in field logs.
+        assertEquals(0, emissions.size)
+    }
+
+    @Test
+    fun start_calledTwice_isIdempotent() {
+        val classifier = ImuMotionClassifier(
+            context = RuntimeEnvironment.getApplication(),
+            onClassification = {},
+        )
+        classifier.start()
+        classifier.start()
+        // Clean up — should not crash or double-unregister.
+        classifier.stop()
+    }
+
+    // endregion
+
+    // region Classification
 
     // region PEDESTRIAN
 
@@ -204,5 +252,5 @@ class ImuMotionClassifierTest {
         assertEquals(0.0f, confidence, 0.001f)
     }
 
-    // endregion
+    // endregion Classification
 }

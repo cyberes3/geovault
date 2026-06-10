@@ -67,22 +67,46 @@ internal class PositioningEndToEndReplayDriver(
         runtime: PositioningRuntime,
         clock: ReplayPositioningClock,
     ) {
-        val fixes = session.rawFixes.sortedBy { it.wallTimeMs(session) }
+        val timeline = buildMergedTimeline()
         var previousWallMs = session.wallBaseMs
-        for (fix in fixes) {
-            val wallMs = fix.wallTimeMs(session)
+        for (event in timeline) {
+            val wallMs = event.wallTimeMs(session)
             injectMotionTicks(runtime, clock, previousWallMs, wallMs)
             clock.advanceTo(
                 wallTimeMs = wallMs,
-                elapsedRealtimeNanos = fix.elapsedRealtimeNanos(session),
+                elapsedRealtimeNanos = event.elapsedRealtimeNanos(session),
             )
-            runtime.fixIngest.processLocationUpdateSerialized(
-                location = fix.toLocation(session),
-                bypassFilters = fix.bypassFilters,
-                allowWhenGpsPaused = fix.allowWhenGpsPaused,
-                skipAdaptiveTrackingEffects = fix.skipAdaptiveTrackingEffects,
-            )
+            when (event) {
+                is TimelineEvent.Fix -> runtime.fixIngest.processLocationUpdateSerialized(
+                    location = event.fix.toLocation(session),
+                    bypassFilters = event.fix.bypassFilters,
+                    allowWhenGpsPaused = event.fix.allowWhenGpsPaused,
+                    skipAdaptiveTrackingEffects = event.fix.skipAdaptiveTrackingEffects,
+                )
+                is TimelineEvent.Imu -> runtime.motion.onImuMotionUpdate(event.imuEvent.toContext())
+            }
             previousWallMs = wallMs
+        }
+    }
+
+    private fun buildMergedTimeline(): List<TimelineEvent> {
+        val fixes = session.rawFixes.map { TimelineEvent.Fix(it) }
+        val imuEvents = session.imuEvents.map { TimelineEvent.Imu(it) }
+        return (fixes + imuEvents).sortedBy { it.wallTimeMs(session) }
+    }
+
+    private sealed class TimelineEvent {
+        abstract fun wallTimeMs(session: CaptureReplaySessionDto): Long
+        abstract fun elapsedRealtimeNanos(session: CaptureReplaySessionDto): Long
+
+        data class Fix(val fix: CaptureReplayRawFixDto) : TimelineEvent() {
+            override fun wallTimeMs(session: CaptureReplaySessionDto) = fix.wallTimeMs(session)
+            override fun elapsedRealtimeNanos(session: CaptureReplaySessionDto) = fix.elapsedRealtimeNanos(session)
+        }
+
+        data class Imu(val imuEvent: CaptureReplayImuEventDto) : TimelineEvent() {
+            override fun wallTimeMs(session: CaptureReplaySessionDto) = imuEvent.wallTimeMs(session)
+            override fun elapsedRealtimeNanos(session: CaptureReplaySessionDto) = imuEvent.elapsedRealtimeNanos(session)
         }
     }
 

@@ -87,6 +87,7 @@
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
     <string name="grant_exact_alarm_permission">Allow Exact Alarms</string>
     <string name="grant_activity_recognition">Allow Activity Recognition</string>
+    <string name="grant_other_sensors">Allow Sensors Access</string>
     <string name="imu_unavailable_snackbar">Motion sensors unavailable on this device — GPS mode switching may be less smooth</string>
     <string name="not_tracking">Not Tracking</string>
     <string name="tracking_active">Tracking Active</string>
@@ -117,6 +118,7 @@
     <string name="tooltip_grant_battery">Open battery settings so the app is not overly restricted while tracking.</string>
     <string name="tooltip_grant_exact_alarm">Grant exact alarm permission if Android requires it for reliable scheduling.</string>
     <string name="tooltip_grant_activity_recognition">Allow activity recognition so inertial sensors can assist GPS mode switching.</string>
+    <string name="tooltip_grant_other_sensors">Allow sensors access so inertial motion data can assist GPS accuracy. Required on some devices.</string>
     <string name="tooltip_start_stop_tracking">Start sending points for the selected tracker, or stop the current session.</string>
     <string name="tooltip_tracking_params">View live readings such as speed and accuracy for the active track.</string>
     <string name="tooltip_manual_send_point">Upload your current position once without changing the tracking session.</string>

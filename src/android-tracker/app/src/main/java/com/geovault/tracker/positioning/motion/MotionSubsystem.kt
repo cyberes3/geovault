@@ -10,6 +10,8 @@ import com.geovault.tracker.policy.TrackPointPolicyEngine
 import com.geovault.tracker.positioning.PositioningContext
 import com.geovault.tracker.positioning.config.GpsRuntimeState
 import com.geovault.tracker.positioning.config.PositioningElasticityConfig
+import com.geovault.tracker.logging.GeoVaultPointRecordingLog
+import com.geovault.tracker.sensor.ImuClassification
 import com.geovault.tracker.sensor.ImuMotionContext
 import com.geovault.tracker.services.LocationIngestResult
 import com.geovault.tracker.services.TrackingMotionMode
@@ -30,8 +32,12 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
 
     /**
      * Called by [ImuMotionClassifier] on every stable classification emission (~every 15 s).
-     * Updates the local IMU context, logs the classification, applies IMU mode constraints to
-     * the engine, and propagates any resulting mode change through the normal output pipeline.
+     *
+     * Updates the local IMU context for use in [handleAcceptedAdaptiveTrackingEffects], logs the
+     * classification, and activates the attention boost when IMU disagrees with the current GPS
+     * mode. The boost tightens the GPS location request so evidence accumulates faster to confirm
+     * or disprove the IMU observation. GPS mode selection itself is unaffected — [AutoTrackingMotionEngine]
+     * has no knowledge of IMU data.
      */
     fun onImuMotionUpdate(ctx: ImuMotionContext) {
         currentImuContext = ctx
@@ -40,15 +46,38 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             details = "class=${ctx.classification} confidence=${ctx.confidence} " +
                 "variance=${ctx.accelerationVarianceMps4} stepRate=${ctx.stepRatePerMinute}",
         )
-        val output = rt.deps.autoTrackingMotionEngine.onImuClassification(ctx)
-        output.imuConstraintSnapshot?.let { snapshot ->
+        GeoVaultPointRecordingLog.i(
+            IMU_RECORDING_TAG,
+            "positioning_imu_classification " +
+                "track=${rt.ports.selectedTrackerId()} " +
+                "wall=${rt.deps.clock.wallTimeMs()} " +
+                "elapsedNanos=${rt.deps.clock.elapsedRealtimeNanos()} " +
+                "class=${ctx.classification.name} " +
+                "confidence=${ctx.confidence} " +
+                "variance=${ctx.accelerationVarianceMps4} " +
+                "stepRate=${ctx.stepRatePerMinute}",
+        )
+
+        val currentMode = rt.contextBuilder.resolveActiveMotionMode()
+        val needsBoost = computeBoostNeeded(ctx.classification, currentMode)
+        val changed = rt.state.imuAttentionBoostActive != needsBoost
+        rt.state.imuAttentionBoostActive = needsBoost
+        if (changed) {
             rt.deps.runtimeTelemetry.event(
-                name = "imu_constraint_changed",
-                details = "ceiling=${snapshot.ceiling} floor=${snapshot.floor} " +
-                    "pedestrianStreak=${snapshot.pedestrianStreak} vehicularStreak=${snapshot.vehicularStreak}",
+                name = "imu_attention_boost",
+                details = "active=$needsBoost imu=${ctx.classification} mode=$currentMode",
             )
+            rt.locationRequests.reapplyLocationRequestIfActive("imu_attention_boost")
         }
-        processAutoTrackingOutput(output, reason = "imu_constraint")
+    }
+
+    /**
+     * Clears IMU state that is specific to a single tracking session. Called at session start
+     * so stale context from the previous session cannot influence stationary detection during
+     * the new session's first ~15 s (before [ImuMotionClassifier] re-stabilizes).
+     */
+    fun clearSessionImuState() {
+        currentImuContext = null
     }
 
     fun startAutoModeTickIfNeeded() {
@@ -228,6 +257,10 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
 
     fun processAutoTrackingOutput(output: AutoTrackingEngineOutput, reason: String) {
         if (output.modeChanged) {
+            // Clear the IMU attention boost on any GPS mode change — the GPS system has
+            // now confirmed or resolved whatever the IMU hint was pointing to. The next
+            // IMU heartbeat (~15 s) will re-evaluate and re-arm the boost if still needed.
+            rt.state.imuAttentionBoostActive = false
             rt.state.lastAutoModeChangedAtMs = rt.deps.clock.wallTimeMs()
             rt.motion.resetElasticDistanceOverride(reason = "auto_mode_changed_$reason", reapplyRequest = false)
             rt.locationRequests.reapplyLocationRequestIfActive("auto_mode_$reason")
@@ -304,4 +337,24 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         return (base + extra).coerceAtMost(config.maxDistanceFilterMeters)
     }
 
+    companion object {
+        private const val IMU_RECORDING_TAG = "ImuRecording"
+
+        /**
+         * Returns whether an IMU attention boost should be active given [classification] and
+         * [currentMode]. A boost is needed whenever the IMU observation disagrees with the
+         * current GPS mode, prompting the GPS system to gather evidence faster.
+         *
+         * Exposed as `internal` so unit tests can verify all boost-trigger combinations without
+         * constructing a full [PositioningRuntime].
+         */
+        internal fun computeBoostNeeded(
+            classification: ImuClassification,
+            currentMode: TrackingMotionMode,
+        ): Boolean = when (classification) {
+            ImuClassification.PEDESTRIAN -> currentMode != TrackingMotionMode.WALKING
+            ImuClassification.VEHICULAR  -> currentMode == TrackingMotionMode.WALKING
+            else -> false
+        }
+    }
 }
