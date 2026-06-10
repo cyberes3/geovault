@@ -34,6 +34,7 @@ class PositioningSessionStateResetTest {
         assertNull(state.elasticDistanceOverrideMeters)
         assertFalse(state.imuAttentionBoostActive)
         assertEquals(0L, state.stationaryPauseCooldownUntilMs)
+        assertEquals(0L, state.lastImuTransitionBoostAtMs)
     }
 
     @Test
@@ -88,6 +89,7 @@ class PositioningSessionStateResetTest {
             lastFixDeliveryAtMs = 5_000L
             imuAttentionBoostActive = true
             stationaryPauseCooldownUntilMs = 9_999_999L
+            lastImuTransitionBoostAtMs = 9_999_999L
         }
     }
 }

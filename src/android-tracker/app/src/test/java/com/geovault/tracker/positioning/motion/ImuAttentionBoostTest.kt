@@ -1,5 +1,6 @@
 package com.geovault.tracker.positioning.motion
 
+import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.policy.filter.StationaryConfidence
 import com.geovault.tracker.sensor.ImuClassification
 import com.geovault.tracker.services.TrackingMotionMode
@@ -171,6 +172,75 @@ class ImuAttentionBoostTest {
             MotionSubsystem.computeSensorFusionHighConfidence(
                 stationaryConfidence = highConfidence,
                 imuClassification = null,
+            )
+        )
+    }
+
+    // endregion
+
+    // region computeTransitionBoostNeeded
+
+    /**
+     * The first classification emitted in a session has no previous context.
+     * There is no transition, so no boost should fire.
+     */
+    @Test
+    fun transitionBoost_nullPrevious_doesNotFire() {
+        assertFalse(
+            MotionSubsystem.computeTransitionBoostNeeded(
+                previousClassification = null,
+                newClassification = ImuClassification.PEDESTRIAN,
+                lastTransitionBoostAtMs = 0L,
+                nowMs = 60_000L,
+            )
+        )
+    }
+
+    /**
+     * The classifier re-emitting the same classification is not a transition.
+     */
+    @Test
+    fun transitionBoost_sameClassification_doesNotFire() {
+        assertFalse(
+            MotionSubsystem.computeTransitionBoostNeeded(
+                previousClassification = ImuClassification.VEHICULAR,
+                newClassification = ImuClassification.VEHICULAR,
+                lastTransitionBoostAtMs = 0L,
+                nowMs = 60_000L,
+            )
+        )
+    }
+
+    /**
+     * A genuine classification change with no recent prior transition boost fires the boost.
+     * This is the primary case: any shift in IMU state warrants increased GPS sampling.
+     */
+    @Test
+    fun transitionBoost_differentClassification_outsideDebounce_fires() {
+        assertTrue(
+            MotionSubsystem.computeTransitionBoostNeeded(
+                previousClassification = ImuClassification.PEDESTRIAN,
+                newClassification = ImuClassification.UNKNOWN,
+                lastTransitionBoostAtMs = 0L,
+                nowMs = TrackingLocationPolicy.IMU_TRANSITION_BOOST_DEBOUNCE_MS,
+            )
+        )
+    }
+
+    /**
+     * A genuine transition within the debounce window must not re-arm the boost.
+     * Guards against PEDESTRIAN→UNKNOWN→PEDESTRIAN oscillation re-triggering on every cycle.
+     */
+    @Test
+    fun transitionBoost_differentClassification_withinDebounce_suppressed() {
+        val boostFiredAtMs = 10_000L
+        val nowMs = boostFiredAtMs + TrackingLocationPolicy.IMU_TRANSITION_BOOST_DEBOUNCE_MS - 1L
+        assertFalse(
+            MotionSubsystem.computeTransitionBoostNeeded(
+                previousClassification = ImuClassification.UNKNOWN,
+                newClassification = ImuClassification.PEDESTRIAN,
+                lastTransitionBoostAtMs = boostFiredAtMs,
+                nowMs = nowMs,
             )
         )
     }

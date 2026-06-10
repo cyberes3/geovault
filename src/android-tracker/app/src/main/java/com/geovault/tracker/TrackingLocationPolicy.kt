@@ -226,6 +226,13 @@ object TrackingLocationPolicy {
     const val STATIONARY_REGION_EXIT_COOLDOWN_MS = 30_000L
 
     /**
+     * Minimum elapsed time between successive IMU transition-triggered attention boosts.
+     * Guards against persistent IMU classification oscillation (e.g.
+     * PEDESTRIAN→UNKNOWN→PEDESTRIAN…) re-arming the GPS boost on every classifier cycle.
+     */
+    const val IMU_TRANSITION_BOOST_DEBOUNCE_MS = 30_000L
+
+    /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest
      * from interval in seconds.
      */

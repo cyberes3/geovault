@@ -41,7 +41,9 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
      * has no knowledge of IMU data.
      */
     fun onImuMotionUpdate(ctx: ImuMotionContext) {
+        val previousClassification = currentImuContext?.classification
         currentImuContext = ctx
+        val nowMs = rt.deps.clock.wallTimeMs()
         rt.deps.runtimeTelemetry.event(
             name = "imu_classification",
             details = "class=${ctx.classification} confidence=${ctx.confidence} " +
@@ -51,7 +53,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             IMU_RECORDING_TAG,
             "positioning_imu_classification " +
                 "track=${rt.ports.selectedTrackerId()} " +
-                "wall=${rt.deps.clock.wallTimeMs()} " +
+                "wall=$nowMs " +
                 "elapsedNanos=${rt.deps.clock.elapsedRealtimeNanos()} " +
                 "class=${ctx.classification.name} " +
                 "confidence=${ctx.confidence} " +
@@ -60,13 +62,22 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         )
 
         val currentMode = rt.contextBuilder.resolveActiveMotionMode()
-        val needsBoost = computeBoostNeeded(ctx.classification, currentMode)
+        val transitionBoost = computeTransitionBoostNeeded(
+            previousClassification = previousClassification,
+            newClassification = ctx.classification,
+            lastTransitionBoostAtMs = rt.state.lastImuTransitionBoostAtMs,
+            nowMs = nowMs,
+        )
+        if (transitionBoost) {
+            rt.state.lastImuTransitionBoostAtMs = nowMs
+        }
+        val needsBoost = computeBoostNeeded(ctx.classification, currentMode) || transitionBoost
         val changed = rt.state.imuAttentionBoostActive != needsBoost
         rt.state.imuAttentionBoostActive = needsBoost
         if (changed) {
             rt.deps.runtimeTelemetry.event(
                 name = "imu_attention_boost",
-                details = "active=$needsBoost imu=${ctx.classification} mode=$currentMode",
+                details = "active=$needsBoost imu=${ctx.classification} mode=$currentMode transition=$transitionBoost",
             )
             rt.locationRequests.reapplyLocationRequestIfActive("imu_attention_boost")
         }
@@ -367,6 +378,31 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             ImuClassification.PEDESTRIAN -> currentMode != TrackingMotionMode.WALKING
             ImuClassification.VEHICULAR  -> currentMode == TrackingMotionMode.WALKING
             else -> false
+        }
+
+        /**
+         * Returns whether the IMU classification transition itself warrants an attention boost.
+         * Any shift between classifications is evidence the motion environment just changed,
+         * so GPS should sample aggressively to confirm the new state regardless of whether
+         * the new classification disagrees with the current GPS mode.
+         *
+         * [previousClassification] null means this is the first emission of the session — no
+         * transition has occurred so no boost is warranted. The [lastTransitionBoostAtMs]
+         * debounce prevents persistent oscillation (e.g. PEDESTRIAN→UNKNOWN→PEDESTRIAN…)
+         * from re-arming the boost on every classifier cycle.
+         *
+         * Exposed as `internal` so unit tests can verify all cases without constructing a
+         * full [PositioningRuntime].
+         */
+        internal fun computeTransitionBoostNeeded(
+            previousClassification: ImuClassification?,
+            newClassification: ImuClassification,
+            lastTransitionBoostAtMs: Long,
+            nowMs: Long,
+        ): Boolean {
+            if (previousClassification == null) return false
+            if (previousClassification == newClassification) return false
+            return nowMs - lastTransitionBoostAtMs >= TrackingLocationPolicy.IMU_TRANSITION_BOOST_DEBOUNCE_MS
         }
 
         /**
