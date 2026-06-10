@@ -5,6 +5,7 @@ import android.location.Location
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.TrackingLocationPolicy
 import com.geovault.tracker.location.RecoveryAnchorState
 import com.geovault.tracker.location.TrackingControlEvent
 import com.geovault.tracker.policy.TrackPointPolicyEngine
@@ -268,11 +269,17 @@ internal class GpsCollectionSubsystem(private val rt: PositioningRuntime) {
      * resume), NOT on raw GPS wake signals like significant-motion interrupts.
      * Keeping this separate from [resumeGps] ensures the ping timer and region
      * state survive false-alarm wakeups and are only torn down on real motion.
+     *
+     * Arms the post-departure cooldown so that UNCERTAINTY_SUPPRESSED fixes near
+     * the previous parked location cannot immediately re-establish a new stationary
+     * region while the device is still leaving. The cooldown is enforced by
+     * [com.geovault.tracker.TrackingLocationPolicy.stationaryUpdate].
      */
-    fun exitStationaryRegion(reason: String) {
+    fun exitStationaryRegion(reason: String, nowMs: Long) {
         rt.deps.stationaryFreshnessCoordinator.onResumed(reason = reason)
         rt.state.consecutiveStationaryPoints = 0
         rt.state.stationaryAnchorLocation = null
+        rt.state.stationaryPauseCooldownUntilMs = nowMs + TrackingLocationPolicy.STATIONARY_REGION_EXIT_COOLDOWN_MS
         rt.deps.stationaryFreshnessCoordinator.clearRegion()
         rt.deps.runtimeTelemetry.event("stationary_region_exited", "reason=$reason")
     }

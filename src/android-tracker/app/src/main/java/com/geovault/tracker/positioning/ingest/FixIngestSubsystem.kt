@@ -385,7 +385,7 @@ internal class FixIngestSubsystem(private val rt: PositioningRuntime) {
             rt.state.gpsRuntimeState != GpsRuntimeState.WAITING_FOR_PROVIDER_PAUSED &&
             result.adjustmentReason != TrackPointPolicyEngine.ADJUSTMENT_REASON_UNCERTAINTY_SUPPRESSED
         ) {
-            rt.collection.exitStationaryRegion("confirmed_movement")
+            rt.collection.exitStationaryRegion("confirmed_movement", nowMs)
         }
         if (result.pointPersisted) {
             GeoVaultCaptureLog.d(

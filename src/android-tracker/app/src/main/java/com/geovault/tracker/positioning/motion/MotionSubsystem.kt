@@ -169,6 +169,13 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
         val stationaryConfidence = result.policyMetrics?.stationaryConfidence
         val stationaryReferenceLocation = result.lastFilteredLocation ?: rawLocation
         val imuClassification = currentImuContext?.classification
+        val inMotionCooldown = nowMs < rt.state.stationaryPauseCooldownUntilMs
+        if (inMotionCooldown) {
+            rt.deps.runtimeTelemetry.event(
+                name = "stationary_motion_cooldown",
+                details = "remainingMs=${rt.state.stationaryPauseCooldownUntilMs - nowMs}"
+            )
+        }
         val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
             lastLocation = rt.state.stationaryAnchorLocation,
             location = stationaryReferenceLocation,
@@ -180,8 +187,9 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             filterConfirmedStillness = filterConfirmedStillness,
             confidence = stationaryConfidence,
             imuClassification = imuClassification,
+            inMotionCooldown = inMotionCooldown,
         )
-        if (stationaryDecision.reason != "disabled") {
+        if (stationaryDecision.reason != "disabled" && stationaryDecision.reason != "motion_exit_cooldown") {
             rt.deps.runtimeTelemetry.event(
                 name = "stationary_update",
                 details = "from=${rt.state.consecutiveStationaryPoints} to=${stationaryDecision.consecutive} " +

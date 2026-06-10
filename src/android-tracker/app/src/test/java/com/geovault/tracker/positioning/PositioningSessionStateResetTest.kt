@@ -33,6 +33,7 @@ class PositioningSessionStateResetTest {
         assertNull(state.lastFilteredLocation)
         assertNull(state.elasticDistanceOverrideMeters)
         assertFalse(state.imuAttentionBoostActive)
+        assertEquals(0L, state.stationaryPauseCooldownUntilMs)
     }
 
     @Test
@@ -86,6 +87,7 @@ class PositioningSessionStateResetTest {
             gpsRuntimeState = GpsRuntimeState.RUNNING
             lastFixDeliveryAtMs = 5_000L
             imuAttentionBoostActive = true
+            stationaryPauseCooldownUntilMs = 9_999_999L
         }
     }
 }

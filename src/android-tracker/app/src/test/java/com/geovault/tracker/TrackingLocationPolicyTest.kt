@@ -848,4 +848,78 @@ class TrackingLocationPolicyTest {
     }
 
     // endregion
+
+    // region Post-departure cooldown
+
+    /**
+     * When [inMotionCooldown] is true, [stationaryUpdate] must return
+     * consecutive=0 / shouldPause=false / reason="motion_exit_cooldown"
+     * unconditionally, regardless of any other input. This is the primary
+     * regression guard for the bug where UNCERTAINTY_SUPPRESSED fixes near
+     * a previous parked location re-established a stationary region within
+     * 12 seconds of departure, causing a 560 m jump.
+     */
+    @Test
+    fun stationaryUpdate_inMotionCooldown_returnsZeroAndNoPause() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 5_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close,
+            stationaryRadiusMeters = 50f, currentConsecutive = 2,
+            significantMotionOnly = true,
+            inMotionCooldown = true,
+        )
+
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("motion_exit_cooldown", result.reason)
+    }
+
+    /**
+     * UNCERTAINTY_SUPPRESSED fixes (filterConfirmedStillness=true) near the
+     * previous parked location must not advance the counter during cooldown.
+     * This is the exact path that triggered the premature re-pause observed
+     * in the field (counter 0→3 in 12 s via filterConfirmedStillness).
+     */
+    @Test
+    fun stationaryUpdate_inMotionCooldown_filterConfirmedStillness_doesNotAccumulate() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 2f }
+        val snap = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 5_000L; accuracy = 1f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = snap,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            inMotionCooldown = true,
+        )
+
+        assertEquals(0, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("motion_exit_cooldown", result.reason)
+    }
+
+    /**
+     * After the cooldown window expires (inMotionCooldown=false), the stationary
+     * machine resumes from zero. The first fix with no prior anchor produces
+     * first_anchor (consecutive=1, no pause), confirming a clean slate.
+     */
+    @Test
+    fun stationaryUpdate_cooldownExpired_resumesNormally() {
+        val firstFix = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 35_000L; accuracy = 8f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = null, location = firstFix,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true,
+            inMotionCooldown = false,
+        )
+
+        assertEquals(1, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("first_anchor", result.reason)
+    }
+
+    // endregion
 }

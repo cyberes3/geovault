@@ -113,7 +113,15 @@ object TrackingLocationPolicy {
         filterConfirmedStillness: Boolean = false,
         confidence: StationaryConfidence? = null,
         imuClassification: ImuClassification? = null,
+        inMotionCooldown: Boolean = false,
     ): StationaryDecision {
+        // After a confirmed stationary-region exit, suppress all stillness evidence
+        // for STATIONARY_REGION_EXIT_COOLDOWN_MS. This prevents UNCERTAINTY_SUPPRESSED
+        // fixes near the previous parked location from re-establishing a stationary
+        // region while the device is still departing.
+        if (inMotionCooldown) {
+            return StationaryDecision(consecutive = 0, shouldPause = false, reason = "motion_exit_cooldown")
+        }
         if (!significantMotionOnly) {
             return StationaryDecision(consecutive = 0, shouldPause = false, reason = "disabled")
         }
@@ -207,6 +215,15 @@ object TrackingLocationPolicy {
     private const val PAUSE_THRESHOLD = 3
     private const val FAST_ADVANCE_SCORE = 0.6
     private const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
+
+    /**
+     * Duration after a confirmed stationary-region exit during which the
+     * stationary machine does not accept any stillness evidence. Prevents
+     * UNCERTAINTY_SUPPRESSED fixes near the previous parked location from
+     * immediately re-establishing a new stationary region while the device
+     * is still departing.
+     */
+    const val STATIONARY_REGION_EXIT_COOLDOWN_MS = 30_000L
 
     /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest

@@ -66,6 +66,7 @@ internal class PositioningSessionState {
     var watchdogJob: Job? = null
     var consecutiveStationaryPoints: Int = 0
     var stationaryAnchorLocation: Location? = null
+    var stationaryPauseCooldownUntilMs: Long = 0L
     var consecutivePushFailures: Int = 0
     var lastSyncFailureClass: SyncFailureClass = SyncFailureClass.NONE
 
@@ -160,6 +161,7 @@ internal class PositioningSessionState {
         fastGpsLockLastSummaryAtMs = 0L
         consecutiveStationaryPoints = 0
         stationaryAnchorLocation = null
+        stationaryPauseCooldownUntilMs = 0L
         lastFilteredLocation = null
         latestObservedRawLocation = null
         lastFixDeliveryAtMs = 0L
