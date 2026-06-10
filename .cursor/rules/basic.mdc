@@ -20,8 +20,7 @@ I really don't care about Mermaid diagrams. You don't need to create them in pla
 
 The backend venv is at src/backend/venv
 
-Always use top-level imports in Python, not lazy/local/function level!
-Do not re-export modules or use __all__. Instead, do direct imports.
+Always use top-level imports in Python, not lazy/local/function level! Do not re-export modules or use __all__. Instead, do direct imports.
 
 Run backend python tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests. More instructions available at src/tests/README.md.
 YES: `./run-tests.sh test_api/test_app_releases.py` NO: `src/tests/run-tests.sh src/tests/test_api/test_app_releases.py`
@@ -39,6 +38,8 @@ Make sure to explicitly define responses via pydantic for the backend and typesc
 We have a bunch of common frontend components in the `parts/` folder. Please use those where possible.
 
 DO NOT MANUALLY CREATE OR EDIT DJANGO MIGRATIONS!!!!! Use `manage.py` to generate them.
+
+When writing commit messages for this large monorepo, always prepend the systems that were touched (ie. frontend or backend or any of the Android apps).
 
 ### Android Instructions
 
