@@ -246,4 +246,81 @@ class ImuAttentionBoostTest {
     }
 
     // endregion
+
+    // region computeVehicularWakeNeeded
+
+    /**
+     * Primary case: IMU transitions to VEHICULAR while GPS is paused and no recent wake.
+     * The wake should fire, supplementing the slow hardware significant-motion sensor.
+     */
+    @Test
+    fun vehicularWake_paused_firesWake() {
+        assertTrue(
+            MotionSubsystem.computeVehicularWakeNeeded(
+                previousClassification = ImuClassification.UNKNOWN,
+                newClassification = ImuClassification.VEHICULAR,
+                confidence = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE,
+                lastWakeAtMs = 0L,
+                nowMs = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS,
+                isPaused = true,
+            )
+        )
+    }
+
+    /**
+     * GPS is not paused: wake must not fire regardless of IMU state.
+     */
+    @Test
+    fun vehicularWake_notPaused_doesNotFire() {
+        assertFalse(
+            MotionSubsystem.computeVehicularWakeNeeded(
+                previousClassification = ImuClassification.UNKNOWN,
+                newClassification = ImuClassification.VEHICULAR,
+                confidence = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE,
+                lastWakeAtMs = 0L,
+                nowMs = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS,
+                isPaused = false,
+            )
+        )
+    }
+
+    /**
+     * A second VEHICULAR transition within the debounce window must not re-trigger.
+     * Guards against oscillating IMU readings causing rapid resume/pause cycles.
+     */
+    @Test
+    fun vehicularWake_debounce_suppressesRepeat() {
+        val wakeAtMs = 10_000L
+        val nowMs = wakeAtMs + TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS - 1L
+        assertFalse(
+            MotionSubsystem.computeVehicularWakeNeeded(
+                previousClassification = ImuClassification.UNKNOWN,
+                newClassification = ImuClassification.VEHICULAR,
+                confidence = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE,
+                lastWakeAtMs = wakeAtMs,
+                nowMs = nowMs,
+                isPaused = true,
+            )
+        )
+    }
+
+    /**
+     * Confidence below the threshold must not trigger a wake.
+     * Low-confidence VEHICULAR readings can be transient noise.
+     */
+    @Test
+    fun vehicularWake_lowConfidence_doesNotFire() {
+        assertFalse(
+            MotionSubsystem.computeVehicularWakeNeeded(
+                previousClassification = ImuClassification.UNKNOWN,
+                newClassification = ImuClassification.VEHICULAR,
+                confidence = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE - 0.01f,
+                lastWakeAtMs = 0L,
+                nowMs = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS,
+                isPaused = true,
+            )
+        )
+    }
+
+    // endregion
 }

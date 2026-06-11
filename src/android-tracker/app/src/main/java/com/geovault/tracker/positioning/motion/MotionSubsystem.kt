@@ -81,6 +81,26 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             )
             rt.locationRequests.reapplyLocationRequestIfActive("imu_attention_boost")
         }
+
+        // When the IMU transitions into VEHICULAR with sufficient confidence and GPS is
+        // currently paused, wake it immediately rather than waiting for the hardware
+        // significant-motion sensor, which can be delayed by several minutes.
+        if (computeVehicularWakeNeeded(
+                previousClassification = previousClassification,
+                newClassification = ctx.classification,
+                confidence = ctx.confidence,
+                lastWakeAtMs = rt.state.lastImuVehicularWakeAtMs,
+                nowMs = nowMs,
+                isPaused = rt.state.gpsRuntimeState == GpsRuntimeState.PAUSED_FOR_MOTION,
+            )
+        ) {
+            rt.state.lastImuVehicularWakeAtMs = nowMs
+            rt.deps.runtimeTelemetry.event(
+                name = "imu_vehicular_wake",
+                details = "confidence=${ctx.confidence}",
+            )
+            rt.collection.resumeGps("imu_vehicular_wake")
+        }
     }
 
     /**
@@ -420,5 +440,32 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             imuClassification: ImuClassification?,
         ): Boolean = TrackingLocationPolicy.isHighConfidence(stationaryConfidence) ||
             imuClassification == ImuClassification.STATIONARY
+
+        /**
+         * Returns whether an IMU-driven GPS wake-from-pause should be triggered.
+         *
+         * A wake fires only when:
+         *  - GPS is currently paused for motion ([isPaused] true)
+         *  - The IMU has just transitioned into [ImuClassification.VEHICULAR] (not already VEHICULAR)
+         *  - The new classification carries at least [TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE]
+         *  - Enough time has elapsed since the last wake to satisfy the debounce window
+         *
+         * Exposed as `internal` so unit tests can verify all cases without constructing a
+         * full [PositioningRuntime].
+         */
+        internal fun computeVehicularWakeNeeded(
+            previousClassification: ImuClassification?,
+            newClassification: ImuClassification,
+            confidence: Float,
+            lastWakeAtMs: Long,
+            nowMs: Long,
+            isPaused: Boolean,
+        ): Boolean {
+            if (!isPaused) return false
+            if (previousClassification == ImuClassification.VEHICULAR) return false
+            if (newClassification != ImuClassification.VEHICULAR) return false
+            if (confidence < TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE) return false
+            return nowMs - lastWakeAtMs >= TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS
+        }
     }
 }

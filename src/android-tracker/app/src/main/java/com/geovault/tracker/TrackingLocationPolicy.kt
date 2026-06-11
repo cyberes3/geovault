@@ -101,6 +101,13 @@ object TrackingLocationPolicy {
      *     GPS-independent and does not require a fresh committed trail.
      *     Requires [currentConsecutive] > 0: confidence accelerates
      *     existing GPS evidence; it cannot create the first anchor.
+     *
+     * IMU veto: [ImuClassification.PEDESTRIAN] and [ImuClassification.VEHICULAR]
+     * both act as active-speed hints that reset the counter to zero (no pause)
+     * whenever [filterConfirmedStillness] is false. The inertial sensor's
+     * confirmed-motion evidence overrides GPS chipset stillness at red lights or
+     * brief stops. [filterConfirmedStillness] retains final authority — GPS
+     * geometry proving the device hasn't moved supersedes IMU hints.
      */
     fun stationaryUpdate(
         lastLocation: Location?,
@@ -131,11 +138,14 @@ object TrackingLocationPolicy {
         // `activeSpeedHint` (current observed chipset speed above the speed
         // floor) and `filterIntervened` (the same event viewed pessimistically).
         //
-        // IMU PEDESTRIAN acts as a guaranteed active-speed signal — the user is
-        // on foot, so GPS pausing must be suppressed. `filterConfirmedStillness`
-        // still takes precedence (the filter proved lat/lon unchanged, which
-        // is stronger evidence than the IMU alone).
-        val effectiveActiveSpeedHint = activeSpeedHint || imuClassification == ImuClassification.PEDESTRIAN
+        // IMU PEDESTRIAN and VEHICULAR both act as guaranteed active-speed signals —
+        // the inertial sensor has confirmed the device is in motion, so GPS pausing
+        // must be suppressed. `filterConfirmedStillness` still takes precedence
+        // (the filter proved lat/lon unchanged, which is stronger evidence than
+        // the IMU alone — e.g. a genuine long stop after vehicular motion).
+        val effectiveActiveSpeedHint = activeSpeedHint ||
+            imuClassification == ImuClassification.PEDESTRIAN ||
+            imuClassification == ImuClassification.VEHICULAR
         if (!filterConfirmedStillness) {
             if (effectiveActiveSpeedHint) {
                 return StationaryDecision(consecutive = 0, shouldPause = false, reason = "active_speed_hint")
@@ -231,6 +241,19 @@ object TrackingLocationPolicy {
      * PEDESTRIAN→UNKNOWN→PEDESTRIAN…) re-arming the GPS boost on every classifier cycle.
      */
     const val IMU_TRANSITION_BOOST_DEBOUNCE_MS = 30_000L
+
+    /**
+     * Minimum IMU confidence required for a VEHICULAR transition to trigger a GPS
+     * wake-from-pause. Filters out low-confidence transient readings.
+     */
+    const val IMU_VEHICULAR_WAKE_MIN_CONFIDENCE = 0.5f
+
+    /**
+     * Minimum elapsed time between successive IMU-triggered GPS wake-from-pause calls.
+     * Prevents rapid re-triggering if the IMU oscillates around the VEHICULAR threshold
+     * while the device is in transit.
+     */
+    const val IMU_VEHICULAR_WAKE_DEBOUNCE_MS = 60_000L
 
     /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest

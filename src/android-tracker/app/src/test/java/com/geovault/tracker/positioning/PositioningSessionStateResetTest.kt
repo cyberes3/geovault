@@ -35,6 +35,7 @@ class PositioningSessionStateResetTest {
         assertFalse(state.imuAttentionBoostActive)
         assertEquals(0L, state.stationaryPauseCooldownUntilMs)
         assertEquals(0L, state.lastImuTransitionBoostAtMs)
+        assertEquals(0L, state.lastImuVehicularWakeAtMs)
     }
 
     @Test
@@ -90,6 +91,7 @@ class PositioningSessionStateResetTest {
             imuAttentionBoostActive = true
             stationaryPauseCooldownUntilMs = 9_999_999L
             lastImuTransitionBoostAtMs = 9_999_999L
+            lastImuVehicularWakeAtMs = 9_999_999L
         }
     }
 }

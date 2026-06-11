@@ -91,7 +91,11 @@ internal class PositioningEndToEndReplayDriver(
 
     private fun buildMergedTimeline(): List<TimelineEvent> {
         val fixes = session.rawFixes.map { TimelineEvent.Fix(it) }
-        val imuEvents = session.imuEvents.map { TimelineEvent.Imu(it) }
+        // IMU events with a negative wall offset predate the first GPS fix (wall base).
+        // They cannot be replayed because the monotonic clock starts at wallBaseMs.
+        val imuEvents = session.imuEvents
+            .filter { it.wallOffsetMs >= 0L }
+            .map { TimelineEvent.Imu(it) }
         return (fixes + imuEvents).sortedBy { it.wallTimeMs(session) }
     }
 

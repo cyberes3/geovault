@@ -670,24 +670,55 @@ class TrackingLocationPolicyTest {
     }
 
     @Test
-    fun stationaryUpdate_imuVehicular_behavesLikeNoImu() {
-        // VEHICULAR classification is handled by the motion engine, not stationary policy.
+    fun stationaryUpdate_imuVehicular_blocksGpsPause() {
+        // IMU VEHICULAR acts as an active-speed hint: the stationary counter resets to 0 and
+        // GPS pause is suppressed, mirroring the PEDESTRIAN behaviour.
         val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
-        val close = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+        val close1 = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+        val close2 = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 20_000L; accuracy = 5f }
 
-        val withImu = TrackingLocationPolicy.stationaryUpdate(
-            lastLocation = anchor, location = close,
-            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+        val r1 = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = null, location = anchor,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true, imuClassification = ImuClassification.VEHICULAR,
+        )
+        assertEquals(0, r1.consecutive)
+        assertFalse(r1.shouldPause)
+        assertEquals("active_speed_hint", r1.reason)
+
+        val r2 = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = close1,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true, imuClassification = ImuClassification.VEHICULAR,
+        )
+        assertEquals(0, r2.consecutive)
+        assertFalse(r2.shouldPause)
+
+        val r3 = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = close1, location = close2,
+            stationaryRadiusMeters = 50f, currentConsecutive = 0,
+            significantMotionOnly = true, imuClassification = ImuClassification.VEHICULAR,
+        )
+        assertEquals(0, r3.consecutive)
+        assertFalse(r3.shouldPause)
+    }
+
+    @Test
+    fun stationaryUpdate_imuVehicular_filterConfirmedStillnessStillPauses() {
+        // filterConfirmedStillness supersedes the IMU VEHICULAR active-speed-hint — GPS geometry
+        // proving the device hasn't moved is stronger evidence than the IMU alone.
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 5f }
+        val same = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 5f }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = same,
+            stationaryRadiusMeters = 50f, currentConsecutive = 2,
             significantMotionOnly = true,
+            filterConfirmedStillness = true,
             imuClassification = ImuClassification.VEHICULAR,
         )
-        val withoutImu = TrackingLocationPolicy.stationaryUpdate(
-            lastLocation = anchor, location = close,
-            stationaryRadiusMeters = 50f, currentConsecutive = 1,
-            significantMotionOnly = true,
-        )
-        assertEquals(withoutImu.consecutive, withImu.consecutive)
-        assertEquals(withoutImu.shouldPause, withImu.shouldPause)
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
     }
 
     @Test
