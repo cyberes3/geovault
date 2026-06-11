@@ -256,6 +256,17 @@ object TrackingLocationPolicy {
     const val IMU_VEHICULAR_WAKE_DEBOUNCE_MS = 60_000L
 
     /**
+     * Duration of the stationary-pause cooldown applied immediately after an IMU-triggered
+     * GPS wake. During this window [stationaryUpdate] returns [motion_exit_cooldown],
+     * blocking all stationary accumulation (including [filterConfirmedStillness] paths) so
+     * that stale SNAP_INTERNAL GPS fixes near the previous parked location cannot re-pause
+     * GPS before actual vehicle displacement is detected. After the window the device has
+     * typically displaced far enough for GPS geometry to confirm motion and
+     * [GpsCollectionSubsystem.exitStationaryRegion] will extend the cooldown permanently.
+     */
+    const val IMU_VEHICULAR_WAKE_COOLDOWN_MS = 45_000L
+
+    /**
      * Returns (intervalMillis, minUpdateIntervalMillis) for LocationRequest
      * from interval in seconds.
      */

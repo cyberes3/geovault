@@ -82,9 +82,11 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             rt.locationRequests.reapplyLocationRequestIfActive("imu_attention_boost")
         }
 
-        // When the IMU transitions into VEHICULAR with sufficient confidence and GPS is
-        // currently paused, wake it immediately rather than waiting for the hardware
-        // significant-motion sensor, which can be delayed by several minutes.
+        // When the IMU reports VEHICULAR with sufficient confidence and GPS is currently
+        // paused, wake it immediately rather than waiting for the hardware significant-motion
+        // sensor, which can be delayed by several minutes.  A post-wake cooldown is applied
+        // to prevent SNAP_INTERNAL GPS fixes at the previous parked location from immediately
+        // re-pausing GPS before actual vehicle displacement is detected.
         if (computeVehicularWakeNeeded(
                 previousClassification = previousClassification,
                 newClassification = ctx.classification,
@@ -95,9 +97,14 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             )
         ) {
             rt.state.lastImuVehicularWakeAtMs = nowMs
+            val cooldownUntilMs = nowMs + TrackingLocationPolicy.IMU_VEHICULAR_WAKE_COOLDOWN_MS
+            rt.state.stationaryPauseCooldownUntilMs = maxOf(
+                rt.state.stationaryPauseCooldownUntilMs,
+                cooldownUntilMs,
+            )
             rt.deps.runtimeTelemetry.event(
                 name = "imu_vehicular_wake",
-                details = "confidence=${ctx.confidence}",
+                details = "confidence=${ctx.confidence} cooldownUntil=$cooldownUntilMs",
             )
             rt.collection.resumeGps("imu_vehicular_wake")
         }
@@ -446,9 +453,17 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
          *
          * A wake fires only when:
          *  - GPS is currently paused for motion ([isPaused] true)
-         *  - The IMU has just transitioned into [ImuClassification.VEHICULAR] (not already VEHICULAR)
-         *  - The new classification carries at least [TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE]
+         *  - The current classification is [ImuClassification.VEHICULAR] (sustained or freshly
+         *    transitioned — the previous value is intentionally not checked)
+         *  - The classification carries at least [TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE]
          *  - Enough time has elapsed since the last wake to satisfy the debounce window
+         *
+         * The `previousClassification` parameter is retained for call-site symmetry but is not
+         * used in the decision. Requiring a fresh *transition* was too restrictive: when GPS
+         * pauses while VEHICULAR is already active, the next IMU tick (~15 s later) would never
+         * satisfy a transition guard, leaving GPS paused for minutes. The
+         * [TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS] window is sufficient to prevent
+         * rapid-fire wakes.
          *
          * Exposed as `internal` so unit tests can verify all cases without constructing a
          * full [PositioningRuntime].
@@ -462,7 +477,6 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             isPaused: Boolean,
         ): Boolean {
             if (!isPaused) return false
-            if (previousClassification == ImuClassification.VEHICULAR) return false
             if (newClassification != ImuClassification.VEHICULAR) return false
             if (confidence < TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE) return false
             return nowMs - lastWakeAtMs >= TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS

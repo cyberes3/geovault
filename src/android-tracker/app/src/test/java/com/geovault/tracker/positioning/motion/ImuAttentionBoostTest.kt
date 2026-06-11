@@ -322,5 +322,25 @@ class ImuAttentionBoostTest {
         )
     }
 
+    /**
+     * VEHICULAR sustained through a GPS pause — previous classification is also VEHICULAR.
+     * The guard that previously blocked this case has been removed; only the debounce window
+     * prevents rapid-fire wakes. The first IMU tick after GPS pauses (~15 s cadence) must
+     * fire a wake so the blackout is seconds rather than minutes.
+     */
+    @Test
+    fun vehicularWake_sustainedVehicular_nowFires() {
+        assertTrue(
+            MotionSubsystem.computeVehicularWakeNeeded(
+                previousClassification = ImuClassification.VEHICULAR,
+                newClassification = ImuClassification.VEHICULAR,
+                confidence = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_MIN_CONFIDENCE,
+                lastWakeAtMs = 0L,
+                nowMs = TrackingLocationPolicy.IMU_VEHICULAR_WAKE_DEBOUNCE_MS,
+                isPaused = true,
+            )
+        )
+    }
+
     // endregion
 }
