@@ -6,12 +6,19 @@ import kotlin.math.abs
  * Pure stationary scoring function. Stateless and side-effect free for
  * unit testability and easy retuning.
  *
- * Inputs all come from the engine's per-fix scalars; the gate
- * (`bufferCount >= 3 && effectiveDistanceMeters <= 1.0 m`) keeps the
- * scorer from firing on the first fix in a session or when RSS-corrected
- * motion is plainly non-zero. Implied speed is intentionally not
- * weighed: the `effective <= 1.0` gate already encodes "RSS says we
- * did not move."
+ * Inputs all come from the engine's per-fix scalars. Three hard gates
+ * must all pass before scoring begins:
+ *
+ *  1. `bufferCount >= 3`: requires at least three fixes in the history buffer
+ *     before the scorer fires to prevent classifying the first fix in a session.
+ *  2. `effectiveDistanceMeters <= 1.0 m`: RSS-corrected anchor-to-fix displacement
+ *     must not exceed 1 m; this encodes "GPS geometry says we did not move."
+ *  3. `reportedSpeedMps < 1.0 m/s`: GPS Doppler speed (direct velocity measurement
+ *     from Doppler shift, unaffected by accuracy inflation) must be below the speed
+ *     floor; this ensures no stillness score can be produced while the chipset is
+ *     clearly measuring motion. Position geometry is unreliable at low speeds under
+ *     inflated accuracy envelopes (UNCERTAINTY_SUPPRESSED); Doppler is trusted when
+ *     it clearly shows the device is in motion.
  *
  * Score breakdown:
  *  - `speedZero` (`speed in [0, 1)`): `+0.4` if `speed < 0.5`, else `+0.3`
@@ -31,6 +38,7 @@ object StationaryConfidenceCalculator {
     fun evaluate(input: Input): StationaryConfidence {
         if (input.bufferCount < MIN_SAMPLES_FOR_SCORING) return StationaryConfidence.NONE
         if (input.effectiveDistanceMeters > EFFECTIVE_STATIONARY_CEILING_METERS) return StationaryConfidence.NONE
+        if (input.reportedSpeedMps >= SPEED_ZERO_CEILING_MPS) return StationaryConfidence.NONE
 
         val speedZero = input.reportedSpeedMps >= 0.0 && input.reportedSpeedMps < SPEED_ZERO_CEILING_MPS
         val speedStable = input.speedStability > SPEED_STABILITY_FLOOR

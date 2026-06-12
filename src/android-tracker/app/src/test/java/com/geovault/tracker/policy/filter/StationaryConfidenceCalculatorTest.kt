@@ -74,6 +74,27 @@ class StationaryConfidenceCalculatorTest {
     }
 
     @Test
+    fun dopplerSpeedAtFloor_returnsNone() {
+        // Doppler hard gate: reportedSpeedMps >= 1.0 must short-circuit to NONE
+        // regardless of all other inputs (favorable buffer, zero effective distance,
+        // perfect stability, zero jerk). No scoring path may produce isStationary=true
+        // when the chipset is clearly measuring motion.
+        val result = StationaryConfidenceCalculator.evaluate(
+            input(
+                bufferCount = 8,
+                reportedSpeedMps = 1.0,
+                bearingStability = 1.0,
+                speedStability = 1.0,
+                jerk = 0.0,
+                accuracyMeters = 5.0,
+                rawDistanceMeters = 0.0,
+                effectiveDistanceMeters = 0.0,
+            )
+        )
+        assertEquals(StationaryConfidence.NONE, result)
+    }
+
+    @Test
     fun cleanWalkingFix_isNotStationary() {
         // speed=1.4 -> speedZero false (no +0.4/0.3). speedStability
         // bonus 0.18 + rawClose 0.15 + lowJerk 0.10 = 0.43, below 0.6.

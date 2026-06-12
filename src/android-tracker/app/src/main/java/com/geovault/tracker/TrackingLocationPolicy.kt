@@ -101,13 +101,27 @@ object TrackingLocationPolicy {
      *     GPS-independent and does not require a fresh committed trail.
      *     Requires [currentConsecutive] > 0: confidence accelerates
      *     existing GPS evidence; it cannot create the first anchor.
+     *     **GPS Doppler speed gate**: fast-advance is additionally blocked
+     *     when [location].speed exceeds [GPS_MOTION_FLOOR_MPS] (1.0 m/s),
+     *     even when [filterConfirmedStillness] is true. Position geometry
+     *     is unreliable at low speeds under inflated accuracy envelopes
+     *     (UNCERTAINTY_SUPPRESSED); Doppler shift is a direct velocity
+     *     measurement unaffected by accuracy inflation and is trusted when
+     *     it clearly shows the device is in motion.
+     *  4. **Doppler contradicts confirmed stillness** (`doppler_contradicts_confirmed_stillness`):
+     *     when [filterConfirmedStillness] is true but GPS Doppler speed still exceeds
+     *     [GPS_MOTION_FLOOR_MPS], the signals are contradictory. The counter is **held**
+     *     (neither advanced nor reset) until they converge. This extends the Doppler gate
+     *     from rule 3 to cover the base-advance path — preventing slow accumulation of
+     *     a false pause even when fast-advance is already blocked.
      *
      * IMU veto: [ImuClassification.PEDESTRIAN] and [ImuClassification.VEHICULAR]
      * both act as active-speed hints that reset the counter to zero (no pause)
      * whenever [filterConfirmedStillness] is false. The inertial sensor's
      * confirmed-motion evidence overrides GPS chipset stillness at red lights or
      * brief stops. [filterConfirmedStillness] retains final authority — GPS
-     * geometry proving the device hasn't moved supersedes IMU hints.
+     * geometry proving the device hasn't moved supersedes IMU hints — but only
+     * when GPS Doppler speed does not corroborate motion (see rules 3–4 above).
      */
     fun stationaryUpdate(
         lastLocation: Location?,
@@ -197,6 +211,17 @@ object TrackingLocationPolicy {
         val gpsSpeedMps = if (location.hasSpeed()) location.speed else 0f
         val movedByGpsSpeed = gpsSpeedMps > GPS_MOTION_FLOOR_MPS
         val movedByGeometry = !withinRadius
+        // GPS geometry says still AND Doppler says moving: conflicting signals.
+        // Position geometry is fooled by accuracy inflation at low speeds
+        // (UNCERTAINTY_SUPPRESSED); Doppler is a direct velocity measurement.
+        // Hold the counter — neither advance nor reset — until the signals converge.
+        if (filterConfirmedStillness && movedByGpsSpeed) {
+            return StationaryDecision(
+                consecutive = currentConsecutive,
+                shouldPause = false,
+                reason = "doppler_contradicts_confirmed_stillness",
+            )
+        }
         // `filterConfirmedStillness` overrides phantom speed bursts: the
         // filter already proved the lat/lon didn't change.
         if (!filterConfirmedStillness && movedByGpsSpeed && movedByGeometry) {
@@ -204,7 +229,11 @@ object TrackingLocationPolicy {
         }
 
         val baseAdvance = if (withinRadius || filterConfirmedStillness) currentConsecutive + 1 else 1
-        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification)
+        // GPS Doppler speed proving motion blocks confidence_fast_advance even when
+        // filterConfirmedStillness is true. Position geometry is fooled by accuracy
+        // inflation at low speeds; Doppler is a direct velocity measurement.
+        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification) &&
+            !movedByGpsSpeed
         val newConsecutive = if (confidenceFastAdvance) {
             maxOf(baseAdvance, PAUSE_THRESHOLD)
         } else {

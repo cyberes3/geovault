@@ -953,4 +953,67 @@ class TrackingLocationPolicyTest {
     }
 
     // endregion
+
+    // region GPS Doppler speed gate on confidence_fast_advance
+
+    /**
+     * GPS Doppler speed above [GPS_MOTION_FLOOR_MPS] (1.0 m/s) combined with
+     * [filterConfirmedStillness]=true is a contradictory signal pair.
+     * The counter must be **held** (neither advanced nor reset) until the signals
+     * converge. This prevents slow accumulation of a false pause when accuracy
+     * inflation causes UNCERTAINTY_SUPPRESSED snaps while the device is actually
+     * moving (~2 m/s).
+     */
+    @Test
+    fun stationaryUpdate_gpsDopplerSpeedAboveFloor_holdsCounter() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 15f }
+        // Same position as anchor but with GPS Doppler speed 2.0 m/s — the device is moving
+        // but accuracy inflation caused a SNAP_INTERNAL snap (filterConfirmedStillness=true).
+        val moving = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 15f
+            speed = 2.0f
+        }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = moving,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+
+        // Both fast-advance and base-advance are blocked: counter holds at 1.
+        assertEquals(1, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("doppler_contradicts_confirmed_stillness", result.reason)
+    }
+
+    /**
+     * GPS Doppler speed below [GPS_MOTION_FLOOR_MPS] (phantom burst at 0.9 m/s) must
+     * NOT block [confidenceFastAdvance]. Below the floor, speed is unreliable (chipset
+     * noise at rest); geometry and IMU are the trusted signals.
+     */
+    @Test
+    fun stationaryUpdate_gpsDopplerSpeedAtFloor_fastAdvanceStillFires() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 15f }
+        val phantom = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 15f
+            speed = 0.9f  // below floor → movedByGpsSpeed=false → gate stays open
+        }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = phantom,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            imuClassification = ImuClassification.STATIONARY,
+        )
+
+        // fast-advance fires: counter jumps to PAUSE_THRESHOLD=3 and GPS pauses.
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    // endregion
 }
