@@ -46,7 +46,10 @@ object TrackingStatusAccuracyProjector {
         lastAccuracyMeters: Float?,
         currentFixAccuracyMeters: Float?,
     ): Float? {
-        return if (uiStatus == TrackingUiStatus.LOCKING && currentFixAccuracyMeters != null) {
+        // While LOCKING, show only the live fix accuracy. If there is no current fix yet
+        // (e.g. GPS just resumed from a freshness probe), return null so the UI shows a
+        // searching indicator rather than a stale pre-pause value that looks misleadingly good.
+        return if (uiStatus == TrackingUiStatus.LOCKING) {
             currentFixAccuracyMeters
         } else {
             lastAccuracyMeters

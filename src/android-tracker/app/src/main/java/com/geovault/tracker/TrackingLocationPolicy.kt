@@ -62,14 +62,19 @@ object TrackingLocationPolicy {
      *
      * [ImuClassification.STATIONARY] satisfies this gate independently of GPS
      * confidence — the inertial sensor has confirmed no motion without any GPS
-     * measurement required.
+     * measurement required — unless [imuFastAdvanceCooldown] is active, in which
+     * case only [isHighConfidence] can satisfy the gate. This prevents a single
+     * brief STATIONARY classification cycle from re-pausing GPS immediately after
+     * a vehicular wake (see [IMU_FAST_ADVANCE_COOLDOWN_MS]).
      */
     private fun confidenceCanFastAdvance(
         currentConsecutive: Int,
         confidence: StationaryConfidence?,
         imuClassification: ImuClassification?,
+        imuFastAdvanceCooldown: Boolean = false,
     ): Boolean = currentConsecutive > 0 &&
-        (isHighConfidence(confidence) || imuClassification == ImuClassification.STATIONARY)
+        (isHighConfidence(confidence) ||
+            (imuClassification == ImuClassification.STATIONARY && !imuFastAdvanceCooldown))
 
     /**
      * Updates stationary state from a single accepted fix.
@@ -108,6 +113,12 @@ object TrackingLocationPolicy {
      *     (UNCERTAINTY_SUPPRESSED); Doppler shift is a direct velocity
      *     measurement unaffected by accuracy inflation and is trusted when
      *     it clearly shows the device is in motion.
+     *     **IMU fast-advance cooldown**: after an `imu_vehicular_wake` the
+     *     [ImuClassification.STATIONARY] arm of fast-advance is suppressed for
+     *     [IMU_FAST_ADVANCE_COOLDOWN_MS] (2 minutes). A single ~30 s IMU
+     *     classification window oscillating back to STATIONARY immediately after
+     *     a vehicular wake is not reliable evidence of genuine stillness. The GPS
+     *     confidence-score arm ([isHighConfidence]) is unaffected.
      *  4. **Doppler contradicts confirmed stillness** (`doppler_contradicts_confirmed_stillness`):
      *     when [filterConfirmedStillness] is true but GPS Doppler speed still exceeds
      *     [GPS_MOTION_FLOOR_MPS], the signals are contradictory. The counter is **held**
@@ -135,6 +146,7 @@ object TrackingLocationPolicy {
         confidence: StationaryConfidence? = null,
         imuClassification: ImuClassification? = null,
         inMotionCooldown: Boolean = false,
+        imuFastAdvanceCooldown: Boolean = false,
     ): StationaryDecision {
         // After a confirmed stationary-region exit, suppress all stillness evidence
         // for STATIONARY_REGION_EXIT_COOLDOWN_MS. This prevents UNCERTAINTY_SUPPRESSED
@@ -177,8 +189,8 @@ object TrackingLocationPolicy {
                 }
                 // Rule 3 / Rule 2b: sensor-fusion confidence is GPS-independent;
                 // it can fast-advance the counter even when the GPS trail is stale.
-                // IMU STATIONARY also satisfies this gate independently.
-                if (confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification)) {
+                // IMU STATIONARY also satisfies this gate independently (subject to cooldown).
+                if (confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification, imuFastAdvanceCooldown)) {
                     val newConsecutive = maxOf(currentConsecutive + 1, PAUSE_THRESHOLD)
                     return StationaryDecision(
                         consecutive = newConsecutive,
@@ -232,7 +244,7 @@ object TrackingLocationPolicy {
         // GPS Doppler speed proving motion blocks confidence_fast_advance even when
         // filterConfirmedStillness is true. Position geometry is fooled by accuracy
         // inflation at low speeds; Doppler is a direct velocity measurement.
-        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification) &&
+        val confidenceFastAdvance = confidenceCanFastAdvance(currentConsecutive, confidence, imuClassification, imuFastAdvanceCooldown) &&
             !movedByGpsSpeed
         val newConsecutive = if (confidenceFastAdvance) {
             maxOf(baseAdvance, PAUSE_THRESHOLD)
@@ -254,6 +266,19 @@ object TrackingLocationPolicy {
     private const val PAUSE_THRESHOLD = 3
     private const val FAST_ADVANCE_SCORE = 0.6
     private const val OSCILLATING_FAST_ADVANCE_SCORE = 0.5
+
+    /**
+     * Duration after an `imu_vehicular_wake` during which the
+     * [ImuClassification.STATIONARY] arm of [confidenceCanFastAdvance] is suppressed.
+     * The IMU can oscillate back to STATIONARY within one classification window (~30 s)
+     * after a vehicular event; allowing that single cycle to re-pause GPS defeats the
+     * purpose of the wake. The GPS confidence-score arm is unaffected.
+     *
+     * Longer than [IMU_VEHICULAR_WAKE_COOLDOWN_MS] (which blocks all stationary
+     * evidence) so that normal counter accumulation can resume while still guarding
+     * the fast-advance shortcut.
+     */
+    const val IMU_FAST_ADVANCE_COOLDOWN_MS = 120_000L
 
     /**
      * Duration after a confirmed stationary-region exit during which the

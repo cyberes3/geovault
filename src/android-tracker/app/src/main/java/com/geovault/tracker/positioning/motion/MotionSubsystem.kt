@@ -214,6 +214,12 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
                 details = "remainingMs=${rt.state.stationaryPauseCooldownUntilMs - nowMs}"
             )
         }
+        // After an imu_vehicular_wake, suppress the IMU=STATIONARY arm of
+        // confidence_fast_advance for IMU_FAST_ADVANCE_COOLDOWN_MS. The IMU can
+        // oscillate back to STATIONARY within one classification window after a
+        // vehicular event, and a single such cycle must not immediately re-pause GPS.
+        val imuFastAdvanceCooldown = rt.state.lastImuVehicularWakeAtMs > 0L &&
+            nowMs - rt.state.lastImuVehicularWakeAtMs < TrackingLocationPolicy.IMU_FAST_ADVANCE_COOLDOWN_MS
         val stationaryDecision = TrackingLocationPolicy.stationaryUpdate(
             lastLocation = rt.state.stationaryAnchorLocation,
             location = stationaryReferenceLocation,
@@ -226,6 +232,7 @@ internal class MotionSubsystem(private val rt: PositioningRuntime) {
             confidence = stationaryConfidence,
             imuClassification = imuClassification,
             inMotionCooldown = inMotionCooldown,
+            imuFastAdvanceCooldown = imuFastAdvanceCooldown,
         )
         if (stationaryDecision.reason != "disabled" && stationaryDecision.reason != "motion_exit_cooldown") {
             rt.deps.runtimeTelemetry.event(

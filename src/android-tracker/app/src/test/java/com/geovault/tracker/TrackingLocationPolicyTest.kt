@@ -1016,4 +1016,95 @@ class TrackingLocationPolicyTest {
     }
 
     // endregion
+
+    // region IMU fast-advance cooldown after vehicular wake
+
+    /**
+     * When [imuFastAdvanceCooldown] is active, the [ImuClassification.STATIONARY]
+     * arm of [confidenceCanFastAdvance] must be suppressed. Counter advances by 1
+     * (base advance only) rather than jumping to the pause threshold.
+     *
+     * Real-world scenario: IMU oscillates back to STATIONARY within one
+     * classification window after an imu_vehicular_wake while the vehicle is still
+     * moving. Without the cooldown this would immediately re-pause GPS.
+     */
+    @Test
+    fun stationaryUpdate_imuFastAdvanceCooldown_blocksImuStationary() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 15f }
+        val fixed = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 15f
+            // speed=-1 (no Doppler) so Doppler gate does not apply
+        }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = fixed,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            imuClassification = ImuClassification.STATIONARY,
+            imuFastAdvanceCooldown = true,
+        )
+
+        // IMU arm suppressed: counter advances by 1 only, no pause.
+        assertEquals(2, result.consecutive)
+        assertFalse(result.shouldPause)
+        assertEquals("advance_confirmed_stillness", result.reason)
+    }
+
+    /**
+     * When [imuFastAdvanceCooldown] is active, the GPS confidence-score arm of
+     * [confidenceCanFastAdvance] must still fire normally. Only the IMU=STATIONARY
+     * arm is suppressed; genuinely high GPS confidence (score > 0.6) is still trusted.
+     */
+    @Test
+    fun stationaryUpdate_imuFastAdvanceCooldown_doesNotBlockHighConfidence() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 15f }
+        val fixed = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 15f
+        }
+        val highConfidence = StationaryConfidence(score = 0.85, isStationary = true, isOscillating = false)
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = fixed,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            imuClassification = null,
+            confidence = highConfidence,
+            imuFastAdvanceCooldown = true,
+        )
+
+        // High GPS confidence score overrides cooldown: counter jumps to PAUSE_THRESHOLD=3.
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    /**
+     * Without the cooldown ([imuFastAdvanceCooldown]=false), IMU=STATIONARY must still
+     * trigger fast-advance as before. Regression guard.
+     */
+    @Test
+    fun stationaryUpdate_imuFastAdvanceCooldownFalse_imuStationaryStillFires() {
+        val anchor = Location("test").apply { latitude = 0.0; longitude = 0.0; time = 0L; accuracy = 15f }
+        val fixed = Location("test").apply {
+            latitude = 0.0; longitude = 0.0; time = 10_000L; accuracy = 15f
+        }
+
+        val result = TrackingLocationPolicy.stationaryUpdate(
+            lastLocation = anchor, location = fixed,
+            stationaryRadiusMeters = 50f, currentConsecutive = 1,
+            significantMotionOnly = true,
+            filterConfirmedStillness = true,
+            imuClassification = ImuClassification.STATIONARY,
+            imuFastAdvanceCooldown = false,
+        )
+
+        // No cooldown: IMU=STATIONARY fast-advance fires normally.
+        assertEquals(3, result.consecutive)
+        assertTrue(result.shouldPause)
+        assertEquals("confidence_fast_advance", result.reason)
+    }
+
+    // endregion
 }
