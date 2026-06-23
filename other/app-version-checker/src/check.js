@@ -102,7 +102,7 @@ export async function runCheck(env, payload) {
     resolved
   );
   let reverseCompare = null;
-  if (forwardCompare.status === 'diverged') {
+  if ((forwardCompare.totalCommits ?? 0) > 0) {
     reverseCompare = await compareCommits(
       env,
       match.origin,

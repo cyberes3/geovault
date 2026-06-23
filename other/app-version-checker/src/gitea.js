@@ -82,34 +82,26 @@ export async function compareCommits(env, origin, codeOwner, codeRepo, baseCommi
 /**
  * Whether the release commit is strictly newer than the local build.
  *
- * @param {object} forwardCompare Gitea compare local...release (commits on release not in local).
- * @param {object | null} reverseCompare When forward is `diverged`, compare release...local.
+ * Uses `total_commits` from the Gitea compare API (the only numeric field it returns;
+ * there is no `status` field in the Gitea response).
+ *
+ * @param {object} forwardCompare  Result of compare/local...release — commits on release path not in local.
+ * @param {object | null} reverseCompare  Result of compare/release...local — commits unique to local (dev-ahead indicator).
  */
 export function isReleaseCommitNewer(forwardCompare, reverseCompare = null) {
-  const status = forwardCompare?.status;
-  if (status === 'ahead') return true;
-  if (status === 'identical' || status === 'behind') return false;
+  const forwardCount = forwardCompare?.totalCommits ?? 0;
 
-  if (status === 'diverged' && reverseCompare) {
-    const reverseStatus = reverseCompare.status;
-    if (reverseStatus === 'ahead' || reverseStatus === 'identical') {
-      return false;
-    }
-    if (reverseStatus === 'behind') {
-      return true;
-    }
-    if (reverseStatus === 'diverged') {
-      const releaseOnly = forwardCompare.totalCommits ?? 0;
-      const localOnly = reverseCompare.totalCommits ?? 0;
-      if (releaseOnly === 0) return false;
-      if (localOnly >= releaseOnly) return false;
-      return true;
-    }
-    return false;
+  // No commits on the release path that aren't already in local → not newer.
+  if (forwardCount === 0) return false;
+
+  if (reverseCompare !== null) {
+    const reverseCount = reverseCompare?.totalCommits ?? 0;
+    // Local has at least as many unique commits as the release — treat as up to date.
+    // This handles dev builds that are ahead of or equally diverged from the published tag.
+    if (reverseCount >= forwardCount) return false;
   }
 
-  // Unknown / missing compare data: do not prompt without proof the release is ahead.
-  return false;
+  return true;
 }
 
 export { TTL_RELEASES, TTL_COMMIT, TTL_COMPARE };
