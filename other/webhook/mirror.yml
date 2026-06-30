@@ -1,5 +1,11 @@
 name: 'mirror'
 on:
+  push:
+    branches:
+      - __mirror
+  schedule:
+    # Run everyday at 3 AM UTC
+    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       ref:
@@ -18,12 +24,13 @@ jobs:
       - name: Check if master branch
         id: check_branch
         run: |
-          if [[ "${{ inputs.ref }}" == "refs/heads/master" ]]; then
+          ref="${{ inputs.ref }}"
+          if [[ -z "$ref" || "$ref" == "refs/heads/master" ]]; then
             echo "is_master=true" >> $GITHUB_OUTPUT
           else
             echo "is_master=false" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: mirror
         if: steps.check_branch.outputs.is_master == 'true'
         id: mirror
@@ -31,4 +38,3 @@ jobs:
         with:
           origin: 'https://git.evulid.cc/cyberes/geovault.git'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
