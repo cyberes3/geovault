@@ -56,6 +56,10 @@ class TrackingServiceCharacterizationTest {
             TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_LOCATION_UPDATE),
         )
         assertEquals(
+            TrackingServiceIntents.StartupCommandPath.StationaryPingDue,
+            TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_STATIONARY_PING_DUE),
+        )
+        assertEquals(
             TrackingServiceIntents.StartupCommandPath.StopNoRestart,
             TrackingServiceIntents.resolveStartupCommandPath(null),
         )
@@ -74,6 +78,27 @@ class TrackingServiceCharacterizationTest {
                 TrackingServiceIntents.StartupCommandPath.ManualSendPoint,
                 foregroundStartRequired = true,
             ),
+        )
+        assertFalse(
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.StartupCommandPath.StationaryPingDue,
+                foregroundStartRequired = true,
+            ),
+        )
+    }
+
+    @Test
+    fun stationaryPingDue_neverRequiresForegroundPromotion() {
+        // The wake-guaranteed alarm only fires while a tracking session (and its foreground
+        // notification) is already alive; it must never itself trigger a foreground promotion.
+        assertFalse(
+            TrackingServiceIntents.requiresForegroundPromotion(
+                TrackingServiceIntents.resolveStartupCommandPath(TrackingServiceIntents.ACTION_STATIONARY_PING_DUE)
+            )
+        )
+        assertEquals(
+            "stationary_ping_alarm",
+            TrackingServiceIntents.resolveStartupTrigger(TrackingServiceIntents.ACTION_STATIONARY_PING_DUE),
         )
     }
 

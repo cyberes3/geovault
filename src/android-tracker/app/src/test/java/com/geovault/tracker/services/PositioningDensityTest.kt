@@ -80,7 +80,11 @@ class PositioningDensityTest {
         assertEquals(base.recoverySpeedCapMps, sparse.recoverySpeedCapMps)
         assertEquals(base.accuracyThresholdMeters, sparse.accuracyThresholdMeters)
         assertNotEquals(base.locationIntervalSec, sparse.locationIntervalSec)
-        assertNotEquals(base.distanceFilterMeters, sparse.distanceFilterMeters)
+        // All FLP distance filter bases are 0f (callbacks arrive on the time interval alone,
+        // per the stationary-deadlock fix), so density scaling doubles 0f to 0f. Density still
+        // runs the value through scaleDistanceMeters() — this just confirms the result stays
+        // physically meaningless-zero rather than asserting it changes.
+        assertEquals(0f, sparse.distanceFilterMeters)
     }
 
     @Test

@@ -224,6 +224,14 @@ internal class PositioningRuntime(
                     Service.START_NOT_STICKY
                 }
             }
+            TrackingServiceIntents.StartupCommandPath.StationaryPingDue -> {
+                if (state.isTracking) {
+                    deps.stationaryPingController.onAlarmFired(reason = "stationary_ping_alarm")
+                } else {
+                    foreground.stopSelfSafelyAfterStartup(reason = "stationary_ping_due_not_tracking")
+                }
+                Service.START_NOT_STICKY
+            }
             TrackingServiceIntents.StartupCommandPath.StopUnknown -> {
                 if (intent?.action == TrackingServiceIntents.ACTION_STOP) {
                     lifecycle.stopTracking(reason = "action_stop")

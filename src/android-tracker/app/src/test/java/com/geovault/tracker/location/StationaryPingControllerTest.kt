@@ -202,14 +202,119 @@ class StationaryPingControllerTest {
         assertEquals(listOf("interval_elapsed", "interval_elapsed"), actions.requests)
     }
 
+    // region Wake-guaranteed alarm scheduling
+    //
+    // These verify the AlarmManager-backed backstop added alongside the coroutine `delay()`
+    // path: a plain `delay()` cannot wake a sleeping CPU, so the alarm must be scheduled
+    // whenever the coroutine timer is, cancelled whenever the coroutine timer is, and whichever
+    // path dispatches first must suppress the other to avoid a duplicate probe request.
+
+    @Test
+    fun onPaused_schedulesWakeGuaranteedAlarm() = runTest {
+        val actions = RecordingActions()
+        val alarmScheduler = RecordingAlarmScheduler()
+        val controller = controller(actions, alarmScheduler = alarmScheduler)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+
+        assertEquals(listOf(StationaryPingController.DEFAULT_INTERVAL_MS), alarmScheduler.scheduledAtMs)
+    }
+
+    @Test
+    fun onPaused_repeatedWhileScheduled_doesNotRescheduleAlarm() = runTest {
+        val actions = RecordingActions()
+        val alarmScheduler = RecordingAlarmScheduler()
+        val controller = controller(actions, alarmScheduler = alarmScheduler)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(1_000L)
+        controller.onPaused(reason = "repeat_pause", providerAvailable = true)
+
+        assertEquals(1, alarmScheduler.scheduledAtMs.size)
+    }
+
+    @Test
+    fun intervalElapsed_cancelsAlarmSoItDoesNotDoubleFire() = runTest {
+        val actions = RecordingActions()
+        val alarmScheduler = RecordingAlarmScheduler()
+        val controller = controller(actions, alarmScheduler = alarmScheduler)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS)
+        runCurrent()
+
+        assertEquals(listOf("interval_elapsed"), actions.requests)
+        assertEquals(1, alarmScheduler.cancelCount)
+    }
+
+    @Test
+    fun onResumed_cancelsAlarm() = runTest {
+        val actions = RecordingActions()
+        val alarmScheduler = RecordingAlarmScheduler()
+        val controller = controller(actions, alarmScheduler = alarmScheduler)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        controller.onResumed(reason = "significant_motion_resume")
+
+        assertEquals(1, alarmScheduler.cancelCount)
+    }
+
+    @Test
+    fun onAlarmFired_dispatchesProbeAndSuppressesLateCoroutineFire() = runTest {
+        // Simulates the OS-level alarm waking the CPU and firing slightly before the
+        // in-process coroutine `delay()` would have resumed on its own.
+        val actions = RecordingActions()
+        val alarmScheduler = RecordingAlarmScheduler()
+        val controller = controller(actions, alarmScheduler = alarmScheduler)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(StationaryPingController.DEFAULT_INTERVAL_MS - 1_000L)
+
+        controller.onAlarmFired(reason = "stationary_ping_alarm")
+        assertEquals(listOf("stationary_ping_alarm"), actions.requests)
+
+        // The coroutine job must have been cancelled by the alarm dispatch; it must not
+        // also fire once its original delay elapses.
+        advanceTimeBy(2_000L)
+        runCurrent()
+        assertEquals(listOf("stationary_ping_alarm"), actions.requests)
+    }
+
+    @Test
+    fun reschedulePausedPing_reArmsAlarmWithNewInterval() = runTest {
+        val actions = RecordingActions()
+        val alarmScheduler = RecordingAlarmScheduler()
+        val controller = controller(actions, alarmScheduler = alarmScheduler)
+
+        controller.onPaused(reason = "pause_for_motion", providerAvailable = true)
+        advanceTimeBy(1_000L)
+
+        val sparseIntervalMs = StationaryPingController.DEFAULT_INTERVAL_MS * 2
+        controller.reschedulePausedPing(
+            newIntervalMs = sparseIntervalMs,
+            providerAvailable = true,
+            reason = "sparse_tracking_changed",
+        )
+
+        assertEquals(
+            listOf(StationaryPingController.DEFAULT_INTERVAL_MS, 1_000L + sparseIntervalMs),
+            alarmScheduler.scheduledAtMs,
+        )
+        assertTrue(alarmScheduler.cancelCount >= 1)
+    }
+
+    // endregion
+
     private fun TestScope.controller(
         actions: RecordingActions,
         intervalMs: Long = StationaryPingController.DEFAULT_INTERVAL_MS,
+        alarmScheduler: StationaryPingAlarmScheduler = NoOpStationaryPingAlarmScheduler,
     ): StationaryPingController {
         return StationaryPingController(
             scope = this,
             actions = actions,
             initialIntervalMs = intervalMs,
+            alarmScheduler = alarmScheduler,
             clock = object : StationaryPingClock {
                 override fun elapsedRealtimeMs(): Long = testScheduler.currentTime
             },
@@ -226,6 +331,19 @@ class StationaryPingControllerTest {
 
         override fun logEvent(name: String, details: String) {
             events += Event(name, details)
+        }
+    }
+
+    private class RecordingAlarmScheduler : StationaryPingAlarmScheduler {
+        val scheduledAtMs = mutableListOf<Long>()
+        var cancelCount = 0
+
+        override fun schedule(triggerAtElapsedMs: Long) {
+            scheduledAtMs += triggerAtElapsedMs
+        }
+
+        override fun cancel() {
+            cancelCount++
         }
     }
 

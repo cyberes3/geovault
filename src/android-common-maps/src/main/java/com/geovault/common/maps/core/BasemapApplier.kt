@@ -3,6 +3,7 @@ package com.geovault.common.maps.core
 import android.content.Context
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.logging.GeoVaultCaptureLog
 import okhttp3.HttpUrl
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -50,14 +51,18 @@ internal class BasemapApplier(
         val requestedKey = basemap?.cacheKey ?: EMPTY_STYLE_KEY
         val currentStyle = map.style
 
-        when (
-            MapSourceApplyPlanner.plan(
-                requestedSourceKey = requestedKey,
-                pendingSourceKey = pendingSourceKey,
-                lastAppliedSourceKey = lastAppliedSourceKey,
-                hasCurrentStyle = currentStyle != null,
-            )
-        ) {
+        val plan = MapSourceApplyPlanner.plan(
+            requestedSourceKey = requestedKey,
+            pendingSourceKey = pendingSourceKey,
+            lastAppliedSourceKey = lastAppliedSourceKey,
+            hasCurrentStyle = currentStyle != null,
+        )
+        GeoVaultCaptureLog.i(
+            TAG,
+            "basemap_apply_plan plan=$plan requestedKey=$requestedKey pendingKey=$pendingSourceKey " +
+                "lastAppliedKey=$lastAppliedSourceKey hasStyle=${currentStyle != null}",
+        )
+        when (plan) {
             MapSourceApplyPlan.Noop -> return false
             MapSourceApplyPlan.ReplaceRasterInPlace -> {
                 if (basemap is ResolvedBasemap.Raster && currentStyle != null) {
@@ -65,6 +70,7 @@ internal class BasemapApplier(
                     if (replaceRasterInPlace(currentStyle, basemap.tileTemplate)) {
                         lastAppliedSourceKey = requestedKey
                         pendingSourceKey = null
+                        GeoVaultCaptureLog.i(TAG, "basemap_raster_replaced_in_place sourceKey=$requestedKey")
                         return false
                     }
                 }
@@ -75,6 +81,10 @@ internal class BasemapApplier(
         pendingSourceKey = requestedKey
         val generation = nextStyleRequestGeneration()
         val restoreCamera = restoreCameraOf(map, savedCamera, defaultPadding)
+        GeoVaultCaptureLog.i(
+            TAG,
+            "basemap_style_load_started type=${basemap.diagnosticType()} sourceKey=$requestedKey generation=$generation",
+        )
 
         return try {
             when (basemap) {
@@ -90,10 +100,21 @@ internal class BasemapApplier(
                 "Basemap apply failed before style load; applying empty style. effectiveId=${sourceManager.getEffectiveSourceId()}",
                 e,
             )
+            GeoVaultCaptureLog.e(
+                TAG,
+                "basemap_apply_failed effectiveId=${sourceManager.getEffectiveSourceId()} sourceKey=$requestedKey",
+                e,
+            )
             onStyleDegraded?.invoke(e.message ?: e.javaClass.simpleName)
             applyEmptyStyle(map, requestedKey, generation, restoreCamera)
             true
         }
+    }
+
+    private fun ResolvedBasemap?.diagnosticType(): String = when (this) {
+        null -> "empty"
+        is ResolvedBasemap.Raster -> "raster"
+        is ResolvedBasemap.Vector -> "vector"
     }
 
     fun isCurrentBasemapApplied(map: MapLibreMap): Boolean {
@@ -132,10 +153,12 @@ internal class BasemapApplier(
                 addRasterLayer(style, RasterLayer(RASTER_LAYER_ID, RASTER_SOURCE_ID))
             } catch (rasterError: Exception) {
                 Log.e(TAG, "Failed applying raster source: sourceKey=$sourceKey", rasterError)
+                GeoVaultCaptureLog.e(TAG, "basemap_raster_source_apply_failed sourceKey=$sourceKey", rasterError)
                 onStyleDegraded?.invoke(rasterError.message ?: "raster_source_apply_failed")
             }
             lastAppliedSourceKey = sourceKey
             pendingSourceKey = null
+            GeoVaultCaptureLog.i(TAG, "basemap_style_loaded type=raster sourceKey=$sourceKey generation=$generation")
             onStyleLoaded?.invoke(map, style)
             restoreCamera()
         }
@@ -159,6 +182,11 @@ internal class BasemapApplier(
                     zoomPolicy.applyForVector(map)
                     lastAppliedSourceKey = sourceKey
                     pendingSourceKey = null
+                    GeoVaultCaptureLog.i(
+                        TAG,
+                        "basemap_style_loaded type=vector sourceKey=$sourceKey generation=$generation " +
+                            "isOurServer=$isOurServer",
+                    )
                     onStyleLoaded?.invoke(map, style)
                     restoreCamera()
                 }
@@ -168,6 +196,11 @@ internal class BasemapApplier(
                     TAG,
                     "Vector style JSON unavailable; applying empty style. " +
                         "styleUrl=$styleUrlString isOurServer=$isOurServer",
+                )
+                GeoVaultCaptureLog.w(
+                    TAG,
+                    "basemap_vector_style_unavailable styleUrl=$styleUrlString isOurServer=$isOurServer " +
+                        "generation=$generation",
                 )
                 onStyleDegraded?.invoke("Map style unavailable for $styleUrlString")
                 applyEmptyStyle(map, sourceKey, generation, restoreCamera)
@@ -187,6 +220,7 @@ internal class BasemapApplier(
             zoomPolicy.applyForRaster(map)
             lastAppliedSourceKey = sourceKey
             pendingSourceKey = null
+            GeoVaultCaptureLog.i(TAG, "basemap_style_loaded type=empty sourceKey=$sourceKey generation=$generation")
             onStyleLoaded?.invoke(map, style)
             restoreCamera()
         }
@@ -202,6 +236,7 @@ internal class BasemapApplier(
         } catch (error: Exception) {
             pendingSourceKey = null
             Log.w(TAG, "Failed replacing raster source in-place; falling back to full style load", error)
+            GeoVaultCaptureLog.w(TAG, "basemap_raster_replace_in_place_failed", error)
             false
         }
     }

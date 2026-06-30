@@ -68,22 +68,27 @@ class CommonInitialAuthControllerTest {
         ).apply { deferCanonicalCallback = true }
         val controller = newController(serverConfig = serverConfig)
 
-        val job = coroutineScope {
-            async {
+        // The cancellation must happen inside this coroutineScope, not after it returns:
+        // coroutineScope suspends until all of its children complete, and the launched async
+        // never completes on its own (the canonical-URL callback is deliberately deferred), so
+        // returning the Deferred out of coroutineScope and cancelling it afterward would hang
+        // forever waiting for coroutineScope itself to return.
+        coroutineScope {
+            val job = async {
                 controller.prepareOAuthConnection("http://example.test")
             }
+            delay(50)
+            job.cancel()
+            try {
+                job.await()
+                fail("Expected CancellationException")
+            } catch (_: CancellationException) {
+                // expected
+            }
+            serverConfig.cancelPendingResolve?.invoke()
+            serverConfig.pendingCanonicalCallback?.invoke(Result.success("https://late.example"))
+            assertTrue(job.isCancelled)
         }
-        delay(50)
-        job.cancel()
-        try {
-            job.await()
-            fail("Expected CancellationException")
-        } catch (_: CancellationException) {
-            // expected
-        }
-        serverConfig.cancelPendingResolve?.invoke()
-        serverConfig.pendingCanonicalCallback?.invoke(Result.success("https://late.example"))
-        assertTrue(job.isCancelled)
     }
 
     @Test

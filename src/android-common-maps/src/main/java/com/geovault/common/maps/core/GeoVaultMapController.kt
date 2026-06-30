@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.net.GeoVaultValidatedInternetNotifier
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.maps.MapLibreMap
@@ -155,12 +156,18 @@ sealed class GeoVaultBaseMap(
             beginNetworkSensitiveMapLoad()
             attachedManager.fetchMapSources { canRenderMap ->
                 if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
+                val currentSourceApplied = attachedManager.isCurrentSourceApplied(map)
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "map_sources_fetched canRenderMap=$canRenderMap currentSourceApplied=$currentSourceApplied " +
+                        "mapClass=${this::class.simpleName}",
+                )
                 if (!canRenderMap) {
                     clearStyleLoadWatchdog()
                     _phase.value = GeoVaultMapPhase.Error
                     return@fetchMapSources
                 }
-                if (!attachedManager.isCurrentSourceApplied(map)) {
+                if (!currentSourceApplied) {
                     beginStyleLoad()
                     if (!attachedManager.applySelectedSource(map)) {
                         completeReadyWithoutStyleCallback()
@@ -256,13 +263,24 @@ sealed class GeoVaultBaseMap(
             return
         }
         Log.i(TAG, "Retrying degraded map after validated internet became available.")
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_retry_triggered reason=network_recovery phase=${_phase.value} " +
+                "mapClass=${this::class.simpleName}",
+        )
         retryMapSourceLoad()
     }
 
     fun cycleSource() {
         val map = maplibreMap ?: return
         val manager = _mapManager ?: return
-        manager.sourceManager.setSelectedSourceId(manager.sourceManager.getNextSourceId())
+        val previousSourceId = manager.sourceManager.getSelectedSourceId()
+        val nextSourceId = manager.sourceManager.getNextSourceId()
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_layer_toggle from=$previousSourceId to=$nextSourceId mapClass=${this::class.simpleName}",
+        )
+        manager.sourceManager.setSelectedSourceId(nextSourceId)
         pluginRegistry.onStyleWillChange(map, map.style)
         _phase.value = GeoVaultMapPhase.StyleLoading
         beginNetworkSensitiveMapLoad()
@@ -423,6 +441,7 @@ sealed class GeoVaultBaseMap(
 
     override fun onDidFailLoadingMap(errorMessage: String) {
         Log.e(TAG, "Map style load failed: $errorMessage")
+        GeoVaultCaptureLog.e(TAG, "map_style_load_failed error=$errorMessage mapClass=${this::class.simpleName}")
         reportStyleLoadFailed(errorMessage)
         styleDeliveredForGeneration = true
         clearStyleLoadWatchdog()
@@ -447,6 +466,11 @@ sealed class GeoVaultBaseMap(
             if (generation != styleLoadGeneration) return@Runnable
             if (styleDeliveredForGeneration) return@Runnable
             Log.e(TAG, "Map style load timed out. generation=$generation")
+            GeoVaultCaptureLog.e(
+                TAG,
+                "map_style_load_timeout generation=$generation timeoutMs=$STYLE_LOAD_TIMEOUT_MS " +
+                    "mapClass=${this::class.simpleName}",
+            )
             reportStyleLoadFailed("Map style load timed out.")
             styleDeliveredForGeneration = true
             clearStyleLoadWatchdog()
@@ -485,6 +509,7 @@ sealed class GeoVaultBaseMap(
 
     private fun reportMapDegraded(message: String) {
         Log.w(TAG, "Reporting degraded map availability: $message")
+        GeoVaultCaptureLog.w(TAG, "map_degraded message=$message mapClass=${this::class.simpleName}")
         currentLoadHadDegradedFallback = true
         _degradedNotice.value = GeoVaultMapDegradedNotice(message = message)
         if (_phase.value != GeoVaultMapPhase.StyleLoading) {
@@ -510,6 +535,10 @@ sealed class GeoVaultBaseMap(
 
     private fun finishReadyPhase() {
         _phase.value = GeoVaultMapPhase.Ready
+        GeoVaultCaptureLog.i(
+            TAG,
+            "map_phase_ready degradedFallback=$currentLoadHadDegradedFallback mapClass=${this::class.simpleName}",
+        )
         updateNetworkRecoveryWatcher()
     }
 

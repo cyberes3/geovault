@@ -12,6 +12,7 @@ object TrackingServiceIntents {
     const val ACTION_RESHOW_FOREGROUND = "com.geovault.tracker.ACTION_RESHOW_FOREGROUND"
     const val ACTION_SEND_MANUAL_POINT = "com.geovault.tracker.ACTION_SEND_MANUAL_POINT"
     const val ACTION_LOCATION_UPDATE = "com.geovault.tracker.ACTION_LOCATION_UPDATE"
+    const val ACTION_STATIONARY_PING_DUE = "com.geovault.tracker.ACTION_STATIONARY_PING_DUE"
     const val EXTRA_FOREGROUND_SERVICE_START_REQUIRED = "extra_foreground_service_start_required"
     const val EXTRA_BACKGROUND_WAKEUP_SOURCE = "extra_background_wakeup_source"
     const val ACTION_TRACKING_ERROR = "com.geovault.tracker.ACTION_TRACKING_ERROR"
@@ -31,6 +32,7 @@ object TrackingServiceIntents {
         ReshowForeground,
         ManualSendPoint,
         LocationUpdate,
+        StationaryPingDue,
         StopUnknown,
     }
 
@@ -42,6 +44,7 @@ object TrackingServiceIntents {
             ACTION_RESHOW_FOREGROUND -> StartupCommandPath.ReshowForeground
             ACTION_SEND_MANUAL_POINT -> StartupCommandPath.ManualSendPoint
             ACTION_LOCATION_UPDATE -> StartupCommandPath.LocationUpdate
+            ACTION_STATIONARY_PING_DUE -> StartupCommandPath.StationaryPingDue
             null -> {
                 if (shouldRestartTrackingAfterProcessDeath()) {
                     StartupCommandPath.StartTracking
@@ -71,6 +74,7 @@ object TrackingServiceIntents {
             StartupCommandPath.StopNoRestart,
             StartupCommandPath.ReshowForeground,
             StartupCommandPath.ManualSendPoint,
+            StartupCommandPath.StationaryPingDue,
             StartupCommandPath.StopUnknown -> false
         }
     }
@@ -83,6 +87,7 @@ object TrackingServiceIntents {
             ACTION_RESHOW_FOREGROUND -> "reshow_foreground"
             ACTION_SEND_MANUAL_POINT -> "manual_send_point"
             ACTION_LOCATION_UPDATE -> "location_update"
+            ACTION_STATIONARY_PING_DUE -> "stationary_ping_alarm"
             null -> "process_restart"
             else -> "unknown_action"
         }

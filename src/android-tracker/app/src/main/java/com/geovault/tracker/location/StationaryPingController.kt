@@ -1,6 +1,12 @@
 package com.geovault.tracker.location
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
+import com.geovault.tracker.tracking.TrackingService
+import com.geovault.tracker.tracking.TrackingServiceIntents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,10 +25,80 @@ object AndroidStationaryPingClock : StationaryPingClock {
     override fun elapsedRealtimeMs(): Long = SystemClock.elapsedRealtime()
 }
 
+/**
+ * Wakes the device to dispatch a stationary ping even if the CPU is asleep and no other
+ * event happens to wake it first. A plain coroutine `delay()` has no power to wake a sleeping
+ * CPU — it only resumes whenever the device next wakes for some unrelated reason, which can
+ * leave the "5-minute ceiling" on a stationary pause unbounded in practice. This mirrors the
+ * [com.geovault.tracker.runtime.WatchdogScheduler] pattern already used elsewhere for the same
+ * Doze-safe wake guarantee.
+ */
+interface StationaryPingAlarmScheduler {
+    fun schedule(triggerAtElapsedMs: Long)
+    fun cancel()
+}
+
+object NoOpStationaryPingAlarmScheduler : StationaryPingAlarmScheduler {
+    override fun schedule(triggerAtElapsedMs: Long) = Unit
+    override fun cancel() = Unit
+}
+
+class AndroidStationaryPingAlarmScheduler(context: Context) : StationaryPingAlarmScheduler {
+    private val appContext = context.applicationContext
+
+    override fun schedule(triggerAtElapsedMs: Long) {
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (canScheduleExactAlarms(alarmManager)) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerAtElapsedMs,
+                pendingIntent(),
+            )
+        } else {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerAtElapsedMs,
+                pendingIntent(),
+            )
+        }
+    }
+
+    override fun cancel() {
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(pendingIntent())
+    }
+
+    private fun pendingIntent(): PendingIntent {
+        val intent = Intent(appContext, TrackingService::class.java).apply {
+            action = TrackingServiceIntents.ACTION_STATIONARY_PING_DUE
+            setPackage(appContext.packageName)
+        }
+        return PendingIntent.getService(
+            appContext,
+            REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun canScheduleExactAlarms(alarmManager: AlarmManager): Boolean {
+        return try {
+            alarmManager.canScheduleExactAlarms()
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
+    private companion object {
+        private const val REQUEST_CODE = 21001
+    }
+}
+
 class StationaryPingController(
     private val scope: CoroutineScope,
     private val actions: StationaryPingActions,
     private val clock: StationaryPingClock = AndroidStationaryPingClock,
+    private val alarmScheduler: StationaryPingAlarmScheduler = NoOpStationaryPingAlarmScheduler,
     initialIntervalMs: Long = DEFAULT_INTERVAL_MS,
 ) {
     private var intervalMs: Long = initialIntervalMs
@@ -46,6 +122,7 @@ class StationaryPingController(
             "stationary_ping_scheduled",
             "reason=$reason intervalMs=$intervalMs providerAvailable=$providerAvailable"
         )
+        alarmScheduler.schedule(dueAtElapsedMs)
         job = scope.launch {
             val remaining = dueAtElapsedMs - clock.elapsedRealtimeMs()
             if (remaining > 0L) {
@@ -85,6 +162,16 @@ class StationaryPingController(
         cancel(reason = reason, eventName = "stationary_ping_stopped")
     }
 
+    /**
+     * Invoked when the wake-guaranteed alarm scheduled by [StationaryPingAlarmScheduler] fires.
+     * This is a separate, OS-level-wake-backed path that can deliver the ping even when the
+     * in-process coroutine [job] missed its window because the CPU was asleep. Whichever path
+     * dispatches first wins; [dispatchIfReady] cancels both.
+     */
+    fun onAlarmFired(reason: String) {
+        dispatchIfReady(reason = reason)
+    }
+
     fun reschedulePausedPing(newIntervalMs: Long, providerAvailable: Boolean, reason: String) {
         intervalMs = newIntervalMs
         val wasScheduled = job != null || dueAtElapsedMs > 0L
@@ -95,7 +182,9 @@ class StationaryPingController(
     }
 
     private fun dispatchIfReady(reason: String) {
+        job?.cancel()
         job = null
+        alarmScheduler.cancel()
         if (!isProviderAvailable) {
             isDueWhileProviderUnavailable = true
             actions.logEvent("stationary_ping_deferred", "reason=$reason providerAvailable=false")
@@ -110,6 +199,7 @@ class StationaryPingController(
         val hadSchedule = job != null || dueAtElapsedMs > 0L || isDueWhileProviderUnavailable
         job?.cancel()
         job = null
+        alarmScheduler.cancel()
         dueAtElapsedMs = 0L
         isDueWhileProviderUnavailable = false
         if (hadSchedule) {

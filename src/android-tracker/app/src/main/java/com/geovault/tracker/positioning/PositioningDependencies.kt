@@ -2,6 +2,7 @@ package com.geovault.tracker.positioning
 
 import android.app.Service
 import com.geovault.tracker.db.AppDatabase
+import com.geovault.tracker.location.AndroidStationaryPingAlarmScheduler
 import com.geovault.tracker.location.AutoTrackingMotionCoordinator
 import com.geovault.tracker.location.AutoTrackingMotionEngine
 import com.geovault.tracker.location.AutoTrackingMotionEvidenceGate
@@ -136,6 +137,7 @@ internal class PositioningDependencies(
         stationaryPingController = StationaryPingController(
             scope = serviceScope,
             initialIntervalMs = initialProbeIntervalMs,
+            alarmScheduler = AndroidStationaryPingAlarmScheduler(service.applicationContext),
             actions = object : StationaryPingActions {
                 override fun requestProbe(reason: String) {
                     runtime.recovery.pausedFreshness.requestStationaryFreshnessProbe(reason = reason)

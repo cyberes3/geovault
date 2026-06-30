@@ -49,9 +49,15 @@ import kotlin.math.sqrt
  *
  * The fixture covers:
  *   • A short driving warm-up leg to establish filter context (offsets 0–80 s)
- *   • Store A stop (~200–1491 s, mode demotes DRIVING→BIKING→WALKING)
- *   • The driving leg between stops (~1491–1641 s)
- *   • Store B stop (~1641–2801 s, stationary detection fires via confidence fast-advance)
+ *   • Store A stop (~200–1335 s parked, mode demotes DRIVING→BIKING; the demotion streak
+ *     persists across GPS-quiet ticks per Bug 2)
+ *   • The driving leg between stops (~1335–1641 s; two raw fixes at ~1502/1512 s recorded a
+ *     stuck/frozen position for ~21 s while their Doppler speed/bearing kept updating — a classic
+ *     reacquisition artifact — so the fixture dead-reckons those two points from the surrounding
+ *     trustworthy fixes rather than replaying the impossible ~45–113 m/s teleports verbatim. Once
+ *     clean fixes resume, the engine correctly re-promotes BIKING→DRIVING for this leg)
+ *   • Store B stop (~1641–2801 s, stationary detection fires via confidence fast-advance and mode
+ *     demotes back to BIKING)
  *   • The driving departure (~2801–3111 s, mode re-promotes to DRIVING)
  *
  * The replay is driven once per class (see [replayData]).  All tests read from the cached
@@ -154,24 +160,30 @@ class StoreStopEndToEndReplayTest {
     }
 
     @Test
-    fun storeAStop_modeFullyDemotesToWalking() {
-        // After demoting to BIKING, subsequent slow-fix decisions cascade mode to WALKING,
-        // matching the in-store pedestrian activity.
+    fun storeAStop_demotionStreakDoesNotBlockRepromotionToDriving() {
+        // After demoting to BIKING at store A, the engine must correctly re-promote to DRIVING
+        // once genuine highway-speed fixes arrive during the connecting drive to store B. This
+        // guards the flip side of Bug 2: persisting the demotion streak across GPS-quiet ticks
+        // must not also cause it to "stick" and block or delay a legitimate re-promotion once
+        // real fast movement resumes.
         val modeChanges = replayData.telemetryLines.filter { "|auto_mode_changed|" in it }
         val bikingIndex = modeChanges.indexOfFirst {
             "mode=BIKING" in it &&
                 (it.substringBefore('|').toLongOrNull() ?: Long.MAX_VALUE) <= StoreA_DepartureWallMs
         }
-        assertTrue("expected BIKING demotion at store A before WALKING cascade", bikingIndex >= 0)
+        assertTrue("expected BIKING demotion at store A before re-promotion", bikingIndex >= 0)
 
-        val walkingAfterBiking = modeChanges.drop(bikingIndex + 1).any {
-            "mode=WALKING" in it &&
-                (it.substringBefore('|').toLongOrNull() ?: Long.MAX_VALUE) <= StoreA_DepartureWallMs
+        val drivingDuringConnectingLeg = modeChanges.drop(bikingIndex + 1).any {
+            "mode=DRIVING" in it &&
+                (it.substringBefore('|').toLongOrNull() ?: Long.MAX_VALUE).let { ts ->
+                    ts > StoreA_DepartureWallMs && ts <= StoreB_ArrivalWallMs
+                }
         }
         assertTrue(
-            "mode must cascade BIKING→WALKING during store-A stop " +
-                "(user was walking; slow-fix streak must continue accumulating after BIKING demotion)",
-            walkingAfterBiking,
+            "mode must re-promote BIKING→DRIVING during the connecting drive to store B " +
+                "(the persisted demotion streak from Bug 2 must not block re-promotion once " +
+                "genuine highway-speed fixes arrive)",
+            drivingDuringConnectingLeg,
         )
     }
 
@@ -181,9 +193,13 @@ class StoreStopEndToEndReplayTest {
 
     @Test
     fun storeAStop_noTrackPointJumpWhileParked() {
+        // Use the last confirmed-stationary fix (not the full StoreA_DepartureWallMs window) as
+        // the upper bound: by StoreA_DepartureWallMs the user has already started driving away,
+        // so checking all the way out to that boundary would flag genuine departure movement as
+        // a GPS anomaly.
         assertNoLargeDisplacementWhileParked(
             arrivalWallMs = StoreA_ArrivalWallMs,
-            departureWallMs = StoreA_DepartureWallMs,
+            departureWallMs = StoreA_LastConfirmedParkedWallMs,
             maxDisplacementMeters = 300.0,
             stopName = "store A",
         )
@@ -276,6 +292,10 @@ class StoreStopEndToEndReplayTest {
         // Store A stop window (offsets 200–1491 s)
         private const val StoreA_ArrivalWallMs = WallBaseMs + 200_049L
         private const val StoreA_DepartureWallMs = WallBaseMs + 1_491_044L
+
+        // Last fix while still confirmed stationary at store A (offset ~1335 s); by
+        // StoreA_DepartureWallMs the user is already ~500 m into the drive away.
+        private const val StoreA_LastConfirmedParkedWallMs = WallBaseMs + 1_335_230L
 
         // Store B stop window (offsets 1641–2801 s)
         private const val StoreB_ArrivalWallMs = WallBaseMs + 1_641_052L
