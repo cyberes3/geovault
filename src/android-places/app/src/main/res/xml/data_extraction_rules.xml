@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="file" path="datastore/geovault_places_cache.settings" />
-        <include domain="file" path="datastore/geovault_places_nav.settings" />
-        <include domain="file" path="datastore/geovault_auth.settings" />
-        <include domain="file" path="datastore/geovault_map_source.settings" />
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="." />
+        <include domain="file" path="." />
+        <include domain="external" path="." />
     </cloud-backup>
     <device-transfer>
-        <include domain="file" path="datastore/geovault_places_cache.settings" />
-        <include domain="file" path="datastore/geovault_places_nav.settings" />
-        <include domain="file" path="datastore/geovault_auth.settings" />
-        <include domain="file" path="datastore/geovault_map_source.settings" />
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="." />
+        <include domain="file" path="." />
+        <include domain="external" path="." />
     </device-transfer>
 </data-extraction-rules>

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <include domain="file" path="datastore/geovault_places_cache.settings" />
-    <include domain="file" path="datastore/geovault_places_nav.settings" />
-    <include domain="file" path="datastore/geovault_auth.settings" />
-    <include domain="file" path="datastore/geovault_map_source.settings" />
+    <!-- Back up all app data: shared prefs, databases, and filesDir (auth, settings, queues, etc.).
+         Android automatically excludes cacheDir and noBackup files. -->
+    <include domain="sharedpref" path="." />
+    <include domain="database" path="." />
+    <include domain="file" path="." />
+    <include domain="external" path="." />
 </full-backup-content>
