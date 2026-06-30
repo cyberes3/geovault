@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'Cyberes/geovault')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'cyberes2/geovault')
 GITHUB_WORKFLOW_BRANCH = os.environ.get('GITHUB_WORKFLOW_BRANCH', '__mirror')
 GITHUB_WORKFLOW_NAME = os.environ.get('GITHUB_WORKFLOW_NAME', 'mirror.yml')
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{GITHUB_WORKFLOW_NAME}/dispatches'

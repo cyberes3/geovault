@@ -20,7 +20,7 @@ platforms end up extremely complicated. GeoVault aims to automate much of that c
 User Manual is in `docs/`.
 
 Development is done on my personal Git server, [git.evulid.cc](https://git.evulid.cc/cyberes/geovault), and is mirrored
-to [GitHub](https://github.com/Cyberes/geovault). Security practices are described
+to [GitHub](https://github.com/cyberes2/geovault). Security practices are described
 in [SECURITY.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/SECURITY.md).
 
 **Features:**

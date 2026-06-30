@@ -16,7 +16,7 @@ something that GitHub understands.
 
 ### Add PAT as GitHub Secret
 
-1. Go to your GitHub repository (e.g., `https://github.com/Cyberes/geovault`)
+1. Go to your GitHub repository (e.g., `https://github.com/cyberes2/geovault`)
 2. Navigate to Settings → Secrets and variables → Actions
 3. Click "New repository secret"
 4. Name: `GITHUB_TOKEN`
@@ -29,7 +29,7 @@ something that GitHub understands.
 2. Install dependencies: `pip install -r requirements.txt`
 3. Set environment variables:
     - `export GITHUB_TOKEN=your_token`
-    - `export GITHUB_REPO=Cyberes/geovault` (optional, defaults to Cyberes/geovault)
+    - `export GITHUB_REPO=cyberes2/geovault` (optional, defaults to cyberes2/geovault)
     - `export GITHUB_WORKFLOW_BRANCH=__mirror` (optional, defaults to __mirror)
 4. Run: `python webhook-proxy.py`
 5. Use a reverse proxy (nginx/caddy) or run behind a process manager (systemd/supervisor)
