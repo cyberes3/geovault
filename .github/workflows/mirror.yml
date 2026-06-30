@@ -2,11 +2,16 @@ name: 'mirror'
 on:
   push:
     branches:
-        - __mirror
+      - __mirror
   schedule:
     # Run everyday at 3 AM UTC
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref that triggered this workflow'
+        required: false
+        default: 'refs/heads/master'
 
 permissions:
   contents: write
@@ -16,9 +21,20 @@ jobs:
     runs-on: ubuntu-latest
     name: mirror
     steps:
+      - name: Check if master branch
+        id: check_branch
+        run: |
+          ref="${{ inputs.ref }}"
+          if [[ -z "$ref" || "$ref" == "refs/heads/master" ]]; then
+            echo "is_master=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_master=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: mirror
+        if: steps.check_branch.outputs.is_master == 'true'
         id: mirror
         uses: bridgelightcloud/github-mirror-action@v3
         with:
-          origin: ''
+          origin: 'https://git.evulid.cc/cyberes/geovault.git'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
