@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Build a signed Android app release and upload it as a Gitea draft release.
+
+Only for apps that live in the geovault monorepo. Symlinked apps under src/
+(for example android-survey-data-viewer) must use their own repository's
+upload-gitea-release.py so release tags and git metadata stay consistent.
 """
 from __future__ import annotations
 
@@ -54,13 +58,6 @@ class AppConfig:
     gitea_repo: str
 
 
-SURVEY_RELEASE = AppConfig(
-    tag_prefix="survey",
-    release_title="Survey",
-    asset_title="GeoVault Survey Data Viewer",
-    gitea_repo="cyberes/survey-data-viewer-android",
-)
-
 APP_CONFIGS = {
     "android-tracker": AppConfig(
         tag_prefix="tracker",
@@ -80,9 +77,6 @@ APP_CONFIGS = {
         asset_title="GeoVault Places",
         gitea_repo="cyberes/geovault-app-release",
     ),
-    # Symlink name in geovault vs real repo folder name.
-    "android-survey-data-viewer": SURVEY_RELEASE,
-    "survey-data-viewer-android": SURVEY_RELEASE,
 }
 
 
@@ -401,7 +395,32 @@ def parse_release_apk_name(apk_path: Path, config: ReleaseConfig) -> tuple[str, 
     return match.group(1), match.group(3)
 
 
+def assert_not_symlinked_app_in_monorepo(script_dir: Path, app_folder: str) -> None:
+    app_path = Path(app_folder)
+    if app_path.is_absolute():
+        return
+
+    candidate = script_dir / app_path
+    if not candidate.is_symlink():
+        return
+
+    repo_root = candidate.resolve().parent
+    upload_script = repo_root / "upload-gitea-release.py"
+    hint = (
+        f"cd {repo_root} && python3 upload-gitea-release.py"
+        if upload_script.is_file()
+        else f"run upload-gitea-release.py in {repo_root}"
+    )
+    die(
+        f"Refusing to upload {candidate.name!r} via geovault upload-gitea-release.py: "
+        f"{candidate} is a symlink into {repo_root}.\n"
+        f"Symlinked apps must be released from their own repository:\n  {hint}"
+    )
+
+
 def resolve_app_dir(script_dir: Path, app_folder: str) -> tuple[str, Path]:
+    assert_not_symlinked_app_in_monorepo(script_dir, app_folder)
+
     app_path = Path(app_folder)
     app_dir = app_path if app_path.is_absolute() else script_dir / app_path
     app_config_key = app_dir.name
