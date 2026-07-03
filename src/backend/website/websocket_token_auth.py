@@ -18,7 +18,7 @@ from users.api_keys import validate_api_key
 logger = logging.getLogger(__name__)
 
 
-def _get_token_from_scope(scope):
+def get_bearer_token_from_scope(scope):
     """Extract Bearer token from WebSocket scope Authorization header. Returns None if not present."""
     headers = scope.get("headers") or []
     for name, value in headers:
@@ -60,7 +60,7 @@ class WebSocketTokenAuthMiddleware:
         if scope.get("type") == "websocket":
             user = scope.get("user")
             if user is None or isinstance(user, AnonymousUser):
-                token = _get_token_from_scope(scope)
+                token = get_bearer_token_from_scope(scope)
                 if token:
                     resolved = await sync_to_async(_resolve_token_to_user_sync)(token)
                     if resolved is not None:

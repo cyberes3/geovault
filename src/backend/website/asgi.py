@@ -31,14 +31,19 @@ from api.routing import websocket_urlpatterns
 # Wrap the ASGI application with exception handling middleware
 from website.exception_handler import ASGIExceptionMiddleware
 from website.websocket_token_auth import WebSocketTokenAuthMiddleware
+from website.websocket_origin_validation import SessionOriginValidator
 
-# Create the base application. WebSocket: token auth (for native apps) then session auth.
+# Create the base application. WebSocket: token auth (for native apps) first, then Origin
+# validation (skipped for token-authenticated connections, enforced for the session-cookie path
+# below), then session auth.
 base_application = ProtocolTypeRouter({
     "http": django_asgi_app,
     "websocket": WebSocketTokenAuthMiddleware(
-        AuthMiddlewareStack(
-            URLRouter(
-                websocket_urlpatterns
+        SessionOriginValidator(
+            AuthMiddlewareStack(
+                URLRouter(
+                    websocket_urlpatterns
+                )
             )
         )
     ),

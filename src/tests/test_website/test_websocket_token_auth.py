@@ -8,42 +8,42 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 
 from website.websocket_token_auth import (
-    _get_token_from_scope,
+    get_bearer_token_from_scope,
     _resolve_token_to_user_sync,
     WebSocketTokenAuthMiddleware,
 )
 
 
 class TestGetTokenFromScope:
-    """Tests for _get_token_from_scope."""
+    """Tests for get_bearer_token_from_scope."""
 
     def test_no_headers_returns_none(self):
         scope = {"headers": []}
-        assert _get_token_from_scope(scope) is None
+        assert get_bearer_token_from_scope(scope) is None
 
     def test_missing_headers_key_returns_none(self):
         scope = {}
-        assert _get_token_from_scope(scope) is None
+        assert get_bearer_token_from_scope(scope) is None
 
     def test_authorization_bearer_returns_token(self):
         scope = {"headers": [(b"authorization", b"Bearer my-token-123")]}
-        assert _get_token_from_scope(scope) == "my-token-123"
+        assert get_bearer_token_from_scope(scope) == "my-token-123"
 
     def test_authorization_bearer_lowercase(self):
         scope = {"headers": [(b"authorization", b"bearer other-token")]}
-        assert _get_token_from_scope(scope) == "other-token"
+        assert get_bearer_token_from_scope(scope) == "other-token"
 
     def test_authorization_non_bearer_returns_none(self):
         scope = {"headers": [(b"authorization", b"Basic dXNlcjpwYXNz")]}
-        assert _get_token_from_scope(scope) is None
+        assert get_bearer_token_from_scope(scope) is None
 
     def test_authorization_empty_bearer_returns_none(self):
         scope = {"headers": [(b"authorization", b"Bearer ")]}
-        assert _get_token_from_scope(scope) is None
+        assert get_bearer_token_from_scope(scope) is None
 
     def test_authorization_bearer_strips_whitespace(self):
         scope = {"headers": [(b"authorization", b"Bearer   token-value  ")]}
-        assert _get_token_from_scope(scope) == "token-value"
+        assert get_bearer_token_from_scope(scope) == "token-value"
 
     def test_other_headers_ignored(self):
         scope = {
@@ -52,11 +52,11 @@ class TestGetTokenFromScope:
                 (b"authorization", b"Bearer the-token"),
             ]
         }
-        assert _get_token_from_scope(scope) == "the-token"
+        assert get_bearer_token_from_scope(scope) == "the-token"
 
     def test_authorization_value_as_string_decoded(self):
         scope = {"headers": [(b"authorization", "Bearer string-token")]}
-        assert _get_token_from_scope(scope) == "string-token"
+        assert get_bearer_token_from_scope(scope) == "string-token"
 
 
 class TestResolveTokenToUserSync:
