@@ -34,16 +34,21 @@ def _hauk_text_response(lines: list[str], status: int = 200) -> HttpResponse:
 
 
 def _resolve_hauk_user_track(usr: str, pwd: str) -> tuple[User | None, LiveTrack | None]:
-    """Resolve user by email and track by Hauk password (hauk_password field). Returns (user, track) or (None, None)."""
+    """
+    Resolve user by email and track by Hauk password (hauk_password field).
+    Compares hauk_password with secrets.compare_digest (constant-time) rather than a
+    DB equality filter, since the password is a credential, not just a lookup key.
+    Returns (user, track) or (None, None).
+    """
     if not (usr and pwd):
         return None, None
     user = User.objects.filter(email__iexact=usr.strip()).first()
     if not user:
         return None, None
-    track = LiveTrack.objects.filter(user=user, hauk_password=pwd).first()
-    if not track:
-        return None, None
-    return user, track
+    for track in LiveTrack.objects.filter(user=user).only('id', 'user', 'hauk_password'):
+        if secrets.compare_digest(track.hauk_password, pwd):
+            return user, track
+    return None, None
 
 
 def _get_hauk_session(sid: str) -> dict | None:

@@ -158,8 +158,8 @@ class TestLiveTrackAppIngress(TestCase):
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000}],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
 
         self.assertEqual(response.status_code, 200)
@@ -189,8 +189,8 @@ class TestLiveTrackAppIngress(TestCase):
             ser="ABC123",
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
 
         self.assertEqual(response.status_code, 200)
@@ -222,8 +222,8 @@ class TestLiveTrackAppIngress(TestCase):
             ],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
 
         self.assertEqual(response.status_code, 200)
@@ -250,8 +250,8 @@ class TestLiveTrackAppIngress(TestCase):
             session_start_ms=1705312700000,
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -277,8 +277,8 @@ class TestLiveTrackAppIngress(TestCase):
         out.extend(struct.pack(">Bqff", 0, 1705312800000, 37.0, -122.0))
         out.extend(struct.pack(">Bqff", 0, 1705312860000, 37.01, -122.01))
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -305,8 +305,8 @@ class TestLiveTrackAppIngress(TestCase):
             "sat": 8, "prov": "gps", "batt": 75, "ischarging": True, "dist": 100.0,
         }))
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -389,8 +389,8 @@ class TestLiveTrackAppIngress(TestCase):
         )
         compressed = gzip.compress(payload)
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self.client.post(
                     self.ingress_url,
                     data=compressed,
@@ -416,8 +416,8 @@ class TestLiveTrackAppIngress(TestCase):
             ],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -434,8 +434,8 @@ class TestLiveTrackAppIngress(TestCase):
         """POST with valid header and batch block but zero points returns 200 (no new coords)."""
         out = _gvl2_header(self.tracker_uuid, has_extended=True, session_start_ms=1705312700000, ser="")
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -534,8 +534,8 @@ class TestLiveTrackAppIngress(TestCase):
             [{"lat": 37.0, "lon": -122.0, "timestamp": 1705312800000, "sat": 0}],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -553,8 +553,8 @@ class TestLiveTrackAppIngress(TestCase):
             ],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -572,8 +572,8 @@ class TestLiveTrackAppIngress(TestCase):
             [{"lat": 37.123456, "lon": -122.654321, "timestamp": 1705312800000}],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -596,8 +596,8 @@ class TestLiveTrackAppIngress(TestCase):
             ser=long_ser,
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -616,8 +616,8 @@ class TestLiveTrackAppIngress(TestCase):
             ser="",
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -638,8 +638,8 @@ class TestLiveTrackAppIngress(TestCase):
         out.extend(struct.pack(">H", 2))
         out.extend(b"\x80\x81")
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(bytes(out))
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -694,8 +694,8 @@ class TestLiveTrackAppIngress(TestCase):
         )
         compressed = zlib.compress(payload)
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self.client.post(
                     self.ingress_url,
                     data=compressed,
@@ -709,6 +709,35 @@ class TestLiveTrackAppIngress(TestCase):
         self.assertEqual(coords[0][1], 37.0)
         self.assertEqual(coords[0][0], -122.0)
 
+    def test_app_ingress_400_gzip_decompression_bomb_rejected(self):
+        """A tiny gzip body that decompresses far past the 2MB cap is rejected with 400,
+        rather than being decompressed in full (decompression-bomb protection)."""
+        bomb = gzip.compress(b"\x00" * (3 * 1024 * 1024))
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                self.ingress_url,
+                data=bomb,
+                content_type="application/octet-stream",
+                HTTP_CONTENT_ENCODING="gzip",
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Content-Encoding", response.content.decode())
+        self.assertEqual((LiveTrack.objects.get(id=self.track_id).geometry or {}).get("coordinates", []), [])
+
+    def test_app_ingress_400_deflate_decompression_bomb_rejected(self):
+        """A tiny deflate body that decompresses far past the 2MB cap is rejected with 400."""
+        import zlib
+        bomb = zlib.compress(b"\x00" * (3 * 1024 * 1024))
+        with _patch_live_track_enabled():
+            response = self.client.post(
+                self.ingress_url,
+                data=bomb,
+                content_type="application/octet-stream",
+                HTTP_CONTENT_ENCODING="deflate",
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Content-Encoding", response.content.decode())
+
     def test_app_ingress_dedups_identical_points_within_payload(self):
         """Incoming payload duplicates with identical lon/lat/timestamp are inserted once."""
         duplicate_ts = 1705312800000
@@ -721,8 +750,8 @@ class TestLiveTrackAppIngress(TestCase):
             ],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
 
         self.assertEqual(response.status_code, 200)
@@ -751,8 +780,8 @@ class TestLiveTrackAppIngress(TestCase):
             ],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response1 = self._ingress_post(first_payload)
                 response2 = self._ingress_post(second_payload)
 
@@ -776,8 +805,8 @@ class TestLiveTrackAppIngress(TestCase):
             [{"lat": 37.0, "lon": -122.0, "timestamp": ts}],
         )
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 first_response = self._ingress_post(payload)
         self.assertEqual(first_response.status_code, 200)
 
@@ -785,8 +814,8 @@ class TestLiveTrackAppIngress(TestCase):
         LiveTrack.objects.filter(id=self.track_id).update(updated_at=old_updated_at)
 
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 duplicate_response = self._ingress_post(payload)
 
         self.assertEqual(duplicate_response.status_code, 200)
@@ -805,8 +834,8 @@ class TestLiveTrackAppIngress(TestCase):
         )
 
         with _patch_live_track_enabled():
-            with patch("extensions.live_track.src.backend.ingress_views.settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch("extensions.live_track.src.backend.ingress_views._ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(payload)
 
         self.assertEqual(response.status_code, 200)

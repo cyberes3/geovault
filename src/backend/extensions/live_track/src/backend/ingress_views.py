@@ -4,21 +4,21 @@ Ingress endpoints: POST-only, Basic Auth or OAuth, rate limit, insert point by t
 
 import base64
 import bisect
-import gzip
+import secrets
 import struct
 import uuid
+import zlib
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.website.auth import api_or_login_required_401
 from pydantic import ValidationError as PydanticValidationError
 
@@ -32,6 +32,14 @@ from .validation import LiveTrackIngressBody
 
 User = get_user_model()
 logger = get_tagged_logger()
+
+# 1 point update per track per second is plenty for any live-tracking use case;
+# anything faster is either a buggy client or abuse.
+_ingress_rate_limiter = RedisRateLimiter(name='live_track_ingress', limit=1, window_seconds=1.0)
+
+# Decompressed ingress payloads are small structured points; cap well above any
+# legitimate batch (_MAX_POINTS_PER_PAYLOAD below) to stop decompression-bomb bodies.
+_MAX_DECOMPRESSED_BODY_BYTES = 2 * 1024 * 1024  # 2 MB
 
 
 def _point_identity_key(lon: float, lat: float, timestamp_ms: int) -> tuple[float, float, int]:
@@ -100,12 +108,18 @@ def _decode_basic_auth(request):
 
 
 def _resolve_user_and_track(email: str, password: str):
-    """Resolve user by email only (user-facing identifier); internal username is not used."""
+    """
+    Resolve user by email only (user-facing identifier); internal username is not used.
+    Compares tracker_secret with secrets.compare_digest (constant-time) rather than a DB
+    equality filter, since the secret is a credential, not just a lookup key.
+    """
     user = User.objects.filter(email=email).first()
     if not user:
         return None, None
-    track = LiveTrack.objects.filter(user=user, tracker_secret=password).first()
-    return user, track
+    for track in LiveTrack.objects.filter(user=user).only('id', 'user', 'tracker_secret'):
+        if secrets.compare_digest(track.tracker_secret, password):
+            return user, track
+    return user, None
 
 
 @require_http_methods(["POST"])
@@ -120,14 +134,9 @@ def ingress(request):
 
     request.user = user  # So logging middleware shows identity instead of Anonymous
 
-    cache_backend = getattr(settings, "CACHES", {}).get("default", {}).get("BACKEND", "")
-    if "redis" in cache_backend.lower():
-        rate_key = f"live_track_ingress:{track.id}"
-        now_ts = timezone.now().timestamp()
-        last = cache.get(rate_key)
-        if last is not None and (now_ts - last) < 1.0:
-            return error_response("Rate limit exceeded", 429)
-        cache.set(rate_key, now_ts, timeout=2)
+    rate_limit_response = _ingress_rate_limiter.enforce(str(track.id))
+    if rate_limit_response is not None:
+        return rate_limit_response
 
     raw = parse_ingress_body(request)
     try:
@@ -442,23 +451,53 @@ def _select_binary_format(body: bytes) -> _BinaryFormat | None:
     return None
 
 
-def _get_request_body_decompressed(request):
-    """Return request body, decompressing if Content-Encoding is gzip or deflate."""
+def _decompress_bounded(decompressobj, body: bytes) -> Optional[bytes]:
+    """
+    Decompress `body` with an incremental decompressobj, stopping (and returning None)
+    if the output would exceed _MAX_DECOMPRESSED_BODY_BYTES. Protects against
+    decompression-bomb payloads (a tiny compressed body expanding to gigabytes).
+    """
+    out = bytearray()
+    # max_length caps how much a single decompress() call will produce, so we can
+    # bail out before ever materializing an oversized buffer.
+    chunk = decompressobj.decompress(body, _MAX_DECOMPRESSED_BODY_BYTES + 1)
+    out.extend(chunk)
+    if len(out) > _MAX_DECOMPRESSED_BODY_BYTES:
+        return None
+    while decompressobj.unconsumed_tail:
+        chunk = decompressobj.decompress(decompressobj.unconsumed_tail, _MAX_DECOMPRESSED_BODY_BYTES + 1 - len(out))
+        out.extend(chunk)
+        if len(out) > _MAX_DECOMPRESSED_BODY_BYTES:
+            return None
+    return bytes(out)
+
+
+def _get_request_body_decompressed(request) -> Optional[bytes]:
+    """
+    Return request body, decompressing if Content-Encoding is gzip or deflate.
+    Decompression is bounded by _MAX_DECOMPRESSED_BODY_BYTES to prevent
+    decompression-bomb bodies; returns None if that bound would be exceeded.
+    """
     body = request.body
     encoding = (request.META.get("HTTP_CONTENT_ENCODING") or "").strip().lower()
     if encoding == "gzip":
         try:
-            return gzip.decompress(body)
-        except (OSError, ValueError) as e:
+            result = _decompress_bounded(zlib.decompressobj(wbits=zlib.MAX_WBITS | 16), body)
+        except (OSError, ValueError, zlib.error) as e:
             logger.warning("app_ingress: gzip decompress failed: %s", e)
             return None
+        if result is None:
+            logger.warning("app_ingress: gzip decompressed body exceeds %d bytes", _MAX_DECOMPRESSED_BODY_BYTES)
+        return result
     if encoding == "deflate":
         try:
-            import zlib
-            return zlib.decompress(body)
+            result = _decompress_bounded(zlib.decompressobj(), body)
         except zlib.error as e:
             logger.warning("app_ingress: deflate decompress failed: %s", e)
             return None
+        if result is None:
+            logger.warning("app_ingress: deflate decompressed body exceeds %d bytes", _MAX_DECOMPRESSED_BODY_BYTES)
+        return result
     return body
 
 
@@ -481,14 +520,9 @@ def app_ingress(request):
 
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_uuid)
 
-    cache_backend = getattr(settings, "CACHES", {}).get("default", {}).get("BACKEND", "")
-    if "redis" in cache_backend.lower():
-        rate_key = f"live_track_ingress:{track.id}"
-        now_ts = timezone.now().timestamp()
-        last = cache.get(rate_key)
-        if last is not None and (now_ts - last) < 1.0:
-            return error_response("Rate limit exceeded", 429)
-        cache.set(rate_key, now_ts, timeout=2)
+    rate_limit_response = _ingress_rate_limiter.enforce(str(track.id))
+    if rate_limit_response is not None:
+        return rate_limit_response
 
     if not points:
         return JsonResponse({"ok": True}, status=200)
