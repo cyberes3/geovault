@@ -9,6 +9,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.force_disconnect import user_sockets_group_name
 from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
@@ -20,6 +21,10 @@ from geo_lib.websocket.modules.process_job_module import ProcessJobModule
 from geo_lib.websocket.registry import get_registered_websocket_modules
 
 _logger = get_tagged_logger()
+
+# Ping is expected every 30s; generous headroom above that for legitimate bursts of module
+# actions (e.g. subscribing to several jobs at once) while still capping a flooding client.
+_receive_rate_limiter = RedisRateLimiter(name='realtime_ws_receive', limit=60, window_seconds=10.0)
 
 
 class RealtimeConsumer(AsyncWebsocketConsumer):
@@ -131,6 +136,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             # Log the error but don't raise - we're already disconnecting
             _logger.error(f"WebSocket disconnect error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
 
+    @_receive_rate_limiter.for_consumer()
     async def receive(self, text_data=None, bytes_data=None):
         """Handle messages received from WebSocket."""
         if text_data:

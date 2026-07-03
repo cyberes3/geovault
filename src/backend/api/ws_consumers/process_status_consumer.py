@@ -13,11 +13,16 @@ from django.http import Http404
 from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.force_disconnect import user_sockets_group_name
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 
 _logger = get_tagged_logger()
+
+# Lower than the realtime consumer's limit since request_logs/request_page hit the database;
+# still well above any legitimate polling/pagination pattern from the process status UI.
+_receive_rate_limiter = RedisRateLimiter(name='process_status_ws_receive', limit=30, window_seconds=10.0)
 
 
 class ProcessStatusConsumer(AsyncWebsocketConsumer):
@@ -137,6 +142,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
 
+    @_receive_rate_limiter.for_consumer()
     async def receive(self, text_data=None, bytes_data=None):
         """Handle messages received from WebSocket."""
         if text_data:
