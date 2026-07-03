@@ -16,6 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from website.config_loader import get_config_loader
+from website.secret_key_validation import require_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,11 +28,12 @@ config = get_config_loader()
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Can be overridden with SECRET_KEY environment variable
-SECRET_KEY = config.get_with_env_override(
-    'security.secret_key',
-    'SECRET_KEY',
-    'django-insecure-f(1zo%f)wm*rl97q0^3!9exd%(s8mz92nagf4q7c2cno&bmyx='
+# Can be overridden with SECRET_KEY environment variable.
+# No default value: require_secret_key() raises ImproperlyConfigured (aborting
+# startup) if this is missing or a known placeholder, rather than silently
+# falling back to an insecure, publicly-known key.
+SECRET_KEY = require_secret_key(
+    config.get_with_env_override('security.secret_key', 'SECRET_KEY', None)
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!

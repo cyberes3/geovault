@@ -10,8 +10,9 @@ site:
 
 
 security:
-  # Django secret key (REQUIRED for production)
-  # Can be overridden with SECRET_KEY environment variable
+  # Django secret key (REQUIRED - the server will refuse to start without a real value here).
+  # Can be overridden with SECRET_KEY environment variable.
+  # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(50))"
   secret_key: django-insecure-change-this-in-production
 
   # Debug mode for development (set to false in production)

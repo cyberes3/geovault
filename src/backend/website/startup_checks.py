@@ -17,9 +17,12 @@ This module performs essential checks when the server starts up:
 
 Warning checks (don't fail startup):
 - Configuration file exists
-- Secret key security
 - MaxMind database availability
 - Email configuration
+
+Note: SECRET_KEY validation happens earlier, at settings-load time (see
+website/secret_key_validation.py), since a missing/placeholder key must abort
+startup entirely rather than just log a warning.
 """
 
 import grp
@@ -608,25 +611,6 @@ def check_config_file():
         _logger.warning(f"⚠ Could not check configuration file: {e}")
 
 
-def check_secret_key():
-    """
-    Check if SECRET_KEY is using the default insecure value.
-    This is a warning-only check (always warns regardless of DEBUG mode).
-    """
-    try:
-        default_secret = 'django-insecure-f(1zo%f)wm*rl97q0^3!9exd%(s8mz92nagf4q7c2cno&bmyx='
-        current_secret = get_required_setting('SECRET_KEY')
-
-        if current_secret == default_secret:
-            _logger.warning("⚠ SECRET_KEY is using the default insecure value!")
-            _logger.warning("  This is a security risk. Set a secure SECRET_KEY in config.yaml or SECRET_KEY environment variable.")
-        else:
-            _logger.info("✓ SECRET_KEY is configured (not using default)")
-
-    except Exception as e:
-        _logger.warning(f"⚠ Could not check SECRET_KEY: {e}")
-
-
 def check_maxmind_database():
     """
     Check if MaxMind database file exists.
@@ -1070,7 +1054,6 @@ def run_startup_checks():
     
     Warning checks (don't fail startup):
     - Configuration file
-    - Secret key security
     - MaxMind database
     - Email configuration
     
@@ -1109,7 +1092,6 @@ def run_startup_checks():
     # Run warning checks (don't fail startup, but log warnings)
     _logger.info("Running warning checks...")
     check_config_file()
-    check_secret_key()
     check_maxmind_database()
     check_email_config()
 
