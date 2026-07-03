@@ -238,6 +238,51 @@ class TestRealtimeConsumerModules(TransactionTestCase):
         # The queue item should be marked as duplicate_imported since imported_item has same hash
         self.assertEqual(queue_item_data['file_duplicate']['status'], 'duplicate_imported')
 
+    async def test_import_queue_data_strips_internal_only_fields(self):
+        """geofeatures/duplicate_features/log_id/file_hash/unparsable are only needed internally
+        to compute feature_count/file_duplicate_status; they must never reach the client. Both
+        geofeatures and (especially) duplicate_features can embed several MB of full GeoJSON per
+        item, so leaving either in risks exceeding the WebSocket message size limit on large or
+        dupe-heavy imports (this regressed in production once for duplicate_features)."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_strip_fields@example.com',
+            password='testpass123',
+            username='testuser_strip_fields'
+        )
+
+        duplicate_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Point'}
+        }
+        duplicate_features_entry = [{
+            'feature': duplicate_feature,
+            'source': DuplicateSource.FEATURE_STORE,
+            'match_type': DuplicateMatchType.HASH,
+            'existing_features': [{'id': 1, 'geojson': duplicate_feature}]
+        }]
+
+        await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash='test_hash_strip',
+            original_filename='strip_fields.geojson',
+            geofeatures=[duplicate_feature],
+            duplicate_features=duplicate_features_entry
+        )
+
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+
+        module = ImportQueueModule(mock_consumer)
+        queue_data = await module.get_import_queue_data()
+
+        self.assertEqual(len(queue_data), 1)
+        item = queue_data[0]
+        for internal_field in ('geofeatures', 'duplicate_features', 'log_id', 'file_hash', 'unparsable'):
+            self.assertNotIn(internal_field, item)
+
     async def test_import_queue_data_without_file_hashes(self):
         """Test that get_import_queue_data works when items have no file_hashes.
         
@@ -671,6 +716,110 @@ class TestAllFeaturesDuplicateDetection(TransactionTestCase):
         
         self.assertEqual(dup_feature_hash, single_feature_hash,
                         "Feature hash should match duplicate feature hash - this enables all_features_duplicate detection")
+
+
+class TestProcessStatusLogsUncapped(TransactionTestCase):
+    """ProcessStatusModule._get_logs() must return the full log history, never truncate it.
+
+    Oversized-message protection is handled by BaseWebSocketModule.send_to_client()'s payload
+    guard plus a generous transport limit (see server-prod.sh), not by silently dropping data
+    here."""
+
+    async def test_full_fetch_returns_every_log_entry(self):
+        from geo_lib.processing.logging import DatabaseLogLevel
+        from api.models import DatabaseLogging
+
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_logs_uncapped@example.com',
+            password='testpass123',
+            username='testuser_logs_uncapped'
+        )
+        log_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        import_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            log_id=log_id,
+            original_filename='many_logs.geojson',
+            geofeatures=[]
+        )
+
+        entry_count = 1500
+
+        @database_sync_to_async
+        def create_logs():
+            entries = [
+                DatabaseLogging(
+                    user=user,
+                    log_id=log_id,
+                    level=DatabaseLogLevel.WARNING.value,
+                    text=f"Skipping feature {i} due to invalid coordinates",
+                    source="Feature Processing",
+                    attributes={},
+                    timestamp=timezone.now(),
+                )
+                for i in range(entry_count)
+            ]
+            return DatabaseLogging.objects.bulk_create(entries)
+
+        created = await create_logs()
+
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"process_status_{user.id}_{import_item.id}"
+
+        module = ProcessStatusModule(mock_consumer, import_item)
+        logs = await module._get_logs()
+
+        self.assertEqual(len(logs), entry_count, "Full fetch must return every log entry, not a truncated subset")
+        returned_ids = [log['id'] for log in logs]
+        self.assertEqual(returned_ids, [log.id for log in created])
+
+    async def test_incremental_fetch_via_after_id_returns_everything_newer(self):
+        from geo_lib.processing.logging import DatabaseLogLevel
+        from api.models import DatabaseLogging
+
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_logs_uncapped_incremental@example.com',
+            password='testpass123',
+            username='testuser_logs_uncapped_incremental'
+        )
+        log_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+        import_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            log_id=log_id,
+            original_filename='many_logs_incremental.geojson',
+            geofeatures=[]
+        )
+
+        entry_count = 1200
+
+        @database_sync_to_async
+        def create_logs():
+            entries = [
+                DatabaseLogging(
+                    user=user,
+                    log_id=log_id,
+                    level=DatabaseLogLevel.WARNING.value,
+                    text=f"Skipping feature {i} due to invalid coordinates",
+                    source="Feature Processing",
+                    attributes={},
+                    timestamp=timezone.now(),
+                )
+                for i in range(entry_count)
+            ]
+            return DatabaseLogging.objects.bulk_create(entries)
+
+        created = await create_logs()
+
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"process_status_{user.id}_{import_item.id}"
+
+        module = ProcessStatusModule(mock_consumer, import_item)
+        logs = await module._get_logs(after_id=created[0].id)
+
+        self.assertEqual(len(logs), entry_count - 1)
 
 
 class TestImportHistoryWebSocket(TransactionTestCase):

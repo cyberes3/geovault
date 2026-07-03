@@ -153,8 +153,13 @@ class ImportQueueModule(BaseWebSocketModule):
                 'original_filename': None  # We don't track the original filename in the queue list
             }
 
-            # Remove keys from response as they're not needed by frontend
+            # Remove keys from response as they're not needed by frontend. geofeatures and
+            # duplicate_features in particular can be several MB of embedded GeoJSON per item
+            # (they're only needed above, to compute feature_count/file_duplicate_status) --
+            # leaving either in the payload risks exceeding the WebSocket message size limit
+            # on large/dupe-heavy imports.
             del item['geofeatures']
+            del item['duplicate_features']
             del item['log_id']
             del item['file_hash']
             del item['unparsable']
