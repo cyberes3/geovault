@@ -4,12 +4,12 @@ import uuid
 
 from api.views.sharing.utils import build_client_share_url, validate_share_id
 
-from .helpers import track_to_response
+from .helpers import track_to_response, visible_group_track_ids_for_user
 from .models import (
     LiveTrack,
     LiveTrackGroupInternalShare,
-    LiveTrackGroupMember,
     LiveTrackGroupShare,
+    LiveTrackGroupSubscription,
     LiveTrackInternalShare,
     LiveTrackShare,
     VISIBILITY_PRIVATE,
@@ -171,10 +171,20 @@ def resolve_internal_share_data(share_id: str, user) -> dict | None:
     )
     if group_share and can_user_resolve_group_internal_share(user, group_share.group):
         group = group_share.group
-        track_ids = list(
-            LiveTrackGroupMember.objects.filter(group=group).values_list("track_id", flat=True)
+        is_owner = group.user_id == user.id
+        is_accepted = is_owner or LiveTrackGroupSubscription.objects.filter(
+            user=user, group=group
+        ).exists()
+        # Internal shares stay governed by the same per-track authorization as the normal
+        # authenticated group view: group-level access alone must not expose member tracks
+        # the viewer has no individual access to (unlike world shares, which are fully public
+        # by the owner's own choice).
+        visible_track_ids = set(
+            visible_group_track_ids_for_user(group, user, is_owner=is_owner, is_accepted=is_accepted)
         )
-        tracks = list(LiveTrack.objects.filter(id__in=track_ids).select_related("user").order_by("name"))
+        tracks = list(
+            LiveTrack.objects.filter(id__in=visible_track_ids).select_related("user").order_by("name")
+        )
         track_payloads = [
             track_to_response(
                 track,

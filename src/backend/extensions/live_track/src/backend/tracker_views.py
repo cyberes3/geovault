@@ -372,16 +372,12 @@ def _get_track_for_user_or_404(user, tracker_id):
         track = LiveTrack.objects.get(id=tracker_id)
     except (LiveTrack.DoesNotExist, ValueError):
         raise Http404
-    if track.user_id == user.id:
-        return track
-    if can_user_see_track(user, track):
-        return track
-    has_track_subscription = LiveTrackSubscription.objects.filter(user=user, track=track).exists()
-    if has_track_subscription and can_user_see_track(user, track):
-        return track
-    if can_user_see_track_via_accepted_group_share(user, track):
-        return track
-    if can_user_see_track_via_owned_group_membership(user, track):
+    if (
+        track.user_id == user.id
+        or can_user_see_track(user, track)
+        or can_user_see_track_via_accepted_group_share(user, track)
+        or can_user_see_track_via_owned_group_membership(user, track)
+    ):
         return track
     raise Http404
 
@@ -587,6 +583,11 @@ def tracker_post_settings(request, tracker_id):
                 new_settings[k] = v
         track.settings = normalize_track_settings_for_api(new_settings)
         update_fields.append("settings")
+        if "allow_group_reshare" in settings_dump and not track.settings.get("allow_group_reshare"):
+            # Revoking reshare consent must also remove this track from groups it was already
+            # reshared into; otherwise those groups (and any world/internal share built on them)
+            # would keep exposing it despite the owner's revocation.
+            LiveTrackGroupMember.objects.filter(track=track).exclude(group__user=track.user).delete()
     if body.visibility is not None:
         track.visibility = body.visibility
         update_fields.append("visibility")

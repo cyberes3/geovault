@@ -932,11 +932,19 @@ class TestLiveTrackAPI(TestCase):
         self.assertEqual(denied_data.json()["error"], "Invalid share link")
 
     def test_group_internal_share_data_returns_group_tracks(self):
-        """Standalone internal group data returns the world-view-compatible group payload."""
+        """Standalone internal group data returns the world-view-compatible group payload, but only
+        for member tracks the requesting user can also see individually. Anyone can resolve a
+        PUBLIC group's internal share without an explicit invite, so a private member track added
+        by the group owner must stay excluded even though the group itself is accessible."""
         with _patch_live_track_enabled():
             track_resp = self.client.post(
                 "/api/extensions/live-track/trackers/",
                 data=json.dumps({"name": "Grouped Internal Track"}),
+                content_type="application/json",
+            )
+            private_track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Grouped Private Track"}),
                 content_type="application/json",
             )
             group_resp = self.client.post(
@@ -947,17 +955,18 @@ class TestLiveTrackAPI(TestCase):
             group_id = group_resp.json()["id"]
             group_patch = self.client.patch(
                 f"/api/extensions/live-track/groups/{group_id}/",
-                data=json.dumps({
-                    "visibility": "shared",
-                    "shared_with_emails": [self.other_user.email],
-                }),
+                data=json.dumps({"visibility": "public"}),
                 content_type="application/json",
             )
         self.assertEqual(group_patch.status_code, 200)
         share_id = group_patch.json()["internal_share_id"]
         track = LiveTrack.objects.get(id=track_resp.json()["id"])
+        track.visibility = "public"
+        track.save(update_fields=["visibility"])
+        private_track = LiveTrack.objects.get(id=private_track_resp.json()["id"])
         group = LiveTrackGroup.objects.get(id=group_id)
         LiveTrackGroupMember.objects.create(group=group, track=track)
+        LiveTrackGroupMember.objects.create(group=group, track=private_track)
 
         self.client.force_login(self.other_user)
         with _patch_live_track_enabled():
@@ -966,7 +975,55 @@ class TestLiveTrackAPI(TestCase):
         data = data_response.json()
         self.assertEqual(data["share_type"], "live_track_group")
         self.assertEqual(data["group_name"], "Internal Data Group")
-        self.assertEqual([item["id"] for item in data["tracks"]], [str(track.id)])
+        self.assertEqual(
+            [item["id"] for item in data["tracks"]],
+            [str(track.id)],
+            "private member track without individual access must not leak via the group's internal share",
+        )
+
+    def test_group_internal_share_data_grants_full_access_once_shared_group_accepted(self):
+        """Accepting an invite to a SHARED group is itself the authorization for every track the
+        owner bundled into it (mirrors the normal group view), so internal share data must include
+        a private member track once the recipient accepts, without needing per-track access too."""
+        with _patch_live_track_enabled():
+            private_track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Bundled Private Track"}),
+                content_type="application/json",
+            )
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Accepted Share Group"}),
+                content_type="application/json",
+            )
+            group_id = group_resp.json()["id"]
+            self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": private_track_resp.json()["id"]}),
+                content_type="application/json",
+            )
+            group_patch = self.client.patch(
+                f"/api/extensions/live-track/groups/{group_id}/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                }),
+                content_type="application/json",
+            )
+        self.assertEqual(group_patch.status_code, 200)
+        share_id = group_patch.json()["internal_share_id"]
+        private_track_id = private_track_resp.json()["id"]
+
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            before_accept = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual([item["id"] for item in before_accept.json()["tracks"]], [])
+
+        with _patch_live_track_enabled():
+            self.client.post(f"/api/extensions/live-track/groups/{group_id}/accept-share/")
+            after_accept = self.client.get(f"/api/extensions/live-track/internal/share/{share_id}/")
+        self.assertEqual(after_accept.status_code, 200)
+        self.assertEqual([item["id"] for item in after_accept.json()["tracks"]], [private_track_id])
 
     def test_internal_share_resolver_rejects_bad_or_unauthenticated_links(self):
         """Internal share resolver keeps invalid-link responses generic."""
@@ -1927,8 +1984,8 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 for i in range(3):
                     self.client.post(
                         "/api/extensions/live-track/ingress/",
@@ -1966,8 +2023,8 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({
@@ -2020,8 +2077,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 7200}),
@@ -2067,8 +2124,8 @@ class TestLiveTrackAPI(TestCase):
         old_ts = now_sec - 7200  # 2 hours ago
         recent_ts = now_sec - 300  # 5 minutes ago
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts}),
@@ -2118,8 +2175,8 @@ class TestLiveTrackAPI(TestCase):
         old_ts_1 = now_sec - 7200
         old_ts_2 = now_sec - 7100
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts_1}),
@@ -2160,8 +2217,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps(
@@ -2234,8 +2291,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 7200}),
@@ -2278,8 +2335,8 @@ class TestLiveTrackAPI(TestCase):
         older_start_sec = now_sec - 1800
         newer_start_ms = (now_sec - 600) * 1000
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps(
@@ -2335,8 +2392,8 @@ class TestLiveTrackAPI(TestCase):
         now_sec = int(time.time())
         session_start_ms = (now_sec - 600) * 1000 + 502
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps(
@@ -2386,8 +2443,8 @@ class TestLiveTrackAPI(TestCase):
         older_start = now_sec - 5000
         latest_start = now_sec - 900
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 # Older session points (explicit older starttimestamp).
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2461,8 +2518,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps(
@@ -2512,8 +2569,8 @@ class TestLiveTrackAPI(TestCase):
         latest_session_start = now_sec - 400
         older_session_start = now_sec - 2000
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 # Newest session point arrives first.
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
@@ -2565,8 +2622,8 @@ class TestLiveTrackAPI(TestCase):
         valid_old = now_sec - 5000
         valid_new = now_sec - 800
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps(
@@ -2623,8 +2680,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps(
@@ -2672,8 +2729,8 @@ class TestLiveTrackAPI(TestCase):
         old_ts = now_sec - 7200  # 2 hours ago
         recent_ts = now_sec - 300  # 5 minutes ago
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts}),
@@ -2718,8 +2775,8 @@ class TestLiveTrackAPI(TestCase):
         old_ts_1 = now_sec - 7200
         old_ts_2 = now_sec - 7100
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts_1}),
@@ -2761,8 +2818,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 7200}),
@@ -2796,8 +2853,8 @@ class TestLiveTrackAPI(TestCase):
         old_ts = now_sec - 7200
         recent_ts = now_sec - 300
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts}),
@@ -2842,8 +2899,8 @@ class TestLiveTrackAPI(TestCase):
         old_ts_1 = now_sec - 7200
         old_ts_2 = now_sec - 7100
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": old_ts_1}),
@@ -3608,8 +3665,8 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.5, "lon": -122.5, "timestamp": 1705312800}),
@@ -3634,8 +3691,8 @@ class TestLiveTrackAPI(TestCase):
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         now_sec = int(time.time())
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 37.0, "lon": -122.0, "timestamp": now_sec - 7200}),
@@ -3671,8 +3728,8 @@ class TestLiveTrackAPI(TestCase):
         tracker_secret = create_resp.json()["tracker_secret"]
         auth = _basic_auth_header("trackuser@example.com", tracker_secret)
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self.client.post(
                     "/api/extensions/live-track/ingress/",
                     data=json.dumps({"lat": 38.0, "lon": -121.0, "timestamp": 1705312800}),
@@ -4275,8 +4332,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_success(self):
         """POST with valid Basic Auth and lat, lon, time returns 200 and appends point."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(auth_header=self.auth_header)
         self.assertEqual(response.status_code, 200)
         track = LiveTrack.objects.get(id=self.track_id)
@@ -4290,8 +4347,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_success_form_body(self):
         """POST with application/x-www-form-urlencoded body works."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self.client.post(
                     self.ingress_url,
                     data="lat=37.5&lon=-122.5&timestamp=1705312800",
@@ -4314,8 +4371,8 @@ class TestLiveTrackIngress(TestCase):
             "&ischarging=true&ser=852210c6e27f72b8&dist=0"
         )
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self.client.post(
                     self.ingress_url,
                     data=form_body,
@@ -4338,8 +4395,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_optional_params_stored(self):
         """Optional params (alt, acc, spd_kph) are stored in point_params."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(
                     data={"lat": 38.0, "lon": -121.0, "timestamp": 1705312800, "alt": 100.5, "acc": 10, "spd_kph": 5.0},
                     auth_header=self.auth_header,
@@ -4393,8 +4450,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_timestamp_optional_uses_server_time(self):
         """POST without timestamp is accepted; server uses current wall clock for the point."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0},
                     auth_header=self.auth_header,
@@ -4422,8 +4479,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_same_timestamp_inserted_after(self):
         """POST with timestamp equal to last point is accepted; point is inserted after (same ts)."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800},
                     auth_header=self.auth_header,
@@ -4444,8 +4501,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_older_timestamp_inserted_in_order(self):
         """POST with timestamp older than last is accepted; point is inserted at correct index."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800},
                     auth_header=self.auth_header,
@@ -4464,8 +4521,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_insert_in_middle(self):
         """Out-of-order: A (ts=100), B (ts=300), C (ts=200) -> order A, C, B."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 100},
                     auth_header=self.auth_header,
@@ -4493,8 +4550,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_insert_at_start(self):
         """Out-of-order: A (ts=200), B (ts=100) -> order B, A."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
                     auth_header=self.auth_header,
@@ -4513,8 +4570,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_multiple_out_of_order(self):
         """Send timestamps 500, 100, 300, 200, 400 -> final order 100, 200, 300, 400, 500."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 for ts in (500, 100, 300, 200, 400):
                     response = self._ingress_post(
                         data={"lat": 37.0, "lon": -122.0, "timestamp": ts},
@@ -4529,8 +4586,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_insert_at_start_keeps_full_history(self):
         """Out-of-order insertion at start keeps all points with no trimming."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 200},
                     auth_header=self.auth_header,
@@ -4554,8 +4611,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_unknown_key_silently_dropped(self):
         """POST with body key not in allowed list is accepted; unknown key is dropped."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800, "foo": "bar"},
                     auth_header=self.auth_header,
@@ -4569,8 +4626,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_disallowed_param_silently_dropped(self):
         """POST with profile (disallowed) is accepted; profile is dropped and not stored."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(
                     data={"lat": 37.0, "lon": -122.0, "timestamp": 1705312800, "profile": "x"},
                     auth_header=self.auth_header,
@@ -4593,18 +4650,16 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_rate_limit_429(self):
         """Two POSTs for same track within same second: first 200, second 429."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache"}}
-                response1 = self._ingress_post(auth_header=self.auth_header)
-                response2 = self._ingress_post(auth_header=self.auth_header)
+            response1 = self._ingress_post(auth_header=self.auth_header)
+            response2 = self._ingress_post(auth_header=self.auth_header)
         self.assertEqual(response1.status_code, 200)
         self.assertEqual(response2.status_code, 429)
 
     def test_ingress_keeps_all_points(self):
         """Ingress retains all received points; point-count trimming is not applied."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 for i in range(4):
                     self._ingress_post(
                         data={
@@ -4623,8 +4678,8 @@ class TestLiveTrackIngress(TestCase):
     def test_ingress_timestamp_stored_as_unix_ms(self):
         """timestamp (epoch sec) yields coordinate third value as Unix ms."""
         with _patch_live_track_enabled():
-            with patch.object(ingress_views, "settings") as mock_settings:
-                mock_settings.CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+            with patch.object(ingress_views, "_ingress_rate_limiter") as mock_limiter:
+                mock_limiter.enforce.return_value = None
                 response = self._ingress_post(
                     data={"lat": 39.0, "lon": -120.0, "timestamp": 1705312800},
                     auth_header=self.auth_header,
@@ -5727,6 +5782,63 @@ class TestLiveTrackGroups(TestCase):
         self.assertIn(track_id, response.json()["track_ids"])
         self.client.force_login(self.user)
 
+    def test_revoking_allow_group_reshare_removes_track_from_other_users_groups(self):
+        """Setting allow_group_reshare back to False must retroactively drop the track from
+        groups it was already reshared into, so revoked consent cannot linger via stale membership."""
+        with _patch_live_track_enabled():
+            track_resp = self.client.post(
+                "/api/extensions/live-track/trackers/",
+                data=json.dumps({"name": "Revoke Reshare Track"}),
+                content_type="application/json",
+            )
+        track_id = track_resp.json()["id"]
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({
+                    "visibility": "shared",
+                    "shared_with_emails": [self.other_user.email],
+                    "allow_group_reshare": True,
+                }),
+                content_type="application/json",
+            )
+        self.client.force_login(self.other_user)
+        with _patch_live_track_enabled():
+            self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/subscribe/",
+                content_type="application/json",
+            )
+        with _patch_live_track_enabled():
+            group_resp = self.client.post(
+                "/api/extensions/live-track/groups/",
+                data=json.dumps({"name": "Reshare Revoke Group"}),
+                content_type="application/json",
+            )
+        group_id = group_resp.json()["id"]
+        with _patch_live_track_enabled():
+            add_response = self.client.post(
+                f"/api/extensions/live-track/groups/{group_id}/tracks/",
+                data=json.dumps({"track_id": track_id}),
+                content_type="application/json",
+            )
+        self.assertIn(track_id, add_response.json()["track_ids"])
+        self.assertTrue(
+            LiveTrackGroupMember.objects.filter(group_id=group_id, track_id=track_id).exists()
+        )
+
+        self.client.force_login(self.user)
+        with _patch_live_track_enabled():
+            revoke_response = self.client.post(
+                f"/api/extensions/live-track/trackers/{track_id}/settings/",
+                data=json.dumps({"allow_group_reshare": False}),
+                content_type="application/json",
+            )
+        self.assertEqual(revoke_response.status_code, 200)
+        self.assertFalse(
+            LiveTrackGroupMember.objects.filter(group_id=group_id, track_id=track_id).exists(),
+            "revoking allow_group_reshare must remove the track from groups it was reshared into",
+        )
+
     def test_group_patch_shared_with_emails_malformed_400(self):
         """PATCH group with shared_with_emails not a list of strings returns 400."""
         with _patch_live_track_enabled():
@@ -5997,6 +6109,9 @@ class TestLiveTrackWorldShare(TestCase):
         self.assertIn("geometry", data)
         self.assertIn("point_params", data)
         self.assertNotIn("tracker_secret", data)
+        self.assertNotIn("hauk_password", data)
+        self.assertNotIn("shared_with_emails", data)
+        self.assertNotIn("owner_email", data, "world share is unauthenticated; owner PII must not leak")
 
     def test_world_share_info_404_invalid_id(self):
         """GET world/share/<invalid_id>/info/ returns 404."""
@@ -6260,6 +6375,11 @@ class TestLiveTrackGroupWorldShare(TestCase):
         self.assertEqual(len(data["tracks"]), 1)
         self.assertEqual(data["tracks"][0]["name"], "Track In Group")
         self.assertNotIn("tracker_secret", data["tracks"][0])
+        self.assertNotIn("hauk_password", data["tracks"][0])
+        self.assertNotIn("shared_with_emails", data["tracks"][0])
+        self.assertNotIn(
+            "owner_email", data["tracks"][0], "group world share is unauthenticated; owner PII must not leak"
+        )
 
     def test_group_world_share_info_404(self):
         """GET world/share/<valid-uuid-no-record>/info/ returns 404."""

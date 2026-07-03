@@ -314,7 +314,9 @@ def track_to_response(
         "created_at": int(track.created_at.timestamp()) if track.created_at else None,
         "updated_at": int(track.updated_at.timestamp()) if track.updated_at else None,
     }
-    if not is_owner:
+    if not is_owner and not for_world_share:
+        # Owner email is only shown to authenticated viewers (subscribers, internal-share
+        # recipients). World shares are unauthenticated links, so never leak the owner's PII there.
         owner_email = (getattr(track.user, "email", "") or "") if getattr(track, "user_id", None) else ""
         out["owner_email"] = owner_email.strip()
     if for_world_share:
