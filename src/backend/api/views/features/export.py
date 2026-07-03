@@ -6,10 +6,10 @@ from django.http import HttpResponse, JsonResponse
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
-from api.models import FeatureStore, TagShare, CollectionShare, FeatureShare, Collection
+from api.models import FeatureStore, Collection
 from api.utils.authorization import get_object_or_404_for_user
-from api.views.features.bbox_utils import _build_base_query, _build_collection_query
-from api.views.sharing.utils import validate_share_id
+from api.views.features.bbox_utils import _build_base_query, _build_collection_query, strip_private_tags
+from api.views.sharing.utils import find_share_by_id, validate_share_id
 from geo_lib.export.feature_export_helpers import parse_feature_id
 from geo_lib.export.geojson_preprocessor import prepare_geojson_for_kmz
 from geo_lib.export.geojson_to_kmz import geojson_to_kmz_bytes
@@ -94,19 +94,9 @@ def _lookup_and_validate_share(share_id: str):
             status=400,
         )
 
-    # Look up the share
-    tag_share = TagShare.objects.filter(share_id=share_id).first()
-    collection_share = None
-    feature_share = None
-    
-    if not tag_share:
-        collection_share = CollectionShare.objects.filter(share_id=share_id).select_related('collection').first()
-    
-    if not tag_share and not collection_share:
-        feature_share = FeatureShare.objects.filter(share_id=share_id).select_related('feature').first()
-
-    share = tag_share or collection_share or feature_share
-    if not share:
+    # Look up the share across all 3 share type tables
+    share, share_type = find_share_by_id(share_id)
+    if share is None:
         # Security: Use generic error message to prevent information disclosure about share existence
         return None, None, None, None, JsonResponse(
             {"error": "Invalid request", "code": 404},
@@ -120,6 +110,9 @@ def _lookup_and_validate_share(share_id: str):
             status=403,
         )
 
+    tag_share = share if share_type == 'tag' else None
+    collection_share = share if share_type == 'collection' else None
+    feature_share = share if share_type == 'feature' else None
     return tag_share, collection_share, feature_share, share, None
 
 
@@ -367,6 +360,14 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
 
     geojson = feature.geojson or {}
     props = geojson.get("properties") or {}
+
+    if share_id and not share.include_tags:
+        # Strip tags/system_tags before they can end up in the KMZ placemark
+        # description (see _apply_properties_to_placemark) - same rule the map
+        # view GeoJSON endpoints apply.
+        props = dict(props)
+        strip_private_tags(props)
+        geojson = {**geojson, "properties": props}
 
     # Use feature name for document title / filename when available
     name = props.get("name") or f"feature-{feature.id}"

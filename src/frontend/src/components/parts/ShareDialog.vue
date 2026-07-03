@@ -29,8 +29,8 @@
                   />
                 </div>
 
-                <!-- Include Tags Toggle (collections only) -->
-                <div v-if="shareType === 'collection'" class="flex items-center gap-3">
+                <!-- Include Tags Toggle (collections and tags; features toggle it after creation below) -->
+                <div v-if="shareType === 'collection' || shareType === 'tag'" class="flex items-center gap-3">
                   <div class="flex-shrink-0">
                     <ToggleButton
                       v-model="includeTags"
@@ -132,6 +132,28 @@
                               <CheckIcon v-else class="w-4 h-4 text-green-600" />
                             </button>
                           </div>
+                        </div>
+
+                        <!-- Include Tags Toggle -->
+                        <div class="mt-4 flex items-center gap-3">
+                          <div class="flex-shrink-0">
+                            <ToggleButton
+                              :model-value="shareData.include_tags || false"
+                              @update:model-value="updateIncludeTags"
+                              label="Include Tags"
+                              size="md"
+                              :disabled="updatingIncludeTags"
+                            />
+                          </div>
+                          <label class="block text-sm font-medium text-gray-700 cursor-pointer" @click="!updatingIncludeTags && updateIncludeTags(!shareData.include_tags)">
+                            Include Tags
+                          </label>
+                          <Loader
+                            v-if="updatingIncludeTags"
+                            size="sm"
+                            layout="inline"
+                            :showMessage="false"
+                          />
                         </div>
 
                         <!-- Allow Downloads Toggle -->
@@ -331,7 +353,8 @@ export default {
       deletingShareId: null,
       includeTags: false,
       allowDownloads: false,
-      updatingAllowDownloads: false
+      updatingAllowDownloads: false,
+      updatingIncludeTags: false
     }
   },
   computed: {
@@ -435,9 +458,12 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.shareData = data
-          // Set allowDownloads to match existing share
+          // Set allowDownloads/includeTags to match existing share
           if (data.allow_downloads !== undefined) {
             this.allowDownloads = data.allow_downloads
+          }
+          if (data.include_tags !== undefined) {
+            this.includeTags = data.include_tags
           }
         } else if (response.status === 404) {
           // No share exists, create one
@@ -500,27 +526,19 @@ export default {
 
         const csrfToken = getCookie('csrftoken')
         const endpoint = '/api/sharing/create/'
-        let body
+        // The only difference between the 3 share types is which field identifies the
+        // shared item; everything else (include_tags/allow_downloads) is identical.
+        const typeSpecificField = {
+          tag: { tag: this.item.tag },
+          collection: { collection_id: this.itemId },
+          feature: { feature_id: this.itemId }
+        }[this.shareType]
 
-        if (this.shareType === 'tag') {
-          body = {
-            share_type: 'tag',
-            tag: this.item.tag,
-            allow_downloads: this.allowDownloads
-          }
-        } else if (this.shareType === 'collection') {
-          body = {
-            share_type: 'collection',
-            collection_id: this.itemId,
-            include_tags: this.includeTags,
-            allow_downloads: this.allowDownloads
-          }
-        } else if (this.shareType === 'feature') {
-          body = {
-            share_type: 'feature',
-            feature_id: this.itemId,
-            allow_downloads: this.allowDownloads
-          }
+        const body = {
+          share_type: this.shareType,
+          ...typeSpecificField,
+          include_tags: this.includeTags,
+          allow_downloads: this.allowDownloads
         }
 
         const response = await fetch(endpoint, {
@@ -540,9 +558,12 @@ export default {
           
           if (this.shareType === 'feature') {
             this.shareData = data
-            // Sync allowDownloads with the created share
+            // Sync allowDownloads/includeTags with the created share
             if (data.allow_downloads !== undefined) {
               this.allowDownloads = data.allow_downloads
+            }
+            if (data.include_tags !== undefined) {
+              this.includeTags = data.include_tags
             }
           } else {
             await this.loadShares()
@@ -601,13 +622,16 @@ export default {
         this.deletingShareId = null
       }
     },
-    async updateAllowDownloads(value) {
+    // Feature shares are toggled in place via PATCH (unlike tag/collection shares, which
+    // have no per-item settings UI - only create/delete). Both toggles hit the same
+    // endpoint and only differ in which field + loading flag they touch.
+    async updateFeatureShareField(field, updatingFlag, value) {
       if (this.shareType !== 'feature' || !this.shareData) {
         return
       }
 
       this.error = null
-      this.updatingAllowDownloads = true
+      this[updatingFlag] = true
 
       try {
         const csrfToken = getCookie('csrftoken')
@@ -618,31 +642,35 @@ export default {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrfToken || ''
           },
-          body: JSON.stringify({
-            allow_downloads: value
-          })
+          body: JSON.stringify({ [field]: value })
         })
 
         const data = await response.json()
 
         if (response.ok) {
           // Update the shareData with the new value - this will automatically flip the toggle via v-model
-          this.shareData.allow_downloads = data.allow_downloads
+          this.shareData[field] = data[field]
         } else {
-          throw new Error(data.error || 'Failed to update download setting')
+          throw new Error(data.error || 'Failed to update share setting')
         }
       } catch (error) {
-        console.error('Error updating allow downloads:', error)
-        this.error = error.message || 'Failed to update download setting. Please try again.'
+        console.error(`Error updating ${field}:`, error)
+        this.error = error.message || 'Failed to update share setting. Please try again.'
         // Revert the toggle if there was an error
         this.$nextTick(() => {
           if (this.shareData) {
-            this.shareData.allow_downloads = !value
+            this.shareData[field] = !value
           }
         })
       } finally {
-        this.updatingAllowDownloads = false
+        this[updatingFlag] = false
       }
+    },
+    updateAllowDownloads(value) {
+      return this.updateFeatureShareField('allow_downloads', 'updatingAllowDownloads', value)
+    },
+    updateIncludeTags(value) {
+      return this.updateFeatureShareField('include_tags', 'updatingIncludeTags', value)
     },
     getFullUrl(path) {
       return `${window.location.origin}${path || ''}`

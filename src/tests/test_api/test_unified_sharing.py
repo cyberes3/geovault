@@ -481,6 +481,166 @@ class TestPublicShareAccess(TestCase):
         self.assertIn('feature_name', data)
 
 
+class TestPublicShareTagStripping(TestCase):
+    """
+    Correctness tests for unauthenticated public share access: verifies `tags` and
+    `system_tags` (which can carry private info) are stripped from GeoJSON properties
+    unless the sharer explicitly opted in via `include_tags`, for all 3 share types.
+    Also covers access_count incrementing and invalid share_id handling, since these
+    endpoints are reached with no authentication at all.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+
+        self.feature_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
+            'properties': {
+                'name': 'Sensitive Feature',
+                'tags': ['user-tag'],
+                'system_tags': ['internal-system-tag'],
+            }
+        }
+        self.feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(self.feature_data)
+        )
+        self.collection = Collection.objects.create(
+            user=self.user,
+            name='Sensitive Collection',
+            feature_ids=[self.feature.id]
+        )
+
+    def _assert_tags_absent(self, properties):
+        self.assertNotIn('tags', properties)
+        self.assertNotIn('system_tags', properties)
+
+    def _assert_tags_present(self, properties):
+        self.assertEqual(properties.get('tags'), ['user-tag'])
+        self.assertEqual(properties.get('system_tags'), ['internal-system-tag'])
+
+    # --- Tag shares ---
+
+    def test_tag_share_strips_tags_and_system_tags_by_default(self):
+        share = TagShare.objects.create(share_id=str(uuid.uuid4()), tag='user-tag', user=self.user)
+        response = self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 200)
+        features = json.loads(response.content)['data']['features']
+        self.assertEqual(len(features), 1)
+        self._assert_tags_absent(features[0]['properties'])
+
+    def test_tag_share_includes_tags_when_opted_in(self):
+        share = TagShare.objects.create(
+            share_id=str(uuid.uuid4()), tag='user-tag', user=self.user, include_tags=True
+        )
+        response = self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 200)
+        features = json.loads(response.content)['data']['features']
+        self.assertEqual(len(features), 1)
+        self._assert_tags_present(features[0]['properties'])
+
+    # --- Collection shares ---
+
+    def test_collection_share_strips_tags_and_system_tags_by_default(self):
+        share = CollectionShare.objects.create(
+            share_id=str(uuid.uuid4()), collection=self.collection, user=self.user
+        )
+        response = self.client.get(f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 200)
+        features = json.loads(response.content)['data']['features']
+        self.assertEqual(len(features), 1)
+        self._assert_tags_absent(features[0]['properties'])
+
+    def test_collection_share_includes_tags_when_opted_in(self):
+        share = CollectionShare.objects.create(
+            share_id=str(uuid.uuid4()), collection=self.collection, user=self.user, include_tags=True
+        )
+        response = self.client.get(f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 200)
+        features = json.loads(response.content)['data']['features']
+        self.assertEqual(len(features), 1)
+        self._assert_tags_present(features[0]['properties'])
+
+    # --- Feature shares ---
+
+    def test_feature_share_strips_tags_and_system_tags_by_default(self):
+        share = FeatureShare.objects.create(share_id=str(uuid.uuid4()), feature=self.feature, user=self.user)
+        response = self.client.get(f'/api/sharing/public/feature/{share.share_id}/')
+        self.assertEqual(response.status_code, 200)
+        features = json.loads(response.content)['features']
+        self.assertEqual(len(features), 1)
+        self._assert_tags_absent(features[0]['properties'])
+
+    def test_feature_share_includes_tags_when_opted_in(self):
+        share = FeatureShare.objects.create(
+            share_id=str(uuid.uuid4()), feature=self.feature, user=self.user, include_tags=True
+        )
+        response = self.client.get(f'/api/sharing/public/feature/{share.share_id}/')
+        self.assertEqual(response.status_code, 200)
+        features = json.loads(response.content)['features']
+        self.assertEqual(len(features), 1)
+        self._assert_tags_present(features[0]['properties'])
+
+    # --- Access count ---
+
+    def test_tag_share_access_count_increments_on_public_access(self):
+        share = TagShare.objects.create(share_id=str(uuid.uuid4()), tag='user-tag', user=self.user)
+        self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
+        self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
+        share.refresh_from_db()
+        self.assertEqual(share.access_count, 2)
+
+    def test_collection_share_access_count_increments_on_public_access(self):
+        share = CollectionShare.objects.create(
+            share_id=str(uuid.uuid4()), collection=self.collection, user=self.user
+        )
+        self.client.get(f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38')
+        share.refresh_from_db()
+        self.assertEqual(share.access_count, 1)
+
+    def test_feature_share_access_count_increments_on_public_access(self):
+        share = FeatureShare.objects.create(share_id=str(uuid.uuid4()), feature=self.feature, user=self.user)
+        self.client.get(f'/api/sharing/public/feature/{share.share_id}/')
+        share.refresh_from_db()
+        self.assertEqual(share.access_count, 1)
+
+    def test_public_share_info_does_not_increment_access_count(self):
+        share = TagShare.objects.create(share_id=str(uuid.uuid4()), tag='user-tag', user=self.user)
+        self.client.get(f'/api/sharing/public/info/{share.share_id}/')
+        share.refresh_from_db()
+        self.assertEqual(share.access_count, 0)
+
+    # --- Invalid / unknown share_id (all 4 public endpoints) ---
+
+    def test_tag_share_bbox_invalid_share_id_returns_404(self):
+        response = self.client.get(f'/api/sharing/public/{uuid.uuid4()}/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 404)
+
+    def test_tag_share_bbox_malformed_share_id_returns_404(self):
+        response = self.client.get('/api/sharing/public/not-a-uuid/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 404)
+
+    def test_collection_share_bbox_invalid_share_id_returns_404(self):
+        response = self.client.get(f'/api/sharing/public/collection/{uuid.uuid4()}/?bbox=-123,37,-122,38')
+        self.assertEqual(response.status_code, 404)
+
+    def test_feature_share_invalid_share_id_returns_404(self):
+        response = self.client.get(f'/api/sharing/public/feature/{uuid.uuid4()}/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_public_share_info_invalid_share_id_returns_404(self):
+        response = self.client.get(f'/api/sharing/public/info/{uuid.uuid4()}/')
+        self.assertEqual(response.status_code, 404)
+
+
 class TestShareDownloads(TestCase):
     """Test downloading from shares for all types."""
 
@@ -594,6 +754,143 @@ class TestShareDownloads(TestCase):
 
         response = self.client.get(f'/api/export-kmz?share={share.share_id}')
         self.assertEqual(response.status_code, 403)
+
+
+class TestShareDownloadTagStripping(TestCase):
+    """
+    Correctness tests for the KMZ download path (`/api/export-kmz?share=...`), a second
+    unauthenticated share touchpoint distinct from the map-view GeoJSON endpoints.
+    `_apply_properties_to_placemark` writes `tags`/`system_tags` straight into the KML
+    placemark description, so these must be stripped upstream before KMZ generation
+    unless the sharer opted in via `include_tags` - mirroring the map view's behavior.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+
+        # 'user-tag' is the tag being shared, so it's inherently disclosed by the share
+        # link itself (and becomes the KMZ document name) - the actual thing under test
+        # is whether 'extra-secret-tag'/'internal-system-tag' leak into the placemark.
+        self.feature_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
+            'properties': {
+                'name': 'Downloadable Sensitive Feature',
+                'tags': ['user-tag', 'extra-secret-tag'],
+                'system_tags': ['internal-system-tag'],
+            }
+        }
+        self.feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(self.feature_data)
+        )
+        self.collection = Collection.objects.create(
+            user=self.user,
+            name='Downloadable Sensitive Collection',
+            feature_ids=[self.feature.id]
+        )
+
+    @staticmethod
+    def _extract_kml_text(kmz_bytes):
+        import zipfile
+        from io import BytesIO
+        with zipfile.ZipFile(BytesIO(kmz_bytes)) as zf:
+            kml_name = next(n for n in zf.namelist() if n.endswith('.kml'))
+            return zf.read(kml_name).decode('utf-8')
+
+    def test_tag_share_bulk_download_strips_tags_by_default(self):
+        share = TagShare.objects.create(
+            share_id=str(uuid.uuid4()), tag='user-tag', user=self.user, allow_downloads=True
+        )
+        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        # 'user-tag' itself legitimately appears as the KMZ document name (it's the
+        # share's own tag, already disclosed by the link); the other tags must not leak.
+        self.assertNotIn('extra-secret-tag', kml_text)
+        self.assertNotIn('internal-system-tag', kml_text)
+
+    def test_tag_share_bulk_download_includes_tags_when_opted_in(self):
+        share = TagShare.objects.create(
+            share_id=str(uuid.uuid4()), tag='user-tag', user=self.user,
+            allow_downloads=True, include_tags=True,
+        )
+        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertIn('extra-secret-tag', kml_text)
+        self.assertIn('internal-system-tag', kml_text)
+
+    def test_collection_share_bulk_download_strips_tags_by_default(self):
+        share = CollectionShare.objects.create(
+            share_id=str(uuid.uuid4()), collection=self.collection, user=self.user, allow_downloads=True
+        )
+        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertNotIn('user-tag', kml_text)
+        self.assertNotIn('internal-system-tag', kml_text)
+
+    def test_collection_share_bulk_download_includes_tags_when_opted_in(self):
+        share = CollectionShare.objects.create(
+            share_id=str(uuid.uuid4()), collection=self.collection, user=self.user,
+            allow_downloads=True, include_tags=True,
+        )
+        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertIn('user-tag', kml_text)
+        self.assertIn('internal-system-tag', kml_text)
+
+    def test_feature_share_single_download_strips_tags_by_default(self):
+        share = FeatureShare.objects.create(
+            share_id=str(uuid.uuid4()), feature=self.feature, user=self.user, allow_downloads=True
+        )
+        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertNotIn('user-tag', kml_text)
+        self.assertNotIn('internal-system-tag', kml_text)
+
+    def test_feature_share_single_download_includes_tags_when_opted_in(self):
+        share = FeatureShare.objects.create(
+            share_id=str(uuid.uuid4()), feature=self.feature, user=self.user,
+            allow_downloads=True, include_tags=True,
+        )
+        response = self.client.get(f'/api/export-kmz?share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertIn('user-tag', kml_text)
+        self.assertIn('internal-system-tag', kml_text)
+
+    def test_single_feature_download_via_tag_share_strips_tags_by_default(self):
+        """A specific `?feature=<id>&share=<tag_share_id>` request (single feature within
+        a bulk tag share) goes through a different code path than the bulk download."""
+        share = TagShare.objects.create(
+            share_id=str(uuid.uuid4()), tag='user-tag', user=self.user, allow_downloads=True
+        )
+        response = self.client.get(f'/api/export-kmz?feature={self.feature.id}&share={share.share_id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertNotIn('extra-secret-tag', kml_text)
+        self.assertNotIn('internal-system-tag', kml_text)
+
+    def test_authenticated_owner_download_still_includes_tags(self):
+        """Regression check: a user downloading their own feature (no share involved)
+        should still see their own tags - only public share downloads are stripped."""
+        self.client.force_login(self.user)
+        response = self.client.get(f'/api/export-kmz?feature={self.feature.id}')
+        self.assertEqual(response.status_code, 200)
+        kml_text = self._extract_kml_text(response.content)
+        self.assertIn('user-tag', kml_text)
+        self.assertIn('internal-system-tag', kml_text)
 
 
 class TestFeatureShareElevations(TestCase):

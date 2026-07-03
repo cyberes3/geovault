@@ -1,16 +1,17 @@
 """Feature sharing operations"""
+import json
 import traceback
-import uuid
 
 from django.db.models import F
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore
+from api.models import FeatureShare, FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, success_response
-from api.validation.feature_updates import validate_payload, FeatureSharePayload
-from api.views.sharing.utils import build_share_url
+from api.utils.responses import error_response
+from api.views.features.bbox_utils import _convert_feature_to_geojson
+from api.views.sharing.public_share import invalid_share_response
+from api.views.sharing.utils import build_share_url, validate_share_id
 from api.views.features.retrieval import (
     _extract_coordinates_with_elevation_from_geojson
 )
@@ -18,66 +19,6 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger()
-
-
-@api_or_login_required_401()
-@require_http_methods(["POST"])
-@validate_payload(FeatureSharePayload)
-def create_feature_share(request, validated_data):
-    """
-    Create a new share link for a single feature.
-    Always uses UUID4 for share_id.
-    
-    POST body:
-    - feature_id: int (required) - The feature ID to share
-    - allow_downloads: boolean (optional, default=False) - Whether to allow downloads
-    """
-    feature_id = validated_data['feature_id']
-
-    # Verify feature exists and belongs to user
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-
-    # Check if a share already exists for this feature
-    existing_share = FeatureShare.objects.filter(feature=feature, user=request.user).first()
-    if existing_share:
-        # Return the existing share
-        share_url = build_share_url(request, existing_share.share_id)
-        
-        return JsonResponse({
-            'share_id': existing_share.share_id,
-            'url': share_url,
-            'created_at': existing_share.created_at.isoformat(),
-            'allow_downloads': existing_share.allow_downloads
-        })
-
-    # Generate UUID4 share_id
-    share_id = str(uuid.uuid4())
-    # Ensure uniqueness (very unlikely but check anyway)
-    while (TagShare.objects.filter(share_id=share_id).exists() or 
-           CollectionShare.objects.filter(share_id=share_id).exists() or
-           FeatureShare.objects.filter(share_id=share_id).exists()):
-        share_id = str(uuid.uuid4())
-
-    # Get allow_downloads from validated data
-    allow_downloads = validated_data.get('allow_downloads', False)
-
-    # Create new share
-    feature_share = FeatureShare.objects.create(
-        share_id=share_id,
-        feature=feature,
-        user=request.user,
-        allow_downloads=allow_downloads
-    )
-
-    # Build full URL using configured site domain
-    share_url = build_share_url(request, feature_share.share_id)
-
-    return JsonResponse({
-        'share_id': feature_share.share_id,
-        'url': share_url,
-        'created_at': feature_share.created_at.isoformat(),
-        'allow_downloads': feature_share.allow_downloads
-    })
 
 
 @api_or_login_required_401()
@@ -104,7 +45,8 @@ def get_feature_share(request, feature_id):
         'url': share_url,
         'created_at': share.created_at.isoformat(),
         'access_count': share.access_count,
-        'allow_downloads': share.allow_downloads
+        'allow_downloads': share.allow_downloads,
+        'include_tags': share.include_tags
     })
 
 
@@ -112,22 +54,26 @@ def get_feature_share(request, feature_id):
 @require_http_methods(["PATCH"])
 def update_feature_share(request, feature_id):
     """
-    Update the allow_downloads setting for a feature share.
-    
-    PATCH body:
-    - allow_downloads: boolean (required) - Whether to allow downloads
+    Update the allow_downloads and/or include_tags settings for a feature share.
+
+    PATCH body (at least one required):
+    - allow_downloads: boolean - Whether to allow downloads
+    - include_tags: boolean - Whether to include tags in the shared feature
     """
     try:
-        import json
         data = json.loads(request.body)
         allow_downloads = data.get('allow_downloads')
-        
-        if allow_downloads is None:
-            return error_response('allow_downloads is required', code=400)
-        
-        if not isinstance(allow_downloads, bool):
+        include_tags = data.get('include_tags')
+
+        if allow_downloads is None and include_tags is None:
+            return error_response('allow_downloads or include_tags is required', code=400)
+
+        if allow_downloads is not None and not isinstance(allow_downloads, bool):
             return error_response('allow_downloads must be a boolean', code=400)
-        
+
+        if include_tags is not None and not isinstance(include_tags, bool):
+            return error_response('include_tags must be a boolean', code=400)
+
         # Verify feature exists and belongs to user
         feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
         
@@ -136,8 +82,11 @@ def update_feature_share(request, feature_id):
         if not share:
             return error_response('No share exists for this feature', code=404)
         
-        # Update allow_downloads
-        share.allow_downloads = allow_downloads
+        # Update whichever fields were provided
+        if allow_downloads is not None:
+            share.allow_downloads = allow_downloads
+        if include_tags is not None:
+            share.include_tags = include_tags
         share.save()
         
         # Build full URL using configured site domain
@@ -148,7 +97,8 @@ def update_feature_share(request, feature_id):
             'url': share_url,
             'created_at': share.created_at.isoformat(),
             'access_count': share.access_count,
-            'allow_downloads': share.allow_downloads
+            'allow_downloads': share.allow_downloads,
+            'include_tags': share.include_tags
         })
     except json.JSONDecodeError:
         return error_response('Invalid JSON in request body', code=400)
@@ -165,30 +115,30 @@ def get_public_feature_share(request, share_id):
     Returns GeoJSON of the shared feature.
     Increments access_count on each successful access.
     """
+    # Validate share_id format (must be UUID4)
+    if not validate_share_id(share_id):
+        return invalid_share_response()
+
     # Get the share
     share = FeatureShare.objects.filter(share_id=share_id).select_related('feature', 'user').first()
     if not share:
-        return JsonResponse({
-            'error': 'Invalid share link',
-            'code': 404
-        }, status=404)
+        return invalid_share_response()
 
     # Increment access count
     FeatureShare.objects.filter(share_id=share_id).update(access_count=F('access_count') + 1)
 
-    # Return the feature as GeoJSON
-    feature = share.feature
-    
-    # Ensure the feature has database_id in properties for frontend processing
-    feature_geojson = feature.geojson.copy()
-    if 'properties' not in feature_geojson:
-        feature_geojson['properties'] = {}
-    feature_geojson['properties']['database_id'] = feature.id
-    
+    # Build the feature as GeoJSON, stripping tags/system_tags unless the sharer opted in
+    feature_geojson = _convert_feature_to_geojson(
+        share.feature,
+        public_safe=True,
+        include_tags=share.include_tags,
+        allow_downloads=share.allow_downloads,
+    )
+
     # Build response with single feature
     return JsonResponse({
         'type': 'FeatureCollection',
-        'features': [feature_geojson],
+        'features': [feature_geojson] if feature_geojson else [],
         'allow_downloads': share.allow_downloads
     })
 
@@ -206,13 +156,14 @@ def get_public_feature_elevations_internal(request, share_id):
     Returns:
     - coordinates: List of [lon, lat, elevation] arrays (elevation may be None if not stored)
     """
+    # Validate share_id format (must be UUID4)
+    if not validate_share_id(share_id):
+        return invalid_share_response()
+
     # Get the share
     share = FeatureShare.objects.filter(share_id=share_id).select_related('feature').first()
     if not share:
-        return JsonResponse({
-            'error': 'Invalid share link',
-            'code': 404
-        }, status=404)
+        return invalid_share_response()
     
     # Extract coordinates from the feature's GeoJSON (with elevation if present)
     geojson_data = share.feature.geojson

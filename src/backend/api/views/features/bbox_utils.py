@@ -225,6 +225,20 @@ def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.
     return base_query.order_by('id')
 
 
+def strip_private_tags(properties: dict) -> None:
+    """
+    Remove `tags`/`system_tags` from a properties dict in place.
+
+    These can carry private information, so they must never reach a public-safe
+    (unauthenticated share) response — GeoJSON view, KMZ download, or otherwise —
+    unless the sharer explicitly opted in via `include_tags`. This is the single
+    source of truth for that stripping so every share touchpoint (map view, single
+    feature share, bulk KMZ export) stays consistent.
+    """
+    properties.pop('tags', None)
+    properties.pop('system_tags', None)
+
+
 def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> dict[str, str | Any] | None:
     """
     Convert FeatureStore instance to GeoJSON Feature dictionary.
@@ -247,11 +261,8 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     # Always include database_id for frontend processing
     properties['database_id'] = feature.id
 
-    if public_safe:
-        # Don't include tags in public view unless explicitly requested
-        # (they can contain private information)
-        if not include_tags and 'tags' in properties:
-            del properties['tags']
+    if public_safe and not include_tags:
+        strip_private_tags(properties)
 
     return {
         "type": "Feature",
@@ -479,8 +490,8 @@ def _execute_bbox_query_and_parse(
             # Always include database_id for frontend processing
             properties['database_id'] = feature_id
 
-            if not include_tags and 'tags' in properties:
-                del properties['tags']
+            if not include_tags:
+                strip_private_tags(properties)
 
             geojson_features.append({
                 "type": "Feature",

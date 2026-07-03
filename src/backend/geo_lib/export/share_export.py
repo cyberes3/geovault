@@ -4,6 +4,8 @@ Share-based export functionality.
 
 from typing import Callable, Dict
 
+from api.views.features.bbox_utils import strip_private_tags
+
 from .geojson_preprocessor import prepare_geojson_for_kmz
 from .geojson_to_kmz import KMZOptions
 
@@ -47,6 +49,14 @@ def build_share_feature_collection(
         geojson_data = feature.geojson
         if not geojson_data or 'geometry' not in geojson_data:
             continue
+
+        if not share.include_tags:
+            # Strip tags/system_tags before they can end up in the KMZ placemark
+            # description (see _apply_properties_to_placemark) - same rule the map
+            # view GeoJSON endpoints apply.
+            properties = dict(geojson_data.get('properties') or {})
+            strip_private_tags(properties)
+            geojson_data = {**geojson_data, 'properties': properties}
 
         # Pre-process GeoJSON for icon embedding
         geojson_for_kmz = prepare_geojson_for_kmz(geojson_data, base_dir, icon_storage_dir)

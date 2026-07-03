@@ -135,6 +135,7 @@ class TagShare(django_models.Model):
     user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     created_at = django_models.DateTimeField(auto_now_add=True)
     access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
+    include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared features")
     allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
 
     class Meta:
@@ -168,6 +169,7 @@ class FeatureShare(django_models.Model):
     user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     created_at = django_models.DateTimeField(auto_now_add=True)
     access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
+    include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared feature")
     allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
 
     class Meta:

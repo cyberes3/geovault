@@ -185,55 +185,10 @@ class CollectionUpdatePayload(CollectionBaseFields):
 # ============================================================================
 # Share Models
 # ============================================================================
-
-class ShareBaseFields(BaseModel):
-    """Base model for share operations."""
-    model_config = ConfigDict(extra='forbid')
-
-    allow_downloads: Optional[bool] = Field(default=False, description="Allow downloads from share")
-
-
-class TagSharePayload(ShareBaseFields):
-    """Pydantic model for creating a tag share."""
-    tag: str = Field(description="Tag to share (required)")
-
-    @field_validator('tag')
-    @classmethod
-    def validate_tag_not_empty(cls, v: str) -> str:
-        """Ensure tag is not empty or whitespace only."""
-        if not v or not v.strip():
-            raise ValueError('tag cannot be empty')
-        return v
-
-
-class CollectionSharePayload(ShareBaseFields):
-    """Pydantic model for creating a collection share."""
-    collection_id: str = Field(description="Collection ID to share (required, must be valid UUID)")
-    include_tags: Optional[bool] = Field(default=False, description="Include tags in shared features")
-
-    @field_validator('collection_id')
-    @classmethod
-    def validate_collection_id_uuid(cls, v: str) -> str:
-        """Ensure collection_id is a valid UUID."""
-        try:
-            uuid.UUID(v)
-        except (ValueError, AttributeError):
-            raise ValueError('collection_id must be a valid UUID')
-        return v
-
-
-class FeatureSharePayload(ShareBaseFields):
-    """Pydantic model for creating a feature share."""
-    feature_id: int = Field(description="Feature ID to share (required)")
-
-    @field_validator('feature_id')
-    @classmethod
-    def validate_feature_id_positive(cls, v: int) -> int:
-        """Ensure feature_id is a positive integer."""
-        if v <= 0:
-            raise ValueError('feature_id must be a positive integer')
-        return v
-
+#
+# Tag/collection/feature shares are created exclusively through the single unified
+# `POST /api/sharing/create/` endpoint (see api/views/sharing/management.py), so
+# UnifiedSharePayload below is the only payload model needed here.
 
 class UnifiedSharePayload(BaseModel):
     """Unified Pydantic model for creating any type of share."""
@@ -247,7 +202,7 @@ class UnifiedSharePayload(BaseModel):
     
     # Collection share fields
     collection_id: Optional[str] = Field(default=None, description="Collection ID to share (required if share_type is 'collection', must be valid UUID)")
-    include_tags: Optional[bool] = Field(default=False, description="Include tags in shared features (only for collections)")
+    include_tags: Optional[bool] = Field(default=False, description="Include tags in shared features (applies to tag, collection, and feature shares)")
     
     # Feature share fields
     feature_id: Optional[int] = Field(default=None, description="Feature ID to share (required if share_type is 'feature')")

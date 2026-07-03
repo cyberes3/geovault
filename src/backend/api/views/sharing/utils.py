@@ -1,5 +1,58 @@
 """Shared utilities for sharing"""
 import re
+import uuid
+from typing import Optional
+
+from django.db.models import Model
+
+from api.models import CollectionShare, FeatureShare, TagShare
+
+# (model, share_type, select_related-fields) for the 3 share types, in lookup order.
+# A single share_id namespace spans all 3 tables, so any share_id maps to at most one
+# of these - this is the source of truth for every "find a share by id" touchpoint
+# (public info/extent lookups, KMZ download validation, delete).
+_SHARE_TYPE_LOOKUP: tuple[tuple[type[Model], str, Optional[tuple[str, ...]]], ...] = (
+    (TagShare, 'tag', None),
+    (CollectionShare, 'collection', ('collection',)),
+    (FeatureShare, 'feature', ('feature',)),
+)
+
+
+def find_share_by_id(share_id: str) -> tuple[Optional[Model], Optional[str]]:
+    """
+    Look up a share by share_id across all 3 share type tables.
+
+    Does NOT validate share_id format - callers should call validate_share_id() first
+    so they can shape their own error response (some distinguish malformed vs.
+    not-found, others intentionally don't to avoid leaking share existence).
+
+    Returns:
+        (share, share_type) where share_type is 'tag' | 'collection' | 'feature',
+        or (None, None) if no matching share exists.
+    """
+    for model, share_type, select_related in _SHARE_TYPE_LOOKUP:
+        qs = model.objects.filter(share_id=share_id)
+        if select_related:
+            qs = qs.select_related(*select_related)
+        share = qs.first()
+        if share:
+            return share, share_type
+    return None, None
+
+
+def generate_unique_share_id() -> str:
+    """
+    Generate a UUID4 share_id guaranteed unique across all three share tables (tag,
+    collection, feature), which share a single global namespace of share_id values.
+    """
+    share_id = str(uuid.uuid4())
+    while (
+        TagShare.objects.filter(share_id=share_id).exists()
+        or CollectionShare.objects.filter(share_id=share_id).exists()
+        or FeatureShare.objects.filter(share_id=share_id).exists()
+    ):
+        share_id = str(uuid.uuid4())
+    return share_id
 
 
 def validate_share_id(share_id: str) -> bool:
