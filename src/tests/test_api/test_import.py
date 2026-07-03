@@ -16,6 +16,20 @@ from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
 
+def _create_feature(user, name="Replacement Target", lon=-122.4194, lat=37.7749):
+    geojson = {
+        'type': 'Feature',
+        'geometry': {'type': 'Point', 'coordinates': [lon, lat, 0.0]},
+        'properties': {'name': name},
+    }
+    return FeatureStore.objects.create(
+        user=user,
+        geojson=geojson,
+        geometry=Point(lon, lat, 0.0),
+        geojson_hash=generate_geojson_hash(geojson),
+    )
+
+
 class TestImportAPI(TransactionTestCase):
     """Test import/upload API endpoints using real backend processing."""
 
@@ -110,7 +124,8 @@ class TestImportAPI(TransactionTestCase):
         self.assertIn(job_status['status'], [ProcessingStatus.COMPLETED.value, ProcessingStatus.COMPLETED])
 
     def test_upload_with_replacement(self):
-        """Test uploading a file as a replacement for an existing feature."""
+        """Test uploading a file as a replacement for an existing feature owned by the uploader."""
+        target_feature = _create_feature(self.user)
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
@@ -126,7 +141,7 @@ class TestImportAPI(TransactionTestCase):
         file = SimpleUploadedFile("test.kml", kml_content.encode('utf-8'))
         response = self.client.post(
             '/api/item/import/upload',
-            {'file': file, 'replacement': '123'}
+            {'file': file, 'replacement': str(target_feature.id)}
         )
 
         self.assertEqual(response.status_code, 200)
@@ -140,6 +155,58 @@ class TestImportAPI(TransactionTestCase):
         # Processing will complete (replacement handling is done during processing)
         self.assertIn(job_status['status'], [ProcessingStatus.COMPLETED.value, ProcessingStatus.FAILED.value,
                                               ProcessingStatus.COMPLETED, ProcessingStatus.FAILED])
+
+    def test_upload_with_replacement_rejects_nonexistent_feature_id(self):
+        """A replacement ID that doesn't exist at all is rejected before any job is queued."""
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        file = SimpleUploadedFile("test.kml", kml_content.encode('utf-8'))
+        response = self.client.post(
+            '/api/item/import/upload',
+            {'file': file, 'replacement': '999999999'}
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_upload_with_replacement_rejects_other_users_feature_id(self):
+        """IDOR: a replacement ID pointing at another user's feature must be rejected up front,
+        not left solely to the downstream apply-replacement re-check."""
+        other_user = get_user_model().objects.create_user(
+            email='otherupload@example.com',
+            password='testpass123',
+            username='otheruploaduser',
+        )
+        other_feature = _create_feature(other_user, name="Other User's Feature")
+
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        file = SimpleUploadedFile("test.kml", kml_content.encode('utf-8'))
+        response = self.client.post(
+            '/api/item/import/upload',
+            {'file': file, 'replacement': str(other_feature.id)}
+        )
+        self.assertEqual(response.status_code, 404)
+        # No job should have been queued for a rejected replacement target.
+        self.assertFalse(
+            ImportQueue.objects.filter(user=self.user, replacement=other_feature.id).exists()
+        )
 
     def test_upload_invalid_file_structure(self):
         """Test uploading without a file."""

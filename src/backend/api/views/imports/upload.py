@@ -1,12 +1,16 @@
 """Import upload endpoint"""
 from django import forms
+from django.http import Http404
 from django.views.decorators.http import require_http_methods
 
+from api.models import FeatureStore
+from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.process_job import ProcessJob
 from geo_lib.security.SecureFileValidator import basic_file_security_check
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.secure_path import secure_filename
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -15,12 +19,15 @@ _logger = get_tagged_logger()
 # Create singleton instance
 process_job = ProcessJob(status_tracker)
 
+_upload_item_rate_limiter = RedisRateLimiter(name='upload_item', limit=30, window_seconds=60.0)
+
 
 class DocumentForm(forms.Form):
     file = forms.FileField()
 
 
 @api_or_login_required_401()
+@_upload_item_rate_limiter()
 @require_http_methods(["POST"])
 def upload_item(request):
     """
@@ -57,6 +64,17 @@ def upload_item(request):
                 return error_response(
                     'Invalid replacement feature ID',
                     code=400,
+                    details={'job_id': None}
+                )
+            # Verify ownership up front so a guessed/foreign feature ID never even reaches the
+            # ImportQueue row; the geometry-apply step re-checks this too, but that's defense in
+            # depth, not the primary gate.
+            try:
+                get_object_or_404_for_user(FeatureStore, request.user, id=replacement_feature_id)
+            except Http404:
+                return error_response(
+                    'Replacement feature not found or access denied',
+                    code=404,
                     details={'job_id': None}
                 )
 
