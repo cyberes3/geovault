@@ -3,6 +3,7 @@
 const fs = require('fs');
 const {kml} = require('@tmcw/togeojson');
 const {DOMParser} = require('@xmldom/xmldom');
+const {stripDoctype} = require('./index.js');
 
 /**
  * Convert KML file to GeoJSON
@@ -22,6 +23,8 @@ function convertKmlToGeojson(inputPath) {
         if (kmlContent && kmlContent.charCodeAt(0) === 0xFEFF) {
             cleanKmlContent = kmlContent.slice(1);
         }
+
+        cleanKmlContent = stripDoctype(cleanKmlContent);
 
         // Parse the KML content
         const parser = new DOMParser();

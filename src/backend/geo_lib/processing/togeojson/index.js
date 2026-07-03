@@ -11,6 +11,21 @@ const {DOMParser} = require('@xmldom/xmldom');
  */
 
 /**
+ * Strip any DOCTYPE declaration (including internal subsets, e.g. inline ENTITY
+ * definitions) from XML content before parsing.
+ *
+ * @xmldom/xmldom does not resolve external entities or DTDs, so this is
+ * defense-in-depth rather than a fix for a demonstrated bypass: it guarantees
+ * no DOCTYPE-based entity expansion is even attempted, regardless of parser
+ * internals now or in a future dependency upgrade.
+ * @param {string} xmlContent
+ * @returns {string}
+ */
+function stripDoctype(xmlContent) {
+    return xmlContent.replace(/<!DOCTYPE[^\[>]*(\[[^\]]*\])?\s*>/gis, '');
+}
+
+/**
  * Convert KML content string to GeoJSON
  * @param {string} kmlContent - KML content as string
  * @returns {Object} GeoJSON FeatureCollection
@@ -21,6 +36,8 @@ function convertKmlContent(kmlContent) {
         if (kmlContent.charCodeAt(0) === 0xFEFF) {
             kmlContent = kmlContent.slice(1);
         }
+
+        kmlContent = stripDoctype(kmlContent);
 
         // Parse the KML content
         const parser = new DOMParser();
@@ -52,6 +69,8 @@ function convertGpxContent(gpxContent) {
         if (gpxContent.charCodeAt(0) === 0xFEFF) {
             gpxContent = gpxContent.slice(1);
         }
+
+        gpxContent = stripDoctype(gpxContent);
 
         // Parse the GPX content
         const parser = new DOMParser();
@@ -196,7 +215,8 @@ module.exports = {
     convertKmlContent,
     convertGpxContent,
     convertFile,
-    detectFileType
+    detectFileType,
+    stripDoctype
 };
 
 // If run directly, process input
