@@ -30,6 +30,7 @@ _logger = get_tagged_logger(__name__)
 # Views handle the business logic for extension-specific functionality.
 # These will be automatically scoped under /api/extensions/<name>/
 
+@api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
 @csrf_exempt # For simplicity in this demo. For production, the platform provides CSRF utilities.
 def item_list_create(request):
@@ -58,6 +59,7 @@ def item_list_create(request):
             _logger.error("Failed to create item:\n%s", traceback.format_exc())
             return JsonResponse({'error': 'Failed to create item'}, status=400)
 
+@api_or_login_required_401()
 @require_http_methods(["DELETE"])
 @csrf_exempt
 def item_delete(request, item_id):
