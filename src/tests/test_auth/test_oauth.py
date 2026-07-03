@@ -375,6 +375,75 @@ class TestOAuthAuthorizationFlowE2E(TestCase):
         return quote(s, safe="")
 
 
+class TestOAuthPKCERejectsPlain(TestCase):
+    """PKCE "plain" is weaker than S256 (verifier == challenge, no hashing) and must be rejected
+    both when explicitly requested and when code_challenge_method is omitted (oauthlib otherwise
+    silently defaults an omitted method to "plain"). See website/oauth_pkce.py."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="pkceplain@example.com",
+            password="testpass123",
+            username="pkceplainuser",
+        )
+        self.redirect_uri = "https://app.example/oauth/callback"
+        self.client_id = "pkce-plain-client"
+        self.app = _create_oauth_application(
+            self.user,
+            client_id=self.client_id,
+            redirect_uri=self.redirect_uri,
+            skip_authorization=True,
+        )
+        self.client.force_login(self.user)
+
+    def _assert_authorize_rejected(self, query_extra):
+        authorize_url = (
+            "/api/oauth/authorize/"
+            f"?response_type=code&client_id={self.client_id}"
+            f"&redirect_uri={quote(self.redirect_uri, safe='')}"
+            "&scope=api&state=plain_state"
+            f"&{query_extra}"
+        )
+        response = self.client.get(authorize_url)
+        if response.status_code == 302:
+            location = response.get("Location", "")
+            params = parse_qs(urlparse(location).query)
+            self.assertNotIn(
+                "code", params, f"Plain PKCE must not yield an authorization code: {location}"
+            )
+        else:
+            self.assertNotEqual(response.status_code, 200, response.content.decode()[:500])
+
+    def test_authorize_rejects_explicit_plain_method(self):
+        """code_challenge_method=plain is rejected outright."""
+        code_challenge = "a" * 43  # plain: challenge == verifier, any 43-128 char string works
+        self._assert_authorize_rejected(
+            f"code_challenge={quote(code_challenge)}&code_challenge_method=plain"
+        )
+
+    def test_authorize_rejects_omitted_method_defaulting_to_plain(self):
+        """code_challenge without code_challenge_method defaults to "plain" in oauthlib and must
+        still be rejected, not silently accepted."""
+        code_challenge = "b" * 43
+        self._assert_authorize_rejected(f"code_challenge={quote(code_challenge)}")
+
+    def test_authorize_still_accepts_s256(self):
+        """Sanity check: S256 (the only remaining method) still works end-to-end."""
+        code_verifier = "c" * 43
+        code_challenge = _pkce_code_challenge(code_verifier)
+        authorize_url = (
+            "/api/oauth/authorize/"
+            f"?response_type=code&client_id={self.client_id}"
+            f"&redirect_uri={quote(self.redirect_uri, safe='')}"
+            "&scope=api&state=s256_state"
+            f"&code_challenge={quote(code_challenge)}&code_challenge_method=S256"
+        )
+        response = self.client.get(authorize_url)
+        self.assertEqual(response.status_code, 302, response.content.decode()[:500])
+        params = parse_qs(urlparse(response.get("Location", "")).query)
+        self.assertIn("code", params)
+
+
 @override_settings(
     OAUTH2_PROVIDER={
         "SCOPES": {"api": "Full API access"},
