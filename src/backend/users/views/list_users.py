@@ -4,12 +4,18 @@ from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.website.auth import api_or_login_required_401
 
 User = get_user_model()
 
+# This enumerates other users' emails; generous per-user limit deters scripted
+# enumeration while staying well above any normal UI usage pattern.
+_list_users_rate_limiter = RedisRateLimiter(name='list_users', limit=20, window_seconds=60.0)
+
 
 @api_or_login_required_401()
+@_list_users_rate_limiter()
 @require_http_methods(["GET"])
 def list_users(request):
     """

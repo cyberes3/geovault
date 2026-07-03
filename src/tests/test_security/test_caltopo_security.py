@@ -153,7 +153,7 @@ class TestCalTopoSecurity(TestCase):
         self.assertEqual(response.status_code, 400)
     
     @patch('extensions.caltopo.src.backend.views.maps.list_maps')
-    @patch('extensions.caltopo.src.backend.utils.rate_limit.time.time')
+    @patch('geo_lib.security.rate_limit.time.time')
     def test_rate_limiting_prevents_abuse(self, mock_time, mock_list_maps):
         """Test rate limiting prevents abuse (multiple rapid requests)."""
         from django.core.cache import caches
