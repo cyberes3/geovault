@@ -428,7 +428,9 @@ LOGIN_URL = '/accounts/login/'
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
-# HSTS is handled by nginx, not Django
+# django.middleware.security.SecurityMiddleware sends the Strict-Transport-Security header
+# itself based on these settings, whenever request.is_secure() is True -- which requires nginx
+# to forward X-Forwarded-Proto correctly (see SECURE_PROXY_SSL_HEADER below).
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
