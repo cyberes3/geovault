@@ -1,7 +1,9 @@
 import { extractCommitRefFromTag, parseApkName } from './parser.js';
 import { deriveCodeRepoPath } from './deriveCodeRepo.js';
-import { fetchReleasesJson } from './gitea.js';
+import { fetchReleasesJson, resolveCommitSha, TTL_RELEASES } from './gitea.js';
 import { getReleaseRepoConfigs, getReleasesLimit } from './repos.js';
+
+const LATEST_MATCH_CACHE_KEY_PREFIX = 'https://app-version-checker.internal/latest-match-v1';
 
 /**
  * Same semantics as ReleaseAssetParser.findFirstMatchingReleaseAsset + repo scope.
@@ -73,4 +75,58 @@ export async function findLatestMatchForApp(env, appName, releasesRepoHint) {
   }
 
   return null;
+}
+
+function latestMatchCacheKey(appName, releasesRepoHint) {
+  const params = new URLSearchParams({ appName, releasesRepo: releasesRepoHint || '' });
+  return new Request(`${LATEST_MATCH_CACHE_KEY_PREFIX}?${params.toString()}`);
+}
+
+/**
+ * Cached wrapper around findLatestMatchForApp + resolveCommitSha (the two calls that scan
+ * Gitea releases and resolve the release tag to a commit SHA — identical for every device
+ * checking a given appName, and the only calls in the /check flow that don't depend on the
+ * caller's local commit).
+ *
+ * Backed by the Workers Cache API (same pattern as the /latest catalog in catalog.js) so
+ * concurrent or repeated /check calls for the same appName are served without hitting Gitea
+ * at all, instead of re-fetching releases and re-resolving the tag on every request.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {ExecutionContext} ctx
+ * @param {string} appName
+ * @param {string} [releasesRepoHint]
+ * @returns {Promise<{ found: false } | { found: true, match: object, releaseCommitSha: string | null }>}
+ */
+export async function getOrFindLatestMatch(env, ctx, appName, releasesRepoHint) {
+  const cache = caches.default;
+  const cacheRequest = latestMatchCacheKey(appName, releasesRepoHint);
+  const cached = await cache.match(cacheRequest);
+  if (cached) {
+    return cached.json();
+  }
+
+  const match = await findLatestMatchForApp(env, appName, releasesRepoHint);
+  const result = match
+    ? {
+        found: true,
+        match,
+        releaseCommitSha: await resolveCommitSha(
+          env,
+          match.origin,
+          match.codeOwner,
+          match.codeRepoName,
+          match.releaseCommitRef
+        ),
+      }
+    : { found: false };
+
+  const response = new Response(JSON.stringify(result), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': `public, max-age=${TTL_RELEASES}`,
+    },
+  });
+  ctx.waitUntil(cache.put(cacheRequest, response.clone()));
+  return result;
 }

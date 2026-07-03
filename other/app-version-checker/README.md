@@ -66,7 +66,17 @@ Returns JSON:
 - `appName`, `versionLabel`, `releasesRepo`, `codeRepo`
 
 **Errors:** JSON body `{ "error": "<code>", "detail": "<message>" }` with appropriate HTTP status (e.g. `400` bad input,
-`404` no matching release asset, `401` bad bearer token, `502` upstream failure, `503` missing `GITEA_USER_AGENT`).
+`404` no matching release asset, `401` bad bearer token, `429` rate limited, `502` upstream failure, `503` missing
+`GITEA_USER_AGENT`).
+
+The release lookup (scanning Gitea releases for `appName` and resolving its tag to a commit SHA) is cached for 600s
+via the Workers Cache API, keyed by `appName` + `releasesRepo` — identical for every device checking a given app, so
+it's shared across all callers instead of being redone per request. When the caller's `localFullCommitSha` already
+matches the cached latest commit (the common case), the response is served entirely from that cache with no Gitea
+calls at all. Only a divergent SHA triggers the (per-caller) Gitea compare calls needed to determine ordering.
+`/check` is also protected by a per-IP Cloudflare Rate Limiting binding (`CHECK_RATE_LIMITER`, see
+`wrangler.example.toml`; defaults to 20 requests/minute per IP). If the binding isn't configured (e.g. local
+`wrangler dev`), the check is skipped rather than blocking requests.
 
 ### Example
 

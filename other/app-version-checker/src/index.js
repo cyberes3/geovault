@@ -28,6 +28,19 @@ function checkPostSecret(request, env) {
   return auth.slice(7) === secret;
 }
 
+/**
+ * Per-IP rate limit for POST /check. The release lookup is cached (see resolveLatest.js), but a
+ * divergent localFullCommitSha still triggers live Gitea compare calls per request. Fails open if
+ * the CHECK_RATE_LIMITER binding isn't configured (e.g. `wrangler dev` without a rate limiting
+ * namespace) so it never blocks correctly-configured request handling on missing optional infra.
+ */
+async function isCheckRateLimited(request, env) {
+  if (!env.CHECK_RATE_LIMITER) return false;
+  const key = request.headers.get('cf-connecting-ip') || 'unknown';
+  const { success } = await env.CHECK_RATE_LIMITER.limit({ key });
+  return !success;
+}
+
 function normalizePath(pathname) {
   const p = pathname.replace(/\/$/, '') || '/';
   return p;
@@ -109,13 +122,16 @@ export default {
         if (!checkPostSecret(request, env)) {
           return jsonResponse({ error: 'unauthorized', detail: 'Invalid or missing Bearer token' }, 401);
         }
+        if (await isCheckRateLimited(request, env)) {
+          return jsonResponse({ error: 'rate_limited', detail: 'Too many requests, please try again later' }, 429);
+        }
         let payload;
         try {
           payload = await request.json();
         } catch {
           return jsonResponse({ error: 'bad_request', detail: 'Body must be JSON' }, 400);
         }
-        const result = await runCheck(env, payload);
+        const result = await runCheck(env, ctx, payload);
         return jsonResponse(result.body, result.status);
       }
 

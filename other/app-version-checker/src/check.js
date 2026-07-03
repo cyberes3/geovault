@@ -1,6 +1,6 @@
 import { FULL_SHA_REGEX } from './parser.js';
-import { compareCommits, isReleaseCommitNewer, resolveCommitSha } from './gitea.js';
-import { findLatestMatchForApp } from './resolveLatest.js';
+import { compareCommits, isReleaseCommitNewer } from './gitea.js';
+import { getOrFindLatestMatch } from './resolveLatest.js';
 import { getReleaseRepoConfigs } from './repos.js';
 
 export class CheckBadRequest extends Error {
@@ -20,9 +20,12 @@ function assertAllowedReleasesRepo(hint, configs) {
 }
 
 /**
+ * @param {Record<string, string | undefined>} env
+ * @param {ExecutionContext} ctx
+ * @param {object} payload
  * @returns {Promise<{ status: number, body: object }>}
  */
-export async function runCheck(env, payload) {
+export async function runCheck(env, ctx, payload) {
   const localSha = String(payload.localFullCommitSha || '')
     .trim()
     .toLowerCase();
@@ -39,8 +42,10 @@ export async function runCheck(env, payload) {
   const configs = getReleaseRepoConfigs(env);
   assertAllowedReleasesRepo(releasesRepo, configs);
 
-  const match = await findLatestMatchForApp(env, appName, releasesRepo);
-  if (!match) {
+  // Cached: identical for every device checking this appName, so this is served from the
+  // Workers cache instead of re-scanning Gitea releases on every /check request.
+  const latest = await getOrFindLatestMatch(env, ctx, appName, releasesRepo);
+  if (!latest.found) {
     return {
       status: 404,
       body: {
@@ -49,14 +54,7 @@ export async function runCheck(env, payload) {
       },
     };
   }
-
-  const resolved = await resolveCommitSha(
-    env,
-    match.origin,
-    match.codeOwner,
-    match.codeRepoName,
-    match.releaseCommitRef
-  );
+  const { match, releaseCommitSha: resolved } = latest;
   if (!resolved) {
     return {
       status: 502,

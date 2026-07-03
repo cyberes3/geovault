@@ -8,6 +8,16 @@ preview_urls = true
 [vars]
 RELEASE_REPO_URLS = '["https://git.evulid.cc/cyberes/geovault-app-release","https://git.evulid.cc/cyberes/survey-data-viewer-android","https://git.evulid.cc/cyberes/ngs-navigator-android"]'
 
+# Per-IP rate limit on POST /check. The release lookup is cached (shared across all callers), but a
+# divergent localFullCommitSha still triggers live Gitea compare calls per request, so this stays in place.
+[[ratelimits]]
+name = "CHECK_RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
 # Update this with your info
 [[routes]]
 pattern = "git.example.com/api/v1/geovault-app-releases/*"
