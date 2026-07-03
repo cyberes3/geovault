@@ -5,11 +5,12 @@ from typing import Tuple, Union
 
 from django.core.files.uploadedfile import UploadedFile
 
-from geo_lib.processing.file_types import get_file_type_by_extension, validate_file_size, get_max_file_size, validate_file_signature
+from geo_lib.processing.file_types import FileType, get_file_type_by_extension, validate_file_size, get_max_file_size, validate_file_signature
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.security.filetype_validators import _validate_content
 from geo_lib.security.validation_helpers import _validate_basic_properties, _validate_file_signature, _validate_mime_type, _validate_file_size
-from geo_lib.security.xml import parse_xml, DANGEROUS_ELEMENTS, HTML_DANGEROUS_ELEMENTS, DANGEROUS_ATTRIBUTES
+from geo_lib.security.xml import parse_xml, _check_dangerous_elements, _check_dangerous_attributes
+from geo_lib.security.zip_utils import MAX_KMZ_KML_DECOMPRESSED_BYTES, read_zip_member_bounded
 
 
 def validate_file(uploaded_file: UploadedFile) -> Tuple[bool, str]:
@@ -48,8 +49,11 @@ def validate_file(uploaded_file: UploadedFile) -> Tuple[bool, str]:
 
 def validate_kml_content(kml_content: str) -> bool:
     """
-    Validate KML content by checking for dangerous elements and attributes.
-    Does NOT modify the content - only validates and rejects if dangerous.
+    Validate KML content by checking for dangerous elements and attributes. Does NOT modify
+    the content - only validates and rejects if dangerous. Delegates to the same
+    geo_lib.security.xml checks used for the main upload validation pipeline
+    (filetype_validators._validate_kml_structure), so KML content is judged by one
+    consistent set of rules regardless of which code path is validating it.
 
     Args:
         kml_content: Raw KML content string
@@ -61,43 +65,11 @@ def validate_kml_content(kml_content: str) -> bool:
         SecurityError: If dangerous content is found
     """
     try:
-        # Parse with secure settings
         root = parse_xml(kml_content)
-
-        # Check for dangerous elements
-        for elem in root.iter():
-            # Extract local name from namespaced tags (e.g., {namespace}tag -> tag)
-            # Check both namespaced and non-namespaced elements
-            if '}' in elem.tag:
-                local_name = elem.tag.split('}')[-1].lower()
-            else:
-                local_name = elem.tag.lower()
-
-            # Check for dangerous elements (in any namespace)
-            if local_name in [dangerous.lower() for dangerous in DANGEROUS_ELEMENTS]:
-                raise SecurityError(f"Dangerous element found: {local_name}")
-
-            # Check for HTML-specific dangerous elements (only in default namespace to avoid false positives)
-            if '}' not in elem.tag and local_name in [dangerous.lower() for dangerous in HTML_DANGEROUS_ELEMENTS]:
-                raise SecurityError(f"HTML dangerous element found: {local_name}")
-
-        # Check for dangerous attributes
-        for elem in root.iter():
-            for attr_name in elem.attrib:
-                # Extract local name from namespaced attributes
-                if '}' in attr_name:
-                    local_attr_name = attr_name.split('}')[-1].lower()
-                else:
-                    local_attr_name = attr_name.lower()
-
-                # Only check for exact matches of dangerous attributes
-                if local_attr_name in [dangerous.lower() for dangerous in DANGEROUS_ATTRIBUTES]:
-                    raise SecurityError(f"Dangerous attribute found: {local_attr_name}")
-
+        _check_dangerous_elements(root, FileType.KML)
+        _check_dangerous_attributes(root)
         return True
-
     except SecurityError:
-        # Re-raise security errors
         raise
     except:
         raise SecurityError("Invalid KML content")
@@ -200,8 +172,8 @@ def secure_kmz_to_kml(kmz_data: Union[str, bytes]) -> str:
             # Use doc.kml if available, otherwise first .kml file
             kml_file = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
 
-            # Read and decode KML content
-            kml_content = kmz.read(kml_file).decode('utf-8')
+            # Read and decode KML content, bounded against decompression-bomb entries
+            kml_content = read_zip_member_bounded(kmz, kml_file, MAX_KMZ_KML_DECOMPRESSED_BYTES).decode('utf-8')
 
             # Validate the content (don't modify it)
             validate_kml_content(kml_content)

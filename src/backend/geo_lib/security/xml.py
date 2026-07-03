@@ -12,9 +12,6 @@ DANGEROUS_ELEMENTS = [
     'script', 'iframe', 'object', 'embed', 'applet', 'form', 'input',
     'button', 'meta'
 ]
-HTML_DANGEROUS_ELEMENTS = [
-    'link'  # HTML link elements, but KML link elements are allowed
-]
 DANGEROUS_ATTRIBUTES = [
     'onload', 'onerror', 'onclick', 'onmouseover', 'onfocus', 'onblur',
     'onchange', 'onsubmit', 'onreset', 'onselect', 'onunload'
