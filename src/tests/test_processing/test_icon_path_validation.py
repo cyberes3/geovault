@@ -43,9 +43,11 @@ class TestParseUserIconHash:
         'a' * 64 + '.exe',
         'a' * 64 + '.php',
         'a' * 64 + '.png.png',
+        'a' * 64 + '.svg',
     ])
     def test_rejects_invalid_extension(self, icon_hash):
-        """Only allowlisted extensions accepted."""
+        """Only allowlisted extensions accepted. SVG is deliberately excluded (stored-XSS risk: it's an
+        XML format that can carry <script>/event-handler payloads if ever served as image/svg+xml)."""
         assert parse_user_icon_hash(icon_hash) is None
 
     @pytest.mark.parametrize('icon_hash', [
@@ -59,7 +61,7 @@ class TestParseUserIconHash:
         """Need at least hash + extension and a dot."""
         assert parse_user_icon_hash(icon_hash) is None
 
-    @pytest.mark.parametrize('ext', ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.bmp', '.svg'])
+    @pytest.mark.parametrize('ext', ['.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.bmp'])
     def test_accepts_valid_hex_and_allowlisted_extension(self, ext):
         """Valid 64-char hex + allowlisted extension returns (hash_part, extension)."""
         hash_part = 'a' * 64

@@ -10,26 +10,25 @@ from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.icons.get import parse_user_icon_hash
+from geo_lib.processing.icons.get import ICON_CONTENT_TYPES, parse_user_icon_hash
 from geo_lib.processing.icons.icon_manager import store_icon
 from geo_lib.processing.logging import ImportLog
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename, secure_path
 from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
-# Content type mapping for icon file extensions
-_CONTENT_TYPES = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.bmp': 'image/bmp',
-    '.svg': 'image/svg+xml',
-    '.webp': 'image/webp',
-    '.ico': 'image/x-icon',
-}
+_upload_icon_rate_limiter = RedisRateLimiter(name='upload_icon', limit=30, window_seconds=60.0)
+
+
+def _icon_response(icon_data: bytes, content_type: str) -> HttpResponse:
+    """Build an icon HttpResponse with nosniff set, since these routes ultimately serve
+    bytes that originated from user uploads or third-party import sources."""
+    response = HttpResponse(icon_data, content_type=content_type)
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 class IconUploadForm(forms.Form):
@@ -38,6 +37,7 @@ class IconUploadForm(forms.Form):
 
 
 @api_or_login_required_401()
+@_upload_icon_rate_limiter()
 @require_http_methods(["POST"])
 def upload_icon(request):
     """
@@ -135,10 +135,10 @@ def serve_user_icon(request, icon_hash):
     icon_data = resolved.read_bytes()
 
     # Determine content type based on extension
-    content_type = _CONTENT_TYPES.get(extension, 'image/png')
+    content_type = ICON_CONTENT_TYPES.get(extension, 'image/png')
 
     # Create response with appropriate headers
-    response = HttpResponse(icon_data, content_type=content_type)
+    response = _icon_response(icon_data, content_type)
     response['Cache-Control'] = 'public, max-age=31536000, immutable'  # Cache for 1 year, immutable
     return response
 
@@ -174,10 +174,10 @@ def serve_system_icon(request, path):
 
     # Determine content type based on extension
     suffix = file_path.suffix.lower()
-    content_type = _CONTENT_TYPES.get(suffix, 'image/png')
+    content_type = ICON_CONTENT_TYPES.get(suffix, 'image/png')
 
     # Create response with appropriate headers
-    response = HttpResponse(icon_data, content_type=content_type)
+    response = _icon_response(icon_data, content_type)
     response['Cache-Control'] = 'public, max-age=31536000, immutable'  # Cache for 1 year, immutable
     return response
 
@@ -286,7 +286,7 @@ def recolor_icon(request):
     image_data = output.read()
 
     # Create response
-    response = HttpResponse(image_data, content_type='image/png')
+    response = _icon_response(image_data, 'image/png')
     response['Cache-Control'] = 'public, max-age=3600'  # Cache for 1 hour
     return response
 

@@ -4,9 +4,12 @@ Handles extraction from KMZ archives, fetching from remote URLs, and storage wit
 """
 
 import hashlib
+import io
 import traceback
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
+
+from PIL import Image, UnidentifiedImageError
 
 from geo_lib.logging.console import get_tagged_logger
 from website.settings_utils import get_required_setting, get_setting
@@ -16,8 +19,41 @@ from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
 _logger = get_tagged_logger()
 
-# Valid image file extensions
-VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
+# Pillow format name for each supported extension, used to re-encode icons before storage.
+_PILLOW_FORMAT_BY_EXTENSION = {
+    '.png': 'PNG',
+    '.jpg': 'JPEG',
+    '.jpeg': 'JPEG',
+    '.gif': 'GIF',
+    '.bmp': 'BMP',
+    '.webp': 'WEBP',
+    '.ico': 'ICO',
+}
+
+
+def _reencode_raster_icon(icon_data: bytes, extension: str) -> Optional[bytes]:
+    """
+    Decode `icon_data` with Pillow and re-encode it into a canonical file of the
+    format implied by `extension`.
+
+    This guarantees every icon that reaches storage is a genuine, well-formed raster
+    image — not, say, an HTML/script polyglot smuggled in under an image extension —
+    and strips any non-image trailer or metadata a crafted file might carry. Returns
+    None if `icon_data` isn't a valid image Pillow can decode as that format.
+    """
+    pillow_format = _PILLOW_FORMAT_BY_EXTENSION.get(extension)
+    if pillow_format is None:
+        return None
+    try:
+        with Image.open(io.BytesIO(icon_data)) as img:
+            img.load()
+            if pillow_format == 'JPEG' and img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            output = io.BytesIO()
+            img.save(output, format=pillow_format)
+            return output.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
 
 
 def _is_valid_icon_type(filename_or_url: str) -> bool:
@@ -71,7 +107,20 @@ def store_icon(icon_data: bytes, original_path: str, import_log: ImportLog, stat
             stats['failed'] += 1
             return None
 
-        # Calculate hash
+        # Re-encode via Pillow so only genuine, well-formed raster images ever reach
+        # storage (rejects e.g. an HTML/script polyglot uploaded under an image extension).
+        icon_data = _reencode_raster_icon(icon_data, extension)
+        if icon_data is None:
+            _logger.warning(f"Icon data is not a valid image for extension {extension}: {original_path}")
+            import_log.add(
+                f"Icon is not a valid image file: {original_path}",
+                "Icon Processing",
+                DatabaseLogLevel.WARNING
+            )
+            stats['failed'] += 1
+            return None
+
+        # Calculate hash (of the re-encoded bytes, since that's what's actually stored)
         icon_hash = hashlib.sha256(icon_data).hexdigest()
 
         # Get storage path

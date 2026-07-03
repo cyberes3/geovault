@@ -5,19 +5,35 @@ import zipfile
 from pathlib import Path
 from typing import Optional, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.parse import urlparse
+from urllib.request import Request
 
 from geo_lib.http.outbound import USER_AGENT
 from geo_lib.logging.console import get_tagged_logger
 from website.settings_utils import get_required_setting
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.security.ssrf import is_url_safe_for_fetch
+from geo_lib.security.ssrf import build_ssrf_safe_opener, is_url_safe_for_fetch
+from geo_lib.security.zip_utils import MAX_KMZ_ICON_DECOMPRESSED_BYTES, read_zip_member_bounded
 
 _logger = get_tagged_logger()
 
-# Valid image file extensions
-VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
+# Single source of truth for icon file extensions accepted anywhere in the icon
+# pipeline (user uploads, KML/KMZ import, remote fetch) and their outbound Content-Type
+# for serving. SVG is intentionally excluded: it's an XML format that can carry
+# <script>/event-handler payloads, so serving user- or import-influenced SVG content
+# as image/svg+xml is a stored-XSS vector. Every other extension here is a raster
+# format that geo_lib.processing.icons.icon_manager.store_icon re-encodes with Pillow
+# before it's ever written to disk, so only genuine, well-formed images are stored.
+ICON_CONTENT_TYPES = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.bmp': 'image/bmp',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
+}
+VALID_ICON_EXTENSIONS = frozenset(ICON_CONTENT_TYPES.keys())
 
 
 def parse_user_icon_hash(icon_hash: str) -> Optional[Tuple[str, str]]:
@@ -127,14 +143,14 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str, import_log: ImportLog
             # Try exact matches first
             for path in paths_to_try:
                 if path in zip_file.namelist():
-                    return zip_file.read(path)
+                    return read_zip_member_bounded(zip_file, path, MAX_KMZ_ICON_DECOMPRESSED_BYTES)
 
             # Try case-insensitive search on all paths
             for path in paths_to_try:
                 path_lower = path.lower()
                 for entry_name in zip_file.namelist():
                     if entry_name.lower() == path_lower:
-                        return zip_file.read(entry_name)
+                        return read_zip_member_bounded(zip_file, entry_name, MAX_KMZ_ICON_DECOMPRESSED_BYTES)
 
             # Icon not found
             import_log.add(
@@ -162,26 +178,6 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str, import_log: ImportLog
         return None
 
 
-_MAX_REDIRECTS = 5
-
-
-class _SafeRedirectHandler(HTTPRedirectHandler):
-    """Validates redirect targets with SSRF check and enforces redirect limit."""
-
-    def __init__(self, max_redirects: int = _MAX_REDIRECTS):
-        self.max_redirects = max_redirects
-        self.redirect_count = 0
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if self.redirect_count >= self.max_redirects:
-            raise URLError("Too many redirects")
-        redirect_url = urljoin(req.full_url, newurl)
-        if not is_url_safe_for_fetch(redirect_url):
-            raise URLError("Redirect target not allowed (SSRF)")
-        self.redirect_count += 1
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
 def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Optional[bytes]:
     """
     Fetch icon from remote URL with timeout.
@@ -198,7 +194,7 @@ def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Option
 
     try:
         req = Request(url, headers={"User-Agent": USER_AGENT})
-        opener = build_opener(_SafeRedirectHandler())
+        opener = build_ssrf_safe_opener()
         with opener.open(req, timeout=timeout) as response:
             # Check content length if available
             content_length = response.headers.get('Content-Length')
