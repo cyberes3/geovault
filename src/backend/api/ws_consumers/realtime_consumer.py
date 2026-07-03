@@ -10,6 +10,7 @@ from django.contrib.auth.models import AnonymousUser
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from geo_lib.websocket.force_disconnect import user_sockets_group_name
 from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
 from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
 from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
@@ -63,10 +64,16 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
             # Create user-specific room group
             self.room_group_name = f"realtime_{self.user.id}"
+            self.user_sockets_group_name = user_sockets_group_name(self.user.id)
 
-            # Join room group
+            # Join room group, plus the cross-consumer group used to force-disconnect this
+            # user's sockets on auth revocation (logout, API key delete, OAuth revoke).
             await self.channel_layer.group_add(
                 self.room_group_name,
+                self.channel_name
+            )
+            await self.channel_layer.group_add(
+                self.user_sockets_group_name,
                 self.channel_name
             )
 
@@ -109,10 +116,15 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             user_identifier = get_user_identifier(self.scope)
             _logger.info(f"WebSocket disconnected: {path} - {user_identifier} - {client_ip} - Close code: {close_code}")
 
-            # Leave room group if it was created
+            # Leave room groups if they were created
             if hasattr(self, 'room_group_name') and self.room_group_name:
                 await self.channel_layer.group_discard(
                     self.room_group_name,
+                    self.channel_name
+                )
+            if hasattr(self, 'user_sockets_group_name') and self.user_sockets_group_name:
+                await self.channel_layer.group_discard(
+                    self.user_sockets_group_name,
                     self.channel_name
                 )
         except:
@@ -147,6 +159,11 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     async def live_track_track_updated(self, event):
         """No-op: live_track updates use the trackers-live consumer, not this realtime channel."""
         pass
+
+    async def force_disconnect(self, event):
+        """Close this socket in response to auth revocation (logout, API key delete, OAuth revoke)."""
+        _logger.info(f"WebSocket force-disconnected: user {getattr(self.user, 'id', 'unknown')} - reason: {event.get('reason', '')}")
+        await self.close(code=4001)
 
     # Dynamic event routing - automatically route events to modules
     def __getattr__(self, name):

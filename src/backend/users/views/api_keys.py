@@ -5,6 +5,7 @@ from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
+from geo_lib.websocket.force_disconnect import WebSocketForceDisconnector
 from users.models import ApiKey
 from users.api_keys import create_user_api_key, validate_api_key
 
@@ -90,7 +91,11 @@ def delete_api_key(request, key_id):
         # Soft delete by setting is_active to False
         api_key.is_active = False
         api_key.save(update_fields=['is_active'])
-        
+
+        # A WebSocket connected via this key's Authorization header stays authenticated until
+        # it reconnects otherwise, since WS auth only runs once at connect() time.
+        WebSocketForceDisconnector.disconnect_user(request.user.id, reason="api_key_deleted")
+
         return JsonResponse({
             'message': 'API key deleted successfully'
         })

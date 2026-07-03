@@ -14,6 +14,7 @@ from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from geo_lib.websocket.force_disconnect import user_sockets_group_name
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 
 _logger = get_tagged_logger()
@@ -26,6 +27,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
         super().__init__(*args, **kwargs)
         self.item_id = None
         self.room_group_name = None
+        self.user_sockets_group_name = None
 
     async def connect(self):
         """Handle WebSocket connection."""
@@ -68,10 +70,16 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
             # Create item-specific room group
             self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
+            self.user_sockets_group_name = user_sockets_group_name(self.user.id)
 
-            # Join room group
+            # Join room group, plus the cross-consumer group used to force-disconnect this
+            # user's sockets on auth revocation (logout, API key delete, OAuth revoke).
             await self.channel_layer.group_add(
                 self.room_group_name,
+                self.channel_name
+            )
+            await self.channel_layer.group_add(
+                self.user_sockets_group_name,
                 self.channel_name
             )
 
@@ -121,6 +129,11 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
             # Leave room group
             await self.channel_layer.group_discard(
                 self.room_group_name,
+                self.channel_name
+            )
+        if self.user_sockets_group_name:
+            await self.channel_layer.group_discard(
+                self.user_sockets_group_name,
                 self.channel_name
             )
 
@@ -184,3 +197,8 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
     async def duplicates_updated(self, event):
         """Handle duplicates updated event."""
         await self.process_status_module.handle_duplicates_updated(event['data'])
+
+    async def force_disconnect(self, event):
+        """Close this socket in response to auth revocation (logout, API key delete, OAuth revoke)."""
+        _logger.info(f"WebSocket force-disconnected: user {getattr(self.user, 'id', 'unknown')} - reason: {event.get('reason', '')}")
+        await self.close(code=4001)

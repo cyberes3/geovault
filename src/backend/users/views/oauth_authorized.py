@@ -9,6 +9,7 @@ from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
+from geo_lib.websocket.force_disconnect import WebSocketForceDisconnector
 
 _logger = get_tagged_logger(__name__)
 
@@ -53,6 +54,10 @@ def _revoke_access_token_grant(token):
         revoke_method()
     else:
         token.delete()
+
+    # A WebSocket connected via this token's Authorization header stays authenticated until it
+    # reconnects otherwise, since WS auth only runs once at connect() time.
+    WebSocketForceDisconnector.disconnect_user(token.user_id, reason="oauth_token_revoked")
 
 
 @api_or_login_required_401(allow_api_keys=False)
