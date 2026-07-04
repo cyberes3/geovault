@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.location.TrackingPermissionGate
 import kotlin.math.sqrt
 
 /**
@@ -68,7 +69,7 @@ class ImuMotionClassifier(
         val linearAccelAvailable = linearAccelSensor != null
         val stepDetectorAvailable = stepDetectorSensor != null
         val activityRecognitionGranted = hasActivityRecognitionPermission()
-        val otherSensorsGranted = hasOtherSensorsPermission()
+        val otherSensorsGranted = TrackingPermissionGate.hasOtherSensorsPermission(context)
 
         GeoVaultCaptureLog.i(
             TAG,
@@ -232,28 +233,10 @@ class ImuMotionClassifier(
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) ==
             PackageManager.PERMISSION_GRANTED
 
-    /**
-     * On stock Android, [Manifest.permission.OTHER_SENSORS] is a normal permission that is
-     * auto-granted. On GrapheneOS it is promoted to a user-controlled runtime permission.
-     * Checking via [ContextCompat.checkSelfPermission] is safe on both platforms: stock Android
-     * returns [PackageManager.PERMISSION_GRANTED] automatically; GrapheneOS reflects the actual
-     * user choice.
-     */
-    private fun hasOtherSensorsPermission(): Boolean =
-        ContextCompat.checkSelfPermission(context, OTHER_SENSORS_PERMISSION) ==
-            PackageManager.PERMISSION_GRANTED
-
     private data class AccelSample(val timestampMs: Long, val magnitude: Float)
 
     companion object {
         private const val TAG = "ImuMotionClassifier"
-
-        /**
-         * On GrapheneOS this permission is promoted to a runtime permission gating access to
-         * [android.hardware.Sensor.TYPE_LINEAR_ACCELERATION]. On stock Android it is a normal
-         * (auto-granted) permission; checking it there always returns GRANTED.
-         */
-        private const val OTHER_SENSORS_PERMISSION = "android.permission.OTHER_SENSORS"
 
         /**
          * Returns true if the device has at least one sensor that [ImuMotionClassifier] can use.
