@@ -19,6 +19,8 @@ Regression tests for behaviors that must not change when refactoring `positionin
 | UI status | `TrackingUiStatusResolver` from runtime snapshot fields | `TrackingUiStatusResolverTest` |
 | Layer boundary | No `com.geovault.common.maps` imports under `positioning/` | `PositioningLayerMapsImportTest` |
 | Session state resets | `resetForStart` / `resetForStop` clear upload, boundaries, adaptive, and job handles | `PositioningSessionStateResetTest` |
+| Sparse tracking density | `PositioningDensity` cadence/probe scaling per preset | `services/PositioningDensityTest`, `PositioningContextTest` |
+| Sparse tracking live toggle | Mid-session setting flip live-reapplies the GPS request and reschedules the paused stationary ping with doubled cadence | `SparseTrackingLiveToggleEndToEndTest` |
 
 ## Manual smoke (release checklist)
 
