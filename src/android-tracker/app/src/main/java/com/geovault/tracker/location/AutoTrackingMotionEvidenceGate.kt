@@ -62,6 +62,15 @@ class AutoTrackingMotionEvidenceGate(
 
     private var lastObservation: Observation? = null
 
+    /**
+     * True when the gate is holding a stored observation (a HANDSHAKE seed or an
+     * already-confirmed anchor) that a follow-up cap-evidence fix could still pair
+     * with. Callers use this to avoid discarding in-progress evidence accumulation
+     * when an unrelated transient reject (e.g. a single low-accuracy fix) interleaves
+     * before the handshake completes -- see [AutoTrackingMotionCoordinator].
+     */
+    val hasPendingObservation: Boolean get() = lastObservation != null
+
     fun reset() {
         lastObservation = null
     }
@@ -75,7 +84,42 @@ class AutoTrackingMotionEvidenceGate(
             reset()
             return null
         }
+        return evaluateObservation(observation)
+    }
 
+    /**
+     * Stale-anchor relocation variant of [evaluate]. Before this existed,
+     * candidate-unconfirmed/stale-relocation-unconfirmed rejects (produced while
+     * RelocationRecoveryGate/SpatialConfirmationGate negotiate a stale-anchor
+     * relocation) were never routed to the evidence gate at all -- regardless of
+     * reject reason, [isSupportedReason] only recognizes cap-evidence reasons -- so
+     * sustained real motion during a prolonged relocation handshake produced no
+     * evidence, and once the ordinary speed-cap-exceeded reason stopped recurring
+     * for a drive, motion mode could get stuck for good. This entry point trusts
+     * `rawDistanceMeters` (the raw haversine to the last-seen fix, independent of
+     * accept/reject) directly as the speed source, since it also happens to be
+     * needed on the real incident that surfaced this gap: RSS-accuracy suppression
+     * in `LocationMetricsEngine.compute()` frequently zeroes
+     * `effectiveDistanceMeters`/`impliedSpeedMps` once accuracy degrades, which is
+     * exactly when these reject reasons fire. All the usual safety gates (max
+     * accuracy, min/max dt, min/max speed, continuity/course-delta checks) still
+     * apply identically to [evaluate] -- this only changes the speed *source*.
+     * Shares [lastObservation] with [evaluate] so a HANDSHAKE seeded by one reason
+     * family can be completed by the other.
+     */
+    fun evaluateStaleRelocation(metrics: TrackPointDecisionMetrics, eventTimeMs: Long): AutoTrackingMotionEvidence? {
+        // Unlike evaluate(), a disqualified fix here must NOT reset the gate: before this
+        // path existed, every candidate-unconfirmed/stale-relocation-unconfirmed fix was a
+        // pure no-op for evidence purposes (see AutoTrackingMotionCoordinator's neutral-hold
+        // branch), and callers still rely on that for fixes this path declines to use (e.g.
+        // accuracy too degraded even for raw-distance evidence). Resetting here would
+        // reintroduce the exact seed-destruction failure mode this fix (and the prior
+        // HANDSHAKE-seed fix) exists to prevent.
+        val observation = observationFromRawDistance(metrics = metrics, eventTimeMs = eventTimeMs) ?: return null
+        return evaluateObservation(observation)
+    }
+
+    private fun evaluateObservation(observation: Observation): AutoTrackingMotionEvidence? {
         val previous = lastObservation
         if (previous == null) {
             lastObservation = observation
@@ -121,6 +165,25 @@ class AutoTrackingMotionEvidenceGate(
         if (metrics.elapsedSeconds !in config.minDtSeconds..config.maxDtSeconds) return null
         if (speedMps !in config.minSpeedMps..config.maxSpeedMps) return null
         if (metrics.rawDistanceMeters <= 0.0 || metrics.effectiveDistanceMeters <= 0.0) return null
+        return Observation(
+            latitude = latitude,
+            longitude = longitude,
+            timestampMs = eventTimeMs,
+            accuracyMeters = accuracy,
+            speedMps = speedMps,
+            courseDegrees = null,
+        )
+    }
+
+    private fun observationFromRawDistance(metrics: TrackPointDecisionMetrics, eventTimeMs: Long): Observation? {
+        val accuracy = metrics.accuracyMeters?.toDouble() ?: return null
+        val latitude = metrics.rawLatitude ?: return null
+        val longitude = metrics.rawLongitude ?: return null
+        if (accuracy > config.maxAccuracyMeters) return null
+        if (metrics.elapsedSeconds !in config.minDtSeconds..config.maxDtSeconds) return null
+        if (metrics.rawDistanceMeters <= 0.0) return null
+        val speedMps = metrics.rawDistanceMeters / metrics.elapsedSeconds
+        if (speedMps !in config.minSpeedMps..config.maxSpeedMps) return null
         return Observation(
             latitude = latitude,
             longitude = longitude,

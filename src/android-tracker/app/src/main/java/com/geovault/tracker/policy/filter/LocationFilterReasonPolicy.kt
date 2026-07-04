@@ -33,6 +33,18 @@ object LocationFilterReasonPolicy {
             reason == FilterReason.SPEED_CAP_UNCONFIRMED
     }
 
+    /**
+     * Reject reasons produced while RelocationRecoveryGate/SpatialConfirmationGate are
+     * negotiating a stale-anchor relocation. These zero out effectiveDistanceMeters via
+     * RSS-accuracy suppression once accuracy is degraded (see LocationMetricsEngine.compute),
+     * so impliedSpeedMps is unusable here -- but rawDistanceMeters (consecutive-fix
+     * displacement) is not. See AutoTrackingMotionEvidenceGate.evaluateStaleRelocation.
+     */
+    fun isStaleRelocationEvidence(reason: FilterReason?): Boolean {
+        return reason == FilterReason.CANDIDATE_UNCONFIRMED ||
+            reason == FilterReason.STALE_RELOCATION_UNCONFIRMED
+    }
+
     fun isRecoverableFreshnessHold(reason: FilterReason?, holdReasons: Set<FilterReason>): Boolean {
         return reason != null && reason in holdReasons
     }

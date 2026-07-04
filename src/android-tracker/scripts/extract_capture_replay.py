@@ -4,7 +4,9 @@ Extract anonymized end-to-end positioning replay artifacts from tracker capture 
 
 Requires positioning_raw_fix lines in the capture log (logged at FixIngestSubsystem
 entry). One-way anonymization: random ~900-1100 mi translation applied in memory only.
-Original coordinates, the translation vector, and random seed are never written.
+Original coordinates, the translation vector, and random seed are never written. The
+real on-device trackId is likewise never written; a fresh random UUID is substituted
+so a fixture cannot be correlated back to the source device's other tracks.
 
 Usage:
   python3 scripts/extract_capture_replay.py write LOG \\
@@ -24,6 +26,7 @@ import math
 import re
 import secrets
 import sys
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -355,7 +358,10 @@ class ReplaySessionBuilder:
         anonymizer = ReplayAnonymizer(reference_lat)
         wall_base_ms = min(fix.wall_ms for fix in events.raw_fixes)
         elapsed_base_nanos = min(fix.elapsed_realtime_nanos for fix in events.raw_fixes)
-        track_id = events.raw_fixes[0].track_id
+        # The real on-device trackId is a stable per-track identifier that can persist
+        # across many capture sessions; it is never written to the fixture, only a
+        # fresh random UUID generated for this extraction.
+        track_id = str(uuid.uuid4())
 
         shifted_fixes = [
             self._raw_fix_json(index, fix, wall_base_ms, elapsed_base_nanos, anonymizer)
@@ -365,6 +371,7 @@ class ReplaySessionBuilder:
             self._imu_event_json(event, wall_base_ms, elapsed_base_nanos)
             for event in events.imu_events
         ]
+        self._enforce_merged_timeline_monotonicity(shifted_fixes, shifted_imu_events)
         expected_events = [
             self._trace_json(trace, wall_base_ms, anonymizer)
             for trace in events.decision_traces
@@ -396,6 +403,49 @@ class ReplaySessionBuilder:
                 "fidelity": "raw_fix_runtime_replay",
             },
         }
+
+    def _enforce_merged_timeline_monotonicity(
+        self,
+        shifted_fixes: list[dict[str, Any]],
+        shifted_imu_events: list[dict[str, Any]],
+    ) -> None:
+        """Corrects cross-stream elapsedRealtime skew between raw fixes and IMU
+        classifications.
+
+        Both streams are logged from independent code paths on-device, each reading
+        SystemClock.elapsedRealtimeNanos() at a slightly different point in its own
+        processing pipeline. Within a single stream this reading is always monotonic
+        (validated separately), but a real capture can occasionally show a small
+        (tens-of-ms) cross-stream skew where an IMU classification's elapsedRealtime
+        reads slightly ahead of or behind a raw fix that arrived at nearly the same
+        wall-clock instant. PositioningEndToEndReplayDriver merges both streams sorted
+        by wallOffsetMs and requires the combined elapsedRealtime sequence to be
+        non-decreasing, so an inverted pair would otherwise crash the replay.
+
+        This does not fabricate or discard any event -- it only nudges the affected
+        event's elapsedRealtimeOffsetNanos up to match the previous event in wall-time
+        order, preserving every real lat/lon/accuracy/speed/classification value.
+        """
+        timeline = sorted(
+            shifted_fixes + shifted_imu_events,
+            key=lambda item: item["wallOffsetMs"],
+        )
+        previous_elapsed = None
+        corrections = 0
+        for item in timeline:
+            elapsed = item["elapsedRealtimeOffsetNanos"]
+            if previous_elapsed is not None and elapsed < previous_elapsed:
+                item["elapsedRealtimeOffsetNanos"] = previous_elapsed
+                corrections += 1
+                elapsed = previous_elapsed
+            previous_elapsed = elapsed
+        if corrections:
+            print(
+                f"note: corrected {corrections} cross-stream elapsedRealtime "
+                "inversion(s) between raw fixes and IMU classifications (see "
+                "_enforce_merged_timeline_monotonicity docstring)",
+                file=sys.stderr,
+            )
 
     def _raw_fix_json(
         self,
