@@ -13,6 +13,15 @@ import org.robolectric.Robolectric
 
 internal class PositioningEndToEndReplayDriver(
     private val session: CaptureReplaySessionDto,
+    /**
+     * Actions to run against the live [PositioningRuntime] partway through the replay, each keyed
+     * by a wall-offset (relative to [CaptureReplaySessionDto.wallBaseMs]) at which it should fire.
+     * An action fires once, immediately after the replay clock has advanced to (or past) its
+     * trigger offset but before that timeline event is ingested. This is the only way to reach
+     * runtime-internal state (e.g. `runtime.deps.settingsRepository.setSparseTracking(true)`)
+     * mid-session, since [PositioningRuntime] is only ever constructed here.
+     */
+    private val midReplayActions: List<Pair<Long, (PositioningRuntime) -> Unit>> = emptyList(),
 ) {
     fun runReplay(): PositioningEndToEndReplayResult {
         TrackPointCrossSourceState.resetForTests()
@@ -69,6 +78,7 @@ internal class PositioningEndToEndReplayDriver(
     ) {
         val timeline = buildMergedTimeline()
         var previousWallMs = session.wallBaseMs
+        val pendingActions = midReplayActions.sortedBy { it.first }.toMutableList()
         for (event in timeline) {
             val wallMs = event.wallTimeMs(session)
             injectMotionTicks(runtime, clock, previousWallMs, wallMs)
@@ -76,6 +86,7 @@ internal class PositioningEndToEndReplayDriver(
                 wallTimeMs = wallMs,
                 elapsedRealtimeNanos = event.elapsedRealtimeNanos(session),
             )
+            firePendingActions(pendingActions, runtime, wallMs)
             when (event) {
                 is TimelineEvent.Fix -> runtime.fixIngest.processLocationUpdateSerialized(
                     location = event.fix.toLocation(session),
@@ -86,6 +97,20 @@ internal class PositioningEndToEndReplayDriver(
                 is TimelineEvent.Imu -> runtime.motion.onImuMotionUpdate(event.imuEvent.toContext())
             }
             previousWallMs = wallMs
+        }
+        firePendingActions(pendingActions, runtime, wallMs = previousWallMs, drainAll = true)
+    }
+
+    private fun firePendingActions(
+        pendingActions: MutableList<Pair<Long, (PositioningRuntime) -> Unit>>,
+        runtime: PositioningRuntime,
+        wallMs: Long,
+        drainAll: Boolean = false,
+    ) {
+        while (pendingActions.isNotEmpty() &&
+            (drainAll || session.wallBaseMs + pendingActions.first().first <= wallMs)
+        ) {
+            pendingActions.removeAt(0).second(runtime)
         }
     }
 
