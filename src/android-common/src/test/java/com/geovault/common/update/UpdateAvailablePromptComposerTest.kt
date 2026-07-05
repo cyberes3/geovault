@@ -63,16 +63,4 @@ class UpdateAvailablePromptComposerTest {
             )
         )
     }
-
-    @Test
-    fun `snackbarModelOrNull returns null for Throttled`() {
-        val result = VersionCheckResult.Throttled("later", lastCheckedAtMs = null)
-        assertNull(
-            UpdateAvailablePromptComposer.snackbarModelOrNull(
-                result,
-                message = "x",
-                detailsActionLabel = "Details",
-            )
-        )
-    }
 }

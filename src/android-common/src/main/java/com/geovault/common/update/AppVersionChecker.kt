@@ -6,43 +6,23 @@ import android.util.Log
 class AppVersionChecker(
     private val apiClient: VersionCheckApiClient = WorkerVersionCheckApiClient()
 ) {
+    /**
+     * Always runs a live check against the release worker. If the live check fails or finds
+     * no match, falls back to the last cached [VersionCheckResult.UpdateAvailable] for the
+     * current local commit (if any) so an "out of date" prompt keeps showing through
+     * transient network failures, until a live check confirms the app is up to date.
+     */
     fun checkForUpdateIfDue(
         context: Context,
         request: VersionCheckRequest,
-        rateLimitKey: String,
-        minIntervalMs: Long = ONE_HOUR_MS
+        cacheKey: String,
     ): VersionCheckResult {
-        val normalizedLocalSha = request.localFullCommitSha.trim().lowercase()
-        val decision = VersionCheckRateLimiter.shouldRunAndMark(
-            context = context.applicationContext,
-            key = rateLimitKey,
-            minIntervalMs = minIntervalMs
-        )
-        if (!decision.shouldRun) {
-            val cachedUpdate = cachedUpdateOrNull(context, rateLimitKey, normalizedLocalSha)
-            if (cachedUpdate != null) {
-                Log.i(
-                    UpdateCheckLog.TAG,
-                    "if_due key=$rateLimitKey action=rate_limited outcome=cached_update " +
-                        "versionLabel=${cachedUpdate.versionLabel} tag=${cachedUpdate.releaseTag}"
-                )
-                return cachedUpdate
-            }
-            Log.d(
-                UpdateCheckLog.TAG,
-                "if_due key=$rateLimitKey action=rate_limited outcome=throttled " +
-                    "lastCheckedAtMs=${decision.lastCheckedAtMs}"
-            )
-            return VersionCheckResult.Throttled(
-                detail = "Version check skipped by rate limiter",
-                lastCheckedAtMs = decision.lastCheckedAtMs
-            )
-        }
         Log.i(
             UpdateCheckLog.TAG,
-            "if_due key=$rateLimitKey action=network_check appName=${request.appName.trim()}"
+            "if_due key=$cacheKey action=network_check appName=${request.appName.trim()}"
         )
-        return persistAndReturn(context, rateLimitKey, checkForUpdate(request))
+        val normalizedLocalSha = request.localFullCommitSha.trim().lowercase()
+        return persistAndReturn(context, cacheKey, normalizedLocalSha, checkForUpdate(request))
     }
 
     fun checkForUpdate(request: VersionCheckRequest): VersionCheckResult {
@@ -127,14 +107,27 @@ class AppVersionChecker(
         }
     }
 
+    /**
+     * Reads the last cached [VersionCheckResult.UpdateAvailable] for [cacheKey], if any, without
+     * making a network call. Used to show a previously detected "out of date" state instantly
+     * (e.g. on app launch) while a live check runs in the background.
+     */
+    fun peekCachedUpdate(
+        context: Context,
+        cacheKey: String,
+        localFullCommitSha: String
+    ): VersionCheckResult.UpdateAvailable? {
+        return cachedUpdateOrNull(context, cacheKey, localFullCommitSha.trim().lowercase())
+    }
+
     private fun cachedUpdateOrNull(
         context: Context,
-        rateLimitKey: String,
+        cacheKey: String,
         normalizedLocalSha: String
     ): VersionCheckResult.UpdateAvailable? {
         if (!FULL_SHA_REGEX.matches(normalizedLocalSha)) return null
         return try {
-            UpdateAvailableCacheStore.read(context, rateLimitKey, normalizedLocalSha)
+            UpdateAvailableCacheStore.read(context, cacheKey, normalizedLocalSha)
         } catch (e: Exception) {
             Log.w(UpdateCheckLog.TAG, "failed reading cached UpdateAvailable", e)
             null
@@ -143,23 +136,43 @@ class AppVersionChecker(
 
     private fun persistAndReturn(
         context: Context,
-        rateLimitKey: String,
+        cacheKey: String,
+        normalizedLocalSha: String,
         result: VersionCheckResult
     ): VersionCheckResult {
-        try {
+        return try {
             when (result) {
-                is VersionCheckResult.UpdateAvailable -> UpdateAvailableCacheStore.write(context, rateLimitKey, result)
-                is VersionCheckResult.UpToDate -> UpdateAvailableCacheStore.clear(context, rateLimitKey)
-                else -> Unit
+                is VersionCheckResult.UpdateAvailable -> {
+                    UpdateAvailableCacheStore.write(context, cacheKey, result)
+                    result
+                }
+
+                is VersionCheckResult.UpToDate -> {
+                    UpdateAvailableCacheStore.clear(context, cacheKey)
+                    result
+                }
+
+                is VersionCheckResult.CheckFailed, is VersionCheckResult.NoMatch -> {
+                    val cachedUpdate = cachedUpdateOrNull(context, cacheKey, normalizedLocalSha)
+                    if (cachedUpdate != null) {
+                        Log.i(
+                            UpdateCheckLog.TAG,
+                            "persistAndReturn key=$cacheKey action=live_check_failed outcome=cached_update " +
+                                "versionLabel=${cachedUpdate.versionLabel} tag=${cachedUpdate.releaseTag}"
+                        )
+                        cachedUpdate
+                    } else {
+                        result
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.w(UpdateCheckLog.TAG, "failed updating cached UpdateAvailable state", e)
+            result
         }
-        return result
     }
 
     companion object {
         private val FULL_SHA_REGEX = Regex("^[0-9a-f]{40}$")
-        const val ONE_HOUR_MS: Long = 60L * 60L * 1000L
     }
 }

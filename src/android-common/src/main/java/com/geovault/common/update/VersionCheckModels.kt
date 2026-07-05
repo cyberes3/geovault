@@ -30,11 +30,6 @@ sealed class VersionCheckResult {
         val detail: String
     ) : VersionCheckResult()
 
-    data class Throttled(
-        val detail: String,
-        val lastCheckedAtMs: Long?
-    ) : VersionCheckResult()
-
     data class CheckFailed(
         val detail: String,
         val cause: Throwable? = null
