@@ -1,6 +1,8 @@
 package com.geovault.tracker.presentation
 
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.RemoteTrackPointAdmissionDiagnostics
+import com.geovault.tracker.policy.RemoteTrackPointAdmissionStage
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointSource
 
@@ -22,6 +24,21 @@ object TrackerMapPointEventReducer {
         val state = input.state
         val point = input.point
         val route = TrackerMapPointRouter.route(point, input.sessionPlan)
+        // ADMISSION-PIPELINE DIAGNOSTICS: visibility-routing and publish are the last two stages
+        // of the remote-point admission pipeline (see RemoteTrackPointAdmissionPipeline); only
+        // REMOTE_STREAM points are in scope for "is streaming not updating" diagnosis — local GPS
+        // overlay routing is a separate, already-well-understood concern.
+        if (point.source == TrackPointSource.REMOTE_STREAM) {
+            if (route.accepted) {
+                RemoteTrackPointAdmissionDiagnostics.recordAccepted(
+                    RemoteTrackPointAdmissionStage.PUBLISH, route.normalizedTrackerId
+                )
+            } else {
+                RemoteTrackPointAdmissionDiagnostics.recordRejected(
+                    RemoteTrackPointAdmissionStage.VISIBILITY_ROUTING, "not_in_display_scope", point.trackId
+                )
+            }
+        }
         if (!route.accepted) {
             return TrackerMapPointReductionResult(
                 acceptedBySourcePolicy = false,

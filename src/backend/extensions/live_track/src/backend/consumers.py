@@ -8,6 +8,7 @@ from django.contrib.auth.models import AnonymousUser
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from geo_lib.websocket.force_disconnect import user_sockets_group_name
 
 logger = get_tagged_logger(__name__)
 
@@ -21,6 +22,7 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         path = self.scope.get("path", "unknown")
         self.room_group_name = None
+        self.user_sockets_group_name = None
         try:
             self.user = self.scope.get("user")
             if self.user is None:
@@ -33,7 +35,15 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
                 )
                 return
             self.room_group_name = f"live_track_{self.user.id}"
+            self.user_sockets_group_name = user_sockets_group_name(self.user.id)
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            # Also join the cross-consumer group used to force-disconnect this user's sockets
+            # on auth revocation (logout, API key delete, OAuth revoke). Without this, a
+            # revoked credential's live-tracking stream would keep working until the client
+            # happened to reconnect on its own.
+            await self.channel_layer.group_add(
+                self.user_sockets_group_name, self.channel_name
+            )
             await self.accept()
             logger.info(
                 "WebSocket trackers-live connected: %s - %s - %s",
@@ -52,6 +62,10 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
                 await self.channel_layer.group_discard(
                     self.room_group_name, self.channel_name
                 )
+            if self.user_sockets_group_name:
+                await self.channel_layer.group_discard(
+                    self.user_sockets_group_name, self.channel_name
+                )
             try:
                 await self.close(code=1011)
             except Exception:
@@ -61,6 +75,10 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
         if hasattr(self, "room_group_name") and self.room_group_name:
             await self.channel_layer.group_discard(
                 self.room_group_name, self.channel_name
+            )
+        if hasattr(self, "user_sockets_group_name") and self.user_sockets_group_name:
+            await self.channel_layer.group_discard(
+                self.user_sockets_group_name, self.channel_name
             )
         logger.info(
             "WebSocket trackers-live disconnected: %s - %s - code %s",
@@ -77,3 +95,12 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
             "type": "track_updated",
             "data": data,
         }))
+
+    async def force_disconnect(self, event):
+        """Close this socket in response to auth revocation (logout, API key delete, OAuth revoke)."""
+        logger.info(
+            "WebSocket trackers-live force-disconnected: user %s - reason: %s",
+            getattr(self.user, "id", "unknown"),
+            event.get("reason", ""),
+        )
+        await self.close(code=4001)

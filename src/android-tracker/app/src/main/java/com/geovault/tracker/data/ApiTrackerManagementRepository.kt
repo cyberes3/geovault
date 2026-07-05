@@ -6,6 +6,7 @@ import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.NaturalSort
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
+import com.geovault.common.concurrent.SingleFlightGate
 import com.geovault.tracker.AppError
 import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.Group
@@ -50,7 +51,7 @@ class ApiTrackerManagementRepository(
     @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
     @Volatile private var cachedApiBaseUrl: String? = null
     @Volatile private var cachedApi: TrackerApi? = null
-    private val readRequestGate = SingleFlightRequestGate<String, Any>()
+    private val readRequestGate = SingleFlightGate<String, Any>()
 
     override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
         if (!forceRefresh) {

@@ -31,6 +31,27 @@ data class TrackerMapUiState(
     val liveActiveFitEnabled: Boolean = false,
     val isGeometryLoading: Boolean = false,
     val renderMetadataSignature: String = "",
+    /**
+     * Set by [TrackerMapRosterRemovalPolicy] the moment the tracker that was displayed drops
+     * out of the roster (deleted, unshared, or an accepted share revoked server-side). Cleared
+     * automatically the next time `displayedTrackerId` is set to something new. Surfaces a
+     * "no longer available" status in place of the stale name instead of leaving the map
+     * frozen on the last-known marker/trail while `streamingStatus` still nominally reads Live.
+     */
+    val unavailableTrackerNotice: TrackerMapUnavailableNotice? = null,
+    /**
+     * Set by [com.geovault.tracker.map.MapStreamingSubsystem]'s heartbeat collector via
+     * [StreamingBatteryOptimizationHintPolicy] when a wanted subscription has been unhealthy for
+     * an extended period despite a usable network being present -- a strong signal the OEM is
+     * background-killing the streaming connection. Surfaces a dismissible, actionable hint on
+     * the map instead of the failure only being visible in capture logs.
+     */
+    val batteryOptimizationHintVisible: Boolean = false,
+)
+
+data class TrackerMapUnavailableNotice(
+    val trackerId: String,
+    val trackerName: String,
 )
 
 data class TrackerMapRenderPackage(

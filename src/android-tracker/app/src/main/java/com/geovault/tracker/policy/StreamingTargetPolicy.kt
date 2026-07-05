@@ -21,4 +21,17 @@ object StreamingTargetPolicy {
         val excludedIds = normalizeTrackerIds(input.locallyRecordedTrackerIds)
         return normalizeTrackerIds(input.requestedTrackerIds) - excludedIds
     }
+
+    /**
+     * Shared single-tracker decision used by both [com.geovault.tracker.presentation.TrackerMapSessionProjector]
+     * (SINGLE_SESSION mode) and `TrackerParamsStreamingController`: viewing the user's own
+     * selected tracker is always history-only (backed by the local GPS feed / local Room queue),
+     * never a remote websocket subscription — regardless of which surface is asking. Unifying
+     * this here means the map and the params screen can never disagree about this one rule.
+     */
+    fun isHistoryOnlyView(viewedTrackerId: String, selectedTrackerId: String): Boolean {
+        val viewed = viewedTrackerId.trim()
+        val selected = selectedTrackerId.trim()
+        return viewed.isNotEmpty() && selected.isNotEmpty() && viewed == selected
+    }
 }

@@ -9,14 +9,32 @@ import com.geovault.tracker.presentation.*
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.ui.TrackerPointTimestamps
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.maplibre.android.geometry.LatLngBounds
 
 internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
-    internal fun publishRenderPackage() {
+    /**
+     * RENDER-SYNC UNDER LOCK: reading `rt.historyRepository.snapshots` and writing the derived
+     * trail fields onto `rt.uiStateMutable` must happen as one atomic step under
+     * `rt.trailReloadMutex` — the same mutex [MapTrailReloadSubsystem]'s reload commit and
+     * [MapStreamingSubsystem]'s live-point consumer already share. Without this, a render
+     * publish that read the history repository *before* a reload's commit finishes can still be
+     * mid-flight when that commit lands, then overwrite the just-committed fresh trail with its
+     * own now-stale computed value once it finally writes — a narrow but real last-writer-wins
+     * regression. Building the whole read-then-write step inside the lock (rather than just the
+     * write) is what actually closes the race: the reload side does the equivalent
+     * read-compute-write atomically too, so whichever side acquires the lock first always
+     * observes — and leaves behind — a fully consistent state for the other.
+     */
+    internal suspend fun publishRenderPackage() {
         val nowMs = System.currentTimeMillis()
-        val effectiveSession = buildCurrentEffectiveSession(nowMs = nowMs)
+        val effectiveSession = rt.trailReloadMutex.withLock {
+            buildCurrentEffectiveSession(nowMs = nowMs).also {
+                syncUiStateTrailsFromHistorySnapshot(it.snapshot.uiState)
+            }
+        }
         val snapshot = effectiveSession.snapshot
-        syncUiStateTrailsFromHistorySnapshot(snapshot.uiState)
         val nextRenderState = buildMapRenderState(snapshot)
         val nextBounds = trailBoundsOrNull(snapshot, nowMs)
         val nextSelectionLockPoint = rt.context.selectionLockPointOrNull(snapshot)
@@ -200,17 +218,31 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         )
     }
 
+    /**
+     * MUTEX-GUARDED REPROJECT: must go through [rt.trailReloadMutex] like every other
+     * trail-mutating path ([publishRenderPackage], [MapTrailReloadSubsystem]'s reload commit,
+     * the live-point consumer in [MapStreamingSubsystem]). This used to read
+     * `rt.uiStateMutable.value`, compute a plan, and blind-assign `rt.uiStateMutable.value = ...`
+     * with no lock at all -- a reload commit landing in between the read and the write would be
+     * silently reverted by this function's now-stale write (last-writer-wins), exactly the class
+     * of race the mutex exists to prevent. Recomputing against `latest` inside `update {}` (rather
+     * than the `state`/`plan` snapshotted before acquiring the lock) additionally protects against
+     * any non-mutex-guarded field changes that land while this suspends waiting for the lock.
+     */
     internal fun reprojectTrailsFromRepository(reason: String) {
         if (!rt.mapReady || !rt.mapSurfaceVisible) return
-        val snapshots = rt.historyRepository.snapshots.value
-        if (snapshots.isEmpty()) return
-        val state = rt.uiStateMutable.value
-        val plan = rt.projectSession(state)
-        GeoVaultCaptureLog.d(
-            TrackerMapViewModel.TAG,
-            "map_update vm_trail_reproject reason=$reason snapshot_keys=${snapshots.size}",
-        )
-        rt.uiStateMutable.value = applyHistoryTrailsToState(state, plan)
+        if (rt.historyRepository.snapshots.value.isEmpty()) return
+        rt.ports.viewModelScope.launch {
+            rt.trailReloadMutex.withLock {
+                val snapshots = rt.historyRepository.snapshots.value
+                if (snapshots.isEmpty()) return@withLock
+                GeoVaultCaptureLog.d(
+                    TrackerMapViewModel.TAG,
+                    "map_update vm_trail_reproject reason=$reason snapshot_keys=${snapshots.size}",
+                )
+                rt.uiStateMutable.update { latest -> applyHistoryTrailsToState(latest, rt.projectSession(latest)) }
+            }
+        }
     }
 
     internal fun applyHistoryTrailsToState(

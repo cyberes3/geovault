@@ -69,6 +69,37 @@ object RetrofitClient {
             .build()
     }
 
+    /**
+     * An authenticated [OkHttpClient] tuned for a long-lived WebSocket connection rather than
+     * ordinary request/response calls: `readTimeout` and `pingInterval` need to be much larger
+     * than [getAuthenticatedOkHttpClient]'s request-oriented defaults (a WS read timeout is
+     * really "how long with no frame at all before we consider the socket dead", not a
+     * per-request budget), while still carrying the same bearer-token/refresh interceptor and
+     * authenticator so a socket upgrade request is authenticated the same way any other API call
+     * is. Auth failures are handled by the caller's own `onFailure`/close-code classification (a
+     * WebSocket connection doesn't get a mid-stream 401 retried the way an HTTP call does), so
+     * the interceptor's role here is limited to attaching a valid token to the initial upgrade
+     * request.
+     */
+    fun newAuthenticatedWebSocketClient(
+        context: Context,
+        readTimeoutSec: Long = 90L,
+        writeTimeoutSec: Long = 10L,
+        connectTimeoutSec: Long = 15L,
+        pingIntervalSec: Long = 30L,
+    ): OkHttpClient {
+        val appContext = context.applicationContext
+        return OkHttpClient.Builder()
+            .addInterceptor(authTokenInterceptor(appContext))
+            .addInterceptor(authFailureInterceptor(appContext))
+            .authenticator(tokenAuthenticator(appContext))
+            .connectTimeout(connectTimeoutSec, TimeUnit.SECONDS)
+            .readTimeout(readTimeoutSec, TimeUnit.SECONDS)
+            .writeTimeout(writeTimeoutSec, TimeUnit.SECONDS)
+            .pingInterval(pingIntervalSec, TimeUnit.SECONDS)
+            .build()
+    }
+
     private fun buildHttpClient(context: Context): OkHttpClient {
         val appContext = context.applicationContext
         return OkHttpClient.Builder()

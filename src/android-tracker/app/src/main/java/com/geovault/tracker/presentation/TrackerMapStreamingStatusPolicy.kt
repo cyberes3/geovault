@@ -1,7 +1,7 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
-import com.geovault.tracker.services.StreamingHealth
+import com.geovault.tracker.streaming.ConnectionPhase
+import com.geovault.tracker.streaming.LiveStreamSubscriptionState
 
 enum class TrackerMapStreamingStatus {
     INACTIVE,
@@ -18,13 +18,13 @@ data class TrackerMapStreamingStatusUiModel(
 )
 
 /**
- * STREAM-STATE-MACHINE: status mapping is now driven by [StreamingHealth] directly so consumers
- * see distinct UI for "starting fresh" vs "reconnecting after a drop", and so a permanent
- * failure is not silently lumped in with a transient blip.
+ * STREAM-STATE-MACHINE: status mapping is driven by [ConnectionPhase] directly so consumers see
+ * distinct UI for "starting fresh" vs "reconnecting after a drop", and so a permanent failure is
+ * not silently lumped in with a transient blip.
  */
 object TrackerMapStreamingStatusPolicy {
     fun resolve(
-        snapshot: LiveStreamRuntimeSnapshot,
+        snapshot: LiveStreamSubscriptionState,
         streamTargetIds: Set<String>,
     ): TrackerMapStreamingStatusUiModel {
         val desiredIds = normalizeIds(streamTargetIds)
@@ -32,12 +32,12 @@ object TrackerMapStreamingStatusPolicy {
             return TrackerMapStreamingStatusUiModel()
         }
 
-        val activeIds = normalizeIds(snapshot.activeTrackerIds)
+        val activeIds = normalizeIds(snapshot.activeTargets)
         val activeCount = activeIds.size
         val desiredMatched = desiredIds.isNotEmpty() && activeIds == desiredIds
 
-        return when (snapshot.health) {
-            StreamingHealth.Starting -> TrackerMapStreamingStatusUiModel(
+        return when (snapshot.connection) {
+            ConnectionPhase.STARTING -> TrackerMapStreamingStatusUiModel(
                 status = if (activeCount > 0) {
                     TrackerMapStreamingStatus.RECONNECTING
                 } else {
@@ -45,11 +45,11 @@ object TrackerMapStreamingStatusPolicy {
                 },
                 activeCount = activeCount,
             )
-            StreamingHealth.Reconnecting -> TrackerMapStreamingStatusUiModel(
+            ConnectionPhase.RECONNECTING -> TrackerMapStreamingStatusUiModel(
                 status = TrackerMapStreamingStatus.RECONNECTING,
                 activeCount = activeCount,
             )
-            StreamingHealth.Running -> TrackerMapStreamingStatusUiModel(
+            ConnectionPhase.RUNNING -> TrackerMapStreamingStatusUiModel(
                 status = if (desiredMatched) {
                     TrackerMapStreamingStatus.LIVE
                 } else if (activeCount > 0) {
@@ -59,13 +59,13 @@ object TrackerMapStreamingStatusPolicy {
                 },
                 activeCount = activeCount,
             )
-            StreamingHealth.FailedTransient,
-            StreamingHealth.FailedPermanent -> TrackerMapStreamingStatusUiModel(
+            ConnectionPhase.FAILED_TRANSIENT,
+            ConnectionPhase.FAILED_PERMANENT -> TrackerMapStreamingStatusUiModel(
                 status = TrackerMapStreamingStatus.FAILED,
                 activeCount = activeCount,
                 failureReason = snapshot.failureReason,
             )
-            StreamingHealth.Stopped -> TrackerMapStreamingStatusUiModel()
+            ConnectionPhase.IDLE -> TrackerMapStreamingStatusUiModel()
         }
     }
 

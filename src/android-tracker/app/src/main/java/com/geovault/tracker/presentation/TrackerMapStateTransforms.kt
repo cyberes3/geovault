@@ -7,6 +7,7 @@ import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.db.QueuedLocation
+import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.maplibre.android.geometry.LatLng
@@ -69,10 +70,11 @@ object TrackerMapStateTransforms {
         remoteLastPoints: Map<String, TrackPointEvent> = emptyMap(),
         activeStreamedTrackerIds: Set<String> = emptySet(),
         streamTargetIds: Set<String> = emptySet(),
-        acceptedRemoteTrackerIds: Set<String> = TrackerMapRemoteAcceptancePolicy.mergedAcceptedRemoteTrackerIds(
-            streamTargetIds = streamTargetIds,
-            activeStreamedTrackerIds = activeStreamedTrackerIds,
-        ),
+        // DEAD-CODE REMOVAL: previously routed through
+        // `TrackerMapRemoteAcceptancePolicy.mergedAcceptedRemoteTrackerIds`, whose result
+        // (`projectedIds + (activeIds intersect projectedIds)`) always equals `projectedIds` —
+        // `activeStreamedTrackerIds` never actually changed the outcome.
+        acceptedRemoteTrackerIds: Set<String> = StreamingTargetPolicy.normalizeTrackerIds(streamTargetIds),
         allQueueTrailsByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
         trackerColorById: Map<String, String> = emptyMap(),
         trackerDisplayNameById: Map<String, String> = emptyMap(),

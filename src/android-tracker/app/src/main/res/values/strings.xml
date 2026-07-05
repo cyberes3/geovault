@@ -199,6 +199,7 @@
     <string name="map_mode_all">All</string>
     <string name="map_mode_group">Group</string>
     <string name="select_tracker">Select a tracker</string>
+    <string name="tracker_no_longer_available">No longer available</string>
     <string name="all_trackers">All Trackers</string>
     <string name="groups_title">Groups</string>
     <string name="show_selected_tracker">Show selected tracker</string>
@@ -243,6 +244,9 @@
     <string name="map_status_accuracy_ok">GPS accuracy ok</string>
     <string name="map_status_accuracy_low">GPS accuracy low</string>
     <string name="map_gps_accuracy_warning_content_description">GPS accuracy warning</string>
+    <string name="map_battery_optimization_hint_message">Live streaming keeps disconnecting. Your device\'s battery optimization may be closing the connection in the background.</string>
+    <string name="map_battery_optimization_hint_action">Disable battery optimizations</string>
+    <string name="map_battery_optimization_hint_dismiss">Dismiss</string>
 
     <string name="trackers_screen_title">Trackers</string>
     <string name="trackers_placeholder_signed_out">Sign in to manage trackers and groups.</string>

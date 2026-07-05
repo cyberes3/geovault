@@ -44,8 +44,11 @@ class StreamingSessionGuardTest {
     }
 
     @Test
-    fun assess_returnsTrackerSetChanged_whenTargetSetDiffers() {
-        val guard = StreamingSessionGuard(staleAfterMs = 45_000L, elapsedRealtimeMs = { 1_000L })
+    fun assess_returnsHotUpdate_whenTargetSetDiffersButSocketHealthy() {
+        var nowMs = 1_000L
+        val guard = StreamingSessionGuard(staleAfterMs = 45_000L, elapsedRealtimeMs = { nowMs })
+        guard.markConnected()
+        nowMs += 1_500L
 
         val assessment = guard.assess(
             requestedTrackerIds = setOf("a", "b"),
@@ -54,6 +57,37 @@ class StreamingSessionGuardTest {
             lifecycleState = TrackingLifecycleState.RUNNING
         )
 
-        assertEquals(StreamingSessionReuseDecision.TRACKER_SET_CHANGED, assessment.decision)
+        assertEquals(StreamingSessionReuseDecision.HOT_UPDATE, assessment.decision)
+    }
+
+    @Test
+    fun assess_returnsNoSocket_whenTargetSetDiffersAndNoSocket() {
+        val guard = StreamingSessionGuard(staleAfterMs = 45_000L, elapsedRealtimeMs = { 1_000L })
+
+        val assessment = guard.assess(
+            requestedTrackerIds = setOf("a", "b"),
+            currentTrackerIds = setOf("a"),
+            hasSocket = false,
+            lifecycleState = TrackingLifecycleState.RUNNING
+        )
+
+        assertEquals(StreamingSessionReuseDecision.NO_SOCKET, assessment.decision)
+    }
+
+    @Test
+    fun assess_returnsStaleActivity_whenTargetSetDiffersButActivityTooOld() {
+        var nowMs = 10_000L
+        val guard = StreamingSessionGuard(staleAfterMs = 2_000L, elapsedRealtimeMs = { nowMs })
+        guard.markConnected()
+        nowMs += 5_000L
+
+        val assessment = guard.assess(
+            requestedTrackerIds = setOf("a", "b"),
+            currentTrackerIds = setOf("a"),
+            hasSocket = true,
+            lifecycleState = TrackingLifecycleState.RUNNING
+        )
+
+        assertEquals(StreamingSessionReuseDecision.STALE_ACTIVITY, assessment.decision)
     }
 }

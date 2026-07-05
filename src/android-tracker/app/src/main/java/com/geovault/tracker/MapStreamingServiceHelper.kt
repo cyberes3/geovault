@@ -5,6 +5,7 @@ import android.content.Intent
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.core.content.ContextCompat
 import com.geovault.tracker.policy.StreamingTargetPolicy
+import com.geovault.tracker.streaming.StreamingStartRetryScheduler
 
 internal sealed class MapStreamingStartResult {
     data class Started(val trackerIds: Set<String>) : MapStreamingStartResult()
@@ -51,13 +52,18 @@ internal object MapStreamingServiceHelper {
             runCatching { ContextCompat.startForegroundService(app, intent) }
                 .exceptionOrNull()
                 ?.let { inner ->
-                    GeoVaultCaptureLog.e("MapStreamingServiceHelper", "FGS start also failed", inner)
-                    clearPersistedTargets(app)
+                    // FGS-START-RESTRICTION PARITY: both startService and startForegroundService
+                    // were denied — likely a reconcile tick landing while fully backgrounded.
+                    // Keep the persisted targets (the retry needs them) and schedule an
+                    // AlarmManager-driven retry instead of dropping the request outright.
+                    GeoVaultCaptureLog.e("MapStreamingServiceHelper", "FGS start also failed; scheduling retry", inner)
+                    StreamingStartRetryScheduler.scheduleRetry(app, cleanedIds, trackerName)
                     return MapStreamingStartResult.Failed(
                         inner.message ?: "Unable to start live streaming service"
                     )
                 }
         }
+        StreamingStartRetryScheduler.resetFailureCount(app)
         return MapStreamingStartResult.Started(cleanedIds)
     }
 
@@ -120,6 +126,31 @@ internal object MapStreamingServiceHelper {
     /** Clears persisted targets without sending ACTION_STOP (used when subscribe intent is invalidated before WS comes up). */
     internal fun clearPersistedStreamingTargets(context: Context) {
         clearPersistedTargets(context.applicationContext)
+    }
+
+    /**
+     * COLD-START ROSTER VALIDATION: drops any persisted target id absent from [validTrackerIds],
+     * re-persisting only the survivors (or clearing entirely if none survive). Called once the
+     * roster is first available after process start so a persisted target for a tracker deleted
+     * or unshared while the app/service was dead never gets re-subscribed — that subscription
+     * would sit forever rejected server-side with nothing to ever clean it up otherwise, since
+     * the normal live roster-removal path only reacts to an id disappearing *while already
+     * known*, not one that was already gone before this process ever saw the roster.
+     */
+    internal fun pruneInvalidPersistedTargets(context: Context, validTrackerIds: Set<String>): Set<String> {
+        val (currentIds, name) = persistedTargets(context)
+        val prunedIds = currentIds.intersect(validTrackerIds)
+        if (prunedIds == currentIds) return currentIds
+        if (prunedIds.isEmpty()) {
+            clearPersistedTargets(context.applicationContext)
+        } else {
+            persistTargets(context.applicationContext, prunedIds, name)
+        }
+        GeoVaultCaptureLog.i(
+            "MapStreamingServiceHelper",
+            "map_update cold_start_prune_invalid_targets before=${currentIds.sorted()} after=${prunedIds.sorted()}",
+        )
+        return prunedIds
     }
 
     private fun clearPersistedTargets(context: Context) {

@@ -19,6 +19,8 @@ import com.geovault.tracker.history.TrackerHistoryRepository
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
 import com.geovault.tracker.settings.TrackerSettingsWritePolicy
+import com.geovault.tracker.streaming.LiveStreamBootstrapper
+import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
 
 class TrackerAppServices private constructor(private val appContext: Context) {
 
@@ -65,6 +67,17 @@ class TrackerAppServices private constructor(private val appContext: Context) {
         TrackerSessionBootstrap(trackerBootstrapOrchestrator)
     }
 
+    /**
+     * Process-wide single source of truth for "what should be streaming" / "what is actually
+     * streaming" (see [LiveStreamSubscriptionRepository]'s class doc). Seeded from persisted
+     * service state on first access so the very first Map/Params reconcile tick after a cold
+     * start already knows about a session the service restored via `START_STICKY`, instead of
+     * racing it with an empty lease.
+     */
+    private val liveStreamSubscriptionRepository by lazy {
+        LiveStreamSubscriptionRepository(appContext).also { LiveStreamBootstrapper.bootstrap(it) }
+    }
+
     fun initialAuthController(): CommonInitialAuthController = authController
 
     fun trackerSettingsRepository(): TrackerSettingsRepository = trackerSettingsRepository
@@ -82,6 +95,8 @@ class TrackerAppServices private constructor(private val appContext: Context) {
     fun trackerBootstrapOrchestrator(): TrackerBootstrapOrchestrator = trackerBootstrapOrchestrator
 
     fun trackerSessionBootstrap(): TrackerSessionBootstrap = trackerSessionBootstrap
+
+    internal fun liveStreamSubscriptionRepository(): LiveStreamSubscriptionRepository = liveStreamSubscriptionRepository
 
     companion object {
         @Volatile

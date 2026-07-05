@@ -1,15 +1,11 @@
 package com.geovault.tracker
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.IBinder
 import com.geovault.common.logging.GeoVaultCaptureLog
-import androidx.core.app.NotificationCompat
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.tracker.location.StreamingFailureClass
@@ -21,17 +17,17 @@ import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.policy.TrackPointQuality
 import com.geovault.tracker.policy.RemoteStreamIngressPolicy
-import com.geovault.tracker.policy.RemoteTrackPointIngress
+import com.geovault.tracker.policy.RemoteTrackPointAdmissionPipeline
 import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.WireTimestampNormalizer
-import com.geovault.tracker.presentation.LiveTrackStreamingTargetCoordinator
-import com.geovault.tracker.services.LiveStreamRuntimeStateStore
-import com.geovault.tracker.services.StreamingHealth
-import com.geovault.tracker.services.StreamingIntent
+import com.geovault.tracker.di.TrackerAppServices
+import com.geovault.tracker.streaming.ConnectionPhase
+import com.geovault.tracker.streaming.ReapplyReason
+import com.geovault.tracker.streaming.StreamingConfig
+import com.geovault.tracker.streaming.StreamingDiagnostics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -42,7 +38,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -79,8 +74,137 @@ class LiveTrackStreamingService : Service() {
     private var wsHttpClient: OkHttpClient? = null
     private val connectionSessionId = AtomicLong(0L)
     private var lifecycle = StreamingLifecycleState()
+    private var retryStreakStartElapsedMs: Long = 0L
     private val sessionGuard = StreamingSessionGuard.createDefault()
     private val stateLock = Any()
+    private val repository by lazy { TrackerAppServices.from(application).liveStreamSubscriptionRepository() }
+    private val notifier by lazy { StreamingForegroundNotifier(this, NOTIFICATION_ID, CHANNEL_ID) }
+    private var livenessWatchdogJob: Job? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startLivenessWatchdog()
+        registerNetworkCallback()
+    }
+
+    /**
+     * CONNECTIVITY-DRIVEN-FAST-RECONNECT: without this, a transient failure while offline waits
+     * out its full exponential backoff even after connectivity is restored well before the
+     * backoff timer elapses (e.g. brief tunnel/elevator loss). Cancels the pending backoff and
+     * retries immediately once the OS reports a usable network again, but only while we are
+     * actually mid-backoff (FAILED with no socket) — a no-op the rest of the time.
+     */
+    private fun registerNetworkCallback() {
+        val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                triggerFastReconnectIfWaiting()
+            }
+        }
+        runCatching { connectivityManager.registerDefaultNetworkCallback(callback) }
+            .onSuccess { networkCallback = callback }
+            .onFailure { e -> GeoVaultCaptureLog.w(TAG, "Failed to register connectivity callback", e) }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val callback = networkCallback ?: return
+        networkCallback = null
+        val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+    }
+
+    private fun triggerFastReconnectIfWaiting() {
+        val trackerIds = currentTrackerIdsSnapshot()
+        if (trackerIds.isEmpty()) return
+        // CONNECTJOB-SYNCHRONIZATION: the check, `connectJob` cancel+reassign, and session bump
+        // all happen inside one `stateLock` acquisition. `setLease`'s dispatch race in
+        // `LiveStreamSubscriptionRepository` was the same underlying issue: `Job.cancel()` is
+        // only cooperative, so without a lock, this connectivity-callback thread could race
+        // `startStreamingTargets` (main) or the watchdog (serviceScope/IO) and stomp whichever
+        // one's `connectJob` reference was written last, orphaning the other's job instead of
+        // actually cancelling it.
+        synchronized(stateLock) {
+            val isMidBackoff = lifecycle.lifecycleState == TrackingLifecycleState.FAILED && webSocket == null
+            if (!isMidBackoff) return
+            connectJob?.cancel()
+            val sessionId = connectionSessionId.incrementAndGet()
+            connectJob = serviceScope.launch { connect(sessionId) }
+        }
+        GeoVaultCaptureLog.i(TAG, "Network became available while awaiting backoff; fast-reconnecting")
+        applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, trackerIds)
+    }
+
+    /**
+     * LIVENESS-WATCHDOG: [StreamingSessionGuard]'s staleness check previously only ran inside
+     * [startStreamingTargets], i.e. only when a *new* start request arrived. If the merged
+     * target set never changes while the connection has silently gone quiet (socket still open
+     * per OkHttp — pings keep it alive — but the server has stopped delivering `track_updated`
+     * messages), nothing ever re-evaluates staleness and the session can sit dead indefinitely.
+     * This loop polls [sessionGuard] on a fixed interval for the lifetime of the service and
+     * forces a reconnect the moment a RUNNING session goes stale, independent of whether any
+     * owner's lease has changed.
+     */
+    private fun startLivenessWatchdog() {
+        livenessWatchdogJob = serviceScope.launch {
+            while (isActive) {
+                delay(StreamingConfig.livenessWatchdogIntervalMs)
+                checkLivenessAndReconnectIfStale()
+            }
+        }
+    }
+
+    private fun checkLivenessAndReconnectIfStale() {
+        val trackerIds = currentTrackerIdsSnapshot()
+        if (trackerIds.isEmpty()) return
+        val assessment = synchronized(stateLock) {
+            if (lifecycle.lifecycleState != TrackingLifecycleState.RUNNING) return
+            sessionGuard.assess(
+                requestedTrackerIds = trackerIds,
+                currentTrackerIds = trackerIds,
+                hasSocket = webSocket != null,
+                lifecycleState = lifecycle.lifecycleState,
+            )
+        }
+        if (assessment.decision != StreamingSessionReuseDecision.STALE_ACTIVITY) return
+        StreamingDiagnostics.logWatchdogReconnect(assessment.activityAgeMs ?: 0L)
+        forceReconnectDueToStaleness()
+    }
+
+    /**
+     * Reconnects the current session in place without touching leases: the target set hasn't
+     * changed, only the connection turned out to be a zombie. [LiveStreamSubscriptionRepository.requestReapply]
+     * is still notified so a caller that keyed a UI recovery action off "did the repository ever
+     * re-apply" (e.g. resume-from-background) observes this reconnect too.
+     *
+     * TOCTOU GUARD: [checkLivenessAndReconnectIfStale] made its staleness decision moments ago,
+     * on a stale snapshot, before releasing `stateLock`. By the time this function actually runs
+     * (same coroutine, but nothing prevents `stopStreamingSession`/`onStartCommand` from running
+     * first on the main thread), the session it decided to reconnect may already have been torn
+     * down. Re-validating `currentTrackerIds`/`lifecycleState` here -- atomically with the
+     * socket null-out -- stops a stale decision from resurrecting `RECONNECTING` state (and a
+     * phantom `connectJob`) for a stream the user already stopped, with nothing left afterward
+     * to ever correct it back to STOPPED.
+     */
+    private fun forceReconnectDueToStaleness() {
+        val socket = synchronized(stateLock) {
+            if (currentTrackerIds.isEmpty() || lifecycle.lifecycleState != TrackingLifecycleState.RUNNING) {
+                return
+            }
+            connectJob?.cancel()
+            webSocket.also {
+                webSocket = null
+                sessionGuard.markDisconnected()
+            }
+        }
+        runCatching { socket?.close(1000, "watchdog_stale_reconnect") }
+        val sessionId = connectionSessionId.incrementAndGet()
+        val trackerIds = currentTrackerIdsSnapshot()
+        if (trackerIds.isEmpty()) return
+        applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, trackerIds)
+        synchronized(stateLock) { connectJob = serviceScope.launch { connect(sessionId) } }
+        repository.requestReapply(ReapplyReason.STALE_CONNECTION)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
@@ -127,10 +251,7 @@ class LiveTrackStreamingService : Service() {
                 val shouldReshow = snapshot.second.isNotEmpty() &&
                     snapshot.first != TrackingLifecycleState.STOPPED
                 if (shouldReshow) {
-                    ensureStreamingChannel()
-                    startForegroundForStreaming(
-                        createNotification(snapshot.third, snapshot.second.size),
-                    )
+                    notifier.show(snapshot.third, snapshot.second.size)
                 }
             }
 
@@ -145,10 +266,7 @@ class LiveTrackStreamingService : Service() {
 
     private fun startStreamingTargets(trackerIds: Set<String>, trackerName: String?) {
         val effectiveTrackerIds = trackerIds.mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
-        ensureStreamingChannel()
-        startForegroundForStreaming(
-            createNotification(trackerName, effectiveTrackerIds.size),
-        )
+        notifier.show(trackerName, effectiveTrackerIds.size)
         if (effectiveTrackerIds.isEmpty()) {
             RemoteStreamIngressPolicy.updateSubscribedTracks(emptySet())
             if (trackerIds.isEmpty()) {
@@ -161,21 +279,62 @@ class LiveTrackStreamingService : Service() {
                 MapStreamingServiceHelper.clearPersistedStreamingTargets(this)
                 applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
             }
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            terminateStreaming()
             return
         }
-        RemoteStreamIngressPolicy.updateSubscribedTracks(effectiveTrackerIds)
-
+        val previousTrackerIds = currentTrackerIdsSnapshot()
+        // ATOMIC ASSESS-AND-COMMIT: previously `assess()` ran under `stateLock`, the lock was
+        // released, and only *then* did the REUSE/HOT_UPDATE branch re-acquire the lock to
+        // commit `currentTrackerIds`/`currentTrackerName` and unconditionally report
+        // `Connected` — with no re-check of `webSocket`/lifecycle in between. A concurrent
+        // watchdog-triggered `forceReconnectDueToStaleness` (a different coroutine on
+        // `serviceScope`) could null out `webSocket` in exactly that gap, and this path would
+        // still report `Connected`/RUNNING to the repository with no live socket underneath —
+        // a plausible cause of a tracker silently going stale on the map with nothing to ever
+        // correct the mismatched RUNNING state. Deciding and committing inside one lock
+        // acquisition means whichever side (this commit, or the watchdog's null-out) runs first
+        // is the one the other observes.
         val assessment = synchronized(stateLock) {
-            sessionGuard.assess(
+            val current = sessionGuard.assess(
                 requestedTrackerIds = effectiveTrackerIds,
                 currentTrackerIds = currentTrackerIds,
                 hasSocket = webSocket != null,
                 lifecycleState = lifecycle.lifecycleState
             )
+            if (current.decision == StreamingSessionReuseDecision.REUSE ||
+                current.decision == StreamingSessionReuseDecision.HOT_UPDATE
+            ) {
+                // ROSTER-DELTA-HOT-UPDATE: the backend fans every subscribed-account update out
+                // over one socket and the admission pipeline's subscription-scope stage filters
+                // client-side against `currentTrackerIdsSnapshot` (see `publishRemotePoint`), so
+                // a roster change never needs a new socket — just swap the filter set and
+                // notification text in place. This also fixes the previous REUSE-path bug where
+                // a same-decision reconnect skipped updating `currentTrackerName` entirely,
+                // leaving the notification's title stale even though it was re-rendered.
+                currentTrackerIds = effectiveTrackerIds
+                currentTrackerName = trackerName
+            }
+            current
         }
-        if (assessment.decision == StreamingSessionReuseDecision.REUSE) {
+        if (assessment.decision == StreamingSessionReuseDecision.REUSE ||
+            assessment.decision == StreamingSessionReuseDecision.HOT_UPDATE
+        ) {
+            // SUBSCRIPTION-SCOPE ORDERING: called only *after* `currentTrackerIds` was already
+            // committed above. `publishRemotePoint` gates admission on a fresh
+            // `currentTrackerIdsSnapshot()` read per point -- that gate, not this policy's own
+            // `subscribedTrackIds` bookkeeping, is what actually decides whether a point for a
+            // dropped tracker reaches processing. Calling this before the commit left a window
+            // where a point for a tracker being dropped could still pass the (stale, wider)
+            // scope check on the OkHttp thread while this policy had already reset that
+            // tracker's per-track anchor state, treating an about-to-be-rejected point as a
+            // fresh stream start. Committing the scope first closes that window entirely.
+            RemoteStreamIngressPolicy.updateSubscribedTracks(effectiveTrackerIds)
+            if (assessment.decision == StreamingSessionReuseDecision.HOT_UPDATE) {
+                StreamingDiagnostics.logRosterDeltaHotUpdate(
+                    previousCount = previousTrackerIds.size,
+                    nextCount = effectiveTrackerIds.size,
+                )
+            }
             applyLifecycleEvent(StreamingLifecycleEvent.Connected, effectiveTrackerIds)
             return
         }
@@ -185,10 +344,11 @@ class LiveTrackStreamingService : Service() {
         synchronized(stateLock) {
             currentTrackerIds = effectiveTrackerIds
             currentTrackerName = trackerName
+            connectJob?.cancel()
+            val sessionId = connectionSessionId.incrementAndGet()
+            connectJob = serviceScope.launch { connect(sessionId) }
         }
-        val sessionId = connectionSessionId.incrementAndGet()
-        connectJob?.cancel()
-        connectJob = serviceScope.launch { connect(sessionId) }
+        RemoteStreamIngressPolicy.updateSubscribedTracks(effectiveTrackerIds)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -197,17 +357,42 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun stopStreamingSession() {
-        LiveTrackStreamingTargetCoordinator.clearInMemoryRequests()
+        repository.clearLeasesWithoutDispatch()
         MapStreamingServiceHelper.clearPersistedStreamingTargets(this)
         disconnectWebSocket()
-        connectionSessionId.incrementAndGet()
+        // STALE-ADMISSION-STATE: previously left RemoteStreamIngressPolicy's per-track ordering
+        // bookkeeping untouched on stop, so it could linger across a full session boundary. Clear
+        // it unconditionally here rather than relying on the next connect()'s
+        // startSubscriptionSession() call, since a subsequent REUSE/HOT_UPDATE decision short-
+        // circuits before that call ever runs.
+        RemoteStreamIngressPolicy.updateSubscribedTracks(emptySet())
         applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
+        terminateStreaming()
+    }
+
+    /**
+     * TERMINAL-TEARDOWN GUARD: every path that decides the service is permanently done
+     * (PERMANENT failure escalation, exhausted retry budget, no tracker selected, explicit
+     * stop) must cancel any in-flight `connectJob` and bump `connectionSessionId` *before*
+     * calling `stopSelf()`. `Job.cancel()` is only cooperative — an orphaned job (one mid-`delay()`
+     * in [scheduleReconnect], or one that lost a `connectJob`-reference race to a concurrent
+     * caller) could otherwise wake up and attempt a connect *after* this function already
+     * decided the service is finished, briefly resurrecting a stream the rest of the app
+     * believes is stopped.
+     */
+    private fun terminateStreaming() {
+        synchronized(stateLock) {
+            connectJob?.cancel()
+            connectJob = null
+            connectionSessionId.incrementAndGet()
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
-        connectJob?.cancel()
+        livenessWatchdogJob?.cancel()
+        unregisterNetworkCallback()
         disconnectWebSocket()
         applyLifecycleEvent(StreamingLifecycleEvent.StopRequested, emptySet())
         // OKHTTP-LIFECYCLE: OkHttpClient owns a connection pool and a dispatcher executor. If we
@@ -254,8 +439,7 @@ class LiveTrackStreamingService : Service() {
             val reason = getString(R.string.error_server_unreachable)
             emitStreamingError(reason)
             applyLifecycleEvent(StreamingLifecycleEvent.PermanentFailure, currentTrackerIdsSnapshot(), reason)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            terminateStreaming()
             return
         }
         val wsScheme = when {
@@ -270,7 +454,6 @@ class LiveTrackStreamingService : Service() {
             .build()
         val trackerIdsSnapshot = currentTrackerIdsSnapshot()
         val listener = TrackersWebSocketListener(
-            filterTrackIds = ::currentTrackerIdsSnapshot,
             onOpened = { openedSocket, response ->
                 handleSocketOpened(sessionId, openedSocket, response)
             },
@@ -332,22 +515,45 @@ class LiveTrackStreamingService : Service() {
                 activeTrackerIds = trackerIdsSnapshot,
                 failureReason = failureReason,
             )
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            terminateStreaming()
+            return
+        }
+        // BOUNDED-RETRY: cap total wall-clock time spent retrying TRANSIENT/AUTH failures so a
+        // permanently-unreachable server doesn't retry a background service forever. The streak
+        // start is recorded the first time this failure run began (see [applyLifecycleEvent],
+        // which resets it back to 0 on the next successful Connected/StartRequested/Stop).
+        val streakStartElapsedMs = synchronized(stateLock) {
+            if (retryStreakStartElapsedMs == 0L) {
+                retryStreakStartElapsedMs = android.os.SystemClock.elapsedRealtime()
+            }
+            retryStreakStartElapsedMs
+        }
+        val streakAgeMs = android.os.SystemClock.elapsedRealtime() - streakStartElapsedMs
+        if (streakAgeMs > StreamingConfig.maxTransientRetryDurationMs) {
+            GeoVaultCaptureLog.w(TAG, "Transient retry budget exhausted after ${streakAgeMs}ms; escalating to permanent")
+            applyLifecycleEvent(
+                event = StreamingLifecycleEvent.PermanentFailure,
+                activeTrackerIds = trackerIdsSnapshot,
+                failureReason = failureReason,
+            )
+            terminateStreaming()
             return
         }
         applyLifecycleEvent(StreamingLifecycleEvent.RecoverableFailure, trackerIdsSnapshot, failureReason)
-        connectJob?.cancel()
-        connectJob = serviceScope.launch {
-            val delayMs = StreamingLifecycleOrchestrator.nextReconnectDelayMs(
-                reconnectAttempt = synchronized(stateLock) { lifecycle.reconnectAttempt },
-                failureClass = failureClass
-            )
-            delay(delayMs)
-            val retryTrackerIds = currentTrackerIdsSnapshot()
-            if (sessionId == connectionSessionId.get() && retryTrackerIds.isNotEmpty()) {
-                applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, retryTrackerIds)
-                connect(sessionId)
+        synchronized(stateLock) {
+            connectJob?.cancel()
+            connectJob = serviceScope.launch {
+                val delayMs = StreamingLifecycleOrchestrator.nextReconnectDelayMs(
+                    reconnectAttempt = synchronized(stateLock) { lifecycle.reconnectAttempt },
+                    failureClass = failureClass,
+                    jitterFraction = StreamingConfig.retryJitterFraction,
+                )
+                delay(delayMs)
+                val retryTrackerIds = currentTrackerIdsSnapshot()
+                if (sessionId == connectionSessionId.get() && retryTrackerIds.isNotEmpty()) {
+                    applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, retryTrackerIds)
+                    connect(sessionId)
+                }
             }
         }
     }
@@ -367,14 +573,27 @@ class LiveTrackStreamingService : Service() {
             )
             return
         }
-        val acceptedOpen = synchronized(stateLock) {
-            sessionId == connectionSessionId.get() &&
+        // ATOMIC MARK-CONNECTED: `sessionGuard.markConnected()` must land inside the same lock
+        // acquisition as the accept check, and `currentTrackerIds` must be read from that same
+        // critical section, not re-fetched afterward via a second `currentTrackerIdsSnapshot()`
+        // call. Otherwise a concurrent teardown (`forceReconnectDueToStaleness`,
+        // `disconnectWebSocket`) landing between the check and the mark could stamp "fresh
+        // activity" on a session already being torn down, or this could report `Connected` with
+        // a tracker set that changed out from under it in the gap.
+        val acceptedTrackerIds = synchronized(stateLock) {
+            val accepted = sessionId == connectionSessionId.get() &&
                 webSocket === socket &&
                 currentTrackerIds.isNotEmpty()
+            if (accepted) {
+                sessionGuard.markConnected()
+                currentTrackerIds
+            } else {
+                null
+            }
         }
-        if (acceptedOpen) {
-            sessionGuard.markConnected()
-            applyLifecycleEvent(StreamingLifecycleEvent.Connected, currentTrackerIdsSnapshot())
+        if (acceptedTrackerIds != null) {
+            RemoteStreamIngressPolicy.markConnected(System.currentTimeMillis())
+            applyLifecycleEvent(StreamingLifecycleEvent.Connected, acceptedTrackerIds)
         } else {
             socket.close(1000, "stale_session")
         }
@@ -424,9 +643,9 @@ class LiveTrackStreamingService : Service() {
     }
 
     private fun disconnectWebSocket() {
-        connectJob?.cancel()
-        connectJob = null
         val socket = synchronized(stateLock) {
+            connectJob?.cancel()
+            connectJob = null
             webSocket.also {
                 webSocket = null
                 sessionGuard.markDisconnected()
@@ -443,13 +662,11 @@ class LiveTrackStreamingService : Service() {
             if (existingClient != null) {
                 return existingClient
             }
-            return RetrofitClient.getAuthenticatedOkHttpClient(applicationContext).newBuilder()
-                .readTimeout(WS_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .writeTimeout(10, TimeUnit.SECONDS)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .pingInterval(WS_PING_INTERVAL_SEC, TimeUnit.SECONDS)
-                .build()
-                .also { builtClient -> wsHttpClient = builtClient }
+            return RetrofitClient.newAuthenticatedWebSocketClient(
+                context = applicationContext,
+                readTimeoutSec = WS_READ_TIMEOUT_SEC,
+                pingIntervalSec = WS_PING_INTERVAL_SEC,
+            ).also { builtClient -> wsHttpClient = builtClient }
         }
     }
 
@@ -466,48 +683,39 @@ class LiveTrackStreamingService : Service() {
             )
             val running = lifecycle.lifecycleState == TrackingLifecycleState.RUNNING
             isRunning = running
+            // BOUNDED-RETRY: a fresh connect attempt, a successful connect, or a deliberate stop
+            // all end the current failure streak — the retry-duration ceiling in
+            // [scheduleReconnect] only bounds *consecutive* failures, not the service's total
+            // lifetime.
+            when (event) {
+                StreamingLifecycleEvent.StartRequested,
+                StreamingLifecycleEvent.Connected,
+                StreamingLifecycleEvent.StopRequested,
+                StreamingLifecycleEvent.PermanentFailure -> retryStreakStartElapsedMs = 0L
+                StreamingLifecycleEvent.RetryRequested,
+                StreamingLifecycleEvent.RecoverableFailure -> Unit
+            }
             lifecycle.failureReason
         }
-        // STREAM-STATE-MACHINE: translate the lifecycle-orchestrator event into the (intent,
-        // health) projection. The orchestrator stays in charge of retry-attempt counting and the
-        // coarse lifecycle-state shape; we only adapt its output to the snapshot model here.
-        val nextIntent = nextStreamingIntent(event = event, activeTrackerIds = activeTrackerIds)
-        val nextHealth = nextStreamingHealth(event = event)
-        LiveStreamRuntimeStateStore.update { previous ->
-            previous.copy(
-                intent = nextIntent ?: previous.intent,
-                health = nextHealth,
-                activeTrackerIds = activeTrackerIds,
-                failureReason = snapshot,
-            )
-        }
+        // STREAM-STATE-MACHINE: the service only reports the connection-health axis; "do we want
+        // a subscription" is owned exclusively by the repository's leases (see
+        // LiveStreamSubscriptionState.wantsSubscription), so there is no parallel "intent" to
+        // keep in sync here anymore.
+        repository.reportConnectionUpdate(
+            connection = nextConnectionPhase(event),
+            activeTargets = activeTrackerIds,
+            failureReason = snapshot,
+        )
     }
 
-    private fun nextStreamingIntent(
-        event: StreamingLifecycleEvent,
-        activeTrackerIds: Set<String>,
-    ): StreamingIntent? {
+    private fun nextConnectionPhase(event: StreamingLifecycleEvent): ConnectionPhase {
         return when (event) {
-            StreamingLifecycleEvent.StartRequested -> StreamingIntent.Wanted(activeTrackerIds)
-            StreamingLifecycleEvent.StopRequested -> StreamingIntent.Idle
-            // Retry / Connected / RecoverableFailure / PermanentFailure all preserve the prior
-            // intent so consumers can keep telling "we still want to be subscribed but the
-            // current attempt is unhealthy" apart from "we deliberately stopped".
-            StreamingLifecycleEvent.RetryRequested,
-            StreamingLifecycleEvent.Connected,
-            StreamingLifecycleEvent.RecoverableFailure,
-            StreamingLifecycleEvent.PermanentFailure -> null
-        }
-    }
-
-    private fun nextStreamingHealth(event: StreamingLifecycleEvent): StreamingHealth {
-        return when (event) {
-            StreamingLifecycleEvent.StartRequested -> StreamingHealth.Starting
-            StreamingLifecycleEvent.RetryRequested -> StreamingHealth.Reconnecting
-            StreamingLifecycleEvent.Connected -> StreamingHealth.Running
-            StreamingLifecycleEvent.RecoverableFailure -> StreamingHealth.FailedTransient
-            StreamingLifecycleEvent.PermanentFailure -> StreamingHealth.FailedPermanent
-            StreamingLifecycleEvent.StopRequested -> StreamingHealth.Stopped
+            StreamingLifecycleEvent.StartRequested -> ConnectionPhase.STARTING
+            StreamingLifecycleEvent.RetryRequested -> ConnectionPhase.RECONNECTING
+            StreamingLifecycleEvent.Connected -> ConnectionPhase.RUNNING
+            StreamingLifecycleEvent.RecoverableFailure -> ConnectionPhase.FAILED_TRANSIENT
+            StreamingLifecycleEvent.PermanentFailure -> ConnectionPhase.FAILED_PERMANENT
+            StreamingLifecycleEvent.StopRequested -> ConnectionPhase.IDLE
         }
     }
 
@@ -532,8 +740,8 @@ class LiveTrackStreamingService : Service() {
             "map_update stream_point_received track=${point.trackId.trim()} session=$sessionId " +
                 "ts=${point.timestampMs} lat=${point.lat} lon=${point.lon} acc=${point.accuracyMeters}"
         )
-        val acceptedEvent = RemoteTrackPointIngress.process(
-            TrackPointEvent(
+        val acceptedEvent = RemoteTrackPointAdmissionPipeline.process(
+            event = TrackPointEvent(
                 source = TrackPointSource.REMOTE_STREAM,
                 trackId = point.trackId,
                 lon = point.lon,
@@ -542,7 +750,8 @@ class LiveTrackStreamingService : Service() {
                 accuracyMeters = point.accuracyMeters,
                 propsJson = point.propsJson,
                 quality = TrackPointQuality.HIGH_CONFIDENCE
-            )
+            ),
+            subscriptionScope = currentTrackerIdsSnapshot(),
         ) ?: run {
             GeoVaultCaptureLog.d(
                 TAG,
@@ -586,121 +795,19 @@ class LiveTrackStreamingService : Service() {
     }
 
     /**
-     * After `startForegroundService`, the system requires `startForeground` within a short
-     * deadline. Use a minimal notification if the primary notification cannot be posted.
-     */
-    private fun startForegroundForStreaming(notification: Notification) {
-        try {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
-        } catch (e: Exception) {
-            GeoVaultCaptureLog.e(TAG, "startForeground failed; using minimal FGS notification", e)
-            runCatching {
-                startForeground(
-                    NOTIFICATION_ID,
-                    createMinimalStreamingNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            }.exceptionOrNull()?.let { inner ->
-                GeoVaultCaptureLog.e(TAG, "Minimal startForeground also failed", inner)
-                throw inner
-            }
-        }
-    }
-
-    private fun createMinimalStreamingNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.live_track_streaming_title))
-            .setContentText(getString(R.string.live_track_streaming_text_anon))
-            .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
-    }
-
-    private fun ensureStreamingChannel() {
-        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.live_track_streaming_channel),
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = getString(R.string.live_track_streaming_channel_description)
-            setShowBadge(false)
-            enableVibration(false)
-            setSound(null, null)
-            enableLights(false)
-            setLockscreenVisibility(Notification.VISIBILITY_SECRET)
-            setBypassDnd(false)
-        }
-        manager.createNotificationChannel(channel)
-    }
-
-    private fun createNotification(trackerName: String?, trackerCount: Int): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val stopIntent = Intent(this, LiveTrackStreamingService::class.java).apply { action = ACTION_STOP }
-        val stopPendingIntent = PendingIntent.getService(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val dismissIntent = Intent(NOTIFICATION_DISMISSED_ACTION).apply { setPackage(packageName) }
-        val dismissPendingIntent = PendingIntent.getBroadcast(
-            this,
-            2,
-            dismissIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val title = getString(R.string.live_track_streaming_title)
-        val text = when {
-            trackerName?.isNotBlank() == true -> getString(R.string.live_track_streaming_text, trackerName)
-            trackerCount > 1 -> String.format(Locale.US, getString(R.string.live_track_streaming_text_many), trackerCount)
-            else -> getString(R.string.live_track_streaming_text_anon)
-        }
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentIntent(pendingIntent)
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                getString(R.string.streaming_notification_action_stop),
-                stopPendingIntent,
-            )
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setDeleteIntent(dismissPendingIntent)
-            .build()
-    }
-
-    /**
      * WebSocket listener for the live-tracker stream.
      *
-     * - [filterTrackIds] is a per-message supplier so subscription changes (e.g. group expansion,
-     *   tracker reselection) take effect on the next inbound message rather than on the next
-     *   reconnect. This eliminates the rare drop/admit anomalies that occurred when the service
-     *   updated its target set without tearing the socket down.
+     * - Subscription-scope filtering (is this track id one we currently care about) previously
+     *   happened here, silently and with no diagnostics, before [onPoint] was even called. That
+     *   stage now lives in [RemoteTrackPointAdmissionPipeline.process] — called from
+     *   [publishRemotePoint] against a fresh [currentTrackerIdsSnapshot] per point — so every
+     *   parsed message reaches [onPoint] and a scope-rejected point still gets recorded in
+     *   [com.geovault.tracker.policy.RemoteTrackPointAdmissionDiagnostics] instead of vanishing.
      * - Failure classification is done here (where the HTTP response code is available) and
      *   handed back to the service via [onDisconnect], which lets the service apply the AUTH
      *   retry budget and pick the right user-facing copy without inspecting OkHttp internals.
      */
     private class TrackersWebSocketListener(
-        private val filterTrackIds: () -> Set<String>,
         // NAMING: these lambdas previously shadowed the WebSocketListener override names (onOpen,
         // onClosed). Kotlin resolves bare `onOpen(...)` to the member function, so the override
         // recursed into itself and crashed with StackOverflowError. Renamed to avoid the clash.
@@ -716,9 +823,7 @@ class LiveTrackStreamingService : Service() {
         override fun onMessage(webSocket: WebSocket, text: String) {
             try {
                 onActivity(webSocket)
-                val liveFilter = filterTrackIds()
                 StreamingTrackPointParser.parseTrackUpdatedMessages(text)
-                    .filter { it.trackId in liveFilter }
                     .forEach { point -> onPoint(webSocket, point) }
             } catch (e: Exception) {
                 GeoVaultCaptureLog.e(TAG, "Parse track_updated failed", e)
@@ -738,7 +843,26 @@ class LiveTrackStreamingService : Service() {
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            onDisconnect(webSocket, StreamingFailureClass.TRANSIENT, reason.takeIf { it.isNotBlank() })
+            // CLOSE-CODE-CLASSIFICATION: this previously ignored `code` entirely and always
+            // reported TRANSIENT, so a server-initiated policy-violation close (e.g. a revoked
+            // session) retried forever exactly like a network blip. Mirror onFailure's HTTP-code
+            // classification with the WS close-code (RFC 6455) equivalents.
+            onDisconnect(webSocket, classifyCloseCode(code), reason.takeIf { it.isNotBlank() })
+        }
+
+        private fun classifyCloseCode(code: Int): StreamingFailureClass {
+            return when (code) {
+                // Policy Violation: the server closed the connection because it rejected who we
+                // are (typically a revoked/invalidated session), not because of a network issue.
+                1008 -> StreamingFailureClass.AUTH
+                // Unsupported Data / Message Too Big / Mandatory Extension / Internal Error /
+                // Service Restart / Try Again Later / Bad Gateway: all point at the server side,
+                // not our credentials — worth retrying, never worth burning the AUTH budget on.
+                1003, 1009, 1010, 1011, 1012, 1013, 1014 -> StreamingFailureClass.TRANSIENT
+                // Normal Closure / Going Away / no code supplied at all: routine teardown
+                // (server restart, load balancer recycle); always worth a transient retry.
+                else -> StreamingFailureClass.TRANSIENT
+            }
         }
 
         private fun classifyHttpCode(code: Int?): StreamingFailureClass {

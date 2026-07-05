@@ -1,58 +1,49 @@
 package com.geovault.tracker.presentation
 
-import android.content.Context
-import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
+import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
+import com.geovault.tracker.streaming.OwnerLease
+import com.geovault.tracker.streaming.StreamingOwner
 
 /**
- * Owns the map streaming request and delegates service ownership to [LiveTrackStreamingTargetCoordinator].
+ * Translates a resolved [TrackerMapStreamingPlan] into a [StreamingOwner.MAP] lease on
+ * [LiveStreamSubscriptionRepository]. Pure translation — all merge/dedupe/dispatch logic lives
+ * in the repository; this class only knows how to turn "here is what should be streamed right
+ * now" into "does the map want a lease, and if so, for what."
  *
- * COMBINED-RECONCILE: this class is intentionally pure with respect to dedupe — duplicate
- * back-to-back reconcile inputs are suppressed by the combined `distinctUntilChangedBy` flow in
- * [TrackerMapViewModel], and duplicate service-action dispatch is absorbed by
- * [LiveTrackStreamingTargetCoordinator]'s `lastAppliedIds` gate. The only state we keep here is
- * the map-ownership lease so a post-stop "restore selected tracker" hook can fire only when the
- * map (and not Tracker Params) was the active subscriber.
+ * Takes the resolved target ids as a plain parameter rather than a [TrackerMapUiState] on
+ * purpose: the caller always has a just-computed [TrackerMapStreamingPlan] in hand (the plan is
+ * the single source of truth for "what should be streamed"), so threading `state.streamTargetIds`
+ * through here as well would just be a second, independently-stale copy of the same decision.
  */
-class LiveTrackStreamingReconciler(
-    private val appContext: Context,
+internal class LiveTrackStreamingReconciler(
+    private val repository: LiveStreamSubscriptionRepository,
 ) {
-    private var mapStreamingLeaseActive: Boolean = false
+    /** True if the map currently holds a (possibly empty) [StreamingOwner.MAP] lease. */
+    fun hasMapStreamingLease(): Boolean = repository.state.value.leases[StreamingOwner.MAP] != null
 
-    fun hasMapStreamingLease(): Boolean = mapStreamingLeaseActive
-
+    /** Reads and clears the map's lease-held flag in one step; used to fire post-stop cleanup exactly once. */
     fun consumeStoppedMapStreamingLease(): Boolean {
-        val wasMapOwned = mapStreamingLeaseActive
-        mapStreamingLeaseActive = false
-        return wasMapOwned
+        val had = hasMapStreamingLease()
+        if (had) repository.setLease(StreamingOwner.MAP, null)
+        return had
     }
 
     /** Unconditional stop (e.g. map context reset). */
     fun stopForegroundStreaming() {
-        mapStreamingLeaseActive = false
-        LiveTrackStreamingTargetCoordinator.replaceRequest(
-            context = appContext,
-            owner = LiveTrackStreamingOwner.Map,
-            request = null,
-        )
-        LiveTrackStreamingTargetCoordinator.resetApplyGate()
+        repository.setLease(StreamingOwner.MAP, null)
     }
 
     fun reconcile(
-        state: TrackerMapUiState,
+        mode: TrackerMapDisplayMode,
+        remoteSubscriptionIds: Set<String>,
+        locallyRecordedTrackerId: String,
         effectiveDisplayedId: String,
         effectiveDisplayedName: String,
-        @Suppress("UNUSED_PARAMETER") streamRuntime: LiveStreamRuntimeSnapshot,
     ) {
-        // streamRuntime is intentionally part of the signature (not re-read from a global) so the
-        // reconciler observes whatever snapshot the caller paired with `state` — the combined
-        // reconcile flow guarantees these come from a single coherent tick. The reconciler itself
-        // does not branch on stream health today; that decision lives in the projector + the
-        // coordinator's lastAppliedIds gate.
-        val locallyRecordedTrackerId = state.runtime.locallyRecordedTrackerId
         val command = TrackerMapStreamingCoordinator.resolve(
             TrackerMapStreamingDecisionInput(
-                mode = state.mode,
-                streamTargetIds = state.streamTargetIds,
+                mode = mode,
+                streamTargetIds = remoteSubscriptionIds,
                 displayedTrackerId = effectiveDisplayedId,
                 displayedTrackerName = effectiveDisplayedName,
             )
@@ -60,41 +51,31 @@ class LiveTrackStreamingReconciler(
         when (command) {
             is TrackerMapStreamingCommand.Start -> {
                 // STREAMING EXCLUSION: the only tracker that should never be streamed is the
-                // locally-recorded one. Per-mode targeting is already encoded in command.trackerIds
-                // by the projector; the only thing this layer adds to the per-owner request is
-                // the locally-recorded id, so a parallel Params owner can't accidentally subscribe
-                // to the actively-recorded tracker via its half of the merged plan.
-                val result = LiveTrackStreamingTargetCoordinator.replaceRequest(
-                    context = appContext,
-                    owner = LiveTrackStreamingOwner.Map,
-                    request = LiveTrackStreamingTargetRequest(
+                // locally-recorded one. Per-mode targeting is already encoded in
+                // command.trackerIds by the projector; the only thing this layer adds to the
+                // per-owner lease is the locally-recorded id, so a parallel Params lease can't
+                // accidentally subscribe to the actively-recorded tracker via its half of the
+                // merged plan.
+                repository.setLease(
+                    StreamingOwner.MAP,
+                    OwnerLease(
                         trackerIds = command.trackerIds,
-                        trackerName = command.trackerName,
+                        displayName = command.trackerName,
                         locallyRecordedTrackerId = locallyRecordedTrackerId,
                     ),
                 )
-                if (result is StreamingSubscriptionApplyResult.Applied) {
-                    mapStreamingLeaseActive = command.trackerIds.isNotEmpty()
-                }
             }
             TrackerMapStreamingCommand.Stop -> {
-                LiveTrackStreamingTargetCoordinator.replaceRequest(
-                    context = appContext,
-                    owner = LiveTrackStreamingOwner.Map,
-                    request = null,
-                )
-                mapStreamingLeaseActive = false
+                repository.setLease(StreamingOwner.MAP, null)
             }
             TrackerMapStreamingCommand.NoOp -> {
-                // Single-session with no resolved displayed id cannot own a map streaming lease;
-                // Params may still keep streaming alone.
-                if (state.mode == TrackerMapDisplayMode.SINGLE_SESSION && effectiveDisplayedId.trim().isEmpty()) {
-                    LiveTrackStreamingTargetCoordinator.replaceRequest(
-                        context = appContext,
-                        owner = LiveTrackStreamingOwner.Map,
-                        request = null,
-                    )
-                    mapStreamingLeaseActive = false
+                // Single-session with no resolved displayed id yet cannot own a map streaming
+                // lease; Params may still keep streaming alone. Safe to call unconditionally —
+                // setLease(MAP, null) is a no-op dispatch when the map didn't hold a lease to
+                // begin with (including the very first reconcile tick at cold start, before the
+                // repository's bootstrap seed is consumed by a real lease).
+                if (mode == TrackerMapDisplayMode.SINGLE_SESSION && effectiveDisplayedId.trim().isEmpty()) {
+                    repository.setLease(StreamingOwner.MAP, null)
                 }
             }
         }

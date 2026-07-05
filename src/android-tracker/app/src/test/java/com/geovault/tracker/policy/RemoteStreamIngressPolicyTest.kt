@@ -110,6 +110,40 @@ class RemoteStreamIngressPolicyTest {
     }
 
     @Test
+    fun process_reconnectCatchupBacklog_isAcceptedWithinGraceWindow() {
+        // RECONNECT-CATCHUP-BACKLOG: a backlog replayed right after (re)connect is, by
+        // construction, older than the 30-minute freshness TTL for any stream that was down for a
+        // while. Without a grace window this point would be silently dropped as stale.
+        val connectedAtMs = 1_700_000_000_000L
+        val now = connectedAtMs + 5_000L
+        RemoteStreamIngressPolicy.markConnected(connectedAtMs)
+
+        val backlogged = RemoteStreamIngressPolicy.process(
+            event = remoteEvent(trackId = "t1", timestampMs = now - (45L * 60L * 1000L), lon = 10.0, lat = 20.0),
+            nowMs = now,
+        )
+
+        assertNotNull(backlogged)
+    }
+
+    @Test
+    fun process_staleBeyondGraceWindow_isStillRejected() {
+        // Steady-state freshness rejection must resume once the grace window elapses — the grace
+        // window is only meant to cover the immediate post-reconnect catch-up, not disable
+        // staleness detection for the rest of the session.
+        val connectedAtMs = 1_700_000_000_000L
+        val now = connectedAtMs + (3L * 60L * 1000L)
+        RemoteStreamIngressPolicy.markConnected(connectedAtMs)
+
+        val stale = RemoteStreamIngressPolicy.process(
+            event = remoteEvent(trackId = "t1", timestampMs = now - (45L * 60L * 1000L), lon = 10.0, lat = 20.0),
+            nowMs = now,
+        )
+
+        assertNull(stale)
+    }
+
+    @Test
     fun startSubscriptionSession_resetsCurrentSubscribedTrackState() {
         val now = 1_700_000_000_000L
         RemoteStreamIngressPolicy.updateSubscribedTracks(listOf("B"))

@@ -7,7 +7,6 @@ import org.junit.Test
 class TrackerMapTrailReloadGuardPolicyTest {
 
     private fun input(
-        force: Boolean = false,
         mode: TrackerMapDisplayMode = TrackerMapDisplayMode.SINGLE_SESSION,
         trailSize: Int = 50,
         runtimeRunning: Boolean = false,
@@ -18,7 +17,6 @@ class TrackerMapTrailReloadGuardPolicyTest {
             activeTrackerId = displayedTrackerId.trim(),
         ),
     ) = TrailReloadGuardInput(
-        force = force,
         mode = mode,
         trailSize = trailSize,
         runtimeRunning = runtimeRunning,
@@ -27,15 +25,13 @@ class TrackerMapTrailReloadGuardPolicyTest {
     )
 
     @Test
-    fun forceAlwaysProceeds() {
+    fun nonRecordingSourceProceedsEvenWhileRuntimeRunning() {
+        // The active-recording protection is scoped to the SINGLE_QUEUE source only —
+        // `runtimeRunning` alone (e.g. a different tracker is displayed while this device
+        // records) must not block a reload.
         assertTrue(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(force = true, runtimeRunning = true, trailSize = 100)
-            )
-        )
-        assertTrue(
-            TrackerMapTrailReloadGuardPolicy.shouldProceed(
-                input(force = true, trailSize = 100)
+                input(runtimeRunning = true, trailSize = 100)
             )
         )
     }
@@ -70,6 +66,10 @@ class TrackerMapTrailReloadGuardPolicyTest {
 
     @Test
     fun runtimeRunningSingleQueueSuppressesReload() {
+        // REGRESSION: previously a `force=true` reload reason (MapContextChange,
+        // RosterChanged, etc.) short-circuited straight past this check even when the
+        // displayed trail was the actively-recorded tracker's own live-updating queue.
+        // There is no longer any input capable of bypassing it.
         assertFalse(
             TrackerMapTrailReloadGuardPolicy.shouldProceed(
                 input(

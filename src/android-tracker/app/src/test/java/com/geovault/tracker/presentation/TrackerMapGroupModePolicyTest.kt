@@ -15,6 +15,7 @@ class TrackerMapGroupModePolicyTest {
             hiddenGroupIds = emptySet(),
             hiddenTrackIds = emptySet(),
             hiddenOwnerTrackerIds = emptySet(),
+            rosterTrackerIds = setOf("t1", "t2", "t3"),
             preferredGroupId = null,
             preferredTrackerId = "t3"
         )
@@ -31,6 +32,7 @@ class TrackerMapGroupModePolicyTest {
             hiddenGroupIds = emptySet(),
             hiddenTrackIds = setOf("t2"),
             hiddenOwnerTrackerIds = emptySet(),
+            rosterTrackerIds = setOf("t1", "t2", "t9"),
             preferredGroupId = null,
             preferredTrackerId = null
         )
@@ -48,6 +50,7 @@ class TrackerMapGroupModePolicyTest {
             hiddenGroupIds = setOf("gh"),
             hiddenTrackIds = emptySet(),
             hiddenOwnerTrackerIds = emptySet(),
+            rosterTrackerIds = setOf("x", "y", "v1"),
             preferredGroupId = null,
             preferredTrackerId = "x"
         )
@@ -64,6 +67,7 @@ class TrackerMapGroupModePolicyTest {
             hiddenGroupIds = emptySet(),
             hiddenTrackIds = emptySet(),
             hiddenOwnerTrackerIds = emptySet(),
+            rosterTrackerIds = setOf("t1", "t2"),
             preferredGroupId = "gb",
             preferredTrackerId = "t1"
         )
@@ -79,10 +83,51 @@ class TrackerMapGroupModePolicyTest {
             hiddenGroupIds = emptySet(),
             hiddenTrackIds = emptySet(),
             hiddenOwnerTrackerIds = setOf("t2"),
+            rosterTrackerIds = setOf("t1", "t2"),
             preferredGroupId = null,
             preferredTrackerId = null
         )
         assertEquals("ga", selection.groupId)
+        assertEquals(setOf("t1"), selection.trackerIds)
+    }
+
+    @Test
+    fun resolveSelection_excludesGroupMemberThatFellOutOfLiveRoster() {
+        // Regression test: `group.track_ids` is fetched independently of (and can lag behind)
+        // the tracker roster, so a deleted/unshared member can still be listed on the group
+        // for a while. Without intersecting against the live roster, that stale id would stay
+        // "eligible" -- re-subscribing the websocket to a dead tracker and leaving a ghost
+        // trail on screen for something TrackerMapRosterRemovalPolicy already tore down.
+        val group = group(id = "ga", name = "Alpha", trackIds = listOf("t1", "t2", "deleted"))
+        val selection = TrackerMapGroupModePolicy.resolveSelection(
+            groups = listOf(group),
+            hiddenGroupIds = emptySet(),
+            hiddenTrackIds = emptySet(),
+            hiddenOwnerTrackerIds = emptySet(),
+            rosterTrackerIds = setOf("t1", "t2"), // "deleted" no longer exists on the roster
+            preferredGroupId = null,
+            preferredTrackerId = null
+        )
+        assertEquals("ga", selection.groupId)
+        assertEquals(setOf("t1", "t2"), selection.trackerIds)
+    }
+
+    @Test
+    fun resolveSelection_groupBecomesIneligibleWhenAllMembersFellOutOfRoster() {
+        val stale = group(id = "gs", name = "Stale", trackIds = listOf("gone1", "gone2"))
+        val fresh = group(id = "gf", name = "Fresh", trackIds = listOf("t1"))
+        val selection = TrackerMapGroupModePolicy.resolveSelection(
+            groups = listOf(stale, fresh),
+            hiddenGroupIds = emptySet(),
+            hiddenTrackIds = emptySet(),
+            hiddenOwnerTrackerIds = emptySet(),
+            rosterTrackerIds = setOf("t1"),
+            preferredGroupId = "gs",
+            preferredTrackerId = null
+        )
+        // "gs" is explicitly preferred but has zero live members left, so it must not be
+        // selected -- resolution falls through to the only remaining eligible group.
+        assertEquals("gf", selection.groupId)
         assertEquals(setOf("t1"), selection.trackerIds)
     }
 

@@ -1,4 +1,4 @@
-package com.geovault.tracker.data
+package com.geovault.common.concurrent
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -8,9 +8,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 
 /**
- * Coalesces concurrent requests for the same key into one in-flight coroutine.
+ * Coalesces concurrent requests for the same key into one in-flight coroutine: if [run] is
+ * called again for a key that already has an operation in progress, the caller awaits that same
+ * operation instead of starting a duplicate one. Useful for de-duplicating bursts of identical
+ * network/database calls that land close together (e.g. several UI collectors independently
+ * requesting the same resource on screen entry).
  */
-class SingleFlightRequestGate<K, V>(
+class SingleFlightGate<K, V>(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     private val lock = Any()

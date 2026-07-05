@@ -57,7 +57,7 @@ object TrackerMapSessionProjector {
                 val id = displayedTrackerId
                 when {
                     id.isEmpty() -> emptySet()
-                    selectedTrackerId.isNotEmpty() && id == selectedTrackerId -> emptySet()
+                    StreamingTargetPolicy.isHistoryOnlyView(id, selectedTrackerId) -> emptySet()
                     else -> setOf(id)
                 }
             }
@@ -70,19 +70,13 @@ object TrackerMapSessionProjector {
                 locallyRecordedTrackerIds = localTrackerIds,
             )
         )
-        val acceptedRemoteTrackerIds = TrackerMapRemoteAcceptancePolicy
-            .mergedAcceptedRemoteTrackerIds(
-                streamTargetIds = remoteSubscriptionIds,
-                activeStreamedTrackerIds = input.activeStreamedTrackerIds,
-            )
-            .let { acceptedIds ->
-                StreamingTargetPolicy.remoteSubscriptionTargets(
-                    StreamingTargetPolicyInput(
-                        requestedTrackerIds = acceptedIds,
-                        locallyRecordedTrackerIds = localTrackerIds,
-                    )
-                )
-            }
+        // DEAD-CODE REMOVAL: accepted remote ids used to be computed via
+        // `TrackerMapRemoteAcceptancePolicy.mergedAcceptedRemoteTrackerIds`, but that function's
+        // result (`projectedIds + (activeIds intersect projectedIds)`) is always exactly
+        // `projectedIds` — a set unioned with its own subset is unchanged. `activeStreamedTrackerIds`
+        // was never actually able to widen or narrow the accepted set, so accepted ids are simply
+        // the (already locally-recorded-excluded) remote subscription ids.
+        val acceptedRemoteTrackerIds = remoteSubscriptionIds
         val localOverlayTrackerIds = when {
             localTrackerIds.isEmpty() -> emptySet()
             input.mode == TrackerMapDisplayMode.ALL_QUEUE -> localTrackerIds

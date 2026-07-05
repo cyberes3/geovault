@@ -537,6 +537,13 @@ private fun TrackerMapAuthenticatedContent(
             .fillMaxSize()
             .background(MaterialTheme.colors.background),
     ) {
+        // Rendered above the map (pushes it down slightly) rather than overlaid, so it never
+        // has to fight the top-left tracker chip or the top-right FAB column for screen space --
+        // both of those already claim the top edge of the map surface itself.
+        MapBatteryOptimizationHint(
+            visible = state.batteryOptimizationHintVisible,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
         Box(
             modifier = Modifier
                 .weight(1f)

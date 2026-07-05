@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.geovault.tracker.MapStreamingStartResult
 import com.geovault.tracker.MapStreamingStopResult
-import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
-import com.geovault.tracker.services.TrackingRuntimeSnapshot
-import kotlinx.coroutines.runBlocking
-import org.junit.After
+import com.geovault.tracker.streaming.LiveStreamServicePort
+import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
+import com.geovault.tracker.streaming.StreamingOwner
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,59 +18,60 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], manifest = Config.NONE)
 class LiveTrackStreamingReconcilerTest {
 
-    @After
-    fun tearDown() {
-        LiveTrackStreamingTargetCoordinator.resetForTests()
-    }
-
     @Test
-    fun reconcile_smokeServicePipeline() = runBlocking {
-        // COMBINED-RECONCILE: invalidateDedupe is gone — back-to-back identical reconciles are
-        // absorbed by the coordinator's `lastAppliedIds` gate. We only smoke the pipeline here to
-        // make sure repeated reconcile + stopForegroundStreaming calls don't crash.
+    fun reconcile_smokeServicePipeline() = runTest {
         val app: Context = ApplicationProvider.getApplicationContext()
-        val reconciler = LiveTrackStreamingReconciler(app)
-        val state = TrackerMapUiState(
+        val gateway = FakeLiveStreamServicePort()
+        val repository = LiveStreamSubscriptionRepository(
+            appContext = app,
+            servicePort = gateway,
+            dispatchDebounceMs = 0L,
+            scope = this,
+        )
+        val reconciler = LiveTrackStreamingReconciler(repository)
+        reconciler.reconcile(
             mode = TrackerMapDisplayMode.ALL_QUEUE,
-            streamTargetIds = emptySet(),
-            runtime = TrackingRuntimeSnapshot(selectedTrackerId = "t1", isRunning = false),
-        )
-        reconciler.reconcile(
-            state = state,
+            remoteSubscriptionIds = emptySet(),
+            locallyRecordedTrackerId = "",
             effectiveDisplayedId = "t1",
             effectiveDisplayedName = "One",
-            streamRuntime = LiveStreamRuntimeSnapshot(),
         )
         reconciler.reconcile(
-            state = state,
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            remoteSubscriptionIds = emptySet(),
+            locallyRecordedTrackerId = "",
             effectiveDisplayedId = "t1",
             effectiveDisplayedName = "One",
-            streamRuntime = LiveStreamRuntimeSnapshot(),
         )
         reconciler.stopForegroundStreaming()
+        advanceUntilIdle()
     }
 
     @Test
-    fun reconcile_startMarksMapLeaseUntilConsumed() {
+    fun reconcile_startMarksMapLeaseUntilConsumed() = runTest {
         val app: Context = ApplicationProvider.getApplicationContext()
-        val gateway = FakeLiveTrackStreamingServiceGateway()
-        LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
-        val reconciler = LiveTrackStreamingReconciler(app)
+        val gateway = FakeLiveStreamServicePort()
+        val repository = LiveStreamSubscriptionRepository(
+            appContext = app,
+            servicePort = gateway,
+            dispatchDebounceMs = 0L,
+            scope = this,
+        )
+        val reconciler = LiveTrackStreamingReconciler(repository)
 
         reconciler.reconcile(
-            state = TrackerMapUiState(
-                mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
-                streamTargetIds = setOf("remote"),
-                runtime = TrackingRuntimeSnapshot(selectedTrackerId = "selected"),
-            ),
+            mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
+            remoteSubscriptionIds = setOf("remote"),
+            locallyRecordedTrackerId = "",
             effectiveDisplayedId = "",
             effectiveDisplayedName = "",
-            streamRuntime = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
         assertEquals(listOf(setOf("remote")), gateway.startedIds)
         assertTrue(reconciler.hasMapStreamingLease())
@@ -78,32 +81,33 @@ class LiveTrackStreamingReconcilerTest {
     }
 
     @Test
-    fun reconcile_stopClearsMapLeaseWithoutConsume() {
+    fun reconcile_stopClearsMapLeaseWithoutConsume() = runTest {
         val app: Context = ApplicationProvider.getApplicationContext()
-        val gateway = FakeLiveTrackStreamingServiceGateway()
-        LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
-        val reconciler = LiveTrackStreamingReconciler(app)
+        val gateway = FakeLiveStreamServicePort()
+        val repository = LiveStreamSubscriptionRepository(
+            appContext = app,
+            servicePort = gateway,
+            dispatchDebounceMs = 0L,
+            scope = this,
+        )
+        val reconciler = LiveTrackStreamingReconciler(repository)
         reconciler.reconcile(
-            state = TrackerMapUiState(
-                mode = TrackerMapDisplayMode.ALL_QUEUE,
-                streamTargetIds = setOf("remote"),
-                runtime = TrackingRuntimeSnapshot(selectedTrackerId = "selected"),
-            ),
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            remoteSubscriptionIds = setOf("remote"),
+            locallyRecordedTrackerId = "",
             effectiveDisplayedId = "",
             effectiveDisplayedName = "",
-            streamRuntime = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
         reconciler.reconcile(
-            state = TrackerMapUiState(
-                mode = TrackerMapDisplayMode.ALL_QUEUE,
-                streamTargetIds = emptySet(),
-                runtime = TrackingRuntimeSnapshot(selectedTrackerId = "selected"),
-            ),
+            mode = TrackerMapDisplayMode.ALL_QUEUE,
+            remoteSubscriptionIds = emptySet(),
+            locallyRecordedTrackerId = "",
             effectiveDisplayedId = "",
             effectiveDisplayedName = "",
-            streamRuntime = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
         assertEquals(1, gateway.stopCount)
         assertFalse(reconciler.hasMapStreamingLease())
@@ -111,33 +115,37 @@ class LiveTrackStreamingReconcilerTest {
     }
 
     @Test
-    fun reconcile_doesNotStreamRuntimeSelectedTracker() {
+    fun reconcile_doesNotStreamRuntimeSelectedTracker() = runTest {
         val app: Context = ApplicationProvider.getApplicationContext()
-        val gateway = FakeLiveTrackStreamingServiceGateway()
-        LiveTrackStreamingTargetCoordinator.resetForTests(gateway)
-        val reconciler = LiveTrackStreamingReconciler(app)
+        val gateway = FakeLiveStreamServicePort()
+        val repository = LiveStreamSubscriptionRepository(
+            appContext = app,
+            servicePort = gateway,
+            dispatchDebounceMs = 0L,
+            scope = this,
+        )
+        val reconciler = LiveTrackStreamingReconciler(repository)
 
         reconciler.reconcile(
-            state = TrackerMapUiState(
-                mode = TrackerMapDisplayMode.SINGLE_SESSION,
-                runtime = TrackingRuntimeSnapshot(selectedTrackerId = "selected"),
-            ),
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            remoteSubscriptionIds = emptySet(),
+            locallyRecordedTrackerId = "",
             effectiveDisplayedId = "selected",
             effectiveDisplayedName = "Selected",
-            streamRuntime = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
         assertEquals(emptyList<Set<String>>(), gateway.startedIds)
     }
 
-    private class FakeLiveTrackStreamingServiceGateway : LiveTrackStreamingServiceGateway {
+    private class FakeLiveStreamServicePort : LiveStreamServicePort {
         val startedIds = mutableListOf<Set<String>>()
         var stopCount = 0
 
         override fun startStreaming(
             context: Context,
             trackerIds: Set<String>,
-            trackerName: String?
+            trackerName: String?,
         ): MapStreamingStartResult {
             startedIds += trackerIds
             return MapStreamingStartResult.Started(trackerIds)
@@ -146,6 +154,10 @@ class LiveTrackStreamingReconcilerTest {
         override fun stopStreaming(context: Context): MapStreamingStopResult {
             stopCount++
             return MapStreamingStopResult.Stopped
+        }
+
+        override fun persistedTargets(context: Context): Pair<Set<String>, String?> {
+            return emptySet<String>() to null
         }
     }
 }

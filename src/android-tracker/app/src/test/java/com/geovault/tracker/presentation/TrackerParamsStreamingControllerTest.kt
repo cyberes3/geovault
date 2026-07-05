@@ -2,146 +2,164 @@ package com.geovault.tracker.presentation
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
-import com.geovault.tracker.services.StreamingHealth
-import com.geovault.tracker.services.StreamingIntent
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.geovault.tracker.MapStreamingStartResult
+import com.geovault.tracker.MapStreamingStopResult
+import com.geovault.tracker.streaming.LiveStreamServicePort
+import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
+import com.geovault.tracker.streaming.StreamingOwner
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], manifest = Config.NONE)
 class TrackerParamsStreamingControllerTest {
 
     @Test
-    fun onScreenStarted_remoteTracker_replacesParamsLease() {
-        val sink = FakeLeaseSink()
-        val controller = controller(sink)
+    fun onScreenStarted_remoteTracker_setsParamsLease() = runTest {
+        val (controller, repository) = controller(this)
 
         controller.onScreenStarted(
             trackerId = "remote",
             trackerName = "Remote",
             selectedTrackerId = "local",
             trackingRunning = true,
-            streamSnapshot = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
-        assertEquals(setOf("remote"), sink.lastRequest?.trackerIds)
-        assertEquals("Remote", sink.lastRequest?.trackerName)
-        assertEquals("local", sink.lastRequest?.locallyRecordedTrackerId)
+        val lease = repository.state.value.leases[StreamingOwner.PARAMS]
+        assertEquals(setOf("remote"), lease?.trackerIds)
+        assertEquals("Remote", lease?.displayName)
+        assertEquals("local", lease?.locallyRecordedTrackerId)
     }
 
     @Test
-    fun onScreenStarted_selectedTrackerNotTracking_doesNotCreateParamsLease() {
-        val sink = FakeLeaseSink()
-        val controller = controller(sink)
+    fun onScreenStarted_notLocallyRecording_leavesLocallyRecordedTrackerIdNull() = runTest {
+        val (controller, repository) = controller(this)
+
+        controller.onScreenStarted(
+            trackerId = "remote",
+            trackerName = "Remote",
+            selectedTrackerId = "local",
+            trackingRunning = false,
+        )
+        advanceUntilIdle()
+
+        val lease = repository.state.value.leases[StreamingOwner.PARAMS]
+        assertEquals(setOf("remote"), lease?.trackerIds)
+        assertNull(lease?.locallyRecordedTrackerId)
+    }
+
+    @Test
+    fun onScreenStarted_viewingOwnSelectedTracker_doesNotCreateParamsLease() = runTest {
+        val (controller, repository) = controller(this)
 
         controller.onScreenStarted(
             trackerId = "selected",
             trackerName = "Selected",
             selectedTrackerId = "selected",
             trackingRunning = false,
-            streamSnapshot = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
-        assertEquals(null, sink.lastRequest)
+        assertNull(repository.state.value.leases[StreamingOwner.PARAMS])
     }
 
     @Test
-    fun onScreenStopped_startedFromIdle_clearsParamsLease() {
-        val sink = FakeLeaseSink()
-        val controller = controller(sink)
+    fun onScreenStarted_blankTrackerId_doesNotCreateParamsLease() = runTest {
+        val (controller, repository) = controller(this)
+
+        controller.onScreenStarted(
+            trackerId = "   ",
+            trackerName = "Ignored",
+            selectedTrackerId = "local",
+            trackingRunning = false,
+        )
+        advanceUntilIdle()
+
+        assertNull(repository.state.value.leases[StreamingOwner.PARAMS])
+    }
+
+    @Test
+    fun onScreenStopped_afterStarted_clearsParamsLease() = runTest {
+        val (controller, repository) = controller(this)
         controller.onScreenStarted(
             trackerId = "remote",
             trackerName = "Remote",
             selectedTrackerId = "",
             trackingRunning = false,
-            streamSnapshot = LiveStreamRuntimeSnapshot(),
         )
+        advanceUntilIdle()
 
         controller.onScreenStopped()
+        advanceUntilIdle()
 
-        assertEquals(null, sink.lastRequest)
+        assertNull(repository.state.value.leases[StreamingOwner.PARAMS])
     }
 
     @Test
-    fun onScreenStarted_sameSessionStreamChanged_reappliesWithResetGate() {
-        val streamState = MutableStateFlow(LiveStreamRuntimeSnapshot())
-        val sink = FakeLeaseSink()
-        val controller = controller(sink, streamState)
-        controller.onScreenStarted(
-            trackerId = "remote",
-            trackerName = "Remote",
-            selectedTrackerId = "",
-            trackingRunning = false,
-            streamSnapshot = streamState.value,
-        )
-        streamState.value = LiveStreamRuntimeSnapshot(
-            intent = StreamingIntent.Wanted(setOf("remote")),
-            health = StreamingHealth.Running,
-            activeTrackerIds = setOf("remote"),
-        )
+    fun onScreenStopped_withoutStarting_isANoOp() = runTest {
+        val (controller, repository) = controller(this)
 
-        controller.onScreenStarted(
-            trackerId = "remote",
-            trackerName = "Remote",
-            selectedTrackerId = "",
-            trackingRunning = false,
-            streamSnapshot = streamState.value,
-        )
+        controller.onScreenStopped()
+        advanceUntilIdle()
 
-        assertEquals(1, sink.resetApplyGateCount)
-        assertEquals(setOf("remote"), sink.lastRequest?.trackerIds)
+        assertNull(repository.state.value.leases[StreamingOwner.PARAMS])
     }
 
     @Test
-    fun onScreenStarted_startingStreamCountsAsExistingSubscription() {
-        val streamState = MutableStateFlow(
-            LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("remote")),
-                health = StreamingHealth.Starting,
-                activeTrackerIds = setOf("remote"),
-            )
-        )
-        val sink = FakeLeaseSink()
-        val controller = controller(sink, streamState)
-
+    fun onScreenStarted_switchingTracker_replacesParamsLease() = runTest {
+        val (controller, repository) = controller(this)
         controller.onScreenStarted(
-            trackerId = "remote",
-            trackerName = "Remote",
+            trackerId = "remoteA",
+            trackerName = "Remote A",
             selectedTrackerId = "",
             trackingRunning = false,
-            streamSnapshot = streamState.value,
         )
+        advanceUntilIdle()
 
-        assertEquals(null, sink.lastRequest)
+        controller.onScreenStarted(
+            trackerId = "remoteB",
+            trackerName = "Remote B",
+            selectedTrackerId = "",
+            trackingRunning = false,
+        )
+        advanceUntilIdle()
+
+        val lease = repository.state.value.leases[StreamingOwner.PARAMS]
+        assertEquals(setOf("remoteB"), lease?.trackerIds)
+        assertEquals("Remote B", lease?.displayName)
     }
 
     private fun controller(
-        sink: FakeLeaseSink,
-        streamState: MutableStateFlow<LiveStreamRuntimeSnapshot> = MutableStateFlow(LiveStreamRuntimeSnapshot()),
-    ): TrackerParamsStreamingController {
+        testScope: kotlinx.coroutines.test.TestScope,
+    ): Pair<TrackerParamsStreamingController, LiveStreamSubscriptionRepository> {
         val context: Context = ApplicationProvider.getApplicationContext()
-        return TrackerParamsStreamingController(
+        val repository = LiveStreamSubscriptionRepository(
             appContext = context,
-            streamState = streamState,
-            leaseSink = sink,
+            servicePort = NoOpLiveStreamServicePort,
+            dispatchDebounceMs = 0L,
+            scope = testScope,
         )
+        return TrackerParamsStreamingController(repository) to repository
     }
 
-    private class FakeLeaseSink : TrackerParamsStreamingLeaseSink {
-        var resetApplyGateCount: Int = 0
-        var lastRequest: LiveTrackStreamingTargetRequest? = null
+    private object NoOpLiveStreamServicePort : LiveStreamServicePort {
+        override fun startStreaming(
+            context: Context,
+            trackerIds: Set<String>,
+            trackerName: String?,
+        ): MapStreamingStartResult = MapStreamingStartResult.Started(trackerIds)
 
-        override fun resetApplyGate() {
-            resetApplyGateCount += 1
-        }
+        override fun stopStreaming(context: Context): MapStreamingStopResult = MapStreamingStopResult.Stopped
 
-        override fun replaceParamsRequest(context: Context, request: LiveTrackStreamingTargetRequest?) {
-            lastRequest = request
-        }
+        override fun persistedTargets(context: Context): Pair<Set<String>, String?> = emptySet<String>() to null
     }
 }

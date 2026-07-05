@@ -1,9 +1,8 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.concurrent.SingleFlightGate
+import com.geovault.common.concurrent.TimeWindowedCache
 import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.data.SingleFlightRequestGate
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Dedupes bursty map warmup requests for a short session window.
@@ -12,43 +11,28 @@ import kotlinx.coroutines.sync.withLock
  * multiple times while preserving fresh fetches once the window expires.
  */
 class TrackerMapSessionRequestDeduper(
-    private val dedupeWindowMs: Long = 4_000L,
-    private val nowMsProvider: () -> Long = { System.currentTimeMillis() },
+    dedupeWindowMs: Long = 4_000L,
+    nowMsProvider: () -> Long = { System.currentTimeMillis() },
 ) {
-    private data class CacheEntry(
-        val loadedAtMs: Long,
-        val value: Any,
-    )
-
-    private val cacheMutex = Mutex()
-    private val resultCache = mutableMapOf<String, CacheEntry>()
-    private val gate = SingleFlightRequestGate<String, Any>()
+    private val resultCache = TimeWindowedCache<String, Any>(windowMs = dedupeWindowMs, nowMsProvider = nowMsProvider)
+    private val gate = SingleFlightGate<String, Any>()
 
     suspend fun <T : Any> loadOnce(
         key: String,
         loader: suspend () -> RepositoryResult<T>
     ): RepositoryResult<T> {
-        val now = nowMsProvider()
-        val cached = cacheMutex.withLock { resultCache[key] }
-        if (cached != null && now - cached.loadedAtMs <= dedupeWindowMs) {
+        resultCache.get(key)?.let { cached ->
             @Suppress("UNCHECKED_CAST")
-            return RepositoryResult.Success(cached.value as T)
+            return RepositoryResult.Success(cached as T)
         }
         @Suppress("UNCHECKED_CAST")
         return gate.run(key) {
-            val recheckNow = nowMsProvider()
-            val rechecked = cacheMutex.withLock { resultCache[key] }
-            if (rechecked != null && recheckNow - rechecked.loadedAtMs <= dedupeWindowMs) {
-                return@run RepositoryResult.Success(rechecked.value) as Any
+            resultCache.get(key)?.let { rechecked ->
+                return@run RepositoryResult.Success(rechecked) as Any
             }
             when (val result = loader()) {
                 is RepositoryResult.Success -> {
-                    cacheMutex.withLock {
-                        resultCache[key] = CacheEntry(
-                            loadedAtMs = nowMsProvider(),
-                            value = result.data as Any
-                        )
-                    }
+                    resultCache.put(key, result.data as Any)
                     result as Any
                 }
                 is RepositoryResult.Failure -> result as Any
@@ -57,9 +41,7 @@ class TrackerMapSessionRequestDeduper(
     }
 
     suspend fun clear() {
-        cacheMutex.withLock {
-            resultCache.clear()
-        }
+        resultCache.clear()
     }
 
     /**
@@ -76,10 +58,7 @@ class TrackerMapSessionRequestDeduper(
     suspend fun invalidate(trackerId: String) {
         val id = trackerId.trim()
         if (id.isEmpty()) return
-        cacheMutex.withLock {
-            val toRemove = resultCache.keys.filter { it.referencesTrackerId(id) }
-            toRemove.forEach(resultCache::remove)
-        }
+        resultCache.invalidateWhere { it.referencesTrackerId(id) }
     }
 
     private fun String.referencesTrackerId(id: String): Boolean {

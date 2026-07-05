@@ -1,8 +1,7 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
-import com.geovault.tracker.services.StreamingHealth
-import com.geovault.tracker.services.StreamingIntent
+import com.geovault.tracker.streaming.ConnectionPhase
+import com.geovault.tracker.streaming.LiveStreamSubscriptionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -12,7 +11,7 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_idleStopped_noTargets_returnsInactive() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(),
+            snapshot = LiveStreamSubscriptionState(),
             streamTargetIds = emptySet(),
         )
 
@@ -24,10 +23,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_starting_noActiveIds_returnsConnecting() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.Starting,
-                activeTrackerIds = emptySet(),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.STARTING,
+                activeTargets = emptySet(),
             ),
             streamTargetIds = setOf("t1"),
         )
@@ -39,10 +37,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_starting_withActiveIds_returnsReconnecting() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.Starting,
-                activeTrackerIds = setOf("t1"),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.STARTING,
+                activeTargets = setOf("t1"),
             ),
             streamTargetIds = setOf("t1"),
         )
@@ -54,10 +51,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_reconnecting_alwaysReconnecting() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.Reconnecting,
-                activeTrackerIds = emptySet(),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.RECONNECTING,
+                activeTargets = emptySet(),
             ),
             streamTargetIds = setOf("t1"),
         )
@@ -68,10 +64,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_running_singleTracker_returnsLive() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.Running,
-                activeTrackerIds = setOf("t1"),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.RUNNING,
+                activeTargets = setOf("t1"),
             ),
             streamTargetIds = setOf("t1"),
         )
@@ -84,10 +79,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_running_multipleTrackers_returnsLiveWithCount() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1", "t2", "t3")),
-                health = StreamingHealth.Running,
-                activeTrackerIds = setOf("t1", "t2", "t3"),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.RUNNING,
+                activeTargets = setOf("t1", "t2", "t3"),
             ),
             streamTargetIds = setOf("t1", "t2", "t3"),
         )
@@ -99,10 +93,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_running_partialActiveIds_returnsReconnecting() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1", "t2")),
-                health = StreamingHealth.Running,
-                activeTrackerIds = setOf("t1"),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.RUNNING,
+                activeTargets = setOf("t1"),
             ),
             streamTargetIds = setOf("t1", "t2"),
         )
@@ -114,10 +107,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_running_extraActiveIds_returnsReconnecting() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.Running,
-                activeTrackerIds = setOf("t1", "t2"),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.RUNNING,
+                activeTargets = setOf("t1", "t2"),
             ),
             streamTargetIds = setOf("t1"),
         )
@@ -129,10 +121,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_running_noActiveIdsForDesiredTargets_returnsConnecting() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.Running,
-                activeTrackerIds = emptySet(),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.RUNNING,
+                activeTargets = emptySet(),
             ),
             streamTargetIds = setOf("t1"),
         )
@@ -144,10 +135,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_failedTransient_returnsFailedWithReason() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.FailedTransient,
-                activeTrackerIds = setOf("t1"),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.FAILED_TRANSIENT,
+                activeTargets = setOf("t1"),
                 failureReason = "Auth expired",
             ),
             streamTargetIds = setOf("t1"),
@@ -161,10 +151,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_failedPermanent_returnsFailed() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Wanted(setOf("t1")),
-                health = StreamingHealth.FailedPermanent,
-                activeTrackerIds = emptySet(),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.FAILED_PERMANENT,
+                activeTargets = emptySet(),
                 failureReason = null,
             ),
             streamTargetIds = setOf("t1"),
@@ -177,10 +166,9 @@ class TrackerMapStreamingStatusPolicyTest {
     @Test
     fun resolve_stopped_withTargets_returnsInactive() {
         val result = TrackerMapStreamingStatusPolicy.resolve(
-            snapshot = LiveStreamRuntimeSnapshot(
-                intent = StreamingIntent.Idle,
-                health = StreamingHealth.Stopped,
-                activeTrackerIds = emptySet(),
+            snapshot = LiveStreamSubscriptionState(
+                connection = ConnectionPhase.IDLE,
+                activeTargets = emptySet(),
             ),
             streamTargetIds = setOf("t1"),
         )

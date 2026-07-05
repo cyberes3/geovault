@@ -19,7 +19,6 @@ import com.geovault.tracker.params.TrackerParamsContentReducer
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackerParamsPointAcceptancePolicy
-import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingMotionMode
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
@@ -53,7 +52,9 @@ class TrackerParamsViewModel(
 ) : AndroidViewModel(application) {
 
     private val formatter = TrackerParamValueFormatter(application)
-    private val streamingController = TrackerParamsStreamingController(application.applicationContext)
+    private val streamingController = TrackerParamsStreamingController(
+        TrackerAppServices.from(application).liveStreamSubscriptionRepository(),
+    )
 
     private val _uiState = MutableStateFlow(buildInitialUiState())
     val uiState: StateFlow<TrackerParamsScreenUiState> = _uiState.asStateFlow()
@@ -73,13 +74,6 @@ class TrackerParamsViewModel(
                 }
                 if (screenStarted) {
                     refreshParamsStreamingLease(runtime)
-                }
-            }
-        }
-        viewModelScope.launch {
-            LiveStreamRuntimeStateStore.state.collect {
-                if (screenStarted) {
-                    refreshParamsStreamingLease(TrackingRuntimeStateStore.state.value)
                 }
             }
         }
@@ -126,7 +120,6 @@ class TrackerParamsViewModel(
             trackerName = streamTrackerName,
             selectedTrackerId = runtime.selectedTrackerId,
             trackingRunning = runtime.localRecordingActive,
-            streamSnapshot = LiveStreamRuntimeStateStore.state.value,
         )
     }
 

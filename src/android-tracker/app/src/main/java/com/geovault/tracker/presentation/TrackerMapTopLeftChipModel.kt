@@ -75,6 +75,25 @@ class TrackerMapTopLeftChipMapper {
         }
 
         if (!showingSingleTracker) {
+            // UNAVAILABLE-NOTICE: `state.unavailableTrackerNotice` is only consulted while the raw
+            // `displayedTrackerId` (not the selected-tracker fallback above) is still blank — the
+            // moment any explicit selection sets a new displayed tracker, this branch is bypassed
+            // and the notice is left to go stale in state rather than needing to be cleared at
+            // every one of those call sites. See `TrackerMapRosterRemovalPolicy`.
+            val notice = state.unavailableTrackerNotice
+            if (isSingleTrackerMode && state.displayedTrackerId.isBlank() && notice != null) {
+                return TrackerMapTopLeftChipUiModel.Visible(
+                    mode = TrackerMapTopLeftChipMode.SINGLE_TRACKER,
+                    iconResId = R.drawable.ic_chevron_track,
+                    title = notice.trackerName.trim().takeIf { it.isNotEmpty() }
+                        ?.let { TrackerMapTopLeftChipText.Value(it) }
+                        ?: TrackerMapTopLeftChipText.Resource(R.string.select_tracker),
+                    subtitle = TrackerMapTopLeftChipText.Resource(R.string.tracker_no_longer_available),
+                    showReset = selectedTrackerId.isNotEmpty(),
+                    cardContentDescriptionResId = R.string.map_chip_tracker_card_content_description,
+                    resetContentDescriptionResId = R.string.show_selected_tracker,
+                )
+            }
             return TrackerMapTopLeftChipUiModel.Hidden
         }
 

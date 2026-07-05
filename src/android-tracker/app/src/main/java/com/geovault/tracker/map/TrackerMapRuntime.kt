@@ -14,6 +14,7 @@ import com.geovault.tracker.history.TrackerHistorySessionBoundary
 import com.geovault.tracker.history.TrackerHistoryWindowResolver
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.presentation.LiveTrackStreamingReconciler
+import com.geovault.tracker.presentation.MapGeometryReloadCircuitBreaker
 import com.geovault.tracker.presentation.TrackerMapCameraDirective
 import com.geovault.tracker.presentation.TrackerMapCameraDirectivePolicy
 import com.geovault.tracker.presentation.TrackerMapFilterChangeReactor
@@ -38,6 +39,7 @@ import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapFitTrailMode
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
@@ -54,7 +56,9 @@ internal class TrackerMapRuntime(
     val ports: TrackerMapPorts,
 ) {
     internal val appContext = ports.application.applicationContext
-    internal val streamingReconciler = LiveTrackStreamingReconciler(appContext)
+    internal val liveStreamSubscriptionRepository: LiveStreamSubscriptionRepository =
+        TrackerAppServices.from(ports.application).liveStreamSubscriptionRepository()
+    internal val streamingReconciler = LiveTrackStreamingReconciler(liveStreamSubscriptionRepository)
     internal val dao = AppDatabase.getDatabase(ports.application).locationDao()
     internal val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(ports.application).trackerManagementRepository()
@@ -78,6 +82,12 @@ internal class TrackerMapRuntime(
     val fitTrailEvents get() = fitTrailSignal.receiveAsFlow()
 
     internal var lastStreamTargetsSeed: String? = null
+    // TrackersRefreshed carries the *new* roster only; the store's own `trackers` StateFlow has
+    // already been overwritten with that same new list by the time the event reaches us (see
+    // `TrackerManagementStateStore.publishTrackers`), so a removal diff needs our own prior
+    // snapshot rather than reading through the store. Starts empty so the first refresh after
+    // (re)start never reports spurious removals.
+    internal var lastKnownRosterTrackerIds: Set<String> = emptySet()
     internal var lastBackgroundAtElapsedMs: Long = 0L
     internal var mapReady: Boolean = false
     internal var pendingResumeEvaluation: Boolean = false
@@ -107,12 +117,26 @@ internal class TrackerMapRuntime(
     internal val geometryLoadingTracker = TrackerMapGeometryLoadingTracker(
         onLoadingChanged = ::setGeometryLoading,
     )
+    internal val geometryReloadCircuitBreaker = MapGeometryReloadCircuitBreaker()
+    internal val streamingPlanCache = TrackerMapStreamingPlanCache()
+
+    /**
+     * Wall-clock timestamp of when [com.geovault.tracker.services.LiveStreamSubscriptionState]
+     * most recently transitioned from healthy to unhealthy while wanted, or `null` if currently
+     * healthy/unwanted. Read and written only from the heartbeat collector in
+     * [MapStreamingSubsystem], which runs on a single dispatcher, so no additional
+     * synchronization is needed. Feeds [com.geovault.tracker.presentation.StreamingBatteryOptimizationHintPolicy].
+     */
+    internal var streamingUnhealthySinceMs: Long? = null
     internal lateinit var trailLoaderOps: TrackerMapTrailLoaderOps
 
     internal lateinit var context: MapContextSubsystem
     internal lateinit var display: MapTrailDisplaySubsystem
     internal lateinit var reload: MapTrailReloadSubsystem
     internal lateinit var streaming: MapStreamingSubsystem
+    internal lateinit var streamRosterResolver: StreamRosterResolver
+    internal lateinit var streamTargetReconciler: StreamTargetReconciler
+    internal lateinit var trackPointReducer: TrackPointReducer
 
     fun start() {
         SelectedTrackerManager.syncRuntimeSelectedTracker(ports.application)
@@ -127,13 +151,16 @@ internal class TrackerMapRuntime(
             loadQueue = { trackerId -> reload.loadQueueTrail(trackerId) },
         )
         streaming.startCollectors()
-        streaming.refreshStreamTargets()
+        streamRosterResolver.refreshStreamTargets()
     }
 
     private fun wireSubsystems() {
         context = MapContextSubsystem(this)
         display = MapTrailDisplaySubsystem(this)
         reload = MapTrailReloadSubsystem(this)
+        streamRosterResolver = StreamRosterResolver(this)
+        streamTargetReconciler = StreamTargetReconciler(this)
+        trackPointReducer = TrackPointReducer(this)
         streaming = MapStreamingSubsystem(this)
     }
 
@@ -176,6 +203,7 @@ internal class TrackerMapRuntime(
             hiddenGroupIds = hiddenGroupIds,
             hiddenTrackIds = hiddenTrackIds,
             hiddenOwnerTrackerIds = hiddenOwnerTrackerIds,
+            rosterTrackerIds = trackerManagementStateStore.trackers.value.mapTo(mutableSetOf()) { it.id.trim() },
             preferredGroupId = state.currentGroupId,
             preferredTrackerId = preferredTrackerId,
         )
@@ -200,6 +228,7 @@ internal class TrackerMapRuntime(
             hiddenGroupIds = hiddenGroupIds,
             hiddenTrackIds = hiddenTrackIds,
             hiddenOwnerTrackerIds = hiddenOwnerTrackerIds,
+            rosterTrackerIds = trackerManagementStateStore.trackers.value.mapTo(mutableSetOf()) { it.id.trim() },
         )
     }
 
@@ -231,6 +260,24 @@ internal class TrackerMapRuntime(
                 activeSessionStartMs = sessionStart,
             )
         }
+    }
+
+    /**
+     * IDLE-ROLLING-WINDOW STALENESS: see [TrackerHistoryRepository.recomputeStaleRollingWindows].
+     * Called both periodically (from [MapStreamingSubsystem.startCollectors]'s ticker) and on
+     * resume ([MapContextSubsystem.onHostResumed]) so a "last N hours"-style filter re-excludes
+     * points that aged out of the window while the tracker was idle, not only while new points
+     * are actively arriving.
+     */
+    internal fun recomputeStaleRollingWindows(): Boolean {
+        val locallyRecordedTrackerId = uiStateMutable.value.runtime.locallyRecordedTrackerId.trim()
+        val activeSessionStartMs = currentActiveSessionStartMs()
+        val changedKeys = historyRepository.recomputeStaleRollingWindows(
+            activeSessionStartMsFor = { trackerId ->
+                if (trackerId == locallyRecordedTrackerId) activeSessionStartMs else null
+            },
+        )
+        return changedKeys.isNotEmpty()
     }
 
     internal fun setGeometryLoading(isLoading: Boolean) {

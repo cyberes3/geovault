@@ -221,7 +221,7 @@ fun HomeScreen(
                         onGrantNotifications = {
                             notificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         },
-                        onGrantBattery = { openBatteryOptimizationSettings(context) },
+                        onGrantBattery = { TrackerSystemSettingsIntents.openBatteryOptimizationSettings(context) },
                         onGrantExactAlarm = { openExactAlarmSettings(context) },
                         onGrantActivityRecognition = {
                             activityRecognitionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
@@ -678,14 +678,6 @@ private fun ServerFailureOverlay(modifier: Modifier = Modifier) {
 
 private fun openLocationPermissionSettings(context: android.content.Context) {
     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        data = Uri.parse("package:${context.packageName}")
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    context.startActivity(intent)
-}
-
-private fun openBatteryOptimizationSettings(context: android.content.Context) {
-    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
         data = Uri.parse("package:${context.packageName}")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

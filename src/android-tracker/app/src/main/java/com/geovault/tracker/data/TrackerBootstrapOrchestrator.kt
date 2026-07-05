@@ -1,5 +1,7 @@
 package com.geovault.tracker.data
 
+import com.geovault.common.concurrent.SingleFlightGate
+import com.geovault.common.concurrent.TimeWindowedCache
 import com.geovault.tracker.RepositoryResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -30,20 +32,20 @@ class RepositoryTrackerBootstrapDataSource(
 
 class TrackerBootstrapOrchestrator(
     private val dataSource: TrackerBootstrapDataSource,
-    private val resumeDedupeWindowMs: Long = 4_000L,
-    private val nowMsProvider: () -> Long = { System.currentTimeMillis() },
+    resumeDedupeWindowMs: Long = 4_000L,
+    nowMsProvider: () -> Long = { System.currentTimeMillis() },
 ) {
-    private val launchGate = SingleFlightRequestGate<String, TrackerBootstrapOutcome>()
-    private val resumeGate = SingleFlightRequestGate<String, TrackerBootstrapOutcome>()
+    private val launchGate = SingleFlightGate<String, TrackerBootstrapOutcome>()
+    private val resumeGate = SingleFlightGate<String, TrackerBootstrapOutcome>()
+    private val resumeCache = TimeWindowedCache<String, TrackerBootstrapOutcome>(
+        windowMs = resumeDedupeWindowMs,
+        nowMsProvider = nowMsProvider,
+    )
 
     @Volatile
     private var launchCompleted = false
     @Volatile
     private var lastLaunchOutcome: TrackerBootstrapOutcome? = null
-    @Volatile
-    private var lastResumeOutcome: TrackerBootstrapOutcome? = null
-    @Volatile
-    private var lastResumeAtMs: Long = 0L
 
     suspend fun refreshForLaunch(): TrackerBootstrapOutcome {
         val cachedLaunchOutcome = lastLaunchOutcome
@@ -64,20 +66,13 @@ class TrackerBootstrapOrchestrator(
     }
 
     suspend fun refreshForResume(): TrackerBootstrapOutcome {
-        val cachedOutcome = lastResumeOutcome
-        if (cachedOutcome != null && nowMsProvider() - lastResumeAtMs <= resumeDedupeWindowMs) {
-            return cachedOutcome
-        }
+        resumeCache.get(RESUME_CACHE_KEY)?.let { return it }
         return resumeGate.run("resume") {
-            val recheckedOutcome = lastResumeOutcome
-            if (recheckedOutcome != null && nowMsProvider() - lastResumeAtMs <= resumeDedupeWindowMs) {
-                return@run recheckedOutcome
-            }
+            resumeCache.get(RESUME_CACHE_KEY)?.let { return@run it }
             refresh(
                 forceRefresh = true,
             ).also { outcome ->
-                lastResumeOutcome = outcome
-                lastResumeAtMs = nowMsProvider()
+                resumeCache.put(RESUME_CACHE_KEY, outcome)
             }
         }
     }
@@ -85,8 +80,7 @@ class TrackerBootstrapOrchestrator(
     fun resetLaunchState() {
         launchCompleted = false
         lastLaunchOutcome = null
-        lastResumeOutcome = null
-        lastResumeAtMs = 0L
+        resumeCache.clear()
     }
 
     private suspend fun refresh(forceRefresh: Boolean): TrackerBootstrapOutcome {
@@ -104,5 +98,9 @@ class TrackerBootstrapOrchestrator(
         return TrackerBootstrapOutcome(
             isServerAccessible = startupResults.any { it is RepositoryResult.Success },
         )
+    }
+
+    private companion object {
+        const val RESUME_CACHE_KEY = "resume"
     }
 }

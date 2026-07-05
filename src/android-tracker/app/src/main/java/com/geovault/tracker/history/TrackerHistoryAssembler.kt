@@ -10,6 +10,14 @@ data class TrackerHistoryComposeInput(
     val clearBoundary: TrackerHistoryClearBoundary? = null,
     val nowMs: Long = System.currentTimeMillis(),
     val previousSnapshot: TrackerHistorySnapshot? = null,
+    /**
+     * Overrides the empty-snapshot-defer branch below to commit the (possibly empty) composed
+     * result instead of keeping [previousSnapshot]. Set by [TrackerHistoryRepository]'s deferral
+     * watchdog once a key has deferred [TrackerHistoryDeferralWatchdog.FORCE_COMMIT_AFTER]
+     * consecutive times in a row, so a session-boundary/filter race that never resolves on its
+     * own cannot freeze the map on stale points forever.
+     */
+    val forceCommitEmpty: Boolean = false,
 ) {
     val activeSessionStartMs: Long? get() = sessionContext.activeSessionStartMs
 }
@@ -96,7 +104,9 @@ object TrackerHistoryAssembler {
                 }
             }
         }
-        if (points.isEmpty() && input.previousSnapshot != null && input.clearBoundary == null) {
+        if (points.isEmpty() && input.previousSnapshot != null && input.clearBoundary == null &&
+            !input.forceCommitEmpty
+        ) {
             val pendingOverlayPoints = input.overlayBatches.sumOf { it.points.size }
             if (pendingOverlayPoints > 0) {
                 GeoVaultCaptureLog.w(
@@ -129,16 +139,25 @@ object TrackerHistoryAssembler {
             complete = input.trunk?.complete ?: false,
             renderWindowFilterSkipped = input.sessionContext.skipRenderWindowFilter,
         )
-        GeoVaultCaptureLog.i(
-            TAG,
-            "map_update history_compose tracker=$trackerId window=${input.key.window.normalizedKey} " +
-                "trunk=${trunkPoints.size} overlay=${eligibleOverlay.size} result=${points.size} " +
-                "complete=${snapshot.complete} degraded=${snapshot.degradedLocalOnly}"
-        )
+        val wasForcedEmptyCommit = points.isEmpty() && input.forceCommitEmpty && input.previousSnapshot != null
+        if (wasForcedEmptyCommit) {
+            GeoVaultCaptureLog.w(
+                TAG,
+                "map_update history_compose_forced_empty_commit tracker=$trackerId " +
+                    "window=${input.key.window.normalizedKey} previous_pts=${input.previousSnapshot?.points?.size ?: 0}",
+            )
+        } else {
+            GeoVaultCaptureLog.i(
+                TAG,
+                "map_update history_compose tracker=$trackerId window=${input.key.window.normalizedKey} " +
+                    "trunk=${trunkPoints.size} overlay=${eligibleOverlay.size} result=${points.size} " +
+                    "complete=${snapshot.complete} degraded=${snapshot.degradedLocalOnly}"
+            )
+        }
         return TrackerHistoryTransactionResult(
             snapshot = snapshot,
             committed = true,
-            reason = "composed",
+            reason = if (wasForcedEmptyCommit) "forced_empty_commit" else "composed",
         )
     }
 

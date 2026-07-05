@@ -3,8 +3,15 @@ package com.geovault.tracker
 import com.geovault.tracker.location.TrackingLifecycleState
 
 internal enum class StreamingSessionReuseDecision {
+    /** Same tracker set, socket healthy: do nothing. */
     REUSE,
-    TRACKER_SET_CHANGED,
+    /**
+     * Different tracker set, but the socket is otherwise healthy (connected, RUNNING, not
+     * stale): the server pushes every update over one socket and the client filters by id
+     * client-side (see [com.geovault.tracker.LiveTrackStreamingService]'s `filterTrackIds`), so
+     * a roster change never needs a new socket — just update `currentTrackerIds` in place.
+     */
+    HOT_UPDATE,
     NO_SOCKET,
     NOT_RUNNING,
     NO_ACTIVITY,
@@ -40,9 +47,12 @@ internal class StreamingSessionGuard(
         hasSocket: Boolean,
         lifecycleState: TrackingLifecycleState,
     ): StreamingSessionAssessment {
-        if (requestedTrackerIds != currentTrackerIds) {
-            return StreamingSessionAssessment(StreamingSessionReuseDecision.TRACKER_SET_CHANGED)
-        }
+        // ROSTER-DELTA-HOT-UPDATE: the underlying-connection health checks (socket presence,
+        // RUNNING, freshness) are evaluated *before* the tracker-set comparison. A roster change
+        // is only ever eligible for an in-place [StreamingSessionReuseDecision.HOT_UPDATE] when
+        // the connection is otherwise indistinguishable from a REUSE-eligible one; if the socket
+        // is missing, not yet RUNNING, or already stale, a real reconnect is needed regardless of
+        // whether the tracker set also happens to differ.
         if (!hasSocket) return StreamingSessionAssessment(StreamingSessionReuseDecision.NO_SOCKET)
         if (lifecycleState != TrackingLifecycleState.RUNNING) {
             return StreamingSessionAssessment(StreamingSessionReuseDecision.NOT_RUNNING)
@@ -57,10 +67,12 @@ internal class StreamingSessionGuard(
                 activityAgeMs = ageMs,
             )
         }
-        return StreamingSessionAssessment(
-            decision = StreamingSessionReuseDecision.REUSE,
-            activityAgeMs = ageMs,
-        )
+        val decision = if (requestedTrackerIds != currentTrackerIds) {
+            StreamingSessionReuseDecision.HOT_UPDATE
+        } else {
+            StreamingSessionReuseDecision.REUSE
+        }
+        return StreamingSessionAssessment(decision = decision, activityAgeMs = ageMs)
     }
 
     companion object {

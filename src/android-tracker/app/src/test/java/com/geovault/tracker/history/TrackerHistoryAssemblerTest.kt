@@ -200,6 +200,35 @@ class TrackerHistoryAssemblerTest {
     }
 
     @Test
+    fun compose_forceCommitEmpty_commitsEmptyInsteadOfDeferring() {
+        val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("1h"))
+        val previous = TrackerHistorySnapshot(
+            key = key,
+            trunk = listOf(point(10_000L, provenance = TrackerHistoryProvenance.SERVER_GEOMETRY)),
+            overlay = emptyList(),
+            points = listOf(point(10_000L, provenance = TrackerHistoryProvenance.SERVER_GEOMETRY)),
+            committedAtMs = 1L,
+            generation = 1L,
+        )
+
+        val result = TrackerHistoryAssembler.compose(
+            TrackerHistoryComposeInput(
+                key = key,
+                trunk = null,
+                overlayBatches = emptyList(),
+                sessionContext = sessionContext(key.window),
+                nowMs = 20_000L,
+                previousSnapshot = previous,
+                forceCommitEmpty = true,
+            ),
+        )
+
+        assertTrue(result.committed)
+        assertEquals("forced_empty_commit", result.reason)
+        assertTrue(result.snapshot.points.isEmpty())
+    }
+
+    @Test
     fun compose_completeServerTrunk_skipsClientWindowFilterAtComposeOnly() {
         val key = TrackerHistoryKey("tracker-1", TrackerHistoryWindow("1w"))
         val nowMs = 10_000_000L

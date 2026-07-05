@@ -147,6 +147,54 @@ class TrackerMapTopLeftChipMapperTest {
     }
 
     @Test
+    fun singleTracker_withUnavailableNoticeAndNoFallbackSelection_showsUnavailableChip() {
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "",
+            runtime = TrackingRuntimeSnapshot(selectedTrackerId = ""),
+        ).copy(unavailableTrackerNotice = TrackerMapUnavailableNotice(trackerId = "tracker1", trackerName = "Alice"))
+
+        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertEquals(TrackerMapTopLeftChipMode.SINGLE_TRACKER, result.mode)
+        assertEquals(TrackerMapTopLeftChipText.Value("Alice"), result.title)
+        assertEquals(TrackerMapTopLeftChipText.Resource(R.string.tracker_no_longer_available), result.subtitle)
+        assertFalse(result.showReset)
+    }
+
+    @Test
+    fun singleTracker_withUnavailableNoticeButSelectedTrackerFallback_showsSelectedTrackerInstead() {
+        // The instant `displayedTrackerId` is blank AND `selectedTrackerId` resolves to something,
+        // the normal fallback title takes over -- a stale notice for a *different*, now-superseded
+        // tracker must never resurface once the view has moved on.
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "",
+            runtime = TrackingRuntimeSnapshot(selectedTrackerId = "tracker2", selectedTrackerName = "Bob"),
+        ).copy(unavailableTrackerNotice = TrackerMapUnavailableNotice(trackerId = "tracker1", trackerName = "Alice"))
+
+        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertEquals(TrackerMapTopLeftChipText.Value("Bob"), result.title)
+    }
+
+    @Test
+    fun singleTracker_withUnavailableNoticeButNewDisplayedTracker_ignoresStaleNotice() {
+        // Once a *new* tracker is explicitly displayed, `displayedTrackerId` is non-blank again,
+        // so the notice branch is bypassed entirely regardless of what it still holds.
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "tracker3",
+            displayedTrackerName = "Carol",
+            runtime = TrackingRuntimeSnapshot(selectedTrackerId = ""),
+        ).copy(unavailableTrackerNotice = TrackerMapUnavailableNotice(trackerId = "tracker1", trackerName = "Alice"))
+
+        val result = mapper.map(state, emptyList()) as TrackerMapTopLeftChipUiModel.Visible
+
+        assertEquals(TrackerMapTopLeftChipText.Value("Carol"), result.title)
+    }
+
+    @Test
     fun groupMode_withoutCurrentGroupName_usesGroupsFallback() {
         val state = baseState(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,

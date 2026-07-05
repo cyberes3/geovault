@@ -23,9 +23,11 @@ data class TrackPointBusDiagnostics(
     val pausedBufferSize: Int,
     val deferredEmitCount: Long,
     val droppedPausedLocalEvents: Long,
+    val droppedNotSubscribedEvents: Long = 0L,
     val droppedInvalidEvents: Long = 0L,
     val droppedLocalEchoEvents: Long = 0L,
     val droppedRemotePolicyEvents: Long = 0L,
+    val droppedQueueOverflowEvents: Long = 0L,
 )
 
 object TrackPointBus {
@@ -54,6 +56,20 @@ object TrackPointBus {
     private val lastEnqueueFailureWarningAtMs = AtomicLong(0L)
     private val lastPausedDropWarningAtMs = AtomicLong(0L)
 
+    /**
+     * [orderedEmitQueue] uses [BufferOverflow.DROP_OLDEST], so `trySend` reports success even
+     * when it silently evicted an older, not-yet-consumed event to make room -- there is no
+     * callback for that eviction. These two counters reconstruct it indirectly: since the
+     * channel never holds more than [ORDERED_QUEUE_CAPACITY] events, `published - consumed`
+     * exceeding that capacity is only possible if at least one event was evicted before this
+     * single consumer coroutine ever saw it, letting [publish] detect and log the drop the
+     * channel itself stays silent about.
+     */
+    private val publishedToQueueCount = AtomicLong(0L)
+    private val consumedFromQueueCount = AtomicLong(0L)
+    private val droppedQueueOverflowEvents = AtomicLong(0L)
+    private val lastQueueOverflowWarningAtMs = AtomicLong(0L)
+
     private val eventsFlow = MutableSharedFlow<TrackPointEvent>(
         replay = REPLAY_EVENTS,
         extraBufferCapacity = EXTRA_BUFFER_EVENTS,
@@ -63,6 +79,7 @@ object TrackPointBus {
     init {
         emitScope.launch {
             for (event in orderedEmitQueue) {
+                consumedFromQueueCount.incrementAndGet()
                 eventsFlow.emit(event)
             }
         }
@@ -102,6 +119,15 @@ object TrackPointBus {
                 "map_update bus_enqueued source=${orderedEvent.source} track=${orderedEvent.trackId.trim()} " +
                     "ts=${orderedEvent.timestampMs} order=${orderedEvent.orderingKey}"
             )
+            val outstanding = publishedToQueueCount.incrementAndGet() - consumedFromQueueCount.get()
+            if (outstanding > ORDERED_QUEUE_CAPACITY) {
+                val dropped = droppedQueueOverflowEvents.incrementAndGet()
+                warnRateLimited(
+                    lastQueueOverflowWarningAtMs,
+                    "Dropped ${orderedEvent.source} event track=${orderedEvent.trackId.trim()} due to ordered " +
+                        "queue overflow (DROP_OLDEST); detected=$dropped outstanding=$outstanding capacity=$ORDERED_QUEUE_CAPACITY"
+                )
+            }
         }
         if (!sendResult.isSuccess) {
             // With DROP_OLDEST this should not normally fire (the channel evicts internally), but
@@ -136,15 +162,21 @@ object TrackPointBus {
 
     fun diagnostics(): TrackPointBusDiagnostics {
         val pausedSize = synchronized(pausedLocalEvents) { pausedLocalEvents.size }
-        val ingressDiagnostics = RemoteTrackPointIngress.diagnostics()
+        val admissionSnapshot = RemoteTrackPointAdmissionDiagnostics.snapshot()
         return TrackPointBusDiagnostics(
             isLocalDeliveryPaused = localDeliveryPaused.get(),
             pausedBufferSize = pausedSize,
             deferredEmitCount = deferredEmitCount.get(),
             droppedPausedLocalEvents = droppedPausedLocalEvents.get(),
-            droppedInvalidEvents = ingressDiagnostics.droppedInvalidEvents,
-            droppedLocalEchoEvents = ingressDiagnostics.droppedLocalEchoEvents,
-            droppedRemotePolicyEvents = ingressDiagnostics.droppedRemotePolicyEvents,
+            droppedNotSubscribedEvents = admissionSnapshot.rejectedCount(
+                RemoteTrackPointAdmissionStage.SUBSCRIPTION_SCOPE, "not_subscribed"
+            ),
+            droppedInvalidEvents = admissionSnapshot.rejectedCount(
+                RemoteTrackPointAdmissionStage.SUBSCRIPTION_SCOPE, "invalid_payload"
+            ),
+            droppedLocalEchoEvents = admissionSnapshot.totalRejected(RemoteTrackPointAdmissionStage.LOCAL_ECHO),
+            droppedRemotePolicyEvents = admissionSnapshot.totalRejected(RemoteTrackPointAdmissionStage.FRESHNESS_ORDERING),
+            droppedQueueOverflowEvents = droppedQueueOverflowEvents.get(),
         )
     }
 
@@ -153,7 +185,10 @@ object TrackPointBus {
         localDeliveryPaused.set(false)
         deferredEmitCount.set(0L)
         droppedPausedLocalEvents.set(0L)
-        RemoteTrackPointIngress.resetForTests()
+        publishedToQueueCount.set(0L)
+        consumedFromQueueCount.set(0L)
+        droppedQueueOverflowEvents.set(0L)
+        RemoteTrackPointAdmissionPipeline.resetForTests()
         synchronized(pausedLocalEvents) {
             pausedLocalEvents.clear()
         }

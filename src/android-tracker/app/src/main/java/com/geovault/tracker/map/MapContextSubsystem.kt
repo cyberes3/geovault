@@ -8,9 +8,8 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.policy.StreamingTargetPolicy
 import com.geovault.tracker.policy.StreamingTargetPolicyInput
 import com.geovault.tracker.presentation.*
-import com.geovault.tracker.services.LiveStreamRuntimeSnapshot
-import com.geovault.tracker.services.LiveStreamRuntimeStateStore
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
+import com.geovault.tracker.streaming.LiveStreamSubscriptionState
 import kotlinx.coroutines.flow.update
 import com.geovault.tracker.ui.TrackerPointTimestamps
 import kotlinx.coroutines.launch
@@ -368,7 +367,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         rt.pendingFitAfterReload = true
         rt.lastTrailLoadSeed = null
         rt.reload.requestRuntimeTrailReload(reloadReason)
-        rt.streaming.refreshStreamTargets()
+        rt.streamRosterResolver.refreshStreamTargets()
     }
 
     fun onHostPaused() {
@@ -376,6 +375,16 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun onHostResumed() {
+        // IDLE-ROLLING-WINDOW: re-filter every rolling-window history key against the current
+        // clock unconditionally on resume — a background period is exactly when "last N hours"
+        // staleness accumulates undetected (see `TrackerMapRuntime.recomputeStaleRollingWindows`).
+        // Independent of the surface-visibility guards below, which only gate the *reload*
+        // decision for other reasons.
+        rt.ports.viewModelScope.launch {
+            if (rt.recomputeStaleRollingWindows()) {
+                rt.display.publishRenderPackage()
+            }
+        }
         if (rt.lastBackgroundAtElapsedMs <= 0L || !rt.mapSurfaceVisible) return
         if (!rt.mapReady) {
             rt.pendingResumeEvaluation = true
@@ -394,7 +403,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         }
         evaluateResumeAfterBackground(allowZeroGap = rt.pendingInitialTrackerForMap || rt.pendingResumeEvaluation)
         rt.display.reprojectTrailsFromRepository("map_surface_visible")
-        rt.streaming.bumpReconcileToken()
+        rt.streamTargetReconciler.bumpReconcileToken()
     }
 
     fun onMapSurfaceHidden(markBackground: Boolean = false) {
@@ -404,7 +413,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             rt.lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
             rt.pendingResumeEvaluation = true
         }
-        rt.streaming.bumpReconcileToken()
+        rt.streamTargetReconciler.bumpReconcileToken()
         rt.ports.viewModelScope.launch {
             rt.sessionRequestDeduper.clear()
         }
@@ -437,7 +446,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             return
         }
         rt.pendingInitialTrackerForMap = false
-        val streamRuntime = LiveStreamRuntimeStateStore.state.value
+        val streamRuntime = rt.liveStreamSubscriptionRepository.state.value
         // STREAMING-RESUME NO-OP: when a group / all-queue stream is already running with the
         // right targets and we have populated trails for the displayed roster, the WS is the
         // authoritative source and the orchestrator's reload+reconcile pass would only cause
@@ -462,8 +471,8 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         val persistedStreamTargetIds = MapStreamingServiceHelper.persistedTargets(
             context = rt.ports.application,
         ).first
-        val unsanitizedResumeStreamTrackerIds = if (streamRuntime.activeTrackerIds.isNotEmpty()) {
-            streamRuntime.activeTrackerIds
+        val unsanitizedResumeStreamTrackerIds = if (streamRuntime.activeTargets.isNotEmpty()) {
+            streamRuntime.activeTargets
         } else {
             state.activeStreamedTrackerIds + persistedStreamTargetIds
         }
@@ -502,8 +511,8 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             }
         rt.ports.viewModelScope.launch {
             applyReopenDecision(outcome.decision)
-            rt.streaming.refreshStreamTargets()
-            rt.streaming.bumpReconcileToken()
+            rt.streamRosterResolver.refreshStreamTargets()
+            rt.streamTargetReconciler.bumpReconcileToken()
             rt.lastBackgroundAtElapsedMs = 0L
             rt.pendingResumeEvaluation = false
         }
@@ -511,7 +520,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
 
     internal fun streamingActiveTargetsMatchDisplayed(
         state: TrackerMapUiState,
-        streamRuntime: LiveStreamRuntimeSnapshot,
+        streamRuntime: LiveStreamSubscriptionState,
         groupSelection: TrackerMapGroupModeSelection,
     ): Boolean {
         return TrackerMapViewModel.streamingActiveTargetsMatchDisplayed(
@@ -523,7 +532,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             },
             localRecordingActive = state.runtime.localRecordingActive,
             locallyRecordedTrackerId = state.runtime.locallyRecordedTrackerId,
-            activeStreamTargets = streamRuntime.activeTrackerIds,
+            activeStreamTargets = streamRuntime.activeTargets,
         )
     }
 
@@ -564,7 +573,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                         remoteLastPoints = TrackerMapViewModel.filterRemoteLastPointsForAcceptedIds(cur.remoteLastPoints, ids),
                     )
                 }
-                rt.streaming.bumpReconcileToken()
+                rt.streamTargetReconciler.bumpReconcileToken()
             }
             TrackerMapResumeDecision.ClearSingleTrackerState -> {
                 rt.pendingReopenSingleTrackerLoadId = null
@@ -607,15 +616,15 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                         if (trackerChanged) next.withAllMapLocksDisabled() else next
                     }.withClearedMapSelectionCard()
                 }
-                rt.reload.reloadTrailFromDatabase(TrackerMapTrailReloadReason.ExplicitTrackerLoad)
+                rt.reload.requestAndAwaitRuntimeTrailReload(TrackerMapTrailReloadReason.ExplicitTrackerLoad)
                 if (rt.pendingReopenSingleTrackerLoadId == trackerId) {
                     rt.pendingReopenSingleTrackerLoadId = null
                 }
-                rt.streaming.bumpReconcileToken()
+                rt.streamTargetReconciler.bumpReconcileToken()
             }
             TrackerMapResumeDecision.RestartDisplayedTrackerStreaming -> {
                 rt.pendingReopenSingleTrackerLoadId = null
-                rt.streaming.bumpReconcileToken()
+                rt.streamTargetReconciler.bumpReconcileToken()
             }
         }
     }
@@ -645,7 +654,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             state.copy(liveActiveFitEnabled = false)
         }
         if (enabled) {
-            rt.display.publishRenderPackage()
+            rt.ports.viewModelScope.launch { rt.display.publishRenderPackage() }
             requestFitTrail()
         }
     }

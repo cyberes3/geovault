@@ -1,5 +1,7 @@
 package com.geovault.tracker.positioning
 
+import com.geovault.tracker.policy.RemoteStreamIngressPolicy
+
 internal class SessionResetCoordinator(private val rt: PositioningRuntime) {
 
     fun applyForStart(selectedTrackerId: String, sessionStartedAtMs: Long) {
@@ -39,5 +41,12 @@ internal class SessionResetCoordinator(private val rt: PositioningRuntime) {
         rt.motion.stopAutoModeTick()
         rt.recovery.fastLock.stopFastGpsLockWindow(reason = "tracking_stopped")
         rt.motion.resetElasticDistanceOverride(reason = "tracking_stopped", reapplyRequest = false)
+        // CROSS-SOURCE-ANCHOR-RESET: TrackPointCrossSourceState's per-track "last accepted" anchor
+        // is advanced by local GPS fixes while recording but was never cleared when recording
+        // stopped. Viewing the same tracker remotely afterward could have its first live points
+        // rejected as "older than last known" until a fix newer than the final local fix arrived.
+        rt.ports.selectedTrackerId().trim().takeIf(String::isNotEmpty)?.let { stoppedTrackerId ->
+            RemoteStreamIngressPolicy.resetTrack(stoppedTrackerId)
+        }
     }
 }

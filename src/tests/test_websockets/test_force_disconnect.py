@@ -10,6 +10,7 @@ from django.test import Client, TransactionTestCase
 
 from api.ws_consumers.process_status_consumer import ProcessStatusConsumer
 from api.ws_consumers.realtime_consumer import RealtimeConsumer
+from extensions.live_track.src.backend.consumers import LiveTrackOnlyConsumer
 from geo_lib.websocket.force_disconnect import WebSocketForceDisconnector, user_sockets_group_name
 
 User = get_user_model()
@@ -107,6 +108,32 @@ class TestWebSocketForceDisconnectorDirect(TransactionTestCase):
         )
         communicator.scope['user'] = user
         communicator.scope['url_route'] = {'kwargs': {'item_id': str(import_item.id)}}
+        try:
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await _settle_after_connect(communicator)
+
+            await WebSocketForceDisconnector.disconnect_user_async(user.id, reason="test")
+
+            closed = await _receive_close_frame(communicator)
+            self.assertEqual(closed.get('code'), 4001)
+        finally:
+            await _safe_disconnect(communicator)
+
+    async def test_disconnects_open_live_track_consumer_socket(self):
+        """A stale/revoked credential must not leave a live-tracking stream connected forever --
+        this consumer previously never joined `user_sockets_{user_id}`, so force-disconnect
+        (logout, API key delete, OAuth revoke) silently missed it."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='force_disconnect_live_track@example.com',
+            password='testpass123',
+            username='force_disconnect_live_track',
+        )
+        communicator = WebsocketCommunicator(
+            LiveTrackOnlyConsumer.as_asgi(),
+            "/ws/extensions/live-track/trackers-live/",
+        )
+        communicator.scope['user'] = user
         try:
             connected, _ = await communicator.connect()
             self.assertTrue(connected)

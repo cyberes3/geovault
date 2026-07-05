@@ -11,7 +11,9 @@ import com.geovault.tracker.logging.GeoVaultPointRecordingLog
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.tracker.BuildConfig
+import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.startup.WatchdogColdStartArmer
+import com.geovault.tracker.streaming.ClearReason
 import com.geovault.tracker.tracking.TrackingService
 import com.geovault.tracker.tracking.TrackingServiceIntents
 
@@ -40,11 +42,17 @@ class TrackerApplication : Application(), GeovaultAuthManager.AuthFailureListene
                     action = TrackingServiceIntents.ACTION_STOP
                 }
             )
-            hookContext.startService(
-                Intent(hookContext, LiveTrackStreamingService::class.java).apply {
-                    action = LiveTrackStreamingService.ACTION_STOP
-                }
-            )
+            // LOGOUT-HARDENING: a bare startService() here can throw IllegalStateException if
+            // the reset flow runs while the app is backgrounded (Android's background-start
+            // restriction), leaving the streaming service running with a signed-out token.
+            // MapStreamingServiceHelper.stopStreaming already escalates to
+            // startForegroundService on that failure; clearAllLeases additionally drops every
+            // in-memory lease and forces a fresh stop dispatch so no owner can resurrect the
+            // subscription after a stale reconcile tick races the logout.
+            MapStreamingServiceHelper.stopStreaming(hookContext)
+            TrackerAppServices.from(hookContext.applicationContext as Application)
+                .liveStreamSubscriptionRepository()
+                .clearAllLeases(ClearReason.LOGOUT)
         }
 
         AppResetFlow.registerHook(
