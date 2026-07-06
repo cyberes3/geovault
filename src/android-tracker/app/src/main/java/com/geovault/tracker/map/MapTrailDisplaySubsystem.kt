@@ -15,9 +15,9 @@ import org.maplibre.android.geometry.LatLngBounds
 
 internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
     /**
-     * RENDER-SYNC UNDER LOCK: reading `rt.historyRepository.snapshots` and writing the derived
-     * trail fields onto `rt.uiStateMutable` must happen as one atomic step under
-     * `rt.trailReloadMutex` — the same mutex [MapTrailReloadSubsystem]'s reload commit and
+     * RENDER-SYNC UNDER LOCK: reading `rt.dependencies.historyRepository.snapshots` and writing the derived
+     * trail fields onto `rt.stateHub.uiStateMutable` must happen as one atomic step under
+     * `rt.trailCommitLock` — the same mutex [MapTrailReloadSubsystem]'s reload commit and
      * [MapStreamingSubsystem]'s live-point consumer already share. Without this, a render
      * publish that read the history repository *before* a reload's commit finishes can still be
      * mid-flight when that commit lands, then overwrite the just-committed fresh trail with its
@@ -29,7 +29,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
      */
     internal suspend fun publishRenderPackage() {
         val nowMs = System.currentTimeMillis()
-        val effectiveSession = rt.trailReloadMutex.withLock {
+        val effectiveSession = rt.trailCommitLock.withCommitLock {
             buildCurrentEffectiveSession(nowMs = nowMs).also {
                 syncUiStateTrailsFromHistorySnapshot(it.snapshot.uiState)
             }
@@ -41,21 +41,21 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         val renderSignature =
             "mode=${snapshot.mode}|displayed=${snapshot.plan.displayedTrackerId}|single=${snapshot.singleTrail.size}|" +
                 "multi=${snapshot.renderTrailsByTracker.mapSizes()}|liveHead=${effectiveSession.liveHead}|" +
-                "bounds=${nextBounds.boundsSummary()}|selectionLock=${rt.uiStateMutable.value.selectionLockTrackerId.trim()}|" +
-                "historyKeys=${rt.historyRepository.snapshots.value.size}"
+                "bounds=${nextBounds.boundsSummary()}|selectionLock=${rt.stateHub.uiStateMutable.value.selectionLockTrackerId.trim()}|" +
+                "historyKeys=${rt.dependencies.historyRepository.snapshots.value.size}"
         if (CaptureLogThrottle.shouldLogOnChange("vm_render_package", renderSignature)) {
             GeoVaultCaptureLog.d(
                 TrackerMapViewModel.TAG,
                 "map_draw_package mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
                     "selected=${snapshot.plan.selectedTrackerId} single=${snapshot.singleTrail.trailSummary()} " +
                     "multi=${snapshot.renderTrailsByTracker.mapSizes()} remote=${snapshot.acceptedRemoteLastPoints.keys.sorted()} " +
-                    "history_snapshot_keys=${rt.historyRepository.snapshots.value.size} " +
+                    "history_snapshot_keys=${rt.dependencies.historyRepository.snapshots.value.size} " +
                     "liveHead=${effectiveSession.liveHead} bounds=${nextBounds.boundsSummary()} " +
-                    "selectionLock=${rt.uiStateMutable.value.selectionLockTrackerId.trim()} selectionPoint=$nextSelectionLockPoint",
+                    "selectionLock=${rt.stateHub.uiStateMutable.value.selectionLockTrackerId.trim()} selectionPoint=$nextSelectionLockPoint",
             )
         }
-        rt.renderPackageMutable.update { current ->
-            // RENDER-COALESCE: every rt.uiStateMutable tick previously bumped `revision`, which made every
+        rt.stateHub.renderPackageMutable.update { current ->
+            // RENDER-COALESCE: every rt.stateHub.uiStateMutable tick previously bumped `revision`, which made every
             // downstream collector (camera effects, polyline rerenders, marker refreshes) treat
             // every state change as a unique frame even when the rendered output was bit-identical.
             // Compare the structural fields and only mint a new revision when the visible scene
@@ -85,78 +85,42 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
     }
 
     /**
-     * CAMERA-DIRECTIVE: resolve the precedence-aware camera target and only mint a new directive
-     * id when the resolution semantically changes. Equal back-to-back resolutions reuse the prior
-     * directive (and therefore reuse the prior id), so a `LaunchedEffect(directive.id)` consumer
-     * doesn't re-animate on noisy state changes.
+     * CAMERA-DIRECTIVE: hands the precedence-aware resolution off to
+     * [TrackerMapRuntime.cameraCoordinator], which owns id minting, dedup, and generation
+     * stamping. This function's only job is projecting the current session into the resolver's
+     * input shape and logging the decision.
      */
-    internal fun publishCameraDirective(
+    private fun publishCameraDirective(
         state: TrackerMapUiState,
         followTarget: Pair<Double, Double>?,
         bounds: org.maplibre.android.geometry.LatLngBounds?,
         selectionLockPoint: Pair<Double, Double>?,
     ) {
-        val resolution = TrackerMapCameraDirectivePolicy.resolve(
-            TrackerMapCameraDirectiveInput(
-                followLockEnabled = state.followLockEnabled,
-                gpsCollecting = state.runtime.gpsCollecting,
-                followTargetLat = followTarget?.first,
-                followTargetLon = followTarget?.second,
-                selectionLockEnabled = state.selectionLockTrackerId.trim().isNotEmpty(),
-                selectionLockLat = selectionLockPoint?.first,
-                selectionLockLon = selectionLockPoint?.second,
-                liveActiveFitEnabled = state.liveActiveFitEnabled,
-                bounds = bounds,
+        val input = TrackerMapCameraDirectiveInput(
+            followLockEnabled = state.followLockEnabled,
+            gpsCollecting = state.runtime.gpsCollecting,
+            followTargetLat = followTarget?.first,
+            followTargetLon = followTarget?.second,
+            selectionLockEnabled = state.selectionLockTrackerId.trim().isNotEmpty(),
+            selectionLockLat = selectionLockPoint?.first,
+            selectionLockLon = selectionLockPoint?.second,
+            liveActiveFitEnabled = state.liveActiveFitEnabled,
+            bounds = bounds,
+        )
+        if (CaptureLogThrottle.shouldLogOnChange("vm_camera_resolve_input", input.toString())) {
+            GeoVaultCaptureLog.d(
+                TrackerMapViewModel.TAG,
+                "map_update vm_camera_resolve mode=${state.mode} follow=${state.followLockEnabled} " +
+                    "gpsCollecting=${state.runtime.gpsCollecting} followTarget=$followTarget " +
+                    "selectionLock=${state.selectionLockTrackerId.trim()} selectionPoint=$selectionLockPoint " +
+                    "liveFit=${state.liveActiveFitEnabled} bounds=${bounds.boundsSummary()}"
             )
-        )
-        if (resolution == rt.lastCameraResolution) return
-        GeoVaultCaptureLog.d(
-            TrackerMapViewModel.TAG,
-            "map_update vm_camera_resolve mode=${state.mode} follow=${state.followLockEnabled} " +
-                "gpsCollecting=${state.runtime.gpsCollecting} followTarget=$followTarget " +
-                "selectionLock=${state.selectionLockTrackerId.trim()} selectionPoint=$selectionLockPoint " +
-                "liveFit=${state.liveActiveFitEnabled} bounds=${bounds.boundsSummary()} reason=${resolution.reason} " +
-                "center=${resolution.centerLat},${resolution.centerLon}"
-        )
-        rt.lastCameraResolution = resolution
-        val id = rt.nextCameraDirectiveId++
-        rt.cameraDirectiveMutable.value = when (resolution.reason) {
-            TrackerMapCameraDirective.Reason.SelectionLock,
-            TrackerMapCameraDirective.Reason.FollowLock -> {
-                val lat = resolution.centerLat
-                val lon = resolution.centerLon
-                if (lat != null && lon != null) {
-                    TrackerMapCameraDirective.CenterPreserveZoom(
-                        latitude = lat,
-                        longitude = lon,
-                        reason = resolution.reason,
-                        id = id,
-                    )
-                } else {
-                    TrackerMapCameraDirective.None(id = id)
-                }
-            }
-            TrackerMapCameraDirective.Reason.LiveActiveFit,
-            TrackerMapCameraDirective.Reason.InitialFit -> {
-                val nextBounds = resolution.bounds
-                if (nextBounds != null) {
-                    TrackerMapCameraDirective.FitBounds(
-                        bounds = nextBounds,
-                        reason = resolution.reason,
-                        id = id,
-                    )
-                } else {
-                    TrackerMapCameraDirective.None(id = id)
-                }
-            }
-            // ExplicitFit is routed through fitTrailEvents, not the directive flow.
-            TrackerMapCameraDirective.Reason.ExplicitFit,
-            TrackerMapCameraDirective.Reason.NoOp -> TrackerMapCameraDirective.None(id = id)
         }
+        rt.cameraCoordinator.resolveFromLockState(input)
     }
 
-    internal fun buildCurrentEffectiveSession(nowMs: Long = System.currentTimeMillis()): TrackerMapEffectiveSession {
-        return buildEffectiveSessionForState(rt.uiStateMutable.value, nowMs)
+    private fun buildCurrentEffectiveSession(nowMs: Long = System.currentTimeMillis()): TrackerMapEffectiveSession {
+        return buildEffectiveSessionForState(rt.stateHub.uiStateMutable.value, nowMs)
     }
 
     internal fun buildCurrentSessionSnapshot(nowMs: Long = System.currentTimeMillis()): TrackerMapSessionSnapshot {
@@ -174,7 +138,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         return buildCurrentSessionSnapshot().plan.acceptedRemoteTrackerIds
     }
 
-    internal fun buildEffectiveSessionForState(
+    private fun buildEffectiveSessionForState(
         state: TrackerMapUiState,
         nowMs: Long = System.currentTimeMillis(),
     ): TrackerMapEffectiveSession {
@@ -184,16 +148,16 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             groupSelection = groupSelection,
             visibleRosterTrackerIds = rt.visibleMapRosterTrackerIds(),
         )
-        val trackers = rt.trackerManagementStateStore.trackers.value
+        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
         TrackerMapHistoryUiSync.syncRuntimeHeadOverlay(
             runtime = state.runtime,
             plan = plan,
-            snapshots = rt.historyRepository.snapshots.value,
+            snapshots = rt.dependencies.historyRepository.snapshots.value,
             trackers = trackers,
-            dispatcher = rt.historyIntentDispatcher,
+            dispatcher = rt.dependencies.historyIntentDispatcher,
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
         )
-        val snapshots = rt.historyRepository.snapshots.value
+        val snapshots = rt.dependencies.historyRepository.snapshots.value
         val visibleIds = visibleTrackerIdsForSessionPlan(state, plan)
         val trails = TrackerMapHistoryUiSync.trailsFromSnapshots(
             state = state,
@@ -219,10 +183,10 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
     }
 
     /**
-     * MUTEX-GUARDED REPROJECT: must go through [rt.trailReloadMutex] like every other
+     * MUTEX-GUARDED REPROJECT: must go through [rt.trailCommitLock] like every other
      * trail-mutating path ([publishRenderPackage], [MapTrailReloadSubsystem]'s reload commit,
      * the live-point consumer in [MapStreamingSubsystem]). This used to read
-     * `rt.uiStateMutable.value`, compute a plan, and blind-assign `rt.uiStateMutable.value = ...`
+     * `rt.stateHub.uiStateMutable.value`, compute a plan, and blind-assign `rt.stateHub.uiStateMutable.value = ...`
      * with no lock at all -- a reload commit landing in between the read and the write would be
      * silently reverted by this function's now-stale write (last-writer-wins), exactly the class
      * of race the mutex exists to prevent. Recomputing against `latest` inside `update {}` (rather
@@ -230,17 +194,17 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
      * any non-mutex-guarded field changes that land while this suspends waiting for the lock.
      */
     internal fun reprojectTrailsFromRepository(reason: String) {
-        if (!rt.mapReady || !rt.mapSurfaceVisible) return
-        if (rt.historyRepository.snapshots.value.isEmpty()) return
+        if (!rt.context.isMapReady || !rt.context.isMapSurfaceVisible) return
+        if (rt.dependencies.historyRepository.snapshots.value.isEmpty()) return
         rt.ports.viewModelScope.launch {
-            rt.trailReloadMutex.withLock {
-                val snapshots = rt.historyRepository.snapshots.value
-                if (snapshots.isEmpty()) return@withLock
+            rt.trailCommitLock.withCommitLock {
+                val snapshots = rt.dependencies.historyRepository.snapshots.value
+                if (snapshots.isEmpty()) return@withCommitLock
                 GeoVaultCaptureLog.d(
                     TrackerMapViewModel.TAG,
                     "map_update vm_trail_reproject reason=$reason snapshot_keys=${snapshots.size}",
                 )
-                rt.uiStateMutable.update { latest -> applyHistoryTrailsToState(latest, rt.projectSession(latest)) }
+                rt.stateHub.uiStateMutable.update { latest -> applyHistoryTrailsToState(latest, rt.projectSession(latest)) }
             }
         }
     }
@@ -249,27 +213,27 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         state: TrackerMapUiState,
         plan: TrackerMapStreamingPlan,
     ): TrackerMapUiState {
-        val trackers = rt.trackerManagementStateStore.trackers.value
+        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
         val visibleIds = visibleTrackerIdsForSessionPlan(state, plan)
         TrackerMapHistoryUiSync.syncRuntimeHeadOverlay(
             runtime = state.runtime,
             plan = plan,
-            snapshots = rt.historyRepository.snapshots.value,
+            snapshots = rt.dependencies.historyRepository.snapshots.value,
             trackers = trackers,
-            dispatcher = rt.historyIntentDispatcher,
+            dispatcher = rt.dependencies.historyIntentDispatcher,
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
         )
         return TrackerMapHistoryUiSync.applySnapshotsToState(
             state = state,
             plan = plan,
-            snapshots = rt.historyRepository.snapshots.value,
+            snapshots = rt.dependencies.historyRepository.snapshots.value,
             trackers = trackers,
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
             visibleTrackerIds = visibleIds,
         )
     }
 
-    internal fun visibleTrackerIdsForSessionPlan(
+    private fun visibleTrackerIdsForSessionPlan(
         state: TrackerMapUiState,
         plan: TrackerMapStreamingPlan,
     ): Set<String>? {
@@ -285,8 +249,8 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             TrackerMapDisplayMode.GROUP_PLACEHOLDER -> HiddenMapItemsPolicy
                 .visibleTrackerIdsForMap(
                     rosterTrackerIds = plan.groupTrackerIds,
-                    mapVisibility = rt.trackerManagementStateStore.mapVisibility.value,
-                    trackers = rt.trackerManagementStateStore.trackers.value,
+                    mapVisibility = rt.dependencies.trackerManagementStateStore.mapVisibility.value,
+                    trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
                 )
             TrackerMapDisplayMode.ALL_QUEUE -> plan.visibleRosterTrackerIds
             TrackerMapDisplayMode.SINGLE_SESSION -> null
@@ -298,14 +262,14 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         return buildMapRenderState(snapshot)
     }
 
-    internal fun buildMapRenderState(
+    private fun buildMapRenderState(
         snapshot: TrackerMapSessionSnapshot
     ): com.geovault.common.maps.render.MapRenderState {
         val s = snapshot.uiState
         val renderAllQueueTrailsByTracker = snapshot.renderTrailsByTracker
-        val trackerColors = rt.trackerManagementStateStore.trackers.value.associate { it.id to (it.color ?: "") }
-        val trackerDisplayNames = rt.trackerManagementStateStore.trackers.value.associate { it.id to it.name }
-        val trackerRenderOrder = rt.trackerManagementStateStore.trackers.value.map { it.id }
+        val trackerColors = rt.dependencies.trackerManagementStateStore.trackers.value.associate { it.id to (it.color ?: "") }
+        val trackerDisplayNames = rt.dependencies.trackerManagementStateStore.trackers.value.associate { it.id to it.name }
+        val trackerRenderOrder = rt.dependencies.trackerManagementStateStore.trackers.value.map { it.id }
         val effectiveDisplayedId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(s)
         val effectiveMapState = s.copy(
             trail = snapshot.singleTrail,
@@ -350,7 +314,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         return trailBoundsOrNull(snapshot, System.currentTimeMillis())
     }
 
-    internal fun trailBoundsOrNull(
+    private fun trailBoundsOrNull(
         snapshot: TrackerMapSessionSnapshot,
         nowMs: Long,
     ): LatLngBounds? {
@@ -362,11 +326,11 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
                 TrackerMapGroupBoundsInput(
                     visibleTrackerIds = visibleTrackerIds,
                     liveActiveFitEnabled = s.liveActiveFitEnabled,
-                    fitOnlyActiveTrackers = rt.trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers,
+                    fitOnlyActiveTrackers = rt.dependencies.trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers,
                     trailsByTracker = snapshot.renderTrailsByTracker,
                     remoteLastPoints = snapshot.acceptedRemoteLastPoints,
                     acceptedRemoteTrackerIds = sessionPlan.acceptedRemoteTrackerIds,
-                    trackers = rt.trackerManagementStateStore.trackers.value,
+                    trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
                     nowMs = nowMs,
                 ),
             )
@@ -378,7 +342,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             ?: singlePointBoundsFromRuntime(s.runtime, sessionPlan)
     }
 
-    internal fun singlePointBoundsFromRuntime(
+    private fun singlePointBoundsFromRuntime(
         runtime: TrackingRuntimeSnapshot,
         sessionPlan: TrackerMapStreamingPlan? = null,
     ): LatLngBounds? {
@@ -394,12 +358,12 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         return LatLngBounds.from(lat, lon, lat, lon)
     }
 
-    internal fun buildFallbackAccuracyByTrackerId(
+    private fun buildFallbackAccuracyByTrackerId(
         state: TrackerMapUiState,
         sessionPlan: TrackerMapStreamingPlan,
     ): Map<String, Float> {
         val fallbackByTrackerId = mutableMapOf<String, Float>()
-        rt.trackerManagementStateStore.trackers.value.forEach { tracker ->
+        rt.dependencies.trackerManagementStateStore.trackers.value.forEach { tracker ->
             val trackerId = tracker.id.trim()
             if (trackerId.isEmpty()) return@forEach
             extractTrackerLatestAccuracyMeters(tracker)?.toFinitePositiveOrNull()?.let { accuracy ->
@@ -415,7 +379,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         return fallbackByTrackerId
     }
 
-    internal fun resolveVisibleAccuracyTrackerIds(
+    private fun resolveVisibleAccuracyTrackerIds(
         state: TrackerMapUiState,
         effectiveDisplayedId: String
     ): Set<String> {
@@ -433,11 +397,11 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         }
     }
 
-    internal fun Float?.toFinitePositiveOrNull(): Float? {
+    private fun Float?.toFinitePositiveOrNull(): Float? {
         return this?.takeIf { it.isFinite() && it > 0f }
     }
 
-    internal fun extractTrackerLatestAccuracyMeters(tracker: Tracker): Float? {
+    private fun extractTrackerLatestAccuracyMeters(tracker: Tracker): Float? {
         val accuracyRaw = tracker.point_params?.lastOrNull()?.get("acc") ?: return null
         return when (accuracyRaw) {
             is Number -> accuracyRaw.toFloat()
@@ -447,17 +411,17 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
     }
 
     /**
-     * Keeps [rt.uiStateMutable] trail fields aligned with what history + render use, so resume guards and
-     * diagnostics that read `rt.uiStateMutable` match the drawn map.
+     * Keeps [rt.stateHub.uiStateMutable] trail fields aligned with what history + render use, so resume guards and
+     * diagnostics that read `rt.stateHub.uiStateMutable` match the drawn map.
      */
-    internal fun syncUiStateTrailsFromHistorySnapshot(trailsState: TrackerMapUiState) {
-        val current = rt.uiStateMutable.value
+    private fun syncUiStateTrailsFromHistorySnapshot(trailsState: TrackerMapUiState) {
+        val current = rt.stateHub.uiStateMutable.value
         if (current.trail == trailsState.trail &&
             current.allQueueTrailsByTracker == trailsState.allQueueTrailsByTracker
         ) {
             return
         }
-        rt.uiStateMutable.update { latest ->
+        rt.stateHub.uiStateMutable.update { latest ->
             if (latest.trail == trailsState.trail &&
                 latest.allQueueTrailsByTracker == trailsState.allQueueTrailsByTracker
             ) {

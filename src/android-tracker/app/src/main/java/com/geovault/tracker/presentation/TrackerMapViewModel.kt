@@ -220,7 +220,8 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     val uiState: StateFlow<TrackerMapUiState> = rt.uiState
     val renderPackage: StateFlow<TrackerMapRenderPackage> = rt.renderPackage
     val cameraDirective = rt.cameraDirective
-    val fitTrailEvents = rt.fitTrailEvents
+
+    fun cameraGeneration(): Long = rt.cameraGeneration()
 
     init {
         rt.start()

@@ -51,3 +51,30 @@ fun geoVaultCenterCameraPreserveZoom(map: GeoVaultBaseMap, latitude: Double, lon
         )
     )
 }
+
+/**
+ * Centers the camera on [latitude]/[longitude], zooming in to [minimumZoom] if the current zoom
+ * is wider than that floor, but never zooming back out if the user (or a prior camera move) has
+ * already zoomed in further. Mirrors the same "focus the position, don't fight a closer zoom"
+ * semantics already used for GPS follow/recenter
+ * ([geoVaultRetargetCameraPositionWithMinimumZoom]'s other callers); use this instead of
+ * [geoVaultCenterCameraPreserveZoom] whenever a lock/focus engaging for the first time should
+ * actually bring the camera in on the point rather than leave it at whatever zoom happened to be
+ * on screen.
+ */
+fun geoVaultCenterCameraWithMinimumZoom(
+    map: GeoVaultBaseMap,
+    latitude: Double,
+    longitude: Double,
+    minimumZoom: Double,
+) {
+    val target = latLngOrNull(latitude, longitude) ?: return
+    val mapLibreMap = map.maplibreMap ?: return
+    mapLibreMap.setCameraPosition(
+        geoVaultRetargetCameraPositionWithMinimumZoom(
+            current = mapLibreMap.cameraPosition,
+            target = target,
+            minimumZoom = minimumZoom,
+        )
+    )
+}

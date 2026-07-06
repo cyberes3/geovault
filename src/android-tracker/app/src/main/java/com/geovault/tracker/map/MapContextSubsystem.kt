@@ -15,6 +15,23 @@ import com.geovault.tracker.ui.TrackerPointTimestamps
 import kotlinx.coroutines.launch
 
 internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
+    // GODOBJECT-CONTEXT: these fields exist only to drive this subsystem's own resume/lifecycle
+    // decisions. `mapReady`, `mapSurfaceVisible`, and `pendingInitialTrackerForMap` are read
+    // (never written) from a couple of other subsystems -- see the [isMapReady]/
+    // [isMapSurfaceVisible]/[hasPendingInitialTrackerForMap] read-only accessors below -- so they
+    // stay `private var` here rather than living as loose mutable fields on `TrackerMapRuntime`.
+    private var lastBackgroundAtElapsedMs: Long = 0L
+    private var mapReady: Boolean = false
+    private var pendingResumeEvaluation: Boolean = false
+    private var mapSurfaceVisible: Boolean = false
+    private var pendingInitialTrackerForMap: Boolean = true
+    private var pendingReopenSingleTrackerLoadId: String? = null
+    private val reopenOrchestrator = TrackerMapReopenOrchestrator()
+
+    val isMapReady: Boolean get() = mapReady
+    val isMapSurfaceVisible: Boolean get() = mapSurfaceVisible
+    val hasPendingInitialTrackerForMap: Boolean get() = pendingInitialTrackerForMap
+
     fun setMode(mode: TrackerMapDisplayMode) {
         val groupOptions = if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             rt.resolveGroupModeOptions()
@@ -22,19 +39,19 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             emptyList()
         }
         val preferredGroupId = if (mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
-            val currentGroup = rt.uiStateMutable.value.currentGroupId.trim()
+            val currentGroup = rt.stateHub.uiStateMutable.value.currentGroupId.trim()
             currentGroup.takeIf { candidate -> groupOptions.any { it.groupId == candidate } }
                 ?: groupOptions.firstOrNull()?.groupId.orEmpty()
         } else {
             ""
         }
-        val nextState = rt.uiStateMutable.value.copy(
+        val nextState = rt.stateHub.uiStateMutable.value.copy(
             mode = mode,
             currentGroupId = preferredGroupId,
             groupModeOptions = groupOptions,
         )
         val pendingReopenTrackerId = if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            rt.pendingReopenSingleTrackerLoadId
+            pendingReopenSingleTrackerLoadId
         } else {
             null
         }
@@ -48,7 +65,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     fun setGroupModeGroup(groupId: String) {
         val normalized = groupId.trim()
         if (normalized.isEmpty()) return
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         if (state.currentGroupId == normalized && state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             return
         }
@@ -66,12 +83,12 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     fun openTrackerOnMap(trackerId: String, trackerName: String?) {
         val normalizedId = trackerId.trim()
         if (normalizedId.isEmpty()) return
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val resolvedName = trackerName?.trim().orEmpty().ifBlank {
             if (normalizedId == state.runtime.selectedTrackerId) {
                 state.runtime.selectedTrackerName
             } else {
-                rt.trackerManagementStateStore.trackers.value
+                rt.dependencies.trackerManagementStateStore.trackers.value
                     .firstOrNull { it.id == normalizedId }
                     ?.name
                     ?.trim()
@@ -101,7 +118,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         val resolvedGroupId = normalizedId.takeIf { candidate ->
             groupOptions.any { it.groupId == candidate }
         } ?: groupOptions.firstOrNull()?.groupId.orEmpty()
-        val nextState = rt.uiStateMutable.value.copy(
+        val nextState = rt.stateHub.uiStateMutable.value.copy(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,
             currentGroupId = resolvedGroupId,
             groupModeOptions = groupOptions,
@@ -118,9 +135,9 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun restoreSelectedTrackerMapContext() {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val selectedId = state.runtime.selectedTrackerId.trim()
-        rt.streamingReconciler.stopForegroundStreaming()
+        rt.dependencies.streamingReconciler.stopForegroundStreaming()
         // CHIP-X / POST-STREAM RESTORE: always collapse back to SINGLE_SESSION on the selected
         // tracker. Both entry points (the X on the top-left chip and the auto-restore that fires
         // when streaming ends) want a deterministic return to the user's selected tracker view.
@@ -129,8 +146,8 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         // streamTargetIds are unchanged), producing a visible "reconnecting" flicker without
         // any actual exit from the group.
         if (selectedId.isBlank()) {
-            rt.pendingInitialTrackerForMap = true
-            rt.pendingResumeEvaluation = true
+            pendingInitialTrackerForMap = true
+            pendingResumeEvaluation = true
             return
         }
         val nextState = state.copy(
@@ -148,16 +165,16 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun resolveListNavigationTarget(preferredTrackerIdOverride: String? = null): MapListNavigationTarget {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val preferredTrackerId = preferredTrackerIdOverride?.trim().orEmpty().ifBlank {
             TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         }.ifBlank {
             state.runtime.selectedTrackerId.trim()
         }.ifBlank { "" }
-        val preferredTrackerOwned = rt.trackerManagementStateStore.trackers.value
+        val preferredTrackerOwned = rt.dependencies.trackerManagementStateStore.trackers.value
             .firstOrNull { it.id == preferredTrackerId }
             ?.isOwner()
-        val currentGroupOwned = rt.trackerManagementStateStore.groups.value
+        val currentGroupOwned = rt.dependencies.trackerManagementStateStore.groups.value
             .firstOrNull { it.id == state.currentGroupId.trim() }
             ?.isOwner()
         return MapListNavigationPolicy.resolve(
@@ -176,14 +193,14 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         val state = snapshot.uiState
         val selection = buildSelectionCard(snapshot, normalizedTrackerId)
         if (selection == null) {
-            rt.uiStateMutable.value = state.withClearedMapSelectionCard()
+            rt.stateHub.uiStateMutable.value = state.withClearedMapSelectionCard()
             return
         }
-        rt.uiStateMutable.value = stateWithSelectionCard(state, selection)
+        rt.stateHub.uiStateMutable.value = stateWithSelectionCard(state, selection)
     }
 
     fun onMapBackgroundTapped(): Boolean {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         if (!TrackerMapViewModel.resolveBackgroundTapShouldCloseBottomCard(
                 isBottomCardVisible = state.isBottomCardVisible,
                 hasSelectionCard = state.selectedMapTracker != null
@@ -191,7 +208,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         ) {
             return false
         }
-        rt.uiStateMutable.value = state.withClearedMapSelectionCard()
+        rt.stateHub.uiStateMutable.value = state.withClearedMapSelectionCard()
         return true
     }
 
@@ -204,30 +221,30 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun focusSelectedTrackerOnMap() {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val selection = state.selectedMapTracker ?: return
         openTrackerOnMap(selection.trackerId, selection.trackerName)
     }
 
     fun toggleSelectedTrackerLock() {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val selection = state.selectedMapTracker ?: return
         toggleTrackerLock(selection.trackerId)
     }
 
     fun toggleDisplayedTrackerLock() {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val displayedId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         if (displayedId.isEmpty()) return
         toggleTrackerLock(displayedId)
     }
 
-    internal fun toggleTrackerLock(trackerId: String) {
+    private fun toggleTrackerLock(trackerId: String) {
         val selectedId = trackerId.trim()
         if (selectedId.isEmpty()) return
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val nextSelectionLock = if (state.selectionLockTrackerId == selectedId) "" else selectedId
-        rt.uiStateMutable.value = state.withAllMapLocksDisabled().copy(selectionLockTrackerId = nextSelectionLock)
+        rt.stateHub.uiStateMutable.value = state.withAllMapLocksDisabled().copy(selectionLockTrackerId = nextSelectionLock)
     }
 
     fun selectionLockPointOrNull(): Pair<Double, Double>? {
@@ -250,12 +267,12 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         return point.latitude to point.longitude
     }
 
-    internal fun buildSelectionCard(
+    private fun buildSelectionCard(
         snapshot: TrackerMapSessionSnapshot,
         trackerId: String
     ): TrackerMapSelectionCard? {
         val state = snapshot.uiState
-        val tracker = rt.trackerManagementStateStore.trackers.value.firstOrNull { it.id == trackerId }
+        val tracker = rt.dependencies.trackerManagementStateStore.trackers.value.firstOrNull { it.id == trackerId }
         val point = resolveTrackerPointData(snapshot, trackerId) ?: return null
         val trackerName = tracker?.name
             ?.takeIf { it.isNotBlank() }
@@ -279,13 +296,13 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         )
     }
 
-    internal fun resolveTrackerPointData(
+    private fun resolveTrackerPointData(
         snapshot: TrackerMapSessionSnapshot,
         trackerId: String
     ): TrackerMapResolvedPoint? {
         val normalizedId = trackerId.trim()
         if (normalizedId.isEmpty()) return null
-        val tracker = rt.trackerManagementStateStore.trackers.value.firstOrNull { it.id == normalizedId }
+        val tracker = rt.dependencies.trackerManagementStateStore.trackers.value.firstOrNull { it.id == normalizedId }
         val effectiveState = snapshot.uiState.copy(
             trail = snapshot.singleTrail,
             allQueueTrailsByTracker = snapshot.renderTrailsByTracker,
@@ -299,7 +316,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         )
     }
 
-    internal fun stateWithSelectionCard(
+    private fun stateWithSelectionCard(
         state: TrackerMapUiState,
         selection: TrackerMapSelectionCard
     ): TrackerMapUiState {
@@ -329,12 +346,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         )
     }
 
-    internal fun clearRenderedTrailsAfterHistoryCleared(trackerId: String) {
-        rt.uiStateMutable.value = stateWithClearedRenderedTrails(rt.uiStateMutable.value, trackerId)
-        rt.lastTrailLoadSeed = null
-    }
-
-    internal fun stateWithResetMapContext(
+    private fun stateWithResetMapContext(
         state: TrackerMapUiState,
         preservedSingleTrackerId: String? = null,
     ): TrackerMapUiState {
@@ -348,7 +360,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             .withClearedMapSelectionCard()
     }
 
-    internal fun applyMapContextTransition(
+    private fun applyMapContextTransition(
         nextState: TrackerMapUiState,
         pendingReopenTrackerId: String?,
         reloadReason: TrackerMapTrailReloadReason = TrackerMapTrailReloadReason.GenericMapRefresh,
@@ -358,20 +370,20 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         } else {
             null
         }
-        rt.uiStateMutable.value = stateWithResetMapContext(
+        rt.stateHub.uiStateMutable.value = stateWithResetMapContext(
             state = nextState,
             preservedSingleTrackerId = preservedSingleTrackerId,
         )
         rt.display.reprojectTrailsFromRepository("map_context_transition")
-        rt.pendingReopenSingleTrackerLoadId = pendingReopenTrackerId
-        rt.pendingFitAfterReload = true
-        rt.lastTrailLoadSeed = null
+        pendingReopenSingleTrackerLoadId = pendingReopenTrackerId
+        rt.pendingReloadCameraFit.arm(reloadReason)
+        rt.reload.invalidateLoadedSeed()
         rt.reload.requestRuntimeTrailReload(reloadReason)
         rt.streamRosterResolver.refreshStreamTargets()
     }
 
     fun onHostPaused() {
-        rt.lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
+        lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
     }
 
     fun onHostResumed() {
@@ -385,33 +397,33 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                 rt.display.publishRenderPackage()
             }
         }
-        if (rt.lastBackgroundAtElapsedMs <= 0L || !rt.mapSurfaceVisible) return
-        if (!rt.mapReady) {
-            rt.pendingResumeEvaluation = true
+        if (lastBackgroundAtElapsedMs <= 0L || !mapSurfaceVisible) return
+        if (!mapReady) {
+            pendingResumeEvaluation = true
             return
         }
         evaluateResumeAfterBackground(allowZeroGap = false)
     }
 
     fun onMapSurfaceVisible() {
-        rt.mapSurfaceVisible = true
-        if (!rt.mapReady) {
-            rt.pendingResumeEvaluation = rt.pendingResumeEvaluation ||
-                rt.pendingInitialTrackerForMap ||
-                rt.lastBackgroundAtElapsedMs > 0L
+        mapSurfaceVisible = true
+        if (!mapReady) {
+            pendingResumeEvaluation = pendingResumeEvaluation ||
+                pendingInitialTrackerForMap ||
+                lastBackgroundAtElapsedMs > 0L
             return
         }
-        evaluateResumeAfterBackground(allowZeroGap = rt.pendingInitialTrackerForMap || rt.pendingResumeEvaluation)
+        evaluateResumeAfterBackground(allowZeroGap = pendingInitialTrackerForMap || pendingResumeEvaluation)
         rt.display.reprojectTrailsFromRepository("map_surface_visible")
         rt.streamTargetReconciler.bumpReconcileToken()
     }
 
     fun onMapSurfaceHidden(markBackground: Boolean = false) {
-        rt.mapSurfaceVisible = false
-        rt.mapReady = false
+        mapSurfaceVisible = false
+        mapReady = false
         if (markBackground) {
-            rt.lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
-            rt.pendingResumeEvaluation = true
+            lastBackgroundAtElapsedMs = SystemClock.elapsedRealtime()
+            pendingResumeEvaluation = true
         }
         rt.streamTargetReconciler.bumpReconcileToken()
         rt.ports.viewModelScope.launch {
@@ -420,33 +432,33 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun setMapReady(isReady: Boolean) {
-        rt.mapReady = isReady
-        if (!rt.mapReady || !rt.pendingResumeEvaluation) return
-        rt.pendingResumeEvaluation = false
-        evaluateResumeAfterBackground(allowZeroGap = rt.pendingInitialTrackerForMap)
+        mapReady = isReady
+        if (!mapReady || !pendingResumeEvaluation) return
+        pendingResumeEvaluation = false
+        evaluateResumeAfterBackground(allowZeroGap = pendingInitialTrackerForMap)
     }
 
     internal fun evaluateResumeAfterBackground(allowZeroGap: Boolean) {
-        val backgroundDurationMs = if (rt.lastBackgroundAtElapsedMs > 0L) {
-            SystemClock.elapsedRealtime() - rt.lastBackgroundAtElapsedMs
+        val backgroundDurationMs = if (lastBackgroundAtElapsedMs > 0L) {
+            SystemClock.elapsedRealtime() - lastBackgroundAtElapsedMs
         } else {
             0L
         }
         if (backgroundDurationMs <= 0L && !allowZeroGap) return
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val groupSelection = rt.resolveGroupModeSelection(state)
-        val hasPendingInitialTracker = rt.pendingInitialTrackerForMap
+        val hasPendingInitialTracker = pendingInitialTrackerForMap
         val selectedTrackerId = state.runtime.selectedTrackerId.trim()
         if (hasPendingInitialTracker &&
             state.mode == TrackerMapDisplayMode.SINGLE_SESSION &&
             selectedTrackerId.isBlank() &&
             TrackerMapDisplayIds.effectiveDisplayedTrackerId(state).isBlank()
         ) {
-            rt.pendingResumeEvaluation = true
+            pendingResumeEvaluation = true
             return
         }
-        rt.pendingInitialTrackerForMap = false
-        val streamRuntime = rt.liveStreamSubscriptionRepository.state.value
+        pendingInitialTrackerForMap = false
+        val streamRuntime = rt.dependencies.liveStreamSubscriptionRepository.state.value
         // STREAMING-RESUME NO-OP: when a group / all-queue stream is already running with the
         // right targets and we have populated trails for the displayed roster, the WS is the
         // authoritative source and the orchestrator's reload+reconcile pass would only cause
@@ -460,8 +472,8 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             streamingActiveTargetsMatchDisplayed(state, streamRuntime, groupSelection) &&
             displayedRosterHasServerHistory(state, groupSelection)
         ) {
-            rt.lastBackgroundAtElapsedMs = 0L
-            rt.pendingResumeEvaluation = false
+            lastBackgroundAtElapsedMs = 0L
+            pendingResumeEvaluation = false
             return
         }
         // STREAMING EXCLUSION (resume): the persisted ids are taken at face value. The projector
@@ -481,10 +493,10 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         // pass; pre-filtering the selected tracker here would silently drop our own tracker from a
         // persisted group / all-queue stream every time we resume from background.
         val resumeStreamTrackerIds = StreamingTargetPolicy.normalizeTrackerIds(unsanitizedResumeStreamTrackerIds)
-        val outcome = rt.reopenOrchestrator.resolve(
+        val outcome = reopenOrchestrator.resolve(
             TrackerMapResumeInput(
                 trackingRunning = state.runtime.localRecordingActive,
-                mapReady = rt.mapReady,
+                mapReady = mapReady,
                 showAllTrackers = state.mode == TrackerMapDisplayMode.ALL_QUEUE,
                 mapViewContext = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     TrackerMapViewContext.GROUP
@@ -513,8 +525,8 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             applyReopenDecision(outcome.decision)
             rt.streamRosterResolver.refreshStreamTargets()
             rt.streamTargetReconciler.bumpReconcileToken()
-            rt.lastBackgroundAtElapsedMs = 0L
-            rt.pendingResumeEvaluation = false
+            lastBackgroundAtElapsedMs = 0L
+            pendingResumeEvaluation = false
         }
     }
 
@@ -547,27 +559,27 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         }
         val normalizedRosterIds = rosterIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         if (normalizedRosterIds.isEmpty()) return false
-        val trackers = rt.trackerManagementStateStore.trackers.value
-        val snapshots = rt.historyRepository.snapshots.value
+        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
+        val snapshots = rt.dependencies.historyRepository.snapshots.value
         return normalizedRosterIds.all { trackerId ->
             TrackerMapHistoryUiSync.hasAuthoritativeServerTrunk(snapshots, trackers, trackerId)
         }
     }
 
-    internal suspend fun applyReopenDecision(decision: TrackerMapResumeDecision) {
+    private suspend fun applyReopenDecision(decision: TrackerMapResumeDecision) {
         when (decision) {
             TrackerMapResumeDecision.NoOp -> Unit
             TrackerMapResumeDecision.MultiContextNoStreaming -> Unit
             is TrackerMapResumeDecision.StartMultiContextStreaming -> {
-                rt.pendingReopenSingleTrackerLoadId = null
-                val locallyRecordedTrackerId = rt.uiStateMutable.value.runtime.locallyRecordedTrackerId
+                pendingReopenSingleTrackerLoadId = null
+                val locallyRecordedTrackerId = rt.stateHub.uiStateMutable.value.runtime.locallyRecordedTrackerId
                 val ids = StreamingTargetPolicy.remoteSubscriptionTargets(
                     StreamingTargetPolicyInput(
                         requestedTrackerIds = decision.trackerIds,
                         locallyRecordedTrackerIds = rt.reload.setOfNotBlank(locallyRecordedTrackerId),
                     )
                 )
-                rt.uiStateMutable.update { cur ->
+                rt.stateHub.uiStateMutable.update { cur ->
                     cur.copy(
                         streamTargetIds = ids,
                         remoteLastPoints = TrackerMapViewModel.filterRemoteLastPointsForAcceptedIds(cur.remoteLastPoints, ids),
@@ -576,10 +588,10 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                 rt.streamTargetReconciler.bumpReconcileToken()
             }
             TrackerMapResumeDecision.ClearSingleTrackerState -> {
-                rt.pendingReopenSingleTrackerLoadId = null
+                pendingReopenSingleTrackerLoadId = null
                 // CONTEXT RESET: no tracker is displayed anymore, so any previously-set selection
                 // lock is no longer meaningful — clear all map locks alongside the card.
-                rt.uiStateMutable.update { cur ->
+                rt.stateHub.uiStateMutable.update { cur ->
                     cur.copy(
                         displayedTrackerId = "",
                         displayedTrackerName = "",
@@ -587,7 +599,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                         streamTargetIds = emptySet(),
                     ).withAllMapLocksDisabled().withClearedMapSelectionCard()
                 }
-                rt.streamingReconciler.stopForegroundStreaming()
+                rt.dependencies.streamingReconciler.stopForegroundStreaming()
             }
             is TrackerMapResumeDecision.LoadSingleTrackerRuntime,
             is TrackerMapResumeDecision.LoadSingleTrackerBootstrap -> {
@@ -595,21 +607,21 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                     is TrackerMapResumeDecision.LoadSingleTrackerRuntime -> decision.trackerId
                     is TrackerMapResumeDecision.LoadSingleTrackerBootstrap -> decision.trackerId
                 }
-                rt.pendingReopenSingleTrackerLoadId = trackerId.takeIf { it.isNotBlank() }
+                pendingReopenSingleTrackerLoadId = trackerId.takeIf { it.isNotBlank() }
                 if (trackerId.isNotBlank()) {
-                    val runtime = rt.uiStateMutable.value.runtime
+                    val runtime = rt.stateHub.uiStateMutable.value.runtime
                     val trackerName = if (trackerId == runtime.selectedTrackerId) {
                         runtime.selectedTrackerName
                     } else {
-                        rt.uiStateMutable.value.displayedTrackerName
+                        rt.stateHub.uiStateMutable.value.displayedTrackerName
                     }
                     // SWITCHING DISPLAYED TRACKER: when the resume decision points us at a
                     // different tracker than the one currently displayed, drop any selection lock
                     // tied to the previous tracker. Same-tracker bootstraps/runtime resyncs leave
                     // the lock alone so a user-set lock survives a benign resume.
-                    val previousDisplayedTrackerId = rt.uiStateMutable.value.displayedTrackerId.trim()
+                    val previousDisplayedTrackerId = rt.stateHub.uiStateMutable.value.displayedTrackerId.trim()
                     val trackerChanged = trackerId.trim() != previousDisplayedTrackerId
-                    rt.uiStateMutable.value = rt.uiStateMutable.value.copy(
+                    rt.stateHub.uiStateMutable.value = rt.stateHub.uiStateMutable.value.copy(
                         displayedTrackerId = trackerId,
                         displayedTrackerName = trackerName,
                     ).let { next ->
@@ -617,21 +629,21 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
                     }.withClearedMapSelectionCard()
                 }
                 rt.reload.requestAndAwaitRuntimeTrailReload(TrackerMapTrailReloadReason.ExplicitTrackerLoad)
-                if (rt.pendingReopenSingleTrackerLoadId == trackerId) {
-                    rt.pendingReopenSingleTrackerLoadId = null
+                if (pendingReopenSingleTrackerLoadId == trackerId) {
+                    pendingReopenSingleTrackerLoadId = null
                 }
                 rt.streamTargetReconciler.bumpReconcileToken()
             }
             TrackerMapResumeDecision.RestartDisplayedTrackerStreaming -> {
-                rt.pendingReopenSingleTrackerLoadId = null
+                pendingReopenSingleTrackerLoadId = null
                 rt.streamTargetReconciler.bumpReconcileToken()
             }
         }
     }
 
     fun setFollowLock(enabled: Boolean) {
-        val state = rt.uiStateMutable.value
-        rt.uiStateMutable.value = if (enabled) {
+        val state = rt.stateHub.uiStateMutable.value
+        rt.stateHub.uiStateMutable.value = if (enabled) {
             state.withAllMapLocksDisabled().copy(followLockEnabled = true)
         } else {
             state.copy(followLockEnabled = false)
@@ -639,16 +651,21 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun disableAllMapLocks() {
-        val state = rt.uiStateMutable.value
+        // GESTURE-BUMP: bump the coordinator generation unconditionally, regardless of whether a
+        // lock was actually active -- a directive minted a moment ago (e.g. a reload-landing fit
+        // still in flight) must never apply after the user has started manually moving the
+        // camera, even if no lock flag happened to be set at the time.
+        rt.cameraCoordinator.onUserGestureStarted()
+        val state = rt.stateHub.uiStateMutable.value
         if (!state.followLockEnabled && !state.liveActiveFitEnabled && state.selectionLockTrackerId.isEmpty()) {
             return
         }
-        rt.uiStateMutable.value = state.withAllMapLocksDisabled()
+        rt.stateHub.uiStateMutable.value = state.withAllMapLocksDisabled()
     }
 
     fun setLiveActiveFit(enabled: Boolean) {
-        val state = rt.uiStateMutable.value
-        rt.uiStateMutable.value = if (enabled) {
+        val state = rt.stateHub.uiStateMutable.value
+        rt.stateHub.uiStateMutable.value = if (enabled) {
             state.withAllMapLocksDisabled().copy(liveActiveFitEnabled = true)
         } else {
             state.copy(liveActiveFitEnabled = false)
@@ -660,7 +677,10 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     fun requestFitTrail(mode: TrackerMapFitTrailMode = TrackerMapFitTrailMode.Animated) {
-        rt.fitTrailSignal.trySend(mode)
+        // FIT-FRESHNESS: bounds are computed synchronously right now, against whatever state is
+        // current at the moment of the request, rather than lazily inside the Compose consumer.
+        // This is strictly fresher than pulling bounds later when the directive is applied.
+        rt.cameraCoordinator.requestExplicitFit(rt.display.trailBoundsOrNull(), mode)
     }
 
     internal fun stateWithRefreshedSelectionCard(

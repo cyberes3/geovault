@@ -5,35 +5,51 @@ import org.maplibre.android.geometry.LatLngBounds
 /**
  * CAMERA-DIRECTIVE: single source of truth for "what the camera should do next".
  *
- * Replaces a handful of overlapping `LaunchedEffect` blocks in `MapScreen` that each watched a
- * different slice of state and could interleave in unpredictable ways. Each emission represents
- * the resolved precedence winner; the consumer applies it and waits for the next non-equal
- * emission.
+ * Every camera command -- precedence-driven (lock resolution) or explicit (a one-shot fit
+ * request) -- flows through this same sealed type via
+ * [com.geovault.tracker.map.TrackerMapCameraCoordinator]. The consumer applies it and waits for
+ * the next non-equal emission.
  *
  * `id` lets the consumer key a `LaunchedEffect` deterministically. When the resolved directive
- * changes meaningfully (different reason, different target, or a fresh ExplicitFit gesture) the
+ * changes meaningfully (different reason, different target, or a fresh explicit-fit request) the
  * id increments and the effect re-runs; consecutive identical resolutions share an id and do
  * not retrigger camera animations.
+ *
+ * `generation` is the coordinator's manual-control generation at mint time. A user gesture bumps
+ * the generation unconditionally; the consumer discards any directive whose `generation` is
+ * behind the coordinator's current generation, so a command queued a moment before the user took
+ * over the camera can never apply after the fact.
  */
 sealed class TrackerMapCameraDirective {
     abstract val id: Long
+    abstract val generation: Long
     abstract val reason: Reason
 
-    data class None(override val id: Long = 0L) : TrackerMapCameraDirective() {
+    data class None(override val id: Long = 0L, override val generation: Long = 0L) : TrackerMapCameraDirective() {
         override val reason: Reason get() = Reason.NoOp
     }
 
-    data class CenterPreserveZoom(
+    /**
+     * Center on a tracker/GPS position for [Reason.SelectionLock] or [Reason.FollowLock]. Despite
+     * the "center" framing, the consumer does not strictly preserve whatever zoom is currently on
+     * screen -- it zooms in to at least a sensible floor (never zooming back out past it), so
+     * engaging a lock actually focuses on the position instead of leaving the camera at whatever
+     * zoom a prior fit happened to land on. See `geoVaultCenterCameraWithMinimumZoom`.
+     */
+    data class CenterOnPoint(
         val latitude: Double,
         val longitude: Double,
         override val reason: Reason,
         override val id: Long,
+        override val generation: Long,
     ) : TrackerMapCameraDirective()
 
     data class FitBounds(
         val bounds: LatLngBounds,
+        val mode: TrackerMapFitTrailMode,
         override val reason: Reason,
         override val id: Long,
+        override val generation: Long,
     ) : TrackerMapCameraDirective()
 
     enum class Reason {
@@ -62,24 +78,26 @@ data class TrackerMapCameraDirectiveInput(
  * CAMERA-DIRECTIVE: precedence is hard-coded so consumers don't have to reason about it. Tests
  * cover every (input -> directive) row, which means adding a new lock kind in the future starts
  * with a failing test for the precedence row.
- *
- * NOTE: [TrackerMapCameraDirective.Reason.ExplicitFit] is intentionally _not_ produced here —
- * it is a one-shot user gesture routed through a separate channel/event so multiple presses
- * always re-fit even when the resulting bounds are equal to a previously-rendered fit.
  */
 object TrackerMapCameraDirectivePolicy {
     fun resolve(input: TrackerMapCameraDirectiveInput): Resolution {
-        if (
-            input.selectionLockEnabled &&
-            input.selectionLockLat != null &&
-            input.selectionLockLon != null
-        ) {
-            return Resolution(
-                reason = TrackerMapCameraDirective.Reason.SelectionLock,
-                centerLat = input.selectionLockLat,
-                centerLon = input.selectionLockLon,
-                bounds = null,
-            )
+        if (input.selectionLockEnabled) {
+            // A claimed selection lock owns the camera outright. Falling through to a
+            // bounds-based directive underneath it when coordinates are transiently
+            // unresolved (e.g. the instant a stream starts, before a point has landed) used to
+            // hand the camera to a full-extent InitialFit/LiveActiveFit fit -- exactly the
+            // "conflicts with full extent" behavior this guards against. Holding still (None)
+            // until a point resolves is strictly better than a camera move nobody asked for.
+            return if (input.selectionLockLat != null && input.selectionLockLon != null) {
+                Resolution(
+                    reason = TrackerMapCameraDirective.Reason.SelectionLock,
+                    centerLat = input.selectionLockLat,
+                    centerLon = input.selectionLockLon,
+                    bounds = null,
+                )
+            } else {
+                Resolution.None
+            }
         }
         if (
             input.followLockEnabled &&

@@ -4,6 +4,8 @@ import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.MapStreamingServiceHelper
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.tracker.history.TrackerHistoryKey
+import com.geovault.tracker.history.TrackerHistoryWindowResolver
 import com.geovault.tracker.presentation.TrackerMapAutoLockPolicy
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapFilterChangeReactor
@@ -32,8 +34,10 @@ import kotlinx.coroutines.flow.update
  * `streamTargetIds` that the reconciler's combined flow subsequently reacts to.
  */
 internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
+    private var lastStreamTargetsSeed: String? = null
+
     fun refreshStreamTargets() {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val groupSelection = rt.resolveGroupModeSelection(state)
         val visibleRosterTrackerIds = rt.visibleMapRosterTrackerIds()
         val plan = rt.projectSession(
@@ -66,7 +70,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
             nextTargets = nextStreamTargetIds,
             displayedTrackerId = plan.displayedTrackerId,
         )
-        rt.uiStateMutable.update { cur ->
+        rt.stateHub.uiStateMutable.update { cur ->
             val baseNext = cur.copy(
                 streamTargetIds = nextStreamTargetIds,
                 remoteLastPoints = TrackerMapViewModel.filterRemoteLastPointsForAcceptedIds(
@@ -95,7 +99,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
         // group/roster inputs) keyed against the *post-update* state, since currentGroupId may
         // have just changed to plan.resolvedGroupId -- that's the state the next
         // TrackPointReducer/StreamTargetReconciler call will actually check the signature against.
-        rt.streamingPlanCache.warm(rt.uiStateMutable.value, plan)
+        rt.streamingPlanCache.warm(rt.stateHub.uiStateMutable.value, plan)
     }
 
     /**
@@ -123,8 +127,8 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
                 groupSelection = groupSelection
             )
         )
-        val seedChanged = seed != rt.lastStreamTargetsSeed
-        rt.lastStreamTargetsSeed = seed
+        val seedChanged = seed != lastStreamTargetsSeed
+        lastStreamTargetsSeed = seed
         val nextStreamTargetIds = plan.remoteSubscriptionIds
         val shouldLoadHistoryForStreamingStart = seedChanged &&
             nextStreamTargetIds.isNotEmpty() &&
@@ -144,7 +148,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
                 // already hold; then request the forced reload that will overwrite those with the
                 // server's window-bounded response.
                 rt.sessionRequestDeduper.invalidate(change.trackerId)
-                rt.recomposeHistoryForTracker(change.trackerId)
+                recomposeHistoryForTracker(change.trackerId)
                 rt.display.publishRenderPackage()
                 rt.reload.requestRuntimeTrailReload(TrackerMapTrailReloadReason.RecentDataWindowChanged)
             }
@@ -159,9 +163,9 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
      * must be torn down explicitly here rather than left to age out on its own.
      */
     suspend fun handleTrackerRemovedFromRoster(trackerId: String) {
-        val outcome = TrackerMapRosterRemovalPolicy.applyRemoval(rt.uiStateMutable.value, trackerId)
+        val outcome = TrackerMapRosterRemovalPolicy.applyRemoval(rt.stateHub.uiStateMutable.value, trackerId)
         if (!outcome.changed) return
-        rt.uiStateMutable.value = outcome.nextState
+        rt.stateHub.uiStateMutable.value = outcome.nextState
         // STALE-PLAN-CACHE GUARD: `TrackerMapStreamingPlanCache` is keyed in part on
         // `state.renderMetadataSignature`, which is only refreshed by the independent
         // "roster-fingerprint" collector reacting to the tracker/group/visibility store flows --
@@ -174,7 +178,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
         // wrote -- closes that gap regardless of the other collector's timing, and covers every
         // caller (including `validateColdStartAgainstRoster`'s cold-start loop, which never calls
         // `refreshStreamTargets()` itself).
-        rt.streamingPlanCache.warm(rt.uiStateMutable.value, rt.projectSession(rt.uiStateMutable.value))
+        rt.streamingPlanCache.warm(rt.stateHub.uiStateMutable.value, rt.projectSession(rt.stateHub.uiStateMutable.value))
         GeoVaultCaptureLog.i(
             TrackerMapViewModel.TAG,
             "roster_removal trackerId=$trackerId shouldRefreshStreamTargets=${outcome.shouldRefreshStreamTargets}"
@@ -195,12 +199,12 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
      * live roster removal, per [TrackerMapRosterRemovalPolicy]'s scope note.
      */
     suspend fun validateColdStartAgainstRoster(rosterIds: Set<String>) {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val displayedId = state.displayedTrackerId.trim()
         if (displayedId.isNotEmpty() && displayedId !in rosterIds) {
             handleTrackerRemovedFromRoster(displayedId)
         }
-        val cardTrackerId = rt.uiStateMutable.value.selectedMapTracker?.trackerId?.trim().orEmpty()
+        val cardTrackerId = rt.stateHub.uiStateMutable.value.selectedMapTracker?.trackerId?.trim().orEmpty()
         if (cardTrackerId.isNotEmpty() && cardTrackerId !in rosterIds) {
             handleTrackerRemovedFromRoster(cardTrackerId)
         }
@@ -214,7 +218,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
             }
         }
 
-        val runtime = rt.uiStateMutable.value.runtime
+        val runtime = rt.stateHub.uiStateMutable.value.runtime
         if (!runtime.localRecordingActive) {
             val persistedSelectedId = SelectedTrackerPrefs.selectedTrackerId(rt.ports.application).trim()
             if (persistedSelectedId.isNotEmpty() && persistedSelectedId !in rosterIds) {
@@ -224,6 +228,34 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
                 )
                 SelectedTrackerManager.clearSelectedTracker(rt.ports.application)
             }
+        }
+    }
+
+    /**
+     * Recomposes every history snapshot for [trackerId] against the current filter window --
+     * called after a filter-window change, before the reload that will backfill the newly
+     * in-window range from the server, so client-side re-filtering of already-held points is
+     * instant instead of waiting on that round trip.
+     */
+    private fun recomposeHistoryForTracker(trackerId: String) {
+        val normalized = trackerId.trim()
+        if (normalized.isEmpty()) return
+        val sessionStart = rt.currentActiveSessionStartMs()
+        val keys = rt.dependencies.historyRepository.snapshots.value.keys.filter { it.normalizedTrackerId == normalized }
+        if (keys.isEmpty()) {
+            val tracker = rt.dependencies.trackerManagementStateStore.trackers.value.firstOrNull { it.id.trim() == normalized }
+            val window = TrackerHistoryWindowResolver.fromTracker(tracker)
+            rt.dependencies.historyRepository.composeAndPublish(
+                key = TrackerHistoryKey(normalized, window),
+                activeSessionStartMs = sessionStart,
+            )
+            return
+        }
+        for (key in keys) {
+            rt.dependencies.historyRepository.composeAndPublish(
+                key = key,
+                activeSessionStartMs = sessionStart,
+            )
         }
     }
 }

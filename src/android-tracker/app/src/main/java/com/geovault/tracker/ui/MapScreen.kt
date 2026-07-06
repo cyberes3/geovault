@@ -60,8 +60,9 @@ import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
 import com.geovault.common.maps.core.GeoVaultMapPaddingDp
 import com.geovault.common.maps.core.GeoVaultMapPhase
+import com.geovault.common.maps.core.MapLibreManager
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
-import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
+import com.geovault.common.maps.core.geoVaultCenterCameraWithMinimumZoom
 import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
 import com.geovault.common.maps.core.latLngOrNull
@@ -452,18 +453,36 @@ private fun TrackerMapAuthenticatedContent(
         renderPlugin.setRenderState(resolvedState)
     }
 
-    // CAMERA-DIRECTIVE: single consumer for VM-resolved camera moves. Precedence is enforced
-    // upstream so this effect doesn't have to consider whether follow-lock or selection-lock or
-    // initial-fit "wins"; it just applies whatever the VM resolved. Tracks consumed directive
-    // ids for InitialFit so the one-shot semantics survive bounds shape churn (e.g. trail growth)
-    // until the viewport context resets and re-arms them.
+    // CAMERA-DIRECTIVE: single consumer for every VM-resolved camera move -- precedence-driven
+    // (SelectionLock/FollowLock/LiveActiveFit/InitialFit) and one-shot explicit (ExplicitFit)
+    // directives both flow through this one stream, each stamped with the manual-control
+    // generation active at mint time. Discarding a directive whose generation is behind the
+    // ViewModel's *current* generation is what closes the "fit landed while panning" race: a
+    // directive minted a moment before a gesture can still reach this effect, but by the time it
+    // runs, the generation check catches that the user has since taken over the camera and skips
+    // applying it. Precedence itself is enforced upstream so this effect doesn't have to reason
+    // about which lock "wins"; it just applies whatever the VM resolved. Tracks consumed
+    // directive ids for InitialFit so the one-shot semantics survive bounds shape churn (e.g.
+    // trail growth) until the viewport context resets and re-arms them.
     val cameraDirective by viewModel.cameraDirective.collectAsState()
     LaunchedEffect(phase, cameraDirective.id) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        when (val directive = cameraDirective) {
+        val directive = cameraDirective
+        if (directive.generation != viewModel.cameraGeneration()) return@LaunchedEffect
+        when (directive) {
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.None -> Unit
-            is com.geovault.tracker.presentation.TrackerMapCameraDirective.CenterPreserveZoom -> {
-                geoVaultCenterCameraPreserveZoom(map, directive.latitude, directive.longitude)
+            is com.geovault.tracker.presentation.TrackerMapCameraDirective.CenterOnPoint -> {
+                // FOCUS-NOT-PRESERVE: zoom in to a sensible floor instead of leaving the camera at
+                // whatever zoom a prior fit happened to land on -- e.g. a selection lock engaging
+                // the instant a stream starts should focus on the tracker's position, not inherit
+                // a leftover full-extent zoom level. Never zooms back out past a closer zoom the
+                // user (or a prior directive) already set.
+                geoVaultCenterCameraWithMinimumZoom(
+                    map = map,
+                    latitude = directive.latitude,
+                    longitude = directive.longitude,
+                    minimumZoom = MapLibreManager.DEFAULT_POINT_ZOOM,
+                )
             }
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.FitBounds -> {
                 if (directive.reason == com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.InitialFit) {
@@ -475,15 +494,27 @@ private fun TrackerMapAuthenticatedContent(
                         map = map,
                         bounds = directive.bounds,
                         boundsFitPaddingPx = boundsFitPaddingPx,
-                        mode = TrackerMapFitTrailMode.Instant,
+                        mode = directive.mode,
                     )
                     didInitialBounds = true
                 } else {
+                    // EXPLICIT-FIT GPS ANCHOR: a one-shot explicit fit (the "Home" FAB) additionally
+                    // frames in the last-resolved GPS one-shot anchor, if any. That anchor is
+                    // Compose-local UI state the ViewModel has no notion of, so the union happens
+                    // here rather than at request time.
+                    val effectiveBounds = if (
+                        directive.reason == com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.ExplicitFit
+                    ) {
+                        gpsHomeAnchor?.let { anchor -> geoVaultLatLngBoundsUnion(directive.bounds, listOf(anchor)) }
+                            ?: directive.bounds
+                    } else {
+                        directive.bounds
+                    }
                     fitTrackerMapBounds(
                         map = map,
-                        bounds = directive.bounds,
+                        bounds = effectiveBounds,
                         boundsFitPaddingPx = boundsFitPaddingPx,
-                        mode = TrackerMapFitTrailMode.Instant,
+                        mode = directive.mode,
                     )
                 }
             }
@@ -505,31 +536,6 @@ private fun TrackerMapAuthenticatedContent(
         if (mapInitialFrameReady) return@LaunchedEffect
         delay(800L)
         mapInitialFrameReady = true
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.fitTrailEvents.collect { mode ->
-            if (map.phase.value != GeoVaultMapPhase.Ready) return@collect
-            // FIT-FRESHNESS: compute bounds at the moment of fit instead of reading the cached
-            // render-package bounds. The render package is published asynchronously off
-            // _uiState.collect, so when a fit is requested in the same tick that flipped
-            // _uiState.value (e.g. immediately after a server reload completes) the cached
-            // bounds can still reflect the previous frame and the camera animates to stale data.
-            val bounds = viewModel.trailBoundsOrNull()
-            val anchor = gpsHomeAnchor
-            val effective = when {
-                bounds != null && anchor != null -> geoVaultLatLngBoundsUnion(bounds, listOf(anchor))
-                else -> bounds
-            }
-            if (effective != null) {
-                fitTrackerMapBounds(
-                    map = map,
-                    bounds = effective,
-                    boundsFitPaddingPx = boundsFitPaddingPx,
-                    mode = mode,
-                )
-            }
-        }
     }
 
     Column(

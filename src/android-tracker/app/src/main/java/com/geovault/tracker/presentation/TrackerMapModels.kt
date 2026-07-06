@@ -147,6 +147,14 @@ internal fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = co
 )
 
 /**
+ * True when any of the three mutually-exclusive map locks currently claims the camera. Used to
+ * gate [com.geovault.tracker.map.PendingReloadCameraFit.consumeIfLanded] so an automatic
+ * reload-landing fit never fights a lock that's already claimed the camera.
+ */
+internal fun TrackerMapUiState.hasAnyMapLockActive(): Boolean =
+    followLockEnabled || liveActiveFitEnabled || selectionLockTrackerId.trim().isNotEmpty()
+
+/**
  * Hides the per-tracker info card and drops the in-card selection. Intentionally does NOT clear
  * `selectionLockTrackerId` — the camera lock is tied to a tracker, not to the card's visibility.
  * Closing the card via background tap, marker re-tap, or any other "dismiss the card" gesture

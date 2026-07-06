@@ -2,6 +2,9 @@ package com.geovault.tracker.map
 
 import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.streaming.LiveStreamSubscriptionState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Owns the reconcile-token bookkeeping and the single decision point that turns the current
@@ -15,8 +18,13 @@ import com.geovault.tracker.streaming.LiveStreamSubscriptionState
  * ui state at all.
  */
 internal class StreamTargetReconciler(private val rt: TrackerMapRuntime) {
+    // Explicit invalidation signal for the combined-reconcile flow in
+    // `MapStreamingSubsystem.startCollectors` -- see [reconcileToken].
+    private val reconcileTokenMutable = MutableStateFlow(0L)
+    val reconcileToken: StateFlow<Long> = reconcileTokenMutable.asStateFlow()
+
     fun bumpReconcileToken() {
-        rt.reconcileTokenMutable.value = rt.reconcileTokenMutable.value + 1L
+        reconcileTokenMutable.value = reconcileTokenMutable.value + 1L
     }
 
     /**
@@ -54,7 +62,7 @@ internal class StreamTargetReconciler(private val rt: TrackerMapRuntime) {
         // `remoteSubscriptionIds` -- not `state.streamTargetIds` -- is what actually drives the
         // lease decision below; see [LiveTrackStreamingReconciler] for why.
         val plan = rt.streamingPlanCache.resolve(state, rt::projectSession)
-        rt.streamingReconciler.reconcile(
+        rt.dependencies.streamingReconciler.reconcile(
             mode = plan.mode,
             remoteSubscriptionIds = plan.remoteSubscriptionIds,
             locallyRecordedTrackerId = state.runtime.locallyRecordedTrackerId,

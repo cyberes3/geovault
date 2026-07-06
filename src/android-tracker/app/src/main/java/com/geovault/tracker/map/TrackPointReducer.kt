@@ -31,7 +31,7 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
         // decision and the mutation itself, so the two can never disagree. Resolved through
         // the cache since this runs once per incoming point across every streamed tracker --
         // see TrackerMapStreamingPlanCache for why a fresh per-point roster scan doesn't scale.
-        val plan = rt.streamingPlanCache.resolve(rt.uiStateMutable.value, rt::projectSession)
+        val plan = rt.streamingPlanCache.resolve(rt.stateHub.uiStateMutable.value, rt::projectSession)
         val route = TrackerMapPointRouter.route(point, plan)
         if (!route.accepted) {
             if (CaptureLogThrottle.shouldLogOnChange(
@@ -51,7 +51,7 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
         // SINGLE-EMISSION POINT-APPLY: applying the trail/remoteLastPoint mutation and
         // refreshing the open selection card's position/accuracy for the same tracker used to
         // be two separate `uiStateMutable` writes (this `update {}` followed by a second
-        // `rt.uiStateMutable.value = stateWithRefreshedSelectionCard(...)`). `MapStreamingSubsystem`
+        // `rt.stateHub.uiStateMutable.value = stateWithRefreshedSelectionCard(...)`). `MapStreamingSubsystem`
         // wires several `collect` (not `collectLatest`) consumers straight off `uiStateMutable`
         // (the "render-resync" and "reconcile" collectors), so a collector resumed between the
         // two writes could render a frame where the marker's own trail/remoteLastPoint had
@@ -59,7 +59,7 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
         // stale pre-point position/accuracy for that identical tracker. Computing the
         // selection-card refresh from the same post-trail-apply snapshot inside this single
         // `update {}` block closes that window.
-        rt.uiStateMutable.update { latest ->
+        rt.stateHub.uiStateMutable.update { latest ->
             var next = latest
 
             if (route.updateRemoteLastPoint) {
@@ -75,8 +75,8 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
             if (route.appendSingleTrail || route.appendMultiTrail) {
                 val overlayCommitted = TrackerMapHistoryUiSync.dispatchLiveOverlay(
                     point = point,
-                    trackers = rt.trackerManagementStateStore.trackers.value,
-                    dispatcher = rt.historyIntentDispatcher,
+                    trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
+                    dispatcher = rt.dependencies.historyIntentDispatcher,
                     activeSessionStartMs = rt.activeSessionStartMsForRuntime(latest.runtime),
                 )
                 if (overlayCommitted) {
@@ -89,7 +89,7 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
             rt.context.stateWithRefreshedSelectionCard(withTrails, point.trackId)
         }
         if (shouldUpdate) {
-            val nextState = rt.uiStateMutable.value
+            val nextState = rt.stateHub.uiStateMutable.value
             if (CaptureLogThrottle.shouldLogOnChange(
                     "vm_point_reduce_accept",
                     "source=${point.source}|track=${point.trackId.trim()}",

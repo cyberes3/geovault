@@ -16,7 +16,37 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.withLock
 
 internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
-    // MUTEX-SCOPE: `trailReloadMutex` is shared with the live track-point consumer
+    // GODOBJECT-RELOAD: reload-cycle bookkeeping nothing outside this file touches directly.
+    // `lastTrailLoadSeed` is the one exception -- two other subsystems need to invalidate it on
+    // events that make the previous seed meaningless (a context reset, a history clear) without
+    // themselves knowing anything about reload internals; see [invalidateLoadedSeed].
+    private var runtimeTrailReloadJob: Job? = null
+    private var runtimeTrailReloadPendingReason: TrackerMapTrailReloadReason? = null
+    private var nextTrailReloadId: Long = 1L
+    private var lastTrailLoadSeed: String? = null
+    private val geometryLoadingTracker = TrackerMapGeometryLoadingTracker(
+        onLoadingChanged = ::setGeometryLoading,
+    )
+    private val geometryReloadCircuitBreaker = MapGeometryReloadCircuitBreaker()
+
+    /**
+     * Invalidates the last-loaded trail seed so the next reload request can't be skipped as a
+     * no-op duplicate. Called by other subsystems after an event that makes the previous seed
+     * meaningless (a context reset, a history clear) without those callers needing to know
+     * anything about how reload seeds are computed.
+     */
+    fun invalidateLoadedSeed() {
+        lastTrailLoadSeed = null
+    }
+
+    private fun setGeometryLoading(isLoading: Boolean) {
+        val current = rt.stateHub.uiStateMutable.value
+        if (current.isGeometryLoading == isLoading) return
+        GeoVaultCaptureLog.d(TrackerMapViewModel.TAG, "map_update vm_geometry_loading from=${current.isGeometryLoading} to=$isLoading")
+        rt.stateHub.uiStateMutable.value = current.copy(isGeometryLoading = isLoading)
+    }
+
+    // MUTEX-SCOPE: `trailCommitLock` is shared with the live track-point consumer
     // (see `MapStreamingSubsystem`'s `pointEventChannel` loop) so that a reload's
     // final state commit and a point's state commit can never interleave into an
     // inconsistent `uiStateMutable` value. Previously the *entire* reload — including
@@ -28,9 +58,9 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
     // commit (queue-overlay writeback + the `uiStateMutable.update` block) needs the
     // lock, and that block's own `trailSeedForState(latest) != seed` staleness check
     // is what protects it against state having moved on while the fetch was in flight.
-    internal suspend fun reloadTrailFromDatabase(reason: TrackerMapTrailReloadReason) {
-        val state = rt.uiStateMutable.value
-        val reloadId = rt.nextTrailReloadId++
+    private suspend fun reloadTrailFromDatabase(reason: TrackerMapTrailReloadReason) {
+        val state = rt.stateHub.uiStateMutable.value
+        val reloadId = nextTrailReloadId++
         GeoVaultCaptureLog.i(
             TrackerMapViewModel.TAG,
             "map_update vm_reload_start reloadId=$reloadId reason=$reason mode=${state.mode} displayed=${state.displayedTrackerId.trim()} " +
@@ -72,14 +102,14 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             val staleTrackerId = staleRosterIds.singleOrNull()
                 ?: sessionPlan.displayedTrackerId.trim().ifBlank { state.runtime.selectedTrackerId.trim() }
             val lastTrunkMs = staleTrackerId.takeIf { it.isNotEmpty() }
-                ?.let { rt.historyRepository.lastTrunkFetchedAtMs(it) }
+                ?.let { rt.dependencies.historyRepository.lastTrunkFetchedAtMs(it) }
             val refreshDecision = if (
                 staleRosterIds.size > 1 &&
                 (refreshCause == TrackerHistoryRefreshCause.Resume ||
                     refreshCause == TrackerHistoryRefreshCause.PeriodicRecording)
             ) {
                 val anyStale = staleRosterIds.any { trackerId ->
-                    val last = rt.historyRepository.lastTrunkFetchedAtMs(trackerId)
+                    val last = rt.dependencies.historyRepository.lastTrunkFetchedAtMs(trackerId)
                     last == null || nowMs - last >= TrackerHistoryRefreshInput.DEFAULT_STALE_AFTER_MS
                 }
                 TrackerHistoryRefreshDecision(
@@ -124,7 +154,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             )
         }
         if (!reason.allowsSource(sessionPlan.trailReloadPlan.source)) {
-            rt.trailReloadMutex.withLock {
+            rt.trailCommitLock.withCommitLock {
                 reconcileLocalQueueOverlayForSkippedReload(
                     reason = reason,
                     plan = sessionPlan.trailReloadPlan,
@@ -148,7 +178,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         // it was sized to is no longer in state. Treat any server-fetching reload as the caller
         // having implicitly asked the camera to re-fit when the new data lands.
         if (reason.allowServerHistoryFetch) {
-            rt.pendingFitAfterReload = true
+            rt.pendingReloadCameraFit.arm(reason)
         }
         val seed = TrackerMapReloadSeedPolicy.trailSeed(
             TrackerMapTrailSeedInput(
@@ -160,12 +190,12 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 renderMetadataSignature = state.renderMetadataSignature,
             )
         )
-        if (!reason.allowServerHistoryFetch && rt.lastTrailLoadSeed == seed) {
+        if (!reason.allowServerHistoryFetch && lastTrailLoadSeed == seed) {
             GeoVaultCaptureLog.v(TrackerMapViewModel.TAG, "map_update vm_reload_seed_skip reason=$reason seed=$seed")
             return
         }
-        rt.lastTrailLoadSeed = seed
-        val planSourceState = rt.uiStateMutable.value
+        lastTrailLoadSeed = seed
+        val planSourceState = rt.stateHub.uiStateMutable.value
         val plan = rt.projectSession(
             state = planSourceState,
             groupSelection = groupSelection,
@@ -202,18 +232,18 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 "single=${loaded.singleTrailSeed.trailSummary()} server=${loaded.serverTrails.mapSizes()} " +
                 "queueOverlays=${loaded.queueOverlaysByTracker.mapSizes()} authoritative=${loaded.authoritativeServerTrackerIds.sorted()}"
         )
-        val trackers = rt.trackerManagementStateStore.trackers.value
+        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
         // LOCK SCOPE: only the write-back of what the (now-completed) fetch produced needs
         // exclusivity against the point consumer — see the class-level MUTEX-SCOPE note.
         var mergeCommitted: MergedTrailResult? = null
-        rt.trailReloadMutex.withLock {
+        rt.trailCommitLock.withCommitLock {
             TrackerMapHistoryUiSync.commitQueueOverlays(
                 queueOverlaysByTracker = loaded.queueOverlaysByTracker,
                 trackers = trackers,
-                dispatcher = rt.historyIntentDispatcher,
+                dispatcher = rt.dependencies.historyIntentDispatcher,
                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
             )
-            rt.uiStateMutable.update { latest ->
+            rt.stateHub.uiStateMutable.update { latest ->
                 if (trailSeedForState(latest) != seed) {
                     return@update latest
                 }
@@ -232,7 +262,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                     activeTrackerId,
                     trackers,
                 )
-                val activeSnapshot = rt.historyRepository.snapshotFor(
+                val activeSnapshot = rt.dependencies.historyRepository.snapshotFor(
                     com.geovault.tracker.history.TrackerHistoryKey(activeTrackerId, activeWindow),
                 )
                 GeoVaultCaptureLog.i(
@@ -256,30 +286,32 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             }
         }
         val finalMerge = mergeCommitted ?: run {
-            rt.lastTrailLoadSeed = null
-            // STALE-COMMIT FIT-FLAG LEAK: this reload set `pendingFitAfterReload = true` above
-            // (if it fetched from the server) expecting to consume it once its own commit
-            // landed. When the commit is skipped because state moved on before the fetch
-            // returned (`trailSeedForState(latest) != seed`), that never happens -- leaving the
-            // flag dangling for some later, unrelated reload to consume instead, producing a
-            // spurious camera re-fit with no connection to what the user actually did. Only
-            // clear it when *this* reload was the one that set it (`allowServerHistoryFetch`);
-            // a queue-skip/source-skip path that never touched the flag has nothing to undo.
-            if (reason.allowServerHistoryFetch) {
-                rt.pendingFitAfterReload = false
-            }
+            lastTrailLoadSeed = null
+            // STALE-COMMIT FIT-FLAG LEAK: this reload armed `pendingReloadCameraFit` above (if it
+            // fetched from the server) expecting to consume it once its own commit landed. When
+            // the commit is skipped because state moved on before the fetch returned
+            // (`trailSeedForState(latest) != seed`), that never happens -- disarm it here so it
+            // can't dangle for some later, unrelated reload to consume instead, producing a
+            // spurious camera re-fit with no connection to what the user actually did.
+            rt.pendingReloadCameraFit.disarm(reason)
             return
         }
-        if (rt.pendingFitAfterReload &&
-            (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
-        ) {
-            rt.pendingFitAfterReload = false
+        val hasData = finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty()
+        val anyLockActive = rt.stateHub.uiStateMutable.value.hasAnyMapLockActive()
+        if (rt.pendingReloadCameraFit.consumeIfLanded(reason, hasData, anyLockActive)) {
             // INSTANT after server-fetching reload: the InitialFit directive (or a prior
             // user-driven fit) has already framed the camera on the locally-preloaded
             // bounds. The server response typically nudges those bounds by a small delta;
             // animating that delta produces a visible jolt at first map open. moveCamera
             // snaps to the final framing in one frame, which is the right semantics for a
             // re-fit the user did not initiate.
+            //
+            // STREAMING-START LOCK FIGHT: when a map lock is already active (e.g. the selection
+            // lock `StreamRosterResolver` engages the instant a stream starts), `consumeIfLanded`
+            // returns false above and this explicit full-extent fit is skipped entirely -- the
+            // "render-resync" collector reacting to this same commit's state/history change
+            // republishes the reactive precedence-driven directive, which frames the camera on
+            // the lock's target instead, so the two paths never fight over the camera.
             rt.context.requestFitTrail(TrackerMapFitTrailMode.Instant)
         }
     }
@@ -290,17 +322,17 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
     )
 
     internal fun requestRuntimeTrailReload(reason: TrackerMapTrailReloadReason) {
-        if (rt.runtimeTrailReloadJob?.isActive == true) {
-            rt.runtimeTrailReloadPendingReason = rt.runtimeTrailReloadPendingReason.mergedWith(reason)
+        if (runtimeTrailReloadJob?.isActive == true) {
+            runtimeTrailReloadPendingReason = runtimeTrailReloadPendingReason.mergedWith(reason)
             return
         }
-        rt.runtimeTrailReloadJob = rt.ports.viewModelScope.launch {
+        runtimeTrailReloadJob = rt.ports.viewModelScope.launch {
             var nextReason: TrackerMapTrailReloadReason? = reason
             while (nextReason != null) {
                 val current = nextReason
-                rt.runtimeTrailReloadPendingReason = null
+                runtimeTrailReloadPendingReason = null
                 reloadTrailFromDatabase(current)
-                nextReason = rt.runtimeTrailReloadPendingReason
+                nextReason = runtimeTrailReloadPendingReason
             }
         }
     }
@@ -310,10 +342,10 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
      * other reload trigger instead of invoking [reloadTrailFromDatabase] directly (the previous
      * behavior of [MapContextSubsystem.applyReopenDecision]'s single-tracker-load branch). A
      * direct call could run fully concurrently with an already in-flight queued reload — two
-     * independent fetches racing to commit under `trailReloadMutex`, with nothing stopping the
+     * independent fetches racing to commit under `trailCommitLock`, with nothing stopping the
      * slower one from landing its now-stale trunk *after* the faster one's fresher commit, and
-     * both unsynchronizedly stomping shared bookkeeping (`rt.lastTrailLoadSeed`,
-     * `rt.pendingFitAfterReload`). Requesting through the queue means a concurrent reload either
+     * both unsynchronizedly stomping shared bookkeeping (`lastTrailLoadSeed`,
+     * `rt.pendingReloadCameraFit`). Requesting through the queue means a concurrent reload either
      * runs this reason next (merged into the same job) or, if nothing is in flight, becomes the
      * sole active reload — exactly the "only one `reloadTrailFromDatabase` call in flight at a
      * time" invariant the queue exists to guarantee. Still suspends the caller until this reason
@@ -322,18 +354,18 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
      */
     internal suspend fun requestAndAwaitRuntimeTrailReload(reason: TrackerMapTrailReloadReason) {
         requestRuntimeTrailReload(reason)
-        rt.runtimeTrailReloadJob?.join()
+        runtimeTrailReloadJob?.join()
     }
 
-    internal suspend fun reconcileLocalQueueOverlayForSkippedReload(
+    private suspend fun reconcileLocalQueueOverlayForSkippedReload(
         reason: TrackerMapTrailReloadReason,
         plan: TrackerMapTrailReloadPlan,
     ) {
         val overlayTrackerId = plan.overlayTrackerId?.trim().orEmpty()
         if (overlayTrackerId.isEmpty()) return
-        if (!rt.uiStateMutable.value.runtime.localRecordingActive) return
+        if (!rt.stateHub.uiStateMutable.value.runtime.localRecordingActive) return
 
-        val initialState = rt.uiStateMutable.value
+        val initialState = rt.stateHub.uiStateMutable.value
         val loaded = TrackerMapTrailLoader.loadLocalOverlay(
             plan = plan,
             currentSingleTrail = initialState.trail,
@@ -354,12 +386,17 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
 
         TrackerMapHistoryUiSync.commitQueueOverlays(
             queueOverlaysByTracker = loaded.queueOverlaysByTracker,
-            trackers = rt.trackerManagementStateStore.trackers.value,
-            dispatcher = rt.historyIntentDispatcher,
+            trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
+            dispatcher = rt.dependencies.historyIntentDispatcher,
             activeSessionStartMs = rt.currentActiveSessionStartMs(),
         )
-        var committed: MergedTrailResult? = null
-        rt.uiStateMutable.update { latest ->
+        // DEAD-LEAK-PATH REMOVED: this whole function only runs when `allowsSource` returned
+        // false for `plan.source`, which is only possible for a non-server-fetching reason (see
+        // `allowsSource`'s invariant below) -- so `pendingReloadCameraFit` can never be armed or
+        // consumable here by construction. This used to track the commit result solely to read
+        // and consume that flag afterward; a read/consume here was structurally guaranteed to
+        // always be a no-op, so both it and the now-pointless result tracking are removed.
+        rt.stateHub.uiStateMutable.update { latest ->
             val latestPlan = rt.projectSession(
                 state = latest,
                 groupSelection = rt.resolveGroupModeSelection(latest),
@@ -370,7 +407,6 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 return@update latest
             }
             val trailsState = rt.display.applyHistoryTrailsToState(latest, latestPlan)
-            committed = MergedTrailResult(trailsState.trail, trailsState.allQueueTrailsByTracker)
             GeoVaultCaptureLog.i(
                 TrackerMapViewModel.TAG,
                 "map_update vm_local_overlay_commit reason=$reason source=${latestPlan.trailReloadPlan.source} overlay=$overlayTrackerId " +
@@ -379,14 +415,6 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             )
             trailsState
         }
-
-        val finalMerge = committed ?: return
-        if (rt.pendingFitAfterReload &&
-            (finalMerge.trail.isNotEmpty() || finalMerge.multiTrails.isNotEmpty())
-        ) {
-            rt.pendingFitAfterReload = false
-            rt.context.requestFitTrail(TrackerMapFitTrailMode.Instant)
-        }
     }
 
     internal fun setOfNotBlank(value: String?): Set<String> {
@@ -394,7 +422,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         return normalized.takeIf { it.isNotEmpty() }?.let(::setOf).orEmpty()
     }
 
-    internal fun TrackerMapTrailReloadReason.allowsSource(source: TrackerMapTrailSource): Boolean {
+    private fun TrackerMapTrailReloadReason.allowsSource(source: TrackerMapTrailSource): Boolean {
         return when {
             allowServerHistoryFetch -> true
             allowMultiServerHistoryFetch && source == TrackerMapTrailSource.MULTI_SERVER -> true
@@ -412,7 +440,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         // when both sessions exceeded the cap — exactly the bug the recent_data_window=session
         // filter is supposed to prevent.
         val recent = withContext(Dispatchers.IO) {
-            rt.dao.getRecentChronologicalForTracker(normalizedTrackerId, TrackerMapViewModel.QUEUE_TRAIL_FETCH_LIMIT)
+            rt.dependencies.dao.getRecentChronologicalForTracker(normalizedTrackerId, TrackerMapViewModel.QUEUE_TRAIL_FETCH_LIMIT)
         }
         return recent
     }
@@ -424,8 +452,8 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         val normalizedId = trackerId.trim()
         return when (
             val geometryResult = rt.sessionRequestDeduper.loadOnce("single:geometry:$normalizedId") {
-                rt.geometryLoadingTracker.track {
-                    fetchGeometryGuarded(setOf(normalizedId)) { rt.trackerManagementRepository.loadTrackerGeometry(normalizedId) }
+                geometryLoadingTracker.track {
+                    fetchGeometryGuarded(setOf(normalizedId)) { rt.dependencies.trackerManagementRepository.loadTrackerGeometry(normalizedId) }
                 }
             }
         ) {
@@ -434,7 +462,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                     TrackerHistorySourceAdapters.filteredServerTrunk(geometryResult.data),
                     trackerId = normalizedId,
                 )
-                val transaction = rt.historyIntentDispatcher.dispatch(
+                val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                     TrackerHistoryIntent.CommitTrunk(
                         batch = batch,
                         activeSessionStartMs = rt.currentActiveSessionStartMs(),
@@ -451,7 +479,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 )
             }
             is RepositoryResult.Failure -> {
-                val trackers = rt.trackerManagementStateStore.trackers.value
+                val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
                 val window = TrackerMapHistoryUiSync.historyWindowForTracker(normalizedId, trackers)
                 val queueTrail = loadQueueTrail(normalizedId)
                 val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
@@ -459,7 +487,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                     window = window,
                     queuedLocations = queueTrail,
                 )
-                val transaction = rt.historyIntentDispatcher.dispatch(
+                val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                     TrackerHistoryIntent.CommitTrunk(
                         batch = batch,
                         activeSessionStartMs = rt.currentActiveSessionStartMs(),
@@ -492,8 +520,8 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         val key = "multi:geometry:${normalizedIds.sorted().joinToString(",")}"
         return when (
             val result = rt.sessionRequestDeduper.loadOnce(key) {
-                rt.geometryLoadingTracker.track {
-                    fetchGeometryGuarded(normalizedIds.toSet()) { rt.trackerManagementRepository.loadTrackersGeometry(normalizedIds) }
+                geometryLoadingTracker.track {
+                    fetchGeometryGuarded(normalizedIds.toSet()) { rt.dependencies.trackerManagementRepository.loadTrackersGeometry(normalizedIds) }
                 }
             }
         ) {
@@ -503,7 +531,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 val trails = normalizedIds.associateWith { trackerId ->
                     val tracker = trackersById[trackerId]
                     if (tracker == null) {
-                        val trackers = rt.trackerManagementStateStore.trackers.value
+                        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
                         val window = TrackerMapHistoryUiSync.historyWindowForTracker(trackerId, trackers)
                         val queueTrail = loadQueueTrail(trackerId)
                         val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
@@ -511,7 +539,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                             window = window,
                             queuedLocations = queueTrail,
                         )
-                        val transaction = rt.historyIntentDispatcher.dispatch(
+                        val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                             TrackerHistoryIntent.CommitTrunk(
                                 batch = batch,
                                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
@@ -523,7 +551,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                             TrackerHistorySourceAdapters.filteredServerTrunk(tracker),
                             trackerId = trackerId,
                         )
-                        val transaction = rt.historyIntentDispatcher.dispatch(
+                        val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                             TrackerHistoryIntent.CommitTrunk(
                                 batch = batch,
                                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
@@ -538,7 +566,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 )
             }
             is RepositoryResult.Failure -> {
-                val trackers = rt.trackerManagementStateStore.trackers.value
+                val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
                 TrackerMapServerTrailResult(
                     trailsByTracker = normalizedIds.associateWith { trackerId ->
                         val window = TrackerMapHistoryUiSync.historyWindowForTracker(trackerId, trackers)
@@ -548,7 +576,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                             window = window,
                             queuedLocations = queueTrail,
                         )
-                        val transaction = rt.historyIntentDispatcher.dispatch(
+                        val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                             TrackerHistoryIntent.CommitTrunk(
                                 batch = batch,
                                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
@@ -575,7 +603,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         trackerIds: Set<String>,
         loader: suspend () -> RepositoryResult<T>,
     ): RepositoryResult<T> {
-        if (!rt.geometryReloadCircuitBreaker.shouldAttempt()) {
+        if (!geometryReloadCircuitBreaker.shouldAttempt()) {
             return RepositoryResult.Failure(AppError.Network)
         }
         val startMs = System.currentTimeMillis()
@@ -583,8 +611,8 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             ?: RepositoryResult.Failure(AppError.Network)
         val elapsedMs = System.currentTimeMillis() - startMs
         when (result) {
-            is RepositoryResult.Success -> rt.geometryReloadCircuitBreaker.recordSuccess()
-            is RepositoryResult.Failure -> rt.geometryReloadCircuitBreaker.recordFailure()
+            is RepositoryResult.Success -> geometryReloadCircuitBreaker.recordSuccess()
+            is RepositoryResult.Failure -> geometryReloadCircuitBreaker.recordFailure()
         }
         // Only diagnostically interesting -- worth a breadcrumb -- when it happens while a
         // recording session is active for one of the same trackers, since that's exactly the
@@ -592,7 +620,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         // A slow reload for a tracker nobody is currently recording is unremarkable network
         // noise and would otherwise just add log spam.
         if (elapsedMs >= StreamingConfig.reloadNetworkSlowDuringRecordingThresholdMs) {
-            val recordedTrackerId = rt.uiStateMutable.value.runtime.locallyRecordedTrackerId
+            val recordedTrackerId = rt.stateHub.uiStateMutable.value.runtime.locallyRecordedTrackerId
             if (recordedTrackerId.isNotEmpty() && recordedTrackerId in trackerIds) {
                 StreamingDiagnostics.logReloadNetworkSlowDuringRecording(trackerIds, elapsedMs)
             }
@@ -601,9 +629,9 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
     }
 
     /**
-     * Seed `rt.uiStateMutable.trail` from the local Room queue at ViewModel construction. Runs
+     * Seed `rt.stateHub.uiStateMutable.trail` from the local Room queue at ViewModel construction. Runs
      * concurrently with the rest of `init`; the goal is for this to land before the
-     * Compose layer attaches its `rt.uiStateMutable.collect` listener so the very first render
+     * Compose layer attaches its `rt.stateHub.uiStateMutable.collect` listener so the very first render
      * package the map sees already has a trail to fit the camera to.
      *
      * Race semantics: if any other code path populates the trail first (a server fetch,
@@ -617,20 +645,20 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         if (selectedId.isEmpty()) return
         val queueTrail = loadQueueTrail(selectedId)
         if (queueTrail.isEmpty()) return
-        val trackers = rt.trackerManagementStateStore.trackers.value
+        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
         val window = TrackerMapHistoryUiSync.historyWindowForTracker(selectedId, trackers)
         val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
             trackerId = selectedId,
             window = window,
             queuedLocations = queueTrail,
         )
-        rt.historyIntentDispatcher.dispatch(
+        rt.dependencies.historyIntentDispatcher.dispatch(
             TrackerHistoryIntent.CommitTrunk(
                 batch = batch,
                 activeSessionStartMs = null,
             ),
         )
-        rt.uiStateMutable.update { latest ->
+        rt.stateHub.uiStateMutable.update { latest ->
             val displayedNow = latest.displayedTrackerId.trim()
             if (displayedNow.isNotEmpty() && displayedNow != selectedId) return@update latest
             val plan = rt.projectSession(latest)
@@ -674,7 +702,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
      * cache was empty (every cold launch) and the trail stayed empty through the
      * geometry fetch window.
      */
-    internal suspend fun preloadedSingleTrackerTrailFromCacheOrNull(
+    private suspend fun preloadedSingleTrackerTrailFromCacheOrNull(
         mode: TrackerMapDisplayMode,
         activeTrackerId: String,
         reloadId: Long,
@@ -682,7 +710,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         if (mode != TrackerMapDisplayMode.SINGLE_SESSION) return null
         val trackerId = activeTrackerId.trim()
         if (trackerId.isEmpty()) return null
-        val cachedTracker = rt.trackerManagementStateStore.trackers.value
+        val cachedTracker = rt.dependencies.trackerManagementStateStore.trackers.value
             .firstOrNull { it.id == trackerId }
         val cachedGeometry = cachedTracker?.geometry?.coordinates.orEmpty()
         if (cachedGeometry.isNotEmpty() && cachedTracker != null) {
@@ -704,14 +732,14 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 }
                 is TrackerHistoryTrunkPrepareResult.Commit -> {
                     val batch = enrichTrunkBatchForActiveSession(prepared.batch, trackerId = trackerId)
-                    rt.historyIntentDispatcher.dispatch(
+                    rt.dependencies.historyIntentDispatcher.dispatch(
                         TrackerHistoryIntent.CommitTrunk(
                             batch = batch,
                             activeSessionStartMs = sessionStart,
                         ),
                     )
                     val trail = TrackerHistoryRenderMapper.toQueuedLocations(
-                        rt.historyRepository.snapshotFor(TrackerHistoryKey(trackerId, batch.window)),
+                        rt.dependencies.historyRepository.snapshotFor(TrackerHistoryKey(trackerId, batch.window)),
                         TrackerMapViewModel.TRAIL_POINT_LIMIT,
                     )
                     if (trail.isNotEmpty()) {
@@ -730,14 +758,14 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         if (queueTrail.isEmpty()) return null
         val window = TrackerMapHistoryUiSync.historyWindowForTracker(
             trackerId,
-            rt.trackerManagementStateStore.trackers.value,
+            rt.dependencies.trackerManagementStateStore.trackers.value,
         )
         val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
             trackerId = trackerId,
             window = window,
             queuedLocations = queueTrail,
         )
-        rt.historyIntentDispatcher.dispatch(
+        rt.dependencies.historyIntentDispatcher.dispatch(
             TrackerHistoryIntent.CommitTrunk(
                 batch = batch,
                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
@@ -749,12 +777,12 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 "points=${queueTrail.trailSummary()}",
         )
         return TrackerHistoryRenderMapper.toQueuedLocations(
-            rt.historyRepository.snapshotFor(TrackerHistoryKey(trackerId, window)),
+            rt.dependencies.historyRepository.snapshotFor(TrackerHistoryKey(trackerId, window)),
             TrackerMapViewModel.TRAIL_POINT_LIMIT,
         )
     }
 
-internal fun rosterTrackerIdsForTrunkStaleCheck(
+    private fun rosterTrackerIdsForTrunkStaleCheck(
         state: TrackerMapUiState,
         sessionPlan: TrackerMapStreamingPlan,
         groupSelection: TrackerMapGroupModeSelection,
@@ -798,7 +826,7 @@ internal fun rosterTrackerIdsForTrunkStaleCheck(
         batch: TrackerHistorySourceBatch,
         trackerId: String,
     ): TrackerHistorySourceBatch {
-        val state = rt.uiStateMutable.value
+        val state = rt.stateHub.uiStateMutable.value
         val normalizedId = trackerId.trim()
         val currentTrail = when (state.mode) {
             TrackerMapDisplayMode.SINGLE_SESSION -> state.trail

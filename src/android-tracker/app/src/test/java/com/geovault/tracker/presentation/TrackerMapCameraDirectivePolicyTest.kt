@@ -133,7 +133,10 @@ class TrackerMapCameraDirectivePolicyTest {
     }
 
     @Test
-    fun resolve_selectionLockSkippedWhenCoordinatesMissing() {
+    fun resolve_selectionLockHoldsCameraWhenCoordinatesMissing() {
+        // A claimed selection lock must never fall through to a bounds-based directive
+        // underneath it -- that's exactly what let a full-extent fit win the race the instant a
+        // stream starts, before the tracker's first point has resolved a coordinate.
         val resolution = TrackerMapCameraDirectivePolicy.resolve(
             TrackerMapCameraDirectiveInput(
                 followLockEnabled = false,
@@ -148,6 +151,26 @@ class TrackerMapCameraDirectivePolicyTest {
             )
         )
 
-        assertEquals(TrackerMapCameraDirective.Reason.InitialFit, resolution.reason)
+        assertEquals(TrackerMapCameraDirective.Reason.NoOp, resolution.reason)
+        assertNull(resolution.bounds)
+    }
+
+    @Test
+    fun resolve_selectionLockHoldsCameraEvenWhenLiveActiveFitAlsoEnabled() {
+        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = null,
+                followTargetLon = null,
+                selectionLockEnabled = true,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+            )
+        )
+
+        assertEquals(TrackerMapCameraDirective.Reason.NoOp, resolution.reason)
     }
 }

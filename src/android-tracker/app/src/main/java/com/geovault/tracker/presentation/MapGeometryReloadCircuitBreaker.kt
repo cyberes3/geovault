@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Those client-wide timeouts exist to tolerate slow-but-legitimate requests across the whole
  * API surface. A trail *reload* can no longer block live-point rendering (see the
- * `trailReloadMutex` narrowing in [MapTrailReloadSubsystem]), but without a dedicated bound a
+ * `trailCommitLock` narrowing in [MapTrailReloadSubsystem]), but without a dedicated bound a
  * single fetch can still hang for up to ~90s (connect+read+write) before OkHttp itself gives
  * up — and every reload trigger in the meantime (a GPS fix, a roster change, a mode switch)
  * queues up another doomed attempt against an unreachable server. [NETWORK_TIMEOUT_MS] gives

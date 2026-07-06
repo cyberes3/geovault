@@ -3,8 +3,10 @@ package com.geovault.tracker.map
 import com.geovault.common.coroutines.launchSupervisedCollector
 import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.history.TrackerHistorySessionBoundary
 import com.geovault.tracker.location.TrackingLifecycleState
 import com.geovault.tracker.policy.TrackPointBus
+import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.presentation.*
 import com.geovault.tracker.services.*
 import com.geovault.tracker.location.NetworkStatusMonitor
@@ -12,6 +14,7 @@ import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.streaming.LiveStreamSubscriptionState
 import com.geovault.tracker.streaming.StreamingConfig
 import com.geovault.tracker.streaming.StreamingDiagnostics
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -42,10 +45,43 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         private val ROLLING_WINDOW_RECOMPUTE_INTERVAL_MS = TimeUnit.SECONDS.toMillis(60)
     }
 
+    // GODOBJECT-STREAMING: bookkeeping this subsystem's own collectors read and write to detect
+    // transitions (previous-vs-current snapshots, dedupe signatures) or forward events
+    // (`pointEventChannel`). Nothing outside this file reads or writes any of these.
+    private val pointEventChannel = Channel<TrackPointEvent>(Channel.UNLIMITED)
+    // TrackersRefreshed carries the *new* roster only; the store's own `trackers` StateFlow has
+    // already been overwritten with that same new list by the time the event reaches us (see
+    // `TrackerManagementStateStore.publishTrackers`), so a removal diff needs our own prior
+    // snapshot rather than reading through the store. Starts empty so the first refresh after
+    // (re)start never reports spurious removals.
+    private var lastKnownRosterTrackerIds: Set<String> = emptySet()
+    private val filterChangeReactor = TrackerMapFilterChangeReactor()
+    private val historySessionBoundary = TrackerHistorySessionBoundary()
+    private var lastObservedTrackingRunning: Boolean? = null
+    private var lastObservedLocalRecordingActive: Boolean? = null
+    private var lastRuntimeTrailReloadSignature: String? = null
+    private var lastObservedStreamingSessionActive: Boolean = false
+    private var lastObservedStreamingFailureReason: String? = null
+    private val runtimeResyncPolicy = TrackerMapRuntimeResyncPolicy()
+
+    /**
+     * Wall-clock timestamp of when [com.geovault.tracker.services.LiveStreamSubscriptionState]
+     * most recently transitioned from healthy to unhealthy while wanted, or `null` if currently
+     * healthy/unwanted. Read and written only from the heartbeat collector below, which runs on a
+     * single dispatcher, so no additional synchronization is needed. Feeds
+     * [com.geovault.tracker.presentation.StreamingBatteryOptimizationHintPolicy].
+     */
+    private var streamingUnhealthySinceMs: Long? = null
+
+    /** Closes this subsystem's channel(s). Called once from [TrackerMapRuntime.onCleared]. */
+    fun close() {
+        pointEventChannel.close()
+    }
+
     fun startCollectors() {
         // PRELOAD-AT-INIT: read the persisted selected tracker id straight from prefs and
-        // seed `rt.uiStateMutable.trail` from the local Room queue ASAP. This races (intentionally)
-        // with the first `rt.uiStateMutable.collect` below so the very first render package the map
+        // seed `rt.stateHub.uiStateMutable.trail` from the local Room queue ASAP. This races (intentionally)
+        // with the first `rt.stateHub.uiStateMutable.collect` below so the very first render package the map
         // sees already has a trail to fit the camera to. Without this, the launch sequence
         // is "empty render -> 0,0 flash -> ExplicitTrackerLoad -> server fetch -> snap"
         // because `getTrackers()` is metadata-only (no geometry) so the in-memory cache
@@ -64,20 +100,20 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         // the transient pre-fetch `emptyList()` default (which would incorrectly treat every
         // persisted id as invalid on every cold launch).
         rt.ports.viewModelScope.launch {
-            val rosterIds = rt.trackerManagementStateStore.trackers
+            val rosterIds = rt.dependencies.trackerManagementStateStore.trackers
                 .first { it.isNotEmpty() }
                 .mapNotNullTo(mutableSetOf()) { it.id.trim().takeIf { id -> id.isNotEmpty() } }
             // Only seed if the live `TrackersRefreshed` collector hasn't already advanced
             // this past its initial empty default — avoids reverting it backward to an
             // older roster snapshot if that collector's event happened to land first.
-            if (rt.lastKnownRosterTrackerIds.isEmpty()) {
-                rt.lastKnownRosterTrackerIds = rosterIds
+            if (lastKnownRosterTrackerIds.isEmpty()) {
+                lastKnownRosterTrackerIds = rosterIds
             }
             rt.streamRosterResolver.validateColdStartAgainstRoster(rosterIds)
         }
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "render-resync",
-            flow = combine(rt.uiStateMutable, rt.historyRepository.snapshots) { state, _ -> state },
+            flow = combine(rt.stateHub.uiStateMutable, rt.dependencies.historyRepository.snapshots) { state, _ -> state },
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) {
@@ -85,7 +121,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         }
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "group-mode-fit-toggle",
-            flow = rt.trackerSettingsRepository.observeSettings()
+            flow = rt.dependencies.trackerSettingsRepository.observeSettings()
                 .map { it.groupModeFitOnlyActiveTrackers }
                 .distinctUntilChanged()
                 .drop(1),
@@ -109,7 +145,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 isRunning = snap.isRunning,
                 lifecycleState = effectiveLifecycleState
             )
-            val current = rt.uiStateMutable.value
+            val current = rt.stateHub.uiStateMutable.value
             val displayedTrackerId = if (current.displayedTrackerId.isBlank()) {
                 effectiveRuntime.selectedTrackerId
             } else {
@@ -120,7 +156,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             } else {
                 current.displayedTrackerName
             }
-            rt.uiStateMutable.value = current.copy(
+            rt.stateHub.uiStateMutable.value = current.copy(
                 runtime = effectiveRuntime,
                 displayedTrackerId = displayedTrackerId,
                 displayedTrackerName = displayedTrackerName
@@ -139,10 +175,10 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                         "displayed=$displayedTrackerId trail=${current.trail.size} multi=${current.allQueueTrailsByTracker.mapSizes()}"
                 )
             }
-            val prevLocalRecording = rt.lastObservedLocalRecordingActive
-            rt.lastObservedLocalRecordingActive = snap.localRecordingActive
+            val prevLocalRecording = lastObservedLocalRecordingActive
+            lastObservedLocalRecordingActive = snap.localRecordingActive
             if (prevLocalRecording != null && !prevLocalRecording && snap.localRecordingActive) {
-                val afterRuntime = rt.uiStateMutable.value
+                val afterRuntime = rt.stateHub.uiStateMutable.value
                 when (
                     val autoLock = TrackerMapAutoLockPolicy.resolveAutoLockOnRecordingStart(
                         mode = afterRuntime.mode,
@@ -151,12 +187,12 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                     )
                 ) {
                     is TrackerMapAutoLockOnRecordingResult.SelectionLock -> {
-                        rt.uiStateMutable.update {
+                        rt.stateHub.uiStateMutable.update {
                             it.withAllMapLocksDisabled().copy(selectionLockTrackerId = autoLock.trackerId)
                         }
                     }
                     TrackerMapAutoLockOnRecordingResult.LiveActiveFit -> {
-                        rt.uiStateMutable.update {
+                        rt.stateHub.uiStateMutable.update {
                             it.withAllMapLocksDisabled().copy(liveActiveFitEnabled = true)
                         }
                         rt.display.publishRenderPackage()
@@ -165,17 +201,17 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                     TrackerMapAutoLockOnRecordingResult.None -> Unit
                 }
             }
-            val runtimeResyncDecision = rt.runtimeResyncPolicy.decide(
-                previousIsRunning = rt.lastObservedTrackingRunning,
+            val runtimeResyncDecision = runtimeResyncPolicy.decide(
+                previousIsRunning = lastObservedTrackingRunning,
                 currentIsRunning = snap.isRunning,
-                mapReady = rt.mapReady,
+                mapReady = rt.context.isMapReady,
                 mapViewContext = if (current.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     TrackerMapViewContext.GROUP
                 } else {
                     TrackerMapViewContext.SINGLE_TRACKER
                 }
             )
-            rt.lastObservedTrackingRunning = snap.isRunning
+            lastObservedTrackingRunning = snap.isRunning
             // RECORDING-DELTA RELOAD: a localRecordingActive transition flips the
             // streaming exclusion (locally-recorded id is added/removed from
             // remoteSubscriptionIds) AND the trail merge plan (overlayTrackerId set
@@ -204,9 +240,9 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 append("|sessionStart=${snap.sessionStartTimeMs}")
             }
             val shouldRequestReload = recordingTransitioned ||
-                runtimeReloadSignature != rt.lastRuntimeTrailReloadSignature
+                runtimeReloadSignature != lastRuntimeTrailReloadSignature
             if (shouldRequestReload) {
-                rt.lastRuntimeTrailReloadSignature = runtimeReloadSignature
+                lastRuntimeTrailReloadSignature = runtimeReloadSignature
                 if (recordingTransitioned ||
                     CaptureLogThrottle.shouldLogOnChange(
                         "vm_runtime_reload_request",
@@ -221,32 +257,32 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 }
             }
             if (recordingTransitioned) {
-                val trackers = rt.trackerManagementStateStore.trackers.value
+                val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
                 val trackerId = when {
                     snap.localRecordingActive -> snap.locallyRecordedTrackerId.trim()
                     else -> snap.locallyRecordedTrackerId.trim().ifBlank { snap.selectedTrackerId.trim() }
                 }
                 if (trackerId.isNotEmpty()) {
                     if (snap.localRecordingActive) {
-                        rt.historySessionBoundary.onRecordingStarted(
+                        historySessionBoundary.onRecordingStarted(
                             trackerId = trackerId,
                             trackers = trackers,
                             sessionStartMs = rt.activeSessionStartMsForRuntime(snap),
-                            repository = rt.historyRepository,
+                            repository = rt.dependencies.historyRepository,
                         )
                     } else {
-                        rt.historySessionBoundary.onRecordingStopped(
+                        historySessionBoundary.onRecordingStopped(
                             trackerId = trackerId,
                             trackers = trackers,
-                            dispatcher = rt.historyIntentDispatcher,
+                            dispatcher = rt.dependencies.historyIntentDispatcher,
                         )
                     }
                 }
             }
-            rt.historySessionBoundary.onRuntimeUpdated(
+            historySessionBoundary.onRuntimeUpdated(
                 runtime = snap,
-                trackers = rt.trackerManagementStateStore.trackers.value,
-                repository = rt.historyRepository,
+                trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
+                repository = rt.dependencies.historyRepository,
             )
             if (shouldRequestReload) {
                 rt.reload.requestRuntimeTrailReload(reloadReason)
@@ -255,7 +291,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             if (runtimeResyncDecision.restartDisplayedStreaming) {
                 rt.streamTargetReconciler.bumpReconcileToken()
             }
-            if (rt.pendingInitialTrackerForMap && rt.mapReady && rt.mapSurfaceVisible) {
+            if (rt.context.hasPendingInitialTrackerForMap && rt.context.isMapReady && rt.context.isMapSurfaceVisible) {
                 rt.context.evaluateResumeAfterBackground(allowZeroGap = true)
             }
         }
@@ -265,7 +301,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) { point ->
-            rt.pointEventChannel.send(point)
+            pointEventChannel.send(point)
         }
         // COMBINED-RECONCILE: this collector handles _state-mutation_ side effects of streaming
         // runtime updates only (mirroring active ids, trimming remote heads, recomputing the
@@ -280,7 +316,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         // snapshot in order instead.
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "stream-state",
-            flow = rt.liveStreamSubscriptionRepository.state,
+            flow = rt.dependencies.liveStreamSubscriptionRepository.state,
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) { snapshot ->
@@ -298,10 +334,10 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             // service hasn't terminated (cleanly stopped or permanently failed). The
             // active -> ended transition is what triggers lease cleanup below.
             val sessionActive = snapshot.wantsSubscription && !snapshot.subscriptionEnded
-            val wasActive = rt.lastObservedStreamingSessionActive
-            val hadMapStreamingLease = rt.streamingReconciler.hasMapStreamingLease()
-            rt.lastObservedStreamingSessionActive = sessionActive
-            rt.uiStateMutable.update { current ->
+            val wasActive = lastObservedStreamingSessionActive
+            val hadMapStreamingLease = rt.dependencies.streamingReconciler.hasMapStreamingLease()
+            lastObservedStreamingSessionActive = sessionActive
+            rt.stateHub.uiStateMutable.update { current ->
                 val plan = rt.projectSession(
                     state = current.copy(activeStreamedTrackerIds = snapshot.activeTargets),
                     groupSelection = rt.resolveGroupModeSelection(current),
@@ -332,32 +368,32 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             // leaving the map staring at the failed group.
             if ((wasActive || hadMapStreamingLease) &&
                 snapshot.subscriptionEnded &&
-                rt.streamingReconciler.consumeStoppedMapStreamingLease()
+                rt.dependencies.streamingReconciler.consumeStoppedMapStreamingLease()
             ) {
                 rt.context.restoreSelectedTrackerMapContext()
             }
             // STREAM-FAILURE-INVALIDATE: a fresh failure reason should re-trigger reconcile so
             // any cleared dedupe in the coordinator can dispatch the next Start cleanly.
             val failureReason = snapshot.failureReason
-            val previousFailure = rt.lastObservedStreamingFailureReason
+            val previousFailure = lastObservedStreamingFailureReason
             if (failureReason != null && failureReason != previousFailure) {
                 rt.streamTargetReconciler.bumpReconcileToken()
             }
-            rt.lastObservedStreamingFailureReason = failureReason
+            lastObservedStreamingFailureReason = failureReason
         }
         // FINGERPRINT-DRIVEN REFRESH: pair (previous, current) fingerprints so we can decide
         // whether the change was cosmetic (name/color only — render-only republish) or
         // structural (roster, group membership, per-tracker hidden, map visibility — server
         // refetch). `recent_data_window` is deliberately excluded from both axes and handled
-        // by [rt.filterChangeReactor] instead, so a filter edit goes through exactly one path
+        // by [filterChangeReactor] instead, so a filter edit goes through exactly one path
         // and the cosmetic/structural axes don't double-fire on the same upsert.
-        rt.filterChangeReactor.seed(rt.trackerManagementStateStore.trackers.value)
+        filterChangeReactor.seed(rt.dependencies.trackerManagementStateStore.trackers.value)
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "roster-fingerprint",
             flow = combine(
-                rt.trackerManagementStateStore.trackers,
-                rt.trackerManagementStateStore.groups,
-                rt.trackerManagementStateStore.mapVisibility,
+                rt.dependencies.trackerManagementStateStore.trackers,
+                rt.dependencies.trackerManagementStateStore.groups,
+                rt.dependencies.trackerManagementStateStore.mapVisibility,
             ) { trackers, groups, visibility ->
                 TrackerMapRenderMetadataFingerprint.from(trackers, groups, visibility)
             }
@@ -376,7 +412,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             // rather than merging it the way `requestRuntimeTrailReload` is designed to.
         ) { (previous, current) ->
             if (current != null) {
-                rt.uiStateMutable.value = rt.uiStateMutable.value.copy(renderMetadataSignature = current.combined)
+                rt.stateHub.uiStateMutable.value = rt.stateHub.uiStateMutable.value.copy(renderMetadataSignature = current.combined)
                 val structuralChanged = previous == null || previous.structural != current.structural
                 val reason = if (structuralChanged) {
                     TrackerMapTrailReloadReason.RosterChanged
@@ -396,13 +432,13 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         // second chance to purge them. Ordered draining keeps the contract simple.
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "tracker-management-events",
-            flow = rt.trackerManagementStateStore.events,
+            flow = rt.dependencies.trackerManagementStateStore.events,
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) { event ->
             when (event) {
                 is com.geovault.tracker.data.TrackerManagementEvent.HistoryCleared -> {
-                    val state = rt.uiStateMutable.value
+                    val state = rt.stateHub.uiStateMutable.value
                     GeoVaultCaptureLog.i(
                         TrackerMapViewModel.TAG,
                         "map_update vm_history_cleared_event track=${event.trackerId.trim()} " +
@@ -427,36 +463,36 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                             rt.sessionRequestDeduper.invalidate(event.trackerId)
                             TrackerMapHistoryUiSync.dispatchHistoryClear(
                                 trackerId = clearedTrackerId,
-                                trackers = rt.trackerManagementStateStore.trackers.value,
-                                dispatcher = rt.historyIntentDispatcher,
+                                trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
+                                dispatcher = rt.dependencies.historyIntentDispatcher,
                                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
                             )
-                            rt.uiStateMutable.value = rt.display.applyHistoryTrailsToState(
-                                state = rt.context.stateWithClearedRenderedTrails(rt.uiStateMutable.value, clearedTrackerId),
-                                plan = rt.projectSession(rt.uiStateMutable.value),
+                            rt.stateHub.uiStateMutable.value = rt.display.applyHistoryTrailsToState(
+                                state = rt.context.stateWithClearedRenderedTrails(rt.stateHub.uiStateMutable.value, clearedTrackerId),
+                                plan = rt.projectSession(rt.stateHub.uiStateMutable.value),
                             )
-                            rt.lastTrailLoadSeed = null
+                            rt.reload.invalidateLoadedSeed()
                             rt.reload.requestRuntimeTrailReload(TrackerMapTrailReloadReason.HistoryCleared)
                         }
                         TrackerMapViewModel.HistoryClearRefreshAction.NO_OP -> Unit
                     }
                 }
                 is com.geovault.tracker.data.TrackerManagementEvent.TrackerUpserted -> {
-                    rt.streamRosterResolver.handleFilterChange(rt.filterChangeReactor.observe(event.tracker))
+                    rt.streamRosterResolver.handleFilterChange(filterChangeReactor.observe(event.tracker))
                 }
                 is com.geovault.tracker.data.TrackerManagementEvent.TrackerDeleted -> {
-                    rt.lastKnownRosterTrackerIds = rt.lastKnownRosterTrackerIds - event.trackerId
+                    lastKnownRosterTrackerIds = lastKnownRosterTrackerIds - event.trackerId
                     rt.streamRosterResolver.handleTrackerRemovedFromRoster(event.trackerId)
                     rt.streamRosterResolver.refreshStreamTargets()
                 }
                 is com.geovault.tracker.data.TrackerManagementEvent.TrackersRefreshed -> {
-                    val changes = rt.filterChangeReactor.observeAll(event.trackers)
+                    val changes = filterChangeReactor.observeAll(event.trackers)
                     for (change in changes) {
                         rt.streamRosterResolver.handleFilterChange(change)
                     }
                     val nextRosterIds = event.trackers.mapTo(mutableSetOf()) { it.id }
-                    val removedIds = rt.lastKnownRosterTrackerIds - nextRosterIds
-                    rt.lastKnownRosterTrackerIds = nextRosterIds
+                    val removedIds = lastKnownRosterTrackerIds - nextRosterIds
+                    lastKnownRosterTrackerIds = nextRosterIds
                     for (removedId in removedIds) {
                         rt.streamRosterResolver.handleTrackerRemovedFromRoster(removedId)
                     }
@@ -467,11 +503,11 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         }
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "point-consumer-reduce",
-            flow = rt.pointEventChannel.receiveAsFlow(),
+            flow = pointEventChannel.receiveAsFlow(),
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) { point ->
-            rt.trailReloadMutex.withLock {
+            rt.trailCommitLock.withCommitLock {
                 rt.trackPointReducer.reduce(point)
             }
         }
@@ -506,9 +542,9 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "reconcile",
             flow = combine(
-                rt.uiStateMutable,
-                rt.liveStreamSubscriptionRepository.state,
-                rt.reconcileTokenMutable,
+                rt.stateHub.uiStateMutable,
+                rt.dependencies.liveStreamSubscriptionRepository.state,
+                rt.streamTargetReconciler.reconcileToken,
             ) { ui, stream, token -> ReconcileInputs(ui, stream, token) }
                 .distinctUntilChangedBy { rt.streamTargetReconciler.reconcileSeedKey(it.state, it.streamRuntime, it.token) },
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
@@ -532,15 +568,15 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) {
-            val streamState = rt.liveStreamSubscriptionRepository.state.value
+            val streamState = rt.dependencies.liveStreamSubscriptionRepository.state.value
             val nowMs = System.currentTimeMillis()
-            rt.streamingUnhealthySinceMs = when {
+            streamingUnhealthySinceMs = when {
                 streamState.subscriptionHealthy -> null
-                rt.streamingUnhealthySinceMs == null -> nowMs
-                else -> rt.streamingUnhealthySinceMs
+                streamingUnhealthySinceMs == null -> nowMs
+                else -> streamingUnhealthySinceMs
             }
             if (streamState.wantsSubscription) {
-                val lastPointAgeMs = rt.uiStateMutable.value.remoteLastPoints.values
+                val lastPointAgeMs = rt.stateHub.uiStateMutable.value.remoteLastPoints.values
                     .maxOfOrNull { it.timestampMs }
                     ?.let { nowMs - it }
                 StreamingDiagnostics.logHeartbeat(
@@ -548,19 +584,19 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                     connection = streamState.connection,
                     activeCount = streamState.activeTargets.size,
                     lastPointAgeMs = lastPointAgeMs,
-                    mutexHeld = rt.trailReloadMutex.isLocked,
+                    mutexHeld = rt.trailCommitLock.isLocked,
                 )
             }
             val showHint = StreamingBatteryOptimizationHintPolicy.shouldShowHint(
                 wantsSubscription = streamState.wantsSubscription,
                 connectionHealthy = streamState.subscriptionHealthy,
-                unhealthySinceMs = rt.streamingUnhealthySinceMs,
+                unhealthySinceMs = streamingUnhealthySinceMs,
                 nowMs = nowMs,
-                hasUsableNetwork = NetworkStatusMonitor.hasUsableNetwork(rt.appContext),
-                hasBatteryOptimizationExemption = TrackingPermissionGate.hasBatteryOptimizationExemption(rt.appContext),
+                hasUsableNetwork = NetworkStatusMonitor.hasUsableNetwork(rt.dependencies.appContext),
+                hasBatteryOptimizationExemption = TrackingPermissionGate.hasBatteryOptimizationExemption(rt.dependencies.appContext),
             )
-            if (rt.uiStateMutable.value.batteryOptimizationHintVisible != showHint) {
-                rt.uiStateMutable.update { it.copy(batteryOptimizationHintVisible = showHint) }
+            if (rt.stateHub.uiStateMutable.value.batteryOptimizationHintVisible != showHint) {
+                rt.stateHub.uiStateMutable.update { it.copy(batteryOptimizationHintVisible = showHint) }
             }
         }
         rt.streamRosterResolver.refreshStreamTargets()
