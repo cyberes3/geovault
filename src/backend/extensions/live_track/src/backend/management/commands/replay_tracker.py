@@ -5,6 +5,7 @@ account, streaming points one at a time through the real ingestion path
 Intended for testing Android live-tracking streaming against realistic data.
 """
 import json
+import re
 import secrets
 import time
 import uuid
@@ -19,6 +20,10 @@ from ...ingress_views import append_point_to_track
 
 User = get_user_model()
 
+# Matches the " YYYY-MM-DD HH:MM:SS" suffix this command appends to tracker names,
+# so --cleanup can find and remove trackers it (or a previous run of it) created.
+_REPLAY_NAME_SUFFIX_RE = re.compile(r" \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+
 
 class Command(BaseCommand):
     help = "Replay a tracker dump file into a new tracker on a target account, streaming points with the original timing."
@@ -27,14 +32,21 @@ class Command(BaseCommand):
         parser.add_argument(
             "--file",
             type=str,
-            required=True,
-            help="Path to a dump JSON file produced by dump_tracker.",
+            default=None,
+            help="Path to a dump JSON file produced by dump_tracker. Omit if only using --cleanup.",
         )
         parser.add_argument(
             "--email",
             type=str,
             required=True,
             help="Email of the account to create the new tracker in.",
+        )
+        parser.add_argument(
+            "--cleanup",
+            action="store_true",
+            help="Before replaying, delete all of the target account's trackers whose name matches "
+            "this command's naming format ('<name> YYYY-MM-DD HH:MM:SS'), i.e. output from previous "
+            "replay_tracker runs. Can be combined with --file, or used alone to just clean up.",
         )
         parser.add_argument(
             "--speed",
@@ -66,10 +78,27 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("--speed must be greater than 0."))
             return
 
+        if not options["file"] and not options["cleanup"]:
+            self.stdout.write(self.style.ERROR("Provide --file to replay, --cleanup to clean up, or both."))
+            return
+
         email = options["email"]
         user = User.objects.filter(email=email).first()
         if not user:
             self.stdout.write(self.style.ERROR(f"No user with email {email!r}."))
+            return
+
+        if options["cleanup"]:
+            stale = [t for t in LiveTrack.objects.filter(user=user) if _REPLAY_NAME_SUFFIX_RE.search(t.name)]
+            if stale:
+                LiveTrack.objects.filter(id__in=[t.id for t in stale]).delete()
+                self.stdout.write(self.style.SUCCESS(f"Deleted {len(stale)} existing replayed tracker(s) for {email!r}:"))
+                for t in stale:
+                    self.stdout.write(f"  - {t.name}")
+            else:
+                self.stdout.write(f"No existing replayed trackers found for {email!r}.")
+
+        if not options["file"]:
             return
 
         share_with_users = []
