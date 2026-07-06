@@ -174,8 +174,7 @@ class Command(BaseCommand):
 
                 append_point_to_track(track, lat, lon, rebased_ts_ms, extra)
                 count += 1
-                if count % 10 == 0 or count == 1:
-                    self.stdout.write(f"  Replayed #{count}/{len(points)} at ({lat:.5f}, {lon:.5f})")
+                self.stdout.write(f"  Replayed #{count}/{len(points)} at ({lat:.5f}, {lon:.5f})")
         except KeyboardInterrupt:
             self.stdout.write(self.style.WARNING("\nStopped by user."))
 
