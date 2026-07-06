@@ -17,6 +17,7 @@ from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.force_disconnect import user_sockets_group_name
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
+from geo_lib.websocket.ping_pong import is_ping_message, pong_payload
 
 _logger = get_tagged_logger()
 
@@ -151,12 +152,8 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                 message_type = data.get('type')
                 message_data = data.get('data', {})
 
-                if message_type == 'ping':
-                    # Send pong response in the same format as other messages
-                    await self.send(text_data=json.dumps({
-                        'type': 'pong',
-                        'data': {}
-                    }))
+                if is_ping_message(data):
+                    await self.send(text_data=pong_payload())
                 elif message_type == 'refresh':
                     await self.process_status_module.send_initial_state()
                 elif message_type == 'request_logs':

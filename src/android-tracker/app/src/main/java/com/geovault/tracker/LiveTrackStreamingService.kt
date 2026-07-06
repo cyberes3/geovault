@@ -59,6 +59,17 @@ class LiveTrackStreamingService : Service() {
         private const val WS_PING_INTERVAL_SEC = 30L
         private const val WS_UPGRADE_HTTP_CODE = 101
 
+        /**
+         * App-level ping payload, answered directly (not via channel-layer broadcast) by
+         * `LiveTrackOnlyConsumer.receive` on the server. This is deliberately independent of
+         * OkHttp's own transport-level WebSocket ping (`WS_PING_INTERVAL_SEC`): that one only
+         * proves the raw socket is alive, which OkHttp already turns into `onFailure` on timeout.
+         * This one proves the server's consumer instance for *this* connection is still accepting
+         * and responding to messages, decoupled entirely from whether the tracker being watched
+         * has actually reported a new point recently (see [StreamingSessionGuard]).
+         */
+        private const val APP_PING_PAYLOAD = """{"module":"live_track","type":"ping"}"""
+
         @Volatile
         @JvmStatic
         var isRunning = false
@@ -138,20 +149,37 @@ class LiveTrackStreamingService : Service() {
     /**
      * LIVENESS-WATCHDOG: [StreamingSessionGuard]'s staleness check previously only ran inside
      * [startStreamingTargets], i.e. only when a *new* start request arrived. If the merged
-     * target set never changes while the connection has silently gone quiet (socket still open
-     * per OkHttp — pings keep it alive — but the server has stopped delivering `track_updated`
-     * messages), nothing ever re-evaluates staleness and the session can sit dead indefinitely.
-     * This loop polls [sessionGuard] on a fixed interval for the lifetime of the service and
-     * forces a reconnect the moment a RUNNING session goes stale, independent of whether any
-     * owner's lease has changed.
+     * target set never changes while the connection has silently gone quiet, nothing ever
+     * re-evaluates staleness and the session can sit dead indefinitely. This loop polls
+     * [sessionGuard] on a fixed interval for the lifetime of the service and forces a reconnect
+     * the moment a RUNNING session goes stale, independent of whether any owner's lease has
+     * changed.
+     *
+     * PING-DRIVEN-NOT-POINT-DRIVEN: this loop also sends the app-level [APP_PING_PAYLOAD] on
+     * every tick, which is what [sessionGuard] actually measures staleness against (see
+     * [handlePongReceived]). Staleness must never be keyed off `track_updated` recency: a
+     * quiet-but-healthy tracker (sparse/significant-motion tracking, or simply stationary) can
+     * legitimately go far longer than [StreamingConfig.sessionStaleAfterMs] between real points,
+     * which previously caused this watchdog to force-reconnect a perfectly healthy connection
+     * and flash the UI to "Reconnecting" on a loop.
      */
     private fun startLivenessWatchdog() {
         livenessWatchdogJob = serviceScope.launch {
             while (isActive) {
                 delay(StreamingConfig.livenessWatchdogIntervalMs)
+                sendAppPingIfRunning()
                 checkLivenessAndReconnectIfStale()
             }
         }
+    }
+
+    private fun sendAppPingIfRunning() {
+        val socket = synchronized(stateLock) {
+            if (lifecycle.lifecycleState != TrackingLifecycleState.RUNNING) return
+            webSocket
+        } ?: return
+        runCatching { socket.send(APP_PING_PAYLOAD) }
+            .onFailure { e -> GeoVaultCaptureLog.w(TAG, "Failed to send app-level ping", e) }
     }
 
     private fun checkLivenessAndReconnectIfStale() {
@@ -458,7 +486,7 @@ class LiveTrackStreamingService : Service() {
                 handleSocketOpened(sessionId, openedSocket, response)
             },
             onPoint = { socket, point -> publishRemotePoint(sessionId, socket, point) },
-            onActivity = { socket -> markSocketActivity(sessionId, socket) },
+            onPong = { socket -> handlePongReceived(sessionId, socket) },
             onDisconnect = { socket, failureClass, reasonHint ->
                 val effectiveClass = resolveFailureClass(failureClass)
                 val reason = when (effectiveClass) {
@@ -634,10 +662,10 @@ class LiveTrackStreamingService : Service() {
         }
     }
 
-    private fun markSocketActivity(sessionId: Long, socket: WebSocket) {
+    private fun handlePongReceived(sessionId: Long, socket: WebSocket) {
         synchronized(stateLock) {
             if (sessionId == connectionSessionId.get() && webSocket === socket) {
-                sessionGuard.markMessageReceived()
+                sessionGuard.markPongReceived()
             }
         }
     }
@@ -813,7 +841,7 @@ class LiveTrackStreamingService : Service() {
         // recursed into itself and crashed with StackOverflowError. Renamed to avoid the clash.
         private val onOpened: (WebSocket, Response) -> Unit = { _, _ -> },
         private val onPoint: (WebSocket, StreamingTrackPoint) -> Unit,
-        private val onActivity: (WebSocket) -> Unit = {},
+        private val onPong: (WebSocket) -> Unit = {},
         private val onDisconnect: (WebSocket, StreamingFailureClass, String?) -> Unit = { _, _, _ -> },
     ) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -822,7 +850,10 @@ class LiveTrackStreamingService : Service() {
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             try {
-                onActivity(webSocket)
+                if (StreamingTrackPointParser.isPongMessage(text)) {
+                    onPong(webSocket)
+                    return
+                }
                 StreamingTrackPointParser.parseTrackUpdatedMessages(text)
                     .forEach { point -> onPoint(webSocket, point) }
             } catch (e: Exception) {
@@ -879,6 +910,12 @@ class LiveTrackStreamingService : Service() {
 object StreamingTrackPointParser {
     fun parseTrackUpdatedMessage(rawJson: String): StreamingTrackPoint? {
         return parseTrackUpdatedMessages(rawJson).firstOrNull()
+    }
+
+    /** True for the app-level pong reply to [LiveTrackStreamingService]'s liveness ping. */
+    fun isPongMessage(rawJson: String): Boolean {
+        val json = JSONObject(rawJson)
+        return json.optString("module", "") == "live_track" && json.optString("type", "") == "pong"
     }
 
     fun parseTrackUpdatedMessages(rawJson: String, nowMs: Long = System.currentTimeMillis()): List<StreamingTrackPoint> {

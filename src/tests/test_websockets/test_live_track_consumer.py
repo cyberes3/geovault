@@ -100,3 +100,55 @@ class TestLiveTrackOnlyConsumer(TransactionTestCase):
         self.assertEqual(data.get("index"), 0)
 
         await communicator.disconnect()
+
+    async def test_ping_answered_with_pong(self):
+        """Client's app-level liveness ping (see StreamingSessionGuard on Android) gets a direct
+        pong reply, independent of any track_updated activity."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email="ping@example.com",
+            password="testpass123",
+            username="pinguser",
+        )
+        communicator = WebsocketCommunicator(
+            LiveTrackOnlyConsumer.as_asgi(),
+            "/ws/extensions/live-track/trackers-live/",
+        )
+        communicator.scope["user"] = user
+
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        # Consume initial_state
+        await communicator.receive_json_from(timeout=2)
+
+        await communicator.send_to(text_data=json.dumps({"module": "live_track", "type": "ping"}))
+
+        msg = await communicator.receive_json_from(timeout=2)
+        self.assertEqual(msg.get("module"), "live_track")
+        self.assertEqual(msg.get("type"), "pong")
+
+        await communicator.disconnect()
+
+    async def test_unknown_message_type_ignored(self):
+        """A non-ping message is silently ignored rather than erroring or closing the socket."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email="unknown@example.com",
+            password="testpass123",
+            username="unknownuser",
+        )
+        communicator = WebsocketCommunicator(
+            LiveTrackOnlyConsumer.as_asgi(),
+            "/ws/extensions/live-track/trackers-live/",
+        )
+        communicator.scope["user"] = user
+
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        # Consume initial_state
+        await communicator.receive_json_from(timeout=2)
+
+        await communicator.send_to(text_data=json.dumps({"module": "live_track", "type": "unknown"}))
+        self.assertTrue(await communicator.receive_nothing(timeout=0.5))
+
+        await communicator.disconnect()

@@ -7,10 +7,17 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.force_disconnect import user_sockets_group_name
+from geo_lib.websocket.ping_pong import is_ping_message, pong_payload
 
 logger = get_tagged_logger(__name__)
+
+# Client pings every ~20s (see StreamingConfig.livenessWatchdogIntervalMs on the Android side);
+# generous headroom above that for a client that reconnects/backs off rapidly, while still
+# capping a client stuck in a ping-spam loop.
+_receive_rate_limiter = RedisRateLimiter(name='live_track_ws_receive', limit=30, window_seconds=10.0)
 
 
 class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
@@ -86,6 +93,28 @@ class LiveTrackOnlyConsumer(AsyncWebsocketConsumer):
             get_user_identifier(self.scope),
             close_code,
         )
+
+    @_receive_rate_limiter.for_consumer()
+    async def receive(self, text_data=None, bytes_data=None):
+        """
+        Answer an app-level ping from the client with a direct pong.
+
+        This is deliberately a direct `self.send()` reply from `receive()`, not routed through
+        `channel_layer.group_send` -- the same pattern `RealtimeConsumer.receive` already uses for
+        its own ping/pong. It exists so the Android client's liveness watchdog
+        (`StreamingSessionGuard`) can distinguish "the connection itself is alive and this
+        consumer's event loop is actually processing messages" from "the tracker being watched
+        simply hasn't reported a new point in a while" -- the two were previously conflated by
+        keying staleness off `track_updated` recency, which misfired for any quiet/sparse tracker.
+        """
+        if not text_data:
+            return
+        try:
+            payload = json.loads(text_data)
+        except (ValueError, TypeError):
+            return
+        if is_ping_message(payload):
+            await self.send(text_data=pong_payload(module="live_track"))
 
     async def live_track_track_updated(self, event):
         """Forward track_updated to the client (module/type/data JSON shape)."""

@@ -20,14 +20,18 @@ object StreamingConfig {
     val webSocketConnectTimeoutMs: Long = TimeUnit.SECONDS.toMillis(15)
 
     /**
-     * [StreamingSessionGuard] treats a REUSE-eligible session as stale if no socket activity
-     * (message or ping pong) has been observed for longer than this while nominally RUNNING.
+     * [StreamingSessionGuard] treats a REUSE-eligible session as stale if no app-level pong (see
+     * [livenessWatchdogIntervalMs]) has been received for longer than this while nominally
+     * RUNNING. Deliberately independent of `track_updated` recency -- a quiet-but-healthy tracker
+     * can legitimately go much longer than this between real points.
      */
     val sessionStaleAfterMs: Long = TimeUnit.SECONDS.toMillis(45)
 
     /**
-     * Liveness watchdog poll interval while a session is nominally RUNNING. Half of
-     * [sessionStaleAfterMs] so staleness is detected within one extra tick of the threshold.
+     * Liveness watchdog poll interval while a session is nominally RUNNING; also the app-level
+     * ping cadence on the same tick (see `LiveTrackStreamingService.sendAppPingIfRunning`). Half
+     * of [sessionStaleAfterMs] so staleness is detected within one extra tick of the threshold,
+     * i.e. after at most one missed pong.
      */
     val livenessWatchdogIntervalMs: Long = TimeUnit.SECONDS.toMillis(20)
 

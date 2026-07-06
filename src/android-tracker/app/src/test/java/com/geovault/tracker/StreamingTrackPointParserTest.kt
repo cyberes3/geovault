@@ -1,6 +1,8 @@
 package com.geovault.tracker
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -77,5 +79,23 @@ class StreamingTrackPointParserTest {
 
         assertEquals(1, points.size)
         assertEquals(1234L, points.first().timestampMs)
+    }
+
+    @Test
+    fun isPongMessage_recognizesLiveTrackPong() {
+        assertTrue(
+            StreamingTrackPointParser.isPongMessage(
+                """{"module":"live_track","type":"pong","data":{}}"""
+            )
+        )
+    }
+
+    @Test
+    fun isPongMessage_rejectsTrackUpdated() {
+        assertFalse(
+            StreamingTrackPointParser.isPongMessage(
+                """{"module":"live_track","type":"track_updated","data":{}}"""
+            )
+        )
     }
 }

@@ -12,6 +12,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.force_disconnect import user_sockets_group_name
+from geo_lib.websocket.ping_pong import is_ping_message, pong_payload
 from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
 from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
 from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
@@ -146,13 +147,8 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 message_type = data.get('type')
                 message_data = data.get('data', {})
 
-                if message_type == 'ping':
-                    # Send pong response in the same format as other messages
-                    await self.send(text_data=json.dumps({
-                        'module': 'ping',
-                        'type': 'pong',
-                        'data': {}
-                    }))
+                if is_ping_message(data):
+                    await self.send(text_data=pong_payload(module='ping'))
                 elif module_name in self.modules:
                     await self.modules[module_name].handle_message(message_type, message_data)
                 else:

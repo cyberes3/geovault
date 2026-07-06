@@ -33,7 +33,14 @@ internal class StreamingSessionGuard(
         lastActivityElapsedMs = elapsedRealtimeMs()
     }
 
-    fun markMessageReceived() {
+    /**
+     * Refreshes staleness on receipt of the app-level pong (see
+     * [com.geovault.tracker.LiveTrackStreamingService.handlePongReceived]), never on an incoming
+     * `track_updated` point. Keying this off point recency instead would conflate "the tracker
+     * being watched hasn't reported in a while" (normal for sparse/stationary trackers) with "the
+     * connection itself is dead" (the only thing this guard should ever act on).
+     */
+    fun markPongReceived() {
         lastActivityElapsedMs = elapsedRealtimeMs()
     }
 

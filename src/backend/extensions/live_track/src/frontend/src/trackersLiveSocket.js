@@ -3,6 +3,8 @@
  * Used by LiveTrackView for live track_updated events only. Same-origin; cookie/session auth.
  */
 
+import { WebSocketHeartbeat } from 'platform/assets/js/websocket/WebSocketHeartbeat.js';
+
 class TrackersLiveSocket {
   constructor() {
     this.socket = null;
@@ -13,6 +15,19 @@ class TrackersLiveSocket {
     this.reconnectTimeoutId = null;
     this.shouldConnect = false;
     this.onReconnect = null;
+    this.heartbeat = new WebSocketHeartbeat({
+      sendPing: () => {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+          this.socket.send(JSON.stringify({ module: 'live_track', type: 'ping' }));
+        }
+      },
+      onTimeout: () => {
+        console.warn('TrackersLiveSocket ping timeout, forcing reconnect');
+        if (this.socket) {
+          this.socket.close(1006, 'Ping timeout'); // Triggers onclose and reconnection
+        }
+      }
+    });
   }
 
   getWsUrl() {
@@ -34,6 +49,7 @@ class TrackersLiveSocket {
       this.socket.onopen = () => {
         const wasReconnect = this.reconnectAttempts > 0;
         this.reconnectAttempts = 0;
+        this.heartbeat.start();
         if (wasReconnect && typeof this.onReconnect === 'function') {
           try {
             this.onReconnect();
@@ -47,6 +63,10 @@ class TrackersLiveSocket {
           const msg = JSON.parse(event.data);
           const type = msg && msg.type;
           const data = msg && msg.data;
+          if (type === 'pong') {
+            this.heartbeat.onPong();
+            return;
+          }
           if (type && this.handlers.has(type)) {
             this.handlers.get(type).forEach((fn) => {
               try {
@@ -62,6 +82,7 @@ class TrackersLiveSocket {
       };
       this.socket.onclose = () => {
         this.socket = null;
+        this.heartbeat.stop();
         if (this.shouldConnect) {
           const delay = Math.min(
             this.reconnectBaseDelayMs * Math.pow(2, Math.min(this.reconnectAttempts, 4)),
@@ -84,6 +105,7 @@ class TrackersLiveSocket {
   disconnect() {
     this.shouldConnect = false;
     this.onReconnect = null;
+    this.heartbeat.stop();
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
       this.reconnectTimeoutId = null;

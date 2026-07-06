@@ -90,4 +90,29 @@ class StreamingSessionGuardTest {
 
         assertEquals(StreamingSessionReuseDecision.STALE_ACTIVITY, assessment.decision)
     }
+
+    @Test
+    fun assess_returnsReuse_whenPongReceivedLongAfterLastTrackerPoint() {
+        // Regression test: staleness must be driven by the app-level pong, never by how long ago
+        // the watched tracker itself last reported a point. A quiet-but-healthy tracker (sparse
+        // tracking, or simply stationary) can go well past `staleAfterMs` between real points
+        // without the connection being stale.
+        var nowMs = 0L
+        val guard = StreamingSessionGuard(staleAfterMs = 45_000L, elapsedRealtimeMs = { nowMs })
+        guard.markConnected()
+
+        nowMs += 40_000L
+        guard.markPongReceived()
+
+        nowMs += 40_000L // 80s since connect, well past staleAfterMs, but only 40s since the pong
+
+        val assessment = guard.assess(
+            requestedTrackerIds = setOf("a"),
+            currentTrackerIds = setOf("a"),
+            hasSocket = true,
+            lifecycleState = TrackingLifecycleState.RUNNING
+        )
+
+        assertEquals(StreamingSessionReuseDecision.REUSE, assessment.decision)
+    }
 }

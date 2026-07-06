@@ -574,6 +574,7 @@ import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 import { connectWebSocket, sendWebSocketMessage, parseWebSocketMessage, shouldReconnect, getReconnectDelay } from '@/utils/import/websocketHandlers.js';
+import { WebSocketHeartbeat } from '@/assets/js/websocket/WebSocketHeartbeat.js';
 import { calculateTotalDuplicateCount, calculateHashDuplicateCount, markDuplicateFeatures, isItemDuplicate, isItemHashDuplicate, getFeatureId, isItemSkipped, isItemDisabled } from '@/utils/import/duplicateDetection.js';
 import { getFeatureIconUrl, getFeatureIconUrlRaw, resolveIconUrl, hasCustomIcon, isSystemIcon, hasNonRecolorableIcon, handleIconError } from '@/utils/import/iconDetection.js';
 import { calculateAdjustedTotalPages, calculateAdjustedHasNext, calculateAdjustedHasPrevious, calculateImportableCount, isValidPageNumber } from '@/utils/import/paginationUtils.js';
@@ -799,6 +800,7 @@ export default {
       wsConnected: false,
       wsReconnectAttempts: 0,
       maxReconnectAttempts: 5,
+      wsHeartbeat: null,
 
       // Tag autocomplete state
       availableUserTags: [],
@@ -874,17 +876,30 @@ export default {
         onClose: this.onWebSocketClose,
         onError: this.onWebSocketError
       });
+      this.wsHeartbeat = new WebSocketHeartbeat({
+        sendPing: () => sendWebSocketMessage(this.ws, this.wsConnected, 'ping', {}),
+        onTimeout: () => {
+          console.warn('Import status WebSocket ping timeout, forcing reconnect');
+          if (this.ws) {
+            this.ws.close(1006, 'Ping timeout'); // Triggers onWebSocketClose and reconnection
+          }
+        }
+      });
     },
 
     onWebSocketOpen() {
       this.wsConnected = true;
       this.wsReconnectAttempts = 0;
+      this.wsHeartbeat.start();
     },
 
     onWebSocketMessage(event) {
       const message = parseWebSocketMessage(event);
 
       switch (message.type) {
+        case 'pong':
+          this.wsHeartbeat.onPong();
+          break;
         case 'initial_state':
           this.handleInitialState(message.data);
           break;
@@ -920,6 +935,9 @@ export default {
 
     onWebSocketClose(event) {
       this.wsConnected = false;
+      if (this.wsHeartbeat) {
+        this.wsHeartbeat.stop();
+      }
 
       // Handle 404 - item not found
       if (event.code === 4004) {

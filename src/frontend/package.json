@@ -8,6 +8,7 @@
     "dev:full": "concurrently -n \"Django,Vite\" -c \"blue,green\" \"cd ../backend && ./server-dev.sh\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "node --test src/**/*.test.mjs",
     "lint": "eslint src --ext .vue,.js,.ts --fix",
     "lint:check": "eslint src --ext .vue,.js,.ts",
     "type-check": "vue-tsc --noEmit",

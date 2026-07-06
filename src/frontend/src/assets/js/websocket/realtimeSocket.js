@@ -2,6 +2,8 @@
  * Global WebSocket service for real-time updates.
  */
 
+import { WebSocketHeartbeat } from './WebSocketHeartbeat.js';
+
 class RealtimeSocket {
     constructor() {
         this.socket = null;
@@ -13,8 +15,15 @@ class RealtimeSocket {
         this.durableSubscriptions = []; // { module, event, handler }[] restored on reconnect
         this.globalHandlers = new Map(); // Global event handlers
         this.modules = new Map(); // Registered modules
-        this.pingInterval = null;
-        this.pingTimeout = null;
+        this.heartbeat = new WebSocketHeartbeat({
+            sendPing: () => { this.send('ping', 'ping'); },
+            onTimeout: () => {
+                console.warn('Ping timeout, triggering reconnection');
+                if (this.socket) {
+                    this.socket.close(1006, 'Ping timeout'); // This will trigger onclose and reconnection
+                }
+            }
+        });
         this.shouldStayConnected = false; // Track if we should maintain connection
         this.visibilityListenerBound = false;
         this._onVisibilityChange = this._onVisibilityChange.bind(this);
@@ -72,7 +81,7 @@ class RealtimeSocket {
      */
     reconnectWhenVisible() {
         if (!this.shouldStayConnected) return;
-        this.stopPing();
+        this.heartbeat.stop();
         if (this.socket) {
             this.socket.close(1000, 'Reconnecting after visibility');
             this.socket = null;
@@ -90,7 +99,7 @@ class RealtimeSocket {
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.reconnectInterval = 1000;
-            this.startPing();
+            this.heartbeat.start();
             this.initializeModules(); // Initialize all registered modules
             this._restoreSubscriptions(); // Re-subscribe all module handlers after reconnect
             this.emit('connected', event);
@@ -110,7 +119,7 @@ class RealtimeSocket {
             if (event.target !== this.socket) return;
 
             this.isConnected = false;
-            this.stopPing();
+            this.heartbeat.stop();
             this.cleanupModules(); // Cleanup all registered modules
             this.emit('disconnected', event);
 
@@ -145,10 +154,7 @@ class RealtimeSocket {
 
         // Handle ping/pong
         if (type === 'pong') {
-            if (this.pingTimeout) {
-                clearTimeout(this.pingTimeout);
-                this.pingTimeout = null;
-            }
+            this.heartbeat.onPong();
             return;
         }
         
@@ -188,45 +194,6 @@ class RealtimeSocket {
     }
 
     /**
-     * Send a ping to keep the connection alive
-     */
-    ping() {
-        this.send('ping', 'ping');
-        
-        // Set timeout for pong response
-        this.pingTimeout = setTimeout(() => {
-            console.warn('Ping timeout, triggering reconnection');
-            // Trigger reconnection instead of closing
-            if (this.socket) {
-                this.socket.close(1006, 'Ping timeout'); // This will trigger onclose and reconnection
-            }
-        }, 10000); // Increased timeout to 10 seconds
-    }
-
-    /**
-     * Start periodic ping
-     */
-    startPing() {
-        this.pingInterval = setInterval(() => {
-            this.ping();
-        }, 30000); // Ping every 30 seconds
-    }
-
-    /**
-     * Stop periodic ping
-     */
-    stopPing() {
-        if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-        }
-        if (this.pingTimeout) {
-            clearTimeout(this.pingTimeout);
-            this.pingTimeout = null;
-        }
-    }
-
-    /**
      * Schedule reconnection attempt
      */
     scheduleReconnect() {
@@ -257,7 +224,7 @@ class RealtimeSocket {
      */
     forceDisconnect() {
         this.shouldStayConnected = false;
-        this.stopPing();
+        this.heartbeat.stop();
         this.cleanupModules(); // Cleanup all registered modules
         this.durableSubscriptions = []; // Clear so next login subscribes fresh
 
