@@ -104,10 +104,25 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
             currentGroupId = "",
             groupModeOptions = emptyList(),
         )
+        // ALIVE-LOCKS-ON-OPEN: a tracker with recent activity (same "active" window the group
+        // bounds resolver uses) is one whose position the user almost certainly wants to keep
+        // watching, not a historical track they want framed end-to-end. Engaging the selection
+        // lock here -- rather than the default full-extent fit -- keeps the camera centered on
+        // its live position at a sane zoom instead of yanking out to the whole trail on open. A
+        // dead tracker has no "current position" worth tracking, so it keeps the fit-to-extent
+        // behavior.
+        val isAlive = TrackerMapGroupBoundsResolver.isTrackerActive(
+            trackerId = normalizedId,
+            trailsByTracker = state.allQueueTrailsByTracker,
+            remoteLastPoints = state.remoteLastPoints,
+            trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
+            nowMs = System.currentTimeMillis(),
+        )
         applyMapContextTransition(
             nextState = nextState,
             pendingReopenTrackerId = normalizedId,
             reloadReason = TrackerMapTrailReloadReason.ExplicitTrackerLoad,
+            desiredSelectionLockTrackerId = normalizedId.takeIf { isAlive },
         )
     }
 
@@ -349,8 +364,9 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
     private fun stateWithResetMapContext(
         state: TrackerMapUiState,
         preservedSingleTrackerId: String? = null,
+        desiredSelectionLockTrackerId: String? = null,
     ): TrackerMapUiState {
-        return TrackerMapContextResetPolicy.reset(
+        val reset = TrackerMapContextResetPolicy.reset(
             TrackerMapContextResetInput(
                 state = state,
                 preservedSingleTrackerId = preservedSingleTrackerId,
@@ -358,12 +374,18 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         )
             .withAllMapLocksDisabled()
             .withClearedMapSelectionCard()
+        return if (desiredSelectionLockTrackerId != null) {
+            reset.copy(selectionLockTrackerId = desiredSelectionLockTrackerId)
+        } else {
+            reset
+        }
     }
 
     private fun applyMapContextTransition(
         nextState: TrackerMapUiState,
         pendingReopenTrackerId: String?,
         reloadReason: TrackerMapTrailReloadReason = TrackerMapTrailReloadReason.GenericMapRefresh,
+        desiredSelectionLockTrackerId: String? = null,
     ) {
         val preservedSingleTrackerId = if (reloadReason == TrackerMapTrailReloadReason.RestoreSelectedAfterStreaming) {
             pendingReopenTrackerId
@@ -373,6 +395,7 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         rt.stateHub.uiStateMutable.value = stateWithResetMapContext(
             state = nextState,
             preservedSingleTrackerId = preservedSingleTrackerId,
+            desiredSelectionLockTrackerId = desiredSelectionLockTrackerId,
         )
         rt.display.reprojectTrailsFromRepository("map_context_transition")
         pendingReopenSingleTrackerLoadId = pendingReopenTrackerId

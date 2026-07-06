@@ -139,14 +139,36 @@ object TrackerMapGroupBoundsResolver {
         nowMs: Long,
     ): Set<String> {
         return candidateTrackerIds.filter { trackerId ->
-            val lastUpdateMs = resolveTrackerLastUpdateMs(
+            isTrackerActive(
                 trackerId = trackerId,
                 trailsByTracker = trailsByTracker,
                 remoteLastPoints = remoteLastPoints,
                 trackers = trackers,
+                nowMs = nowMs,
             )
-            lastUpdateMs != null && (nowMs - lastUpdateMs) <= ACTIVE_TRACKER_WINDOW_MS
         }.toSet()
+    }
+
+    /**
+     * Single-tracker version of the same "recent activity within [ACTIVE_TRACKER_WINDOW_MS]"
+     * definition [resolveActiveTrackerIds] applies across a roster, exposed for callers that need
+     * an alive/dead read on one specific tracker (e.g. deciding camera behavior when a tracker is
+     * opened) rather than a group bounds fit.
+     */
+    fun isTrackerActive(
+        trackerId: String,
+        trailsByTracker: Map<String, List<QueuedLocation>>,
+        remoteLastPoints: Map<String, TrackPointEvent>,
+        trackers: List<Tracker>,
+        nowMs: Long,
+    ): Boolean {
+        val lastUpdateMs = resolveTrackerLastUpdateMs(
+            trackerId = trackerId,
+            trailsByTracker = trailsByTracker,
+            remoteLastPoints = remoteLastPoints,
+            trackers = trackers,
+        )
+        return lastUpdateMs != null && (nowMs - lastUpdateMs) <= ACTIVE_TRACKER_WINDOW_MS
     }
 
     private fun resolveTrackerLastUpdateMs(
