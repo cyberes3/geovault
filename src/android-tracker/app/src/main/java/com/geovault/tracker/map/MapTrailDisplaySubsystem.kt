@@ -13,6 +13,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import org.maplibre.android.geometry.LatLngBounds
 
+/**
+ * Owns turning current state into what actually gets drawn: projecting the effective session
+ * (which trail(s), single vs. multi, live-head detection), deriving the immutable
+ * [com.geovault.tracker.presentation.TrackerMapRenderPackage] the UI layer collects, and
+ * resolving camera-fit bounds for that render. Every publish reads/writes trail state under
+ * `rt.trailCommitLock` so it can never observe a reload or live-point commit mid-flight; see the
+ * RENDER-SYNC UNDER LOCK note on [publishRenderPackage] below.
+ */
 internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
     /**
      * RENDER-SYNC UNDER LOCK: reading `rt.dependencies.historyRepository.snapshots` and writing the derived
@@ -43,7 +51,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
                 "multi=${snapshot.renderTrailsByTracker.mapSizes()}|liveHead=${effectiveSession.liveHead}|" +
                 "bounds=${nextBounds.boundsSummary()}|selectionLock=${rt.stateHub.uiStateMutable.value.selectionLockTrackerId.trim()}|" +
                 "historyKeys=${rt.dependencies.historyRepository.snapshots.value.size}"
-        if (CaptureLogThrottle.shouldLogOnChange("vm_render_package", renderSignature)) {
+        if (CaptureLogThrottle.shouldLogOnChange("map_draw_package", renderSignature)) {
             GeoVaultCaptureLog.d(
                 TrackerMapViewModel.TAG,
                 "map_draw_package mode=${snapshot.mode} displayed=${snapshot.plan.displayedTrackerId} " +
@@ -107,7 +115,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             liveActiveFitEnabled = state.liveActiveFitEnabled,
             bounds = bounds,
         )
-        if (CaptureLogThrottle.shouldLogOnChange("vm_camera_resolve_input", input.toString())) {
+        if (CaptureLogThrottle.shouldLogOnChange("vm_camera_resolve", input.toString())) {
             GeoVaultCaptureLog.d(
                 TrackerMapViewModel.TAG,
                 "map_update vm_camera_resolve mode=${state.mode} follow=${state.followLockEnabled} " +
@@ -134,7 +142,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         return buildEffectiveSessionForState(state, nowMs).snapshot
     }
 
-    fun acceptedRemoteTrackerIdsForCurrentSession(): Set<String> {
+    internal fun acceptedRemoteTrackerIdsForCurrentSession(): Set<String> {
         return buildCurrentSessionSnapshot().plan.acceptedRemoteTrackerIds
     }
 
@@ -257,7 +265,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         }
     }
 
-    fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
+    internal fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
         val snapshot = buildCurrentSessionSnapshot()
         return buildMapRenderState(snapshot)
     }
@@ -309,7 +317,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         )
     }
 
-    fun trailBoundsOrNull(): LatLngBounds? {
+    internal fun trailBoundsOrNull(): LatLngBounds? {
         val snapshot = buildCurrentSessionSnapshot()
         return trailBoundsOrNull(snapshot, System.currentTimeMillis())
     }
@@ -322,20 +330,29 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         if (s.mode == TrackerMapDisplayMode.ALL_QUEUE || s.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
             val sessionPlan = snapshot.plan
             val visibleTrackerIds = visibleTrackerIdsForSessionPlan(s, sessionPlan).orEmpty()
-            return TrackerMapGroupBoundsResolver.resolve(
-                TrackerMapGroupBoundsInput(
-                    visibleTrackerIds = visibleTrackerIds,
-                    liveActiveFitEnabled = s.liveActiveFitEnabled,
-                    fitOnlyActiveTrackers = rt.dependencies.trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers,
-                    trailsByTracker = snapshot.renderTrailsByTracker,
-                    remoteLastPoints = snapshot.acceptedRemoteLastPoints,
-                    acceptedRemoteTrackerIds = sessionPlan.acceptedRemoteTrackerIds,
-                    trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
-                    nowMs = nowMs,
-                ),
+            val groupBoundsInput = TrackerMapGroupBoundsInput(
+                visibleTrackerIds = visibleTrackerIds,
+                liveActiveFitEnabled = s.liveActiveFitEnabled,
+                fitOnlyActiveTrackers = rt.dependencies.trackerSettingsRepository.getSettings().groupModeFitOnlyActiveTrackers,
+                trailsByTracker = snapshot.renderTrailsByTracker,
+                remoteLastPoints = snapshot.acceptedRemoteLastPoints,
+                acceptedRemoteTrackerIds = sessionPlan.acceptedRemoteTrackerIds,
+                trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
+                nowMs = nowMs,
             )
-                ?: TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
-                ?: singlePointBoundsFromRuntime(s.runtime)
+            // HOLD-ON-EMPTY-ACTIVE-ONLY: TrackerMapGroupBoundsResolution.Hold means "fit only
+            // active trackers" is on but nobody currently qualifies -- falling back to the
+            // all-tracker/single-point bounds below would silently override that intent with an
+            // unrelated fit every time the roster goes quiet. Hold the camera (null -> None
+            // directive, see TrackerMapCameraDirectivePolicy) instead until a tracker becomes
+            // active again.
+            return when (val resolution = TrackerMapGroupBoundsResolver.resolveOrHold(groupBoundsInput)) {
+                is TrackerMapGroupBoundsResolution.Bounds -> resolution.bounds
+                TrackerMapGroupBoundsResolution.Hold -> null
+                TrackerMapGroupBoundsResolution.NoBounds ->
+                    TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)
+                        ?: singlePointBoundsFromRuntime(s.runtime)
+            }
         }
         val sessionPlan = snapshot.plan
         return TrackerMapStateTransforms.trailBounds(snapshot.singleTrail)

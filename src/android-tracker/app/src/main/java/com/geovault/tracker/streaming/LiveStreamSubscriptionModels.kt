@@ -80,6 +80,16 @@ data class LiveStreamSubscriptionState(
     val activeTargets: Set<String> = emptySet(),
     val failureReason: String? = null,
     val lastDispatchedCommand: DispatchedCommand? = null,
+    /**
+     * Sticky: latches `true` the first time [connection] is ever observed as
+     * [ConnectionPhase.RUNNING] in this repository's (i.e. this process's) lifetime, and never
+     * resets afterward. Exists solely so a consumer can tell "this STARTING is the very first
+     * connection attempt this process has made" (e.g. a cold-start bootstrap restore, where
+     * [activeTargets] is pre-populated from persisted state purely for display) apart from "this
+     * STARTING follows a connection that was genuinely RUNNING before" (a real reconnect) --
+     * [activeTargets] alone can't distinguish the two, since both populate it identically.
+     */
+    val hasConnectedThisProcess: Boolean = false,
 ) {
     private val effectiveLeases: List<OwnerLease>
         get() = leases.values + listOfNotNull(bootstrapLease)

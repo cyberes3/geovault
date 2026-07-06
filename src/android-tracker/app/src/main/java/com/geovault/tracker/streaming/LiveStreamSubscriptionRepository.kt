@@ -178,7 +178,14 @@ internal class LiveStreamSubscriptionRepository(
 
     /** Called exclusively by [com.geovault.tracker.LiveTrackStreamingService] to report the connection-health axis. */
     fun reportConnectionUpdate(connection: ConnectionPhase, activeTargets: Set<String>, failureReason: String?) {
-        _state.update { it.copy(connection = connection, activeTargets = activeTargets, failureReason = failureReason) }
+        _state.update {
+            it.copy(
+                connection = connection,
+                activeTargets = activeTargets,
+                failureReason = failureReason,
+                hasConnectedThisProcess = it.hasConnectedThisProcess || connection == ConnectionPhase.RUNNING,
+            )
+        }
     }
 
     private fun publishLeaseState() {

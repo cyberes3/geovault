@@ -6,6 +6,16 @@ sealed class TrackerMapAutoLockOnRecordingResult {
     data object LiveActiveFit : TrackerMapAutoLockOnRecordingResult()
 }
 
+/**
+ * Resolves the map lock that should engage automatically -- without any FAB tap -- in response
+ * to a change the user did not directly drive through the lock UI: starting local recording
+ * ([resolveAutoLockOnRecordingStart]), or a streaming scope narrowing down to exactly one target
+ * ([resolveAutoSelectionLockForSingleStream]). Both always resolve to a state reached via
+ * [com.geovault.tracker.presentation.withAllMapLocksDisabled] first -- an auto-lock always
+ * establishes a fresh camera context rather than composing with whatever lock happened to be
+ * active before the triggering event, unlike the user-driven
+ * [TrackerMapLiveActiveFitPolicy.composesWithSelectionLock] case.
+ */
 object TrackerMapAutoLockPolicy {
 
     fun resolveAutoLockOnRecordingStart(

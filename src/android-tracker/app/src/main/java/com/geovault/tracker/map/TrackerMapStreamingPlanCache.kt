@@ -6,7 +6,7 @@ import com.geovault.tracker.presentation.TrackerMapUiState
 /**
  * CACHE-STREAMING-PLAN: [TrackerMapRuntime.projectSession] (via `resolveGroupModeSelection` /
  * `visibleMapRosterTrackerIds`) scans the full tracker/group/visibility store on every call, so
- * its cost scales with roster size. `handleTrackPointEvent` and `reconcileSeedKey` both run once
+ * its cost scales with roster size. [TrackPointReducer.reduce] and `reconcileSeedKey` both run once
  * per accepted point -- without caching, a busy group re-pays that full roster scan on every
  * single incoming point from every member, not just once per meaningful state change.
  *
@@ -30,7 +30,7 @@ internal class TrackerMapStreamingPlanCache {
      * this class depending on [TrackerMapRuntime] directly) keeps the memoization logic testable
      * in isolation from the runtime's Android/DI dependencies.
      */
-    fun resolve(state: TrackerMapUiState, compute: (TrackerMapUiState) -> TrackerMapStreamingPlan): TrackerMapStreamingPlan {
+    internal fun resolve(state: TrackerMapUiState, compute: (TrackerMapUiState) -> TrackerMapStreamingPlan): TrackerMapStreamingPlan {
         val signature = signatureFor(state)
         val plan = cachedPlan
         if (plan != null && signature == cachedSignature) return plan
@@ -40,8 +40,8 @@ internal class TrackerMapStreamingPlanCache {
         return fresh
     }
 
-    /** Lets a caller that already computed a plan from fresher inputs (e.g. [MapStreamingSubsystem.refreshStreamTargets]) warm the cache for free instead of leaving it to miss on the very next call. */
-    fun warm(state: TrackerMapUiState, plan: TrackerMapStreamingPlan) {
+    /** Lets a caller that already computed a plan from fresher inputs (e.g. [StreamRosterResolver.refreshStreamTargets]) warm the cache for free instead of leaving it to miss on the very next call. */
+    internal fun warm(state: TrackerMapUiState, plan: TrackerMapStreamingPlan) {
         cachedSignature = signatureFor(state)
         cachedPlan = plan
     }

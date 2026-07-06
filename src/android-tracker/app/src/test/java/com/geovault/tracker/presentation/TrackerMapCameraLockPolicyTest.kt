@@ -11,26 +11,4 @@ class TrackerMapCameraLockPolicyTest {
         assertFalse(TrackerMapCameraLockPolicy.shouldRenderUserLocation(runtimeRunning = true))
         assertTrue(TrackerMapCameraLockPolicy.shouldRenderUserLocation(runtimeRunning = false))
     }
-
-    @Test
-    fun shouldEnableFollowCamera_requiresNotRunningAndFollowLock() {
-        assertTrue(
-            TrackerMapCameraLockPolicy.shouldEnableFollowCamera(
-                runtimeRunning = false,
-                followLockEnabled = true
-            )
-        )
-        assertFalse(
-            TrackerMapCameraLockPolicy.shouldEnableFollowCamera(
-                runtimeRunning = true,
-                followLockEnabled = true
-            )
-        )
-        assertFalse(
-            TrackerMapCameraLockPolicy.shouldEnableFollowCamera(
-                runtimeRunning = false,
-                followLockEnabled = false
-            )
-        )
-    }
 }

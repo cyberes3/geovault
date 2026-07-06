@@ -78,39 +78,64 @@ data class TrackerMapCameraDirectiveInput(
  * CAMERA-DIRECTIVE: precedence is hard-coded so consumers don't have to reason about it. Tests
  * cover every (input -> directive) row, which means adding a new lock kind in the future starts
  * with a failing test for the precedence row.
+ *
+ * Precedence, highest to lowest:
+ *  1. Selection lock + live active fit BOTH on ([TrackerMapLiveActiveFitPolicy] composes these
+ *     two in SINGLE_SESSION) -- fit bounds; fall back to centering on the locked point if bounds
+ *     haven't resolved yet, so the "keep re-fitting around the lock" request still does
+ *     *something* useful during that gap instead of going idle. Checked ahead of follow lock
+ *     defensively -- these two locks are not expected to ever be engaged simultaneously with
+ *     follow lock, but if that invariant were ever violated, the composed selection+live-fit
+ *     intent must still win per this documented order rather than depending on branch order below.
+ *  2. Selection lock alone -- fixed center-on-point. Deliberately holds the camera still (None)
+ *     rather than falling through to a bounds-based directive when the locked point hasn't
+ *     resolved yet (e.g. the instant a stream starts, before its first point has landed) --
+ *     that fallthrough used to hand the camera to a full-extent InitialFit fit, which is exactly
+ *     the "lock conflicts with full extent" behavior this guards against.
+ *  3. Follow lock (GPS) -- center-on-point. Also holds (None) rather than falling through when
+ *     GPS isn't actively collecting or hasn't resolved a fix yet, for the same reason as #2 --
+ *     otherwise the FAB shows the lock armed while the camera silently snaps to a full-extent fit.
+ *  4. Live active fit alone -- fit bounds.
+ *  5. No lock active -- one-shot InitialFit of whatever bounds are available.
+ *  6. Nothing resolvable -- None.
  */
 object TrackerMapCameraDirectivePolicy {
     fun resolve(input: TrackerMapCameraDirectiveInput): Resolution {
-        if (input.selectionLockEnabled) {
-            // A claimed selection lock owns the camera outright. Falling through to a
-            // bounds-based directive underneath it when coordinates are transiently
-            // unresolved (e.g. the instant a stream starts, before a point has landed) used to
-            // hand the camera to a full-extent InitialFit/LiveActiveFit fit -- exactly the
-            // "conflicts with full extent" behavior this guards against. Holding still (None)
-            // until a point resolves is strictly better than a camera move nobody asked for.
-            return if (input.selectionLockLat != null && input.selectionLockLon != null) {
+        val bothLocksEngaged = input.selectionLockEnabled && input.liveActiveFitEnabled
+        if (input.selectionLockEnabled && !bothLocksEngaged) {
+            return selectionLockCenterOrHold(input)
+        }
+        if (bothLocksEngaged) {
+            if (input.liveActiveFitEnabled && input.bounds != null) {
+                return Resolution(
+                    reason = TrackerMapCameraDirective.Reason.LiveActiveFit,
+                    centerLat = null,
+                    centerLon = null,
+                    bounds = input.bounds,
+                )
+            }
+            // Live active fit's bounds haven't resolved yet -- fall back to the locked point
+            // rather than dropping the camera lock entirely for that gap.
+            return selectionLockCenterOrHold(input)
+        }
+        if (input.followLockEnabled) {
+            return if (
+                input.gpsCollecting &&
+                input.followTargetLat != null &&
+                input.followTargetLon != null
+            ) {
                 Resolution(
-                    reason = TrackerMapCameraDirective.Reason.SelectionLock,
-                    centerLat = input.selectionLockLat,
-                    centerLon = input.selectionLockLon,
+                    reason = TrackerMapCameraDirective.Reason.FollowLock,
+                    centerLat = input.followTargetLat,
+                    centerLon = input.followTargetLon,
                     bounds = null,
                 )
             } else {
+                // HOLD: GPS isn't actively producing a fix right now (e.g. collection paused,
+                // permission dropped mid-session) -- hold the camera instead of falling through
+                // to a full-extent InitialFit while the follow-lock FAB still shows armed.
                 Resolution.None
             }
-        }
-        if (
-            input.followLockEnabled &&
-            input.gpsCollecting &&
-            input.followTargetLat != null &&
-            input.followTargetLon != null
-        ) {
-            return Resolution(
-                reason = TrackerMapCameraDirective.Reason.FollowLock,
-                centerLat = input.followTargetLat,
-                centerLon = input.followTargetLon,
-                bounds = null,
-            )
         }
         if (input.liveActiveFitEnabled && input.bounds != null) {
             return Resolution(
@@ -129,6 +154,21 @@ object TrackerMapCameraDirectivePolicy {
             )
         }
         return Resolution.None
+    }
+
+    private fun selectionLockCenterOrHold(input: TrackerMapCameraDirectiveInput): Resolution {
+        val lat = input.selectionLockLat
+        val lon = input.selectionLockLon
+        return if (lat != null && lon != null) {
+            Resolution(
+                reason = TrackerMapCameraDirective.Reason.SelectionLock,
+                centerLat = lat,
+                centerLon = lon,
+                bounds = null,
+            )
+        } else {
+            Resolution.None
+        }
     }
 
     /**

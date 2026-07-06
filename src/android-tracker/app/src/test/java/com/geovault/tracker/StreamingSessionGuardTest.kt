@@ -1,6 +1,7 @@
 package com.geovault.tracker
 
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.streaming.StreamingConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -102,7 +103,7 @@ class StreamingSessionGuardTest {
         guard.markConnected()
 
         nowMs += 40_000L
-        guard.markPongReceived()
+        guard.markLivenessReceived()
 
         nowMs += 40_000L // 80s since connect, well past staleAfterMs, but only 40s since the pong
 
@@ -114,5 +115,54 @@ class StreamingSessionGuardTest {
         )
 
         assertEquals(StreamingSessionReuseDecision.REUSE, assessment.decision)
+    }
+
+    @Test
+    fun assess_returnsReuse_whenTrackerPointRefreshesLivenessWithNoPongYet() {
+        // Defense-in-depth: an incoming track_updated point is a secondary liveness signal
+        // alongside the pong, guarding against the pong path alone ever silently regressing
+        // server-side.
+        var nowMs = 0L
+        val guard = StreamingSessionGuard(staleAfterMs = 45_000L, elapsedRealtimeMs = { nowMs })
+        guard.markConnected()
+
+        nowMs += 40_000L
+        guard.markLivenessReceived()
+
+        nowMs += 40_000L // 80s since connect, well past staleAfterMs, but only 40s since the point
+
+        val assessment = guard.assess(
+            requestedTrackerIds = setOf("a"),
+            currentTrackerIds = setOf("a"),
+            hasSocket = true,
+            lifecycleState = TrackingLifecycleState.RUNNING
+        )
+
+        assertEquals(StreamingSessionReuseDecision.REUSE, assessment.decision)
+    }
+
+    @Test
+    fun createDefault_usesStreamingConfigSessionStaleAfterMs() {
+        var nowMs = 1_000L
+        val guard = StreamingSessionGuard(elapsedRealtimeMs = { nowMs })
+        guard.markConnected()
+
+        nowMs += StreamingConfig.sessionStaleAfterMs - 1L
+        val stillFresh = guard.assess(
+            requestedTrackerIds = setOf("a"),
+            currentTrackerIds = setOf("a"),
+            hasSocket = true,
+            lifecycleState = TrackingLifecycleState.RUNNING
+        )
+        assertEquals(StreamingSessionReuseDecision.REUSE, stillFresh.decision)
+
+        nowMs += 2L
+        val nowStale = guard.assess(
+            requestedTrackerIds = setOf("a"),
+            currentTrackerIds = setOf("a"),
+            hasSocket = true,
+            lifecycleState = TrackingLifecycleState.RUNNING
+        )
+        assertEquals(StreamingSessionReuseDecision.STALE_ACTIVITY, nowStale.decision)
     }
 }

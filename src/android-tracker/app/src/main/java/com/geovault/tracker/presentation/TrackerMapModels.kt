@@ -140,6 +140,14 @@ internal fun TrackerMapTrailReloadReason?.mergedWith(
     return if (incoming.strength() > current.strength()) incoming else current
 }
 
+/**
+ * Clears all three map locks unconditionally -- the right default whenever a *new* camera
+ * context is being established (a fresh manual lock target, a context reset, a roster removal,
+ * auto-lock on recording start, etc.). The one exception is enabling live active fit in
+ * SINGLE_SESSION, which composes with an existing selection lock instead of clearing it; see
+ * [TrackerMapLiveActiveFitPolicy.composesWithSelectionLock] and
+ * [com.geovault.tracker.map.MapContextSubsystem.setLiveActiveFit].
+ */
 internal fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = copy(
     followLockEnabled = false,
     liveActiveFitEnabled = false,
@@ -147,8 +155,13 @@ internal fun TrackerMapUiState.withAllMapLocksDisabled(): TrackerMapUiState = co
 )
 
 /**
- * True when any of the three mutually-exclusive map locks currently claims the camera. Used to
- * gate [com.geovault.tracker.map.PendingReloadCameraFit.consumeIfLanded] so an automatic
+ * True when any of the three map locks currently claims the camera. `followLockEnabled` and
+ * `liveActiveFitEnabled` are always mutually exclusive with each other, and both are mutually
+ * exclusive with `selectionLockTrackerId` in every mode *except* SINGLE_SESSION, where a
+ * selection lock and live active fit may both be set at once (see
+ * [TrackerMapLiveActiveFitPolicy.composesWithSelectionLock]) -- this still only needs to check
+ * "is at least one set" and doesn't care which combination. Used to gate
+ * [com.geovault.tracker.map.PendingReloadCameraFit.consumeIfLanded] so an automatic
  * reload-landing fit never fights a lock that's already claimed the camera.
  */
 internal fun TrackerMapUiState.hasAnyMapLockActive(): Boolean =

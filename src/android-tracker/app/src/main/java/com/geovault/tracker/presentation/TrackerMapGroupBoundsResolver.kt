@@ -31,6 +31,25 @@ sealed class TrackerMapGroupBoundsStrategy {
 }
 
 /**
+ * Outcome of [TrackerMapGroupBoundsResolver.resolveOrHold], distinguishing *why* no bounds were
+ * resolved so callers know whether it's safe to fall back to some other bounds source.
+ */
+sealed class TrackerMapGroupBoundsResolution {
+    data class Bounds(val bounds: LatLngBounds) : TrackerMapGroupBoundsResolution()
+
+    /**
+     * [TrackerMapGroupBoundsStrategy.ActiveOnly] found zero qualifying trackers. Falling back to
+     * an all-tracker/single-point bounds here would silently override the "only show active
+     * trackers" intent the moment the roster goes quiet -- callers should hold the camera (apply
+     * no directive) instead of substituting an unrelated fit.
+     */
+    data object Hold : TrackerMapGroupBoundsResolution()
+
+    /** Genuinely nothing to show (e.g. empty roster, lock off) -- safe to fall back. */
+    data object NoBounds : TrackerMapGroupBoundsResolution()
+}
+
+/**
  * Single authority for GROUP_PLACEHOLDER / ALL_QUEUE map bounds.
  *
  * Replaces split logic between [TrackerMapViewModel] and [TrackerMapLiveActiveFitPolicy] so lock-on
@@ -58,6 +77,28 @@ object TrackerMapGroupBoundsResolver {
             TrackerMapGroupBoundsStrategy.AllVisibleWhileLocked,
             -> resolveAllVisible(normalizedInput)
             TrackerMapGroupBoundsStrategy.ActiveOnly -> resolveActiveOnly(normalizedInput)
+        }
+    }
+
+    /**
+     * Same resolution as [resolve], but distinguishes an [TrackerMapGroupBoundsResolution.Hold]
+     * (ActiveOnly with zero qualifying trackers) from a genuine [TrackerMapGroupBoundsResolution.NoBounds]
+     * so callers know whether falling back to some other bounds source is safe.
+     */
+    fun resolveOrHold(input: TrackerMapGroupBoundsInput): TrackerMapGroupBoundsResolution {
+        val normalizedInput = input.normalizedToVisibleTrackers()
+        val resolvedStrategy = strategy(normalizedInput)
+        val bounds = when (resolvedStrategy) {
+            TrackerMapGroupBoundsStrategy.AllVisible,
+            TrackerMapGroupBoundsStrategy.AllVisibleWhileLocked,
+            -> resolveAllVisible(normalizedInput)
+            TrackerMapGroupBoundsStrategy.ActiveOnly -> resolveActiveOnly(normalizedInput)
+        }
+        if (bounds != null) return TrackerMapGroupBoundsResolution.Bounds(bounds)
+        return if (resolvedStrategy == TrackerMapGroupBoundsStrategy.ActiveOnly) {
+            TrackerMapGroupBoundsResolution.Hold
+        } else {
+            TrackerMapGroupBoundsResolution.NoBounds
         }
     }
 
@@ -179,7 +220,7 @@ object TrackerMapGroupBoundsResolver {
     ): Long? {
         val remoteMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(remoteLastPoints[trackerId]?.timestampMs)
         val trailMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(trailsByTracker[trackerId]?.lastOrNull()?.time)
-        val tracker = trackers.firstOrNull { it.id == trackerId }
+        val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
         val trackerDataMs = tracker?.lastDataTimestampMsOrNull()
         return listOfNotNull(remoteMs, trailMs, trackerDataMs)
             .filter { it > 0L }

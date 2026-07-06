@@ -45,7 +45,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         private val ROLLING_WINDOW_RECOMPUTE_INTERVAL_MS = TimeUnit.SECONDS.toMillis(60)
     }
 
-    // GODOBJECT-STREAMING: bookkeeping this subsystem's own collectors read and write to detect
+    // Bookkeeping this subsystem's own collectors read and write to detect
     // transitions (previous-vs-current snapshots, dedupe signatures) or forward events
     // (`pointEventChannel`). Nothing outside this file reads or writes any of these.
     private val pointEventChannel = Channel<TrackPointEvent>(Channel.UNLIMITED)
@@ -74,31 +74,51 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
     private var streamingUnhealthySinceMs: Long? = null
 
     /** Closes this subsystem's channel(s). Called once from [TrackerMapRuntime.onCleared]. */
-    fun close() {
+    internal fun close() {
         pointEventChannel.close()
     }
 
-    fun startCollectors() {
-        // PRELOAD-AT-INIT: read the persisted selected tracker id straight from prefs and
-        // seed `rt.stateHub.uiStateMutable.trail` from the local Room queue ASAP. This races (intentionally)
-        // with the first `rt.stateHub.uiStateMutable.collect` below so the very first render package the map
-        // sees already has a trail to fit the camera to. Without this, the launch sequence
-        // is "empty render -> 0,0 flash -> ExplicitTrackerLoad -> server fetch -> snap"
-        // because `getTrackers()` is metadata-only (no geometry) so the in-memory cache
-        // preload inside `reloadTrailFromDatabase` returns null on every cold launch.
-        // The Room queue is the only source of truth that survives process death without
-        // a network round-trip.
+    internal fun startCollectors() {
+        wireInitialTrailSeed()
+        wireColdStartRosterValidation()
+        wireRenderResyncCollector()
+        wireGroupModeFitToggleCollector()
+        wireRuntimeStateCollector()
+        wirePointConsumerForwardCollector()
+        wireStreamStateCollector()
+        wireRosterFingerprintCollector()
+        wireTrackerManagementEventsCollector()
+        wirePointConsumerReduceCollector()
+        wireIdleRollingWindowTicker()
+        wireReconcileCollector()
+        wireHeartbeatCollector()
+        rt.streamRosterResolver.refreshStreamTargets()
+    }
+
+    // PRELOAD-AT-INIT: read the persisted selected tracker id straight from prefs and
+    // seed `rt.stateHub.uiStateMutable.trail` from the local Room queue ASAP. This races (intentionally)
+    // with the first `rt.stateHub.uiStateMutable.collect` below so the very first render package the map
+    // sees already has a trail to fit the camera to. Without this, the launch sequence
+    // is "empty render -> 0,0 flash -> ExplicitTrackerLoad -> server fetch -> snap"
+    // because `getTrackers()` is metadata-only (no geometry) so the in-memory cache
+    // preload inside `reloadTrailFromDatabase` returns null on every cold launch.
+    // The Room queue is the only source of truth that survives process death without
+    // a network round-trip.
+    private fun wireInitialTrailSeed() {
         rt.ports.viewModelScope.launch {
             rt.reload.seedInitialTrailFromLocalQueue()
         }
-        // COLD-START ROSTER VALIDATION: `first { it.isNotEmpty() }` rather than reacting to
-        // the `TrackersRefreshed` *event* — that SharedFlow has no replay, so if some other
-        // screen already fetched+published the roster before this ViewModel/collector
-        // existed, the event would already be gone and this would never run. The `trackers`
-        // StateFlow always has a current value for a new subscriber, so this sees the roster
-        // whether it was fetched before or after this point, without ever validating against
-        // the transient pre-fetch `emptyList()` default (which would incorrectly treat every
-        // persisted id as invalid on every cold launch).
+    }
+
+    // COLD-START ROSTER VALIDATION: `first { it.isNotEmpty() }` rather than reacting to
+    // the `TrackersRefreshed` *event* — that SharedFlow has no replay, so if some other
+    // screen already fetched+published the roster before this ViewModel/collector
+    // existed, the event would already be gone and this would never run. The `trackers`
+    // StateFlow always has a current value for a new subscriber, so this sees the roster
+    // whether it was fetched before or after this point, without ever validating against
+    // the transient pre-fetch `emptyList()` default (which would incorrectly treat every
+    // persisted id as invalid on every cold launch).
+    private fun wireColdStartRosterValidation() {
         rt.ports.viewModelScope.launch {
             val rosterIds = rt.dependencies.trackerManagementStateStore.trackers
                 .first { it.isNotEmpty() }
@@ -111,6 +131,9 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             }
             rt.streamRosterResolver.validateColdStartAgainstRoster(rosterIds)
         }
+    }
+
+    private fun wireRenderResyncCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "render-resync",
             flow = combine(rt.stateHub.uiStateMutable, rt.dependencies.historyRepository.snapshots) { state, _ -> state },
@@ -119,6 +142,9 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         ) {
             rt.display.publishRenderPackage()
         }
+    }
+
+    private fun wireGroupModeFitToggleCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "group-mode-fit-toggle",
             flow = rt.dependencies.trackerSettingsRepository.observeSettings()
@@ -130,6 +156,9 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         ) {
             rt.display.publishRenderPackage()
         }
+    }
+
+    private fun wireRuntimeStateCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "runtime-state",
             flow = TrackingRuntimeStateStore.state,
@@ -145,34 +174,40 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 isRunning = snap.isRunning,
                 lifecycleState = effectiveLifecycleState
             )
-            val current = rt.stateHub.uiStateMutable.value
-            val displayedTrackerId = if (current.displayedTrackerId.isBlank()) {
-                effectiveRuntime.selectedTrackerId
-            } else {
-                current.displayedTrackerId
+            // ATOMIC RUNTIME-SYNC: `displayedTrackerId`/`displayedTrackerName` are derived from
+            // `current` and written back inside the same `updateAndGet {}` step (rather than a
+            // separate read-then-blind-`.value =`-write pair) so a concurrent trail/point commit
+            // landing in between can never be silently clobbered by this write reapplying a
+            // stale base snapshot.
+            val next = rt.stateHub.uiStateMutable.updateAndGet { current ->
+                val displayedTrackerId = if (current.displayedTrackerId.isBlank()) {
+                    effectiveRuntime.selectedTrackerId
+                } else {
+                    current.displayedTrackerId
+                }
+                val displayedTrackerName = if (current.displayedTrackerName.isBlank()) {
+                    effectiveRuntime.selectedTrackerName
+                } else {
+                    current.displayedTrackerName
+                }
+                current.copy(
+                    runtime = effectiveRuntime,
+                    displayedTrackerId = displayedTrackerId,
+                    displayedTrackerName = displayedTrackerName
+                )
             }
-            val displayedTrackerName = if (current.displayedTrackerName.isBlank()) {
-                effectiveRuntime.selectedTrackerName
-            } else {
-                current.displayedTrackerName
-            }
-            rt.stateHub.uiStateMutable.value = current.copy(
-                runtime = effectiveRuntime,
-                displayedTrackerId = displayedTrackerId,
-                displayedTrackerName = displayedTrackerName
-            )
             val runtimeSnapshotSignature =
-                "mode=${current.mode}|selected=${snap.selectedTrackerId.trim()}|local=${snap.localRecordingActive}|" +
-                    "trail=${current.trail.size}|multi=${current.allQueueTrailsByTracker.mapSizes()}|" +
+                "mode=${next.mode}|selected=${snap.selectedTrackerId.trim()}|local=${snap.localRecordingActive}|" +
+                    "trail=${next.trail.size}|multi=${next.allQueueTrailsByTracker.mapSizes()}|" +
                     "lastTs=${snap.lastTrackedTimestampMs}"
             if (CaptureLogThrottle.shouldLogOnChange("vm_runtime_snapshot", runtimeSnapshotSignature)) {
                 GeoVaultCaptureLog.d(
                     TrackerMapViewModel.TAG,
-                    "map_update vm_runtime_snapshot mode=${current.mode} selected=${snap.selectedTrackerId.trim()} " +
+                    "map_update vm_runtime_snapshot mode=${next.mode} selected=${snap.selectedTrackerId.trim()} " +
                         "localActive=${snap.localRecordingActive} localId=${snap.locallyRecordedTrackerId.trim()} " +
                         "sessionStart=${snap.sessionStartTimeMs} lastTs=${snap.lastTrackedTimestampMs} " +
                         "lat=${snap.lastTrackedLatitude} lon=${snap.lastTrackedLongitude} " +
-                        "displayed=$displayedTrackerId trail=${current.trail.size} multi=${current.allQueueTrailsByTracker.mapSizes()}"
+                        "displayed=${next.displayedTrackerId} trail=${next.trail.size} multi=${next.allQueueTrailsByTracker.mapSizes()}"
                 )
             }
             val prevLocalRecording = lastObservedLocalRecordingActive
@@ -205,7 +240,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 previousIsRunning = lastObservedTrackingRunning,
                 currentIsRunning = snap.isRunning,
                 mapReady = rt.context.isMapReady,
-                mapViewContext = if (current.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                mapViewContext = if (next.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     TrackerMapViewContext.GROUP
                 } else {
                     TrackerMapViewContext.SINGLE_TRACKER
@@ -295,6 +330,9 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 rt.context.evaluateResumeAfterBackground(allowZeroGap = true)
             }
         }
+    }
+
+    private fun wirePointConsumerForwardCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "point-consumer-forward",
             flow = TrackPointBus.events,
@@ -303,17 +341,20 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
         ) { point ->
             pointEventChannel.send(point)
         }
-        // COMBINED-RECONCILE: this collector handles _state-mutation_ side effects of streaming
-        // runtime updates only (mirroring active ids, trimming remote heads, recomputing the
-        // status pill, and emitting post-stop lease cleanup). The reconcile call itself moves to
-        // the combined flow below so reconcile inputs come from a single coherent snapshot.
-        // Deliberately `collect`, not `collectLatest`: the post-stop cleanup branch calls
-        // `restoreSelectedTrackerMapContext()`, which resets displayed/mode state and kicks
-        // off a trail reload. `collectLatest` would cancel that branch mid-flight the instant
-        // a newer snapshot lands (e.g. a fast Stop-then-Start), which could leave the restore
-        // half-applied and silently drop the fresher snapshot's own handling since the block
-        // never ran to completion. Every field this handler reads is drained from a single
-        // snapshot in order instead.
+    }
+
+    // COMBINED-RECONCILE: this collector handles _state-mutation_ side effects of streaming
+    // runtime updates only (mirroring active ids, trimming remote heads, recomputing the
+    // status pill, and emitting post-stop lease cleanup). The reconcile call itself moves to
+    // the combined flow below so reconcile inputs come from a single coherent snapshot.
+    // Deliberately `collect`, not `collectLatest`: the post-stop cleanup branch calls
+    // `restoreSelectedTrackerMapContext()`, which resets displayed/mode state and kicks
+    // off a trail reload. `collectLatest` would cancel that branch mid-flight the instant
+    // a newer snapshot lands (e.g. a fast Stop-then-Start), which could leave the restore
+    // half-applied and silently drop the fresher snapshot's own handling since the block
+    // never ran to completion. Every field this handler reads is drained from a single
+    // snapshot in order instead.
+    private fun wireStreamStateCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "stream-state",
             flow = rt.dependencies.liveStreamSubscriptionRepository.state,
@@ -381,12 +422,15 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             }
             lastObservedStreamingFailureReason = failureReason
         }
-        // FINGERPRINT-DRIVEN REFRESH: pair (previous, current) fingerprints so we can decide
-        // whether the change was cosmetic (name/color only — render-only republish) or
-        // structural (roster, group membership, per-tracker hidden, map visibility — server
-        // refetch). `recent_data_window` is deliberately excluded from both axes and handled
-        // by [filterChangeReactor] instead, so a filter edit goes through exactly one path
-        // and the cosmetic/structural axes don't double-fire on the same upsert.
+    }
+
+    // FINGERPRINT-DRIVEN REFRESH: pair (previous, current) fingerprints so we can decide
+    // whether the change was cosmetic (name/color only — render-only republish) or
+    // structural (roster, group membership, per-tracker hidden, map visibility — server
+    // refetch). `recent_data_window` is deliberately excluded from both axes and handled
+    // by [filterChangeReactor] instead, so a filter edit goes through exactly one path
+    // and the cosmetic/structural axes don't double-fire on the same upsert.
+    private fun wireRosterFingerprintCollector() {
         filterChangeReactor.seed(rt.dependencies.trackerManagementStateStore.trackers.value)
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "roster-fingerprint",
@@ -412,7 +456,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             // rather than merging it the way `requestRuntimeTrailReload` is designed to.
         ) { (previous, current) ->
             if (current != null) {
-                rt.stateHub.uiStateMutable.value = rt.stateHub.uiStateMutable.value.copy(renderMetadataSignature = current.combined)
+                rt.stateHub.uiStateMutable.update { it.copy(renderMetadataSignature = current.combined) }
                 val structuralChanged = previous == null || previous.structural != current.structural
                 val reason = if (structuralChanged) {
                     TrackerMapTrailReloadReason.RosterChanged
@@ -423,13 +467,16 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 rt.streamRosterResolver.refreshStreamTargets()
             }
         }
-        // Events are discrete, per-tracker side effects (invalidate cache + render +
-        // request reload). Using `collect` instead of `collectLatest` here is deliberate:
-        // collectLatest cancels the previous handler when a new event lands, which can
-        // abort a suspending `rt.sessionRequestDeduper.invalidate(...)` mid-flight. The
-        // reactor's `observe` already mutated its baseline synchronously by that point,
-        // so a cancelled invalidate would silently leak stale cache entries with no
-        // second chance to purge them. Ordered draining keeps the contract simple.
+    }
+
+    // Events are discrete, per-tracker side effects (invalidate cache + render +
+    // request reload). Using `collect` instead of `collectLatest` here is deliberate:
+    // collectLatest cancels the previous handler when a new event lands, which can
+    // abort a suspending `rt.sessionRequestDeduper.invalidate(...)` mid-flight. The
+    // reactor's `observe` already mutated its baseline synchronously by that point,
+    // so a cancelled invalidate would silently leak stale cache entries with no
+    // second chance to purge them. Ordered draining keeps the contract simple.
+    private fun wireTrackerManagementEventsCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "tracker-management-events",
             flow = rt.dependencies.trackerManagementStateStore.events,
@@ -467,10 +514,17 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                                 dispatcher = rt.dependencies.historyIntentDispatcher,
                                 activeSessionStartMs = rt.currentActiveSessionStartMs(),
                             )
-                            rt.stateHub.uiStateMutable.value = rt.display.applyHistoryTrailsToState(
-                                state = rt.context.stateWithClearedRenderedTrails(rt.stateHub.uiStateMutable.value, clearedTrackerId),
-                                plan = rt.projectSession(rt.stateHub.uiStateMutable.value),
-                            )
+                            // Serialize with `trailCommitLock`, matching the reproject/reload
+                            // commit convention elsewhere: this reads-then-writes trail state
+                            // across two intermediate steps (clear, then reproject), so it must
+                            // not interleave with a concurrent reload/live-point commit that also
+                            // mutates `trail`/`allQueueTrailsByTracker`.
+                            rt.trailCommitLock.withCommitLock {
+                                rt.stateHub.uiStateMutable.update { latest ->
+                                    val cleared = rt.context.stateWithClearedRenderedTrails(latest, clearedTrackerId)
+                                    rt.display.applyHistoryTrailsToState(cleared, rt.projectSession(cleared))
+                                }
+                            }
                             rt.reload.invalidateLoadedSeed()
                             rt.reload.requestRuntimeTrailReload(TrackerMapTrailReloadReason.HistoryCleared)
                         }
@@ -482,8 +536,10 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 }
                 is com.geovault.tracker.data.TrackerManagementEvent.TrackerDeleted -> {
                     lastKnownRosterTrackerIds = lastKnownRosterTrackerIds - event.trackerId
+                    // `handleTrackerRemovedFromRoster` triggers its own `refreshStreamTargets()`
+                    // when the removed tracker actually warrants one -- no need to call it again
+                    // here.
                     rt.streamRosterResolver.handleTrackerRemovedFromRoster(event.trackerId)
-                    rt.streamRosterResolver.refreshStreamTargets()
                 }
                 is com.geovault.tracker.data.TrackerManagementEvent.TrackersRefreshed -> {
                     val changes = filterChangeReactor.observeAll(event.trackers)
@@ -496,11 +552,14 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                     for (removedId in removedIds) {
                         rt.streamRosterResolver.handleTrackerRemovedFromRoster(removedId)
                     }
-                    if (changes.isNotEmpty() || removedIds.isNotEmpty()) rt.streamRosterResolver.refreshStreamTargets()
+                    if (changes.isNotEmpty()) rt.streamRosterResolver.refreshStreamTargets()
                 }
                 else -> Unit
             }
         }
+    }
+
+    private fun wirePointConsumerReduceCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "point-consumer-reduce",
             flow = pointEventChannel.receiveAsFlow(),
@@ -511,14 +570,17 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 rt.trackPointReducer.reduce(point)
             }
         }
-        // IDLE-ROLLING-WINDOW TICKER: see `TrackerMapRuntime.recomputeStaleRollingWindows`.
-        // Runs for the lifetime of the map regardless of whether points are actively
-        // arriving, since the staleness this guards against only manifests during idle
-        // periods (a "last 1h" filter needs to re-exclude points as they age out even
-        // with nothing new coming in to trigger a compose on its own). Modeled as a Flow
-        // (rather than a bare `while (isActive) { delay(...) }` loop) purely so it can go
-        // through the same [launchSupervisedCollector] auto-restart machinery as every other
-        // always-on collector here.
+    }
+
+    // IDLE-ROLLING-WINDOW TICKER: see `TrackerMapRuntime.recomputeStaleRollingWindows`.
+    // Runs for the lifetime of the map regardless of whether points are actively
+    // arriving, since the staleness this guards against only manifests during idle
+    // periods (a "last 1h" filter needs to re-exclude points as they age out even
+    // with nothing new coming in to trigger a compose on its own). Modeled as a Flow
+    // (rather than a bare `while (isActive) { delay(...) }` loop) purely so it can go
+    // through the same [launchSupervisedCollector] auto-restart machinery as every other
+    // always-on collector here.
+    private fun wireIdleRollingWindowTicker() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "idle-rolling-window-ticker",
             flow = flow {
@@ -534,11 +596,14 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 rt.display.publishRenderPackage()
             }
         }
-        // COMBINED-RECONCILE: the single source of truth for reconcile triggering. By combining
-        // ui state, streaming runtime, and the explicit invalidation token into one flow we
-        // eliminate the dual-collector race where one path could see a fresher uiState than the
-        // other saw of streamRuntime (or vice versa). distinctUntilChangedBy on the seed dedupes
-        // identical inputs without requiring an internal reconciler-side seed cache.
+    }
+
+    // COMBINED-RECONCILE: the single source of truth for reconcile triggering. By combining
+    // ui state, streaming runtime, and the explicit invalidation token into one flow we
+    // eliminate the dual-collector race where one path could see a fresher uiState than the
+    // other saw of streamRuntime (or vice versa). distinctUntilChangedBy on the seed dedupes
+    // identical inputs without requiring an internal reconciler-side seed cache.
+    private fun wireReconcileCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "reconcile",
             flow = combine(
@@ -550,13 +615,16 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
             retryDelayMs = StreamingConfig.collectorRestartDelayMs,
             onError = StreamingDiagnostics::logCollectorRestart,
         ) { inputs -> rt.streamTargetReconciler.reconcileStreaming(inputs.state) }
-        // HEARTBEAT: fires on a fixed interval independent of point/state cadence, unlike the
-        // stream-state collector above which only emits on structural changes and can otherwise
-        // go quiet for the entire duration of a session that looks healthy but is actually
-        // stalled (the "streamed tracker not updating" failure mode this whole audit started
-        // from). This is also where the battery-optimization hint's "unhealthy for N minutes"
-        // clock is advanced -- a fixed tick is exactly what that policy needs, so piggy-backing
-        // here avoids standing up a second always-on timer just for it.
+    }
+
+    // HEARTBEAT: fires on a fixed interval independent of point/state cadence, unlike the
+    // stream-state collector above which only emits on structural changes and can otherwise
+    // go quiet for the entire duration of a session that looks healthy but is actually
+    // stalled (the "streamed tracker not updating" failure mode this whole audit started
+    // from). This is also where the battery-optimization hint's "unhealthy for N minutes"
+    // clock is advanced -- a fixed tick is exactly what that policy needs, so piggy-backing
+    // here avoids standing up a second always-on timer just for it.
+    private fun wireHeartbeatCollector() {
         rt.ports.viewModelScope.launchSupervisedCollector(
             tag = "heartbeat",
             flow = flow {
@@ -599,7 +667,6 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 rt.stateHub.uiStateMutable.update { it.copy(batteryOptimizationHintVisible = showHint) }
             }
         }
-        rt.streamRosterResolver.refreshStreamTargets()
     }
 
     internal data class ReconcileInputs(

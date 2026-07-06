@@ -357,6 +357,24 @@ class LiveStreamSubscriptionRepositoryTest {
     }
 
     @Test
+    fun reportConnectionUpdate_hasConnectedThisProcess_latchesTrueOnRunningAndStaysTrue() = runTest {
+        val gateway = FakeLiveStreamServicePort()
+        val repository = newRepository(gateway, this)
+
+        assertFalse(repository.state.value.hasConnectedThisProcess)
+
+        repository.reportConnectionUpdate(ConnectionPhase.STARTING, emptySet(), null)
+        assertFalse(repository.state.value.hasConnectedThisProcess)
+
+        repository.reportConnectionUpdate(ConnectionPhase.RUNNING, setOf("a"), null)
+        assertTrue(repository.state.value.hasConnectedThisProcess)
+
+        // Sticky: a later disconnect/retry must not clear it back to false.
+        repository.reportConnectionUpdate(ConnectionPhase.RECONNECTING, setOf("a"), "dropped")
+        assertTrue(repository.state.value.hasConnectedThisProcess)
+    }
+
+    @Test
     fun dispatch_blocksASecondCallerRatherThanRunningConcurrentlyWithAnInFlightDispatch() {
         // Regression test for a race where `scheduleDispatch`'s `dispatchJob?.cancel()` couldn't
         // actually stop an in-flight tick (dispatch() has no suspension point to honor

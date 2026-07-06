@@ -538,6 +538,91 @@ class TrackerMapGroupBoundsResolverTest {
         assertEquals(0.0, bounds.longitudeWest, 0.0)
     }
 
+    @Test
+    fun resolveOrHold_activeOnlyWithNoQualifyingTrackers_returnsHoldNotNoBounds() {
+        // GROUP ACTIVE-ONLY HOLD REGRESSION: callers must be able to distinguish "nothing
+        // active right now" (Hold -- keep the camera where it is) from a genuine "there is
+        // nothing at all to show" (NoBounds -- safe to fall back to some other bounds source).
+        val nowMs = System.currentTimeMillis()
+        val staleTrail = listOf(makeQueuedLocation(nowMs - 20 * 60 * 1000L))
+
+        val resolution = TrackerMapGroupBoundsResolver.resolveOrHold(
+            baseInput(
+                liveActiveFitEnabled = true,
+                fitOnlyActiveTrackers = true,
+                visibleTrackerIds = setOf("t1"),
+                trailsByTracker = mapOf("t1" to staleTrail),
+                nowMs = nowMs,
+            ),
+        )
+
+        assertEquals(TrackerMapGroupBoundsResolution.Hold, resolution)
+    }
+
+    @Test
+    fun resolveOrHold_lockOffWithNothingVisible_returnsNoBounds() {
+        val resolution = TrackerMapGroupBoundsResolver.resolveOrHold(
+            baseInput(liveActiveFitEnabled = false, visibleTrackerIds = emptySet()),
+        )
+
+        assertEquals(TrackerMapGroupBoundsResolution.NoBounds, resolution)
+    }
+
+    @Test
+    fun resolveOrHold_activeOnlyWithQualifyingTracker_returnsBounds() {
+        val nowMs = System.currentTimeMillis()
+        val trackers = listOf(
+            Tracker(
+                id = "live-roster",
+                name = "Live",
+                color = null,
+                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
+                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
+            ),
+        )
+
+        val resolution = TrackerMapGroupBoundsResolver.resolveOrHold(
+            baseInput(
+                liveActiveFitEnabled = true,
+                fitOnlyActiveTrackers = true,
+                visibleTrackerIds = setOf("live-roster"),
+                trackers = trackers,
+                nowMs = nowMs,
+            ),
+        )
+
+        val bounds = resolution as TrackerMapGroupBoundsResolution.Bounds
+        assertEquals(40.0, bounds.bounds.latitudeNorth, 0.0)
+    }
+
+    @Test
+    fun isTrackerActive_trimsIdsBeforeMatchingRosterTracker() {
+        // TRIM-COMPARISON FIX: a roster tracker id with incidental whitespace must still match
+        // an untrimmed candidate id -- untrimmed ids otherwise silently fail the roster lookup
+        // and fall through to trail/remote-only recency, missing legitimately fresh
+        // `last_point`/`point_params` timestamps.
+        val nowMs = System.currentTimeMillis()
+        val trackers = listOf(
+            Tracker(
+                id = " tracker-1 ",
+                name = "Tracker 1",
+                color = null,
+                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
+                last_point = listOf(-74.0, 40.0, (nowMs - 30_000L).toDouble()),
+            ),
+        )
+
+        val active = TrackerMapGroupBoundsResolver.isTrackerActive(
+            trackerId = "tracker-1",
+            trailsByTracker = emptyMap(),
+            remoteLastPoints = emptyMap(),
+            trackers = trackers,
+            nowMs = nowMs,
+        )
+
+        assertTrue(active)
+    }
+
     private fun baseInput(
         visibleTrackerIds: Set<String> = emptySet(),
         liveActiveFitEnabled: Boolean = false,

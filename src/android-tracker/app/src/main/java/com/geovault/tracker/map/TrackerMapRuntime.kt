@@ -34,16 +34,17 @@ import kotlinx.coroutines.flow.StateFlow
  * [MapContextSubsystem.isMapReady], [MapTrailReloadSubsystem.invalidateLoadedSeed]).
  */
 internal class TrackerMapRuntime(
-    val ports: TrackerMapPorts,
+    internal val ports: TrackerMapPorts,
 ) {
     internal val dependencies = TrackerMapDependencies(ports.application)
 
     internal val stateHub = TrackerMapStateHub()
-    val uiState: StateFlow<TrackerMapUiState> = stateHub.uiState
-    val renderPackage: StateFlow<TrackerMapRenderPackage> = stateHub.renderPackage
+    internal val uiState: StateFlow<TrackerMapUiState> = stateHub.uiState
+    internal val renderPackage: StateFlow<TrackerMapRenderPackage> = stateHub.renderPackage
     internal val cameraCoordinator = TrackerMapCameraCoordinator()
-    val cameraDirective: StateFlow<TrackerMapCameraDirective> = cameraCoordinator.directive
-    fun cameraGeneration(): Long = cameraCoordinator.generation
+    internal val cameraDirective: StateFlow<TrackerMapCameraDirective> = cameraCoordinator.directive
+    internal val cameraGenerationFlow: StateFlow<Long> = cameraCoordinator.generationFlow
+    internal fun cameraGeneration(): Long = cameraCoordinator.generation
 
     internal val trailCommitLock = TrailCommitCoordinator()
     internal val pendingReloadCameraFit = PendingReloadCameraFit()
@@ -59,7 +60,7 @@ internal class TrackerMapRuntime(
     internal lateinit var streamTargetReconciler: StreamTargetReconciler
     internal lateinit var trackPointReducer: TrackPointReducer
 
-    fun start() {
+    internal fun start() {
         SelectedTrackerManager.syncRuntimeSelectedTracker(ports.application)
         wireSubsystems()
         trailLoaderOps = TrackerMapTrailLoaderOps(
@@ -85,9 +86,9 @@ internal class TrackerMapRuntime(
         streaming = MapStreamingSubsystem(this)
     }
 
-    fun trackerRosterForMapChip() = dependencies.trackerManagementStateStore.trackers.value
+    internal fun trackerRosterForMapChip() = dependencies.trackerManagementStateStore.trackers.value
 
-    fun onCleared() {
+    internal fun onCleared() {
         streaming.close()
     }
 

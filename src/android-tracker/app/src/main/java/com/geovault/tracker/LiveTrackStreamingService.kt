@@ -22,7 +22,6 @@ import com.geovault.tracker.policy.TrackPointSource
 import com.geovault.tracker.policy.WireTimestampNormalizer
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.streaming.ConnectionPhase
-import com.geovault.tracker.streaming.ReapplyReason
 import com.geovault.tracker.streaming.StreamingConfig
 import com.geovault.tracker.streaming.StreamingDiagnostics
 import kotlinx.coroutines.CoroutineScope
@@ -55,15 +54,13 @@ class LiveTrackStreamingService : Service() {
         const val EXTRA_STREAMING_ERROR_MESSAGE = "extra_streaming_error_message"
         const val NOTIFICATION_ID = 102
         private const val CHANNEL_ID = "live_track_streaming"
-        private const val WS_READ_TIMEOUT_SEC = 90L
-        private const val WS_PING_INTERVAL_SEC = 30L
         private const val WS_UPGRADE_HTTP_CODE = 101
 
         /**
          * App-level ping payload, answered directly (not via channel-layer broadcast) by
          * `LiveTrackOnlyConsumer.receive` on the server. This is deliberately independent of
-         * OkHttp's own transport-level WebSocket ping (`WS_PING_INTERVAL_SEC`): that one only
-         * proves the raw socket is alive, which OkHttp already turns into `onFailure` on timeout.
+         * OkHttp's own transport-level WebSocket ping (see [StreamingConfig.webSocketPingIntervalMs]):
+         * that one only proves the raw socket is alive, which OkHttp already turns into `onFailure` on timeout.
          * This one proves the server's consumer instance for *this* connection is still accepting
          * and responding to messages, decoupled entirely from whether the tracker being watched
          * has actually reported a new point recently (see [StreamingSessionGuard]).
@@ -155,13 +152,17 @@ class LiveTrackStreamingService : Service() {
      * the moment a RUNNING session goes stale, independent of whether any owner's lease has
      * changed.
      *
-     * PING-DRIVEN-NOT-POINT-DRIVEN: this loop also sends the app-level [APP_PING_PAYLOAD] on
-     * every tick, which is what [sessionGuard] actually measures staleness against (see
-     * [handlePongReceived]). Staleness must never be keyed off `track_updated` recency: a
-     * quiet-but-healthy tracker (sparse/significant-motion tracking, or simply stationary) can
-     * legitimately go far longer than [StreamingConfig.sessionStaleAfterMs] between real points,
-     * which previously caused this watchdog to force-reconnect a perfectly healthy connection
-     * and flash the UI to "Reconnecting" on a loop.
+     * PING-DRIVEN, NOT SOLELY POINT-DRIVEN: this loop also sends the app-level [APP_PING_PAYLOAD]
+     * on every tick, which is [sessionGuard]'s *authoritative* staleness signal (see
+     * [handlePongReceived]) -- it alone proves liveness even for a perfectly healthy but
+     * currently-idle tracker. Staleness must never be keyed *solely* off `track_updated`
+     * recency: a quiet-but-healthy tracker (sparse/significant-motion tracking, or simply
+     * stationary) can legitimately go far longer than [StreamingConfig.sessionStaleAfterMs]
+     * between real points, which previously caused this watchdog to force-reconnect a perfectly
+     * healthy connection and flash the UI to "Reconnecting" on a loop. An incoming point *does*
+     * also refresh [sessionGuard] now (see [publishRemotePoint]), but purely as a defense-in-depth
+     * secondary signal alongside the pong -- it can only make a connection look more alive, never
+     * less, so it cannot reintroduce that loop.
      */
     private fun startLivenessWatchdog() {
         livenessWatchdogJob = serviceScope.launch {
@@ -201,9 +202,13 @@ class LiveTrackStreamingService : Service() {
 
     /**
      * Reconnects the current session in place without touching leases: the target set hasn't
-     * changed, only the connection turned out to be a zombie. [LiveStreamSubscriptionRepository.requestReapply]
-     * is still notified so a caller that keyed a UI recovery action off "did the repository ever
-     * re-apply" (e.g. resume-from-background) observes this reconnect too.
+     * changed, only the connection turned out to be a zombie. Deliberately does NOT call
+     * [LiveStreamSubscriptionRepository.requestReapply] -- this function already tears down the
+     * old socket/job and starts a brand new [connect] itself; also going through the repository
+     * would additionally re-invoke [com.geovault.tracker.streaming.LiveStreamSubscriptionRepository]'s
+     * `dispatchStart`, which re-enters this very service via `servicePort.startStreaming` with the
+     * *same* (unchanged) tracker ids -- a second, redundant reconnect racing the one already
+     * started below rather than any real lease/target change.
      *
      * TOCTOU GUARD: [checkLivenessAndReconnectIfStale] made its staleness decision moments ago,
      * on a stale snapshot, before releasing `stateLock`. By the time this function actually runs
@@ -231,7 +236,6 @@ class LiveTrackStreamingService : Service() {
         if (trackerIds.isEmpty()) return
         applyLifecycleEvent(StreamingLifecycleEvent.RetryRequested, trackerIds)
         synchronized(stateLock) { connectJob = serviceScope.launch { connect(sessionId) } }
-        repository.requestReapply(ReapplyReason.STALE_CONNECTION)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -665,7 +669,7 @@ class LiveTrackStreamingService : Service() {
     private fun handlePongReceived(sessionId: Long, socket: WebSocket) {
         synchronized(stateLock) {
             if (sessionId == connectionSessionId.get() && webSocket === socket) {
-                sessionGuard.markPongReceived()
+                sessionGuard.markLivenessReceived()
             }
         }
     }
@@ -692,8 +696,8 @@ class LiveTrackStreamingService : Service() {
             }
             return RetrofitClient.newAuthenticatedWebSocketClient(
                 context = applicationContext,
-                readTimeoutSec = WS_READ_TIMEOUT_SEC,
-                pingIntervalSec = WS_PING_INTERVAL_SEC,
+                readTimeoutSec = TimeUnit.MILLISECONDS.toSeconds(StreamingConfig.webSocketReadTimeoutMs),
+                pingIntervalSec = TimeUnit.MILLISECONDS.toSeconds(StreamingConfig.webSocketPingIntervalMs),
             ).also { builtClient -> wsHttpClient = builtClient }
         }
     }
@@ -763,6 +767,9 @@ class LiveTrackStreamingService : Service() {
             )
             return
         }
+        // LIVENESS DEFENSE-IN-DEPTH: see the KDoc on `StreamingSessionGuard.markLivenessReceived`
+        // for why this secondary signal exists alongside (never instead of) the app-level pong.
+        sessionGuard.markLivenessReceived()
         GeoVaultCaptureLog.d(
             TAG,
             "map_update stream_point_received track=${point.trackId.trim()} session=$sessionId " +

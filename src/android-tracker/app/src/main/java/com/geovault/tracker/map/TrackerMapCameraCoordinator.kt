@@ -27,13 +27,22 @@ import org.maplibre.android.geometry.LatLngBounds
 internal class TrackerMapCameraCoordinator {
     private val directiveMutable =
         MutableStateFlow<TrackerMapCameraDirective>(TrackerMapCameraDirective.None())
-    val directive: StateFlow<TrackerMapCameraDirective> = directiveMutable.asStateFlow()
+    internal val directive: StateFlow<TrackerMapCameraDirective> = directiveMutable.asStateFlow()
 
-    private var generationCounter: Long = 0L
-    val generation: Long get() = generationCounter
+    // LIVE GENERATION: a directive's own `generation` field is frozen at mint time, so it can't
+    // tell a Compose consumer "the user started a gesture while you were still animating this
+    // same directive." Exposing the counter as its own flow lets the consumer key a LaunchedEffect
+    // on it directly and re-run (cancelling any in-flight camera animation) the instant a gesture
+    // bumps it, instead of only checking staleness once when the effect first launches.
+    private val generationMutable = MutableStateFlow(0L)
+    internal val generationFlow: StateFlow<Long> = generationMutable.asStateFlow()
+    internal val generation: Long get() = generationMutable.value
 
-    private var lastResolution: TrackerMapCameraDirectivePolicy.Resolution =
-        TrackerMapCameraDirectivePolicy.Resolution.None
+    // `null` (rather than `Resolution.None`) is the "no prior resolution" sentinel so that
+    // [resetLastResolution] can force the next [resolveFromLockState] call to always mint --
+    // including when the freshly-resolved value for a new viewport happens to also be `None`
+    // (e.g. bounds haven't loaded yet for the tracker just switched to).
+    private var lastResolution: TrackerMapCameraDirectivePolicy.Resolution? = null
     private var nextId: Long = 1L
 
     /**
@@ -41,8 +50,19 @@ internal class TrackerMapCameraCoordinator {
      * (regardless of whether a lock was active beforehand) so a directive minted just before the
      * gesture can never land after it.
      */
-    fun onUserGestureStarted() {
-        generationCounter++
+    internal fun onUserGestureStarted() {
+        generationMutable.value += 1
+    }
+
+    /**
+     * Forces the next [resolveFromLockState] call to mint a fresh directive even if the
+     * resolution is semantically identical to the last one emitted. Called on map-context
+     * transitions (tracker/mode/group switch) so a new viewport always gets its own directive to
+     * key a fresh camera-consumer effect run off of, rather than silently reusing the previous
+     * viewport's directive id because the resolved camera intent happens to look the same.
+     */
+    internal fun resetLastResolution() {
+        lastResolution = null
     }
 
     /**
@@ -51,7 +71,7 @@ internal class TrackerMapCameraCoordinator {
      * directive (and therefore its id), so a `LaunchedEffect(directive.id)` consumer doesn't
      * re-animate on noisy, camera-irrelevant state churn.
      */
-    fun resolveFromLockState(input: TrackerMapCameraDirectiveInput) {
+    internal fun resolveFromLockState(input: TrackerMapCameraDirectiveInput) {
         val resolution = TrackerMapCameraDirectivePolicy.resolve(input)
         if (resolution == lastResolution) return
         lastResolution = resolution
@@ -65,14 +85,19 @@ internal class TrackerMapCameraCoordinator {
      * the previous lazy pull, and removes the need for the consumer to call back into the
      * ViewModel to compute bounds. A `null` bounds means there's nothing to fit; silently a no-op.
      */
-    fun requestExplicitFit(bounds: LatLngBounds?, mode: TrackerMapFitTrailMode) {
+    internal fun requestExplicitFit(bounds: LatLngBounds?, mode: TrackerMapFitTrailMode) {
         if (bounds == null) return
+        // Force the next `resolveFromLockState` call to mint fresh too: without this, a
+        // precedence-driven resolution left over from before this explicit fit could look
+        // identical to whatever the precedence engine resolves next, deduping away a directive
+        // the consumer actually needs to see.
+        lastResolution = null
         directiveMutable.value = TrackerMapCameraDirective.FitBounds(
             bounds = bounds,
             mode = mode,
             reason = TrackerMapCameraDirective.Reason.ExplicitFit,
             id = nextId++,
-            generation = generationCounter,
+            generation = generation,
         )
     }
 
@@ -89,10 +114,10 @@ internal class TrackerMapCameraCoordinator {
                         longitude = lon,
                         reason = resolution.reason,
                         id = id,
-                        generation = generationCounter,
+                        generation = generation,
                     )
                 } else {
-                    TrackerMapCameraDirective.None(id = id, generation = generationCounter)
+                    TrackerMapCameraDirective.None(id = id, generation = generation)
                 }
             }
             TrackerMapCameraDirective.Reason.LiveActiveFit,
@@ -104,14 +129,14 @@ internal class TrackerMapCameraCoordinator {
                         mode = TrackerMapFitTrailMode.Instant,
                         reason = resolution.reason,
                         id = id,
-                        generation = generationCounter,
+                        generation = generation,
                     )
                 } else {
-                    TrackerMapCameraDirective.None(id = id, generation = generationCounter)
+                    TrackerMapCameraDirective.None(id = id, generation = generation)
                 }
             }
             TrackerMapCameraDirective.Reason.ExplicitFit,
-            TrackerMapCameraDirective.Reason.NoOp -> TrackerMapCameraDirective.None(id = id, generation = generationCounter)
+            TrackerMapCameraDirective.Reason.NoOp -> TrackerMapCameraDirective.None(id = id, generation = generation)
         }
     }
 }

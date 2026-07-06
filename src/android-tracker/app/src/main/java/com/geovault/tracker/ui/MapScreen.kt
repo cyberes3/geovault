@@ -1,6 +1,7 @@
 package com.geovault.tracker.ui
 
 import android.app.Activity
+import android.location.Location
 import android.view.WindowManager
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
@@ -39,12 +40,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -257,8 +258,21 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     val density = LocalDensity.current
-    val boundsFitPaddingPx = remember(density, mapPaddingPolicy) {
-        mapPaddingPolicy.computeBoundsFitPaddingPx(density)
+    // MEASURED-NOT-GUESSED CHIP RESERVE: the top-left chip's height varies with its content
+    // (name-only vs. name+status vs. name+user-label+status), so a fixed dp guess for how much
+    // top viewport to reserve during a bounds fit either wastes space or -- worse -- undershoots
+    // the tallest variant and lets a fitted marker land behind the chip. Track the chip's actual
+    // rendered height (see the `onGloballyPositioned` on its Box below) and feed that into the
+    // bounds-fit padding instead. Falls back to the policy's static guess for the first frame(s)
+    // before layout has run, and to zero when no chip is shown at all.
+    var topLeftChipMeasuredHeightPx by remember { mutableStateOf(0) }
+    val topLeftChipReserveDp = when {
+        topLeftChipModel !is TrackerMapTopLeftChipUiModel.Visible -> 0.dp
+        topLeftChipMeasuredHeightPx > 0 -> with(density) { topLeftChipMeasuredHeightPx.toDp() }
+        else -> TrackerMapPaddingPolicy.FallbackTopLeftChipViewportReserveTopDp
+    }
+    val boundsFitPaddingPx = remember(density, mapPaddingPolicy, topLeftChipReserveDp) {
+        mapPaddingPolicy.computeBoundsFitPaddingPx(density, topLeftChipReserveDp)
     }
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
@@ -299,11 +313,20 @@ private fun TrackerMapAuthenticatedContent(
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val userLocationPolicy = remember { TrackerMapUserLocationPolicy() }
-    var liveGpsPuckRequestedThisSession by rememberSaveable { mutableStateOf(false) }
+    // Viewport scoping is handled entirely by the `LaunchedEffect(viewportContextSeed)` reset
+    // below -- `rememberSaveable`'s cross-process persistence would only let this leak across a
+    // process-death/restore boundary into a viewport where the puck was never requested, so a
+    // plain `remember` is deliberately used instead.
+    var liveGpsPuckRequestedThisSession by remember { mutableStateOf(false) }
     val clearMapLocks = remember(viewModel) {
         { viewModel.disableAllMapLocks() }
     }
     var gpsHomeAnchor by remember { mutableStateOf<LatLng?>(null) }
+    // LIVE PUCK TRACKING: unlike `gpsHomeAnchor` (a one-shot snapshot captured only when the
+    // "my location" FAB resolves a fix), this mirrors every fix the plugin renders while the
+    // puck is active, so a live-active-fit re-fit keeps a moving user framed instead of
+    // freezing on wherever they happened to be standing at FAB-tap time.
+    var liveGpsPuckPosition by remember { mutableStateOf<LatLng?>(null) }
     var didInitialBounds by remember { mutableStateOf(false) }
     // INITIAL-FRAME GATE: covers the map view with a loading overlay until the very
     // first camera directive at this viewport context has been applied (or, as a
@@ -326,10 +349,20 @@ private fun TrackerMapAuthenticatedContent(
     LaunchedEffect(viewportContextSeed) {
         didInitialBounds = false
         gpsHomeAnchor = null
+        liveGpsPuckPosition = null
         // Re-arm the loading overlay on every viewport context change so the brief
         // window between "old context's camera position" and "new context's camera
         // fit" is hidden (e.g. switching tracker, switching to group mode).
         mapInitialFrameReady = false
+        // "ThisSession" means this viewport context, not the process lifetime -- without
+        // resetting here, requesting the GPS puck while viewing one tracker would leak into
+        // every other tracker/mode viewed afterwards (e.g. making the live-lock FAB appear for
+        // a stream where the puck was never actually requested).
+        liveGpsPuckRequestedThisSession = false
+        // A taller/shorter chip from the previous viewport must not feed stale padding into the
+        // first bounds fit for this one -- fall back to the default reserve until this
+        // viewport's own chip (if any) reports its measured height.
+        topLeftChipMeasuredHeightPx = 0
     }
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
@@ -361,6 +394,14 @@ private fun TrackerMapAuthenticatedContent(
                 }
             },
         )
+    }
+
+    DisposableEffect(locationPlugin) {
+        val listener: (Location) -> Unit = { location ->
+            liveGpsPuckPosition = latLngOrNull(location.latitude, location.longitude)
+        }
+        locationPlugin.addLocationListener(listener)
+        onDispose { locationPlugin.removeLocationListener(listener) }
     }
 
     DisposableEffect(map) {
@@ -419,6 +460,16 @@ private fun TrackerMapAuthenticatedContent(
         )
     }
 
+    // ORPHAN GUARD: both anchors are captured/updated only while the puck is enabled -- once it
+    // is disabled (permission revoked, backgrounded, runtime tracking took over, etc.) they must
+    // not survive to be unioned into a later fit as stale, no-longer-current positions.
+    LaunchedEffect(userLocationDecision.shouldEnablePuck) {
+        if (!userLocationDecision.shouldEnablePuck) {
+            gpsHomeAnchor = null
+            liveGpsPuckPosition = null
+        }
+    }
+
     DisposableEffect(map, userLocationDecision.shouldStreamGps) {
         if (userLocationDecision.shouldStreamGps) {
             locationPlugin.startRenderingGpsLocation(intervalMs = 2000L)
@@ -465,10 +516,19 @@ private fun TrackerMapAuthenticatedContent(
     // directive ids for InitialFit so the one-shot semantics survive bounds shape churn (e.g.
     // trail growth) until the viewport context resets and re-arms them.
     val cameraDirective by viewModel.cameraDirective.collectAsState()
-    LaunchedEffect(phase, cameraDirective.id) {
+    // LIVE-GENERATION KEY: `cameraGeneration` and `viewportContextSeed` are both included
+    // alongside `cameraDirective.id` so a user gesture or a viewport switch that lands between
+    // this effect being scheduled and actually running cancels the stale run outright, rather
+    // than relying solely on the one-time staleness check at effect entry.
+    val cameraGeneration by viewModel.cameraGenerationFlow.collectAsState()
+    LaunchedEffect(phase, cameraDirective.id, cameraGeneration, viewportContextSeed) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         val directive = cameraDirective
         if (directive.generation != viewModel.cameraGeneration()) return@LaunchedEffect
+        // INITIAL-FRAME SHIELD: only a directive that actually positions the camera may lift the
+        // loading overlay. A `None` directive (nothing resolvable yet for this viewport -- e.g.
+        // bounds/lock target still loading) must leave the overlay up; flipping it here used to
+        // briefly reveal the map at MapLibre's stale/default camera position.
         when (directive) {
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.None -> Unit
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.CenterOnPoint -> {
@@ -483,6 +543,11 @@ private fun TrackerMapAuthenticatedContent(
                     longitude = directive.longitude,
                     minimumZoom = MapLibreManager.DEFAULT_POINT_ZOOM,
                 )
+                // Order matters: the camera move above must complete BEFORE we flip the
+                // overlay flag, otherwise we'd reveal the map for one frame at the previous
+                // (default / stale) camera position. The MapLibre move is synchronous so by
+                // the time we reach this line the new camera is in the next frame.
+                mapInitialFrameReady = true
             }
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.FitBounds -> {
                 if (directive.reason == com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.InitialFit) {
@@ -498,17 +563,27 @@ private fun TrackerMapAuthenticatedContent(
                     )
                     didInitialBounds = true
                 } else {
-                    // EXPLICIT-FIT GPS ANCHOR: a one-shot explicit fit (the "Home" FAB) additionally
-                    // frames in the last-resolved GPS one-shot anchor, if any. That anchor is
-                    // Compose-local UI state the ViewModel has no notion of, so the union happens
-                    // here rather than at request time.
-                    val effectiveBounds = if (
-                        directive.reason == com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.ExplicitFit
-                    ) {
-                        gpsHomeAnchor?.let { anchor -> geoVaultLatLngBoundsUnion(directive.bounds, listOf(anchor)) }
-                            ?: directive.bounds
-                    } else {
-                        directive.bounds
+                    // GPS ANCHOR UNION: a one-shot explicit fit (the "Home" FAB) additionally
+                    // frames in the last-resolved GPS one-shot anchor, if any, so the position
+                    // the user tapped "my location" at stays in view for that single fit. An
+                    // ongoing live-active-fit re-fit instead unions the *live*, continuously-
+                    // updating puck position -- using the one-shot anchor there would freeze the
+                    // union at wherever the user happened to be standing when the FAB was
+                    // originally tapped, silently falling out of frame as they walk away from it.
+                    // Both anchors are Compose-local UI state the ViewModel has no notion of, so
+                    // the union happens here rather than at request time.
+                    val effectiveBounds = when (directive.reason) {
+                        com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.ExplicitFit -> {
+                            gpsHomeAnchor?.let { anchor -> geoVaultLatLngBoundsUnion(directive.bounds, listOf(anchor)) }
+                                ?: directive.bounds
+                        }
+                        com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.LiveActiveFit -> {
+                            liveGpsPuckPosition
+                                .takeIf { userLocationDecision.shouldEnablePuck }
+                                ?.let { anchor -> geoVaultLatLngBoundsUnion(directive.bounds, listOf(anchor)) }
+                                ?: directive.bounds
+                        }
+                        else -> directive.bounds
                     }
                     fitTrackerMapBounds(
                         map = map,
@@ -517,13 +592,9 @@ private fun TrackerMapAuthenticatedContent(
                         mode = directive.mode,
                     )
                 }
+                mapInitialFrameReady = true
             }
         }
-        // Order matters: the camera move above must complete BEFORE we flip the
-        // overlay flag, otherwise we'd reveal the map for one frame at the previous
-        // (default / stale) camera position. The MapLibre move is synchronous so by
-        // the time we reach this line the new camera is in the next frame.
-        mapInitialFrameReady = true
     }
     // SAFETY NET: if no camera directive ever arrives with bounds (e.g. fresh install
     // with empty queue and the geometry endpoint is slow), don't leave the map hidden
@@ -588,6 +659,31 @@ private fun TrackerMapAuthenticatedContent(
             val singleTrackerLocked = selectionLockBehavior?.isLocked == true
             val isSelectedDefaultTracker = selectionLockBehavior != null &&
                 selectionLockBehavior.displayedTrackerId == state.runtime.selectedTrackerId.trim()
+            // MULTI-TRACKER GATE: fitting bounds around a single point is indistinguishable from
+            // centering on it, so the live-active-fit toggle only earns its keep once there's a
+            // second tracker/position sharing the map. This is deliberately just the user's own
+            // GPS puck -- a locally-recorded tracker different from the one currently displayed
+            // was considered here too, but SINGLE_SESSION bounds (trailBoundsOrNull in
+            // MapTrailDisplaySubsystem) and point routing (TrackerMapPointRouter.routeLocal) both
+            // only ever use the *displayed* tracker's own trail/position; a differing overlay
+            // tracker's points are accepted but never appended to any trail or unioned into
+            // bounds in this mode. Gating on it here would show a toggle that's a pure no-op.
+            // Hoisted above the FAB builder (rather than computed inline) so the auto-clear
+            // effect below can react to it too.
+            val hasMultipleTrackersOnMap = userLocationDecision.shouldEnablePuck
+            // STUCK-LIVE-FIT GUARD: once this gate drops to false, the secondary FAB that would
+            // let the user turn live active fit back off disappears too (see
+            // TrackerMapLiveActiveFitPolicy.resolveVisibility) -- without this, a toggle enabled
+            // while a second tracker/GPS puck was present would stay silently stuck on forever
+            // once that second position source goes away (e.g. GPS puck disabled, or the local
+            // recording overlay tracker changes). Auto-clearing here preserves the selection lock
+            // (see MapContextSubsystem.setLiveActiveFit) -- only the live-fit modifier itself is
+            // dropped.
+            LaunchedEffect(hasMultipleTrackersOnMap, viewportContextSeed) {
+                if (!hasMultipleTrackersOnMap && state.liveActiveFitEnabled) {
+                    viewModel.setLiveActiveFit(false)
+                }
+            }
             val lockFabIsActive = when (lockFabBehavior) {
                 is TrackerMapLockFabBehavior.SelectionLock -> lockFabBehavior.isLocked
                 is TrackerMapLockFabBehavior.LiveActiveFit -> lockFabBehavior.isEnabled
@@ -672,11 +768,11 @@ private fun TrackerMapAuthenticatedContent(
                 val liveActiveFitVisibility = TrackerMapLiveActiveFitPolicy.resolveVisibility(
                     LiveActiveFitInput(
                         mode = state.mode,
-                        runtimeRunning = state.runtime.localRecordingActive,
                         followLockArmed = liveActiveFitLockArmed,
                         liveActiveFitEnabled = state.liveActiveFitEnabled,
                         hasTrailPoints = state.trail.isNotEmpty(),
                         isSelectedDefaultTracker = isSelectedDefaultTracker,
+                        hasMultipleTrackersOnMap = hasMultipleTrackersOnMap,
                     )
                 )
                 if (liveActiveFitVisibility.showButton) {
@@ -707,6 +803,10 @@ private fun TrackerMapAuthenticatedContent(
                     tooltip = tooltipMapZoomIn,
                     onTap = {
                         if (phase == GeoVaultMapPhase.Ready) {
+                            // GESTURE PARITY: a manual zoom is exactly as much a user takeover of
+                            // the camera as a pan is -- without this, zooming in/out with a lock
+                            // engaged would fight the lock's next re-fit instead of releasing it.
+                            viewModel.disableAllMapLocks()
                             zoomInFabAction.onTap?.invoke()
                         }
                     },
@@ -719,6 +819,7 @@ private fun TrackerMapAuthenticatedContent(
                     tooltip = tooltipMapZoomOut,
                     onTap = {
                         if (phase == GeoVaultMapPhase.Ready) {
+                            viewModel.disableAllMapLocks()
                             zoomOutFabAction.onTap?.invoke()
                         }
                     },
@@ -737,20 +838,32 @@ private fun TrackerMapAuthenticatedContent(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
+                        // Placed before `padding` so the measured size includes the top offset
+                        // below, i.e. the full reserved region from the top of the map down to
+                        // below the chip -- exactly what `boundsFitPaddingPx` above needs.
+                        .onGloballyPositioned { coordinates ->
+                            topLeftChipMeasuredHeightPx = coordinates.size.height
+                        }
                         .padding(top = 16.dp, start = 16.dp, end = 80.dp),
                 ) {
-                    MapTopLeftTrackerChip(
-                        modifier = Modifier.widthIn(max = maxWidth),
-                        model = topLeftChipModel,
-                        onCardClick = {
-                            onHostNavigationRequested(
-                                MapHostNavigationRequestResolver.fromListNavigationTarget(
-                                    viewModel.resolveListNavigationTarget()
+                    // KEYED ON VIEWPORT: forces the chip's internal `remember`ed interaction
+                    // state (tooltip-suppression, tracked card bounds) to reset when the tracker
+                    // being viewed changes, instead of silently carrying over state that was
+                    // computed for a different tracker's chip.
+                    key(viewportContextSeed) {
+                        MapTopLeftTrackerChip(
+                            modifier = Modifier.widthIn(max = maxWidth),
+                            model = topLeftChipModel,
+                            onCardClick = {
+                                onHostNavigationRequested(
+                                    MapHostNavigationRequestResolver.fromListNavigationTarget(
+                                        viewModel.resolveListNavigationTarget()
+                                    )
                                 )
-                            )
-                        },
-                        onResetClick = viewModel::restoreSelectedTrackerMapContext,
-                    )
+                            },
+                            onResetClick = viewModel::restoreSelectedTrackerMapContext,
+                        )
+                    }
                 }
             }
             if (state.isGeometryLoading) {

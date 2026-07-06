@@ -19,18 +19,18 @@ import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
  * substitute fakes instead of having to reach into the runtime itself.
  */
 internal class TrackerMapDependencies(application: Application) {
-    val appContext = application.applicationContext
-    val dao = AppDatabase.getDatabase(application).locationDao()
-    val trackerManagementRepository: TrackerManagementRepository =
+    internal val appContext = application.applicationContext
+    internal val dao = AppDatabase.getDatabase(application).locationDao()
+    internal val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
-    val trackerManagementStateStore: TrackerManagementStateStore =
+    internal val trackerManagementStateStore: TrackerManagementStateStore =
         TrackerAppServices.from(application).trackerManagementStateStore()
-    val trackerSettingsRepository: TrackerSettingsRepository =
+    internal val trackerSettingsRepository: TrackerSettingsRepository =
         TrackerAppServices.from(application).trackerSettingsRepository()
-    val liveStreamSubscriptionRepository: LiveStreamSubscriptionRepository =
+    internal val liveStreamSubscriptionRepository: LiveStreamSubscriptionRepository =
         TrackerAppServices.from(application).liveStreamSubscriptionRepository()
-    val streamingReconciler = LiveTrackStreamingReconciler(liveStreamSubscriptionRepository)
-    val historyRepository: TrackerHistoryRepository =
+    internal val streamingReconciler = LiveTrackStreamingReconciler(liveStreamSubscriptionRepository)
+    internal val historyRepository: TrackerHistoryRepository =
         TrackerAppServices.from(application).trackerHistoryRepository()
-    val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
+    internal val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
 }

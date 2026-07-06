@@ -1,6 +1,7 @@
 package com.geovault.tracker
 
 import com.geovault.tracker.location.TrackingLifecycleState
+import com.geovault.tracker.streaming.StreamingConfig
 
 internal enum class StreamingSessionReuseDecision {
     /** Same tracker set, socket healthy: do nothing. */
@@ -24,7 +25,7 @@ internal data class StreamingSessionAssessment(
 )
 
 internal class StreamingSessionGuard(
-    private val staleAfterMs: Long = DEFAULT_STALE_AFTER_MS,
+    private val staleAfterMs: Long = StreamingConfig.sessionStaleAfterMs,
     private val elapsedRealtimeMs: () -> Long,
 ) {
     private var lastActivityElapsedMs: Long = 0L
@@ -34,13 +35,20 @@ internal class StreamingSessionGuard(
     }
 
     /**
-     * Refreshes staleness on receipt of the app-level pong (see
-     * [com.geovault.tracker.LiveTrackStreamingService.handlePongReceived]), never on an incoming
-     * `track_updated` point. Keying this off point recency instead would conflate "the tracker
-     * being watched hasn't reported in a while" (normal for sparse/stationary trackers) with "the
-     * connection itself is dead" (the only thing this guard should ever act on).
+     * Refreshes staleness. The app-level pong (see
+     * [com.geovault.tracker.LiveTrackStreamingService.handlePongReceived]) is the *authoritative*
+     * source -- it alone proves the connection is alive even for a perfectly healthy but
+     * currently-idle tracker, so it must never be starved by point traffic. An incoming
+     * `track_updated` point (see
+     * [com.geovault.tracker.LiveTrackStreamingService.publishRemotePoint]) is only a secondary,
+     * defense-in-depth signal: it proves liveness incidentally whenever *any* subscribed tracker
+     * reports in, guarding against the pong path alone ever silently regressing server-side. This
+     * is deliberately NOT the primary staleness signal -- keying off point recency alone would
+     * conflate "the tracker being watched hasn't reported in a while" (normal for sparse/
+     * stationary trackers) with "the connection itself is dead" (the only thing this guard should
+     * ever act on).
      */
-    fun markPongReceived() {
+    fun markLivenessReceived() {
         lastActivityElapsedMs = elapsedRealtimeMs()
     }
 
@@ -83,8 +91,6 @@ internal class StreamingSessionGuard(
     }
 
     companion object {
-        private const val DEFAULT_STALE_AFTER_MS = 45_000L
-
         fun createDefault(): StreamingSessionGuard {
             return StreamingSessionGuard(elapsedRealtimeMs = android.os.SystemClock::elapsedRealtime)
         }

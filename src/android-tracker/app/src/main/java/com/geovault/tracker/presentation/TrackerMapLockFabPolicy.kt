@@ -18,6 +18,19 @@ sealed class TrackerMapLockFabBehavior {
     data class FollowLock(val isEnabled: Boolean) : TrackerMapLockFabBehavior()
 }
 
+/**
+ * Resolves what the *primary* map lock FAB does and displays, per [TrackerMapDisplayMode]:
+ *  - SINGLE_SESSION with a displayed tracker: toggles the selection lock on that tracker. The
+ *    secondary FAB ([TrackerMapLiveActiveFitPolicy]) layers live active fit on top of this one
+ *    once it's locked.
+ *  - ALL_QUEUE / GROUP_PLACEHOLDER: toggles live active fit directly -- there's no per-tracker
+ *    selection lock concept at this level, so this FAB owns that flag standalone.
+ *  - Otherwise (SINGLE_SESSION with nothing displayed): toggles follow lock (GPS).
+ *
+ * Exactly one of these three is ever the "primary" behavior for a given mode/context; the FAB
+ * itself is a single icon whose meaning and active-state boolean come entirely from whichever
+ * variant this resolves to.
+ */
 object TrackerMapLockFabPolicy {
     fun resolve(input: TrackerMapLockFabInput): TrackerMapLockFabBehavior {
         val displayedTrackerId = input.displayedTrackerId.trim()

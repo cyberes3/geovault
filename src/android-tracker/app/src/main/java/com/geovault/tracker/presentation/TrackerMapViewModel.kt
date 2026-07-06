@@ -220,6 +220,7 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     val uiState: StateFlow<TrackerMapUiState> = rt.uiState
     val renderPackage: StateFlow<TrackerMapRenderPackage> = rt.renderPackage
     val cameraDirective = rt.cameraDirective
+    val cameraGenerationFlow: StateFlow<Long> = rt.cameraGenerationFlow
 
     fun cameraGeneration(): Long = rt.cameraGeneration()
 
@@ -247,8 +248,6 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
     fun onTrackerMarkerTapped(trackerId: String) = rt.context.onTrackerMarkerTapped(trackerId)
 
     fun onMapBackgroundTapped(): Boolean = rt.context.onMapBackgroundTapped()
-
-    fun selectMapTrackerFromTap(trackerId: String) = rt.context.selectMapTrackerFromTap(trackerId)
 
     fun clearMapTrackerSelection() = rt.context.clearMapTrackerSelection()
 

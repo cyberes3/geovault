@@ -34,11 +34,25 @@ object TrackerMapStreamingStatusPolicy {
 
         val activeIds = normalizeIds(snapshot.activeTargets)
         val activeCount = activeIds.size
-        val desiredMatched = desiredIds.isNotEmpty() && activeIds == desiredIds
+        // LEASE-INTENT COMPARISON: match against the repository's own merged lease intent
+        // (the union of every owner's -- map's and params' -- current lease), not the map's
+        // independently-resolved `streamTargetIds`. The two can legitimately disagree for a
+        // perfectly healthy connection -- e.g. Params holds a lease for a tracker the map
+        // doesn't display, so `activeTargets` correctly includes it too even though the map's
+        // own desired set doesn't. Comparing against the map's narrower set alone would
+        // misclassify that (and any transient lag between a roster change updating the map's
+        // plan and the repository's leases catching up to it) as a dropped connection.
+        val leaseIntentIds = normalizeIds(snapshot.mergedTargets)
+        val desiredMatched = leaseIntentIds.isNotEmpty() && activeIds == leaseIntentIds
 
         return when (snapshot.connection) {
             ConnectionPhase.STARTING -> TrackerMapStreamingStatusUiModel(
-                status = if (activeCount > 0) {
+                // COLD-START BOOTSTRAP GUARD: `activeTargets` is pre-populated with the
+                // persisted target set as soon as the bootstrap lease seeds (purely so a count
+                // can be shown immediately), well before any real connection attempt in this
+                // process has happened. Without `hasConnectedThisProcess`, that non-empty count
+                // alone would misclassify this very first STARTING as a reconnect.
+                status = if (activeCount > 0 && snapshot.hasConnectedThisProcess) {
                     TrackerMapStreamingStatus.RECONNECTING
                 } else {
                     TrackerMapStreamingStatus.CONNECTING
@@ -59,7 +73,16 @@ object TrackerMapStreamingStatusPolicy {
                 },
                 activeCount = activeCount,
             )
-            ConnectionPhase.FAILED_TRANSIENT,
+            // FAILED_TRANSIENT means a retry is still pending within the backoff budget (see
+            // LiveTrackStreamingService.scheduleReconnect) -- surface it as "Reconnecting", not
+            // "Failed", since the user hasn't lost the stream, it's just between attempts.
+            // Only FAILED_PERMANENT (retry budget exhausted, or a non-retryable failure class)
+            // is a true terminal failure.
+            ConnectionPhase.FAILED_TRANSIENT -> TrackerMapStreamingStatusUiModel(
+                status = TrackerMapStreamingStatus.RECONNECTING,
+                activeCount = activeCount,
+                failureReason = snapshot.failureReason,
+            )
             ConnectionPhase.FAILED_PERMANENT -> TrackerMapStreamingStatusUiModel(
                 status = TrackerMapStreamingStatus.FAILED,
                 activeCount = activeCount,

@@ -17,9 +17,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * grouping seam, not a new invariant-enforcing layer.
  */
 internal class TrackerMapStateHub {
-    val uiStateMutable = MutableStateFlow(TrackerMapUiState())
-    val uiState: StateFlow<TrackerMapUiState> = uiStateMutable.asStateFlow()
+    internal val uiStateMutable = MutableStateFlow(TrackerMapUiState())
+    internal val uiState: StateFlow<TrackerMapUiState> = uiStateMutable.asStateFlow()
 
-    val renderPackageMutable = MutableStateFlow(TrackerMapRenderPackage())
-    val renderPackage: StateFlow<TrackerMapRenderPackage> = renderPackageMutable.asStateFlow()
+    internal val renderPackageMutable = MutableStateFlow(TrackerMapRenderPackage())
+    internal val renderPackage: StateFlow<TrackerMapRenderPackage> = renderPackageMutable.asStateFlow()
 }

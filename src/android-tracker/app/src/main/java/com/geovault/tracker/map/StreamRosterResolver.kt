@@ -17,6 +17,7 @@ import com.geovault.tracker.presentation.TrackerMapStreamingPlan
 import com.geovault.tracker.presentation.TrackerMapTrailReloadReason
 import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.presentation.TrackerMapViewModel
+import com.geovault.tracker.presentation.TrackerRosterRemovalOutcome
 import com.geovault.tracker.presentation.withAllMapLocksDisabled
 import kotlinx.coroutines.flow.update
 
@@ -36,7 +37,7 @@ import kotlinx.coroutines.flow.update
 internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
     private var lastStreamTargetsSeed: String? = null
 
-    fun refreshStreamTargets() {
+    internal fun refreshStreamTargets() {
         val state = rt.stateHub.uiStateMutable.value
         val groupSelection = rt.resolveGroupModeSelection(state)
         val visibleRosterTrackerIds = rt.visibleMapRosterTrackerIds()
@@ -71,18 +72,23 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
             displayedTrackerId = plan.displayedTrackerId,
         )
         rt.stateHub.uiStateMutable.update { cur ->
+            // BLOCK-LOCAL MODE: use `cur.mode` (the snapshot this `update {}` step is actually
+            // committing against), not the outer `state.mode` captured before this function was
+            // called -- a concurrent mode switch landing in between would otherwise have its
+            // `currentGroupId`/`groupModeOptions` silently overwritten back to this stale
+            // decision on a CAS retry.
             val baseNext = cur.copy(
                 streamTargetIds = nextStreamTargetIds,
                 remoteLastPoints = TrackerMapViewModel.filterRemoteLastPointsForAcceptedIds(
                     remoteLastPoints = cur.remoteLastPoints,
                     acceptedRemoteTrackerIds = plan.acceptedRemoteTrackerIds,
                 ),
-                currentGroupId = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                currentGroupId = if (cur.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     plan.resolvedGroupId
                 } else {
                     cur.currentGroupId
                 },
-                groupModeOptions = if (state.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
+                groupModeOptions = if (cur.mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER) {
                     rt.resolveGroupModeOptions()
                 } else {
                     emptyList()
@@ -138,7 +144,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
         }
     }
 
-    suspend fun handleFilterChange(change: TrackerMapFilterChangeReactor.FilterChange) {
+    internal suspend fun handleFilterChange(change: TrackerMapFilterChangeReactor.FilterChange) {
         when (change) {
             is TrackerMapFilterChangeReactor.FilterChange.None -> Unit
             is TrackerMapFilterChangeReactor.FilterChange.Refresh -> {
@@ -162,10 +168,22 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
      * response ever coming for this id again, so any displayed/streamed/cached state for it
      * must be torn down explicitly here rather than left to age out on its own.
      */
-    suspend fun handleTrackerRemovedFromRoster(trackerId: String) {
-        val outcome = TrackerMapRosterRemovalPolicy.applyRemoval(rt.stateHub.uiStateMutable.value, trackerId)
-        if (!outcome.changed) return
-        rt.stateHub.uiStateMutable.value = outcome.nextState
+    internal suspend fun handleTrackerRemovedFromRoster(trackerId: String) {
+        // ATOMIC REMOVAL: the policy is re-evaluated against `latest` inside the `update {}`
+        // block (rather than a snapshot read once up front) so a concurrent trail/point commit
+        // landing in the meantime can't be silently reverted by this write -- this touches
+        // trail-bearing fields (`allQueueTrailsByTracker`, `trail`), so it's also serialized with
+        // `trailCommitLock` against the point consumer's and reload's own trail commits.
+        var outcome: TrackerRosterRemovalOutcome? = null
+        rt.trailCommitLock.withCommitLock {
+            rt.stateHub.uiStateMutable.update { latest ->
+                val result = TrackerMapRosterRemovalPolicy.applyRemoval(latest, trackerId)
+                outcome = result
+                if (result.changed) result.nextState else latest
+            }
+        }
+        val resolvedOutcome = outcome ?: return
+        if (!resolvedOutcome.changed) return
         // STALE-PLAN-CACHE GUARD: `TrackerMapStreamingPlanCache` is keyed in part on
         // `state.renderMetadataSignature`, which is only refreshed by the independent
         // "roster-fingerprint" collector reacting to the tracker/group/visibility store flows --
@@ -181,9 +199,15 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
         rt.streamingPlanCache.warm(rt.stateHub.uiStateMutable.value, rt.projectSession(rt.stateHub.uiStateMutable.value))
         GeoVaultCaptureLog.i(
             TrackerMapViewModel.TAG,
-            "roster_removal trackerId=$trackerId shouldRefreshStreamTargets=${outcome.shouldRefreshStreamTargets}"
+            "map_update roster_removal trackerId=$trackerId shouldRefreshStreamTargets=${resolvedOutcome.shouldRefreshStreamTargets}"
         )
         rt.display.publishRenderPackage()
+        // Own the "was this tracker actually streamed" refresh decision here rather than making
+        // every caller remember to check it -- a caller that forgot would silently leave a
+        // now-dead tracker still leased.
+        if (resolvedOutcome.shouldRefreshStreamTargets) {
+            refreshStreamTargets()
+        }
     }
 
     /**
@@ -198,7 +222,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
      * startup validation pass, so that case is left alone entirely — the same is true of any
      * live roster removal, per [TrackerMapRosterRemovalPolicy]'s scope note.
      */
-    suspend fun validateColdStartAgainstRoster(rosterIds: Set<String>) {
+    internal suspend fun validateColdStartAgainstRoster(rosterIds: Set<String>) {
         val state = rt.stateHub.uiStateMutable.value
         val displayedId = state.displayedTrackerId.trim()
         if (displayedId.isNotEmpty() && displayedId !in rosterIds) {

@@ -21,9 +21,9 @@ internal class StreamTargetReconciler(private val rt: TrackerMapRuntime) {
     // Explicit invalidation signal for the combined-reconcile flow in
     // `MapStreamingSubsystem.startCollectors` -- see [reconcileToken].
     private val reconcileTokenMutable = MutableStateFlow(0L)
-    val reconcileToken: StateFlow<Long> = reconcileTokenMutable.asStateFlow()
+    internal val reconcileToken: StateFlow<Long> = reconcileTokenMutable.asStateFlow()
 
-    fun bumpReconcileToken() {
+    internal fun bumpReconcileToken() {
         reconcileTokenMutable.value = reconcileTokenMutable.value + 1L
     }
 
@@ -32,7 +32,7 @@ internal class StreamTargetReconciler(private val rt: TrackerMapRuntime) {
      * adjacent ticks with the same key are deduped; any change here triggers exactly one
      * reconcile call.
      */
-    fun reconcileSeedKey(
+    internal fun reconcileSeedKey(
         state: TrackerMapUiState,
         streamRuntime: LiveStreamSubscriptionState,
         token: Long,
@@ -55,7 +55,7 @@ internal class StreamTargetReconciler(private val rt: TrackerMapRuntime) {
             "${streamRuntime.failureReason.orEmpty()}|$token"
     }
 
-    fun reconcileStreaming(state: TrackerMapUiState) {
+    internal fun reconcileStreaming(state: TrackerMapUiState) {
         // The immediately-preceding `reconcileSeedKey` call (from the same combined-flow tick)
         // already resolved this exact state's plan, so this reuses that cached result instead of
         // re-scanning the roster a second time for the same tick. The plan's own
