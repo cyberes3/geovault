@@ -79,12 +79,29 @@ internal class LiveStreamSubscriptionRepository(
         val (ids, name) = runCatching { servicePort.persistedTargets(appContext) }
             .getOrDefault(emptySet<String>() to null)
         if (ids.isEmpty()) return
-        synchronized(lock) {
+        val (leasesSnapshot, bootstrap) = synchronized(lock) {
             bootstrapLease = OwnerLease(trackerIds = ids, displayName = name)
             bootstrapDeadlineElapsedMs = elapsedRealtimeMs() + bootstrapGraceMs
+            leases.toMap() to bootstrapLease
         }
-        publishLeaseState()
-        _state.update { it.copy(activeTargets = ids, connection = ConnectionPhase.STARTING) }
+        // BOOTSTRAP-SEED RACE: same hazard `setLease` documents in detail -- a separate
+        // `publishLeaseState()` followed by a STARTING fix-up would let a plain-`collect`
+        // consumer see the bootstrap lease already making `wantsSubscription` true while
+        // `connection` is still the freshly-constructed state's default `IDLE`, which is
+        // indistinguishable from a session that ran and stopped. Folding the lease-derived
+        // fields and the STARTING seed into one `update {}` closes that window the same way.
+        // (Today this repository is only ever handed to a caller *after* this method returns
+        // -- see `TrackerAppServices`' lazy construction, which runs this before anything can
+        // hold a reference to `state` -- so no collector actually exists yet to observe the
+        // gap; fixed anyway so the invariant doesn't depend on that wiring staying true.)
+        _state.update {
+            it.copy(
+                leases = leasesSnapshot,
+                bootstrapLease = bootstrap,
+                activeTargets = ids,
+                connection = ConnectionPhase.STARTING,
+            )
+        }
     }
 
     /** Replaces [owner]'s lease. `null` drops it. A no-op (no dispatch) if the value is unchanged. */
@@ -97,7 +114,30 @@ internal class LiveStreamSubscriptionRepository(
             true
         }
         if (!changed) return
-        publishLeaseState()
+        // PENDING-START RACE: this must land as a *single* `_state` emission, not
+        // `publishLeaseState()` followed by a separate STARTING fix-up. `StateFlow` collectors
+        // that use plain `collect` (as `MapStreamingSubsystem`'s stream-state collector
+        // deliberately does) observe every distinct emission, so a two-step update would let
+        // them see the intermediate value in between: leases already reflect the new lease
+        // (`wantsSubscription=true`) but `connection` is still the stale `IDLE`/
+        // `FAILED_PERMANENT` left over from the previous session — indistinguishable from
+        // `subscriptionEnded` for a session that actually ran and stopped. That false "ended"
+        // reading tore down the lease this call just set, before the service ever got a chance
+        // to try connecting, and did so on *every* call to `setLease` since `dispatch()` (and
+        // the real `servicePort.startStreaming` that would move `connection` off IDLE) doesn't
+        // run until after `dispatchDebounceMs` elapses. Computing both the lease-derived fields
+        // and the STARTING bump inside one `update {}` block closes that window: whatever a
+        // collector sees is either the fully-old or the fully-new state, never a hybrid of the
+        // two. Mirrors `seedFromPersistedState`'s identical STARTING seed for the same reason.
+        val (leasesSnapshot, bootstrap) = synchronized(lock) { leases.toMap() to bootstrapLease }
+        _state.update { current ->
+            val withLeases = current.copy(leases = leasesSnapshot, bootstrapLease = bootstrap)
+            if (withLeases.wantsSubscription && withLeases.subscriptionEnded) {
+                withLeases.copy(connection = ConnectionPhase.STARTING)
+            } else {
+                withLeases
+            }
+        }
         scheduleDispatch(immediate = false)
     }
 

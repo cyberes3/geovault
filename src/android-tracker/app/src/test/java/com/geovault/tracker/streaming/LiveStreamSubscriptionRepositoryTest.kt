@@ -6,6 +6,7 @@ import com.geovault.tracker.MapStreamingStartResult
 import com.geovault.tracker.MapStreamingStopResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -97,6 +98,60 @@ class LiveStreamSubscriptionRepositoryTest {
     }
 
     @Test
+    fun setLease_marksConnectionAsStartingBeforeDispatchSoTheNewLeaseIsNotMisreadAsEnded() = runTest {
+        // Regression test: with a real (non-zero) debounce, `dispatch()` -- and the
+        // `connection` update that comes from actually contacting the service -- doesn't run
+        // until after the debounce window. A caller reading `state` synchronously right after
+        // `setLease` (like `MapStreamingSubsystem`'s stream-state collector) must not see a
+        // stale `connection=IDLE` alongside `wantsSubscription=true`, since that combination is
+        // indistinguishable from a session that actually ran and ended -- which previously
+        // caused that just-set lease to be torn down before the service ever got a chance to
+        // start it.
+        val gateway = FakeLiveStreamServicePort()
+        val repository = newRepository(gateway, this, dispatchDebounceMs = 350L)
+
+        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+
+        assertTrue(repository.state.value.wantsSubscription)
+        assertFalse(repository.state.value.subscriptionEnded)
+        assertEquals(ConnectionPhase.STARTING, repository.state.value.connection)
+
+        advanceUntilIdle()
+        assertEquals(listOf(setOf("a")), gateway.startedIds)
+    }
+
+    @Test
+    fun setLease_neverEmitsAnIntermediateStateWhereANewLeaseLooksAlreadyEnded() = runTest {
+        // Regression test for a production "streaming never starts" bug: the previous
+        // implementation applied the lease-merge update and the STARTING fix-up as two
+        // *separate* `_state.update` calls. A collector using plain `collect` (exactly what
+        // `MapStreamingSubsystem`'s stream-state collector does, deliberately, so it never
+        // misses the real post-stop cleanup) observes every distinct emission -- including the
+        // intermediate one in between those two updates, where `wantsSubscription` was already
+        // true but `connection` was still the stale IDLE left over from repository construction
+        // (or a prior stop). That intermediate emission is indistinguishable from a session
+        // that actually ran and ended, so it immediately tore the brand new lease back down --
+        // every single time, since the debounce means `dispatch()` never runs fast enough to
+        // race ahead of it. This test collects *every* emission (not just the final value) and
+        // asserts none of them ever show that broken combination.
+        val gateway = FakeLiveStreamServicePort()
+        val repository = newRepository(gateway, this, dispatchDebounceMs = 350L)
+        val observedStates = mutableListOf<LiveStreamSubscriptionState>()
+        val collectorJob = launch { repository.state.collect { observedStates.add(it) } }
+
+        repository.setLease(StreamingOwner.MAP, OwnerLease(trackerIds = setOf("a")))
+        advanceUntilIdle()
+
+        collectorJob.cancel()
+        val brokenEmissions = observedStates.filter { it.wantsSubscription && it.subscriptionEnded }
+        assertTrue(
+            "no emission should ever report wantsSubscription=true alongside subscriptionEnded=true, " +
+                "but saw: $brokenEmissions",
+            brokenEmissions.isEmpty(),
+        )
+    }
+
+    @Test
     fun requestReapply_forcesRedispatchOfIdenticalTargets() = runTest {
         // This is the exact mechanism the liveness watchdog relies on: a session that looks
         // unchanged (same tracker ids) but has gone silent must still be force-reconnected.
@@ -185,6 +240,34 @@ class LiveStreamSubscriptionRepositoryTest {
 
         assertEquals(setOf("real"), repository.state.value.mergedTargets)
         assertEquals(listOf(setOf("real")), gateway.startedIds)
+    }
+
+    @Test
+    fun seedFromPersistedState_neverEmitsAnIntermediateStateWhereTheBootstrapLeaseLooksAlreadyEnded() = runTest {
+        // Regression test mirroring `setLease_neverEmitsAnIntermediateStateWhereANewLeaseLooksAlreadyEnded`:
+        // `seedFromPersistedState` used to apply the bootstrap lease via `publishLeaseState()`
+        // and then bump `connection` to STARTING as a *separate* `_state.update` call. A
+        // collector using plain `collect` would observe the intermediate emission where the
+        // bootstrap lease already made `wantsSubscription` true but `connection` was still the
+        // freshly-constructed state's default IDLE -- indistinguishable from a session that ran
+        // and ended. In production no collector exists yet at this point (see
+        // `TrackerAppServices`' lazy construction), but this asserts the invariant holds
+        // regardless of that wiring.
+        val gateway = FakeLiveStreamServicePort(persisted = setOf("restored") to "Restored")
+        val repository = newRepository(gateway, this)
+        val observedStates = mutableListOf<LiveStreamSubscriptionState>()
+        val collectorJob = launch { repository.state.collect { observedStates.add(it) } }
+
+        repository.seedFromPersistedState()
+        advanceUntilIdle()
+
+        collectorJob.cancel()
+        val brokenEmissions = observedStates.filter { it.wantsSubscription && it.subscriptionEnded }
+        assertTrue(
+            "no emission should ever report wantsSubscription=true alongside subscriptionEnded=true, " +
+                "but saw: $brokenEmissions",
+            brokenEmissions.isEmpty(),
+        )
     }
 
     @Test

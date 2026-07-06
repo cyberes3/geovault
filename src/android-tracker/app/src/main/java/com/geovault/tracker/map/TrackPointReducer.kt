@@ -48,6 +48,17 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
             return
         }
         var shouldUpdate = false
+        // SINGLE-EMISSION POINT-APPLY: applying the trail/remoteLastPoint mutation and
+        // refreshing the open selection card's position/accuracy for the same tracker used to
+        // be two separate `uiStateMutable` writes (this `update {}` followed by a second
+        // `rt.uiStateMutable.value = stateWithRefreshedSelectionCard(...)`). `MapStreamingSubsystem`
+        // wires several `collect` (not `collectLatest`) consumers straight off `uiStateMutable`
+        // (the "render-resync" and "reconcile" collectors), so a collector resumed between the
+        // two writes could render a frame where the marker's own trail/remoteLastPoint had
+        // already jumped to this point but its open selection card was still showing the
+        // stale pre-point position/accuracy for that identical tracker. Computing the
+        // selection-card refresh from the same post-trail-apply snapshot inside this single
+        // `update {}` block closes that window.
         rt.uiStateMutable.update { latest ->
             var next = latest
 
@@ -74,14 +85,11 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
             }
 
             if (!shouldUpdate) return@update latest
-            rt.display.applyHistoryTrailsToState(next, plan)
+            val withTrails = rt.display.applyHistoryTrailsToState(next, plan)
+            rt.context.stateWithRefreshedSelectionCard(withTrails, point.trackId)
         }
         if (shouldUpdate) {
-            val nextState = rt.context.stateWithRefreshedSelectionCard(
-                state = rt.uiStateMutable.value,
-                changedTrackerId = point.trackId,
-            )
-            rt.uiStateMutable.value = nextState
+            val nextState = rt.uiStateMutable.value
             if (CaptureLogThrottle.shouldLogOnChange(
                     "vm_point_reduce_accept",
                     "source=${point.source}|track=${point.trackId.trim()}",
