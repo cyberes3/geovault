@@ -179,6 +179,7 @@ fun GeoVaultTheme(
             }
             val useDarkNavigationBarIcons = !darkTheme
             if (GeoVaultSystemBars.shouldApplyChrome(
+                    activity = activity,
                     statusBarColor = statusBarColor,
                     navigationBarColor = navigationBarColor,
                     useDarkStatusBarText = false,
