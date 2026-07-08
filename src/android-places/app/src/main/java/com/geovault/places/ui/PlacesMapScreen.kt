@@ -26,9 +26,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
@@ -58,6 +61,7 @@ import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.places.R
 import com.geovault.places.model.Feature
 import com.geovault.places.presentation.PlacesMapViewModel
@@ -80,6 +84,7 @@ fun PlacesMapScreen(
     onOpenEdit: (Feature) -> Unit,
     onViewInList: (Feature) -> Unit,
     onNavigate: (Feature) -> Unit,
+    onViewDescription: (Feature) -> Unit,
     onLaunchArgsConsumed: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
@@ -90,7 +95,7 @@ fun PlacesMapScreen(
             config = GeoJsonRenderConfig(
                 showPointCircles = false,
                 showPointLabelsAndIcons = true,
-                showPointTextLabels = false,
+                showPointTextLabels = true,
             ),
             context = context,
         )
@@ -346,6 +351,24 @@ fun PlacesMapScreen(
                         text = viewModel.selectedFeatureLabel(selectedFeature?.properties),
                         color = MaterialTheme.colors.onSurface,
                         fontWeight = FontWeight.Bold,
+                    )
+                    // Always reserve a line for the description (even when blank) so the card's
+                    // height — and the buttons below it — don't jump around as the selected
+                    // feature changes.
+                    val description = selectedFeature?.properties?.description?.takeIf { it.isNotBlank() }
+                    Text(
+                        text = description ?: "No description",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .clickable(enabled = description != null) {
+                                selectedFeature?.let(onViewDescription)
+                            },
+                        color = geoVaultContentSecondaryColor(),
+                        fontStyle = if (description == null) FontStyle.Italic else FontStyle.Normal,
+                        minLines = 1,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

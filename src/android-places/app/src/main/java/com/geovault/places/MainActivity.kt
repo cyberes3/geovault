@@ -255,19 +255,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                         },
-                                        onViewDescription = { feature ->
-                                            val intent = Intent(this@MainActivity, DescriptionViewActivity::class.java).apply {
-                                                putExtra(
-                                                    DescriptionViewActivity.EXTRA_TITLE,
-                                                    feature.properties.name ?: "Description"
-                                                )
-                                                putExtra(
-                                                    DescriptionViewActivity.EXTRA_DESCRIPTION,
-                                                    feature.properties.description.orEmpty()
-                                                )
-                                            }
-                                            startActivity(intent)
-                                        },
+                                        onViewDescription = ::openDescriptionView,
                                         onOpenMapToPlace = { feature ->
                                             val coords = feature.geometry.coordinates
                                             mapLaunchArgs = PlacesMapLaunchArgs(
@@ -310,10 +298,9 @@ class MainActivity : ComponentActivity() {
                                         launchArgs = mapLaunchArgs,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onOpenEdit = { feature ->
-                                            val editIntent = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
-                                                putExtra("feature", feature)
-                                            }
-                                            editLauncher.launch(editIntent)
+                                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
+                                            i.putExtra("feature", feature)
+                                            editLauncher.launch(i)
                                         },
                                         onViewInList = { feature ->
                                             viewModel.setSelectedPlaceId(feature.properties.database_id)
@@ -337,6 +324,7 @@ class MainActivity : ComponentActivity() {
                                                 )
                                             }
                                         },
+                                        onViewDescription = ::openDescriptionView,
                                         onLaunchArgsConsumed = {
                                             mapLaunchArgs = PlacesMapLaunchArgs(requestToken = mapLaunchArgs.requestToken)
                                         },
@@ -389,4 +377,11 @@ class MainActivity : ComponentActivity() {
         accountViewModel.onOauthUrlConsumed()
     }
 
+    private fun openDescriptionView(feature: Feature) {
+        val intent = Intent(this, DescriptionViewActivity::class.java).apply {
+            putExtra(DescriptionViewActivity.EXTRA_TITLE, feature.properties.name ?: "Description")
+            putExtra(DescriptionViewActivity.EXTRA_DESCRIPTION, feature.properties.description.orEmpty())
+        }
+        startActivity(intent)
+    }
 }
