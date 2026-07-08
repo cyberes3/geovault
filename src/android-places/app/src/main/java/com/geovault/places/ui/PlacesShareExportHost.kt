@@ -75,6 +75,7 @@ fun PlacesShareExportHost(
             emptyLabel = "No places to export",
             searchable = true,
             selectNoneLabel = "Select none",
+            confirmText = "Export",
             onConfirm = { selected ->
                 onDismissRequest()
                 if (selected.isEmpty()) {
