@@ -298,9 +298,7 @@ class MainActivity : ComponentActivity() {
                                         launchArgs = mapLaunchArgs,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onOpenEdit = { feature ->
-                                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
-                                            i.putExtra("feature", feature)
-                                            editLauncher.launch(i)
+                                            editLauncher.launch(buildEditIntent(feature))
                                         },
                                         onViewInList = { feature ->
                                             viewModel.setSelectedPlaceId(feature.properties.database_id)
@@ -383,5 +381,27 @@ class MainActivity : ComponentActivity() {
             putExtra(DescriptionViewActivity.EXTRA_DESCRIPTION, feature.properties.description.orEmpty())
         }
         startActivity(intent)
+    }
+
+    /**
+     * Builds the edit intent for a feature that only has its merged display representation
+     * (e.g. tapped from the map). If it matches a pending offline edit, routes through the same
+     * offline-edit extras the list screen uses so the edit updates the existing queue entry
+     * instead of attempting an online PUT (or creating a duplicate offline entry).
+     */
+    private fun buildEditIntent(feature: Feature): Intent {
+        val offlineMatch = PlacesAppServices.from(application).cacheStore()
+            .findOfflineEdit(feature.properties.database_id)
+        return Intent(this, PlaceEditActivity::class.java).apply {
+            if (offlineMatch != null) {
+                val (offlineFeature, offlineIndex) = offlineMatch
+                putExtra("feature", offlineFeature.feature)
+                putExtra("original_feature", offlineFeature.original)
+                putExtra("is_offline_edit", true)
+                putExtra("offline_edit_index", offlineIndex)
+            } else {
+                putExtra("feature", feature)
+            }
+        }
     }
 }

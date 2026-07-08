@@ -49,6 +49,18 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
         )
     }
 
+    /**
+     * Looks up a pending offline edit matching [databaseId], if any, along with its index in the
+     * offline queue. Used to route an edit initiated from a screen that only has the merged
+     * display [Feature] (e.g. the map) through the same offline-edit path the list uses.
+     */
+    fun findOfflineEdit(databaseId: Int?): Pair<OfflineFeature, Int>? {
+        if (databaseId == null) return null
+        val list = getOfflineFeatures()
+        val idx = list.indexOfFirst { it.feature.properties.database_id == databaseId }
+        return if (idx >= 0) list[idx] to idx else null
+    }
+
     fun getLastSyncTime(): Long = store.getBlocking(KEY_LAST_SYNC_TIME)
 
     override fun setCached(collection: FeatureCollection, lastSyncTime: Long) {
@@ -70,17 +82,20 @@ class PlacesCacheStore(context: Context) : PlacesOfflineStore {
         val id = feature.properties.database_id
         val current = getCachedFeatures().toMutableList()
         val idx = if (id != null) current.indexOfFirst { it.properties.database_id == id } else -1
-        if (idx >= 0) {
-            current[idx] = feature
+        val updated = if (idx >= 0) {
+            current.removeAt(idx)
+            feature
         } else {
             val now = DATE_FORMAT.format(Date())
-            val withDate = if (feature.properties.created_at.isNullOrBlank()) {
+            if (feature.properties.created_at.isNullOrBlank()) {
                 feature.copy(properties = feature.properties.copy(created_at = now))
             } else {
                 feature
             }
-            current.add(0, withDate)
         }
+        // Move to the front to approximate the server's "composite" (most-recently-touched-first)
+        // sort locally, since we don't have updated_at/last_navigated_at on the client to sort by.
+        current.add(0, updated)
         store.putBlocking(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = current)))
     }
 

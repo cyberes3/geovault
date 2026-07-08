@@ -207,6 +207,9 @@ class MainScreenViewModel(
 
     fun applyUpdatedFeature(updated: Feature) {
         cache.updateCachedFeature(updated)
+        // A successful online edit supersedes any stale pending offline edit for this place,
+        // otherwise it would keep showing under "WAITING TO SYNC" alongside the fresh copy.
+        cache.removeOfflineByFeature(updated)
         _state.update { it.copy(searchQuery = "") }
         publishFromCache()
     }
