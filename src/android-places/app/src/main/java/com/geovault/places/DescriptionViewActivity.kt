@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
+import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 import com.geovault.common.ui.theme.GeoVaultTheme
 
 class DescriptionViewActivity : ComponentActivity() {
@@ -52,7 +52,12 @@ private fun DescriptionScreen(title: String, body: String, onClose: () -> Unit) 
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .navigationBarsPadding()
+                    // Uses the visibility-ignoring inset (not the plain `navigationBarsPadding()`)
+                    // because the latter changes value whenever the OS transiently toggles system
+                    // bar visibility — which happens when the text-selection floating toolbar
+                    // appears. That padding change remeasures this Column mid-selection and knocks
+                    // the selection's layout coordinates out from under it, clearing it instantly.
+                    .geoVaultStableNavigationBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {

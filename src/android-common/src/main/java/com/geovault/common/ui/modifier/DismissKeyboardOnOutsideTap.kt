@@ -9,7 +9,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 /**
  * Clears Compose focus and hides the soft keyboard. Use for explicit dismissal from
@@ -29,6 +32,16 @@ fun dismissKeyboardClearingFocus(
  * example [androidx.compose.material.Button]). Drag gestures are ignored so focused inputs can
  * stay active while their surrounding form scrolls above the keyboard.
  *
+ * Only fires while the software keyboard is actually visible. This modifier is mounted on
+ * every screen's full-screen root (see [com.geovault.common.ui.theme.GeoVaultTheme]), including
+ * screens with no text input at all. Without the visibility check, ANY stationary tap-and-release
+ * anywhere on the screen — including the tap-and-hold used to long-press-select text inside a
+ * [androidx.compose.foundation.text.selection.SelectionContainer] — would force-clear focus,
+ * which tears down the selection's toolbar/focus state and clears the selection almost instantly.
+ * Ordinary `TextField`s hide this same bug because they re-request focus as part of handling
+ * their own tap, invisibly undoing the clear in the same gesture; read-only selectable text has
+ * no such self-healing.
+ *
  * Apply on a full-screen root (see [com.geovault.common.ui.theme.GeoVaultTheme]) or on
  * scrollable form containers; see [com.geovault.common.ui.components.GeoVaultInput].
  */
@@ -36,6 +49,7 @@ fun Modifier.dismissKeyboardOnOutsideTap(enabled: Boolean = true): Modifier = co
     if (!enabled) return@composed Modifier
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
     Modifier.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(
@@ -53,7 +67,9 @@ fun Modifier.dismissKeyboardOnOutsideTap(enabled: Boolean = true): Modifier = co
                     }
                 }
             } while (event.changes.any { it.pressed })
-            if (!movedPastTouchSlop) {
+            val imeVisible = ViewCompat.getRootWindowInsets(view)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            if (!movedPastTouchSlop && imeVisible) {
                 dismissKeyboardClearingFocus(focusManager, keyboardController)
             }
         }
