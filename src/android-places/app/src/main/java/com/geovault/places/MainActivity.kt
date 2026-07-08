@@ -35,6 +35,7 @@ import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultBottomNavScaffold
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
+import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
@@ -177,6 +178,16 @@ class MainActivity : ComponentActivity() {
                         intent?.removeExtra(EXTRA_OAUTH_ERROR)
                     }
                 }
+                // Root back: Map → List. Settings / share dialogs register their own handlers
+                // (or use Dialog onDismissRequest). On List, defer to the system (finish).
+                GeoVaultRegisterBackHandler(
+                    canGoBack = { selectedTab != PlacesTab.LIST.name },
+                    onBack = {
+                        if (selectedTab == PlacesTab.LIST.name) return@GeoVaultRegisterBackHandler false
+                        selectedTab = PlacesTab.LIST.name
+                        true
+                    },
+                )
                 Box(modifier = Modifier.fillMaxSize()) {
                     GeoVaultMainMapPreloadHost(
                         mainMapKey = PLACES_MAIN_MAP_KEY,
