@@ -54,6 +54,7 @@ import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
+import com.geovault.common.ui.components.TopBarMenuEntry
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
@@ -91,6 +92,7 @@ fun MainScreen(
     onAuthServerUrlChanged: (String) -> Unit,
     onAuthConnect: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenShare: () -> Unit,
     onRefresh: () -> Unit,
     onAddPlace: () -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
@@ -119,6 +121,9 @@ fun MainScreen(
                     actionsContent = {
                         GeoVaultTopBarSettingsMenuAction(
                             onOpenSettings = onOpenSettings,
+                            extraEntries = listOf(
+                                TopBarMenuEntry(label = "Share", onClick = onOpenShare),
+                            ),
                             overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                         )
                     }

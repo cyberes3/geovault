@@ -48,6 +48,7 @@ import com.geovault.places.presentation.SettingsViewModel
 import com.geovault.places.ui.MainScreen
 import com.geovault.places.ui.PlacesMapLaunchArgs
 import com.geovault.places.ui.PlacesMapScreen
+import com.geovault.places.ui.PlacesShareExportHost
 import com.geovault.places.ui.SettingsScreen
 import org.maplibre.android.geometry.LatLng
 
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
                 val mainMap = rememberGeoVaultMainMap(PLACES_MAIN_MAP_KEY)
                 var selectedTab by rememberSaveable { mutableStateOf(PlacesTab.LIST.name) }
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
+                var isShareExportOpen by rememberSaveable { mutableStateOf(false) }
                 var hasOpenedMapTab by rememberSaveable {
                     mutableStateOf(selectedTab == PlacesTab.MAP.name)
                 }
@@ -219,6 +221,7 @@ class MainActivity : ComponentActivity() {
                                         onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
                                         onAuthConnect = accountViewModel::connect,
                                         onOpenSettings = { isSettingsOpen = true },
+                                        onOpenShare = { isShareExportOpen = true },
                                         onRefresh = viewModel::refreshNow,
                                         onAddPlace = {
                                             editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java))
@@ -297,6 +300,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel = mapViewModel,
                                         launchArgs = mapLaunchArgs,
                                         onOpenSettings = { isSettingsOpen = true },
+                                        onOpenShare = { isShareExportOpen = true },
                                         onOpenEdit = { feature ->
                                             editLauncher.launch(buildEditIntent(feature))
                                         },
@@ -344,6 +348,11 @@ class MainActivity : ComponentActivity() {
                             onClose = { isSettingsOpen = false },
                         )
                     }
+                    PlacesShareExportHost(
+                        visible = isShareExportOpen,
+                        onDismissRequest = { isShareExportOpen = false },
+                        cacheStore = PlacesAppServices.from(application).cacheStore(),
+                    )
                 }
             }
         }

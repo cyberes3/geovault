@@ -60,6 +60,7 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility
 import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
+import com.geovault.common.ui.components.TopBarMenuEntry
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.places.R
@@ -81,6 +82,7 @@ fun PlacesMapScreen(
     viewModel: PlacesMapViewModel,
     launchArgs: PlacesMapLaunchArgs,
     onOpenSettings: () -> Unit,
+    onOpenShare: () -> Unit,
     onOpenEdit: (Feature) -> Unit,
     onViewInList: (Feature) -> Unit,
     onNavigate: (Feature) -> Unit,
@@ -213,6 +215,9 @@ fun PlacesMapScreen(
                 actionsContent = {
                     GeoVaultTopBarSettingsMenuAction(
                         onOpenSettings = onOpenSettings,
+                        extraEntries = listOf(
+                            TopBarMenuEntry(label = "Share", onClick = onOpenShare),
+                        ),
                         visibility = GeoVaultTopBarMenuVisibility.Always,
                         overflowTooltip = stringResource(R.string.tooltip_nav_settings),
                     )
