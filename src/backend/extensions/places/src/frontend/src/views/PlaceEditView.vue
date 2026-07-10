@@ -31,8 +31,9 @@
       />
     </div>
 
-    <div class="w-full flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sm:flex-shrink-0 sm:z-20">
-      <PlaceForm
+    <div class="flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sm:flex-shrink-0 sm:z-20">
+      <div>
+        <PlaceForm
           :name="name"
           :description="description"
           :coordinates-input="coordinatesInput"
@@ -49,7 +50,8 @@
           @use-location="useCurrentLocation"
           @save="savePlace"
           @cancel="goToList"
-      />
+        />
+      </div>
     </div>
 
     <PlacesLayerPickerModal
