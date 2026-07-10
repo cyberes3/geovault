@@ -327,7 +327,7 @@ import {
 import googleMapsIconUrl from '@/assets/google-maps-icon.svg';
 import googleMapsIconBwUrl from '@/assets/google-maps-icon-bw.svg';
 import {createPlacesMap} from '@/utils/placesMaplibre.js';
-import {getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
+import {ensureUserSettingsLoaded, getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
 /** Namespaced ids — vector basemaps can define generic layer names and break overlays. */
 const PLACE_SOURCE_ID = 'gv_places_overlay_list_source';
 const PLACE_LAYER_ID = 'gv_places_overlay_list_layer';
@@ -466,6 +466,7 @@ export default {
         return;
       }
       try {
+        await ensureUserSettingsLoaded();
         const controller = await createPlacesMap({
           container: mapContainer.value,
           mode: 'list',
@@ -896,7 +897,8 @@ export default {
 
     watch(
       () => window.gv_core?.store?.state?.userSettings,
-      () => {
+      (userSettings) => {
+        if (!userSettings) return;
         void applyDefaultBasemapFromUserSettings();
       },
       {deep: true, immediate: true}

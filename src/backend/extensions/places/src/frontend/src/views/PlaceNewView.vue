@@ -205,7 +205,7 @@ import {computed, inject, onActivated, onBeforeUnmount, onDeactivated, onMounted
 import {onBeforeRouteLeave, useRoute} from 'vue-router';
 import {ArrowPathIcon, HomeIcon, MagnifyingGlassIcon, MapPinIcon, Square3Stack3DIcon} from '@heroicons/vue/24/outline';
 import {createPlacesMap} from '@/utils/placesMaplibre.js';
-import {getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
+import {ensureUserSettingsLoaded, getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
 import {useDocumentTitle} from 'platform/utils/documentTitle.js';
 const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';
 const PLACE_EDIT_LAYER_ID = 'gv_places_overlay_edit_layer';
@@ -473,6 +473,7 @@ export default {
         return;
       }
       try {
+        await ensureUserSettingsLoaded();
         mapController.value = await createPlacesMap({
           container: mapContainer.value,
           mode: 'edit',
@@ -811,7 +812,8 @@ export default {
 
     watch(
       () => window.gv_core?.store?.state?.userSettings,
-      () => {
+      (userSettings) => {
+        if (!userSettings) return;
         void applyDefaultBasemapFromUserSettings();
       },
       {deep: true, immediate: true}

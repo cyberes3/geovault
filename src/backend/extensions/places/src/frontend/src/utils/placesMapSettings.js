@@ -23,3 +23,19 @@ export function getDefaultMapSourceIdFromStore() {
     : settings?.extensions?.places?.defaultMapSourceId;
   return normalizeMapSourceId(raw);
 }
+
+/** Wait for App.vue settings fetch (or fetch once) so the map starts on the user's basemap. */
+export async function ensureUserSettingsLoaded({ waitMs = 3000, pollMs = 50 } = {}) {
+  const store = window.gv_core?.store;
+  if (!store || store.state.userSettings != null) {
+    return;
+  }
+  const deadline = Date.now() + waitMs;
+  while (store.state.userSettings == null && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  if (store.state.userSettings != null) {
+    return;
+  }
+  await store.dispatch('fetchUserSettings');
+}
