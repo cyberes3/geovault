@@ -5,12 +5,12 @@
 
       <div
           v-if="loadingEdit"
-          class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/50 pointer-events-auto cursor-wait"
+          class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-500/40 pointer-events-auto cursor-wait"
           aria-busy="true"
           aria-live="polite"
       >
         <div class="inline-flex bg-white rounded-lg shadow-lg border border-gray-200 px-4 py-3">
-          <Loader size="sm" layout="inline" :show-message="true" message="Loading place..."/>
+          <Loader size="sm" layout="inline" :show-message="true" message="Loading..."/>
         </div>
       </div>
 
