@@ -144,6 +144,7 @@ import {
   ArrowDownTrayIcon,
   InformationCircleIcon
 } from '@heroicons/vue/24/outline';
+import { toastApiError } from 'platform/utils/apiError.js';
 
 export default {
     name: 'Geotagger',
@@ -359,6 +360,7 @@ export default {
                 }
             } catch (e) {
                 console.error("Search failed", e);
+                toastApiError(e, 'Location search failed');
                 if (this.currentSearchQuery === query) {
                     this.searchResults = [];
                 }

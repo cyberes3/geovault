@@ -1,7 +1,6 @@
 import Geotagger from './Geotagger.vue';
 
 async function setup({ app, router, registry, api }) {
-    // Register as a tool in the "Tools" dropdown
     registry.registerTool({
         label: 'Geotagger',
         path: '/'
@@ -9,6 +8,8 @@ async function setup({ app, router, registry, api }) {
 
     router.addRoute({
         path: '/',
+        name: 'exif-geotagger',
+        meta: { title: 'Photo Geotagger' },
         component: Geotagger
     });
 }

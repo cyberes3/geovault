@@ -206,6 +206,7 @@ import {onBeforeRouteLeave, useRoute} from 'vue-router';
 import {ArrowPathIcon, HomeIcon, MagnifyingGlassIcon, MapPinIcon, Square3Stack3DIcon} from '@heroicons/vue/24/outline';
 import {createPlacesMap} from '@/utils/placesMaplibre.js';
 import {getDefaultMapSourceIdFromStore} from '@/utils/placesMapSettings.js';
+import {useDocumentTitle} from 'platform/utils/documentTitle.js';
 const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';
 const PLACE_EDIT_LAYER_ID = 'gv_places_overlay_edit_layer';
 const INITIAL_CENTER = [0, 0];
@@ -244,6 +245,9 @@ export default {
       const n = parseInt(String(q), 10);
       return isNaN(n) ? null : n;
     });
+
+    const pageTitle = computed(() => (editId.value ? 'Edit Place' : 'New Place'));
+    useDocumentTitle(pageTitle);
 
     const name = ref('');
     const description = ref('');
@@ -356,6 +360,19 @@ export default {
       }
     }
 
+    function validateParsedCoordinatePair(lng, lat) {
+      const validateCoordinatesUtil = window.gv_core?.GeoVault?.utils?.validateCoordinates;
+      if (!validateCoordinatesUtil) {
+        return true;
+      }
+      const validation = validateCoordinatesUtil([lng, lat], 'Point');
+      if (!validation.valid) {
+        coordinateError.value = validation.error || 'Invalid coordinates';
+        return false;
+      }
+      return true;
+    }
+
     // Unified rule (same as Android): try parse as coordinates; if fail, geocode only when
     // address-like (has letter not N/S/E/W/D); else if looks like coordinate attempt show error;
     // else clear with no error (e.g. "123 " while typing).
@@ -372,6 +389,12 @@ export default {
       if (!parseCoordinates) return;
       const coordinates = parseCoordinates(input);
       if (coordinates) {
+        if (!validateParsedCoordinatePair(coordinates.lng, coordinates.lat)) {
+          latitude.value = null;
+          longitude.value = null;
+          updateMarkerFromCoords();
+          return;
+        }
         latitude.value = coordinates.lat;
         longitude.value = coordinates.lng;
         coordinatesInput.value = `${latitude.value}, ${longitude.value}`;
@@ -488,7 +511,7 @@ export default {
         };
       } catch (err) {
         console.error('Failed to load place', err);
-        toast.error(err.response?.data?.message || err.message || 'Failed to load place.');
+        api.toastError(err, 'Failed to load place.');
         if (router) router.navigate('');
       } finally {
         loadingEdit.value = false;
@@ -610,6 +633,9 @@ export default {
           return;
         }
       }
+      if (!validateParsedCoordinatePair(lng, lat)) {
+        return;
+      }
       saving.value = true;
       try {
         const properties = {
@@ -644,7 +670,7 @@ export default {
         if (router) router.navigate('');
       } catch (err) {
         console.error('Failed to save place', err);
-        toast.error(err.response?.data?.message || err.message || 'Failed to save place.');
+        api.toastError(err, 'Failed to save place.');
       } finally {
         saving.value = false;
       }

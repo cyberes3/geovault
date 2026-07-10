@@ -23,10 +23,14 @@ async function setup({ app, router, registry, api, toast, metadata }) {
   const createRouteWrapper = window.gv_core?.createRouteWrapper;
   router.addRoute({
     path: '',
+    name: 'live-track',
+    meta: { title: 'Tracker' },
     component: createRouteWrapper ? createRouteWrapper(LiveTrackView, { api }) : LiveTrackView
   });
   router.addRoute({
     path: 'share',
+    name: 'live-track-share',
+    meta: { title: 'Shared' },
     component: WorldShareView
   });
 }

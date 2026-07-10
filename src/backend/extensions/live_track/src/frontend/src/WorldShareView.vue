@@ -189,6 +189,7 @@ import { trackToParamsModalShape } from './trackParamsShape.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
 import { useTileSources } from './useTileSources.js';
 import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls.js';
+import { useDocumentTitle } from 'platform/utils/documentTitle.js';
 const LIVE_TRACK_API_BASE_URL = '/api/extensions/live-track';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
@@ -268,6 +269,7 @@ export default {
     const trackData = ref(null);
     const groupTracks = ref([]);
     const displayTitle = computed(() => trackName.value || groupName.value || 'Shared');
+    useDocumentTitle(displayTitle);
     const mapContainer = ref(null);
     const mapWrapperRef = ref(null);
     const mobileDrawerRef = ref(null);

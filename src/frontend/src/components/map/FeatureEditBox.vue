@@ -250,6 +250,7 @@ import { MapIcon, ArrowUpTrayIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 import { sortTagsByPriority } from '@/utils/tagUtils.js'
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
 import { validateCoordinates } from '@/utils/coordinateValidation.js'
+import { ApiError, getResponseErrorMessage } from '@/utils/apiError.js'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -797,7 +798,7 @@ export default {
         const data = await response.json()
 
         if (!response.ok) {
-          this.errorMessage = data.message || data.error || 'Failed to update feature'
+          this.errorMessage = getResponseErrorMessage(response.status, data, 'Failed to update feature')
           this.isSaving = false
           return
         }
@@ -883,7 +884,7 @@ export default {
 
       } catch (error) {
         console.error('Error updating feature:', error)
-        this.errorMessage = `Error: ${error.message}`
+        this.errorMessage = ApiError.from(error, 'Failed to update feature').message
         this.isSaving = false
       }
     },

@@ -204,7 +204,7 @@
 </template>
 
 <script>
-import {markRaw, defineAsyncComponent} from 'vue'
+import {markRaw, defineAsyncComponent, getCurrentInstance} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl from 'maplibre-gl'
 import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js'
@@ -228,7 +228,8 @@ import MapLoadingIndicator from './MapLoadingIndicator.vue'
 import MobileControlsBar from './MobileControlsBar.vue'
 import LocationControl from './LocationControl.vue'
 import { toast } from '@/utils/toast'
-import { setGeoVaultPageTitle } from '@/utils/documentTitle.js'
+import { useDocumentTitle } from '@/utils/documentTitle.js'
+import { toastApiError, getResponseErrorMessage } from '@/utils/apiError.js'
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
@@ -283,6 +284,26 @@ import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js'
 
 export default {
   name: 'MapPage',
+  setup() {
+    const instance = getCurrentInstance();
+    useDocumentTitle(() => {
+      const vm = instance?.proxy;
+      if (!vm) {
+        return 'Map';
+      }
+      const path = vm.$route.path;
+      if (path !== '/map' && path !== '/mapshare') {
+        return 'Map';
+      }
+      if (!vm.isPublicShareMode) {
+        return 'Map';
+      }
+      if (vm.publicShareError) {
+        return 'Share';
+      }
+      return vm.viewContext?.name ?? 'Share';
+    });
+  },
   components: {
     FeatureListSidebar,
     MapControlsSidebar,
@@ -382,26 +403,6 @@ export default {
     }
   },
   watch: {
-    '$route': {
-      handler() {
-        this.syncMapPageDocumentTitle()
-      },
-      deep: true,
-      immediate: true
-    },
-    viewContext: {
-      handler() {
-        this.syncMapPageDocumentTitle()
-      },
-      deep: true,
-      immediate: true
-    },
-    publicShareError: {
-      handler() {
-        this.syncMapPageDocumentTitle()
-      },
-      immediate: true
-    },
     selectedFeature(newFeature, oldFeature) {
       // Update highlighting when feature is selected/deselected (dialog opens/closes)
       this.$nextTick(() => {
@@ -600,22 +601,6 @@ export default {
     }
   },
   methods: {
-    syncMapPageDocumentTitle() {
-      const path = this.$route.path
-      if (path !== '/map' && path !== '/mapshare') {
-        return
-      }
-      if (!this.isPublicShareMode) {
-        setGeoVaultPageTitle('Map')
-        return
-      }
-      if (this.publicShareError) {
-        setGeoVaultPageTitle('Share')
-        return
-      }
-      const name = this.viewContext?.name
-      setGeoVaultPageTitle(name ?? 'Share')
-    },
     teardownMapInteractionHandlers() {
       if (this.map && this.mapInteractionHandlers) {
         const handlers = this.mapInteractionHandlers
@@ -3425,13 +3410,16 @@ export default {
       const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
 
       try {
-        await hiddenFeaturesManager.removeHidden(featureId)
-        this.$store.commit('removeHiddenFeature', String(featureId))
+        hiddenFeaturesManager.removeHidden(featureId, () => {
+          this.$store.commit('removeHiddenFeature', String(featureId))
+        })
+        await hiddenFeaturesManager.forceFlush()
         this.loadedBounds.clear()
         this.loadDataForCurrentView()
         this.updateFeaturesInExtent()
       } catch (error) {
         console.error('Error unhiding feature:', error)
+        toastApiError(error, 'Failed to unhide feature')
       }
     },
     async handleUnhideAllHidden() {
@@ -3442,13 +3430,15 @@ export default {
       const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
 
       try {
-        await hiddenFeaturesManager.clearAllHidden()
+        const { clearHiddenFeatures } = await import('@/utils/userSettingsService.js')
+        await clearHiddenFeatures()
         this.$store.commit('setHiddenFeatures', [])
         this.loadedBounds.clear()
         this.loadDataForCurrentView()
         this.updateFeaturesInExtent()
       } catch (error) {
         console.error('Error clearing hidden features:', error)
+        toastApiError(error, 'Failed to unhide all features')
       }
     },
     filterExistingFeaturesByTags(selectedTags) {
@@ -4099,6 +4089,7 @@ export default {
         }
       } catch (error) {
         console.error('Error loading collection:', error)
+        toastApiError(error, 'Failed to load collection')
         this.collectionName = null
         this.isCollectionMode = false
         if (this.map.getSource('geojson-data')) {
@@ -4123,16 +4114,18 @@ export default {
         this.isDataLoading = true
         
         const response = await fetch(`${APIHOST}/api/feature/${featureId}/`)
+        const data = await response.json().catch(() => ({}))
         if (!response.ok) {
           console.error(`Failed to fetch feature ${featureId}: ${response.statusText}`)
+          toast.error(getResponseErrorMessage(response.status, data, `Failed to load feature ${featureId}`))
           this.removeFeatureIdFromUrl()
           this.isDataLoading = false
           return
         }
 
-        const data = await response.json()
-        if (!response.ok || !data.feature) {
+        if (!data.feature) {
           console.error(`Feature ${featureId} not found or access denied`)
+          toast.error(getResponseErrorMessage(response.status, data, `Feature ${featureId} not found`))
           this.removeFeatureIdFromUrl()
           this.isDataLoading = false
           return

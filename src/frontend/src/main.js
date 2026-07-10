@@ -49,6 +49,7 @@ import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsSe
 import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
 import { geolocationManager } from '@/utils/map/geolocationManager.js';
 import { parseCoordinates, looksLikeCoordinates } from '@/utils/coordinateParser.js';
+import { validateCoordinates } from '@/utils/coordinateValidation.js';
 import { ExtensionApi } from './utils/extensionApi.js';
 import { realtimeSocket } from '@/assets/js/websocket/realtimeSocket.js';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
@@ -85,7 +86,8 @@ const GeoVault = {
         getCurrentPosition: () => geolocationManager.getCurrentPosition(),
         checkGeolocationPermission: () => geolocationManager.checkPermission(),
         parseCoordinates,
-        looksLikeCoordinates
+        looksLikeCoordinates,
+        validateCoordinates
     },
     toast
 };

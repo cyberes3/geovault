@@ -411,7 +411,7 @@ const fetchFeatures = async () => {
     }
   } catch (e) {
     console.error('Failed to fetch features:', e);
-    if (toast) toast.error('Failed to load features: ' + (e.message || 'Unknown error'));
+    api.toastError(e, 'Failed to load features');
     features.value = [];
   } finally {
     loadingFeatures.value = false;

@@ -315,3 +315,39 @@ class TestPlacesAPI(TestCase):
                     content_type='application/json'
                 )
                 self.assertEqual(response.status_code, 400, msg=label)
+
+    def test_create_place_swapped_coordinates_rejected(self):
+        """POST with swapped coordinates returns 400."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-104.26, 120.0]},
+            'properties': {'name': 'Swapped Place'},
+        }
+        with _patch_places_enabled():
+            response = self.client.post(
+                '/api/extensions/places/features/',
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        error_text = data['error'].lower()
+        self.assertTrue('latitude' in error_text or 'swapped' in error_text)
+
+    def test_update_place_swapped_coordinates_rejected(self):
+        """PUT with swapped coordinates returns 400."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-104.26, 120.0]},
+            'properties': {'name': 'Swapped Update'},
+        }
+        with _patch_places_enabled():
+            response = self.client.put(
+                f'/api/extensions/places/features/{self.place_feature.id}/',
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        error_text = data['error'].lower()
+        self.assertTrue('latitude' in error_text or 'swapped' in error_text)

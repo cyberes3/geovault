@@ -223,6 +223,7 @@ import {ImportTableItem} from "@/assets/js/types/import-types"
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
 import {getCookie} from "@/assets/js/auth.js";
+import {getImportApiErrorMessage} from "@/utils/apiError.js";
 import {SECURITY_CONFIG} from "@/config.js";
 import { InformationCircleIcon, CloudArrowUpIcon, ArrowUpTrayIcon, XMarkIcon, DocumentIcon, CheckIcon } from '@heroicons/vue/24/outline';
 import {
@@ -615,12 +616,7 @@ export default {
             // Handle individual file errors without stopping the entire process
             console.error(`Error uploading file ${file.name}:`, fileError)
 
-            let errorMessage = "Upload failed"
-            if (fileError.response && fileError.response.data && fileError.response.data.msg) {
-              errorMessage = fileError.response.data.msg
-            } else if (fileError.response && fileError.response.status === 400) {
-              errorMessage = "Invalid file format or upload structure"
-            }
+            let errorMessage = getImportApiErrorMessage(fileError, 'Upload failed')
 
             this.uploadResults.failed.push({
               filename: file.name,
@@ -692,13 +688,7 @@ export default {
       console.error("Error response:", error.response)
       console.error("Error response data:", error.response?.data)
 
-      if (error.response && error.response.data && error.response.data.msg != null) {
-        this.uploadMsg = error.response.data.msg
-      } else if (error.response && error.response.status === 400) {
-        this.uploadMsg = "Invalid file format or upload structure. Please check your files and try again."
-      } else {
-        this.uploadMsg = "Upload failed. Please try again."
-      }
+      this.uploadMsg = getImportApiErrorMessage(error, 'Upload failed. Please try again.')
     },
     startAutoRefresh() {
       // Clear any existing interval

@@ -14,52 +14,60 @@ const routes = [
         meta: { title: 'Dashboard' },
         component: () => import('./components/dashboard/DashboardPage.vue'),
     },
-        {
+    {
         path: '/import',
         name: 'Import',
+        meta: { title: 'Import Data' },
         component: () => import('./components/import/ImportHomePage.vue'),
     },
     {
         path: '/import/upload',
         name: 'Import Data',
+        meta: { title: 'Upload Data' },
         component: () => import('./components/import/ImportUploadPage.vue'),
     },
     {
         path: '/import/process/:id',
         name: 'Process Data',
+        meta: { title: 'Process Import' },
         component: () => import('./components/import/ImportProcessPage.vue'),
         props: true
     },
     {
         path: '/map',
         name: 'Map',
+        meta: { title: 'Map' },
         component: () => import('./components/map/MapPage.vue'),
     },
     {
         path: '/mapshare',
         name: 'MapShare',
+        meta: { title: 'Share' },
         component: () => import('./components/map/MapPage.vue'),
     },
     {
         path: '/tags',
         name: 'Tags',
+        meta: { title: 'Tags' },
         component: () => import('./components/tags/TagsPage.vue'),
     },
     {
         path: '/collections',
         name: 'Collections',
+        meta: { title: 'Collections' },
         component: () => import('./components/collections/CollectionsPage.vue'),
     },
     {
         path: '/settings',
         name: 'Settings',
+        meta: { title: 'Settings' },
         component: () => import('./components/settings/SettingsPage.vue'),
     },
     {
         path: '/admin',
         name: 'Admin',
+        meta: { title: 'Admin Panel', requiresAdmin: true },
         component: () => import('./components/admin/AdminPanelPage.vue'),
-        meta: { requiresAdmin: true }
     }
     // Catch-all (NotFound) is added in main.js after extension routes so /extensions/* is matched first
 ]
@@ -71,11 +79,7 @@ const router = createRouter({
 })
 
 router.afterEach((to) => {
-    if (to.path === '/mapshare' && to.query.id) {
-        setGeoVaultPageTitle('Share')
-        return
-    }
-    const label = to.meta.title ?? to.name ?? 'GeoVault'
+    const label = to.meta.title ?? 'GeoVault'
     setGeoVaultPageTitle(label)
 })
 

@@ -75,7 +75,7 @@ The platform calls it and passes:
 - **`router`** — `addRoute(route)`, `navigate(path)`; paths are scoped under `/extensions/<kebab-name>/`.
 - **`store`** — Vuex store.
 - **`registry`** — `registerNavLink(link)`, `registerTool(tool)`, `registerSettingsTab(tab)`, `registerRoutes(routes)`. Use **nav links** for main nav; use **registerTool** for items in the Tools dropdown (e.g. exif_geotagger).
-- **`api`** — `ExtensionApi`: `get/post/put/patch/delete(url, data?)` with CSRF and URL scoping. Use `api.handleError(error)` for user-facing messages.
+- **`api`** — `ExtensionApi`: `get/post/put/patch/delete(url, data?)` with CSRF and URL scoping. Use `api.toastError(error, fallback)` for user-facing errors, or `api.handleError(error)` for inline error UI.
 - **`utils`** — `updateUserSetting(key, value)`, `loadSettingsFromStore()`, `keyValueToNested`, `getNestedValue`. Settings keys must start with `extensions.<name>.`.
 - **`toast`** — `toast.success()`, `toast.error()`, etc.
 - **`metadata`** — `name`, `version`, `description`, `kebabName`, `icon`.
@@ -87,7 +87,7 @@ Use the injected `api` so the platform can add CSRF and scope URLs:
 ```javascript
 const res = await api.get('/items/');
 await api.post('/items/', { name: 'New' });
-// On error: toast.error(api.handleError(err).message);
+// On error: api.toastError(err, 'Failed to save item');
 ```
 
 ### Settings tab
@@ -98,7 +98,7 @@ Register a tab with `registry.registerSettingsTab({ id, label, component, icon }
 
 All shared platform resources live on **`window.gv_core`** only. Use `window.gv_core.*` in your extension code; do not use Vue provide/inject for platform store, toast, or utils.
 
-- **`window.gv_core.GeoVault`** — `registry`, `utils` (e.g. `updateUserSetting`, `loadSettingsFromStore`, `keyValueToNested`, `getNestedValue`, `getCurrentPosition`, `checkGeolocationPermission`, `parseCoordinates`), `toast`
+- **`window.gv_core.GeoVault`** — `registry`, `utils` (e.g. `updateUserSetting`, `loadSettingsFromStore`, `keyValueToNested`, `getNestedValue`, `getCurrentPosition`, `checkGeolocationPermission`, `parseCoordinates`, `looksLikeCoordinates`, `validateCoordinates`), `toast`
 - **`window.gv_core.store`** — Vuex store (set after the app mounts)
 - **`window.gv_core.Vue`**, **`window.gv_core.VueRouter`**, **`window.gv_core.Vuex`**, **`window.gv_core.axios`** — Vue ecosystem
 - **`window.gv_core.HeroiconsOutline`**, **`window.gv_core.HeroiconsSolid`** — Heroicons

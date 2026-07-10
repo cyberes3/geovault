@@ -467,7 +467,10 @@ export default {
           credentials: 'include',
           headers: token ? { 'X-CSRFToken': token } : {}
         });
-        if (!res.ok) throw new Error(res.statusText);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw { response: { status: res.status, data } };
+        }
         const blob = await res.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -476,7 +479,7 @@ export default {
         URL.revokeObjectURL(a.href);
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Download started');
       } catch (e) {
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(e?.message || 'Download failed');
+        api.toastError(e, 'Download failed');
       }
     }
 

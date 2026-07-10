@@ -45,16 +45,15 @@ async function setup({ app, router, store, registry, api, utils, toast, metadata
     // Like nav links, these are automatically scoped under /extensions/example-extension/
     router.addRoute({
         path: '/page',
+        name: 'example-extension-page',
+        meta: { title: 'Example Extension' },
         component: ExamplePage
     });
 
     // Example: Using the enhanced API
     // api.get('/items/') - GET request with automatic CSRF token
     // api.post('/items/', { name: 'Test' }) - POST request
-    // api.put('/items/1/', { name: 'Updated' }) - PUT request
-    // api.delete('/items/1/') - DELETE request
-    // All methods automatically handle CSRF tokens, but you must handle errors explicitly
-    // Use api.handleError(error) to extract error info and show toasts as needed
+    // On error: api.toastError(error, 'Failed to save item')
 }
 
 export default setup

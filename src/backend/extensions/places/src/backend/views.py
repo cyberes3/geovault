@@ -16,11 +16,22 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
+from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
+from geo_lib.validation.coordinate.helpers import CoordinateValidationError
 from geo_lib.website.auth import api_or_login_required_401
 from .models import PlaceMetadata
 from .validation import PlaceFeaturePayload
 
 VALID_SORT = {'created', 'modified', 'navigated', 'composite'}
+
+
+def _validate_place_coordinates(data: dict):
+    """Return an error_response if coordinates are invalid, else None."""
+    try:
+        validate_coordinates_for_geometry_type(data['geometry']['coordinates'], 'Point')
+    except CoordinateValidationError as e:
+        return error_response(f'Invalid coordinates: {e}', 400)
+    return None
 
 
 def _feature_to_geometry_and_hash(normalized_feature):
@@ -95,6 +106,10 @@ def places_list(request):
                     'Invalid payload: only Point features are allowed' + (f' — {"; ".join(err_msgs)}' if err_msgs else ''),
                     400,
                 )
+
+            coord_error = _validate_place_coordinates(data)
+            if coord_error is not None:
+                return coord_error
 
             # Normalize and validate
             try:
@@ -171,6 +186,10 @@ def place_detail(request, feature_id):
                     'Invalid payload: only Point features are allowed' + (f' — {"; ".join(err_msgs)}' if err_msgs else ''),
                     400,
                 )
+
+            coord_error = _validate_place_coordinates(data)
+            if coord_error is not None:
+                return coord_error
 
             # Normalize and validate
             try:

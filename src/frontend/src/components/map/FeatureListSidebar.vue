@@ -359,6 +359,8 @@ import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import { getIconUrl, resolveIconUrl, isSystemIcon } from '@/utils/map/iconUtils.ts'
 import { parseCoordinates } from '@/utils/coordinateParser.js'
+import { toastApiError } from '@/utils/apiError.js'
+import { toast } from '@/utils/toast'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -675,10 +677,12 @@ export default {
           this.searchResults = features
         } else {
           console.error('Search failed:', data.error || 'Unknown error')
+          toast.error(data.error || 'Search failed')
           this.searchResults = []
         }
       } catch (error) {
         console.error('Error searching features:', error)
+        toastApiError(error, 'Search failed')
         this.searchResults = []
       } finally {
         this.isSearching = false
@@ -849,13 +853,14 @@ export default {
           this.geocodingResults = data.data.features
         } else {
           console.error('Forward reverse_geocoding search failed:', data.error || 'Unknown error')
-          // Only clear results if this is still the current query
+          toast.error(data.error || 'Place search failed')
           if (this.currentSearchQuery === query) {
             this.geocodingResults = []
           }
         }
       } catch (error) {
         console.error('Error searching places:', error)
+        toastApiError(error, 'Place search failed')
         // Only clear results if this is still the current query
         if (this.currentSearchQuery === query) {
           this.geocodingResults = []

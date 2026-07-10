@@ -67,6 +67,7 @@ import SettingsInput from "./components/SettingsInput.vue";
 import HiddenFeaturesWidget from "@/components/map/HiddenFeaturesWidget.vue";
 import { clearHiddenFeatures } from "@/utils/userSettingsService.js";
 import { toast } from '@/utils/toast'
+import { toastApiError } from '@/utils/apiError.js'
 
 export default {
   name: 'MapSettingsTab',
@@ -197,16 +198,19 @@ export default {
       }
     },
     async unhideFeature(featureId) {
-      // Import the debounced manager
       const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
 
-      // Optimistic update: immediately update UI
       const optimisticUpdate = () => {
         this.$store.commit('removeHiddenFeature', String(featureId))
       }
 
-      // Add to debounced bulk update with optimistic callback
       hiddenFeaturesManager.removeHidden(featureId, optimisticUpdate)
+      try {
+        await hiddenFeaturesManager.forceFlush()
+      } catch (error) {
+        console.error('Error unhiding feature from settings:', error)
+        toastApiError(error, 'Failed to unhide feature')
+      }
     },
     async unhideAll() {
       try {
@@ -215,7 +219,7 @@ export default {
         this.$store.commit("setHiddenFeatures", []);
       } catch (error) {
         console.error("Error clearing hidden features from settings:", error);
-        toast.error(error.message || "Failed to clear hidden features.");
+        toastApiError(error, 'Failed to clear hidden features');
       }
     },
   },

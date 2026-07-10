@@ -390,6 +390,7 @@ export default {
         const errorInfo = this.api.handleError(error)
         this.connectionStatus.checking = false
         console.error('Error checking CalTopo status:', errorInfo)
+        this.api.toastError(error, 'Failed to check CalTopo connection')
       }
     },
     async handleConnect() {
@@ -453,6 +454,7 @@ export default {
       } catch (error) {
         const errorInfo = this.api.handleError(error)
         console.error('Failed to load maps:', errorInfo)
+        this.api.toastError(error, 'Failed to load CalTopo maps')
       } finally {
         this.loadingMaps = false
       }

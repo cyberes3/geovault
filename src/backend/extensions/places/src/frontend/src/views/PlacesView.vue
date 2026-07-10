@@ -406,6 +406,7 @@ export default {
         updateMapFeatures({ fit: true });
       } catch (err) {
         console.error("Failed to load places", err);
+        api.toastError(err, 'Failed to load places');
       } finally {
         loading.value = false;
       }
@@ -674,6 +675,7 @@ export default {
         fetchPlaces();
       } catch (err) {
         console.error(err);
+        api.toastError(err, 'Failed to delete place');
       }
     };
 
@@ -831,7 +833,7 @@ export default {
         descriptionModalEditing.value = false;
       } catch (err) {
         console.error(err);
-        toast?.error?.('Failed to update description');
+        api.toastError(err, 'Failed to update description');
       } finally {
         descriptionSaving.value = false;
       }

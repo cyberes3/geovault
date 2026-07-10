@@ -7,6 +7,9 @@ from typing import Literal, Tuple, Union
 
 from pydantic import BaseModel, Field, field_validator
 
+from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
+from geo_lib.validation.coordinate.helpers import CoordinateValidationError
+
 
 class PointGeometry(BaseModel):
     """GeoJSON Point geometry: [longitude, latitude] or [longitude, latitude, elevation]."""
@@ -24,14 +27,16 @@ class PointGeometry(BaseModel):
     def validate_coordinates(cls, v) -> Tuple[float, ...]:
         if not isinstance(v, (list, tuple)) or len(v) < 2 or len(v) > 3:
             raise ValueError("coordinates must be [lon, lat] or [lon, lat, z]")
-        lon, lat = float(v[0]), float(v[1])
-        if not (-180 <= lon <= 180):
-            raise ValueError("longitude must be between -180 and 180")
-        if not (-90 <= lat <= 90):
-            raise ValueError("latitude must be between -90 and 90")
+        coords = [float(v[0]), float(v[1])]
         if len(v) == 3:
-            return (lon, lat, float(v[2]))
-        return (lon, lat)
+            coords.append(float(v[2]))
+        try:
+            validate_coordinates_for_geometry_type(coords[:2], 'Point')
+        except CoordinateValidationError as e:
+            raise ValueError(str(e)) from e
+        if len(v) == 3:
+            return (coords[0], coords[1], coords[2])
+        return (coords[0], coords[1])
 
 
 class PlaceFeaturePayload(BaseModel):

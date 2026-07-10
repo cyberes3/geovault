@@ -34,7 +34,8 @@ export interface ExtensionApi {
     put(url: string, data?: any, config?: any): Promise<any>;
     patch(url: string, data?: any, config?: any): Promise<any>;
     delete(url: string, config?: any): Promise<any>;
-    handleError(error: any): { message: string, status?: number };
+    handleError(error: any, fallback?: string): { message: string, status?: number, data?: unknown, error: unknown };
+    toastError(error: any, fallback?: string): void;
     url(path: string): string;
 }
 

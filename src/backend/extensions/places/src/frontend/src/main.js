@@ -24,13 +24,15 @@ async function setup({app, router, store, registry, api, metadata}) {
     router.addRoute({
         path: '',
         component: wrap(PlacesView),
-        name: 'places-list'
+        name: 'places-list',
+        meta: { title: 'Places' },
     });
 
     router.addRoute({
         path: '/new',
         component: wrap(PlaceNewView),
-        name: 'place-new'
+        name: 'place-new',
+        meta: { title: 'New Place' },
     });
 }
 
