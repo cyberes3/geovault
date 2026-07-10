@@ -367,6 +367,13 @@ export default {
       }
       const validation = validateCoordinatesUtil([lng, lat], 'Point');
       if (!validation.valid) {
+        if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) {
+          const swapped = validateCoordinatesUtil([lat, lng], 'Point');
+          if (swapped.valid) {
+            coordinateError.value = 'Coordinates appear to be swapped. Enter latitude, longitude.';
+            return false;
+          }
+        }
         coordinateError.value = validation.error || 'Invalid coordinates';
         return false;
       }

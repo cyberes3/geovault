@@ -83,30 +83,12 @@ def _validate_point_coordinate(point: List[Any]) -> Tuple[float, float]:
     # Additional bounds check (coordinate-parser should have already validated, but double-check)
     if not (-180 <= lon <= 180):
         raise CoordinateValidationError(f"Longitude {lon} is out of bounds [-180, 180]")
-    if not (-90 <= lat <= 90):
-        raise CoordinateValidationError(f"Latitude {lat} is out of bounds [-90, 90]")
-
-    # Detect lat/lon swapping
-    # Only flag as swapped if coordinates are clearly wrong
-    # Don't flag valid longitudes just because abs(lon) > 90 (many valid longitudes are > 90)
-
-    # Case 1: Latitude is clearly out of bounds (abs(lat) > 90)
-    # This means the value in the lat position is actually a longitude
     if abs(lat) > 90:
         raise CoordinateValidationError(
             f"Coordinates appear to be swapped. Latitude {lat} is outside valid range [-90, 90]."
         )
-
-    # Note: We don't check for lon > 180 here because that's already caught by bounds check above
-    # and would fail before we get to swap detection
-
-    # Case 2: Both values are in valid ranges, but pattern suggests a swap
-    # Only flag if lon is in lat range (-90 to 90) AND lat is clearly a longitude value
-    # This catches cases like [40, -120] where 40 could be lat but -120 is clearly a lon
-    # But we've already validated that abs(lat) <= 90, so if we get here, both are valid
-    # We can't reliably detect swaps when both values are in valid ranges
-    # So we only flag obvious cases that passed bounds but are clearly wrong
-    # (This case is now empty since bounds check handles everything)
+    if not (-90 <= lat <= 90):
+        raise CoordinateValidationError(f"Latitude {lat} is out of bounds [-90, 90]")
 
     return lon, lat
 
