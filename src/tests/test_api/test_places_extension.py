@@ -14,6 +14,21 @@ from api.models import FeatureStore
 from extensions.places.src.backend.models import PlaceMetadata
 from geo_lib.feature_id import generate_geojson_hash
 
+# Synthetic geometry for tests only — not real locations.
+TEST_LON_A = -10.0
+TEST_LAT_A = 20.0
+TEST_LON_B = -10.1
+TEST_LAT_B = 20.1
+TEST_LON_C = -10.2
+TEST_LAT_C = 20.2
+TEST_LON_D = -10.3
+TEST_LAT_D = 20.3
+TEST_BBOX = '-11,19,-9,21'
+
+
+def _point_coords(lon, lat):
+    return [lon, lat, 0.0]
+
 
 def _patch_places_enabled():
     """Return a context manager that mocks config so the places extension is considered enabled."""
@@ -44,14 +59,14 @@ class TestPlacesAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': _point_coords(TEST_LON_A, TEST_LAT_A)
             },
             'properties': {'name': 'Standard Point'}
         }
         self.standard_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.standard_feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(TEST_LON_A, TEST_LAT_A, 0.0),
             geojson_hash=generate_geojson_hash(self.standard_feature_data),
             scope=None
         )
@@ -61,14 +76,14 @@ class TestPlacesAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4094, 37.7849, 0.0]
+                'coordinates': _point_coords(TEST_LON_B, TEST_LAT_B)
             },
             'properties': {'name': 'My Place'}
         }
         self.place_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.place_feature_data,
-            geometry=Point(-122.4094, 37.7849, 0.0),
+            geometry=Point(TEST_LON_B, TEST_LAT_B, 0.0),
             geojson_hash=generate_geojson_hash(self.place_feature_data),
             scope='places'
         )
@@ -90,7 +105,7 @@ class TestPlacesAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.5, 37.8, 0.0]
+                'coordinates': _point_coords(TEST_LON_C, TEST_LAT_C)
             },
             'properties': {
                 'name': 'New Place',
@@ -117,16 +132,12 @@ class TestPlacesAPI(TestCase):
         # 1. Main geojson endpoint
         response = self.client.get(
             '/api/geojson/',
-            {'bbox': '-123,37,-122,38', 'zoom': '10'}
+            {'bbox': TEST_BBOX, 'zoom': '10'}
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         
         # Should ONLY return the standard feature, NOT the places feature
-        # Standard feature (-122.4194, 37.7749) is in bbox
-        # Place feature (-122.4094, 37.7849) is in bbox
-        
-        # If filtering works, count should be 1
         found_ids = [f['properties']['database_id'] for f in data['data']['features']]
         self.assertIn(self.standard_feature.id, found_ids)
         self.assertNotIn(self.place_feature.id, found_ids)
@@ -149,14 +160,14 @@ class TestPlacesAPI(TestCase):
         # Place A: created earlier, modified later
         place_a_data = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.7, 0.0]},
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(TEST_LON_C, TEST_LAT_C)},
             'properties': {'name': 'Place A'}
         }
         place_a = FeatureStore.objects.create(
             user=self.user,
             scope='places',
             geojson=place_a_data,
-            geometry=Point(-122.5, 37.7, 0.0),
+            geometry=Point(TEST_LON_C, TEST_LAT_C, 0.0),
             geojson_hash=generate_geojson_hash(place_a_data),
             timestamp=now - timedelta(days=5),
         )
@@ -168,14 +179,14 @@ class TestPlacesAPI(TestCase):
         # Place B: created later, modified earlier
         place_b_data = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.4, 37.7, 0.0]},
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(TEST_LON_D, TEST_LAT_C)},
             'properties': {'name': 'Place B'}
         }
         place_b = FeatureStore.objects.create(
             user=self.user,
             scope='places',
             geojson=place_b_data,
-            geometry=Point(-122.4, 37.7, 0.0),
+            geometry=Point(TEST_LON_D, TEST_LAT_C, 0.0),
             geojson_hash=generate_geojson_hash(place_b_data),
             timestamp=now - timedelta(days=2),
         )
@@ -230,7 +241,7 @@ class TestPlacesAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.41, 37.78, 0.0]
+                'coordinates': _point_coords(TEST_LON_B, TEST_LAT_B)
             },
             'properties': {
                 'name': 'Updated Place',
@@ -320,7 +331,7 @@ class TestPlacesAPI(TestCase):
         """POST with swapped coordinates returns 400."""
         payload = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-104.26, 120.0]},
+            'geometry': {'type': 'Point', 'coordinates': [TEST_LON_A, 120.0]},
             'properties': {'name': 'Swapped Place'},
         }
         with _patch_places_enabled():
@@ -334,11 +345,148 @@ class TestPlacesAPI(TestCase):
         error_text = data['error'].lower()
         self.assertTrue('latitude' in error_text or 'swapped' in error_text)
 
+    def test_create_place_requires_name(self):
+        """POST without name returns 400."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(TEST_LON_C, TEST_LAT_C)},
+            'properties': {'description': 'No name'},
+        }
+        with _patch_places_enabled():
+            response = self.client.post(
+                '/api/extensions/places/features/',
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_place_rejects_unknown_properties(self):
+        """POST with extra properties returns 400."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(TEST_LON_C, TEST_LAT_C)},
+            'properties': {'name': 'Valid', 'unexpected_field': 'nope'},
+        }
+        with _patch_places_enabled():
+            response = self.client.post(
+                '/api/extensions/places/features/',
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_place_does_not_store_geojson_hash_in_properties(self):
+        """geojson_hash is stored on FeatureStore, not inside geojson.properties."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(TEST_LON_D, TEST_LAT_D)},
+            'properties': {'name': 'Hash Check Place'},
+        }
+        with _patch_places_enabled():
+            response = self.client.post(
+                '/api/extensions/places/features/',
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        place_id = data['properties']['database_id']
+        place = FeatureStore.objects.get(id=place_id)
+        self.assertIsNotNone(place.geojson_hash)
+        self.assertNotIn('geojson_hash', place.geojson.get('properties', {}))
+
+    def test_list_places_sort_navigated(self):
+        """sort=navigated orders by last_navigated_at descending."""
+        now = timezone.now()
+        self.place_feature.delete()
+
+        place_old_nav = self._create_place_with_metadata(
+            'Old Nav', TEST_LON_C, TEST_LAT_C, now - timedelta(days=3),
+            navigated_at=now - timedelta(days=2),
+        )
+        place_new_nav = self._create_place_with_metadata(
+            'New Nav', TEST_LON_D, TEST_LAT_D, now - timedelta(days=3),
+            navigated_at=now - timedelta(hours=1),
+        )
+
+        with _patch_places_enabled():
+            response = self.client.get('/api/extensions/places/features/', {'sort': 'navigated'})
+        self.assertEqual(response.status_code, 200)
+        ids = [f['properties']['database_id'] for f in json.loads(response.content)['features']]
+        self.assertEqual(ids[0], place_new_nav.id)
+        self.assertEqual(ids[1], place_old_nav.id)
+
+    def test_list_places_sort_composite(self):
+        """sort=composite orders by most recent activity across created/modified/navigated."""
+        now = timezone.now()
+        self.place_feature.delete()
+
+        place_created_recent = self._create_place_with_metadata(
+            'Created Recent', TEST_LON_C, TEST_LAT_C, now - timedelta(hours=1),
+        )
+        place_modified_recent = self._create_place_with_metadata(
+            'Modified Recent', TEST_LON_D, TEST_LAT_D, now - timedelta(days=5),
+            updated_at=now - timedelta(minutes=30),
+        )
+
+        with _patch_places_enabled():
+            response = self.client.get('/api/extensions/places/features/', {'sort': 'composite'})
+        self.assertEqual(response.status_code, 200)
+        ids = [f['properties']['database_id'] for f in json.loads(response.content)['features']]
+        self.assertEqual(ids[0], place_modified_recent.id)
+        self.assertEqual(ids[1], place_created_recent.id)
+
+    def test_main_api_get_place_returns_404(self):
+        """Main map API cannot read scoped place features by ID."""
+        response = self.client.get(f'/api/feature/{self.place_feature.id}/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_main_api_update_place_returns_404(self):
+        """Main map API cannot update scoped place features by ID."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(TEST_LON_B, TEST_LAT_B)},
+            'properties': {'name': 'Bypass Update'},
+        }
+        response = self.client.put(
+            f'/api/feature/{self.place_feature.id}/update/',
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_main_api_delete_place_returns_404(self):
+        """Main map API cannot delete scoped place features by ID."""
+        response = self.client.delete(f'/api/feature/{self.place_feature.id}/delete/')
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(FeatureStore.objects.filter(id=self.place_feature.id).exists())
+
+    def _create_place_with_metadata(self, name, lon, lat, created_at, updated_at=None, navigated_at=None):
+        place_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': _point_coords(lon, lat)},
+            'properties': {'name': name},
+        }
+        place = FeatureStore.objects.create(
+            user=self.user,
+            scope='places',
+            geojson=place_data,
+            geometry=Point(lon, lat, 0.0),
+            geojson_hash=generate_geojson_hash(place_data),
+            timestamp=created_at,
+        )
+        PlaceMetadata.objects.create(
+            feature=place,
+            updated_at=updated_at,
+            last_navigated_at=navigated_at,
+        )
+        return place
+
     def test_update_place_swapped_coordinates_rejected(self):
         """PUT with swapped coordinates returns 400."""
         payload = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-104.26, 120.0]},
+            'geometry': {'type': 'Point', 'coordinates': [TEST_LON_A, 120.0]},
             'properties': {'name': 'Swapped Update'},
         }
         with _patch_places_enabled():

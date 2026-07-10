@@ -1,11 +1,11 @@
 import PlacesView from './views/PlacesView.vue';
-import PlaceNewView from './views/PlaceNewView.vue';
+import PlaceEditView from './views/PlaceEditView.vue';
 import PlacesSettings from './PlacesSettings.vue';
 
 /**
  * Uses platform createRouteWrapper so extensionApi/extensionRouter are provided per-route.
  */
-async function setup({app, router, store, registry, api, metadata}) {
+async function setup({ router, registry, api, metadata }) {
     registry.registerNavLink({
         label: 'Places',
         path: ''
@@ -30,9 +30,16 @@ async function setup({app, router, store, registry, api, metadata}) {
 
     router.addRoute({
         path: '/new',
-        component: wrap(PlaceNewView),
+        component: wrap(PlaceEditView),
         name: 'place-new',
         meta: { title: 'New Place' },
+    });
+
+    router.addRoute({
+        path: '/edit/:id',
+        component: wrap(PlaceEditView),
+        name: 'place-edit',
+        meta: { title: 'Edit Place' },
     });
 }
 

@@ -38,26 +38,39 @@ export default defineConfig({
             formats: ['umd']
         },
         rollupOptions: {
-            external: [
-                'vue',
-                'vue-router',
-                'vuex',
-                'axios',
-                'maplibre-gl',
-                '@heroicons/vue/24/outline',
-                '@heroicons/vue/24/solid',
-                '@/components/parts/Loader.vue'
-            ],
+            external: (id) => {
+                if (['vue', 'vue-router', 'vuex', 'axios', 'maplibre-gl'].includes(id)) {
+                    return true;
+                }
+                if (id.startsWith('@heroicons/vue')) {
+                    return true;
+                }
+                if (id.startsWith('platform/components/parts/')) {
+                    return true;
+                }
+                return false;
+            },
             output: {
-                globals: {
-                    vue: 'Vue',
-                    'vue-router': 'VueRouter',
-                    vuex: 'Vuex',
-                    axios: 'axios',
-                    'maplibre-gl': 'maplibregl',
-                    '@heroicons/vue/24/outline': 'HeroiconsOutline',
-                    '@heroicons/vue/24/solid': 'HeroiconsSolid',
-                    '@/components/parts/Loader.vue': 'Loader'
+                globals: (id) => {
+                    const baseGlobals = {
+                        vue: 'Vue',
+                        'vue-router': 'VueRouter',
+                        vuex: 'Vuex',
+                        axios: 'axios',
+                        'maplibre-gl': 'maplibregl',
+                        '@heroicons/vue/24/outline': 'HeroiconsOutline',
+                        '@heroicons/vue/24/solid': 'HeroiconsSolid'
+                    };
+                    if (baseGlobals[id]) {
+                        return baseGlobals[id];
+                    }
+                    const sharedPartGlobals = {
+                        'platform/components/parts/BaseButton.vue': 'BaseButton',
+                        'platform/components/parts/BaseModal.vue': 'BaseModal',
+                        'platform/components/parts/Loader.vue': 'Loader',
+                        'platform/components/parts/SettingsInput.vue': 'SettingsInput',
+                    };
+                    return sharedPartGlobals[id];
                 },
                 extend: true
             }

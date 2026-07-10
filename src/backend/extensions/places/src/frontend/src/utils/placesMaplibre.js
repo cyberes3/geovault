@@ -1,12 +1,6 @@
 import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
-import {
-  buildRasterSourceSpec,
-  buildRasterStyle,
-  fetchVisibleTileSources,
-  getTileSourceSelectOptions,
-  isStyleBasedSource,
-  resolveInitialBaseSource
-} from '@/utils/tileSources.js';
+import { TileSourceCatalog } from 'platform/utils/map/tileSources/TileSourceCatalog.js';
+import { OSM_TILE_SOURCE_ID } from 'platform/utils/map/tileSources/constants.js';
 import {
   applyEditInteractionPolicy,
   applyListDesktopInteractionPolicy,
@@ -14,8 +8,16 @@ import {
   getInitialCooperativeGestures,
   isTouchPointer
 } from '@/utils/placesCooperativeGestures.js';
+import {
+  buildRasterSourceSpec,
+  buildRasterStyle,
+  getTileSourceSelectOptions,
+  isStyleBasedSource
+} from '@/utils/placesBasemap.js';
+
 const DEFAULT_CENTER = [0, 0];
 const DEFAULT_ZOOM = 2;
+const tileSourceCatalog = new TileSourceCatalog();
 
 /** Basemap raster ids — must not collide with layers inside vector styles (e.g. MapTiler). */
 const GV_PLACES_BASE_RASTER_SOURCE_ID = 'gv_places_basemap_raster';
@@ -27,6 +29,18 @@ const BLANK_MAP_STYLE = {
   sources: {},
   layers: []
 };
+
+function getCssColor(variableName, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+  return value || fallback;
+}
+
+function getMarkerColors() {
+  return {
+    default: getCssColor('--color-blue-500', '#163D8A'),
+    highlighted: getCssColor('--color-yellow-500', '#F4AC45'),
+  };
+}
 
 function getMaplibre() {
   return window.gv_core?.maplibre || window.maplibregl || null;
@@ -92,12 +106,16 @@ function applyViewToPointFeatures(map, maplibre, features, {
   }
 }
 
+function resolveInitialBaseSource(tileSources, preferredId = OSM_TILE_SOURCE_ID) {
+  return tileSourceCatalog.resolveSource(tileSources, preferredId);
+}
+
 export async function createPlacesMap({
   container,
   mode = 'list',
   sourceId,
   layerId,
-  preferredSourceId = 'osm',
+  preferredSourceId = OSM_TILE_SOURCE_ID,
   minZoom = 1,
   maxZoom = 18,
   initialPointFeatures = null,
@@ -111,9 +129,10 @@ export async function createPlacesMap({
     throw new Error('Map container is required');
   }
 
+  const markerColors = getMarkerColors();
   const initialCoop = getInitialCooperativeGestures(mode);
+  const tileSources = await tileSourceCatalog.load();
 
-  const tileSources = await fetchVisibleTileSources();
   const resolveInitialStyle = (baseSource) => {
     const useStyleUrl = isStyleBasedSource(baseSource) && !!baseSource?.client_config?.style_url;
     return useStyleUrl
@@ -145,9 +164,6 @@ export async function createPlacesMap({
     applyViewToPointFeatures(map, maplibre, currentFeatures, initialFitOptions);
   }
 
-  /**
-   * Match MapPage: style URL for vector tiles; blank style + add raster source/layer for rasters.
-   */
   const applyPlacesBasemap = async (baseSource) => {
     const clientConfig = baseSource?.client_config || {};
     const useStyleUrl = isStyleBasedSource(baseSource) && !!clientConfig.style_url;
@@ -224,10 +240,6 @@ export async function createPlacesMap({
     resizeNow();
   });
 
-  /**
-   * Always remove and re-add overlay so we never "skip" addLayer because a basemap style
-   * already defines the same id (that was the main marker-loss bug).
-   */
   const reinstallPlacesOverlay = () => {
     try {
       if (map.getLayer(layerId)) {
@@ -253,7 +265,7 @@ export async function createPlacesMap({
       source: sourceId,
       paint: {
         'circle-radius': 7,
-        'circle-color': ['case', ['==', ['get', 'is_highlighted'], 1], '#F4AC45', '#163D8A'],
+        'circle-color': ['case', ['==', ['get', 'is_highlighted'], 1], markerColors.highlighted, markerColors.default],
         'circle-stroke-color': ['case', ['==', ['get', 'is_highlighted'], 1], '#000000', '#FFFFFF'],
         'circle-stroke-width': 2
       }
@@ -288,12 +300,11 @@ export async function createPlacesMap({
   };
 
   const getBaseSourceOptions = () => getTileSourceSelectOptions(tileSources);
-
-  const getCurrentBaseSourceId = () => activeBaseSource?.id || 'osm';
+  const getCurrentBaseSourceId = () => activeBaseSource?.id || OSM_TILE_SOURCE_ID;
 
   const setBaseSource = async (nextSourceId) => {
     const nextBaseSource = resolveInitialBaseSource(tileSources, nextSourceId);
-    const nextId = nextBaseSource?.id || 'osm';
+    const nextId = nextBaseSource?.id || OSM_TILE_SOURCE_ID;
     if (nextId === getCurrentBaseSourceId()) {
       return nextId;
     }

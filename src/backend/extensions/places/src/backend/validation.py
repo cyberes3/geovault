@@ -5,7 +5,7 @@ Ensures create/update payloads are GeoJSON Feature with Point geometry only.
 
 from typing import Literal, Tuple, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
 from geo_lib.validation.coordinate.helpers import CoordinateValidationError
@@ -39,18 +39,17 @@ class PointGeometry(BaseModel):
         return (coords[0], coords[1])
 
 
+class PlaceProperties(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    name: str = Field(..., min_length=1)
+    description: str | None = None
+    address: str | None = None
+
+
 class PlaceFeaturePayload(BaseModel):
     """GeoJSON Feature with Point geometry only. Used for create and update."""
 
     type: Literal["Feature"] = "Feature"
     geometry: PointGeometry
-    properties: dict = Field(default_factory=dict, description="Feature properties (e.g. name, description)")
-
-    @field_validator("properties", mode="before")
-    @classmethod
-    def ensure_properties_dict(cls, v):
-        if v is None:
-            return {}
-        if not isinstance(v, dict):
-            raise ValueError("properties must be an object")
-        return v
+    properties: PlaceProperties

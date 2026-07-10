@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
+from api.utils.feature_scope import require_default_scope_feature
 from api.utils.responses import error_response, handle_404
 from api.validation.feature_updates import validate_payload, FeatureMetadataUpdate, BulkFeatureUpdatePayload
 from api.views.features.updates.shared import (
@@ -51,6 +52,7 @@ def update_feature_metadata(request, feature_id, validated_data):
     """
     # Get the feature from database
     feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    require_default_scope_feature(feature)
 
     # Extract allowed metadata fields
     allowed_fields = {'name', 'description', 'created', 'tags', 'icon', 'marker-color', 'stroke', 'coordinates'}
@@ -249,6 +251,7 @@ def bulk_update_features_metadata(request, validated_data):
             try:
                 # Get the feature from database
                 feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+                require_default_scope_feature(feature)
 
                 # Create a deep copy of the original feature to merge updates into
                 original_geojson = feature.geojson

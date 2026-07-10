@@ -20,32 +20,29 @@
 </template>
 
 <script setup>
-import {computed, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue';
-import {fetchVisibleTileSources, getTileSourceSelectOptions} from '@/utils/tileSources.js';
-import {PLACES_DEFAULT_MAP_SOURCE_KEY} from '@/utils/placesMapSettings.js';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import SettingsInput from 'platform/components/parts/SettingsInput.vue';
+import { useTileSources } from '@/composables/useTileSources.js';
+import { PLACES_DEFAULT_MAP_SOURCE_KEY } from '@/utils/placesMapSettings.js';
 
 const defaultMapSettingKey = PLACES_DEFAULT_MAP_SOURCE_KEY;
 
-const {updateUserSetting, loadSettingsFromStore, keyValueToNested} = window.gv_core.GeoVault.utils;
+const { updateUserSetting, loadSettingsFromStore, keyValueToNested } = window.gv_core.GeoVault.utils;
 const store = window.gv_core?.store || null;
 
 const config = [
-  {key: PLACES_DEFAULT_MAP_SOURCE_KEY, defaultValue: 'osm'}
+  { key: PLACES_DEFAULT_MAP_SOURCE_KEY, defaultValue: 'osm' }
 ];
 
 const settingsValues = reactive({});
 const successCheckmarks = reactive({});
 const saveTimers = {};
-const tileSourcesList = ref([]);
+const { baseSourceOptions, loadTileSources } = useTileSources();
 
-const defaultMapOptions = computed(() => {
-  const rows = getTileSourceSelectOptions(tileSourcesList.value);
-  return rows.map((row) => ({value: row.id, label: row.name}));
-});
-
-async function loadTileSources() {
-  tileSourcesList.value = await fetchVisibleTileSources();
-}
+const defaultMapOptions = computed(() => baseSourceOptions.value.map((row) => ({
+  value: row.id,
+  label: row.name,
+})));
 
 function load() {
   if (!store?.state?.userSettings) return;
@@ -81,9 +78,9 @@ onMounted(async () => {
   load();
 });
 
-watch(() => store?.state?.userSettings, () => load(), {deep: true});
+watch(() => store?.state?.userSettings, () => load(), { deep: true });
 
 onBeforeUnmount(() => {
-  Object.values(saveTimers).forEach((t) => clearTimeout(t));
+  Object.values(saveTimers).forEach((timer) => clearTimeout(timer));
 });
 </script>
