@@ -358,6 +358,13 @@ export default {
       if (!input) {
         coordinateError.value = '';
       }
+      if (coordinatesValidationTimeout.value != null) {
+        clearTimeout(coordinatesValidationTimeout.value);
+      }
+      coordinatesValidationTimeout.value = setTimeout(() => {
+        coordinatesValidationTimeout.value = null;
+        validateCoordinates({ reformatInput: false });
+      }, 300);
     }
 
     function validateParsedCoordinatePair(lng, lat) {
@@ -383,13 +390,15 @@ export default {
     // Unified rule (same as Android): try parse as coordinates; if fail, geocode only when
     // address-like (has letter not N/S/E/W/D); else if looks like coordinate attempt show error;
     // else clear with no error (e.g. "123 " while typing).
-    function validateCoordinates() {
+    function validateCoordinates(options = {}) {
+      const { reformatInput = true } = options;
       coordinateError.value = '';
       latitude.value = null;
       longitude.value = null;
       storedAddress.value = null;
       const input = coordinatesInput.value.trim();
       if (!input) {
+        updateMarkerFromCoords();
         return;
       }
       const parseCoordinates = window.gv_core?.GeoVault?.utils?.parseCoordinates;
@@ -404,7 +413,9 @@ export default {
         }
         latitude.value = coordinates.lat;
         longitude.value = coordinates.lng;
-        coordinatesInput.value = `${latitude.value}, ${longitude.value}`;
+        if (reformatInput) {
+          coordinatesInput.value = `${latitude.value}, ${longitude.value}`;
+        }
         storedAddress.value = null;
         updateMarkerFromCoords(true);
         return;
