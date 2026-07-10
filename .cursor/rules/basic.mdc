@@ -43,6 +43,8 @@ When writing commit messages for this large monorepo, always prepend the systems
 
 If you need to access the Gitea repo at https://git.evulid.cc/cyberes/geovault/releases you should use the GITEA_UPLOAD_USER_AGENT in the .env since git.evulid.cc is protected by anti-bot measures.
 
+Tests SHOULD NOT contain private info such as coordinates!
+
 ### Android Instructions
 
 `android-common` has a lot of components and code that you should use across all apps. Before making any changes check what it provides. It's very important to correctly leverage `android-common` so that our apps remain consistent. `android-common-maps` provides a map component that handles all the usual logic and management.
