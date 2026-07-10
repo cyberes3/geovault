@@ -334,6 +334,11 @@ const PLACE_LAYER_ID = 'gv_places_overlay_list_layer';
 const INITIAL_CENTER = [0, 0];
 const INITIAL_ZOOM = 2;
 const FOCUS_ZOOM = 12;
+const MAP_FEATURE_FIT_OPTIONS = {
+  focusZoom: FOCUS_ZOOM,
+  fitPadding: {top: 100, right: 100, bottom: 140, left: 140},
+  fitMaxZoom: 15
+};
 
 export default {
   components: {
@@ -449,11 +454,7 @@ export default {
       const data = getMapFeatureCollection();
       mapController.value.setPointFeatures(data.features);
       if (options.fit) {
-        mapController.value.fitToPointFeatures(data.features, {
-          focusZoom: FOCUS_ZOOM,
-          fitPadding: {top: 100, right: 100, bottom: 140, left: 140},
-          fitMaxZoom: 15
-        });
+        mapController.value.fitToPointFeatures(data.features, MAP_FEATURE_FIT_OPTIONS);
       }
     };
 
@@ -467,6 +468,7 @@ export default {
       }
       try {
         await ensureUserSettingsLoaded();
+        const initialFeatures = getMapFeatureCollection().features;
         const controller = await createPlacesMap({
           container: mapContainer.value,
           mode: 'list',
@@ -474,7 +476,9 @@ export default {
           layerId: PLACE_LAYER_ID,
           preferredSourceId: getDefaultMapSourceIdFromStore(),
           minZoom: 1,
-          maxZoom: 18
+          maxZoom: 18,
+          initialPointFeatures: initialFeatures,
+          initialFitOptions: MAP_FEATURE_FIT_OPTIONS
         });
         mapController.value = controller;
         map.value = controller.map;
@@ -506,7 +510,7 @@ export default {
         }
       };
 
-      updateMapFeatures({ fit: true });
+      updateMapFeatures();
 
       // Click handler
       map.value.on('click', (e) => {
@@ -904,9 +908,9 @@ export default {
       {deep: true, immediate: true}
     );
 
-    onMounted(() => {
-      initMap();
-      fetchPlaces();
+    onMounted(async () => {
+      await fetchPlaces();
+      await initMap();
     });
 
     onBeforeUnmount(() => {

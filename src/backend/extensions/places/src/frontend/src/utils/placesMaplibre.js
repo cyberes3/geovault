@@ -54,6 +54,44 @@ function waitForMapEvent(map, eventName, timeoutMs = 15000) {
   });
 }
 
+function getValidPointFeatures(features) {
+  if (!Array.isArray(features) || features.length === 0) {
+    return [];
+  }
+  return features.filter((feature) => {
+    const coordinates = feature?.geometry?.coordinates;
+    return (
+      Array.isArray(coordinates) &&
+      coordinates.length >= 2 &&
+      isValidMapLngLatPair(coordinates[0], coordinates[1])
+    );
+  });
+}
+
+function applyViewToPointFeatures(map, maplibre, features, {
+  focusZoom = 12,
+  fitPadding = {top: 100, right: 100, bottom: 140, left: 140},
+  fitMaxZoom = 15
+} = {}) {
+  const valid = getValidPointFeatures(features);
+  if (valid.length === 0) {
+    return;
+  }
+  if (valid.length === 1) {
+    map.jumpTo({center: valid[0].geometry.coordinates, zoom: focusZoom});
+    return;
+  }
+  const first = valid[0].geometry.coordinates;
+  const bounds = new maplibre.LngLatBounds(first, first);
+  for (let i = 1; i < valid.length; i += 1) {
+    bounds.extend(valid[i].geometry.coordinates);
+  }
+  const camera = map.cameraForBounds(bounds, {padding: fitPadding, maxZoom: fitMaxZoom});
+  if (camera) {
+    map.jumpTo(camera);
+  }
+}
+
 export async function createPlacesMap({
   container,
   mode = 'list',
@@ -61,7 +99,9 @@ export async function createPlacesMap({
   layerId,
   preferredSourceId = 'osm',
   minZoom = 1,
-  maxZoom = 18
+  maxZoom = 18,
+  initialPointFeatures = null,
+  initialFitOptions = {}
 }) {
   const maplibre = getMaplibre();
   if (!maplibre) {
@@ -85,7 +125,7 @@ export async function createPlacesMap({
   };
 
   let activeBaseSource = resolveInitialBaseSource(tileSources, preferredSourceId);
-  let currentFeatures = [];
+  let currentFeatures = Array.isArray(initialPointFeatures) ? initialPointFeatures : [];
   const style = resolveInitialStyle(activeBaseSource);
 
   const map = new maplibre.Map({
@@ -100,6 +140,10 @@ export async function createPlacesMap({
     attributionControl: false,
     cooperativeGestures: initialCoop
   });
+
+  if (currentFeatures.length > 0) {
+    applyViewToPointFeatures(map, maplibre, currentFeatures, initialFitOptions);
+  }
 
   /**
    * Match MapPage: style URL for vector tiles; blank style + add raster source/layer for rasters.
@@ -234,32 +278,8 @@ export async function createPlacesMap({
     });
   };
 
-  const fitToPointFeatures = (features, {
-    focusZoom = 12,
-    fitPadding = {top: 100, right: 100, bottom: 140, left: 140},
-    fitMaxZoom = 15
-  } = {}) => {
-    if (!features || features.length === 0) return;
-    const valid = features.filter((f) => {
-      const c = f?.geometry?.coordinates;
-      return (
-        Array.isArray(c) &&
-        c.length >= 2 &&
-        isValidMapLngLatPair(c[0], c[1])
-      );
-    });
-    if (valid.length === 0) return;
-    if (valid.length === 1) {
-      const c = valid[0].geometry.coordinates;
-      map.easeTo({center: c, zoom: focusZoom, duration: 0});
-      return;
-    }
-    const first = valid[0].geometry.coordinates;
-    const bounds = new maplibre.LngLatBounds(first, first);
-    for (let i = 1; i < valid.length; i += 1) {
-      bounds.extend(valid[i].geometry.coordinates);
-    }
-    map.fitBounds(bounds, {padding: fitPadding, maxZoom: fitMaxZoom, duration: 0});
+  const fitToPointFeatures = (features, options = {}) => {
+    applyViewToPointFeatures(map, maplibre, features, options);
   };
 
   const queryFirstPointAt = (point) => {
