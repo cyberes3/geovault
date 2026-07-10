@@ -20,6 +20,7 @@
           :is-searching="isSearching"
           :show-results="showResults"
           :search-timeout="searchTimeout"
+          :disabled="loadingEdit"
           @input="handleSearchInput()"
           @search="performSearch()"
           @select-result="selectSearchResult"
@@ -31,7 +32,11 @@
       />
     </div>
 
-    <div class="flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sm:flex-shrink-0 sm:z-20">
+    <div
+        class="flex flex-col bg-white border-t border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sm:flex-shrink-0 sm:z-20"
+        :class="{ 'opacity-60': loadingEdit }"
+        :aria-busy="loadingEdit"
+    >
       <div>
         <PlaceForm
           :name="name"
@@ -416,12 +421,25 @@ watch(editId, (newId) => {
 });
 
 onMounted(async () => {
-  await initMap();
   window.addEventListener('beforeunload', handleBeforeUnload);
-  if (editId.value) {
-    await loadPlaceForEdit(editId.value);
-  } else {
-    resetFormAndMap();
+  const editing = editId.value != null;
+  if (editing) {
+    loadingEdit.value = true;
+  }
+  try {
+    await initMap();
+    if (editing) {
+      await loadPlaceForEdit(editId.value);
+    } else {
+      resetFormAndMap();
+    }
+  } catch (error) {
+    console.error('Failed to initialize place edit page', error);
+    loadingEdit.value = false;
+    if (editing) {
+      toast.error?.('Failed to load place.');
+      router?.navigate('');
+    }
   }
 });
 

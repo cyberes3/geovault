@@ -7,13 +7,15 @@
       <input
           :value="searchQuery"
           placeholder="Search locations..."
-          class="flex-1 outline-none text-sm px-3 py-2 bg-transparent w-full"
+          class="flex-1 outline-none text-sm px-3 py-2 bg-transparent w-full disabled:opacity-60 disabled:cursor-not-allowed"
+          :disabled="disabled"
           @input="$emit('update:searchQuery', $event.target.value); $emit('input')"
           @keyup.enter="$emit('search')"
       />
       <button
           type="button"
-          class="p-2 hover:bg-gray-100 rounded-md text-gray-500 transition-colors"
+          class="p-2 hover:bg-gray-100 rounded-md text-gray-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          :disabled="disabled"
           @click="$emit('search')"
       >
         <div class="w-5 h-5 flex items-center justify-center overflow-hidden">
@@ -59,6 +61,7 @@ const props = defineProps({
   isSearching: { type: Boolean, default: false },
   showResults: { type: Boolean, default: false },
   searchTimeout: { type: [Number, null], default: null },
+  disabled: { type: Boolean, default: false },
 });
 
 defineEmits(['update:searchQuery', 'input', 'search', 'select-result']);
