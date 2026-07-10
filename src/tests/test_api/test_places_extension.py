@@ -263,6 +263,50 @@ class TestPlacesAPI(TestCase):
         meta = PlaceMetadata.objects.get(feature=self.place_feature)
         self.assertIsNotNone(meta.updated_at)
 
+    def test_update_place_rejects_round_trip_response_properties(self):
+        """PUT must not accept properties echoed from GET (description modal regression)."""
+        with _patch_places_enabled():
+            get_response = self.client.get(
+                f'/api/extensions/places/features/{self.place_feature.id}/'
+            )
+        self.assertEqual(get_response.status_code, 200)
+        place = json.loads(get_response.content)
+        place['properties']['description'] = 'Updated description'
+
+        with _patch_places_enabled():
+            response = self.client.put(
+                f'/api/extensions/places/features/{self.place_feature.id}/',
+                data=json.dumps(place),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('database_id', data['error'])
+        self.assertIn('created_at', data['error'])
+
+    def test_update_place_description_only_payload(self):
+        """PUT accepts a minimal payload for description-only edits."""
+        updated_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': _point_coords(TEST_LON_A, TEST_LAT_A),
+            },
+            'properties': {
+                'name': 'My Place',
+                'description': 'Updated description',
+            },
+        }
+        with _patch_places_enabled():
+            response = self.client.put(
+                f'/api/extensions/places/features/{self.place_feature.id}/',
+                data=json.dumps(updated_data),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['properties']['description'], 'Updated description')
+
     def test_delete_place_detail(self):
         """Test deleting a place."""
         place_id = self.place_feature.id

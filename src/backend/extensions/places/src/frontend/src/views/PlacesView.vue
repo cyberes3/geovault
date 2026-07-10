@@ -68,6 +68,7 @@ import { usePlacesApi } from '@/composables/usePlacesApi.js';
 import { usePlacesMap } from '@/composables/usePlacesMap.js';
 import { copyToClipboard } from '@/utils/clipboard.js';
 import { filterPlaces, formatCoords, googleMapsUrl } from '@/utils/placeFormatters.js';
+import { buildPlacePayload } from '@/utils/placePayload.js';
 
 const PLACE_SOURCE_ID = 'gv_places_overlay_list_source';
 const PLACE_LAYER_ID = 'gv_places_overlay_list_layer';
@@ -325,13 +326,9 @@ async function saveDescriptionEdit() {
     return;
   }
   const id = descriptionModalPlace.value.properties.database_id;
-  const updatedFeature = {
-    ...descriptionModalPlace.value,
-    properties: {
-      ...descriptionModalPlace.value.properties,
-      description: descriptionEditDraft.value || null,
-    },
-  };
+  const updatedFeature = buildPlacePayload(descriptionModalPlace.value, {
+    description: descriptionEditDraft.value,
+  });
   descriptionSaving.value = true;
   try {
     const fromApi = await updatePlace(id, updatedFeature);
