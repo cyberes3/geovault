@@ -63,28 +63,12 @@
         @update:selected-base-source-id="applyBaseSourceSelection"
     />
 
-    <BaseModal
-        :is-open="showLeaveConfirm"
-        title="Unsaved Changes"
-        max-width="md"
-        @close="cancelLeave"
-    >
-      <div class="p-4 sm:p-6">
-        <p class="text-sm text-gray-700">You have unsaved changes. Leave anyway?</p>
-      </div>
-      <template #footer>
-        <BaseButton type="button" variant="white" @click="cancelLeave">Stay</BaseButton>
-        <BaseButton type="button" variant="primary" color="blue" @click="confirmLeave">Leave</BaseButton>
-      </template>
-    </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { computed, inject, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute } from 'vue-router';
-import BaseButton from 'platform/components/parts/BaseButton.vue';
-import BaseModal from 'platform/components/parts/BaseModal.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import PlaceForm from '@/components/PlaceForm.vue';
 import PlaceLocationSearch from '@/components/PlaceLocationSearch.vue';
@@ -146,8 +130,6 @@ const selectedBaseSourceId = ref('osm');
 const saving = ref(false);
 const loadingEdit = ref(false);
 const isGettingLocation = ref(false);
-const showLeaveConfirm = ref(false);
-let pendingLeaveNext = null;
 
 const editId = computed(() => {
   const raw = route.params.id;
@@ -399,27 +381,16 @@ function handleBeforeUnload(event) {
   }
 }
 
-function cancelLeave() {
-  showLeaveConfirm.value = false;
-  pendingLeaveNext = null;
-}
-
-function confirmLeave() {
-  showLeaveConfirm.value = false;
-  if (pendingLeaveNext) {
-    pendingLeaveNext();
-    pendingLeaveNext = null;
-  }
-}
-
 onBeforeRouteLeave((_to, _from, next) => {
   if (!isDirty.value) {
     next();
     return;
   }
-  showLeaveConfirm.value = true;
-  pendingLeaveNext = () => next();
-  next(false);
+  if (confirm('You have unsaved changes. Leave anyway?')) {
+    next();
+  } else {
+    next(false);
+  }
 });
 
 watch(
