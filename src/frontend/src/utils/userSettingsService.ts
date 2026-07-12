@@ -23,18 +23,10 @@ export async function clearHiddenFeatures(): Promise<void> {
 }
 
 /**
- * Get settings for a specific section from configuration.
- */
-export function getSettingsForSection(config: Array<{ section: string; key: string; defaultValue: unknown }>, section: string) {
-    if (!Array.isArray(config)) {
-        console.warn('getSettingsForSection: config must be an array');
-        return [];
-    }
-    return config.filter((setting) => setting.section === section);
-}
-
-/**
- * Load settings from Vuex store with defaults from configuration.
+ * Load settings from Vuex store with defaults from configuration. This is a pure, standalone
+ * helper exposed to extensions via `window.gv_core.utils.loadSettingsFromStore` (see `main.js`);
+ * core settings tabs get equivalent reactive behavior from the `useSettingsSection` composable
+ * instead.
  * @param config - Settings configuration array
  * @param store - Vuex store instance (or store state)
  */

@@ -7,7 +7,7 @@
       <!-- Dynamically generated settings -->
       <div class="space-y-6">
         <SettingsInput
-          v-for="setting in getSettingsForSection('import')"
+          v-for="setting in sectionSettings"
           :key="setting.key"
           :setting="setting"
           :model-value="settingsValues[setting.key]"
@@ -19,32 +19,13 @@
   </div>
 </template>
 
-<script>
-import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
-import settingsConfig from '@/components/settings-data.json'
-import SettingsMixin from './mixins/SettingsMixin.js'
-import SettingsInput from './components/SettingsInput.vue'
+<script setup lang="ts">
+import settingsConfig from '@/components/settings-data.json';
+import SettingsInput from './components/SettingsInput.vue';
+import { useSettingsSection, type SettingDefinition } from '@/composables/useSettingsSection';
 
-export default {
-  name: 'ImportSettingsTab',
-  components: {
-    ChevronDownIcon,
-    Bars3Icon,
-    XMarkIcon,
-    SettingsInput
-  },
-  mixins: [SettingsMixin],
-  data() {
-    return {
-      // Settings configuration - loaded from external JSON file
-      settingsConfig: settingsConfig,
-    }
-  },
-  created() {
-    // Load settings from store
-    this.loadSettingsFromStore()
-  },
-  methods: {
-  },
-}
+const { sectionSettings, settingsValues, successCheckmarks, handleSettingChange } = useSettingsSection(
+    settingsConfig as SettingDefinition[],
+    'import',
+);
 </script>

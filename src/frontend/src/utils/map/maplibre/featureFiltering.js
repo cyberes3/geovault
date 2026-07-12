@@ -2,7 +2,10 @@
  * Feature filtering utilities for MapLibre
  */
 
-import * as turf from '@turf/turf'
+import { point, lineString, polygon } from '@turf/helpers'
+import { booleanPointOnLine } from '@turf/boolean-point-on-line'
+import { nearestPointOnLine } from '@turf/nearest-point-on-line'
+import { distance } from '@turf/distance'
 
 /**
  * Check if a point is on a line using Turf.js
@@ -14,13 +17,13 @@ import * as turf from '@turf/turf'
 function isPointOnLineFeature(pointFeature, lineFeature, tolerance = 10) {
   try {
     // Use Turf's booleanPointOnLine with tolerance
-    return turf.booleanPointOnLine(pointFeature, lineFeature, { tolerance })
+    return booleanPointOnLine(pointFeature, lineFeature, { tolerance })
   } catch (e) {
     // Fallback: check distance to line
     try {
-      const nearestPoint = turf.nearestPointOnLine(lineFeature, pointFeature)
-      const distance = turf.distance(pointFeature, nearestPoint, { units: 'meters' })
-      return distance <= tolerance
+      const nearestPoint = nearestPointOnLine(lineFeature, pointFeature)
+      const pointDistance = distance(pointFeature, nearestPoint, { units: 'meters' })
+      return pointDistance <= tolerance
     } catch (e2) {
       return false
     }
@@ -41,7 +44,7 @@ function isPointOnPolygonBoundary(pointFeature, polygonFeature, tolerance = 10) 
     
     for (const ring of rings) {
       // Create a LineString from the ring (closed)
-      const boundaryLine = turf.lineString([...ring, ring[0]])
+      const boundaryLine = lineString([...ring, ring[0]])
       
       // Check if point is on this boundary line
       if (isPointOnLineFeature(pointFeature, boundaryLine, tolerance)) {
@@ -102,10 +105,10 @@ export function filterPointsOnBorders(features, tolerance = 10) {
   lines.forEach(f => {
     try {
       if (f.geometry.type === 'LineString') {
-        lineFeatures.push(turf.lineString(f.geometry.coordinates, f.properties || {}))
+        lineFeatures.push(lineString(f.geometry.coordinates, f.properties || {}))
       } else if (f.geometry.type === 'MultiLineString') {
         f.geometry.coordinates.forEach(seq => {
-          lineFeatures.push(turf.lineString(seq, f.properties || {}))
+          lineFeatures.push(lineString(seq, f.properties || {}))
         })
       }
     } catch (e) {
@@ -118,10 +121,10 @@ export function filterPointsOnBorders(features, tolerance = 10) {
   polygons.forEach(f => {
     try {
       if (f.geometry.type === 'Polygon') {
-        polygonFeatures.push(turf.polygon(f.geometry.coordinates, f.properties || {}))
+        polygonFeatures.push(polygon(f.geometry.coordinates, f.properties || {}))
       } else if (f.geometry.type === 'MultiPolygon') {
         f.geometry.coordinates.forEach(polygonCoords => {
-          polygonFeatures.push(turf.polygon(polygonCoords, f.properties || {}))
+          polygonFeatures.push(polygon(polygonCoords, f.properties || {}))
         })
       }
     } catch (e) {
@@ -130,10 +133,10 @@ export function filterPointsOnBorders(features, tolerance = 10) {
   })
 
   // Filter out points that are on any line or polygon border
-  const filteredPoints = points.filter(point => {
+  const filteredPoints = points.filter(candidatePoint => {
     try {
       // Convert point to Turf.js Point feature
-      const pointFeature = turf.point(point.geometry.coordinates, point.properties || {})
+      const pointFeature = point(candidatePoint.geometry.coordinates, candidatePoint.properties || {})
       
       // Check if point is on any line
       for (const lineFeature of lineFeatures) {

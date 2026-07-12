@@ -3,7 +3,10 @@
  * Calculates centroids for polygons and centers for lines
  */
 
-import * as turf from '@turf/turf'
+import { polygon, multiPolygon, lineString } from '@turf/helpers'
+import { centerOfMass as turfCenterOfMass } from '@turf/center-of-mass'
+import { length as turfLength } from '@turf/length'
+import { along } from '@turf/along'
 
 /**
  * Calculate the centroid of a polygon
@@ -17,15 +20,15 @@ export function calculatePolygonCentroid(geometry) {
   try {
     let polygonFeature
     if (geometry.type === 'Polygon') {
-      polygonFeature = turf.polygon(geometry.coordinates)
+      polygonFeature = polygon(geometry.coordinates)
     } else if (geometry.type === 'MultiPolygon') {
-      polygonFeature = turf.multiPolygon(geometry.coordinates)
+      polygonFeature = multiPolygon(geometry.coordinates)
     } else {
       return null
     }
 
-    const centerOfMass = turf.centerOfMass(polygonFeature)
-    return centerOfMass.geometry.coordinates
+    const centroid = turfCenterOfMass(polygonFeature)
+    return centroid.geometry.coordinates
   } catch (error) {
     console.warn('Error calculating polygon centroid:', error)
     return null
@@ -91,17 +94,17 @@ export function calculateLineCenter(geometry) {
   try {
     let lineFeature
     if (geometry.type === 'LineString') {
-      lineFeature = turf.lineString(geometry.coordinates)
+      lineFeature = lineString(geometry.coordinates)
     } else if (geometry.type === 'MultiLineString') {
       // For MultiLineString, find the center of the longest segment
       let longestLine = null
       let maxLength = 0
       
       geometry.coordinates.forEach(coords => {
-        const line = turf.lineString(coords)
-        const length = turf.length(line, { units: 'kilometers' })
-        if (length > maxLength) {
-          maxLength = length
+        const line = lineString(coords)
+        const segmentLength = turfLength(line, { units: 'kilometers' })
+        if (segmentLength > maxLength) {
+          maxLength = segmentLength
           longestLine = line
         }
       })
@@ -113,10 +116,10 @@ export function calculateLineCenter(geometry) {
     }
 
     // Get the center point along the line
-    const length = turf.length(lineFeature, { units: 'kilometers' })
-    const centerDistance = length / 2
+    const lineLength = turfLength(lineFeature, { units: 'kilometers' })
+    const centerDistance = lineLength / 2
     
-    const centerPoint = turf.along(lineFeature, centerDistance, { units: 'kilometers' })
+    const centerPoint = along(lineFeature, centerDistance, { units: 'kilometers' })
     return centerPoint.geometry.coordinates
   } catch (error) {
     console.warn('Error calculating line center:', error)

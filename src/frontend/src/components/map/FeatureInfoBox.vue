@@ -151,7 +151,8 @@
 
 <script>
 import { marked } from 'marked'
-import * as turf from '@turf/turf'
+import { length } from '@turf/length'
+import { area } from '@turf/area'
 import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon, ShareIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import { formatDate } from '@/utils/dateUtils'
@@ -237,7 +238,7 @@ export default {
       
       try {
         // Use Turf.js to calculate length in meters
-        return turf.length(geometry, { units: 'meters' })
+        return length(geometry, { units: 'meters' })
       } catch (error) {
         console.error('Error calculating feature length:', error)
         return null
@@ -251,7 +252,7 @@ export default {
       
       try {
         // Use Turf.js to calculate area in square meters
-        return turf.area(geometry)
+        return area(geometry)
       } catch (error) {
         console.error('Error calculating feature area:', error)
         return null

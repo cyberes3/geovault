@@ -4,7 +4,9 @@
  */
 
 import maplibregl from 'maplibre-gl'
-import * as turf from '@turf/turf'
+import { length } from '@turf/length'
+import { point, lineString } from '@turf/helpers'
+import { pointToLineDistance } from '@turf/point-to-line-distance'
 import { calculatePolygonCentroid, calculateLineCenter } from './labelPlacement.js'
 
 // Web Mercator constants
@@ -28,15 +30,15 @@ export function getResolutionFromZoom(zoom) {
 
 /**
  * Calculate distance from a point to a line segment using Turf.js
- * @param {Array<number>} point - Point [lon, lat]
+ * @param {Array<number>} pointCoord - Point [lon, lat]
  * @param {Array<number>} lineStart - Line segment start [lon, lat]
  * @param {Array<number>} lineEnd - Line segment end [lon, lat]
  * @returns {number} Distance in meters
  */
-function distanceToLineSegment(point, lineStart, lineEnd) {
-    const pointFeature = turf.point(point)
-    const lineFeature = turf.lineString([lineStart, lineEnd])
-    return turf.pointToLineDistance(pointFeature, lineFeature, { units: 'meters' })
+function distanceToLineSegment(pointCoord, lineStart, lineEnd) {
+    const pointFeature = point(pointCoord)
+    const lineFeature = lineString([lineStart, lineEnd])
+    return pointToLineDistance(pointFeature, lineFeature, { units: 'meters' })
 }
 
 /**
@@ -46,7 +48,7 @@ function distanceToLineSegment(point, lineStart, lineEnd) {
  */
 function calculateLineLength(geometry) {
   if (!geometry || !geometry.coordinates) return 0
-  return turf.length(geometry, { units: 'meters' })
+  return length(geometry, { units: 'meters' })
 }
 
 /**

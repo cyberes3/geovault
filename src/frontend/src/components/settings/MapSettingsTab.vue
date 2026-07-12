@@ -5,7 +5,7 @@
     <!-- Dynamically generated settings -->
     <div class="space-y-6 mb-6">
       <SettingsInput
-        v-for="setting in getSettingsForSection('map')"
+        v-for="setting in sectionSettings"
         :key="setting.key"
         :setting="setting"
         :model-value="settingsValues[setting.key]"
@@ -60,177 +60,168 @@
   </div>
 </template>
 
-<script>
-import settingsConfig from "@/components/settings-data.json";
-import SettingsMixin from "./mixins/SettingsMixin.js";
-import SettingsInput from "./components/SettingsInput.vue";
-import HiddenFeaturesWidget from "@/components/map/HiddenFeaturesWidget.vue";
-import { clearHiddenFeatures } from "@/utils/userSettingsService";
-import { tileSourceCatalog } from "@/utils/map/openlayers";
-import { toast } from '@/utils/toast'
-import { toastApiError } from '@/utils/apiError'
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+import { useStore } from 'vuex';
+import settingsConfig from '@/components/settings-data.json';
+import SettingsInput from './components/SettingsInput.vue';
+import HiddenFeaturesWidget from '@/components/map/HiddenFeaturesWidget.vue';
+import { clearHiddenFeatures } from '@/utils/userSettingsService';
+import { tileSourceCatalog } from '@/utils/map/openlayers';
+import hiddenFeaturesManager from '@/utils/hiddenFeaturesManager';
+import { toastApiError } from '@/utils/apiError';
+import { useSettingsSection, type SettingDefinition } from '@/composables/useSettingsSection';
+import type { HiddenFeature } from '@/assets/js/store/modules/userSettings';
 
-export default {
-  name: 'MapSettingsTab',
-  components: {
-    SettingsInput,
-    HiddenFeaturesWidget,
-  },
-  mixins: [SettingsMixin],
-  data() {
-    return {
-      // Settings configuration - loaded from external JSON file
-      settingsConfig: settingsConfig,
-      tileSources: [],
-    }
-  },
-  computed: {
-    storeUserSettings() {
-      return this.$store?.getters?.['userSettings/userSettings'];
-    },
-    hiddenFeatureIds() {
-      const features = this.$store?.getters?.['userSettings/hiddenFeatures'] || [];
-      if (!Array.isArray(features)) return [];
-      return features.map(f => String(f.id));
-    },
-    hiddenFeatureSummaries() {
-      const features = this.$store?.getters?.['userSettings/hiddenFeatures'] || [];
-      if (!Array.isArray(features)) return [];
-      return features.map(f => ({
+/** Shape returned by the (untyped, plain-JS) `tileSourceCatalog.load()`. */
+interface TileSource {
+    id: string;
+    name: string;
+    type: string;
+    requires_proxy: boolean;
+    client_config?: { type: string; attribution?: string };
+}
+
+interface RootGetters {
+    'userSettings/hiddenFeatures': HiddenFeature[];
+}
+
+const store = useStore();
+
+const { sectionSettings, settingsValues, successCheckmarks, handleSettingChange } = useSettingsSection(
+    settingsConfig as SettingDefinition[],
+    'map',
+);
+
+const tileSources = ref<TileSource[]>([]);
+
+const hiddenFeatureIds = computed<string[]>(() => {
+    const getters = store.getters as RootGetters;
+    return getters['userSettings/hiddenFeatures'].map((f) => String(f.id));
+});
+
+const hiddenFeatureSummaries = computed(() => {
+    const getters = store.getters as RootGetters;
+    return getters['userSettings/hiddenFeatures'].map((f) => ({
         id: String(f.id),
-        name: f.name || null,
-        geometry_type: f.geometry_type || null,
-      }));
-    },
-    isMobile() {
-      // Simple viewport width check for mobile detection
-      return window.innerWidth < 768;
-    },
-    tileSourcesWithAttribution() {
-      // Return tile sources with their attributions, sorted by name
-      return this.tileSources
-        .map(source => ({
-          id: source.id,
-          name: source.name || source.id,
-          attribution: this.processAttributionLinks(source.client_config?.attribution || 'No attribution available')
+        name: f.name ?? null,
+        geometry_type: f.geometry_type ?? null,
+    }));
+});
+
+// Simple viewport width check for mobile detection
+const isMobile = computed(() => window.innerWidth < 768);
+
+const tileSourcesWithAttribution = computed(() => {
+    return tileSources.value
+        .map((source) => ({
+            id: source.id,
+            name: source.name || source.id,
+            attribution: processAttributionLinks(source.client_config?.attribution ?? 'No attribution available'),
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
-    },
-  },
-  async created() {
-    // Load settings from store using mixin method
-    this.loadSettingsFromStore();
-    
-    // Fetch tile sources to populate default_basemap options
-    await this.fetchTileSources();
-    this.populateBasemapOptions();
-  },
-  methods: {
-    processAttributionLinks(html) {
-      if (!html || typeof html !== 'string') {
+});
+
+function processAttributionLinks(html: string): string {
+    if (!html || typeof html !== 'string') {
         return html;
-      }
-      
-      // Process all <a> tags to add target="_blank" and rel="noopener noreferrer"
-      return html.replace(/<a(\s+[^>]*|)>/gi, (match, attributes) => {
+    }
+
+    // Process all <a> tags to add target="_blank" and rel="noopener noreferrer"
+    return html.replace(/<a(\s+[^>]*|)>/gi, (_match, attributes: string) => {
         // Normalize attributes - handle case where there's no space after <a
         let attrs = (attributes || '').trim();
-        
+
         // Check if target already exists
         if (attrs.includes('target=')) {
-          // Replace existing target
-          attrs = attrs.replace(/target=["'][^"']*["']/gi, 'target="_blank"');
+            attrs = attrs.replace(/target=["'][^"']*["']/gi, 'target="_blank"');
         } else {
-          // Add target attribute
-          attrs = attrs ? attrs + ' target="_blank"' : 'target="_blank"';
+            attrs = attrs ? `${attrs} target="_blank"` : 'target="_blank"';
         }
-        
+
         // Check if rel already exists
         if (attrs.includes('rel=')) {
-          // Add noopener noreferrer to existing rel if not present
-          const relMatch = attrs.match(/rel=["']([^"']*)["']/i);
-          if (relMatch) {
-            const existingRel = relMatch[1];
-            if (!existingRel.includes('noopener') || !existingRel.includes('noreferrer')) {
-              const newRel = existingRel.split(/\s+/).concat(['noopener', 'noreferrer']).filter((v, i, a) => a.indexOf(v) === i).join(' ');
-              attrs = attrs.replace(/rel=["'][^"']*["']/gi, `rel="${newRel}"`);
+            const relMatch = /rel=["']([^"']*)["']/i.exec(attrs);
+            if (relMatch) {
+                const existingRel = relMatch[1];
+                if (!existingRel.includes('noopener') || !existingRel.includes('noreferrer')) {
+                    const newRel = existingRel
+                        .split(/\s+/)
+                        .concat(['noopener', 'noreferrer'])
+                        .filter((v, i, a) => a.indexOf(v) === i)
+                        .join(' ');
+                    attrs = attrs.replace(/rel=["'][^"']*["']/gi, `rel="${newRel}"`);
+                }
             }
-          }
         } else {
-          // Add rel attribute
-          attrs = attrs ? attrs + ' rel="noopener noreferrer"' : 'rel="noopener noreferrer"';
+            attrs = attrs ? `${attrs} rel="noopener noreferrer"` : 'rel="noopener noreferrer"';
         }
-        
+
         return attrs ? `<a ${attrs}>` : '<a>';
-      });
-    },
-    async fetchTileSources() {
-      try {
+    });
+}
+
+async function fetchTileSources(): Promise<void> {
+    try {
         // Shared catalog already filters out hidden (utility) sources and caches the result.
-        this.tileSources = await tileSourceCatalog.load();
-      } catch (error) {
+        // `tileSourceCatalog` is plain JS and untyped, hence the cast.
+        tileSources.value = await tileSourceCatalog.load() as TileSource[];
+    } catch (error) {
         console.error('Error fetching tile sources:', error);
         // Fallback to default OSM if API fails
-        this.tileSources = [{
-          id: 'osm',
-          name: 'OpenStreetMap',
-          type: 'osm',
-          requires_proxy: false,
-          client_config: {type: 'osm'}
+        tileSources.value = [{
+            id: 'osm',
+            name: 'OpenStreetMap',
+            type: 'osm',
+            requires_proxy: false,
+            client_config: { type: 'osm' },
         }];
-      }
-    },
-    populateBasemapOptions() {
-      // Find the default_basemap setting and populate its options
-      const basemapSetting = this.settingsConfig.find(
-        setting => setting.key === 'map.default_basemap'
-      );
-      
-      if (basemapSetting && this.tileSources.length > 0) {
-        // Populate options from tile sources
-        basemapSetting.options = this.tileSources.map(source => ({
-          value: source.id,
-          label: source.name
+    }
+}
+
+function populateBasemapOptions(): void {
+    // Find the default_basemap setting and populate its options
+    const basemapSetting = (settingsConfig as SettingDefinition[]).find(
+        (setting) => setting.key === 'map.default_basemap',
+    );
+
+    if (basemapSetting && tileSources.value.length > 0) {
+        basemapSetting.options = tileSources.value.map((source) => ({
+            value: source.id,
+            label: source.name,
         }));
-      }
-    },
-    async unhideFeature(featureId) {
-      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default
+    }
+}
 
-      const optimisticUpdate = () => {
-        this.$store.dispatch('userSettings/removeHiddenFeature', String(featureId))
-      }
+async function unhideFeature(featureId: string): Promise<void> {
+    const optimisticUpdate = () => {
+        void store.dispatch('userSettings/removeHiddenFeature', String(featureId));
+    };
 
-      hiddenFeaturesManager.removeHidden(featureId, optimisticUpdate)
-      try {
-        await hiddenFeaturesManager.forceFlush()
-      } catch (error) {
-        console.error('Error unhiding feature from settings:', error)
-        toastApiError(error, 'Failed to unhide feature')
-      }
-    },
-    async unhideAll() {
-      try {
+    hiddenFeaturesManager.removeHidden(featureId, optimisticUpdate);
+    try {
+        await hiddenFeaturesManager.forceFlush();
+    } catch (error) {
+        console.error('Error unhiding feature from settings:', error);
+        toastApiError(error, 'Failed to unhide feature');
+    }
+}
+
+async function unhideAll(): Promise<void> {
+    try {
         await clearHiddenFeatures();
         // Local cache: clear all hidden features in the store
-        this.$store.dispatch("userSettings/setHiddenFeatures", []);
-      } catch (error) {
-        console.error("Error clearing hidden features from settings:", error);
+        void store.dispatch('userSettings/setHiddenFeatures', []);
+    } catch (error) {
+        console.error('Error clearing hidden features from settings:', error);
         toastApiError(error, 'Failed to clear hidden features');
-      }
-    },
-  },
-  watch: {
-    // Watch for changes in the store and reload settings
-    storeUserSettings: {
-      handler() {
-        // Reload settings when store updates
-        this.loadSettingsFromStore();
-      },
-      deep: true
     }
-  }
 }
+
+onMounted(async () => {
+    await fetchTileSources();
+    populateBasemapOptions();
+});
 </script>
 
 <style scoped>
@@ -253,4 +244,3 @@ export default {
   color: var(--color-blue-800);
 }
 </style>
-

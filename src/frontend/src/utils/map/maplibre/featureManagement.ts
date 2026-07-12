@@ -3,7 +3,10 @@
  */
 
 import { markRaw } from 'vue';
-import * as turf from '@turf/turf';
+import { bbox as turfBbox } from '@turf/bbox';
+import { point } from '@turf/helpers';
+import { distance } from '@turf/distance';
+import { length } from '@turf/length';
 import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
 import type { Geometry as GeoJsonGeometry } from 'geojson';
 import { filterPointsOnBorders } from './featureFiltering.js';
@@ -54,17 +57,16 @@ function calculatePolygonScreenSize(geometry: GeoJsonFeature['geometry'], zoom: 
 
     try {
         // Use Turf.js to get bbox (returns [minLon, minLat, maxLon, maxLat])
-        const bbox = turf.bbox(geometry as GeoJsonGeometry);
-        const [minLon, minLat, maxLon, maxLat] = bbox;
+        const [minLon, minLat, maxLon, maxLat] = turfBbox(geometry as GeoJsonGeometry);
 
         // Create points at the bbox corners to measure distances
-        const bottomLeft = turf.point([minLon, minLat]);
-        const bottomRight = turf.point([maxLon, minLat]);
-        const topLeft = turf.point([minLon, maxLat]);
+        const bottomLeft = point([minLon, minLat]);
+        const bottomRight = point([maxLon, minLat]);
+        const topLeft = point([minLon, maxLat]);
 
         // Calculate geodesic distances in meters
-        const widthMeters = turf.distance(bottomLeft, bottomRight, { units: 'meters' });
-        const heightMeters = turf.distance(bottomLeft, topLeft, { units: 'meters' });
+        const widthMeters = distance(bottomLeft, bottomRight, { units: 'meters' });
+        const heightMeters = distance(bottomLeft, topLeft, { units: 'meters' });
 
         // Convert to pixels using Web Mercator resolution
         const resolution = WEB_MERCATOR_WORLD_SIZE / Math.pow(2, zoom);
@@ -86,7 +88,7 @@ function calculateLineScreenSize(geometry: GeoJsonFeature['geometry'], zoom: num
 
     try {
         // Use Turf.js to calculate geodesic length in meters
-        const lengthMeters = turf.length({ type: 'Feature', properties: {}, geometry: geometry as GeoJsonGeometry }, { units: 'meters' });
+        const lengthMeters = length({ type: 'Feature', properties: {}, geometry: geometry as GeoJsonGeometry }, { units: 'meters' });
 
         // Convert to pixels using Web Mercator resolution
         const resolution = WEB_MERCATOR_WORLD_SIZE / Math.pow(2, zoom);

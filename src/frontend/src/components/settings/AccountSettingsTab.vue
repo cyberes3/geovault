@@ -11,7 +11,7 @@
       <!-- Dynamically generated settings -->
       <div class="space-y-6">
         <SettingsInput
-            v-for="setting in getSettingsForSection('account')"
+            v-for="setting in sectionSettings"
             :key="setting.key"
             :setting="setting"
             :model-value="settingsValues[setting.key]"
@@ -43,54 +43,19 @@
   </div>
 </template>
 
-<script>
-import settingsConfig from "@/components/settings-data.json";
-import SettingsMixin from "./mixins/SettingsMixin.js";
-import SettingsInput from "./components/SettingsInput.vue";
-import PasswordChangeSection from "./account/PasswordChangeSection.vue";
-import EmailVerificationSection from "./account/EmailVerificationSection.vue";
-import ApiKeysSection from "./account/ApiKeysSection.vue";
-import OAuthConnectionsSection from "./account/OAuthConnectionsSection.vue";
-import DataExportSection from "./account/DataExportSection.vue";
-import {ArrowTopRightOnSquareIcon} from '@heroicons/vue/24/outline';
+<script setup lang="ts">
+import settingsConfig from '@/components/settings-data.json';
+import SettingsInput from './components/SettingsInput.vue';
+import PasswordChangeSection from './account/PasswordChangeSection.vue';
+import EmailVerificationSection from './account/EmailVerificationSection.vue';
+import ApiKeysSection from './account/ApiKeysSection.vue';
+import OAuthConnectionsSection from './account/OAuthConnectionsSection.vue';
+import DataExportSection from './account/DataExportSection.vue';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/vue/24/outline';
+import { useSettingsSection, type SettingDefinition } from '@/composables/useSettingsSection';
 
-export default {
-  name: 'AccountSettingsTab',
-  components: {
-    SettingsInput,
-    PasswordChangeSection,
-    EmailVerificationSection,
-    ApiKeysSection,
-    OAuthConnectionsSection,
-    DataExportSection,
-    ArrowTopRightOnSquareIcon
-  },
-  mixins: [SettingsMixin],
-  props: {},
-  data() {
-    return {
-      // Settings configuration - loaded from external JSON file
-      settingsConfig: settingsConfig
-    }
-  },
-  computed: {
-    storeUserSettings() {
-      return this.$store?.getters?.['userSettings/userSettings'];
-    }
-  },
-  created() {
-    // Load settings from store using mixin method
-    this.loadSettingsFromStore();
-  },
-  watch: {
-    // Watch for changes in the store and reload settings
-    storeUserSettings: {
-      handler() {
-        // Reload settings when store updates
-        this.loadSettingsFromStore();
-      },
-      deep: true
-    }
-  }
-}
+const { sectionSettings, settingsValues, successCheckmarks, handleSettingChange } = useSettingsSection(
+    settingsConfig as SettingDefinition[],
+    'account',
+);
 </script>
