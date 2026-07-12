@@ -9,7 +9,7 @@ import * as turf from '@turf/turf'
  * Calculate the centroid of a polygon
  * Uses centerOfMass which is better for irregular/concave polygons
  * @param {Object} geometry - GeoJSON Polygon or MultiPolygon geometry
- * @returns {Array<number>} [lon, lat] coordinates of centroid
+ * @returns {Array<number>|null} [lon, lat] coordinates of centroid, or null if it cannot be calculated
  */
 export function calculatePolygonCentroid(geometry) {
   if (!geometry || !geometry.coordinates) return null

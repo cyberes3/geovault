@@ -5,7 +5,7 @@ import { ensureLayersExist, addFeaturesToMap } from './index.js'
  * @param {Object} map - MapLibre map instance
  * @param {Object} geojsonData - GeoJSON data to restore
  * @param {boolean} showAllLabels - Whether to show labels
- * @param {Object} labelMarkerManager - Label marker manager instance
+ * @param {Object|null} labelMarkerManager - Label marker manager instance
  */
 export async function restoreGeoJsonFeatures(map, geojsonData, showAllLabels, labelMarkerManager) {
   if (!map) return

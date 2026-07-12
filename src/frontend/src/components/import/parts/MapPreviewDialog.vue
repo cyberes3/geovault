@@ -26,345 +26,176 @@
   </BaseModal>
 </template>
 
-<script>
-import {Map, View} from 'ol'
-import {Vector as VectorLayer} from 'ol/layer'
-import {openLayersBasemap} from '@/utils/map/openlayers/index.js'
-import {Vector as VectorSource} from 'ol/source'
-import {Style, Fill, Stroke, Circle, Text} from 'ol/style'
-import {GeoJSON} from 'ol/format'
-import {fromLonLat} from 'ol/proj'
+<script setup lang="ts">
+import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { Style, Fill, Stroke, Circle, Text } from 'ol/style'
+import type { FeatureLike } from 'ol/Feature'
+import {
+  useOpenLayersPreviewMap,
+  getFeatureProperties,
+  getStringProperty,
+  getNumberProperty,
+} from '@/composables/useOpenLayersPreviewMap'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import Loader from '@/components/parts/Loader.vue'
+import type { GeoJsonFeature } from '@/types/geospatial'
 
-export default {
-  name: 'MapPreviewDialog',
-  components: {
-    BaseModal,
-    Loader
-  },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false
-    },
-    features: {
-      type: Array,
-      default: () => []
-    },
-    filename: {
-      type: String,
-      default: ''
+const props = withDefaults(defineProps<{
+  isOpen?: boolean
+  features?: GeoJsonFeature[]
+  filename?: string
+}>(), {
+  isOpen: false,
+  features: () => [],
+  filename: '',
+})
+
+const emit = defineEmits<{
+  (e: 'close'): void
+}>()
+
+const mapContainer = ref<HTMLDivElement | null>(null)
+const isLoading = ref(false)
+const featureCount = ref(0)
+
+function getFeatureStyle(feature: FeatureLike): Style {
+  const properties = getFeatureProperties(feature)
+  const geometryType = feature.getGeometry()?.getType()
+
+  if (geometryType === 'Point') {
+    const fillColor = getStringProperty(properties, 'marker-color', '#ff0000')
+    return new Style({
+      image: new Circle({
+        radius: 5,
+        fill: new Fill({ color: fillColor })
+      })
+    })
+  } else if (geometryType === 'LineString') {
+    const strokeColor = getStringProperty(properties, 'stroke', '#ff0000')
+    return new Style({
+      stroke: new Stroke({
+        color: strokeColor,
+        width: getNumberProperty(properties, 'stroke-width', 3)
+      })
+    })
+  } else if (geometryType === 'Polygon') {
+    const strokeColor = getStringProperty(properties, 'stroke', '#ff0000')
+    let fillColor = getStringProperty(properties, 'fill', '#ff0000')
+
+    const fillOpacity = getNumberProperty(properties, 'fill-opacity')
+    if (fillOpacity !== undefined) {
+      const hex = fillColor.replace('#', '')
+      const r = parseInt(hex.substring(0, 2), 16)
+      const g = parseInt(hex.substring(2, 4), 16)
+      const b = parseInt(hex.substring(4, 6), 16)
+      fillColor = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`
     }
-  },
-  data() {
-    return {
-      map: null,
-      vectorSource: null,
-      vectorLayer: null,
-      labelLayer: null,
-      isLoading: false,
-      featureCount: 0
+
+    return new Style({
+      stroke: new Stroke({
+        color: strokeColor,
+        width: getNumberProperty(properties, 'stroke-width', 2)
+      }),
+      fill: new Fill({ color: fillColor })
+    })
+  }
+
+  return new Style({
+    stroke: new Stroke({ color: '#ff0000', width: 2 }),
+    fill: new Fill({ color: 'rgba(255, 0, 0, 0.3)' })
+  })
+}
+
+function getLabelStyle(feature: FeatureLike): Style | undefined {
+  const properties = getFeatureProperties(feature)
+  const geometryType = feature.getGeometry()?.getType()
+  const name = getStringProperty(properties, 'name')
+
+  if (!name) {
+    return undefined
+  }
+
+  const offsetY = geometryType === 'Point' ? -15 : -10
+  return new Style({
+    text: new Text({
+      text: name,
+      font: '12px Arial',
+      fill: new Fill({ color: '#000000' }),
+      stroke: new Stroke({ color: '#ffffff', width: 3 }),
+      offsetY
+    })
+  })
+}
+
+const { map, loadFeatures: loadFeaturesIntoMap, fitToAllFeatures, initMap, cleanup } = useOpenLayersPreviewMap({
+  getFeatureStyle,
+  getLabelStyle
+})
+
+async function initializeMap(): Promise<void> {
+  await initMap(mapContainer.value)
+}
+
+function loadFeatures(): void {
+  if (!map.value || props.features.length === 0) {
+    featureCount.value = 0
+    isLoading.value = false
+    return
+  }
+
+  isLoading.value = true
+
+  try {
+    const olFeatures = loadFeaturesIntoMap(props.features)
+    featureCount.value = olFeatures.length
+    if (olFeatures.length > 0) {
+      fitToAllFeatures({ padding: [50, 50, 50, 50], maxZoom: 15 })
     }
-  },
-  watch: {
-    isOpen(newVal) {
-      if (newVal) {
-        this.$nextTick(async () => {
-          this.isLoading = true
-          try {
-            await this.initializeMap()
-            this.loadFeatures()
-          } catch (error) {
-            console.error('Error initializing map preview:', error)
-            this.isLoading = false
-          }
-        })
-      } else {
-        this.cleanup()
-      }
-    },
-    features: {
-      handler() {
-        if (this.isOpen && this.map) {
-          this.loadFeatures()
-        }
-      },
-      deep: true
-    },
-    $route() {
-      // Close dialog when route changes
-      if (this.isOpen) {
-        this.closeDialog()
-      }
-    }
-  },
-  methods: {
-    async initializeMap() {
-      if (this.map) {
-        this.cleanup()
-      }
-
-      // Create vector source and layers
-      this.vectorSource = new VectorSource()
-
-      // Layer for features (geometry only, no decluttering)
-      this.vectorLayer = new VectorLayer({
-        source: this.vectorSource,
-        style: (feature) => this.getFeatureStyle(feature) // No text labels
-      })
-
-      // Layer for labels only (with decluttering)
-      this.labelLayer = new VectorLayer({
-        source: this.vectorSource,
-        style: (feature) => this.getLabelStyle(feature),
-        declutter: true
-      })
-
-      const basemapLayer = await openLayersBasemap.createTileLayer()
-
-      // Create map
-      this.map = new Map({
-        target: this.$refs.mapContainer,
-        layers: [
-          basemapLayer,
-          this.vectorLayer,
-          this.labelLayer
-        ],
-        view: new View({
-          center: fromLonLat([-104.692626, 38.881215]),
-          zoom: 10
-        })
-      })
-
-    },
-
-    getFeatureStyle(feature) {
-      const properties = feature.get('properties') || {}
-      const geometryType = feature.getGeometry().getType()
-
-      // Helper function to convert hex color to CSS color string
-      const hexToColor = (hexColor, defaultColor = '#ff0000') => {
-        if (!hexColor || typeof hexColor !== 'string') return defaultColor
-        return hexColor
-      }
-
-      if (geometryType === 'Point') {
-        // Points use marker-color or default red
-        const fillColor = hexToColor(properties['marker-color'], '#ff0000')
-        return new Style({
-          image: new Circle({
-            radius: 5,
-            fill: new Fill({
-              color: fillColor
-            })
-          })
-        })
-      } else if (geometryType === 'LineString') {
-        // Lines use stroke and stroke-width
-        const strokeColor = hexToColor(properties.stroke, '#ff0000')
-        return new Style({
-          stroke: new Stroke({
-            color: strokeColor,
-            width: properties['stroke-width'] || 3
-          })
-        })
-      } else if (geometryType === 'Polygon') {
-        // Polygons use stroke, stroke-width, fill, and fill-opacity
-        const strokeColor = hexToColor(properties.stroke, '#ff0000')
-        let fillColor = hexToColor(properties.fill, '#ff0000')
-
-        // Apply fill-opacity if specified
-        if (properties['fill-opacity'] !== undefined) {
-          // Convert hex to RGB and apply opacity
-          const hex = fillColor.replace('#', '')
-          const r = parseInt(hex.substr(0, 2), 16)
-          const g = parseInt(hex.substr(2, 2), 16)
-          const b = parseInt(hex.substr(4, 2), 16)
-          fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`
-        }
-
-        return new Style({
-          stroke: new Stroke({
-            color: strokeColor,
-            width: properties['stroke-width'] || 2
-          }),
-          fill: new Fill({
-            color: fillColor
-          })
-        })
-      }
-
-      // Default style for unknown geometry types
-      return new Style({
-        stroke: new Stroke({
-          color: '#ff0000',
-          width: 2
-        }),
-        fill: new Fill({
-          color: 'rgba(255, 0, 0, 0.3)'
-        })
-      })
-    },
-
-    getLabelStyle(feature) {
-      const properties = feature.get('properties') || {}
-      const geometryType = feature.getGeometry().getType()
-      const name = properties.name || ''
-
-      // Only return label style if feature has a name
-      if (!name) {
-        return null
-      }
-
-      if (geometryType === 'Point') {
-        return new Style({
-          text: new Text({
-            text: name,
-            font: '12px Arial',
-            fill: new Fill({
-              color: '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: 3
-            }),
-            offsetY: -15
-          })
-        })
-      } else if (geometryType === 'LineString') {
-        return new Style({
-          text: new Text({
-            text: name,
-            font: '12px Arial',
-            fill: new Fill({
-              color: '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: 3
-            }),
-            offsetY: -10
-          })
-        })
-      } else if (geometryType === 'Polygon') {
-        return new Style({
-          text: new Text({
-            text: name,
-            font: '12px Arial',
-            fill: new Fill({
-              color: '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: 3
-            }),
-            offsetY: -10
-          })
-        })
-      }
-
-      // Default label style
-      return new Style({
-        text: new Text({
-          text: name,
-          font: '12px Arial',
-          fill: new Fill({
-            color: '#000000'
-          }),
-          stroke: new Stroke({
-            color: '#ffffff',
-            width: 3
-          }),
-          offsetY: -10
-        })
-      })
-    },
-
-    loadFeatures() {
-      if (!this.map || !this.features || this.features.length === 0) {
-        this.featureCount = 0
-        this.isLoading = false
-        return
-      }
-
-      this.isLoading = true
-
-      try {
-        // Clear existing features
-        this.vectorSource.clear()
-
-        // Convert features to GeoJSON format
-        const geoJsonFeatures = this.features.map(feature => {
-          // Convert the feature to a standard GeoJSON format
-          return {
-            type: 'Feature',
-            geometry: feature.geometry,
-            properties: feature.properties || {}
-          }
-        })
-
-        const geoJsonData = {
-          type: 'FeatureCollection',
-          features: geoJsonFeatures
-        }
-
-        // Add features to the map
-        const features = new GeoJSON().readFeatures(geoJsonData, {
-          featureProjection: 'EPSG:3857',
-          dataProjection: 'EPSG:4326'
-        })
-
-        // Preserve properties from the original data
-        features.forEach((feature, index) => {
-          const originalFeature = geoJsonFeatures[index]
-          if (originalFeature && originalFeature.properties) {
-            feature.set('properties', originalFeature.properties)
-            Object.keys(originalFeature.properties).forEach(key => {
-              feature.set(key, originalFeature.properties[key])
-            })
-          }
-        })
-
-        this.vectorSource.addFeatures(features)
-        this.featureCount = features.length
-
-        // Fit map to show all features
-        if (features.length > 0) {
-          const extent = this.vectorSource.getExtent()
-          this.map.getView().fit(extent, {
-            padding: [50, 50, 50, 50],
-            maxZoom: 15
-          })
-        }
-
-      } catch (error) {
-        console.error('Error loading features for preview:', error)
-      } finally {
-        this.isLoading = false
-      }
-    },
-
-
-    closeDialog() {
-      this.$emit('close')
-    },
-
-    cleanup() {
-      if (this.map) {
-        this.map.setTarget(null)
-        this.map = null
-      }
-      this.vectorSource = null
-      this.vectorLayer = null
-      this.labelLayer = null
-    }
-  },
-
-  beforeUnmount() {
-    this.cleanup()
+  } catch (error) {
+    console.error('Error loading features for preview:', error)
+  } finally {
+    isLoading.value = false
   }
 }
+
+function closeDialog(): void {
+  emit('close')
+}
+
+watch(() => props.isOpen, (newVal) => {
+  if (newVal) {
+    void nextTick(async () => {
+      isLoading.value = true
+      try {
+        await initializeMap()
+        loadFeatures()
+      } catch (error) {
+        console.error('Error initializing map preview:', error)
+        isLoading.value = false
+      }
+    })
+  } else {
+    cleanup()
+  }
+})
+
+watch(() => props.features, () => {
+  if (props.isOpen && map.value) {
+    loadFeatures()
+  }
+}, { deep: true })
+
+const route = useRoute()
+watch(() => route.fullPath, () => {
+  if (props.isOpen) {
+    closeDialog()
+  }
+})
+
+onBeforeUnmount(() => {
+  cleanup()
+})
 </script>
 
 <style scoped>

@@ -295,21 +295,14 @@ import Loader from './Loader.vue'
 import ToggleButton from './ToggleButton.vue'
 import { ClipboardDocumentIcon, CheckIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { formatDate } from '@/utils/dateUtils'
-
-function getCookie(name) {
-  let cookieValue = null
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';')
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim()
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-        break
-      }
-    }
-  }
-  return cookieValue
-}
+import {
+  listShares,
+  getFeatureShare,
+  createShare as createShareApi,
+  deleteShare as deleteShareApi,
+  updateFeatureShare
+} from '@/api/services/sharingApi'
+import { getApiErrorMessage } from '@/utils/apiError'
 
 export default {
   name: 'ShareDialog',
@@ -447,34 +440,23 @@ export default {
 
       try {
         // Try to get existing share
-        const response = await fetch(`/api/sharing/features/${featureId}/`, {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          this.shareData = data
-          // Set allowDownloads/includeTags to match existing share
-          if (data.allow_downloads !== undefined) {
-            this.allowDownloads = data.allow_downloads
-          }
-          if (data.include_tags !== undefined) {
-            this.includeTags = data.include_tags
-          }
-        } else if (response.status === 404) {
+        const data = await getFeatureShare(featureId)
+        this.shareData = data
+        // Set allowDownloads/includeTags to match existing share
+        if (data.allow_downloads !== undefined) {
+          this.allowDownloads = data.allow_downloads
+        }
+        if (data.include_tags !== undefined) {
+          this.includeTags = data.include_tags
+        }
+      } catch (error) {
+        if (error.status === 404) {
           // No share exists, create one
           await this.createShare()
         } else {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to load share')
+          console.error('Error loading share:', error)
+          this.error = getApiErrorMessage(error, 'Failed to load share. Please try again.')
         }
-      } catch (error) {
-        console.error('Error loading share:', error)
-        this.error = error.message || 'Failed to load share. Please try again.'
       } finally {
         this.loading = false
       }
@@ -484,31 +466,24 @@ export default {
       this.error = null
 
       try {
-        const response = await fetch('/api/sharing/list/', { credentials: 'same-origin' })
-        const data = await response.json()
-
-        if (response.ok) {
-          const list = Array.isArray(data.shares) ? data.shares : []
-          // Filter shares based on type (normalize ids/strings so list API rows always match)
-          if (this.shareType === 'tag') {
-            const tag = (this.item.tag != null ? String(this.item.tag) : '').trim()
-            this.shares = list.filter(
-              (s) => s.share_type === 'tag' && s.tag != null && String(s.tag).trim() === tag
-            )
-          } else if (this.shareType === 'collection') {
-            const cid = this.itemId != null ? String(this.itemId) : ''
-            this.shares = list.filter(
-              (s) => s.share_type === 'collection' && s.collection_id != null && String(s.collection_id) === cid
-            )
-          } else {
-            this.shares = []
-          }
+        const list = await listShares()
+        // Filter shares based on type (normalize ids/strings so list API rows always match)
+        if (this.shareType === 'tag') {
+          const tag = (this.item.tag != null ? String(this.item.tag) : '').trim()
+          this.shares = list.filter(
+            (s) => s.share_type === 'tag' && s.tag != null && String(s.tag).trim() === tag
+          )
+        } else if (this.shareType === 'collection') {
+          const cid = this.itemId != null ? String(this.itemId) : ''
+          this.shares = list.filter(
+            (s) => s.share_type === 'collection' && s.collection_id != null && String(s.collection_id) === cid
+          )
         } else {
-          throw new Error(data.error || 'Failed to load shares')
+          this.shares = []
         }
       } catch (error) {
         console.error('Error loading shares:', error)
-        this.error = error.message || 'Failed to load shares. Please try again.'
+        this.error = getApiErrorMessage(error, 'Failed to load shares. Please try again.')
       } finally {
         this.loading = false
       }
@@ -524,8 +499,6 @@ export default {
           throw new Error('Invalid feature: missing feature ID')
         }
 
-        const csrfToken = getCookie('csrftoken')
-        const endpoint = '/api/sharing/create/'
         // The only difference between the 3 share types is which field identifies the
         // shared item; everything else (include_tags/allow_downloads) is identical.
         const typeSpecificField = {
@@ -534,50 +507,34 @@ export default {
           feature: { feature_id: this.itemId }
         }[this.shareType]
 
-        const body = {
+        const data = await createShareApi({
           share_type: this.shareType,
           ...typeSpecificField,
           include_tags: this.includeTags,
           allow_downloads: this.allowDownloads
-        }
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken || ''
-          },
-          body: JSON.stringify(body)
         })
 
-        const data = await response.json()
+        this.successMessage = 'Share link created successfully!'
 
-        if (response.ok) {
-          this.successMessage = 'Share link created successfully!'
-          
-          if (this.shareType === 'feature') {
-            this.shareData = data
-            // Sync allowDownloads/includeTags with the created share
-            if (data.allow_downloads !== undefined) {
-              this.allowDownloads = data.allow_downloads
-            }
-            if (data.include_tags !== undefined) {
-              this.includeTags = data.include_tags
-            }
-          } else {
-            await this.loadShares()
+        if (this.shareType === 'feature') {
+          this.shareData = data
+          // Sync allowDownloads/includeTags with the created share
+          if (data.allow_downloads !== undefined) {
+            this.allowDownloads = data.allow_downloads
           }
-          
-          setTimeout(() => {
-            this.successMessage = null
-          }, 3000)
+          if (data.include_tags !== undefined) {
+            this.includeTags = data.include_tags
+          }
         } else {
-          throw new Error(data.error || 'Failed to create share')
+          await this.loadShares()
         }
+
+        setTimeout(() => {
+          this.successMessage = null
+        }, 3000)
       } catch (error) {
         console.error('Error creating share:', error)
-        this.error = error.message || 'Failed to create share. Please try again.'
+        this.error = getApiErrorMessage(error, 'Failed to create share. Please try again.')
       } finally {
         this.creating = false
       }
@@ -591,33 +548,19 @@ export default {
       this.error = null
 
       try {
-        const csrfToken = getCookie('csrftoken')
-        const response = await fetch(`/api/sharing/${shareId}/`, {
-          method: 'DELETE',
-          credentials: 'same-origin',
-          headers: {
-            'X-CSRFToken': csrfToken || ''
-          }
-        })
+        await deleteShareApi(shareId)
+        this.successMessage = 'Share deleted successfully!'
 
-        const data = await response.json()
-
-        if (response.ok) {
-          this.successMessage = 'Share deleted successfully!'
-          
-          if (this.shareType === 'feature') {
-            setTimeout(() => {
-              this.closeDialog()
-            }, 1000)
-          } else {
-            await this.loadShares()
-          }
+        if (this.shareType === 'feature') {
+          setTimeout(() => {
+            this.closeDialog()
+          }, 1000)
         } else {
-          throw new Error(data.error || 'Failed to delete share')
+          await this.loadShares()
         }
       } catch (error) {
         console.error('Error deleting share:', error)
-        this.error = error.message || 'Failed to delete share. Please try again.'
+        this.error = getApiErrorMessage(error, 'Failed to delete share. Please try again.')
       } finally {
         this.deletingShareId = null
       }
@@ -634,28 +577,12 @@ export default {
       this[updatingFlag] = true
 
       try {
-        const csrfToken = getCookie('csrftoken')
-        const response = await fetch(`/api/sharing/features/${this.itemId}/update/`, {
-          method: 'PATCH',
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken || ''
-          },
-          body: JSON.stringify({ [field]: value })
-        })
-
-        const data = await response.json()
-
-        if (response.ok) {
-          // Update the shareData with the new value - this will automatically flip the toggle via v-model
-          this.shareData[field] = data[field]
-        } else {
-          throw new Error(data.error || 'Failed to update share setting')
-        }
+        const data = await updateFeatureShare(this.itemId, { [field]: value })
+        // Update the shareData with the new value - this will automatically flip the toggle via v-model
+        this.shareData[field] = data[field]
       } catch (error) {
         console.error(`Error updating ${field}:`, error)
-        this.error = error.message || 'Failed to update share setting. Please try again.'
+        this.error = getApiErrorMessage(error, 'Failed to update share setting. Please try again.')
         // Revert the toggle if there was an error
         this.$nextTick(() => {
           if (this.shareData) {

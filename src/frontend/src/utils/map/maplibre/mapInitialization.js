@@ -55,9 +55,11 @@ export function createTransformRequest(customTransformRequest) {
  * @param {Object} config - Map configuration
  * @param {Array<number>} config.center - Initial center [lon, lat]
  * @param {number} config.zoom - Initial zoom level
+ * @param {number} [config.pitch] - Initial pitch in degrees (default: 0)
+ * @param {number} [config.bearing] - Initial bearing in degrees (default: 0)
  * @param {string} config.glyphsUrl - Glyphs URL template
  * @param {boolean} config.antialias - Enable anti-aliasing (default: false)
- * @param {Function} config.transformRequest - Optional transformRequest function for custom headers (chained with OSM referrer)
+ * @param {Function} [config.transformRequest] - Optional transformRequest function for custom headers (chained with OSM referrer)
  * @returns {Object} MapLibre map instance
  */
 export function initializeMap(container, config) {
@@ -66,7 +68,7 @@ export function initializeMap(container, config) {
     throw new Error('Invalid container: must be an HTMLElement')
   }
 
-  const { center, zoom, glyphsUrl = '/api/fonts/{fontstack}/{range}.pbf', antialias = false, transformRequest } = config
+  const { center, zoom, pitch = 0, bearing = 0, glyphsUrl = '/api/fonts/{fontstack}/{range}.pbf', antialias = false, transformRequest = undefined } = config
 
   const mapConfig = {
     container: container,
@@ -78,6 +80,8 @@ export function initializeMap(container, config) {
     },
     center: center, // [lon, lat]
     zoom: zoom,
+    pitch: pitch,
+    bearing: bearing,
     maxZoom: MAX_ZOOM_LEVEL,
     maxPitch: 85,
     attributionControl: false,

@@ -264,7 +264,7 @@
         title="Apply Selected Feature's Spatial Data"
       >
         <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
-        <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
+        <Loader v-if="applying" size="sm" layout="inline" :show-message="false" color="white" />
         {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
       </BaseButton>
     </template>
@@ -281,7 +281,6 @@
   >
     <div class="flex-1 min-h-0 flex flex-col p-6 h-full">
       <div
-        :ref="el => setExpandedMapRef(el)"
         id="expanded-feature-map"
         class="flex-1 min-h-0 w-full border border-gray-300 rounded-md overflow-hidden"
       ></div>
@@ -289,822 +288,561 @@
   </BaseModal>
 </template>
 
-<script>
-import {APIHOST} from '@/config.js'
-import {PROCESSING_MESSAGES} from '@/assets/js/constants/processing-messages.js'
-import {Map, View} from 'ol'
-import {Vector as VectorLayer} from 'ol/layer'
-import {openLayersBasemap} from '@/utils/map/openlayers/index.js'
-import {Vector as VectorSource} from 'ol/source'
-import {Style, Fill, Stroke, Circle} from 'ol/style'
-import {GeoJSON} from 'ol/format'
-import {fromLonLat} from 'ol/proj'
-import {getCenter} from 'ol/extent'
-import {DragPan, MouseWheelZoom} from 'ol/interaction'
-import {markRaw} from 'vue'
+<script setup lang="ts">
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { Style, Fill, Stroke, Circle } from 'ol/style'
+import { DragPan, MouseWheelZoom } from 'ol/interaction'
+import type { FeatureLike } from 'ol/Feature'
+import { openLayersBasemap } from '@/utils/map/openlayers/index.js'
+import { useOpenLayersPreviewMap } from '@/composables/useOpenLayersPreviewMap'
+import { getFeature, applyFeatureReplacement } from '@/api/services/featuresApi'
+import { uploadImportFile, getImportJobStatus, getImportQueueFeatures, deleteImportItem } from '@/api/services/importApi'
+import { getApiErrorMessage } from '@/utils/apiError'
+import { PROCESSING_MESSAGES } from '@/assets/js/constants/processing-messages.js'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import Loader from '@/components/parts/Loader.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
 import { InformationCircleIcon, DocumentIcon, ExclamationCircleIcon, ExclamationTriangleIcon, CheckIcon, ArrowUpTrayIcon, ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import type { GeoJsonFeature } from '@/types/geospatial'
 
-export default {
-  name: 'ReplacementFeatureDialog',
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false
-    },
-    featureId: {
-      type: Number,
-      required: true
-    }
-  },
-  emits: ['close', 'applied'],
-  components: {
-    BaseModal,
-    BaseButton,
-    Loader,
-    ToggleButton,
-    XMarkIcon,
-    InformationCircleIcon,
-    DocumentIcon,
-    ExclamationCircleIcon,
-    ExclamationTriangleIcon,
-    CheckIcon,
-    ArrowUpTrayIcon,
-    ArrowsPointingOutIcon
-  },
-  data() {
-    return {
-      importQueueId: null,
-      jobId: null,
-      processing: false,
-      processingMessage: 'Processing file...',
-      processingProgress: null,
-      features: [],
-      selectedFeatureIndex: null,
-      errorMessage: '',
-      successMessage: '',
-      applying: false,
-      applied: false,
-      regenerateTags: false,
-      ws: null,
-      wsConnected: false,
-      pollingInterval: null,
-      selectedFile: null,
-      existingFeatureGeometryType: null,
-      featureMaps: {}, // Store map instances by index
-      expandedMapIndex: null, // Index of currently expanded map
-      expandedMap: null, // Expanded map instance
-      isDragOver: false
-    }
-  },
-  computed: {
-    sortedFeatures() {
-      // Filter features by geometry type matching the existing feature
-      let filtered = this.features
+interface ImportJobStatus {
+  status?: string
+  progress?: number
+  message?: string
+  import_queue_id?: number | string
+  error_message?: string
+}
 
-      if (this.existingFeatureGeometryType) {
-        filtered = this.features.filter(feature => {
-          const featureType = feature.geometry?.type
-          return this.geometryTypesMatch(this.existingFeatureGeometryType, featureType)
-        })
-      }
+interface ImportJobStatusResponse {
+  job_status?: ImportJobStatus
+}
 
-      // Sort features alphabetically by name
-      return filtered.sort((a, b) => {
-        const nameA = (a.properties?.name || '').toLowerCase()
-        const nameB = (b.properties?.name || '').toLowerCase()
-        return nameA.localeCompare(nameB)
-      })
-    },
-    dropzoneClasses() {
-      if (this.isDragOver) {
-        return 'border-blue-600 bg-blue-50'
-      } else {
-        return 'border-gray-300 hover:border-blue-600 hover:bg-blue-50'
+interface ImportQueueFeaturesResponse {
+  geofeatures?: GeoJsonFeature[]
+  error?: string
+}
+
+interface FeatureDetailResponse {
+  feature?: {
+    geojson?: {
+      geometry?: {
+        type?: string
       }
     }
-  },
-  watch: {
-    isOpen(newVal) {
-      if (newVal) {
-        openLayersBasemap.prefetch().catch((error) => {
-          console.error('Error prefetching OpenLayers basemap tile sources:', error)
-        })
-        this.$nextTick(() => {
-          this.resetDialog()
-          this.fetchExistingFeatureGeometryType()
-        })
-      } else {
-        this.cleanup()
-      }
-    },
-    expandedMapIndex(newVal) {
-      if (newVal !== null) {
-        // Wait for BaseModal to fully render before initializing map
-        this.$nextTick(() => {
-          // Additional delay to ensure BaseModal content is visible
-          setTimeout(() => {
-            void this.initializeExpandedMap()
-          }, 100)
-        })
-      } else {
-        // Clean up map when modal closes
-        if (this.expandedMap) {
-          this.expandedMap.map.setTarget(null)
-          this.expandedMap.map = null
-          if (this.expandedMap.vectorSource) {
-            this.expandedMap.vectorSource.clear()
-          }
-          this.expandedMap = null
-        }
-      }
-    },
-    sortedFeatures: {
-      handler() {
-        // Reinitialize maps when features change
-        this.$nextTick(() => {
-          this.sortedFeatures.forEach((feature, index) => {
-            const container = document.getElementById(`feature-map-${index}`)
-            if (container && !this.featureMaps[index]) {
-              this.initializeFeatureMap(container, index)
-            }
-          })
-        })
-      },
-      deep: true
-    },
-    $route() {
-      // Close dialog when route changes
-      if (this.isOpen) {
-        this.handleClose()
-      }
-    }
-  },
-  methods: {
-    /**
-     * Get color value and convert to rgba with optional opacity
-     * @param {string} color - Hex color value (e.g., '#163D8A')
-     * @param {number} opacity - Optional opacity (0-1), defaults to 1
-     * @returns {string} rgba color string
-     */
-    getColorWithOpacity(color, opacity = 1) {
-      // Convert hex to rgb
-      if (color.startsWith('#')) {
-        const hex = color.replace('#', '')
-        const r = parseInt(hex.substring(0, 2), 16)
-        const g = parseInt(hex.substring(2, 4), 16)
-        const b = parseInt(hex.substring(4, 6), 16)
-        return opacity === 1 ? color : `rgba(${r}, ${g}, ${b}, ${opacity})`
-      }
-
-      // If already rgb/rgba, extract values and apply opacity
-      const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-      if (rgbMatch) {
-        const r = parseInt(rgbMatch[1])
-        const g = parseInt(rgbMatch[2])
-        const b = parseInt(rgbMatch[3])
-        return `rgba(${r}, ${g}, ${b}, ${opacity})`
-      }
-
-      // Fallback to blue-500
-      return opacity === 1 ? '#163D8A' : `rgba(22, 61, 138, ${opacity})`
-    },
-    resetDialog() {
-      // Clean up all maps
-      this.cleanupMaps()
-
-      this.importQueueId = null
-      this.jobId = null
-      this.processing = false
-      this.processingMessage = 'Processing file...'
-      this.processingProgress = null
-      this.features = []
-      this.selectedFeatureIndex = null
-      this.errorMessage = ''
-      this.successMessage = ''
-      this.applying = false
-      this.applied = false
-      this.regenerateTags = false
-      this.selectedFile = null
-      this.existingFeatureGeometryType = null
-      this.expandedMapIndex = null
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = ''
-      }
-    },
-    cleanupMaps() {
-      // Clean up all map instances
-      Object.values(this.featureMaps).forEach(mapData => {
-        if (mapData.map) {
-          mapData.map.setTarget(null)
-          mapData.map = null
-        }
-        if (mapData.vectorSource) {
-          mapData.vectorSource.clear()
-          mapData.vectorSource = null
-        }
-      })
-      this.featureMaps = {}
-
-      // Clean up expanded map
-      if (this.expandedMap) {
-        this.expandedMap.map.setTarget(null)
-        this.expandedMap.map = null
-        if (this.expandedMap.vectorSource) {
-          this.expandedMap.vectorSource.clear()
-        }
-        this.expandedMap = null
-      }
-    },
-    setMapRef(el, index) {
-      if (el && !this.featureMaps[index]) {
-        // Wait for next tick to ensure DOM is ready
-        this.$nextTick(() => {
-          void this.initializeFeatureMap(el, index)
-        })
-      }
-    },
-    async initializeFeatureMap(container, index) {
-      if (!container || this.featureMaps[index]) return
-
-      const feature = this.sortedFeatures[index]
-      if (!feature || !feature.geometry) return
-
-      try {
-        // Create vector source
-        const vectorSource = markRaw(new VectorSource())
-
-        // Create vector layer with simple styling
-        const vectorLayer = markRaw(new VectorLayer({
-          source: vectorSource,
-          style: (feature) => {
-            const geometryType = feature.getGeometry().getType()
-            if (geometryType === 'Point' || geometryType === 'MultiPoint') {
-              return new Style({
-                image: new Circle({
-                  radius: 6,
-                  fill: new Fill({ color: '#fbbf24' }), // Yellow
-                  stroke: new Stroke({ color: '#000000', width: 2 }) // Black border
-                })
-              })
-            } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
-              return new Style({
-                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 3 })
-              })
-            } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
-              return new Style({
-                fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) }),
-                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 })
-              })
-            }
-            return new Style({
-              stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 }),
-              fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) })
-            })
-          }
-        }))
-
-        const tileLayer = markRaw(await openLayersBasemap.createTileLayer())
-
-        // Convert feature to GeoJSON and add to map
-        const geoJsonFeature = {
-          type: 'Feature',
-          geometry: feature.geometry,
-          properties: feature.properties || {}
-        }
-
-        const format = new GeoJSON()
-        const olFeature = format.readFeature(geoJsonFeature, {
-          featureProjection: 'EPSG:3857',
-          dataProjection: 'EPSG:4326'
-        })
-
-        vectorSource.addFeature(olFeature)
-
-        // Calculate center and extent
-        const extent = vectorSource.getExtent()
-        const center = getCenter(extent)
-
-        // Create a 50 mile extent (50 miles = 80,467 meters)
-        // Buffer the center by 50 miles in each direction
-        const bufferDistance = 50 * 1609.34 // 50 miles in meters
-        const bufferedExtent = [
-          center[0] - bufferDistance, // minX
-          center[1] - bufferDistance, // minY
-          center[0] + bufferDistance, // maxX
-          center[1] + bufferDistance  // maxY
-        ]
-
-        // Create map with pan and zoom interactions
-        const map = markRaw(new Map({
-          target: container,
-          layers: [tileLayer, vectorLayer],
-          view: new View({
-            center: center,
-            maxZoom: 18
-          }),
-          controls: [],
-          interactions: [
-            new DragPan(),
-            new MouseWheelZoom()
-          ]
-        }))
-
-        // Store map instance
-        this.featureMaps[index] = {
-          map,
-          vectorSource,
-          vectorLayer,
-          tileLayer
-        }
-
-        // Fit to 50 mile extent
-        map.getView().fit(bufferedExtent, {
-          padding: [10, 10, 10, 10],
-          duration: 0
-        })
-      } catch (error) {
-        console.error(`Error initializing map for feature ${index}:`, error)
-      }
-    },
-    calculateZoomForExtent(extent) {
-      // Simple zoom calculation based on extent size
-      const width = extent[2] - extent[0]
-      const height = extent[3] - extent[1]
-      const maxDim = Math.max(width, height)
-
-      // Approximate zoom level based on extent size
-      if (maxDim > 20000000) return 3
-      if (maxDim > 10000000) return 4
-      if (maxDim > 5000000) return 5
-      if (maxDim > 2000000) return 6
-      if (maxDim > 1000000) return 7
-      if (maxDim > 500000) return 8
-      if (maxDim > 200000) return 9
-      if (maxDim > 100000) return 10
-      if (maxDim > 50000) return 11
-      if (maxDim > 20000) return 12
-      if (maxDim > 10000) return 13
-      if (maxDim > 5000) return 14
-      if (maxDim > 2000) return 15
-      return 16
-    },
-    expandMap(index) {
-      this.expandedMapIndex = index
-      // Map initialization will be handled by the watcher
-    },
-    closeExpandedMap() {
-      if (this.expandedMap) {
-        this.expandedMap.map.setTarget(null)
-        this.expandedMap.map = null
-        if (this.expandedMap.vectorSource) {
-          this.expandedMap.vectorSource.clear()
-        }
-        this.expandedMap = null
-      }
-      this.expandedMapIndex = null
-    },
-    setExpandedMapRef(el) {
-      // Ref callback - map initialization is handled by watcher
-      // This is kept for potential future use
-    },
-    async initializeExpandedMap() {
-      if (this.expandedMapIndex === null || this.expandedMap) return
-
-      const container = document.getElementById('expanded-feature-map')
-      if (!container) return
-
-      const feature = this.sortedFeatures[this.expandedMapIndex]
-      if (!feature || !feature.geometry) return
-
-      try {
-        // Create vector source
-        const vectorSource = markRaw(new VectorSource())
-
-        // Create vector layer with same styling as small maps
-        const vectorLayer = markRaw(new VectorLayer({
-          source: vectorSource,
-          style: (feature) => {
-            const geometryType = feature.getGeometry().getType()
-            if (geometryType === 'Point' || geometryType === 'MultiPoint') {
-              return new Style({
-                image: new Circle({
-                  radius: 8, // Slightly larger for expanded view
-                  fill: new Fill({ color: '#fbbf24' }), // Yellow
-                  stroke: new Stroke({ color: '#000000', width: 2 }) // Black border
-                })
-              })
-            } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
-              return new Style({
-                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 3 })
-              })
-            } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
-              return new Style({
-                fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) }),
-                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 })
-              })
-            }
-            return new Style({
-              stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 }),
-              fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) })
-            })
-          }
-        }))
-
-        const tileLayer = markRaw(await openLayersBasemap.createTileLayer())
-
-        // Convert feature to GeoJSON and add to map
-        const geoJsonFeature = {
-          type: 'Feature',
-          geometry: feature.geometry,
-          properties: feature.properties || {}
-        }
-
-        const format = new GeoJSON()
-        const olFeature = format.readFeature(geoJsonFeature, {
-          featureProjection: 'EPSG:3857',
-          dataProjection: 'EPSG:4326'
-        })
-
-        vectorSource.addFeature(olFeature)
-
-        // Calculate center and extent
-        const extent = vectorSource.getExtent()
-        const center = getCenter(extent)
-
-        // Create a 50 mile extent (50 miles = 80,467 meters)
-        const bufferDistance = 50 * 1609.34 // 50 miles in meters
-        const bufferedExtent = [
-          center[0] - bufferDistance,
-          center[1] - bufferDistance,
-          center[0] + bufferDistance,
-          center[1] + bufferDistance
-        ]
-
-        // Create map with full interactions
-        const map = markRaw(new Map({
-          target: container,
-          layers: [tileLayer, vectorLayer],
-          view: new View({
-            center: center,
-            maxZoom: 18
-          }),
-          controls: [],
-          interactions: [
-            new DragPan(),
-            new MouseWheelZoom()
-          ]
-        }))
-
-        // Store expanded map instance
-        this.expandedMap = {
-          map,
-          vectorSource,
-          vectorLayer,
-          tileLayer
-        }
-
-        // Fit to 50 mile extent
-        map.getView().fit(bufferedExtent, {
-          padding: [20, 20, 20, 20],
-          duration: 0
-        })
-      } catch (error) {
-        console.error(`Error initializing expanded map:`, error)
-      }
-    },
-    async fetchExistingFeatureGeometryType() {
-      try {
-        const response = await fetch(`${APIHOST}/api/feature/${this.featureId}/`, {
-          credentials: 'include'
-        })
-        const data = await response.json()
-
-        if (response.ok && data.feature && data.feature.geojson) {
-          const geojson = data.feature.geojson
-          if (geojson.geometry && geojson.geometry.type) {
-            this.existingFeatureGeometryType = geojson.geometry.type
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching existing feature geometry type:', error)
-        // Continue without filtering if we can't fetch the geometry type
-      }
-    },
-    geometryTypesMatch(existingType, replacementType) {
-      if (!existingType || !replacementType) return false
-
-      // Normalize geometry types to base types
-      const normalizeType = (type) => {
-        if (type === 'Point' || type === 'MultiPoint') return 'Point'
-        if (type === 'LineString' || type === 'MultiLineString') return 'LineString'
-        if (type === 'Polygon' || type === 'MultiPolygon') return 'Polygon'
-        return type
-      }
-
-      return normalizeType(existingType) === normalizeType(replacementType)
-    },
-    cleanup() {
-      if (this.ws) {
-        this.ws.close()
-        this.ws = null
-      }
-      if (this.pollingInterval) {
-        clearInterval(this.pollingInterval)
-        this.pollingInterval = null
-      }
-      this.cleanupMaps()
-    },
-    handleFileSelect(event) {
-      const file = event.target.files[0]
-      if (!file) {
-        this.selectedFile = null
-        return
-      }
-
-      // Prevent selecting a new file if one is already being processed
-      if (this.processing || this.importQueueId) {
-        this.errorMessage = 'Please wait for the current upload to complete'
-        if (this.$refs.fileInput) {
-          this.$refs.fileInput.value = ''
-        }
-        return
-      }
-
-      // Validate file type
-      const fileName = file.name.toLowerCase()
-      if (!fileName.endsWith('.kmz') && !fileName.endsWith('.kml') && !fileName.endsWith('.gpx')) {
-        this.errorMessage = 'Please select a KMZ, KML, or GPX file'
-        this.selectedFile = null
-        if (this.$refs.fileInput) {
-          this.$refs.fileInput.value = ''
-        }
-        return
-      }
-
-      // Clear any previous errors
-      this.errorMessage = ''
-      this.selectedFile = file
-    },
-    clearFileSelection() {
-      this.selectedFile = null
-      this.errorMessage = ''
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = ''
-      }
-    },
-    onDrop(e) {
-      e.preventDefault()
-      e.stopPropagation()
-      this.isDragOver = false
-
-      const droppedFiles = Array.from(e.dataTransfer.files)
-      if (droppedFiles.length === 0) {
-        return
-      }
-
-      // Only use the first file (this component handles single file upload)
-      const file = droppedFiles[0]
-
-      // Use the same validation logic as handleFileSelect
-      if (!file) {
-        this.selectedFile = null
-        return
-      }
-
-      // Prevent selecting a new file if one is already being processed
-      if (this.processing || this.importQueueId) {
-        this.errorMessage = 'Please wait for the current upload to complete'
-        return
-      }
-
-      // Validate file type
-      const fileName = file.name.toLowerCase()
-      if (!fileName.endsWith('.kmz') && !fileName.endsWith('.kml') && !fileName.endsWith('.gpx')) {
-        this.errorMessage = 'Please select a KMZ, KML, or GPX file'
-        this.selectedFile = null
-        return
-      }
-
-      // Clear any previous errors
-      this.errorMessage = ''
-      this.selectedFile = file
-    },
-    dragEnter(e) {
-      e.preventDefault()
-      e.stopPropagation()
-      this.isDragOver = true
-    },
-    dragLeave(e) {
-      e.preventDefault()
-      e.stopPropagation()
-      // Only set isDragOver to false if we're leaving the dropzone entirely
-      // Check if the related target is outside the dropzone
-      const dropzone = e.currentTarget
-      if (!dropzone.contains(e.relatedTarget)) {
-        this.isDragOver = false
-      }
-    },
-    handleUpload() {
-      if (!this.selectedFile) {
-        this.errorMessage = 'Please select a file first'
-        return
-      }
-      this.uploadFile(this.selectedFile)
-    },
-    async uploadFile(file) {
-      this.errorMessage = ''
-      this.processing = true
-      this.processingMessage = 'Uploading file...'
-      this.processingProgress = 0
-
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('replacement', this.featureId.toString())
-
-        const response = await fetch(`${APIHOST}/api/item/import/upload`, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': this.getCsrfToken()
-          },
-          credentials: 'include',
-          body: formData
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          this.errorMessage = data.msg || 'Failed to upload file'
-          this.processing = false
-          return
-        }
-
-        this.jobId = data.job_id
-        this.processingMessage = 'Processing file...'
-        this.processingProgress = 10
-
-        // Start polling for processing status
-        this.startPolling()
-      } catch (error) {
-        console.error('Error uploading file:', error)
-        this.errorMessage = `Error: ${error.message}`
-        this.processing = false
-      }
-    },
-    startPolling() {
-      // Poll for job status
-      this.pollingInterval = setInterval(async () => {
-        if (!this.jobId) return
-
-        try {
-          const response = await fetch(`${APIHOST}/api/item/import/status/${this.jobId}`, {
-            credentials: 'include'
-          })
-          const data = await response.json()
-
-          if (response.ok && data.job_status) {
-            this.processingProgress = data.job_status.progress || 0
-            this.processingMessage = data.job_status.message || 'Processing...'
-
-            if (data.job_status.status === 'completed') {
-              // Get the import table item ID from the job status
-              this.importQueueId = data.job_status.import_queue_id
-              clearInterval(this.pollingInterval)
-              this.pollingInterval = null
-              await this.fetchFeatures()
-            } else if (data.job_status.status === 'failed') {
-              this.errorMessage = data.job_status.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT
-              this.processing = false
-              clearInterval(this.pollingInterval)
-              this.pollingInterval = null
-            }
-          }
-        } catch (error) {
-          console.error('Error polling status:', error)
-        }
-      }, 1000)
-    },
-    async fetchFeatures() {
-      if (!this.importQueueId) return
-
-      try {
-        const response = await fetch(`${APIHOST}/api/item/import/get/features/${this.importQueueId}`, {
-          credentials: 'include'
-        })
-        const data = await response.json()
-
-        if (response.ok && data.geofeatures) {
-          this.features = data.geofeatures
-          this.processing = false
-        } else {
-          this.errorMessage = data.error || 'Failed to load features'
-          this.processing = false
-        }
-      } catch (error) {
-        console.error('Error fetching features:', error)
-        this.errorMessage = 'Failed to load features'
-        this.processing = false
-      }
-    },
-    async handleApply() {
-      if (this.selectedFeatureIndex === null || !this.importQueueId) return
-
-      // Get the selected feature from sorted list and find its index in the original features array
-      const selectedFeature = this.sortedFeatures[this.selectedFeatureIndex]
-      const originalIndex = this.features.findIndex(f => f === selectedFeature)
-
-      if (originalIndex === -1) {
-        this.errorMessage = 'Selected feature not found'
-        return
-      }
-
-      this.applying = true
-      this.errorMessage = ''
-
-      try {
-        const response = await fetch(`${APIHOST}/api/feature/${this.featureId}/apply-replacement/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': this.getCsrfToken()
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            import_queue_id: this.importQueueId,
-            feature_index: originalIndex,
-            regenerate_tags: this.regenerateTags
-          })
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          this.errorMessage = data.error || 'Failed to apply replacement geometry'
-          this.applying = false
-          return
-        }
-
-        this.successMessage = 'Spatial data updated successfully!'
-        this.applied = true
-        this.applying = false
-        this.$emit('applied')
-      } catch (error) {
-        console.error('Error applying replacement:', error)
-        this.errorMessage = `Error: ${error.message}`
-        this.applying = false
-      }
-    },
-    handleCancel() {
-      // Close dialog immediately
-      this.handleClose()
-
-      // Delete the import table item in the background (fire-and-forget)
-      if (this.importQueueId) {
-        fetch(`${APIHOST}/api/item/import/delete/${this.importQueueId}`, {
-          method: 'DELETE',
-          headers: {
-            'X-CSRFToken': this.getCsrfToken()
-          },
-          credentials: 'include'
-        }).catch(error => {
-          console.error('Error deleting import table item:', error)
-        })
-      }
-    },
-    handleClose() {
-      this.cleanup()
-      this.$emit('close')
-    },
-    getCsrfToken() {
-      const name = 'csrftoken'
-      let cookieValue = null
-      if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';')
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i].trim()
-          if (cookie.substring(0, name.length + 1) === (name + '=')) {
-            cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-            break
-          }
-        }
-      }
-      return cookieValue || ''
-    },
-    formatFileSize(bytes) {
-      if (bytes === 0) return '0 Bytes'
-      const k = 1024
-      const sizes = ['Bytes', 'KB', 'MB', 'GB']
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
-      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-    }
-  },
-  beforeUnmount() {
-    this.cleanup()
   }
 }
-</script>
 
+const props = withDefaults(defineProps<{
+  isOpen?: boolean
+  featureId: number
+}>(), {
+  isOpen: false,
+})
+
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'applied'): void
+}>()
+
+const METERS_PER_MILE = 1609.34
+const FIFTY_MILE_BUFFER_METERS = 50 * METERS_PER_MILE
+
+const importQueueId = ref<number | string | null>(null)
+const jobId = ref<string | null>(null)
+const processing = ref(false)
+const processingMessage = ref('Processing file...')
+const processingProgress = ref<number | null>(null)
+const features = ref<GeoJsonFeature[]>([])
+const selectedFeatureIndex = ref<number | null>(null)
+const errorMessage = ref('')
+const successMessage = ref('')
+const applying = ref(false)
+const applied = ref(false)
+const regenerateTags = ref(false)
+const selectedFile = ref<File | null>(null)
+const existingFeatureGeometryType = ref<string | null>(null)
+const expandedMapIndex = ref<number | null>(null)
+const isDragOver = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+let pollingInterval: ReturnType<typeof setInterval> | null = null
+/** Index -> mini-map composable instance. Plain Map (not reactive) since it just holds OL objects. */
+const featureMapInstances = new Map<number, ReturnType<typeof createReplacementMapInstance>>()
+let expandedMapInitialized = false
+
+const sortedFeatures = computed(() => {
+  let filtered = features.value
+
+  if (existingFeatureGeometryType.value) {
+    filtered = features.value.filter((feature) => geometryTypesMatch(existingFeatureGeometryType.value, feature.geometry.type))
+  }
+
+  return [...filtered].sort((a, b) => {
+    const nameA = ((a.properties.name as string | undefined) ?? '').toLowerCase()
+    const nameB = ((b.properties.name as string | undefined) ?? '').toLowerCase()
+    return nameA.localeCompare(nameB)
+  })
+})
+
+const dropzoneClasses = computed(() => {
+  return isDragOver.value
+    ? 'border-blue-600 bg-blue-50'
+    : 'border-gray-300 hover:border-blue-600 hover:bg-blue-50'
+})
+
+/**
+ * Get color value and convert to rgba with optional opacity.
+ * @param color - Hex color value (e.g., '#163D8A')
+ * @param opacity - Optional opacity (0-1), defaults to 1
+ */
+function getColorWithOpacity(color: string, opacity = 1): string {
+  if (color.startsWith('#')) {
+    const hex = color.replace('#', '')
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return opacity === 1 ? color : `rgba(${r}, ${g}, ${b}, ${opacity})`
+  }
+
+  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1])
+    const g = parseInt(rgbMatch[2])
+    const b = parseInt(rgbMatch[3])
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`
+  }
+
+  return opacity === 1 ? '#163D8A' : `rgba(22, 61, 138, ${opacity})`
+}
+
+/** Shared style for both the mini candidate-feature maps and the expanded preview map. */
+function getReplacementFeatureStyle(feature: FeatureLike, pointRadius: number): Style {
+  const geometryType = feature.getGeometry()?.getType()
+  if (geometryType === 'Point' || geometryType === 'MultiPoint') {
+    return new Style({
+      image: new Circle({
+        radius: pointRadius,
+        fill: new Fill({ color: '#fbbf24' }),
+        stroke: new Stroke({ color: '#000000', width: 2 })
+      })
+    })
+  } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
+    return new Style({ stroke: new Stroke({ color: getColorWithOpacity('#163D8A'), width: 3 }) })
+  } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+    return new Style({
+      fill: new Fill({ color: getColorWithOpacity('#163D8A', 0.3) }),
+      stroke: new Stroke({ color: getColorWithOpacity('#163D8A'), width: 2 })
+    })
+  }
+  return new Style({
+    stroke: new Stroke({ color: getColorWithOpacity('#163D8A'), width: 2 }),
+    fill: new Fill({ color: getColorWithOpacity('#163D8A', 0.3) })
+  })
+}
+
+function createReplacementMapInstance(pointRadius: number) {
+  return useOpenLayersPreviewMap({
+    getFeatureStyle: (feature) => getReplacementFeatureStyle(feature, pointRadius),
+    controls: [],
+    interactions: [new DragPan(), new MouseWheelZoom()],
+    maxZoom: 18
+  })
+}
+
+const expandedMapInstance = createReplacementMapInstance(8)
+
+function resetDialog(): void {
+  cleanupMaps()
+
+  importQueueId.value = null
+  jobId.value = null
+  processing.value = false
+  processingMessage.value = 'Processing file...'
+  processingProgress.value = null
+  features.value = []
+  selectedFeatureIndex.value = null
+  errorMessage.value = ''
+  successMessage.value = ''
+  applying.value = false
+  applied.value = false
+  regenerateTags.value = false
+  selectedFile.value = null
+  existingFeatureGeometryType.value = null
+  expandedMapIndex.value = null
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+function cleanupMaps(): void {
+  featureMapInstances.forEach((instance) => { instance.cleanup() })
+  featureMapInstances.clear()
+
+  expandedMapInstance.cleanup()
+  expandedMapInitialized = false
+}
+
+function setMapRef(el: Element | { $el?: Element } | null, index: number): void {
+  if (el instanceof HTMLElement && !featureMapInstances.has(index)) {
+    void nextTick(() => {
+      void initializeFeatureMap(el, index)
+    })
+  }
+}
+
+async function initializeFeatureMap(container: HTMLElement, index: number): Promise<void> {
+  if (featureMapInstances.has(index)) return
+
+  const feature = sortedFeatures.value[index] as GeoJsonFeature | undefined
+  if (!feature) return
+
+  try {
+    const instance = createReplacementMapInstance(6)
+    await instance.initMap(container)
+    const [olFeature] = instance.loadFeatures([{ geometry: feature.geometry, properties: feature.properties }])
+    instance.zoomToFeature(olFeature, {
+      forceBufferMeters: FIFTY_MILE_BUFFER_METERS,
+      padding: [10, 10, 10, 10],
+      duration: 0
+    })
+    featureMapInstances.set(index, instance)
+  } catch (error) {
+    console.error(`Error initializing map for feature ${index}:`, error)
+  }
+}
+
+function expandMap(index: number): void {
+  expandedMapIndex.value = index
+}
+
+function closeExpandedMap(): void {
+  expandedMapIndex.value = null
+}
+
+async function initializeExpandedMap(): Promise<void> {
+  if (expandedMapIndex.value === null || expandedMapInitialized) return
+
+  const container = document.getElementById('expanded-feature-map')
+  if (!container) return
+
+  const feature = sortedFeatures.value[expandedMapIndex.value] as GeoJsonFeature | undefined
+  if (!feature) return
+
+  try {
+    await expandedMapInstance.initMap(container)
+    const [olFeature] = expandedMapInstance.loadFeatures([{ geometry: feature.geometry, properties: feature.properties }])
+    expandedMapInstance.zoomToFeature(olFeature, {
+      forceBufferMeters: FIFTY_MILE_BUFFER_METERS,
+      padding: [20, 20, 20, 20],
+      duration: 0
+    })
+    expandedMapInitialized = true
+  } catch (error) {
+    console.error('Error initializing expanded map:', error)
+  }
+}
+
+async function fetchExistingFeatureGeometryType(): Promise<void> {
+  try {
+    const data = await getFeature(props.featureId) as FeatureDetailResponse
+    const geometryType = data.feature?.geojson?.geometry?.type
+    if (geometryType) {
+      existingFeatureGeometryType.value = geometryType
+    }
+  } catch (error) {
+    console.error('Error fetching existing feature geometry type:', error)
+    // Continue without filtering if we can't fetch the geometry type
+  }
+}
+
+function normalizeGeometryType(type: string | null | undefined): string | null | undefined {
+  if (type === 'Point' || type === 'MultiPoint') return 'Point'
+  if (type === 'LineString' || type === 'MultiLineString') return 'LineString'
+  if (type === 'Polygon' || type === 'MultiPolygon') return 'Polygon'
+  return type
+}
+
+function geometryTypesMatch(existingType: string | null | undefined, replacementType: string | null | undefined): boolean {
+  if (!existingType || !replacementType) return false
+  return normalizeGeometryType(existingType) === normalizeGeometryType(replacementType)
+}
+
+function cleanup(): void {
+  if (pollingInterval) {
+    clearInterval(pollingInterval)
+    pollingInterval = null
+  }
+  cleanupMaps()
+}
+
+function handleFileSelect(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    selectedFile.value = null
+    return
+  }
+
+  if (processing.value || importQueueId.value) {
+    errorMessage.value = 'Please wait for the current upload to complete'
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+    return
+  }
+
+  const fileName = file.name.toLowerCase()
+  if (!fileName.endsWith('.kmz') && !fileName.endsWith('.kml') && !fileName.endsWith('.gpx')) {
+    errorMessage.value = 'Please select a KMZ, KML, or GPX file'
+    selectedFile.value = null
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+    return
+  }
+
+  errorMessage.value = ''
+  selectedFile.value = file
+}
+
+function clearFileSelection(): void {
+  selectedFile.value = null
+  errorMessage.value = ''
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+function isAllowedSpatialFile(fileName: string): boolean {
+  return fileName.endsWith('.kmz') || fileName.endsWith('.kml') || fileName.endsWith('.gpx')
+}
+
+function onDrop(e: DragEvent): void {
+  e.preventDefault()
+  e.stopPropagation()
+  isDragOver.value = false
+
+  const file = e.dataTransfer?.files[0]
+  if (!file) {
+    selectedFile.value = null
+    return
+  }
+
+  if (processing.value || importQueueId.value) {
+    errorMessage.value = 'Please wait for the current upload to complete'
+    return
+  }
+
+  if (!isAllowedSpatialFile(file.name.toLowerCase())) {
+    errorMessage.value = 'Please select a KMZ, KML, or GPX file'
+    selectedFile.value = null
+    return
+  }
+
+  errorMessage.value = ''
+  selectedFile.value = file
+}
+
+function dragEnter(e: DragEvent): void {
+  e.preventDefault()
+  e.stopPropagation()
+  isDragOver.value = true
+}
+
+function dragLeave(e: DragEvent): void {
+  e.preventDefault()
+  e.stopPropagation()
+  const dropzone = e.currentTarget as HTMLElement | null
+  const relatedTarget = e.relatedTarget as Node | null
+  if (!dropzone?.contains(relatedTarget)) {
+    isDragOver.value = false
+  }
+}
+
+function handleUpload(): void {
+  if (!selectedFile.value) {
+    errorMessage.value = 'Please select a file first'
+    return
+  }
+  void uploadFile(selectedFile.value)
+}
+
+async function uploadFile(file: File): Promise<void> {
+  errorMessage.value = ''
+  processing.value = true
+  processingMessage.value = 'Uploading file...'
+  processingProgress.value = 0
+
+  try {
+    const data = await uploadImportFile(file, { replacementFeatureId: props.featureId })
+    jobId.value = data.job_id ?? null
+    processingMessage.value = 'Processing file...'
+    processingProgress.value = 10
+    startPolling()
+  } catch (error) {
+    console.error('Error uploading file:', error)
+    errorMessage.value = getApiErrorMessage(error, 'Failed to upload file')
+    processing.value = false
+  }
+}
+
+function startPolling(): void {
+  pollingInterval = setInterval(() => {
+    void (async () => {
+      if (!jobId.value) return
+
+      try {
+        const data = await getImportJobStatus(jobId.value) as ImportJobStatusResponse
+        const jobStatus = data.job_status
+        if (jobStatus) {
+          processingProgress.value = jobStatus.progress ?? 0
+          processingMessage.value = jobStatus.message ?? 'Processing...'
+
+          if (jobStatus.status === 'completed') {
+            importQueueId.value = jobStatus.import_queue_id ?? null
+            if (pollingInterval) {
+              clearInterval(pollingInterval)
+              pollingInterval = null
+            }
+            await fetchFeatures()
+          } else if (jobStatus.status === 'failed') {
+            errorMessage.value = jobStatus.error_message ?? PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT
+            processing.value = false
+            if (pollingInterval) {
+              clearInterval(pollingInterval)
+              pollingInterval = null
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling status:', error)
+      }
+    })()
+  }, 1000)
+}
+
+async function fetchFeatures(): Promise<void> {
+  if (!importQueueId.value) return
+
+  try {
+    const data = await getImportQueueFeatures(importQueueId.value) as ImportQueueFeaturesResponse
+    if (data.geofeatures) {
+      features.value = data.geofeatures
+      processing.value = false
+    } else {
+      errorMessage.value = data.error ?? 'Failed to load features'
+      processing.value = false
+    }
+  } catch (error) {
+    console.error('Error fetching features:', error)
+    errorMessage.value = getApiErrorMessage(error, 'Failed to load features')
+    processing.value = false
+  }
+}
+
+async function handleApply(): Promise<void> {
+  if (selectedFeatureIndex.value === null || !importQueueId.value) return
+
+  const selectedFeature = sortedFeatures.value[selectedFeatureIndex.value]
+  const originalIndex = features.value.findIndex((f) => f === selectedFeature)
+
+  if (originalIndex === -1) {
+    errorMessage.value = 'Selected feature not found'
+    return
+  }
+
+  applying.value = true
+  errorMessage.value = ''
+
+  try {
+    await applyFeatureReplacement(props.featureId, {
+      import_queue_id: importQueueId.value,
+      feature_index: originalIndex,
+      regenerate_tags: regenerateTags.value
+    })
+
+    successMessage.value = 'Spatial data updated successfully!'
+    applied.value = true
+    applying.value = false
+    emit('applied')
+  } catch (error) {
+    console.error('Error applying replacement:', error)
+    errorMessage.value = getApiErrorMessage(error, 'Failed to apply replacement geometry')
+    applying.value = false
+  }
+}
+
+function handleCancel(): void {
+  handleClose()
+
+  if (importQueueId.value) {
+    deleteImportItem(importQueueId.value).catch((error: unknown) => {
+      console.error('Error deleting import table item:', error)
+    })
+  }
+}
+
+function handleClose(): void {
+  cleanup()
+  emit('close')
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+watch(() => props.isOpen, (newVal) => {
+  if (newVal) {
+    openLayersBasemap.prefetch().catch((error: unknown) => {
+      console.error('Error prefetching OpenLayers basemap tile sources:', error)
+    })
+    void nextTick(() => {
+      resetDialog()
+      void fetchExistingFeatureGeometryType()
+    })
+  } else {
+    cleanup()
+  }
+})
+
+watch(expandedMapIndex, (newVal) => {
+  if (newVal !== null) {
+    void nextTick(() => {
+      setTimeout(() => {
+        void initializeExpandedMap()
+      }, 100)
+    })
+  } else {
+    expandedMapInstance.cleanup()
+    expandedMapInitialized = false
+  }
+})
+
+watch(sortedFeatures, () => {
+  void nextTick(() => {
+    sortedFeatures.value.forEach((_feature, index) => {
+      const container = document.getElementById(`feature-map-${index}`)
+      if (container && !featureMapInstances.has(index)) {
+        void initializeFeatureMap(container, index)
+      }
+    })
+  })
+}, { deep: true })
+
+const route = useRoute()
+watch(() => route.fullPath, () => {
+  if (props.isOpen) {
+    handleClose()
+  }
+})
+
+onBeforeUnmount(() => {
+  cleanup()
+})
+</script>

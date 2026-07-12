@@ -79,9 +79,10 @@ export async function searchImportItems(importId: number | string, query: string
     return response.data;
 }
 
-/** DELETE /api/item/import/delete/:id */
-export async function deleteImportItem(importId: number | string): Promise<void> {
-    await httpClient.delete(`/api/item/import/delete/${importId}`);
+/** DELETE /api/item/import/delete/:id - starts an async delete job and returns its job id. */
+export async function deleteImportItem(importId: number | string): Promise<{ msg: string; job_id?: string }> {
+    const response = await httpClient.delete(`/api/item/import/delete/${importId}`);
+    return response.data as { msg: string; job_id?: string };
 }
 
 /**

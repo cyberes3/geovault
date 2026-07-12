@@ -116,7 +116,7 @@
 <script>
 import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js'
 import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
-import { APIHOST } from '@/config.js'
+import { getUserTags } from '@/api/services/featuresApi'
 
 // Shared cache for all TagPicker instances to avoid duplicate API calls
 // Cache expires after 5 seconds to ensure fresh data
@@ -289,12 +289,9 @@ export default {
       // Start a new fetch and cache it
       tagCache.fetchPromise = (async () => {
         try {
-          const response = await fetch(`${APIHOST}/api/features/user-tags/`, {
-            credentials: 'include'
-          })
-          const data = await response.json()
+          const data = await getUserTags()
 
-          if (response.ok && Array.isArray(data)) {
+          if (Array.isArray(data)) {
             // Sort user tags alphabetically
             const sortedTags = sortUserTagsAlphabetically(data)
             // Update cache
@@ -304,7 +301,7 @@ export default {
             return sortedTags
           } else {
             // eslint-disable-next-line no-console
-            console.error('Failed to fetch user tags:', data.error || 'Unknown error')
+            console.error('Failed to fetch user tags: unexpected response shape')
             tagCache.fetchPromise = null
             return []
           }

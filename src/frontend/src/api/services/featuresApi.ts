@@ -1,9 +1,21 @@
+import { AxiosHeaders } from 'axios';
 import { httpClient } from '../httpClient';
+import { normalizeBboxError, parseBboxAxiosResponse, type BboxResponseData } from '@/utils/format/geobuf';
 
 export interface FeatureMetadataUpdate {
     feature_id: number | string;
     tags: string[];
     [key: string]: unknown;
+}
+
+export interface BboxFeaturesParams {
+    /** `minLon,minLat,maxLon,maxLat` */
+    bbox: string;
+    zoom: number;
+    collection?: string | null;
+    tags?: string[] | null;
+    matchMode?: 'AND' | 'OR';
+    signal?: AbortSignal;
 }
 
 /** GET /api/features/by-tag/ - all features grouped by tag; accepts optional search params. */
@@ -100,8 +112,44 @@ export async function exportFeaturesKmz(all = true): Promise<{ blob: Blob; filen
     };
 }
 
+export interface ExtentHintResponse {
+    bbox: [number, number, number, number] | null;
+}
+
 /** GET /api/geojson/extent-hint/ - cheap pre-check used before fitting to the user's data extent. */
-export async function getExtentHint() {
-    const response = await httpClient.get('/api/geojson/extent-hint/');
+export async function getExtentHint(): Promise<ExtentHintResponse> {
+    const response = await httpClient.get<ExtentHintResponse>('/api/geojson/extent-hint/');
     return response.data;
+}
+
+/**
+ * GET /api/geojson/ - viewport (bbox) feature query used by the main map. Requests protobuf/geobuf
+ * (falls back to JSON if the server ever responds with it) and decodes via `parseBboxAxiosResponse`.
+ */
+export async function getFeaturesInBbox(params: BboxFeaturesParams): Promise<BboxResponseData> {
+    const query: Record<string, string> = {
+        bbox: params.bbox,
+        zoom: String(Math.round(params.zoom)),
+        format: 'protobuf',
+    };
+    if (params.collection) {
+        query.collection = params.collection;
+    }
+
+    const searchParams = new URLSearchParams(query);
+    if (params.tags && params.tags.length > 0) {
+        params.tags.forEach((tag) => searchParams.append('tags', tag));
+        searchParams.append('match_mode', params.matchMode ?? 'AND');
+    }
+
+    try {
+        const response = await httpClient.get<ArrayBuffer>(`/api/geojson/?${searchParams.toString()}`, {
+            responseType: 'arraybuffer',
+            signal: params.signal,
+        });
+        const headerRecord = (response.headers as AxiosHeaders).toJSON(true);
+        return parseBboxAxiosResponse(headerRecord['content-type'] ?? '', headerRecord, response.data);
+    } catch (error) {
+        throw normalizeBboxError(error);
+    }
 }
