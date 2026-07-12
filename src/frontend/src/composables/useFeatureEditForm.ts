@@ -4,18 +4,8 @@ import { updateFeatureMetadata, deleteFeature, getFeature } from '@/api/services
 import { ApiError } from '@/utils/apiError';
 import { sortTagsByPriority } from '@/utils/tagUtils.js';
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js';
-import { validateCoordinates } from '@/utils/coordinateValidation.js';
-
-const ICON_PROPERTY_NAMES = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'];
-const VALID_ICON_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'];
-
-function isSystemIconUrl(iconUrl: string | null): boolean {
-    return !!iconUrl && iconUrl.includes('/api/icons/system/');
-}
-
-function isUserIconUrl(iconUrl: string | null): boolean {
-    return !!iconUrl && iconUrl.includes('/api/icons/user/');
-}
+import { validateCoordinates } from '@/utils/geo/coordinates';
+import { ICON_PROPERTY_NAMES, VALID_ICON_EXTENSIONS, isSystemIcon as isSystemIconUrl, isUserIcon as isUserIconUrl } from '@/utils/map/iconUtils';
 
 /** Checks the usual GeoJSON icon property names and returns the first one that looks like an icon reference. */
 function findIconUrlInProperties(properties: Record<string, unknown>): string | null {

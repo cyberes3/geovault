@@ -138,18 +138,10 @@ import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
 import LocationIcon from '@/components/parts/LocationIcon.vue'
 import Loader from '@/components/parts/Loader.vue'
-import { parseCoordinates } from '@/utils/coordinateParser.js'
+import { parseCoordinates } from '@/utils/geo/coordinates'
 import { geolocationManager } from '@/utils/map/geolocationManager'
 import { toast } from '@/utils/toast'
-
-// Helper functions for icon type checking
-function isSystemIcon(iconUrl) {
-  return iconUrl && iconUrl.includes('/api/icons/system/')
-}
-
-function isUserIcon(iconUrl) {
-  return iconUrl && iconUrl.includes('/api/icons/user/')
-}
+import { isSystemIcon, isUserIcon } from '@/utils/map/iconUtils'
 
 export default {
   name: 'QuickPointDialog',

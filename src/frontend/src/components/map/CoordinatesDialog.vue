@@ -84,7 +84,7 @@
 import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
-import { validateCoordinates } from '@/utils/coordinateValidation.js'
+import { validateCoordinates } from '@/utils/geo/coordinates'
 import CodeEditor from 'simple-code-editor'
 
 export default {

@@ -297,8 +297,7 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
 
         // Detach every listener registered by `setupMapEventHandlers` before `remove()`: `.off()`
         // needs the map instance the listeners were actually registered on, so this must run
-        // while `map.value` still points at it (unlike `destroyMap()`, this path previously
-        // skipped teardown entirely, leaking the old instance's listener closures until GC).
+        // while `map.value` still points at it.
         teardownMapInteractionHandlers();
 
         if (labelMarkerManager.value) {

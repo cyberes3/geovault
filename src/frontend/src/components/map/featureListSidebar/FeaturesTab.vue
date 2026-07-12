@@ -97,7 +97,7 @@ import { XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline';
 import Loader from '@/components/parts/Loader.vue';
 import { APIHOST } from '@/config.js';
 import { getGeometryTypeColor, DEFAULT_GEOMETRY_COLOR } from '@/utils/geometryColors.js';
-import { getIconUrl, resolveIconUrl, isSystemIcon } from '@/utils/map/iconUtils.ts';
+import { getIconUrl, resolveIconUrl, isSystemIcon, handleIconError } from '@/utils/map/iconUtils.ts';
 import { toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast';
 import type { GeoJsonFeature } from '@/types/geospatial';
@@ -188,11 +188,6 @@ const featureRowVisualsById = computed<Map<string, FeatureRowVisuals>>(() => {
   }
   return map;
 });
-
-function handleIconError(event: Event) {
-  const target = event.target as HTMLImageElement;
-  target.style.display = 'none';
-}
 
 function handleFeatureClick(feature: GeoJsonFeature) {
   emit('feature-click', feature);

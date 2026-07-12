@@ -86,8 +86,8 @@ export async function deleteImportItem(importId: number | string): Promise<{ msg
 }
 
 /**
- * POST /api/item/import/upload - multipart file upload. Returns the legacy `{msg, job_id}`
- * shape; real-time progress after upload is reported over the import WebSocket, not this call.
+ * POST /api/item/import/upload - multipart file upload. Returns `{msg, job_id}`; real-time
+ * progress after upload is reported over the import WebSocket, not this call.
  */
 export async function uploadImportFile(file: File, options: { replacementFeatureId?: string | number; onUploadProgress?: (event: AxiosProgressEvent) => void } = {}) {
     const formData = new FormData();

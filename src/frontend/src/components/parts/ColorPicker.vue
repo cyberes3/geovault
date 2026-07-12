@@ -62,7 +62,7 @@
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { SketchPicker } from 'vue-color'
 import 'vue-color/style.css'
-import { normalizeHex, hexToRgb, rgbToHsl } from '@/utils/colorUtils.js'
+import { normalizeHex, hexToRgb, rgbToHsl } from '@/utils/color/pickerColorUtils'
 
 export default {
   name: 'ColorPickerDialog',

@@ -81,7 +81,7 @@ import { RecycleScroller } from 'vue-virtual-scroller';
 import { XMarkIcon } from '@heroicons/vue/24/outline';
 import Loader from '@/components/parts/Loader.vue';
 import BaseButton from '@/components/parts/BaseButton.vue';
-import { parseCoordinates } from '@/utils/coordinateParser.js';
+import { parseCoordinates } from '@/utils/geo/coordinates';
 import { toastApiError } from '@/utils/apiError';
 import { toast } from '@/utils/toast';
 import { APIHOST } from '@/config.js';

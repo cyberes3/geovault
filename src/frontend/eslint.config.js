@@ -47,7 +47,8 @@ export default [
         confirm: 'readonly',
         WebSocket: 'readonly',
         CloseEvent: 'readonly',
-        MessageEvent: 'readonly'
+        MessageEvent: 'readonly',
+        Image: 'readonly'
       }
     },
     plugins: {
@@ -141,7 +142,8 @@ export default [
         confirm: 'readonly',
         WebSocket: 'readonly',
         CloseEvent: 'readonly',
-        MessageEvent: 'readonly'
+        MessageEvent: 'readonly',
+        Image: 'readonly'
       }
     },
     plugins: {

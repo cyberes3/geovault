@@ -287,8 +287,7 @@ export function useImportQueueTable({ isLoading }: UseImportQueueTableOptions) {
 
   // A full replacement of importTable (SET_IMPORT_TABLE) only happens once the queue's
   // "initial_state" has been (re)loaded; incremental item add/remove/update mutations don't
-  // reassign the array reference, so this fires exactly when the old `setImportTable`-mutation
-  // subscription used to.
+  // reassign the array reference, so this watcher fires exactly on those (re)load events.
   watch(importTable, (newTable) => {
     hasInitiallyLoaded.value = true;
     internalLoading.value = false;

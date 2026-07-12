@@ -16,6 +16,8 @@ External repos are provided for you in the `external sources/` directory. This f
 
 I really don't care about Mermaid diagrams. You don't need to create them in plans.
 
+Code comments shouldn't reference things in the past. Ie. "Consolidates what used to be ... into one module, since ..."
+
 ### Backend and Frontend Instructions
 
 The backend venv is at src/backend/venv

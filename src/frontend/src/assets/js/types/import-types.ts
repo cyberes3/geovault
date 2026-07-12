@@ -11,6 +11,7 @@ export interface ImportFeatureProperties {
     stroke?: string;
     fill?: string;
     'fill-opacity'?: number;
+    // Mirrors `ICON_PROPERTY_NAMES` in `@/utils/map/iconUtils.ts` - keep both in sync.
     icon?: string;
     'icon-href'?: string;
     iconUrl?: string;

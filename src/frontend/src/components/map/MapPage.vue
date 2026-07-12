@@ -264,10 +264,10 @@ const activeMobileSidebar = ref<'features' | 'controls' | null>(null);
 const showQuickPointDialog = ref(false);
 
 /**
- * `isMobile` was referenced by the terrain tooltip text in the original template but was never
- * defined as component state there (only as an unrelated local inside `zoomToFeature`), so the
- * ternary always evaluated to the "mouse button" branch. Preserved verbatim rather than fixed,
- * since this refactor must not change observable behavior.
+ * The terrain tooltip text branches on `isMobile`, but no component state actually tracks device
+ * type here (the only other `isMobile` in this file is an unrelated local inside `zoomToFeature`),
+ * so the tooltip always renders its "mouse button" wording. Hardcoded to `false` rather than wired
+ * to a real mobile check, to avoid changing the tooltip's current behavior.
  */
 const isMobile = false;
 

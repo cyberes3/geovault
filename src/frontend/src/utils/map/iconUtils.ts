@@ -4,38 +4,46 @@
  * Functions for handling icon URLs and icon-related operations.
  */
 
-import {APIHOST} from '@/config.js';
+import { APIHOST } from '@/config.js';
 
 /**
- * Check if an icon URL is a system (built-in) icon
- * @param iconUrl - Icon URL to check
- * @returns true if the icon is a system icon
+ * Canonical set of GeoJSON feature property names that may hold an icon URL/href. Any code
+ * reading the icon property on a feature should go through `getIconUrl` below rather than
+ * re-declaring its own subset, so a future new alias only needs to be added in one place.
  */
-export function isSystemIcon(iconUrl: string): boolean {
-    return iconUrl.startsWith('/api/icons/system/');
+export const ICON_PROPERTY_NAMES = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'] as const;
+
+export type IconPropertyName = (typeof ICON_PROPERTY_NAMES)[number];
+
+/** Common raster/vector image file extensions accepted for a user-supplied icon reference. */
+export const VALID_ICON_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'];
+
+/**
+ * Check if an icon URL is a system (built-in) icon, i.e. served from the `/api/icons/system/`
+ * endpoint. System icons can be recolored via the `/api/icons/recolor/` endpoint.
+ */
+export function isSystemIcon(iconUrl: string | null | undefined): boolean {
+    return !!iconUrl && iconUrl.includes('/api/icons/system/');
+}
+
+/** Check if an icon URL is a user-uploaded icon, served from the `/api/icons/user/` endpoint. */
+export function isUserIcon(iconUrl: string | null | undefined): boolean {
+    return !!iconUrl && iconUrl.includes('/api/icons/user/');
 }
 
 /**
- * Get icon URL from feature properties
- * Checks multiple common property names for icon URLs
+ * Get icon URL from feature properties.
+ * Checks every property name in `ICON_PROPERTY_NAMES` and returns the first non-empty match.
  * @param properties - Feature properties object
  * @returns Icon URL if found, null otherwise
  */
-export function getIconUrl(properties: any): string | null {
-    // Common property names that might contain icon hrefs
-    const iconPropertyNames = [
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'marker-symbol',
-        'symbol',
-    ];
+export function getIconUrl(properties: Record<string, unknown> | null | undefined): string | null {
+    if (!properties) return null;
 
-    for (const propName of iconPropertyNames) {
-        if (properties[propName] && typeof properties[propName] === 'string') {
-            const iconUrl = properties[propName].trim();
+    for (const propName of ICON_PROPERTY_NAMES) {
+        const value = properties[propName];
+        if (typeof value === 'string') {
+            const iconUrl = value.trim();
             if (iconUrl) {
                 return iconUrl;
             }
@@ -43,6 +51,19 @@ export function getIconUrl(properties: any): string | null {
     }
 
     return null;
+}
+
+/** Check if a feature has a custom icon set under any of `ICON_PROPERTY_NAMES`. */
+export function hasCustomIcon(properties: Record<string, unknown> | null | undefined): boolean {
+    return getIconUrl(properties) !== null;
+}
+
+/** `@error` handler shared by every `<img>` tag rendering a (possibly broken) icon URL: hides the broken image instead of showing the browser's default placeholder. */
+export function handleIconError(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (target?.parentElement) {
+        target.style.display = 'none';
+    }
 }
 
 /**

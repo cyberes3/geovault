@@ -80,11 +80,7 @@
 <script>
 import {APIHOST} from '@/config.js'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
-
-// Helper functions for icon type checking
-function isSystemIcon(iconUrl) {
-  return iconUrl && iconUrl.includes('/api/icons/system/')
-}
+import { isSystemIcon, resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
 
 // Helper to normalize icon URLs for comparison (removes APIHOST prefix)
 function normalizeIconUrl(value) {
@@ -203,19 +199,10 @@ export default {
       this.previewUrl = null
     },
     
-    resolveIconUrl(iconUrl) {
-      if (!iconUrl) return ''
-      if (iconUrl.startsWith('http')) return iconUrl
-      if (iconUrl.startsWith('/')) return `${APIHOST}${iconUrl}`
-      return `${APIHOST}/${iconUrl}`
-    },
-
-    handleIconError(event) {
-      // Hide broken image
-      if (event.target && event.target.parentElement) {
-        event.target.style.display = 'none'
-      }
-    },
+    // Thin wrappers so the template (Options API, no direct module-scope access) can call the
+    // shared `@/utils/map/iconUtils` helpers via `this.*`.
+    resolveIconUrl,
+    handleIconError,
 
     resetIconState(iconUrl = null) {
       this.currentIconUrl = iconUrl

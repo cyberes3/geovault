@@ -155,10 +155,10 @@
 </template>
 
 <script>
-import {APIHOST} from '@/config.js'
 import { getIconRegistry, uploadIcon } from '@/api/services/iconsApi'
 import { getApiErrorMessage } from '@/utils/apiError'
 import BaseModal from '@/components/parts/BaseModal.vue'
+import { resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
 
 export default {
   name: 'IconPickerDialog',
@@ -235,18 +235,9 @@ export default {
         this.isLoading = false
       }
     },
-    resolveIconUrl(iconUrl) {
-      // If already absolute URL, return as is
-      if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
-        return iconUrl
-      }
-      // If relative URL starting with /api/, prepend APIHOST
-      if (iconUrl.startsWith('/api/')) {
-        return `${APIHOST}${iconUrl}`
-      }
-      // Fallback: assume it's a relative path and prepend APIHOST
-      return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`
-    },
+    // Thin wrapper so the template (Options API, no direct module-scope access) can call the
+    // shared `@/utils/map/iconUtils` helper via `this.resolveIconUrl`.
+    resolveIconUrl,
     selectIcon(iconUrl) {
       this.selectedIconUrl = iconUrl
       this.customIconFile = null
@@ -309,12 +300,9 @@ export default {
     closeDialog() {
       this.$emit('close')
     },
-    handleIconError(event) {
-      // Hide broken image
-      if (event.target && event.target.parentElement) {
-        event.target.style.display = 'none'
-      }
-    },
+    // Thin wrapper so the template (Options API, no direct module-scope access) can call the
+    // shared `@/utils/map/iconUtils` helper via `this.handleIconError`.
+    handleIconError,
     handleIconLoad(event) {
       // Hide placeholder when image loads
       const placeholder = event.target.previousElementSibling

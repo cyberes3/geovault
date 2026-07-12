@@ -187,7 +187,7 @@ import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import Loader from '@/components/parts/Loader.vue'
-import { APIHOST } from '@/config.js'
+import { resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
 
 export default {
   name: 'BulkStylingModal',
@@ -391,24 +391,10 @@ export default {
         this.bulkData.polyColor = null
       }
     },
-    resolveIconUrl(iconUrl) {
-      // If already absolute URL, return as is
-      if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
-        return iconUrl
-      }
-      // If relative URL starting with /api/, prepend APIHOST
-      if (iconUrl.startsWith('/api/')) {
-        return `${APIHOST}${iconUrl}`
-      }
-      // Fallback: assume it's a relative path and prepend APIHOST
-      return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`
-    },
-    handleIconError(event) {
-      // Hide broken image
-      if (event.target && event.target.parentElement) {
-        event.target.style.display = 'none'
-      }
-    },
+    // Thin wrappers so the template (Options API, no direct module-scope access) can call the
+    // shared `@/utils/map/iconUtils` helpers via `this.*`.
+    resolveIconUrl,
+    handleIconError,
     handleApply() {
       // Emit the bulk data to parent, only including keys for enabled toggles
       // This ensures we don't send keys that weren't explicitly configured
