@@ -97,12 +97,13 @@ export function initializeMap(container, config) {
 }
 
 /**
- * Setup GeoJSON source on map
+ * Setup GeoJSON source on map. Uses `once()` (the 'load' event only ever fires once per map
+ * instance) so the listener is self-removing and needs no explicit teardown.
  * @param {Object} map - MapLibre map instance
  * @param {Function} onLoad - Callback when source is ready
  */
 export function setupGeoJsonSource(map, onLoad) {
-  map.on('load', () => {
+  map.once('load', () => {
     map.addSource('geojson-data', {
       type: 'geojson',
       data: {
@@ -118,12 +119,13 @@ export function setupGeoJsonSource(map, onLoad) {
 }
 
 /**
- * Setup map event listeners
+ * Setup map event listeners.
  * @param {Object} map - MapLibre map instance
  * @param {Object} handlers - Event handlers
  * @param {Function} handlers.onMoveEnd - Handler for moveend event
  * @param {Function} handlers.onZoomEnd - Handler for zoomend event
  * @param {Function} handlers.onClick - Handler for click event
+ * @returns {Function} Teardown function that removes exactly the listeners this call registered.
  */
 export function setupMapEventListeners(map, handlers) {
   const { onMoveEnd, onZoomEnd, onClick } = handlers
@@ -140,5 +142,17 @@ export function setupMapEventListeners(map, handlers) {
   if (onClick) {
     map.on('click', onClick)
   }
-}
 
+  return () => {
+    if (onMoveEnd) {
+      map.off('moveend', onMoveEnd)
+      map.off('zoomend', onMoveEnd)
+    }
+    if (onZoomEnd) {
+      map.off('zoomend', onZoomEnd)
+    }
+    if (onClick) {
+      map.off('click', onClick)
+    }
+  }
+}

@@ -604,7 +604,7 @@ export class LabelMarkerManager {
             name,
             position,
             isLabelPoint: false,
-            hasIcon: !!feature.properties?._iconId, // Track if feature has an icon
+            hasIcon: !!feature.properties?.['_icon-id'], // Track if feature has an icon
             placeLabelBelow: false // Regular points don't use this flag
           })
         })

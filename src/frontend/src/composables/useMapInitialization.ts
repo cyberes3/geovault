@@ -63,7 +63,17 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
     const savedMapPitch: Ref<number | null> = ref(null);
     const savedMapBearing: Ref<number | null> = ref(null);
 
-    let mapInteractionHandlers: { onMove: () => void; onZoom: () => void; teardownCopyCoords: () => void } | null = null;
+    interface MapInteractionHandlers {
+        onMove: () => void;
+        onZoom: () => void;
+        onZoomFrame: () => void;
+        onStyleImageMissing: (e: { id: string }) => void;
+        onMouseMove: (e: MapMouseEvent) => void;
+        onMouseOut: () => void;
+        teardownCopyCoords: () => void;
+        teardownMapEventListeners: () => void;
+    }
+    let mapInteractionHandlers: MapInteractionHandlers | null = null;
     let teardownTrackingUnlockHandlers: (() => void) | null = null;
     let movementTimeout: ReturnType<typeof setTimeout> | null = null;
     let zoomUpdateFrame: number | null = null;
@@ -77,11 +87,16 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
         }, 150);
     }
 
+    /**
+     * Remove every listener `setupMapEventHandlers` registered, on whichever map instance they
+     * were actually registered on (captured via closure in `handlers`, not the live `map.value` -
+     * important because this must also run against an about-to-be-removed instance during
+     * `performMapDestruction`, after which `map.value` no longer points at it).
+     */
     function teardownMapInteractionHandlers(): void {
-        if (map.value && mapInteractionHandlers) {
+        if (mapInteractionHandlers) {
             const handlers = mapInteractionHandlers;
-            map.value.off('move', handlers.onMove);
-            map.value.off('zoom', handlers.onZoom);
+            handlers.teardownMapEventListeners();
             handlers.teardownCopyCoords();
             mapInteractionHandlers = null;
         }
@@ -138,18 +153,38 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
         };
         mapInstance.on('zoom', onZoom);
 
+        const onZoomFrame = () => {
+            if (zoomUpdateFrame) {
+                cancelAnimationFrame(zoomUpdateFrame);
+            }
+            zoomUpdateFrame = requestAnimationFrame(() => {
+                deps.callbacks.onZoomFrame();
+                zoomUpdateFrame = null;
+            });
+        };
+        mapInstance.on('zoom', onZoomFrame);
+
+        const onStyleImageMissing = (e: { id: string }) => { handleStyleImageMissing(e.id); };
+        mapInstance.on('styleimagemissing', onStyleImageMissing);
+
+        const MOUSE_MOVE_THROTTLE = 100;
+        const onMouseMove = (e: MapMouseEvent) => {
+            const now = Date.now();
+            if (now - lastMouseMoveTime < MOUSE_MOVE_THROTTLE) return;
+            lastMouseMoveTime = now;
+            deps.callbacks.onMouseMove(e);
+        };
+        mapInstance.on('mousemove', onMouseMove);
+
+        const onMouseOut = () => { deps.callbacks.onMouseOut(); };
+        mapInstance.on('mouseout', onMouseOut);
+
         teardownTrackingUnlockHandlers = setupUserGestureTrackingUnlock(mapInstance, {
             isLocked: deps.callbacks.isTrackingLocked,
             onUnlock: deps.callbacks.onTrackingUnlock,
         }) as () => void;
 
-        mapInteractionHandlers = {
-            onMove,
-            onZoom,
-            teardownCopyCoords: setupCopyMapCoordinatesOnContextMenu(mapInstance, { toast }) as () => void,
-        };
-
-        setupMapEventListeners(mapInstance, {
+        const teardownMapEventListeners = setupMapEventListeners(mapInstance, {
             onMoveEnd: () => {
                 isMapMoving.value = false;
                 if (movementTimeout) {
@@ -176,29 +211,26 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
                 deps.callbacks.onZoomEnd(currentZoom);
             },
             onClick: (e: MapMouseEvent) => { deps.callbacks.onClick(e); },
-        });
+        }) as () => void;
 
-        mapInstance.on('zoom', () => {
-            if (zoomUpdateFrame) {
-                cancelAnimationFrame(zoomUpdateFrame);
-            }
-            zoomUpdateFrame = requestAnimationFrame(() => {
-                deps.callbacks.onZoomFrame();
-                zoomUpdateFrame = null;
-            });
-        });
-
-        mapInstance.on('styleimagemissing', (e: { id: string }) => { handleStyleImageMissing(e.id); });
-
-        const MOUSE_MOVE_THROTTLE = 100;
-        mapInstance.on('mousemove', (e: MapMouseEvent) => {
-            const now = Date.now();
-            if (now - lastMouseMoveTime < MOUSE_MOVE_THROTTLE) return;
-            lastMouseMoveTime = now;
-            deps.callbacks.onMouseMove(e);
-        });
-
-        mapInstance.on('mouseout', () => { deps.callbacks.onMouseOut(); });
+        mapInteractionHandlers = {
+            onMove,
+            onZoom,
+            onZoomFrame,
+            onStyleImageMissing,
+            onMouseMove,
+            onMouseOut,
+            teardownCopyCoords: setupCopyMapCoordinatesOnContextMenu(mapInstance, { toast }) as () => void,
+            teardownMapEventListeners: () => {
+                mapInstance.off('move', onMove);
+                mapInstance.off('zoom', onZoom);
+                mapInstance.off('zoom', onZoomFrame);
+                mapInstance.off('styleimagemissing', onStyleImageMissing);
+                mapInstance.off('mousemove', onMouseMove);
+                mapInstance.off('mouseout', onMouseOut);
+                teardownMapEventListeners();
+            },
+        };
     }
 
     function createMapInstance(mapConfig: MapConfigInit): void {
@@ -262,6 +294,12 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
             savedMapPitch.value = map.value.getPitch();
             savedMapBearing.value = map.value.getBearing();
         }
+
+        // Detach every listener registered by `setupMapEventHandlers` before `remove()`: `.off()`
+        // needs the map instance the listeners were actually registered on, so this must run
+        // while `map.value` still points at it (unlike `destroyMap()`, this path previously
+        // skipped teardown entirely, leaking the old instance's listener closures until GC).
+        teardownMapInteractionHandlers();
 
         if (labelMarkerManager.value) {
             labelMarkerManager.value.clear();
@@ -343,15 +381,21 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
                 return;
             }
 
+            // Named so the timeout branch can `.off()` it below - `Evented.off()` removes from
+            // both regular and one-time listener maps, so this cancels the pending `once()`
+            // registration instead of leaving it to fire (harmlessly, but not for free) later.
+            const onEvent = () => {
+                clearTimeout(timeoutId);
+                resolve();
+            };
+
             const timeoutId = setTimeout(() => {
                 console.warn(`Timeout waiting for ${eventName} event`);
+                mapInstance.off(eventName, onEvent);
                 resolve();
             }, timeout);
 
-            void mapInstance.once(eventName, () => {
-                clearTimeout(timeoutId);
-                resolve();
-            });
+            void mapInstance.once(eventName, onEvent);
         });
     }
 
