@@ -4,7 +4,7 @@ import traceback
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from django import forms
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -64,7 +64,8 @@ def upload_icon(request):
     if not file_name:
         file_name = "upload.png"
 
-    # Validate file extension (only PNG, JPG, ICO allowed for uploads)
+    # Validate file extension (PNG, JPG, WEBP allowed for uploads; WEBP is converted to
+    # PNG below since we standardize stored icons on PNG/JPG)
     file_ext = os.path.splitext(file_name)[1].lower()
     allowed_extensions = get_required_setting('ICON_UPLOAD_ALLOWED_EXTENSIONS')
     if file_ext not in allowed_extensions:
@@ -91,6 +92,22 @@ def upload_icon(request):
             'error': f'File size exceeds maximum allowed size of {max_size_mb:.0f}KB',
             'code': 400
         }, status=400)
+
+    # WEBP is accepted as an upload input but converted to PNG here so every stored
+    # user icon is PNG or JPG, regardless of what the browser originally sent.
+    if file_ext == '.webp':
+        try:
+            with Image.open(BytesIO(icon_data)) as img:
+                img.load()
+                output = BytesIO()
+                img.convert('RGBA').save(output, format='PNG')
+                icon_data = output.getvalue()
+        except (UnidentifiedImageError, OSError, ValueError):
+            return JsonResponse({
+                'error': 'Invalid WEBP image',
+                'code': 400
+            }, status=400)
+        file_name = os.path.splitext(file_name)[0] + '.png'
 
     # Store icon using existing icon manager
     # Create empty ImportLog for non-import use case

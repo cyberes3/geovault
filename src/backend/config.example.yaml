@@ -151,12 +151,12 @@ icons:
   # Maximum size for user-uploaded icons (500KB)
   upload_max_size_bytes: 512000
 
-  # Allowed extensions for icon uploads
+  # Allowed extensions for icon uploads (WEBP is converted to PNG on upload)
   upload_allowed_extensions:
     - .png
     - .jpg
     - .jpeg
-    - .ico
+    - .webp
 
 
 reverse_geocoding:

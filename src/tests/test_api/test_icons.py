@@ -46,6 +46,44 @@ class TestIconsAPI(TestCase):
         # Should fail validation
         self.assertIn(response.status_code, [400, 500])
 
+    def test_upload_icon_rejects_ico_extension(self):
+        """ICO uploads are no longer accepted; only PNG/JPG/WEBP are."""
+        file = SimpleUploadedFile("test_icon.ico", b"not a real ico but extension is what's checked first", content_type='image/x-icon')
+        response = self.client.post('/api/icons/upload/', {'file': file})
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('Invalid file extension', data['error'])
+
+    def test_upload_webp_icon_is_converted_to_png(self):
+        """WEBP uploads are accepted but re-encoded to PNG before storage."""
+        img = Image.new('RGB', (100, 100), color='blue')
+        img_bytes = BytesIO()
+        img.save(img_bytes, format='WEBP')
+        img_bytes.seek(0)
+
+        file = SimpleUploadedFile("test_icon.webp", img_bytes.read(), content_type='image/webp')
+        response = self.client.post('/api/icons/upload/', {'file': file})
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('icon_url', data)
+        self.assertTrue(data['icon_url'].endswith('.png'), f"Expected a .png icon_url, got: {data['icon_url']}")
+
+        # The served file should be a genuine, decodable PNG (round-tripped through Pillow).
+        served = self.client.get(data['icon_url'])
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served['Content-Type'], 'image/png')
+        stored_img = Image.open(BytesIO(served.content))
+        self.assertEqual(stored_img.format, 'PNG')
+
+    def test_upload_invalid_webp_icon_is_rejected(self):
+        """A file with a .webp extension that isn't actually a decodable image is rejected."""
+        file = SimpleUploadedFile("test_icon.webp", b"not actually a webp image", content_type='image/webp')
+        response = self.client.post('/api/icons/upload/', {'file': file})
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('WEBP', data['error'])
+
     def test_recolor_icon(self):
         """Test recoloring an icon."""
         response = self.client.get(

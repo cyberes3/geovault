@@ -15,8 +15,14 @@ export const ICON_PROPERTY_NAMES = ['icon', 'icon-href', 'iconUrl', 'icon_url', 
 
 export type IconPropertyName = (typeof ICON_PROPERTY_NAMES)[number];
 
-/** Common raster/vector image file extensions accepted for a user-supplied icon reference. */
-export const VALID_ICON_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'];
+/**
+ * File extensions the app recognizes as icon references. Every icon we store ourselves
+ * (system or user, via `/api/icons/.../`) is matched unconditionally regardless of extension,
+ * so this list only gates the fallback case: a raw filename/URL from imported data that isn't
+ * one of our own icon URLs but still looks like it points at an image. All icons we store or
+ * accept for upload are PNG/JPG, so that's all this needs to cover.
+ */
+export const VALID_ICON_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
 
 /**
  * Check if an icon URL is a system (built-in) icon, i.e. served from the `/api/icons/system/`
