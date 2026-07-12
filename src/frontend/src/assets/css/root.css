@@ -24,4 +24,24 @@
     --feature-color-default: #d1d5db;         /* Light gray */
 }
 
+/*
+Extension CSS scoping convention: `gv_core.createRouteWrapper()` wraps every extension route and
+settings-tab component in a `.gv-ext.gv-ext-<kebab-name>` root. Extensions should scope any
+non-Tailwind global-looking selectors under their own `.gv-ext-<kebab-name>` class so two
+extensions (or an extension and core) can never fight over the same selector.
+*/
+.gv-ext-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    color: var(--main-red);
+}
+
+.gv-ext-error__message {
+    font-size: 0.95rem;
+    max-width: 32rem;
+}
+
 

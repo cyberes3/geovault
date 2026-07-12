@@ -23,24 +23,26 @@ export async function clearHiddenFeatures(): Promise<void> {
 }
 
 /**
- * Load settings from Vuex store with defaults from configuration. This is a pure, standalone
- * helper exposed to extensions via `window.gv_core.utils.loadSettingsFromStore` (see `main.js`);
+ * Pick out a flat `{ key: value }` map for a settings-tab schema from the current nested user
+ * settings object, falling back to each entry's `defaultValue`. Exposed to extensions via
+ * `window.gv_core.GeoVault.utils.loadSettingsFromValues` (see `@/extensions/extensionLoader`);
  * core settings tabs get equivalent reactive behavior from the `useSettingsSection` composable
  * instead.
  * @param config - Settings configuration array
- * @param store - Vuex store instance (or store state)
+ * @param settings - The current nested user settings object (e.g. `platformState.userSettings.value`)
  */
-export function loadSettingsFromStore(config: Array<{ key: string; defaultValue: unknown }>, store: any): Record<string, unknown> {
+export function loadSettingsFromValues(
+    config: Array<{ key: string; defaultValue: unknown }>,
+    settings: Record<string, unknown> | null
+): Record<string, unknown> {
     if (!Array.isArray(config)) {
-        console.warn('loadSettingsFromStore: config must be an array');
+        console.warn('loadSettingsFromValues: config must be an array');
         return {};
     }
 
-    const settings = store?.getters?.['userSettings/userSettings'] || store?.userSettings || store || {};
     const settingsValues: Record<string, unknown> = {};
-
     config.forEach((setting) => {
-        const value = getNestedValue(settings, setting.key);
+        const value = getNestedValue(settings ?? {}, setting.key);
         settingsValues[setting.key] = value !== undefined ? value : setting.defaultValue;
     });
 
