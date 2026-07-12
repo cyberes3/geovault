@@ -151,7 +151,9 @@
 </template>
 
 <script>
-import { getCookie } from "@/assets/js/auth.js";
+import { getFeaturesByTag, getAllFeatures } from "@/api/services/featuresApi";
+import { saveCollection } from "@/api/services/collectionsApi";
+import { getApiErrorMessage } from "@/utils/apiError";
 import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import Loader from "@/components/parts/Loader.vue";
@@ -242,23 +244,18 @@ export default {
     async fetchTags() {
       this.loadingTags = true;
       try {
-        const response = await fetch('/api/features/by-tag/');
-        const data = await response.json();
-        
-        if (response.ok) {
-          // Get user tags and system tags separately
-          const userTags = data.user_tags ? Object.keys(data.user_tags) : [];
-          const systemTags = data.system_tags ? Object.keys(data.system_tags) : [];
-          
-          // Sort user tags alphabetically, system tags by priority
-          const sortedUserTags = sortUserTagsAlphabetically(userTags);
-          const sortedSystemTags = sortTagsByPriority(systemTags);
-          
-          // Combine: user tags first, then system tags
-          this.availableTags = [...sortedUserTags, ...sortedSystemTags];
-        } else {
-          this.availableTags = [];
-        }
+        const data = await getFeaturesByTag();
+
+        // Get user tags and system tags separately
+        const userTags = data.user_tags ? Object.keys(data.user_tags) : [];
+        const systemTags = data.system_tags ? Object.keys(data.system_tags) : [];
+
+        // Sort user tags alphabetically, system tags by priority
+        const sortedUserTags = sortUserTagsAlphabetically(userTags);
+        const sortedSystemTags = sortTagsByPriority(systemTags);
+
+        // Combine: user tags first, then system tags
+        this.availableTags = [...sortedUserTags, ...sortedSystemTags];
       } catch (error) {
         console.error('Error fetching tags:', error);
         this.availableTags = [];
@@ -269,14 +266,8 @@ export default {
     async fetchFeatures() {
       this.loadingFeatures = true;
       try {
-        const response = await fetch('/api/features/all/');
-        const data = await response.json();
-        
-        if (response.ok && data.data && data.data.features) {
-          this.availableFeatures = data.data.features;
-        } else {
-          this.availableFeatures = [];
-        }
+        const data = await getAllFeatures();
+        this.availableFeatures = (data.data && data.data.features) || [];
       } catch (error) {
         console.error('Error fetching features:', error);
         this.availableFeatures = [];
@@ -300,36 +291,17 @@ export default {
       this.error = null;
 
       try {
-        const url = this.collection 
-          ? `/api/collections/${this.collection.id}/update/`
-          : '/api/collections/create/';
-        
-        const method = this.collection ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-          method: method,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-          },
-          body: JSON.stringify({
-            name: this.formData.name.trim(),
-            description: this.formData.description.trim() || null,
-            tags: this.formData.tags,
-            feature_ids: this.formData.feature_ids.map(id => parseInt(id))
-          })
-        });
+        await saveCollection({
+          name: this.formData.name.trim(),
+          description: this.formData.description.trim() || null,
+          tags: this.formData.tags,
+          feature_ids: this.formData.feature_ids.map(id => parseInt(id))
+        }, this.collection?.id);
 
-        const data = await response.json();
-
-        if (response.ok) {
-          this.$emit('saved');
-        } else {
-          this.error = data.error || 'Failed to save collection';
-        }
+        this.$emit('saved');
       } catch (error) {
         console.error('Error saving collection:', error);
-        this.error = 'Failed to save collection. Please try again.';
+        this.error = getApiErrorMessage(error, 'Failed to save collection. Please try again.');
       } finally {
         this.saving = false;
       }

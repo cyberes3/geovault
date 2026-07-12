@@ -8,7 +8,7 @@
  * - Terrain toggle control
  */
 
-import { fetchConfig as fetchCachedConfig } from '@/utils/configService.js'
+import { fetchConfig as fetchCachedConfig } from '@/utils/configService'
 
 /**
  * MapTiler configuration class

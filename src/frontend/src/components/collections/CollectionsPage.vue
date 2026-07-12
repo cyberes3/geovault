@@ -182,7 +182,8 @@
 </template>
 
 <script>
-import { getCookie } from "@/assets/js/auth.js";
+import { listCollections, deleteCollection as deleteCollectionApi, applyBulkOperationsToCollection as applyBulkOperationsToCollectionApi } from "@/api/services/collectionsApi";
+import { getApiErrorMessage } from "@/utils/apiError";
 import CollectionDialog from "./CollectionDialog.vue";
 import ShareDialog from "@/components/parts/ShareDialog.vue";
 import Loader from "../parts/Loader.vue";
@@ -235,22 +236,11 @@ export default {
       this.error = null;
 
       try {
-        const response = await fetch('/api/collections/');
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (response.ok && data.collections) {
-          this.collections = data.collections;
-        } else {
-          throw new Error(data.error || 'Failed to load collections');
-        }
+        const data = await listCollections();
+        this.collections = data.collections || [];
       } catch (error) {
         console.error('Error fetching collections:', error);
-        this.error = error.message || 'Failed to load collections. Please try again.';
+        this.error = getApiErrorMessage(error, 'Failed to load collections. Please try again.');
       } finally {
         this.loading = false;
       }
@@ -279,25 +269,12 @@ export default {
       }
 
       try {
-        const csrfToken = getCookie('csrftoken');
-        const response = await fetch(`/api/collections/${collection.id}/delete/`, {
-          method: 'DELETE',
-          headers: {
-            'X-CSRFToken': csrfToken || ''
-          }
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          // Refresh the collections list
-          this.fetchCollections();
-        } else {
-          alert(data.error || 'Failed to delete collection');
-        }
+        await deleteCollectionApi(collection.id);
+        // Refresh the collections list
+        this.fetchCollections();
       } catch (error) {
         console.error('Error deleting collection:', error);
-        alert('Failed to delete collection. Please try again.');
+        alert(getApiErrorMessage(error, 'Failed to delete collection. Please try again.'));
       }
     },
     viewOnMap(collectionId) {
@@ -345,28 +322,13 @@ export default {
     },
     async applyBulkOperationsToCollection(collectionId, bulkData) {
       try {
-        const csrfToken = getCookie('csrftoken');
-        const response = await fetch(`/api/collections/${collectionId}/bulk-operations/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken || ''
-          },
-          body: JSON.stringify({
-            bulk_operations: bulkData
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Failed to apply bulk operations: ${response.status}`);
-        }
+        await applyBulkOperationsToCollectionApi(collectionId, bulkData);
 
         // Refresh collections list to ensure counts/metadata stay in sync
         await this.fetchCollections();
       } catch (error) {
         console.error('Error applying bulk operations to collection:', error);
-        alert(`Failed to apply bulk operations: ${error.message}`);
+        alert(getApiErrorMessage(error, 'Failed to apply bulk operations'));
       }
     },
     currentBulkOperationsForCollection(collectionId) {

@@ -2511,7 +2511,7 @@ export default {
       const store = window.gv_core?.store;
       const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
       if (!store || !getNestedValue) return;
-      const saved = getNestedValue(store.state?.userSettings, DEFAULT_SORT_KEY);
+      const saved = getNestedValue(store.getters?.['userSettings/userSettings'], DEFAULT_SORT_KEY);
       if (saved && VALID_SORT_VALUES.has(saved)) sortBy.value = saved;
     }
 
@@ -2519,7 +2519,7 @@ export default {
       const store = window.gv_core?.store;
       const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
       if (!store || !getNestedValue || !tileSourcesRef?.value?.length) return;
-      const defaultMap = getNestedValue(store.state?.userSettings, DEFAULT_MAP_KEY);
+      const defaultMap = getNestedValue(store.getters?.['userSettings/userSettings'], DEFAULT_MAP_KEY);
       if (defaultMap && tileSourcesRef.value.some((s) => s.id === defaultMap)) {
         selectedLayerRef.value = defaultMap;
       }
@@ -2545,7 +2545,7 @@ export default {
         resizeListenerAttached = true;
       }
       const store = window.gv_core?.store;
-      const userInfo = store?.state?.userInfo;
+      const userInfo = store?.getters?.['auth/userInfo'];
       if (userInfo?.email) userLogin.value = userInfo.email;
       applyDefaultSortFromStore();
       await fetchTileSources();
@@ -2688,7 +2688,7 @@ export default {
     });
 
     watch(
-      () => window.gv_core?.store?.state?.userSettings,
+      () => window.gv_core?.store?.getters?.['userSettings/userSettings'],
       (userSettings) => {
         if (!userSettings) return;
         applyDefaultSortFromStore();

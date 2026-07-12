@@ -80,7 +80,7 @@
 </template>
 
 <script>
-import {mapState} from "vuex";
+import {mapGetters} from "vuex";
 import OverviewTab from "./OverviewTab.vue";
 import UsersListTab from "./UsersListTab.vue";
 
@@ -91,7 +91,7 @@ export default {
     UsersListTab
   },
   computed: {
-    ...mapState(["userInfo"]),
+    ...mapGetters("auth", ["userInfo"]),
     isAuthorized() {
       return this.userInfo && this.userInfo.isSuperuser === true;
     },

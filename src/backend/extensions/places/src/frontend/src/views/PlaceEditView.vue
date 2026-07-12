@@ -399,7 +399,7 @@ onBeforeRouteLeave((_to, _from, next) => {
 });
 
 watch(
-  () => window.gv_core?.store?.state?.userSettings,
+  () => window.gv_core?.store?.getters?.['userSettings/userSettings'],
   (userSettings) => {
     if (!userSettings) {
       return;

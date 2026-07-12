@@ -301,10 +301,10 @@
 </template>
 
 <script>
-import {mapState} from "vuex";
+import {mapGetters} from "vuex";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
-import {getCookie} from "@/assets/js/auth.js";
-import axios from "axios";
+import {getCookie} from "@/utils/cookies";
+import {logout} from "@/api/services/authApi";
 import Loader from "@/components/parts/Loader.vue";
 import ToastContainer from "@/components/parts/ToastContainer.vue";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline';
@@ -333,7 +333,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(["userInfo"]),
+    ...mapGetters('auth', ["userInfo"]),
     extensionRegistryState() {
       return extensionRegistry;
     },
@@ -348,7 +348,7 @@ export default {
     isMapRoute() {
       const path = this.$route.path;
       if (path === '/map' || path === '/mapshare') return true;
-      const prefixes = this.$store.state.extensionMapRoutePrefixes || [];
+      const prefixes = this.$store.getters['extensionsRuntime/mapRoutePrefixes'] || [];
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     isPublicShareRoute() {
@@ -362,7 +362,7 @@ export default {
         if (oldUserInfo && !newUserInfo) {
           this.handleLogout();
           // Clear user settings when user logs out
-          this.$store.commit('userSettings', null);
+          this.$store.dispatch('userSettings/clearUserSettings');
           // Redirect to login if not on a public share route
           const hash = window.location.hash || '';
           const pathFromHash = hash.replace(/^#/, '').split('?')[0];
@@ -452,7 +452,7 @@ export default {
     isPublicSharePath(path) {
       if (!path) return false;
       if (path === '/mapshare') return true;
-      const prefixes = this.$store.state.extensionPublicShareRoutePrefixes || [];
+      const prefixes = this.$store.getters['extensionsRuntime/publicShareRoutePrefixes'] || [];
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     async checkAuth() {
@@ -467,7 +467,7 @@ export default {
       this.userInfoLoading = true;
       
       // Use centralized store action to fetch user info
-      const userStatus = await this.$store.dispatch('fetchUserInfo');
+      const userStatus = await this.$store.dispatch('auth/fetchUserInfo');
 
       if (!userStatus || !userStatus.authorized) {
         // User is not authorized (guest)
@@ -482,7 +482,7 @@ export default {
       }
 
       this.userInfoLoading = false;
-      const userInfo = this.$store.state.userInfo;
+      const userInfo = this.$store.getters['auth/userInfo'];
 
       // Check admin access for initial route
       if (this.$route.meta.requiresAdmin && !userInfo.isSuperuser) {
@@ -491,11 +491,11 @@ export default {
 
       // Parallelize loading user settings and config cache (for faster map initialization)
       // Config is needed by tagUtils and maptiler integration
-      const { fetchConfig } = await import('@/utils/configService.js')
+      const { fetchConfig } = await import('@/utils/configService')
       
       try {
         await Promise.all([
-          this.$store.dispatch('fetchUserSettings'),
+          this.$store.dispatch('userSettings/fetchUserSettings'),
           fetchConfig() // Pre-cache config for map components
         ]);
       } catch (error) {
@@ -535,12 +535,12 @@ export default {
     addRealtimeListeners() {
       // Handle connection status
       realtimeSocket.on('connected', () => {
-        this.$store.dispatch('setWebSocketConnected', true);
-        this.$store.dispatch('setWebSocketReconnectAttempts', 0);
+        this.$store.dispatch('websocket/setConnected', true);
+        this.$store.dispatch('websocket/setReconnectAttempts', 0);
       });
 
       realtimeSocket.on('disconnected', () => {
-        this.$store.dispatch('setWebSocketConnected', false);
+        this.$store.dispatch('websocket/setConnected', false);
       });
     },
     handleLogout() {
@@ -556,34 +556,24 @@ export default {
         const csrfToken = getCookie('csrftoken');
         if (!csrfToken) {
           console.error('CSRF token not found');
-          this.$store.commit('userInfo', null);
-          this.$store.commit('userSettings', null);
+          this.$store.dispatch('auth/clearUserInfo');
+          this.$store.dispatch('userSettings/clearUserSettings');
           const loginUrl = window.location.origin + '/accounts/login/';
           window.location.replace(loginUrl);
           return;
         }
 
-        // Call allauth logout endpoint (requires POST with CSRF token in form data)
-        // Django allauth expects the CSRF token as 'csrfmiddlewaretoken' in the form body
-        const formData = new URLSearchParams();
-        formData.append('csrfmiddlewaretoken', csrfToken);
+        await logout();
 
-        await axios.post('/accounts/logout/', formData.toString(), {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': csrfToken
-          }
-        });
-
-        this.$store.commit('userInfo', null);
-        this.$store.commit('userSettings', null);
+        this.$store.dispatch('auth/clearUserInfo');
+        this.$store.dispatch('userSettings/clearUserSettings');
 
         const loginUrl = window.location.origin + '/accounts/login/';
         window.location.replace(loginUrl);
       } catch (error) {
         console.error('Logout error:', error);
-        this.$store.commit('userInfo', null);
-        this.$store.commit('userSettings', null);
+        this.$store.dispatch('auth/clearUserInfo');
+        this.$store.dispatch('userSettings/clearUserSettings');
         const loginUrl = window.location.origin + '/accounts/login/';
         window.location.replace(loginUrl);
       }
@@ -659,7 +649,7 @@ export default {
     // Add click outside listener for user menu
     document.addEventListener('click', this.handleClickOutside);
   },
-  beforeDestroy() {
+  beforeUnmount() {
     // Don't disconnect WebSocket here - let it stay connected across the app lifecycle
     // Remove click outside listener
     document.removeEventListener('click', this.handleClickOutside);

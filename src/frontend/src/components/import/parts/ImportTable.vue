@@ -229,10 +229,10 @@
 </template>
 
 <script>
-import {mapState} from "vuex";
+import {mapGetters} from "vuex";
 import axios from "axios";
 import {ImportTableItem} from "@/assets/js/types/import-types";
-import {getCookie} from "@/assets/js/auth.js";
+import {getCookie} from "@/utils/cookies";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
@@ -248,7 +248,9 @@ export default {
     }
   },
   computed: {
-    ...mapState(["userInfo", "importTable", "websocketConnected"]),
+    ...mapGetters("auth", ["userInfo"]),
+    ...mapGetters("importQueue", ["importTable"]),
+    ...mapGetters("websocket", {websocketConnected: "connected"}),
     filteredImportTable() {
       // Filter out items that have been locally deleted and add deleting/importing state
       return this.importTable
@@ -571,8 +573,6 @@ export default {
 
         if (response.status === 200) {
           alert(`Successfully imported "${item.original_filename}"!`);
-          // Refresh the table
-          this.$store.dispatch('refreshImportTable');
         } else {
           alert(`Failed to import: ${response.data.msg}`);
         }
@@ -860,9 +860,6 @@ export default {
           this.importingItems.delete(itemId);
         });
 
-        // Refresh the table to update status icons
-        this.$store.dispatch('refreshImportTable');
-
         // Show alert if there were failed imports
         if (data.failed_count > 0 && data.failed_items && data.failed_items.length > 0) {
           const failedDetails = data.failed_items.map(item => 
@@ -885,9 +882,6 @@ export default {
         itemIds.forEach(itemId => {
           this.importingItems.delete(itemId);
         });
-
-        // Refresh the table to update status icons
-        this.$store.dispatch('refreshImportTable');
 
         // Show error alert to user
         const errorMessage = data.error_message || 'An error occurred while importing items. Some items may not have been imported.';
@@ -919,9 +913,6 @@ export default {
           this.deletingItems.delete(itemId);
         });
 
-        // Refresh the table to update status icons
-        this.$store.dispatch('refreshImportTable');
-
         this.$forceUpdate();
       };
 
@@ -934,9 +925,6 @@ export default {
         itemIds.forEach(itemId => {
           this.deletingItems.delete(itemId);
         });
-
-        // Refresh the table to update status icons
-        this.$store.dispatch('refreshImportTable');
 
         // Show error alert to user
         const errorMessage = data.error_message || 'An error occurred while deleting items. Some items may not have been deleted.';
@@ -1016,7 +1004,7 @@ export default {
     document.addEventListener('click', this.handleOutsideClick);
     document.addEventListener('touchstart', this.handleOutsideClick);
   },
-  beforeDestroy() {
+  beforeUnmount() {
     // Unsubscribe from bulk job events
     this.cleanupBulkJobHandlers();
 

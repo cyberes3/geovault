@@ -542,7 +542,7 @@
 </template>
 
 <script>
-import {mapState} from "vuex";
+import {mapGetters} from "vuex";
 import axios from "axios";
 import { formatDate } from "@/utils/dateUtils.js";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
@@ -551,7 +551,7 @@ import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js"
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
-import {getCookie} from "@/assets/js/auth.js";
+import {getCookie} from "@/utils/cookies";
 import {APIHOST} from "@/config.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
@@ -582,7 +582,8 @@ import { isPointGeometry, isLineGeometry, isPolygonGeometry, initializeFeatureDe
 
 export default {
   computed: {
-    ...mapState(["userInfo", "userSettings"]),
+    ...mapGetters("auth", ["userInfo"]),
+    ...mapGetters("userSettings", ["userSettings"]),
     hasBulkOperationsConfigured() {
       return hasBulkOperationsConfigured(this.bulkOperations);
     },
@@ -862,10 +863,6 @@ export default {
       immediate: true
     }
   },
-  beforeDestroy() {
-    // Clean up polling interval
-    this.stopProcessingPolling()
-  },
   props: ['id'],
   methods: {
     // WebSocket methods
@@ -1076,9 +1073,6 @@ export default {
         this.waitingForImportCompletion = false;
         this.lockButtons = false;
         this.loading.importing = false;
-
-        // Refresh the import table
-        this.$store.dispatch('refreshImportTable');
 
         // Remove the beforeunload handler before redirecting
         if (this.beforeUnloadHandler) {
@@ -2614,6 +2608,8 @@ export default {
     }
   },
   beforeUnmount() {
+    // Clean up polling interval
+    this.stopProcessingPolling()
     // Remove the navigation warning when component is destroyed
     if (this.beforeUnloadHandler) {
       window.removeEventListener('beforeunload', this.beforeUnloadHandler);

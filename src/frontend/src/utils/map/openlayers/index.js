@@ -1,7 +1,8 @@
 import {TileSourceCatalog} from '../tileSources/TileSourceCatalog.js'
 import {OpenLayersBasemapFactory} from './OpenLayersBasemapFactory.js'
 
-const tileSourceCatalog = new TileSourceCatalog()
+/** Shared catalog instance so every consumer (map basemaps, settings UI) hits the same cache. */
+export const tileSourceCatalog = new TileSourceCatalog()
 
 /** Shared basemap factory for small OpenLayers maps (import previews, feature replacement, etc.). */
 export const openLayersBasemap = new OpenLayersBasemapFactory(tileSourceCatalog)

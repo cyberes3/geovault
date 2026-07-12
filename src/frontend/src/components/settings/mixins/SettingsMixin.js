@@ -1,6 +1,6 @@
-import { updateUserSetting } from "@/utils/userSettingsService.js";
+import { updateUserSetting } from "@/utils/userSettingsService";
 import { toast } from '@/utils/toast';
-import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
+import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils';
 
 /**
  * Mixin for settings tabs that manage user settings with debounced saves
@@ -119,7 +119,7 @@ export default {
 
         // Update store directly with settings from response (no need to fetch again)
         if (this.$store && response && response.settings) {
-          this.$store.commit('userSettings', response.settings);
+          this.$store.dispatch('userSettings/setUserSettings', response.settings);
           // Settings are already updated in settingsValues from response above
           // No need to reload from store as it's redundant
         }
@@ -177,7 +177,7 @@ export default {
       });
     }
   },
-  beforeDestroy() {
+  beforeUnmount() {
     // Flush any pending saves immediately before destroying
     this.flushPendingSaves();
     // Cleanup any remaining timers

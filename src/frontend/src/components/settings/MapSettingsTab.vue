@@ -65,9 +65,10 @@ import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
 import HiddenFeaturesWidget from "@/components/map/HiddenFeaturesWidget.vue";
-import { clearHiddenFeatures } from "@/utils/userSettingsService.js";
+import { clearHiddenFeatures } from "@/utils/userSettingsService";
+import { tileSourceCatalog } from "@/utils/map/openlayers";
 import { toast } from '@/utils/toast'
-import { toastApiError } from '@/utils/apiError.js'
+import { toastApiError } from '@/utils/apiError'
 
 export default {
   name: 'MapSettingsTab',
@@ -84,13 +85,16 @@ export default {
     }
   },
   computed: {
+    storeUserSettings() {
+      return this.$store?.getters?.['userSettings/userSettings'];
+    },
     hiddenFeatureIds() {
-      const features = this.$store?.state?.hiddenFeatures || [];
+      const features = this.$store?.getters?.['userSettings/hiddenFeatures'] || [];
       if (!Array.isArray(features)) return [];
       return features.map(f => String(f.id));
     },
     hiddenFeatureSummaries() {
-      const features = this.$store?.state?.hiddenFeatures || [];
+      const features = this.$store?.getters?.['userSettings/hiddenFeatures'] || [];
       if (!Array.isArray(features)) return [];
       return features.map(f => ({
         id: String(f.id),
@@ -162,15 +166,8 @@ export default {
     },
     async fetchTileSources() {
       try {
-        const response = await fetch('/api/tiles/sources/');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.sources && Array.isArray(data.sources)) {
-          // Filter out hidden sources (utility sources like terrain/hillshade)
-          this.tileSources = data.sources.filter(source => !source.hidden);
-        }
+        // Shared catalog already filters out hidden (utility) sources and caches the result.
+        this.tileSources = await tileSourceCatalog.load();
       } catch (error) {
         console.error('Error fetching tile sources:', error);
         // Fallback to default OSM if API fails
@@ -198,10 +195,10 @@ export default {
       }
     },
     async unhideFeature(featureId) {
-      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default
 
       const optimisticUpdate = () => {
-        this.$store.commit('removeHiddenFeature', String(featureId))
+        this.$store.dispatch('userSettings/removeHiddenFeature', String(featureId))
       }
 
       hiddenFeaturesManager.removeHidden(featureId, optimisticUpdate)
@@ -216,7 +213,7 @@ export default {
       try {
         await clearHiddenFeatures();
         // Local cache: clear all hidden features in the store
-        this.$store.commit("setHiddenFeatures", []);
+        this.$store.dispatch("userSettings/setHiddenFeatures", []);
       } catch (error) {
         console.error("Error clearing hidden features from settings:", error);
         toastApiError(error, 'Failed to clear hidden features');
@@ -225,7 +222,7 @@ export default {
   },
   watch: {
     // Watch for changes in the store and reload settings
-    '$store.state.userSettings': {
+    storeUserSettings: {
       handler() {
         // Reload settings when store updates
         this.loadSettingsFromStore();

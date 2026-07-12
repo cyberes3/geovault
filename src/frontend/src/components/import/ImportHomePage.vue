@@ -120,8 +120,9 @@
 </template>
 
 <script>
-import {mapState} from "vuex"
+import {mapGetters} from "vuex"
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
+import {getImportHistory} from "@/api/services/importApi";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
@@ -138,7 +139,8 @@ export default {
     ArrowRightIcon
   },
   computed: {
-    ...mapState(["userInfo", "importTable", "importHistory", "importHistoryLoaded", "importHistoryPagination"]),
+    ...mapGetters("auth", ["userInfo"]),
+    ...mapGetters("importQueue", ["importTable", "importHistory", "importHistoryLoaded", "importHistoryPagination"]),
     combinedHistoryLoading() {
       // Show loading placeholders only when:
       // 1. We haven't received initial data from WebSocket yet
@@ -163,16 +165,12 @@ export default {
       if (showLoading) {
         this.importTableIsLoading = true
       }
-      try {
-        await this.$store.dispatch('refreshImportTable')
-      } catch (error) {
-        console.error('Error fetching import table:', error)
-      } finally {
-        if (showLoading) {
-          this.importTableIsLoading = false
-        }
-        this.hasImportTableLoaded = true
+      // The import table itself is kept up to date by the WebSocket
+      // (importQueue/setImportTable); this just controls the loading indicator.
+      if (showLoading) {
+        this.importTableIsLoading = false
       }
+      this.hasImportTableLoaded = true
     },
     startAutoRefresh() {
       // Clear any existing interval
@@ -210,25 +208,14 @@ export default {
       
       this.isLoadingHistoryPage = true;
       try {
-        const response = await fetch(`/api/item/import/history?page=${page}&page-size=10`, {
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to load page ${page}`);
-        }
-        
-        const data = await response.json();
-        
+        const data = await getImportHistory(page, 10);
+
         // Update store with paginated data
-        this.$store.dispatch('setImportHistory', {
+        this.$store.dispatch('importQueue/setImportHistory', {
           items: data.items,
           pagination: data.pagination
         });
-        this.$store.dispatch('setImportHistoryPage', page);
+        this.$store.dispatch('importQueue/setImportHistoryPage', page);
       } catch (error) {
         console.error('Error loading import history page:', error);
       } finally {
@@ -251,7 +238,7 @@ export default {
     // If we already have data, mark as initially loaded
     // This prevents showing loading placeholders when navigating back with browser buttons
     if (this.importHistory && this.importHistory.length > 0) {
-      this.$store.dispatch('setImportHistoryLoaded', true);
+      this.$store.dispatch('importQueue/setImportHistoryLoaded', true);
     }
 
     // Don't fetch data here - let the route guards handle it

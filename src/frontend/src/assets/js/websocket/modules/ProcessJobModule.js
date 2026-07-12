@@ -68,7 +68,7 @@ export class ProcessJobModule extends BaseModule {
         }
 
         // Update the specific item in the store using import_queue_id
-        this.store.dispatch('updateImportTableItem', {
+        this.store.dispatch('importQueue/updateImportTableItem', {
             id: data.import_queue_id,
             updates: updates
         });

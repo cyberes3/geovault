@@ -241,7 +241,9 @@
 /**
  * @typedef {{ by_type: Record<string, number>, total_storage_bytes: number }} StorageUsageResponse
  */
-import {mapState} from "vuex";
+import {mapGetters} from "vuex";
+import { getStorageUsage } from "@/api/services/userApi";
+import { getAppReleases, listExtensions } from "@/api/services/extensionsApi";
 import BaseButton from "../parts/BaseButton.vue";
 import {
   ArrowDownTrayIcon,
@@ -254,7 +256,8 @@ import {
 
 export default {
   computed: {
-    ...mapState(["userInfo"]),
+    ...mapGetters("auth", ["userInfo"]),
+    ...mapGetters("extensionsRuntime", ["deferredPrompt"]),
     uploaderApkUrl() {
       return this.appReleases?.uploader_url ? '/api/apps/download/uploader/' : this.releasesPageUrl;
     },
@@ -272,7 +275,7 @@ export default {
       return !/Mobile|Android/i.test(navigator.userAgent);
     },
     canInstallPWA() {
-      return !!this.$store.state.deferredPrompt;
+      return !!this.deferredPrompt;
     },
     releasesPageUrl() {
       return this.appReleases?.releases_page_url;
@@ -325,33 +328,20 @@ export default {
       const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
       try {
-        const response = await fetch('/api/user/storage/usage/', {
-          signal: controller.signal
-        })
+        /** @type {StorageUsageResponse} */
+        const data = await getStorageUsage(controller.signal)
 
         clearTimeout(timeoutId)
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        /** @type {StorageUsageResponse} */
-        const data = await response.json()
         this.storageBytes = data.total_storage_bytes ?? 0
         this.storageError = false
       } catch (error) {
         clearTimeout(timeoutId)
 
-        // Handle timeout or other errors
-        if (error.name === 'AbortError') {
-          // Request timed out
-          this.storageError = true
-          console.warn('Storage usage request timed out')
-        } else {
-          // Other errors
-          this.storageError = true
-          console.error('Failed to fetch storage usage:', error)
-        }
+        // Covers both the abort-on-timeout case and any other request failure;
+        // the UI treats them identically, so only the log message differs in detail.
+        this.storageError = true
+        console.error('Failed to fetch storage usage:', error)
         this.storageBytes = null
       } finally {
         this.storageLoading = false
@@ -359,25 +349,20 @@ export default {
     },
     async fetchAppReleases() {
       try {
-        const response = await fetch("/api/apps/releases/");
-        if (!response.ok) return;
-        const data = await response.json();
-        this.appReleases = data;
+        this.appReleases = await getAppReleases();
       } catch (_) {
         // Keep appReleases null; computed URLs fall back to releases page
       }
     },
     async fetchExtensions() {
       try {
-        const response = await fetch("/api/extensions/");
-        if (!response.ok) return;
-        this.extensions = await response.json();
+        this.extensions = await listExtensions();
       } catch (_) {
         this.extensions = [];
       }
     },
     async installPwa() {
-      const promptEvent = this.$store.state.deferredPrompt;
+      const promptEvent = this.deferredPrompt;
       if (!promptEvent) return;
 
       // Show the install prompt
@@ -388,7 +373,7 @@ export default {
       console.log(`PWA: User response to install prompt: ${outcome}`);
 
       // We've used the prompt, and can't use it again, clear it from state
-      this.$store.commit("setDeferredPrompt", null);
+      this.$store.dispatch("extensionsRuntime/setDeferredPrompt", null);
     },
   },
   async created() {

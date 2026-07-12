@@ -129,7 +129,8 @@
 </template>
 
 <script>
-import {APIHOST} from '@/config.js'
+import { createQuickPointFeature } from '@/api/services/featuresApi'
+import { getApiErrorMessage } from '@/utils/apiError'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
@@ -351,48 +352,16 @@ export default {
         }
 
         // Call backend API
-        const response = await fetch(`${APIHOST}/api/features/quick-point/create/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': this.getCsrfToken()
-          },
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          this.errorMessage = data.error || data.msg || 'Failed to create point'
-          this.isSaving = false
-          return
-        }
+        const data = await createQuickPointFeature(payload)
 
         // Success - emit event with the created feature and close
         this.$emit('created', data.feature)
         this.handleClose()
       } catch (error) {
         console.error('Error creating quick point:', error)
-        this.errorMessage = `Error: ${error.message}`
+        this.errorMessage = getApiErrorMessage(error, 'Failed to create point')
         this.isSaving = false
       }
-    },
-    getCsrfToken() {
-      // Get CSRF token from cookies
-      const name = 'csrftoken'
-      let cookieValue = null
-      if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';')
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i].trim()
-          if (cookie.substring(0, name.length + 1) === (name + '=')) {
-            cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-            break
-          }
-        }
-      }
-      return cookieValue || ''
     }
   }
 }

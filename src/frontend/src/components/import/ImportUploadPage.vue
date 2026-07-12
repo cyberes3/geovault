@@ -216,14 +216,13 @@
 </template>
 
 <script>
-import {mapState} from "vuex"
-import axios from "axios";
+import {mapGetters} from "vuex"
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {ImportTableItem} from "@/assets/js/types/import-types"
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
-import {getCookie} from "@/assets/js/auth.js";
-import {getImportApiErrorMessage} from "@/utils/apiError.js";
+import {uploadImportFile} from "@/api/services/importApi";
+import {getApiErrorMessage} from "@/utils/apiError";
 import {SECURITY_CONFIG} from "@/config.js";
 import { InformationCircleIcon, CloudArrowUpIcon, ArrowUpTrayIcon, XMarkIcon, DocumentIcon, CheckIcon } from '@heroicons/vue/24/outline';
 import {
@@ -238,7 +237,8 @@ import {
 
 export default {
   computed: {
-    ...mapState(["userInfo", "importTable"]),
+    ...mapGetters("auth", ["userInfo"]),
+    ...mapGetters("importQueue", ["importTable"]),
     SECURITY_CONFIG() {
       return SECURITY_CONFIG
     },
@@ -550,19 +550,12 @@ export default {
           // Calculate overall progress based on completed files
           const baseProgress = (i / this.files.length) * 100
 
-          let formData = new FormData()
-          formData.append('file', file)
-
-
           try {
             // Reset processing state for this file
             this.isProcessing = false
             this.currentFileUploadComplete = false
 
-            const response = await axios.post('/api/item/import/upload', formData, {
-              headers: {
-                'X-CSRFToken': getCookie('csrftoken')
-              },
+            const data = await uploadImportFile(file, {
               onUploadProgress: (progressEvent) => {
                 // Calculate individual file progress
                 const fileProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -586,25 +579,25 @@ export default {
 
 
             // Handle response message
-            if (response.data.msg.toLowerCase().includes("success")) {
+            if (data.msg.toLowerCase().includes("success")) {
               this.uploadResults.successful.push({
                 filename: file.name,
-                message: response.data.msg,
-                job_id: response.data.job_id
+                message: data.msg,
+                job_id: data.job_id
               })
               // WebSocket will handle real-time updates
             } else {
               // Check if this is a benign error (duplicate file)
-              const msg = response.data.msg.toLowerCase()
+              const msg = data.msg.toLowerCase()
               if (msg.includes("already") || msg.includes("duplicate")) {
                 this.uploadResults.skipped.push({
                   filename: file.name,
-                  message: response.data.msg
+                  message: data.msg
                 })
               } else {
                 this.uploadResults.failed.push({
                   filename: file.name,
-                  message: response.data.msg
+                  message: data.msg
                 })
               }
             }
@@ -616,7 +609,7 @@ export default {
             // Handle individual file errors without stopping the entire process
             console.error(`Error uploading file ${file.name}:`, fileError)
 
-            let errorMessage = getImportApiErrorMessage(fileError, 'Upload failed')
+            let errorMessage = getApiErrorMessage(fileError, 'Upload failed')
 
             this.uploadResults.failed.push({
               filename: file.name,
@@ -688,7 +681,7 @@ export default {
       console.error("Error response:", error.response)
       console.error("Error response data:", error.response?.data)
 
-      this.uploadMsg = getImportApiErrorMessage(error, 'Upload failed. Please try again.')
+      this.uploadMsg = getApiErrorMessage(error, 'Upload failed. Please try again.')
     },
     startAutoRefresh() {
       // Clear any existing interval

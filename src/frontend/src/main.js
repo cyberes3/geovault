@@ -27,7 +27,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
     // Prevent the mini-infobar from appearing on mobile
     e.preventDefault();
     // Stash the event so it can be triggered later.
-    store.commit('setDeferredPrompt', e);
+    store.dispatch('extensionsRuntime/setDeferredPrompt', e);
     console.log('PWA: beforeinstallprompt event captured');
 });
 
@@ -36,7 +36,7 @@ import * as VueState from 'vue'
 import * as VueRouterState from 'vue-router'
 import * as VuexState from 'vuex'
 import App from './App.vue'
-import store from "@/assets/js/store.ts";
+import store from "@/assets/js/store";
 import router from "@/router.js";
 import '@/assets/css/root.css'
 import 'simple-code-editor/themes/themes.css'
@@ -44,13 +44,15 @@ import 'simple-code-editor/themes/themes-base16.css'
 
 import { extensionRegistry } from './utils/extensionRegistry.js';
 import axios from 'axios';
+import { httpClient } from '@/api/httpClient';
+import { listExtensions } from '@/api/services/extensionsApi';
 import { toast } from '@/utils/toast';
-import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsService.js';
-import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
+import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsService';
+import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils';
 import { geolocationManager } from '@/utils/map/geolocationManager.js';
 import { parseCoordinates, looksLikeCoordinates } from '@/utils/coordinateParser.js';
 import { validateCoordinates } from '@/utils/coordinateValidation.js';
-import { ExtensionApi } from './utils/extensionApi.js';
+import { ExtensionApi } from './utils/extensionApi';
 import { realtimeSocket } from '@/assets/js/websocket/realtimeSocket.js';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
 import * as HeroiconsSolid from '@heroicons/vue/24/solid';
@@ -453,7 +455,7 @@ async function resolveExtensionIcon(icon, kebabName) {
                 : `/extensions/static/${kebabName}/${icon}`;
 
             // Fetch SVG content
-            const response = await axios.get(iconUrl, { responseType: 'text' });
+            const response = await httpClient.get(iconUrl, { responseType: 'text' });
             const svgContent = response.data;
 
             // Ensure xmlns is present in the SVG string (critical for paths to render)
@@ -594,16 +596,15 @@ async function resolveExtensionIcon(icon, kebabName) {
  */
 async function loadExtensions() {
     try {
-        const response = await axios.get('/api/extensions/');
-        const extensions = response.data;
+        const extensions = await listExtensions();
         const mapPrefixes = (Array.isArray(extensions) ? extensions : [])
             .filter(ext => ext && ext.map_route)
             .map(ext => `/extensions/${ext.name.replace(/_/g, '-')}`);
-        store.commit('setExtensionMapRoutePrefixes', mapPrefixes);
+        store.dispatch('extensionsRuntime/setMapRoutePrefixes', mapPrefixes);
         const publicSharePrefixes = (Array.isArray(extensions) ? extensions : [])
             .filter(ext => ext && ext.public_share_route)
             .map(ext => `/extensions/${ext.name.replace(/_/g, '-')}/share`);
-        store.commit('setExtensionPublicShareRoutePrefixes', publicSharePrefixes);
+        store.dispatch('extensionsRuntime/setPublicShareRoutePrefixes', publicSharePrefixes);
         const successfullyLoaded = [];
 
         for (const ext of extensions) {

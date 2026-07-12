@@ -15,7 +15,7 @@ const MPS_TO_KMH = 3.6;
  * @returns {'metric' | 'imperial'}
  */
 export function getUnitPreference() {
-  return store.state.userSettings?.account?.units || 'imperial';
+  return store.getters['userSettings/userSettings']?.account?.units || 'imperial';
 }
 
 /**

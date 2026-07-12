@@ -14,7 +14,7 @@ function normalizeMapSourceId(value) {
 export function getDefaultMapSourceIdFromStore() {
   const store = window.gv_core?.store || null;
   const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-  const settings = store?.state?.userSettings;
+  const settings = store?.getters?.['userSettings/userSettings'];
   if (!settings) {
     return PLACES_FALLBACK_MAP_SOURCE_ID;
   }
@@ -27,15 +27,15 @@ export function getDefaultMapSourceIdFromStore() {
 /** Wait for App.vue settings fetch (or fetch once) so the map starts on the user's basemap. */
 export async function ensureUserSettingsLoaded({ waitMs = 3000, pollMs = 50 } = {}) {
   const store = window.gv_core?.store;
-  if (!store || store.state.userSettings != null) {
+  if (!store || store.getters['userSettings/userSettings'] != null) {
     return;
   }
   const deadline = Date.now() + waitMs;
-  while (store.state.userSettings == null && Date.now() < deadline) {
+  while (store.getters['userSettings/userSettings'] == null && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  if (store.state.userSettings != null) {
+  if (store.getters['userSettings/userSettings'] != null) {
     return;
   }
-  await store.dispatch('fetchUserSettings');
+  await store.dispatch('userSettings/fetchUserSettings');
 }

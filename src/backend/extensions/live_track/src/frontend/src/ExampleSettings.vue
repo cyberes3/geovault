@@ -112,7 +112,7 @@ const load = () => {
   }
   
   // Check if settings are available in the store
-  const storeSettings = store.state?.userSettings;
+  const storeSettings = store.getters?.['userSettings/userSettings'];
   if (!storeSettings) {
     // Settings not loaded yet - will be reloaded by watcher when they arrive
     return;
@@ -151,7 +151,7 @@ const handleSettingChange = (key, value) => {
       
       if (response && response.success) {
         // 5. Update store so other components see the change
-        if (store) store.commit('userSettings', response.settings);
+        if (store) store.dispatch('userSettings/setUserSettings', response.settings);
         
         // 6. Show success checkmark for 3 seconds
         successCheckmarks[key] = true;
@@ -179,7 +179,7 @@ onMounted(() => {
 // Watch for store updates and reload settings when they change
 // This handles the case where settings arrive after component mount
 watch(
-  () => store?.state?.userSettings,
+  () => store?.getters?.['userSettings/userSettings'],
   () => {
     // Reload settings whenever the store updates
     load();

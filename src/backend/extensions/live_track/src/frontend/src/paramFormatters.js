@@ -9,7 +9,7 @@ const METERS_TO_KM = 0.001;
 const KMH_TO_MPH = 0.621371;
 
 function getUnitPreference() {
-  return window.gv_core?.store?.state?.userSettings?.account?.units || 'imperial';
+  return window.gv_core?.store?.getters?.['userSettings/userSettings']?.account?.units || 'imperial';
 }
 
 /**

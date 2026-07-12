@@ -402,7 +402,7 @@ watch([selectedPlace, hoveredPlaceId], () => {
 });
 
 watch(
-  () => window.gv_core?.store?.state?.userSettings,
+  () => window.gv_core?.store?.getters?.['userSettings/userSettings'],
   (userSettings) => {
     if (!userSettings) {
       return;

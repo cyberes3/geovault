@@ -250,7 +250,7 @@ import { MapIcon, ArrowUpTrayIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 import { sortTagsByPriority } from '@/utils/tagUtils.js'
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
 import { validateCoordinates } from '@/utils/coordinateValidation.js'
-import { ApiError, getResponseErrorMessage } from '@/utils/apiError.js'
+import { ApiError, getResponseErrorMessage } from '@/utils/apiError'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {

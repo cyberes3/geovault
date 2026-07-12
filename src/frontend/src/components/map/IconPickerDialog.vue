@@ -156,6 +156,8 @@
 
 <script>
 import {APIHOST} from '@/config.js'
+import { getIconRegistry, uploadIcon } from '@/api/services/iconsApi'
+import { getApiErrorMessage } from '@/utils/apiError'
 import BaseModal from '@/components/parts/BaseModal.vue'
 
 export default {
@@ -213,11 +215,7 @@ export default {
     async loadIconRegistry() {
       this.isLoading = true
       try {
-        const response = await fetch(`${APIHOST}/api/icons/registry/`)
-        if (!response.ok) {
-          throw new Error(`Failed to load icon registry: ${response.statusText}`)
-        }
-        const data = await response.json()
+        const data = await getIconRegistry()
         // Ensure all required properties exist
         this.iconRegistry = {
           points: data.points || [],
@@ -295,30 +293,12 @@ export default {
       if (this.customIconFile) {
         // Upload custom icon
         try {
-          const formData = new FormData()
-          formData.append('file', this.customIconFile)
-
-          const response = await fetch(`${APIHOST}/api/icons/upload/`, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': this.getCsrfToken()
-            },
-            credentials: 'include',
-            body: formData
-          })
-
-          const data = await response.json()
-
-          if (!response.ok) {
-            this.customIconError = data.error || 'Failed to upload icon'
-            return
-          }
-
+          const data = await uploadIcon(this.customIconFile)
           this.$emit('icon-selected', data.icon_url)
           this.closeDialog()
         } catch (error) {
           console.error('Error uploading icon:', error)
-          this.customIconError = `Error: ${error.message}`
+          this.customIconError = getApiErrorMessage(error, 'Failed to upload icon')
         }
       } else if (this.selectedIconUrl) {
         // Use selected preset icon
@@ -351,22 +331,6 @@ export default {
       if (this.$refs.customIconInput) {
         this.$refs.customIconInput.value = ''
       }
-    },
-    getCsrfToken() {
-      // Get CSRF token from cookies
-      const name = 'csrftoken'
-      let cookieValue = null
-      if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';')
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i].trim()
-          if (cookie.substring(0, name.length + 1) === (name + '=')) {
-            cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
-            break
-          }
-        }
-      }
-      return cookieValue || ''
     }
   }
 }

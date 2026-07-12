@@ -360,7 +360,7 @@
 
 <script>
 import axios from "axios";
-import {getCookie} from "@/assets/js/auth.js";
+import {getCookie} from "@/utils/cookies";
 import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
@@ -424,6 +424,9 @@ export default {
   computed: {
     oauthApplicationsUrl() {
       return `${window.location.origin}/api/oauth/applications/`;
+    },
+    storeUserSettings() {
+      return this.$store?.getters?.['userSettings/userSettings'];
     }
   },
   methods: {
@@ -862,7 +865,7 @@ export default {
   },
   watch: {
     // Watch for changes in the store and reload settings
-    '$store.state.userSettings': {
+    storeUserSettings: {
       handler() {
         // Reload settings when store updates
         this.loadSettingsFromStore();
@@ -870,7 +873,7 @@ export default {
       deep: true
     }
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.stopCooldownTimer();
   }
 }

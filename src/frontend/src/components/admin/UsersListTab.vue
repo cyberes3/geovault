@@ -99,6 +99,8 @@
 
 <script>
 import { UserIcon, ArrowTopRightOnSquareIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
+import { listUsers } from '@/api/services/adminApi';
+import { getApiErrorMessage } from '@/utils/apiError';
 import Loader from '@/components/parts/Loader.vue';
 
 export default {
@@ -158,22 +160,13 @@ export default {
       this.error = null
       
       try {
-        const response = await fetch('/api/admin/users/', {
-          credentials: 'include'
-        })
-        
-        if (!response.ok) {
-          if (response.status === 403) {
-            throw new Error('You do not have permission to view users.')
-          }
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-        
-        const data = await response.json()
+        const data = await listUsers()
         this.users = data.users || []
       } catch (error) {
         console.error('Failed to fetch users:', error)
-        this.error = error.message || 'Failed to load users. Please try again later.'
+        this.error = error.status === 403
+          ? 'You do not have permission to view users.'
+          : getApiErrorMessage(error, 'Failed to load users. Please try again later.')
       } finally {
         this.loading = false
       }

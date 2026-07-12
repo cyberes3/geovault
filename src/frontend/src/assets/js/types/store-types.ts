@@ -1,14 +1,14 @@
-import {getCookie} from "../auth.js"
+import {getCookie} from "../../../utils/cookies"
 
 export class UserInfo {
     email: string | null;
-    id: bigint;
+    id: number | null;
     featureCount: number;
     tags: string[];
     csrftoken: string | null;
     isSuperuser: boolean;
 
-    constructor(email: string | null, userId: bigint, featureCount: number = 0, tags: string[] = [], isSuperuser: boolean = false) {
+    constructor(email: string | null, userId: number | null, featureCount: number = 0, tags: string[] = [], isSuperuser: boolean = false) {
         this.email = email
         this.id = userId
         this.featureCount = featureCount

@@ -9,8 +9,8 @@
         :initial-selected-tags="initialSelectedTags"
         :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
         :is-mobile-open="activeMobileSidebar === 'features'"
-        :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
-        :geocoding-available="maptilerConfig && maptilerConfig.isAvailable() && !!$store.state.userInfo"
+        :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.getters['auth/userInfo']"
+        :geocoding-available="maptilerConfig && maptilerConfig.isAvailable() && !!$store.getters['auth/userInfo']"
         @close="activeMobileSidebar = null"
         @feature-click="handleFeatureListClick"
         @feature-hide="handleHideFeature"
@@ -113,7 +113,7 @@
             v-if="isEditingFeature && !isPublicShareMode"
             :available-tags="availableTags"
             :feature="selectedFeature"
-            :can-hide-feature="isMainMapRoute && !!$store.state.userInfo"
+            :can-hide-feature="isMainMapRoute && !!$store.getters['auth/userInfo']"
             :initial-hidden="hiddenFeatureIds.includes(String(selectedFeature?.properties?.database_id || selectedFeature?.get?.('properties')?.database_id || ''))"
             @cancel="handleCancelEdit"
             @deleted="handleFeatureDeleted"
@@ -187,7 +187,7 @@
         :tile-sources="tileSources"
         :user-location="userLocation"
         :view-context="viewContext"
-        :can-manage-hidden="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
+        :can-manage-hidden="isMainMapRoute && !isPublicShareMode && !!$store.getters['auth/userInfo']"
         :show-all-labels="showAllLabels"
         :hillshade-available="maptilerConfig && maptilerConfig.isAvailable()"
         :hillshade-enabled="hillshadeEnabled"
@@ -215,7 +215,7 @@ import {
 } from '@/utils/map/mapConfigUtils'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import {getInverseColor} from '@/utils/map/colorUtils'
-import {getCookie} from '@/assets/js/auth.js'
+import {getCookie} from '@/utils/cookies'
 import {getUnitPreference} from '@/utils/units'
 import {APIHOST, MAP_CONFIG} from '@/config.js'
 
@@ -229,7 +229,7 @@ import MobileControlsBar from './MobileControlsBar.vue'
 import LocationControl from './LocationControl.vue'
 import { toast } from '@/utils/toast'
 import { useDocumentTitle } from '@/utils/documentTitle.js'
-import { toastApiError, getResponseErrorMessage } from '@/utils/apiError.js'
+import { toastApiError, getResponseErrorMessage } from '@/utils/apiError'
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
@@ -331,12 +331,12 @@ export default {
       return path === '/map' && !hasCollection && !hasTag
     },
     hiddenFeatureIds() {
-      const features = this.$store.state.hiddenFeatures || []
+      const features = this.$store.getters['userSettings/hiddenFeatures'] || []
       if (!Array.isArray(features)) return []
       return features.map(f => String(f.id))
     },
     hiddenFeatureSummaries() {
-      const features = this.$store.state.hiddenFeatures || []
+      const features = this.$store.getters['userSettings/hiddenFeatures'] || []
       if (!Array.isArray(features)) return []
       return features.map(f => ({
         id: String(f.id),
@@ -652,7 +652,7 @@ export default {
     // Create and configure map instance with controls and sources
     createMapInstance(mapConfig) {
       // Get anti-aliasing setting from user preferences
-      const userSettings = this.$store.state.userSettings || {}
+      const userSettings = this.$store.getters['userSettings/userSettings'] || {}
       const enableAntialias = userSettings.map?.enable_antialias || false
 
       // Create MapLibre map
@@ -1593,7 +1593,7 @@ export default {
       }
       
       const zoom = this.map ? this.map.getZoom() : null
-      const userSettings = this.$store.state.userSettings || {}
+      const userSettings = this.$store.getters['userSettings/userSettings'] || {}
       const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
         ? userSettings.map.replace_icons_low_zoom 
         : true
@@ -1674,7 +1674,7 @@ export default {
       // Lightweight method to hide icons immediately when zooming out past threshold
       // Uses layer visibility for immediate effect, then updates source data
       const ICON_THRESHOLD = 8
-      const userSettings = this.$store.state.userSettings || {}
+      const userSettings = this.$store.getters['userSettings/userSettings'] || {}
       const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
         ? userSettings.map.replace_icons_low_zoom 
         : true
@@ -1768,7 +1768,7 @@ export default {
       if (features.length === 0) return
       
       this.lastProcessedZoom = zoom
-      const userSettings = this.$store.state.userSettings || {}
+      const userSettings = this.$store.getters['userSettings/userSettings'] || {}
       const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
         ? userSettings.map.replace_icons_low_zoom 
         : true
@@ -1838,7 +1838,7 @@ export default {
       
       // Ensure point-icons layer visibility matches zoom level
       if (this.map && this.map.getLayer('point-icons')) {
-        const userSettings = this.$store.state.userSettings || {}
+        const userSettings = this.$store.getters['userSettings/userSettings'] || {}
         const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
           ? userSettings.map.replace_icons_low_zoom 
           : true
@@ -1986,7 +1986,7 @@ export default {
         // Filter out hidden sources (utility sources like terrain/hillshade)
         this.tileSources = data.sources.filter(source => !source.hidden)
 
-        const userSettings = this.$store.state.userSettings || {}
+        const userSettings = this.$store.getters['userSettings/userSettings'] || {}
         const defaultBasemap = userSettings.map?.default_basemap
 
         if (defaultBasemap && this.tileSources.find(s => s.id === defaultBasemap)) {
@@ -2090,7 +2090,7 @@ export default {
       maptilerRemoveHillshade(this.map)
     },
     async fetchAvailableTags() {
-      if (!this.$store.state.userInfo) return
+      if (!this.$store.getters['auth/userInfo']) return
       try {
         const response = await fetch(`${APIHOST}/api/features/by-tag/`)
         const data = await response.json()
@@ -2174,7 +2174,7 @@ export default {
         return
       }
 
-      const userSettings = this.$store.state.userSettings || {}
+      const userSettings = this.$store.getters['userSettings/userSettings'] || {}
       const mapSettings = userSettings.map || {}
 
       const state = {
@@ -2442,7 +2442,7 @@ export default {
       }
 
       // Get anti-aliasing setting from user preferences
-      const userSettings = this.$store.state.userSettings || {}
+      const userSettings = this.$store.getters['userSettings/userSettings'] || {}
       const enableAntialias = userSettings.map?.enable_antialias || false
 
       // Create MapLibre map
@@ -2958,7 +2958,7 @@ export default {
             if (geoJsonFeature.geometry.type === 'Point') {
                 const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
                 const zoom = this.map.getZoom()
-                const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
+                const replaceIconsLowZoom = this.$store.getters['userSettings/userSettings']?.replace_icons_low_zoom ?? true
                 const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
                 
                 if (shouldShowIcon) {
@@ -3203,7 +3203,7 @@ export default {
         }
         const iconUrl = getFeatureIconUrl(createdFeature.properties)
         const zoom = this.map.getZoom()
-        const userSettings = this.$store.state.userSettings || {}
+        const userSettings = this.$store.getters['userSettings/userSettings'] || {}
         const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined
           ? userSettings.map.replace_icons_low_zoom
           : true
@@ -3284,7 +3284,7 @@ export default {
             if (updatedFeatureCopy.geometry?.type === 'Point') {
               const iconUrl = getFeatureIconUrl(updatedFeatureCopy.properties)
               const zoom = this.map.getZoom()
-              const userSettings = this.$store.state.userSettings || {}
+              const userSettings = this.$store.getters['userSettings/userSettings'] || {}
               const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
                 ? userSettings.map.replace_icons_low_zoom 
                 : true
@@ -3403,15 +3403,15 @@ export default {
       }
     },
     async handleUnhideFeature(featureId) {
-      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.getters['auth/userInfo']) {
         return
       }
 
-      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default
 
       try {
         hiddenFeaturesManager.removeHidden(featureId, () => {
-          this.$store.commit('removeHiddenFeature', String(featureId))
+          this.$store.dispatch('userSettings/removeHiddenFeature', String(featureId))
         })
         await hiddenFeaturesManager.forceFlush()
         this.loadedBounds.clear()
@@ -3423,16 +3423,16 @@ export default {
       }
     },
     async handleUnhideAllHidden() {
-      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.getters['auth/userInfo']) {
         return
       }
 
-      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default
 
       try {
-        const { clearHiddenFeatures } = await import('@/utils/userSettingsService.js')
+        const { clearHiddenFeatures } = await import('@/utils/userSettingsService')
         await clearHiddenFeatures()
-        this.$store.commit('setHiddenFeatures', [])
+        this.$store.dispatch('userSettings/setHiddenFeatures', [])
         this.loadedBounds.clear()
         this.loadDataForCurrentView()
         this.updateFeaturesInExtent()
@@ -3624,7 +3624,7 @@ export default {
       })
     },
     async handleHideFeature(feature) {
-      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.getters['auth/userInfo']) {
         return
       }
 
@@ -3637,10 +3637,10 @@ export default {
 
       if (!featureId) return
 
-      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager')).default
 
       const optimisticUpdate = () => {
-        this.$store.commit('addHiddenFeature', {
+        this.$store.dispatch('userSettings/addHiddenFeature', {
           featureId: String(featureId),
           featureName: featureName || null,
           geometryType: geometryType || null
@@ -4427,7 +4427,7 @@ export default {
 
       try {
         // Fetch available tags (refresh tag list on map restore)
-        if (this.$store.state.userInfo) {
+        if (this.$store.getters['auth/userInfo']) {
           await this.fetchAvailableTags()
         }
 
@@ -4548,7 +4548,7 @@ export default {
     ]
     
     // Fetch available tags for child components (only for authenticated users)
-    if (this.$store.state.userInfo) {
+    if (this.$store.getters['auth/userInfo']) {
       initPromises.push(this.fetchAvailableTags())
     }
 
@@ -4587,7 +4587,7 @@ export default {
 
     // Setup terrain and hillshade preferences BEFORE updating map layer
     // so they can be applied during the initial setup
-    const userSettings = this.$store.state.userSettings || {}
+    const userSettings = this.$store.getters['userSettings/userSettings'] || {}
     const defaultTerrainOn = userSettings.map?.enable_3d_terrain || false
     const defaultHillshadeOn = userSettings.map?.enable_hillshade || false
     

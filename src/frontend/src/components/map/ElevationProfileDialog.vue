@@ -142,7 +142,7 @@
 <script>
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
-import { getCookie } from '@/assets/js/auth.js'
+import { getCookie } from '@/utils/cookies'
 import Loader from '@/components/parts/Loader.vue'
 import { XMarkIcon, ExclamationTriangleIcon, EllipsisHorizontalIcon } from '@heroicons/vue/24/outline'
 import { 
@@ -206,7 +206,7 @@ export default {
   computed: {
     elevationProfileSource() {
       // Get elevation profile source from store, default to 'gps'
-      const settings = this.$store.state.userSettings
+      const settings = this.$store.getters['userSettings/userSettings']
       return settings?.map?.elevation_profile_source || 'gps'
     },
     /**

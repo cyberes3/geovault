@@ -45,7 +45,7 @@ const defaultMapOptions = computed(() => baseSourceOptions.value.map((row) => ({
 })));
 
 function load() {
-  if (!store?.state?.userSettings) return;
+  if (!store?.getters?.['userSettings/userSettings']) return;
   const values = loadSettingsFromStore(config, store);
   Object.assign(settingsValues, values);
 }
@@ -58,7 +58,7 @@ function handleSettingChange(key, value) {
       const update = keyValueToNested(key, value);
       const response = await updateUserSetting(update);
       if (response?.success && store) {
-        store.commit('userSettings', response.settings);
+        store.dispatch('userSettings/setUserSettings', response.settings);
         successCheckmarks[key] = true;
         setTimeout(() => {
           successCheckmarks[key] = false;
@@ -78,7 +78,7 @@ onMounted(async () => {
   load();
 });
 
-watch(() => store?.state?.userSettings, () => load(), { deep: true });
+watch(() => store?.getters?.['userSettings/userSettings'], () => load(), { deep: true });
 
 onBeforeUnmount(() => {
   Object.values(saveTimers).forEach((timer) => clearTimeout(timer));

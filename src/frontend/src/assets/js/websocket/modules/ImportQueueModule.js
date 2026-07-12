@@ -19,9 +19,9 @@ export class ImportTableModule extends BaseModule {
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
-            this.store.dispatch('setRealtimeModuleData', { module: 'importTable', data });
+            this.store.dispatch('websocket/setModuleData', { module: 'importTable', data });
             // Also update the importTable state
-            this.store.commit('setImportTable', data);
+            this.store.dispatch('importQueue/setImportTable', data);
         });
 
         // Handle new item added
@@ -32,17 +32,17 @@ export class ImportTableModule extends BaseModule {
 
         // Handle item deleted
         this.subscribe('item_deleted', (data) => {
-            this.store.dispatch('removeImportTableItem', data.id);
+            this.store.dispatch('importQueue/removeImportTableItem', data.id);
         });
 
         // Handle items deleted (bulk)
         this.subscribe('items_deleted', (data) => {
-            this.store.dispatch('removeImportTableItems', data.ids);
+            this.store.dispatch('importQueue/removeImportTableItems', data.ids);
         });
 
         // Handle item imported
         this.subscribe('item_imported', (data) => {
-            this.store.dispatch('updateImportTableItem', {
+            this.store.dispatch('importQueue/updateImportTableItem', {
                 id: data.id,
                 updates: { imported: true }
             });
@@ -75,7 +75,7 @@ export class ImportTableModule extends BaseModule {
             }
 
             // Update the specific item in the store using id
-            this.store.dispatch('updateImportTableItem', {
+            this.store.dispatch('importQueue/updateImportTableItem', {
                 id: data.id,
                 updates: updates
             });

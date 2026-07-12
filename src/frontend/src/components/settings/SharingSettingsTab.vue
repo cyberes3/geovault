@@ -135,8 +135,8 @@
 </template>
 
 <script>
-import axios from "axios";
-import { getCookie } from "@/assets/js/auth.js";
+import { listShares, deleteShare as deleteShareApi } from "@/api/services/sharingApi";
+import { getApiErrorMessage, toastApiError } from "@/utils/apiError";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
 import { formatDate } from "@/utils/dateUtils.js";
@@ -165,20 +165,10 @@ export default {
       this.sharesError = null;
 
       try {
-        const response = await axios.get('/api/sharing/list/', {
-          headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-          }
-        });
-
-        if (response.status === 200 && response.data.shares) {
-          this.shares = response.data.shares;
-        } else {
-          throw new Error(response.data.error || 'Failed to load shares');
-        }
+        this.shares = await listShares();
       } catch (error) {
         console.error('Error loading shares:', error);
-        this.sharesError = error.response?.data?.error || error.message || 'Failed to load shares. Please try again.';
+        this.sharesError = getApiErrorMessage(error, 'Failed to load shares. Please try again.');
       } finally {
         this.sharesLoading = false;
       }
@@ -193,22 +183,11 @@ export default {
 
       try {
         // Single endpoint handles both tag and collection shares
-        const response = await axios.delete(`/api/sharing/${shareId}/`, {
-          headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-          }
-        });
-
-        if (response.status === 200) {
-          // Reload shares
-          await this.loadShares();
-        } else {
-          throw new Error(response.data.error || 'Failed to delete share');
-        }
+        await deleteShareApi(shareId);
+        await this.loadShares();
       } catch (error) {
         console.error('Error deleting share:', error);
-        this.sharesError = error.response?.data?.error || error.message || 'Failed to delete share. Please try again.';
-        toast.error(this.sharesError);
+        toastApiError(error, 'Failed to delete share. Please try again.');
       } finally {
         this.deletingShareId = null;
       }
