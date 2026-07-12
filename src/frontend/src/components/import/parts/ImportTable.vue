@@ -233,7 +233,6 @@ import {mapGetters} from "vuex";
 import axios from "axios";
 import {ImportTableItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/utils/cookies";
-import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
@@ -249,17 +248,29 @@ export default {
   },
   computed: {
     ...mapGetters("auth", ["userInfo"]),
-    ...mapGetters("importQueue", ["importTable"]),
+    ...mapGetters("importQueue", [
+      "importTable",
+      "isBulkImporting",
+      "isBulkDeleting",
+      "bulkImportingItemIds",
+      "bulkDeletingItemIds",
+      "lastBulkImportOutcome",
+      "lastBulkDeleteOutcome",
+    ]),
     ...mapGetters("websocket", {websocketConnected: "connected"}),
     filteredImportTable() {
-      // Filter out items that have been locally deleted and add deleting/importing state
+      // Filter out items that have been locally deleted and add deleting/importing state.
+      // "deleting"/"importing" is true either from a single-item action (local Sets) or because
+      // a bulk job in the store is currently working on this item.
+      const bulkImportingIds = new Set(this.bulkImportingItemIds);
+      const bulkDeletingIds = new Set(this.bulkDeletingItemIds);
       return this.importTable
         .slice()
         .filter(item => !this.deletedItems.includes(item.id))
         .map(item => ({
           ...item,
-          deleting: this.deletingItems.has(item.id),
-          importing: this.importingItems.has(item.id)
+          deleting: this.deletingItems.has(item.id) || bulkDeletingIds.has(item.id),
+          importing: this.importingItems.has(item.id) || bulkImportingIds.has(item.id)
         }))
         // Sort so the oldest items appear at the top of the table
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -305,15 +316,10 @@ export default {
       deletedItems: [], // Track locally deleted items to prevent flicker
       deletedItemTimeouts: new Map(), // Track how many refresh cycles each deleted item has been gone
       selectedItems: new Set(), // Track selected items for bulk import
-      isBulkImporting: false, // Track bulk import state
-      isBulkDeleting: false, // Track bulk delete state
       refreshInterval: null, // Auto-refresh interval
-      deletingItems: new Set(), // Track items currently being deleted
-      importingItems: new Set(), // Track items currently being imported individually
+      deletingItems: new Set(), // Track items currently being deleted individually (not via a bulk job)
+      importingItems: new Set(), // Track items currently being imported individually (not via a bulk job)
       deleteJobIds: new Map(), // Track delete job IDs for each item
-      bulkImportJobId: null, // Track current bulk import job ID
-      bulkDeleteJobId: null, // Track current bulk delete job ID
-      bulkJobHandlers: [], // Store handler references for cleanup
       filenameRefs: {}, // Store refs to filename elements for truncation detection
       rowRefs: {}, // Store refs to row elements for tooltip positioning
       showTooltip: {}, // Track which tooltips are visible
@@ -325,33 +331,34 @@ export default {
     }
   },
   watch: {
-    websocketConnected(newVal) {
-      if (newVal) {
-        // WebSocket connected - delete job events are now handled directly by store actions
-      }
-    },
     filteredImportTable() {
       // Check truncation when table updates
       this.$nextTick(() => {
         this.checkAllFilenameTruncation()
       })
+    },
+    // A full replacement of importTable (SET_IMPORT_TABLE) only happens once the queue's
+    // "initial_state" has been (re)loaded; incremental item add/remove/update mutations don't
+    // reassign the array, so this fires exactly when the old `setImportTable`-mutation
+    // subscription used to.
+    importTable(newTable) {
+      this.hasInitiallyLoaded = true;
+      this.internalLoading = false;
+      this.isRefreshing = false;
+      this.checkForRestoreItems(newTable);
+    },
+    lastBulkImportOutcome(outcome) {
+      if (!outcome) return;
+      window.alert(outcome.message);
+      this.$store.dispatch('importQueue/clearLastBulkImportOutcome');
+    },
+    lastBulkDeleteOutcome(outcome) {
+      if (!outcome) return;
+      window.alert(outcome.message);
+      this.$store.dispatch('importQueue/clearLastBulkDeleteOutcome');
     }
   },
   methods: {
-    subscribeToRefreshMutation() {
-      this.$store.subscribe((mutation, state) => {
-        if (mutation.type === 'triggerImportTableRefresh') {
-          // Only refresh if we're not in the middle of an auto-refresh cycle
-          // This prevents duplicate API calls when the parent component is already refreshing
-          if (!this.isRefreshing) {
-            this.refreshData();
-          }
-        }
-      });
-    },
-    async refreshData() {
-      await this.fetchQueueList()
-    },
     setFilenameRef(el, index) {
       if (el) {
         this.filenameRefs[index] = el
@@ -514,17 +521,17 @@ export default {
 
       try {
         // Request refresh from WebSocket
-        realtimeSocket.requestRefresh('import_queue')
-        // Don't set internalLoading = false here - keep it true until data arrives
-        // The subscribeToImportTableUpdates() method will set it to false when setImportTable mutation is received
+        this.$store.dispatch('importQueue/requestQueueRefresh')
+        // Don't set internalLoading = false here - keep it true until data arrives.
+        // The `importTable` watcher will set it to false once the new data lands in the store.
       } catch (error) {
         console.error('Error requesting queue refresh:', error)
         // Only set loading to false on error
         this.internalLoading = false
         this.hasRequestedInitialLoad = false // Reset on error so we can retry
       } finally {
-        // Keep isRefreshing true until data arrives to prevent duplicate requests
-        // It will be set to false when data arrives via subscribeToImportTableUpdates
+        // Keep isRefreshing true until data arrives to prevent duplicate requests.
+        // It will be set to false by the `importTable` watcher once data arrives.
       }
     },
     checkForRestoreItems(serverQueue) {
@@ -715,36 +722,12 @@ export default {
         return;
       }
 
-      this.isBulkImporting = true;
       const itemIds = Array.from(this.selectedItems);
 
-      // Mark all items as importing immediately to disable buttons
-      itemIds.forEach(itemId => {
-        this.importingItems.add(itemId);
-      });
-      this.$forceUpdate();
-
-      try {
-        // Send WebSocket message to start bulk import
-        realtimeSocket.send('bulk_import_job', 'start_bulk_import', {
-          item_ids: itemIds,
-          import_custom_icons: true
-        });
-
-        // Clear selection immediately
-        this.clearSelection();
-
-      } catch (error) {
-        console.error('Bulk import error:', error);
-        // Remove items from importingItems on error
-        itemIds.forEach(itemId => {
-          this.importingItems.delete(itemId);
-        });
-        // Error will be reflected in table status icons after refresh
-        this.$forceUpdate();
-      } finally {
-        // Note: isBulkImporting will be set to false when the job completes via WebSocket
-      }
+      // The store optimistically marks these items as importing and starts the bulk_import_job
+      // WebSocket module; BulkImportJobModule dispatches the completion/failure back into it.
+      this.$store.dispatch('importQueue/startBulkImport', { itemIds, importCustomIcons: true });
+      this.clearSelection();
     },
     async bulkDelete() {
       if (this.selectedItems.size === 0) {
@@ -778,191 +761,12 @@ export default {
         return;
       }
 
-      this.isBulkDeleting = true;
       const itemIds = Array.from(this.selectedItems);
 
-      // Mark all items as deleting immediately to disable buttons
-      itemIds.forEach(itemId => {
-        this.deletingItems.add(itemId);
-      });
-      this.$forceUpdate();
-
-      try {
-        // Send WebSocket message to start bulk delete
-        realtimeSocket.send('bulk_delete_job', 'start_bulk_delete', {
-          item_ids: itemIds
-        });
-
-        // Clear selection immediately
-        this.clearSelection();
-
-      } catch (error) {
-        console.error('Bulk delete error:', error);
-        // Remove items from deletingItems on error
-        itemIds.forEach(itemId => {
-          this.deletingItems.delete(itemId);
-        });
-        // Error will be reflected in table status icons after refresh
-        this.$forceUpdate();
-      } finally {
-        // Note: isBulkDeleting will be set to false when the job completes via WebSocket
-      }
-    },
-    setupRealtimeConnection() {
-      // The realtime connection is now managed globally in App.vue
-      // Loading state is handled by the store subscription
-    },
-    subscribeToImportTableUpdates() {
-      // Subscribe to import table mutations to handle loading completion
-      this.$store.subscribe((mutation, state) => {
-        if (mutation.type === 'setImportTable') {
-          // When import table data is received, mark as initially loaded
-          this.hasInitiallyLoaded = true;
-          this.internalLoading = false;
-          this.isRefreshing = false; // Clear refreshing flag when data arrives
-          
-          // Check if any deleted items should be restored
-          this.checkForRestoreItems(state.importTable);
-        }
-      });
-    },
-    setupBulkJobHandlers() {
-      // Clear any existing handlers
-      this.cleanupBulkJobHandlers();
-
-      // Define handlers
-      const bulkImportJobStarted = (data) => {
-        this.bulkImportJobId = data.job_id;
-      };
-
-      const bulkImportStatusUpdated = (data) => {
-        // Update progress if needed
-        if (data.current_item_id) {
-          // Item is being processed, keep it in importingItems
-          this.importingItems.add(data.current_item_id);
-          this.$forceUpdate();
-        }
-      };
-
-      const bulkImportCompleted = (data) => {
-        // Prevent duplicate alerts by checking if this is the current job
-        // If job_id doesn't match our tracked job, ignore it (already handled)
-        if (data.job_id && this.bulkImportJobId && data.job_id !== this.bulkImportJobId) {
-          return;
-        }
-
-        this.isBulkImporting = false;
-        this.bulkImportJobId = null;
-
-        // Remove all items from importingItems
-        const itemIds = data.item_ids || [];
-        itemIds.forEach(itemId => {
-          this.importingItems.delete(itemId);
-        });
-
-        // Show alert if there were failed imports
-        if (data.failed_count > 0 && data.failed_items && data.failed_items.length > 0) {
-          const failedDetails = data.failed_items.map(item => 
-            `  • ${item.filename}: ${item.error}`
-          ).join('\n');
-          
-          const alertMessage = `Bulk import completed with ${data.failed_count} failure(s):\n\n${failedDetails}`;
-          window.alert(alertMessage);
-        }
-
-        this.$forceUpdate();
-      };
-
-      const bulkImportFailed = (data) => {
-        this.isBulkImporting = false;
-        this.bulkImportJobId = null;
-
-        // Remove all items from importingItems
-        const itemIds = data.item_ids || [];
-        itemIds.forEach(itemId => {
-          this.importingItems.delete(itemId);
-        });
-
-        // Show error alert to user
-        const errorMessage = data.error_message || 'An error occurred while importing items. Some items may not have been imported.';
-        window.alert(`Bulk import failed: ${errorMessage}`);
-
-        this.$forceUpdate();
-      };
-
-      const bulkDeleteJobStarted = (data) => {
-        this.bulkDeleteJobId = data.job_id;
-      };
-
-      const bulkDeleteStatusUpdated = (data) => {
-        // Update progress if needed
-        if (data.current_item_id) {
-          // Item is being processed, keep it in deletingItems
-          this.deletingItems.add(data.current_item_id);
-          this.$forceUpdate();
-        }
-      };
-
-      const bulkDeleteCompleted = (data) => {
-        this.isBulkDeleting = false;
-        this.bulkDeleteJobId = null;
-
-        // Remove all items from deletingItems
-        const itemIds = data.item_ids || [];
-        itemIds.forEach(itemId => {
-          this.deletingItems.delete(itemId);
-        });
-
-        this.$forceUpdate();
-      };
-
-      const bulkDeleteFailed = (data) => {
-        this.isBulkDeleting = false;
-        this.bulkDeleteJobId = null;
-
-        // Remove all items from deletingItems
-        const itemIds = data.item_ids || [];
-        itemIds.forEach(itemId => {
-          this.deletingItems.delete(itemId);
-        });
-
-        // Show error alert to user
-        const errorMessage = data.error_message || 'An error occurred while deleting items. Some items may not have been deleted.';
-        window.alert(`Bulk delete failed: ${errorMessage}`);
-
-        this.$forceUpdate();
-      };
-
-      // Subscribe to bulk import job events
-      realtimeSocket.subscribe('bulk_import_job', 'job_started', bulkImportJobStarted);
-      realtimeSocket.subscribe('bulk_import_job', 'status_updated', bulkImportStatusUpdated);
-      realtimeSocket.subscribe('bulk_import_job', 'completed', bulkImportCompleted);
-      realtimeSocket.subscribe('bulk_import_job', 'failed', bulkImportFailed);
-
-      // Subscribe to bulk delete job events
-      realtimeSocket.subscribe('bulk_delete_job', 'job_started', bulkDeleteJobStarted);
-      realtimeSocket.subscribe('bulk_delete_job', 'status_updated', bulkDeleteStatusUpdated);
-      realtimeSocket.subscribe('bulk_delete_job', 'completed', bulkDeleteCompleted);
-      realtimeSocket.subscribe('bulk_delete_job', 'failed', bulkDeleteFailed);
-
-      // Store handlers for cleanup
-      this.bulkJobHandlers = [
-        { module: 'bulk_import_job', event: 'job_started', handler: bulkImportJobStarted },
-        { module: 'bulk_import_job', event: 'status_updated', handler: bulkImportStatusUpdated },
-        { module: 'bulk_import_job', event: 'completed', handler: bulkImportCompleted },
-        { module: 'bulk_import_job', event: 'failed', handler: bulkImportFailed },
-        { module: 'bulk_delete_job', event: 'job_started', handler: bulkDeleteJobStarted },
-        { module: 'bulk_delete_job', event: 'status_updated', handler: bulkDeleteStatusUpdated },
-        { module: 'bulk_delete_job', event: 'completed', handler: bulkDeleteCompleted },
-        { module: 'bulk_delete_job', event: 'failed', handler: bulkDeleteFailed },
-      ];
-    },
-    cleanupBulkJobHandlers() {
-      // Unsubscribe from all bulk job events
-      this.bulkJobHandlers.forEach(({ module, event, handler }) => {
-        realtimeSocket.unsubscribe(module, event, handler);
-      });
-      this.bulkJobHandlers = [];
+      // The store optimistically marks these items as deleting and starts the bulk_delete_job
+      // WebSocket module; BulkDeleteJobModule dispatches the completion/failure back into it.
+      this.$store.dispatch('importQueue/startBulkDelete', { itemIds });
+      this.clearSelection();
     },
   },
   async created() {
@@ -977,17 +781,8 @@ export default {
       this.fetchQueueList();
     }
 
-    // Setup realtime connection (now managed globally)
-    this.setupRealtimeConnection()
-
-    // Subscribe to manual refresh mutations
-    this.subscribeToRefreshMutation()
-
-    // Setup bulk job WebSocket handlers
-    this.setupBulkJobHandlers()
-
-    // Subscribe to import table updates to handle loading completion
-    this.subscribeToImportTableUpdates();
+    // Realtime connection + WebSocket module registration is managed globally in App.vue; the
+    // `importTable`/`lastBulk*Outcome` watchers above react to whatever those modules dispatch.
   },
   mounted() {
     // WebSocket is already connected in created()
@@ -1005,9 +800,6 @@ export default {
     document.addEventListener('touchstart', this.handleOutsideClick);
   },
   beforeUnmount() {
-    // Unsubscribe from bulk job events
-    this.cleanupBulkJobHandlers();
-
     // Clear deleted items when component is destroyed (user navigates away)
     this.clearDeletedItems();
     // Clear selected items when component is destroyed

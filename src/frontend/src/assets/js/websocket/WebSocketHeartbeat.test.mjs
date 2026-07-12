@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mock } from 'node:test';
-import { WebSocketHeartbeat } from './WebSocketHeartbeat.js';
+import { WebSocketHeartbeat } from './WebSocketHeartbeat.ts';
 
 test('sends a ping on the configured interval', (t) => {
   t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });

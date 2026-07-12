@@ -36,7 +36,14 @@ export default [
         fetch: 'readonly',
         performance: 'readonly',
         setInterval: 'readonly',
-        clearInterval: 'readonly'
+        clearInterval: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        alert: 'readonly',
+        confirm: 'readonly',
+        WebSocket: 'readonly',
+        CloseEvent: 'readonly',
+        MessageEvent: 'readonly'
       }
     },
     plugins: {
@@ -119,7 +126,14 @@ export default [
         fetch: 'readonly',
         performance: 'readonly',
         setInterval: 'readonly',
-        clearInterval: 'readonly'
+        clearInterval: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        alert: 'readonly',
+        confirm: 'readonly',
+        WebSocket: 'readonly',
+        CloseEvent: 'readonly',
+        MessageEvent: 'readonly'
       }
     },
     plugins: {

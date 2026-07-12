@@ -302,7 +302,7 @@
 
 <script>
 import {mapGetters} from "vuex";
-import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
+import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket";
 import {getCookie} from "@/utils/cookies";
 import {logout} from "@/api/services/authApi";
 import Loader from "@/components/parts/Loader.vue";

@@ -573,8 +573,7 @@ import ColorPickerElement from "@/components/parts/ColorPickerElement.vue";
 import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
-import { connectWebSocket, sendWebSocketMessage, parseWebSocketMessage, shouldReconnect, getReconnectDelay } from '@/utils/import/websocketHandlers.js';
-import { WebSocketHeartbeat } from '@/assets/js/websocket/WebSocketHeartbeat.js';
+import { ImportStatusSocket } from '@/assets/js/websocket/ImportStatusSocket';
 import { calculateTotalDuplicateCount, calculateHashDuplicateCount, markDuplicateFeatures, isItemDuplicate, isItemHashDuplicate, getFeatureId, isItemSkipped, isItemDisabled } from '@/utils/import/duplicateDetection.js';
 import { getFeatureIconUrl, getFeatureIconUrlRaw, resolveIconUrl, hasCustomIcon, isSystemIcon, hasNonRecolorableIcon, handleIconError } from '@/utils/import/iconDetection.js';
 import { calculateAdjustedTotalPages, calculateAdjustedHasNext, calculateAdjustedHasPrevious, calculateImportableCount, isValidPageNumber } from '@/utils/import/paginationUtils.js';
@@ -797,11 +796,7 @@ export default {
       saveStatusTimeout: null,
 
       // WebSocket connection
-      ws: null,
-      wsConnected: false,
-      wsReconnectAttempts: 0,
-      maxReconnectAttempts: 5,
-      wsHeartbeat: null,
+      importStatusSocket: null,
 
       // Tag autocomplete state
       availableUserTags: [],
@@ -867,92 +862,20 @@ export default {
   methods: {
     // WebSocket methods
     connectWebSocket() {
-      this.ws = connectWebSocket(this.currentId, {
-        onOpen: this.onWebSocketOpen,
-        onMessage: this.onWebSocketMessage,
-        onClose: this.onWebSocketClose,
-        onError: this.onWebSocketError
-      });
-      this.wsHeartbeat = new WebSocketHeartbeat({
-        sendPing: () => sendWebSocketMessage(this.ws, this.wsConnected, 'ping', {}),
-        onTimeout: () => {
-          console.warn('Import status WebSocket ping timeout, forcing reconnect');
-          if (this.ws) {
-            this.ws.close(1006, 'Ping timeout'); // Triggers onWebSocketClose and reconnection
-          }
-        }
-      });
-    },
-
-    onWebSocketOpen() {
-      this.wsConnected = true;
-      this.wsReconnectAttempts = 0;
-      this.wsHeartbeat.start();
-    },
-
-    onWebSocketMessage(event) {
-      const message = parseWebSocketMessage(event);
-
-      switch (message.type) {
-        case 'pong':
-          this.wsHeartbeat.onPong();
-          break;
-        case 'initial_state':
-          this.handleInitialState(message.data);
-          break;
-        case 'status':
-          this.handleStatusMessage(message.data);
-          break;
-        case 'status_updated':
-          this.handleStatusUpdate(message.data);
-          break;
-        case 'log_added':
-          this.handleLogAdded(message.data);
-          break;
-        case 'item_completed':
-          this.handleItemCompleted(message.data);
-          break;
-        case 'item_failed':
-          this.handleItemFailed(message.data);
-          break;
-        case 'page':
-          this.handlePageData(message.data);
-          break;
-        case 'logs':
-          this.handleLogsData(message.data);
-          break;
-        case 'item_deleted':
-          this.handleItemDeleted(message.data);
-          break;
-        case 'error':
-          this.handleError(message.data);
-          break;
+      if (!this.importStatusSocket) {
+        this.importStatusSocket = new ImportStatusSocket();
+        this.importStatusSocket.on('initial_state', (data) => this.handleInitialState(data));
+        this.importStatusSocket.on('status', (data) => this.handleStatusMessage(data));
+        this.importStatusSocket.on('status_updated', (data) => this.handleStatusUpdate(data));
+        this.importStatusSocket.on('log_added', (data) => this.handleLogAdded(data));
+        this.importStatusSocket.on('item_completed', (data) => this.handleItemCompleted(data));
+        this.importStatusSocket.on('item_failed', (data) => this.handleItemFailed(data));
+        this.importStatusSocket.on('page', (data) => this.handlePageData(data));
+        this.importStatusSocket.on('logs', (data) => this.handleLogsData(data));
+        this.importStatusSocket.on('item_deleted', (data) => this.handleItemDeleted(data));
+        this.importStatusSocket.on('error', (data) => this.handleError(data));
       }
-    },
-
-    onWebSocketClose(event) {
-      this.wsConnected = false;
-      if (this.wsHeartbeat) {
-        this.wsHeartbeat.stop();
-      }
-
-      // Handle 404 - item not found
-      if (event.code === 4004) {
-        console.log('Item not found (404) - redirecting to import table');
-        this.loading.redirecting = true;
-        this.$router.replace('/import');
-        return;
-      }
-
-      // Attempt to reconnect if conditions are met
-      if (shouldReconnect(event, this.currentId, this.wsReconnectAttempts, this.maxReconnectAttempts)) {
-        this.wsReconnectAttempts++;
-        setTimeout(() => this.connectWebSocket(), getReconnectDelay());
-      }
-    },
-
-    onWebSocketError(error) {
-      console.error('WebSocket error:', error);
+      this.importStatusSocket.connect(this.currentId);
     },
 
     formatGeometryTypeForDisplay(geometryType) {
@@ -1222,7 +1145,7 @@ export default {
     },
 
     sendWebSocketMessage(type, data) {
-      sendWebSocketMessage(this.ws, this.wsConnected, type, data);
+      this.importStatusSocket?.send(type, data);
     },
 
     async checkProcessingStatus() {
@@ -2176,10 +2099,7 @@ export default {
       this.stopProcessingPolling();
 
       // Close WebSocket connection before clearing state
-      if (this.ws) {
-        this.ws.close(1000); // Normal closure code
-        this.ws = null;
-      }
+      this.importStatusSocket?.close();
 
       // Clear all component data to reset state
       this.msg = "";
@@ -2614,12 +2534,7 @@ export default {
     if (this.beforeUnloadHandler) {
       window.removeEventListener('beforeunload', this.beforeUnloadHandler);
     }
-    // Close WebSocket connection
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-    // Clear component state when component is destroyed
+    // Clear component state (this also closes the WebSocket connection) when destroyed
     this.clearComponentState();
   },
   beforeRouteLeave(to, from, next) {
@@ -2658,13 +2573,7 @@ export default {
     }
   },
   beforeRouteUpdate(to, from, next) {
-    // Close existing WebSocket before switching to new item
-    if (this.ws) {
-      this.ws.close(1000); // Normal closure
-      this.ws = null;
-    }
-
-    // Update to new ID and reconnect
+    // Update to new ID and reconnect (clearComponentState() closes the existing WebSocket)
     this.clearComponentState();
     this.currentId = to.params.id;
     this.connectWebSocket();
