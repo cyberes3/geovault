@@ -1,6 +1,6 @@
 """Static file serving via WhiteNoise (CSS/JS/images, including the built frontend)."""
+from website.public_url import public_base_url
 from website.settings.paths import BASE_DIR
-from website.settings.security import DEBUG, SITE_DOMAIN
 
 STATIC_URL = '/static/'
 
@@ -24,10 +24,9 @@ WHITENOISE_IMMUTABLE_FILE_TEST = lambda path, url: url.startswith('/static/') an
 
 
 def _whitenoise_add_cors_headers(headers, path, url):
-    """Set CORS header for WhiteNoise static files to match site domain."""
-    # Use the same logic as CustomHeaderMiddleware to determine the correct origin
-    protocol = 'https' if not DEBUG else 'http'
-    headers['Access-Control-Allow-Origin'] = f'{protocol}://{SITE_DOMAIN}'
+    """Set CORS header for WhiteNoise static files to match site domain (same origin logic
+    CustomHeaderMiddleware uses for its own CORS headers; see website.public_url)."""
+    headers['Access-Control-Allow-Origin'] = public_base_url()
 
 
 # WhiteNoise CORS header configuration. By default, WhiteNoise sets

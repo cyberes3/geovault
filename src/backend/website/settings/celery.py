@@ -20,6 +20,10 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ENABLE_UTC = True
 CELERY_TIMEZONE = TIME_ZONE
+# Safety-net queue for any task that omits an explicit `queue=` - every real task today sets one
+# (maintenance/extensions/live_track/imports), so nothing currently targets this, but it's kept
+# in every worker's --queues flag (installation/geovault-celery.service) so an undeclared-queue
+# task still runs somewhere instead of silently never executing.
 CELERY_TASK_DEFAULT_QUEUE = _celery.default_queue
 CELERY_TASK_ALWAYS_EAGER = _celery.task_always_eager
 CELERY_TASK_EAGER_PROPAGATES = _celery.task_eager_propagates

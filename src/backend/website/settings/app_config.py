@@ -48,18 +48,18 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'website.middleware.LoggingMiddleware',  # Log BEFORE WhiteNoise to catch static file requests
-    'website.middleware.FixRequestHostMiddleware',  # Fix request host for email URL generation (before allauth)
+    'website.middleware.logging.LoggingMiddleware',  # Log BEFORE WhiteNoise to catch static file requests
+    'website.middleware.host_fix.FixRequestHostMiddleware',  # Fix request host for email URL generation (before allauth)
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Serve static files in production
-    'website.middleware.CustomSessionMiddleware',  # Custom SessionMiddleware that prevents cookies for tile requests
+    'website.middleware.session.CustomSessionMiddleware',  # Custom SessionMiddleware that prevents cookies for tile requests
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'website.middleware.APIKeyResolutionMiddleware',  # Resolve API key for /api/ so logs show username
-    'website.middleware.ActivityTrackingMiddleware',  # Track user activity (after auth)
+    'website.middleware.auth.APIKeyResolutionMiddleware',  # Resolve API key for /api/ so logs show username
+    'website.middleware.activity.ActivityTrackingMiddleware',  # Track user activity (after auth)
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'website.middleware.CustomHeaderMiddleware',
+    'website.middleware.security_headers.CustomHeaderMiddleware',
     'allauth.account.middleware.AccountMiddleware',
 ]
 
@@ -72,6 +72,7 @@ TEMPLATES = [
             BASE_DIR / '../frontend/dist',
             BASE_DIR / '../allauth templates',
             BASE_DIR / 'website' / 'templates',
+            BASE_DIR / 'website' / 'oauth' / 'templates',
         ],
         'APP_DIRS': True,
         'OPTIONS': {

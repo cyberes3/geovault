@@ -3,7 +3,7 @@ Django management command to run startup checks.
 """
 
 from django.core.management.base import BaseCommand
-from website.startup_checks import run_startup_checks
+from website.startup_checks.orchestrator import run_startup_checks
 
 
 class Command(BaseCommand):

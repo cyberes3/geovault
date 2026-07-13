@@ -349,6 +349,30 @@ class TestExtensionHooks:
         finally:
             clear_extension_context()
 
+    def test_register_bg_task_applies_hardening_options(self):
+        """time_limit/soft_time_limit/autoretry_for/retry_kwargs reach the real Celery task."""
+        set_extension_context("test_extension")
+        try:
+            def callback():
+                return True
+
+            task_name = register_bg_task(
+                "hardened_task",
+                callback,
+                queue="extensions",
+                time_limit=90,
+                soft_time_limit=60,
+                autoretry_for=(OSError,),
+                retry_kwargs={"max_retries": 3},
+            )
+            celery_task = extension_hooks_module.current_app.tasks[task_name]
+            assert celery_task.time_limit == 90
+            assert celery_task.soft_time_limit == 60
+            assert OSError in celery_task.autoretry_for
+            assert celery_task.retry_kwargs == {"max_retries": 3}
+        finally:
+            clear_extension_context()
+
     def test_register_periodic_bg_task_without_context_raises(self):
         """Periodic registration without extension context should fail."""
         with pytest.raises(ValueError, match="Cannot register periodic background task outside of extension context"):
@@ -377,6 +401,15 @@ class TestExtensionHooks:
             assert items[0]["args"] == [1]
             assert items[0]["kwargs"] == {"a": 2}
             assert items[0]["options"] == {"queue": "extensions"}
+        finally:
+            clear_extension_context()
+
+    def test_register_periodic_bg_task_rejects_invalid_task_ref(self):
+        """A task_ref that's neither a name string nor a Celery task object should raise."""
+        set_extension_context("test_extension")
+        try:
+            with pytest.raises(TypeError, match="task_ref must be a task name string or Celery task object"):
+                register_periodic_bg_task("sched1", object(), 60.0)
         finally:
             clear_extension_context()
 

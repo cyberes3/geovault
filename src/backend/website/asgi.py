@@ -22,7 +22,7 @@ from website.exception_handler import setup_global_exception_handlers
 setup_global_exception_handlers()
 
 # Run startup checks after Django is initialized
-from website.startup_checks import run_startup_checks
+from website.startup_checks.orchestrator import run_startup_checks
 run_startup_checks()
 
 # Import routing after Django is set up

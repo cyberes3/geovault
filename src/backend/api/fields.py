@@ -18,6 +18,34 @@ _fernet_instance = None
 _FERNET_KDF_SALT = b"geovault-fernet-v1"
 _FERNET_KDF_ITERATIONS = 600000
 
+# Fernet token structure (per the spec): 1-byte version (0x80) + 8-byte big-endian timestamp +
+# 16-byte IV + ciphertext (padded to a multiple of 16 bytes, minimum one block) + 32-byte HMAC.
+# So the minimum decoded length is 1 + 8 + 16 + 16 + 32 = 73 bytes, and every valid length beyond
+# that differs by a whole 16-byte AES block.
+_FERNET_VERSION_BYTE = 0x80
+_FERNET_MIN_DECODED_LENGTH = 73
+_FERNET_CIPHERTEXT_BLOCK_SIZE = 16
+
+
+def _looks_like_fernet_token(value: str) -> bool:
+    """
+    Precise structural check for whether a string is a plausible Fernet token, rather than the
+    loose 'starts with gAAAAAB' string-prefix guess: base64-urlsafe-decode it and verify the
+    decoded bytes match Fernet's fixed layout (version byte, minimum length, block-aligned
+    ciphertext). This still can't prove the token decrypts successfully (wrong key/HMAC mismatch
+    is a separate, expected failure mode handled by the InvalidToken branches below) but it
+    correctly rejects plaintext that merely happens to start with the same characters.
+    """
+    if not value:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(value.encode('ascii') + b'=' * (-len(value) % 4))
+    except (ValueError, TypeError, UnicodeEncodeError, base64.binascii.Error):
+        return False
+    if len(decoded) < _FERNET_MIN_DECODED_LENGTH or decoded[0] != _FERNET_VERSION_BYTE:
+        return False
+    return (len(decoded) - _FERNET_MIN_DECODED_LENGTH) % _FERNET_CIPHERTEXT_BLOCK_SIZE == 0
+
 
 def _get_fernet_instance():
     """
@@ -109,15 +137,18 @@ class EncryptedTextField(models.TextField):
             # Decrypt the value
             decrypted_bytes = self._fernet.decrypt(value.encode('utf-8'))
             return decrypted_bytes.decode('utf-8')
-        except InvalidToken as e:
+        except InvalidToken:
             # This could happen if:
             # - Data was encrypted with a different key
             # - Data is corrupted
             # - Data is plaintext (from before encryption was added)
+            # Logged at warning level with a traceback rather than silently returning the
+            # ciphertext as a plain string, since a wrong-key/corrupted-data case looks
+            # identical to the harmless pre-encryption-plaintext case otherwise.
             _logger.warning(
-                f"Failed to decrypt field value (InvalidToken). "
-                f"This may be plaintext data from before encryption was added, "
-                f"or data encrypted with a different key: {e}"
+                "Failed to decrypt field value (InvalidToken). This may be plaintext data from "
+                "before encryption was added, or data encrypted with a different key.",
+                exc_info=True,
             )
             # Return the value as-is (might be plaintext from migration)
             return value
@@ -142,10 +173,10 @@ class EncryptedTextField(models.TextField):
             return None
         
         if isinstance(value, str):
-            # Check if it looks like an encrypted value (Fernet tokens start with specific prefix)
-            # If it's already decrypted (doesn't look encrypted), return as-is
-            if not value.startswith('gAAAAAB'):
-                # Doesn't look like a Fernet token, assume it's already plaintext
+            # Check if it looks like an encrypted value via the Fernet token structure (version
+            # byte, minimum length, block-aligned ciphertext) rather than a loose string-prefix
+            # guess. If it doesn't look encrypted, it's already decrypted plaintext; return as-is.
+            if not _looks_like_fernet_token(value):
                 return value
             
             # Try to decrypt
@@ -153,10 +184,16 @@ class EncryptedTextField(models.TextField):
                 decrypted_bytes = self._fernet.decrypt(value.encode('utf-8'))
                 return decrypted_bytes.decode('utf-8')
             except InvalidToken:
-                # Not encrypted, return as-is
+                # Structurally looked like a Fernet token but failed to decrypt (wrong key or
+                # corrupted data) - log so this is visible, then return as-is like from_db_value.
+                _logger.warning(
+                    "Failed to decrypt field value in to_python() (InvalidToken) despite the "
+                    "value looking like a Fernet token; returning it unchanged.",
+                    exc_info=True,
+                )
                 return value
             except Exception as e:
-                _logger.warning(f"Error decrypting in to_python: {e}")
+                _logger.error(f"Error decrypting in to_python: {e}", exc_info=True)
                 return value
         
         # Convert non-string to string

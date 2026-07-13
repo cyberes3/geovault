@@ -12,12 +12,27 @@ from extensions.pwa_mint.src.backend.worker import (
     enqueue_startup_check,
     pwa_check_and_regenerate_task,
 )
+from website.celery_app import celery_app
 
 User = get_user_model()
 
 
 @pytest.mark.django_db
 class TestPwaMintCeleryTasks:
+    @pytest.mark.parametrize(
+        "task_name",
+        ["extensions.pwa_mint.check_and_regenerate", "extensions.pwa_mint.regenerate"],
+    )
+    def test_pwa_tasks_are_registered_with_celery(self, task_name):
+        """`PwaMintConfig.extension_ready()` registers both PWA tasks via `register_bg_task`
+        at real Django startup - confirm that results in real Celery registration, with the
+        hardening options (time_limit/soft_time_limit/autoretry_for) applied."""
+        task = celery_app.tasks.get(task_name)
+        assert task is not None
+        assert task.soft_time_limit
+        assert task.time_limit
+        assert OSError in task.autoretry_for
+
     def test_check_and_regenerate_triggers_regen_when_stale(self):
         with patch(
             "extensions.pwa_mint.src.backend.worker._should_regenerate",

@@ -17,5 +17,5 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'website.settings')
 application = get_wsgi_application()
 
 # Run startup checks after Django is initialized
-from website.startup_checks import run_startup_checks
+from website.startup_checks.orchestrator import run_startup_checks
 run_startup_checks()

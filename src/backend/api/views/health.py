@@ -10,12 +10,11 @@ from django.views.decorators.http import require_http_methods
 from geo_lib.logging.console import get_tagged_logger
 from website.auth_decorators import api_or_login_required_401
 from website.settings_utils import get_required_setting, get_setting
-from website.startup_checks import (
-    check_celery_beat,
-    check_celery_worker,
+from website.startup_checks.celery import check_celery_beat, check_celery_worker
+from website.startup_checks.environment import (
     check_database_connection,
-    check_redis_connection,
     check_postgis_installation,
+    check_redis_connection,
 )
 
 _logger = get_tagged_logger()

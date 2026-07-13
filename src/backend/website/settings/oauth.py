@@ -28,7 +28,8 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 # OAuth2 Provider (django-oauth-toolkit) for mobile and API clients
-# PROTECTED_CLIENT_IDS: applications with these client_ids are shared (e.g. Android Places/Uploader).
+# PROTECTED_CLIENT_IDS: applications with these client_ids are shared (all 5 first-party Android
+# apps created by the ensure_oauth2_app management command: places, uploader, tracker, survey, NGS).
 # Only the server can change them; users cannot edit or delete them in the UI.
 # ALLOWED_REDIRECT_URI_SCHEMES: permit Android app custom schemes for OAuth callback redirects.
 OAUTH2_PROVIDER = {
@@ -38,9 +39,15 @@ OAUTH2_PROVIDER = {
     'DEFAULT_SCOPES': ['api'],
     'ACCESS_TOKEN_EXPIRE_SECONDS': 3600 * 12,  # 12 hours
     'REFRESH_TOKEN_EXPIRE_SECONDS': 3600 * 24 * 365,  # 1 year
-    'PROTECTED_CLIENT_IDS': ['geovault-android-places', 'geovault-android-uploader', 'geovault-android-tracker'],
+    'PROTECTED_CLIENT_IDS': [
+        'geovault-android-places',
+        'geovault-android-uploader',
+        'geovault-android-tracker',
+        'geovault-android-survey',
+        'geovault-android-ngs',
+    ],
     # Redirect URI schemes: only these are accepted when an app registers or uses a redirect_uri.
     # Real security is that the redirect_uri must be in the application's registered list.
-    # "custom" (via oauth_custom_scheme monkeypatch) allows any reverse-DNS scheme (e.g. com.*.app).
+    # "custom" (via website.oauth.custom_scheme monkeypatch) allows any reverse-DNS scheme (e.g. com.*.app).
     'ALLOWED_REDIRECT_URI_SCHEMES': ['http', 'https', 'custom'],
 }

@@ -13,8 +13,8 @@ Dropping "plain" from the class-level challenge-method registry closes both the 
 (`code_challenge_method=plain`) and implicit (omitted parameter, defaults to "plain") paths,
 since both are validated against this same dict at the authorization and token-exchange steps.
 
-Import this before any oauth2_provider views are used (e.g. at top of oauth_urls), same pattern
-as oauth_custom_scheme.py.
+Import this before any oauth2_provider views are used (e.g. at top of oauth/urls.py), same
+pattern as custom_scheme.py.
 """
 from oauthlib.oauth2.rfc6749.grant_types.authorization_code import AuthorizationCodeGrant
 

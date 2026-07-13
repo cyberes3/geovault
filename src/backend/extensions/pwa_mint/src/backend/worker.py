@@ -10,6 +10,16 @@ from website.celery_app import celery_app
 
 logger = logging.getLogger("website.pwa_mint.worker")
 
+# `_perform_pwa_generation` bounds its own outbound HTTP calls (10s manifest pre-call + 300s
+# PWABuilder build/sign request) but has no overall ceiling - these give the Celery worker a
+# hard backstop over the whole task (HTTP calls + zip extraction + APK cache write).
+PWA_REGENERATE_SOFT_TIME_LIMIT_SECONDS = 360
+PWA_REGENERATE_TIME_LIMIT_SECONDS = 390
+# `_should_regenerate`/`_regenerate_apk` touch the local APK cache directory directly (stat,
+# open, os.replace) - retry a few times on transient file I/O errors (e.g. a concurrent
+# regeneration briefly holding the temp file, a flaky mount) rather than failing outright.
+PWA_REGENERATE_RETRY_KWARGS = {"max_retries": 3, "countdown": 30}
+
 def _should_regenerate() -> bool:
     """Check if the cached APK is missing or older than 24 hours."""
     domain = settings.SITE_DOMAIN
@@ -48,7 +58,13 @@ def _regenerate_apk() -> bool:
 
 
 def pwa_check_and_regenerate_task() -> bool:
-    """Periodic/startup check task: regenerate only when APK is missing/stale."""
+    """
+    Periodic/startup check task: regenerate only when APK is missing/stale.
+
+    Registered with Celery (with time_limit/soft_time_limit/retry hardening) via
+    `register_bg_task` in `apps.py`'s `extension_ready()`, not a `@shared_task` decorator here -
+    see that call's comment for why.
+    """
     if _should_regenerate():
         logger.info("APK is missing or stale, triggering regeneration")
         return _regenerate_apk()
@@ -57,7 +73,7 @@ def pwa_check_and_regenerate_task() -> bool:
 
 
 def pwa_regenerate_task() -> bool:
-    """Force regeneration task."""
+    """Force regeneration task. Registered with Celery via `apps.py` - see `pwa_check_and_regenerate_task`."""
     return _regenerate_apk()
 
 

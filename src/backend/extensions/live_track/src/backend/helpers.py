@@ -752,5 +752,11 @@ def flush_pending_broadcasts() -> int:
 
 
 def flush_pending_broadcasts_task() -> int:
-    """Celery task callback for flushing buffered live-track updates."""
+    """
+    Celery task callback for flushing buffered live-track updates.
+
+    Registered with Celery (with time_limit/soft_time_limit/retry hardening) via
+    `register_bg_task` in `apps.py`'s `extension_ready()`, not a `@shared_task` decorator here -
+    see that call's comment for why.
+    """
     return flush_pending_broadcasts()

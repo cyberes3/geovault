@@ -1,10 +1,12 @@
 """
-Celery task for cleaning up old orphaned replacement ImportQueue rows.
+Business logic for cleaning up old orphaned replacement ImportQueue rows.
+
+The Celery task wrapper lives in `api.tasks` (registration/scheduling concern); this module
+only owns the actual cleanup query, kept separately so it stays independently unit-testable.
 """
 
 from datetime import timedelta
 
-from celery import shared_task
 from django.utils import timezone
 
 from api.models import ImportQueue
@@ -13,7 +15,6 @@ from geo_lib.logging.console import get_tagged_logger
 _logger = get_tagged_logger("ReplacementCleanupService")
 
 
-@shared_task(name="api.replacement_cleanup.cleanup_orphaned_replacements", queue="maintenance")
 def cleanup_orphaned_replacements() -> int:
     """
     Delete replacement-upload rows that were never imported and are >= 10 minutes old.

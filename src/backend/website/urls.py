@@ -104,7 +104,7 @@ urlpatterns = [
     # Block access to /accounts/email/ and redirect to frontend settings
     path('accounts/email/', block_account_email_view, name='account_email'),
     path('accounts/', include('allauth.urls')),  # Django allauth URLs
-    path('api/oauth/', include('website.oauth_urls')),
+    path('api/oauth/', include('website.oauth.urls')),
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
     path('api/', include("api.urls")),

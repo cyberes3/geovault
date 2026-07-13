@@ -4,11 +4,11 @@ OAuth2 URLconf that uses our views for application detail/update/delete so prote
 """
 from django.urls import path, re_path
 
-import website.oauth_custom_scheme  # noqa: F401 - apply custom redirect scheme patches before importing dot views
-import website.oauth_pkce  # noqa: F401 - reject weak PKCE "plain" challenge method before importing dot views
+import website.oauth.custom_scheme  # noqa: F401 - apply custom redirect scheme patches before importing dot views
+import website.oauth.pkce  # noqa: F401 - reject weak PKCE "plain" challenge method before importing dot views
 from oauth2_provider import views as dot_views
 
-from website.oauth_views import (
+from website.oauth.views import (
     ApplicationList,
     ApplicationDetail,
     ApplicationUpdate,

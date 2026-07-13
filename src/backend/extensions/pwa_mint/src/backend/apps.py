@@ -16,6 +16,9 @@ from .worker import (
     enqueue_startup_check,
     pwa_check_and_regenerate_task,
     pwa_regenerate_task,
+    PWA_REGENERATE_RETRY_KWARGS,
+    PWA_REGENERATE_SOFT_TIME_LIMIT_SECONDS,
+    PWA_REGENERATE_TIME_LIMIT_SECONDS,
 )
 
 logger = logging.getLogger("website.pwa_mint")
@@ -90,15 +93,29 @@ class PwaMintConfig(ExtensionAppConfig):
             logger.warning(f"Failed to initialize keystore on startup: {e}")
 
         try:
+            # APK build/signing is unbounded file I/O + a multi-minute outbound HTTP call
+            # (see worker.py's constants) - hard time/soft-time limits plus a few OSError
+            # retries, applied here rather than via a `@shared_task` decorator on the callback
+            # itself (see `register_bg_task`'s docstring for why: this extension's backend
+            # package gets imported under two distinct dotted paths, and a module-level
+            # decorator would register - and silently re-register - a task per import).
             check_task_name = register_bg_task(
                 "check_and_regenerate",
                 pwa_check_and_regenerate_task,
                 queue="extensions",
+                time_limit=PWA_REGENERATE_TIME_LIMIT_SECONDS,
+                soft_time_limit=PWA_REGENERATE_SOFT_TIME_LIMIT_SECONDS,
+                autoretry_for=(OSError,),
+                retry_kwargs=PWA_REGENERATE_RETRY_KWARGS,
             )
             register_bg_task(
                 "regenerate",
                 pwa_regenerate_task,
                 queue="extensions",
+                time_limit=PWA_REGENERATE_TIME_LIMIT_SECONDS,
+                soft_time_limit=PWA_REGENERATE_SOFT_TIME_LIMIT_SECONDS,
+                autoretry_for=(OSError,),
+                retry_kwargs=PWA_REGENERATE_RETRY_KWARGS,
             )
             register_periodic_bg_task(
                 "daily_check",

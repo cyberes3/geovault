@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from django.test import override_settings
 
-from website.startup_checks import check_social_preview_tilesource
+from website.startup_checks.config import check_social_preview_tilesource
 
 
 @pytest.mark.django_db
@@ -19,7 +19,7 @@ class TestStartupChecksSocialPreview:
             },
         }
         with override_settings(TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE="osm"), patch(
-            "website.startup_checks.get_tile_source", return_value=tile_cfg
+            "website.startup_checks.config.get_tile_source", return_value=tile_cfg
         ):
             assert check_social_preview_tilesource() is True
 
@@ -36,13 +36,13 @@ class TestStartupChecksSocialPreview:
             },
         }
         with override_settings(TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE="osm"), patch(
-            "website.startup_checks.get_tile_source", return_value=tile_cfg
+            "website.startup_checks.config.get_tile_source", return_value=tile_cfg
         ):
             assert check_social_preview_tilesource() is True
 
     def test_check_social_preview_tilesource_missing_source(self):
         with override_settings(TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE="does-not-exist"), patch(
-            "website.startup_checks.get_tile_source", return_value=None
+            "website.startup_checks.config.get_tile_source", return_value=None
         ):
             assert check_social_preview_tilesource() is False
 
@@ -56,6 +56,6 @@ class TestStartupChecksSocialPreview:
             },
         }
         with override_settings(TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE="maptiler-topo-v4"), patch(
-            "website.startup_checks.get_tile_source", return_value=tile_cfg
+            "website.startup_checks.config.get_tile_source", return_value=tile_cfg
         ):
             assert check_social_preview_tilesource() is False

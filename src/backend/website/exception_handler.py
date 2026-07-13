@@ -88,21 +88,15 @@ def _async_exception_handler(loop, context):
 
 def setup_global_exception_handlers():
     """
-    Set up global exception handlers for unhandled exceptions.
-    This should be called during Django startup to ensure all exceptions are logged.
+    Set the global sys.excepthook for unhandled exceptions escaping the main thread.
+    This should be called during Django startup (before the ASGI server's event loop exists).
+
+    Note: this does not also set asyncio's loop exception handler. This function runs at ASGI
+    module-import time, before Daphne's real event loop exists, so there is no running loop to
+    attach to yet - `ASGIExceptionMiddleware` below sets it (via `asyncio.get_running_loop()`)
+    on every request instead, which is the only point a real running loop is guaranteed to exist.
     """
-    # Set global exception handler for main thread
     sys.excepthook = _global_exception_handler
-    
-    # Set exception handler for async tasks
-    try:
-        loop = asyncio.get_event_loop()
-        if loop is not None:
-            loop.set_exception_handler(_async_exception_handler)
-    except RuntimeError:
-        # No event loop exists yet, we'll set it up when one is created
-        # This will be handled by the ASGI middleware
-        pass
 
 
 class ASGIExceptionMiddleware:

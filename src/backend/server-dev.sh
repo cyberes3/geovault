@@ -12,6 +12,9 @@ python manage.py migrate --no-input
 python -u manage.py runserver 0.0.0.0:8000
 
 # Run Celery in separate terminals:
+# `default` is included as a safety net for any future task that omits an explicit `queue=`
+# (Celery's CELERY_TASK_DEFAULT_QUEUE) - no task targets it today, but a worker not listening on
+# it means such a task would silently never run instead of erroring.
 # celery -A website.celery_app worker --loglevel=info --queues=default,maintenance,extensions,live_track,imports
 # celery -A website.celery_app beat --loglevel=info
 

@@ -1,6 +1,6 @@
 """
 Internal HTML page at /api/pages/apps/ listing links to additional apps (Gitea releases).
-Staff-only; parses Gitea release data with 30-minute server cache.
+Public, no auth required; parses Gitea release data with 30-minute server cache.
 """
 from urllib.parse import urlparse, urlunparse
 

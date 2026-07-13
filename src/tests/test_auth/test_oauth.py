@@ -378,7 +378,7 @@ class TestOAuthAuthorizationFlowE2E(TestCase):
 class TestOAuthPKCERejectsPlain(TestCase):
     """PKCE "plain" is weaker than S256 (verifier == challenge, no hashing) and must be rejected
     both when explicitly requested and when code_challenge_method is omitted (oauthlib otherwise
-    silently defaults an omitted method to "plain"). See website/oauth_pkce.py."""
+    silently defaults an omitted method to "plain"). See website/oauth/pkce.py."""
 
     def setUp(self):
         self.user = User.objects.create_user(

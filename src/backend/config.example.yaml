@@ -263,7 +263,11 @@ celery:
   # Can be overridden with the CELERY_RESULT_BACKEND environment variable.
   # result_backend: redis://127.0.0.1:6379/4
 
-  # Default Celery queue name for tasks that don't specify one explicitly.
+  # Default Celery queue name for tasks that don't specify one explicitly. Every real task today
+  # declares its own queue (maintenance/extensions/live_track/imports), so this is currently
+  # just a safety net - kept in every worker's --queues flag (see
+  # installation/geovault-celery.service) so a future task that forgets to set queue= still gets
+  # picked up by a worker instead of silently never running because nothing listens on it.
   default_queue: default
 
   # Run tasks synchronously in-process instead of dispatching to a worker (used by the test

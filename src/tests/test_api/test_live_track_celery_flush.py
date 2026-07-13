@@ -3,15 +3,31 @@ from fnmatch import fnmatch
 from unittest.mock import patch
 
 import pytest
+import redis
 from django.contrib.auth import get_user_model
 
 from extensions.live_track.src.backend.helpers import (
+    LIVE_TRACK_FLUSH_TASK_NAME,
     flush_pending_broadcasts,
     queue_broadcast_track_updated,
 )
 from extensions.live_track.src.backend.models import LiveTrack, LiveTrackSubscription
+from website.celery_app import celery_app
 
 User = get_user_model()
+
+
+class TestLiveTrackFlushTaskRegistration:
+    def test_flush_task_is_registered_with_celery(self):
+        """`LiveTrackConfig.extension_ready()` registers the flush task via `register_bg_task`
+        at real Django startup - confirm that results in real Celery registration, with the
+        hardening options (time_limit/soft_time_limit/autoretry_for) applied."""
+        task = celery_app.tasks.get(LIVE_TRACK_FLUSH_TASK_NAME)
+        assert task is not None
+        assert task.soft_time_limit
+        assert task.time_limit
+        assert redis.exceptions.ConnectionError in task.autoretry_for
+        assert redis.exceptions.TimeoutError in task.autoretry_for
 
 
 class FakeRedis:

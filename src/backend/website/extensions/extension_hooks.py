@@ -291,11 +291,25 @@ def register_bg_task(
     *,
     queue: Optional[str] = None,
     bind: bool = False,
+    time_limit: Optional[int] = None,
+    soft_time_limit: Optional[int] = None,
     autoretry_for: Optional[Tuple[Type[Exception], ...]] = None,
     retry_kwargs: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Register an extension background task with Celery.
+
+    Deliberately *not* a plain `@shared_task` decorator on the callback's own definition: the
+    extension loader (`extension_loader._register_module_with_prefix`) imports each extension's
+    backend package under two distinct dotted paths - the short one (`<ext>.src.backend...`,
+    used internally by relative imports while the extension app is loading) and the full one
+    (`extensions.<ext>.src.backend...`, used by everything else, including tests). A module-level
+    `@shared_task` decorator runs its registration side effect on *both* independently-imported
+    copies, silently overwriting `celery_app.tasks[name]` with whichever copy happened to import
+    second (e.g. a test importing the callback directly) - a real, observed failure mode, not a
+    theoretical one. Calling this once, explicitly, from `extension_ready()` (which only ever
+    runs once, against the one callback reference the extension's own `apps.py` already holds)
+    avoids that entirely.
 
     Returns:
         Fully qualified Celery task name.
@@ -314,6 +328,10 @@ def register_bg_task(
     task_options: Dict[str, Any] = {"name": task_name, "bind": bind}
     if queue:
         task_options["queue"] = queue
+    if time_limit:
+        task_options["time_limit"] = time_limit
+    if soft_time_limit:
+        task_options["soft_time_limit"] = soft_time_limit
     if autoretry_for:
         task_options["autoretry_for"] = autoretry_for
     if retry_kwargs:
@@ -331,6 +349,8 @@ def register_bg_task(
             "callback": callback,
             "queue": queue,
             "bind": bind,
+            "time_limit": time_limit,
+            "soft_time_limit": soft_time_limit,
             "autoretry_for": autoretry_for or tuple(),
             "retry_kwargs": retry_kwargs or {},
             "celery_task": celery_task,
@@ -351,9 +371,14 @@ def register_periodic_bg_task(
     """
     Register a periodic schedule for an extension background task.
 
+    Deferred until `celery_app`'s `on_after_finalize` (see
+    `website.celery_app._register_extension_periodic_tasks`) so the schedule can be added after
+    every extension's tasks exist, regardless of `AppConfig.ready()` order across extensions.
+
     task_ref can be:
       - fully qualified task name string
-      - Celery task object (with .name)
+      - Celery task object (with .name), e.g. the return value is looked up via
+        `current_app.tasks[register_bg_task(...)]` if you need the object rather than the name
     """
     if _current_extension_name is None:
         raise ValueError(

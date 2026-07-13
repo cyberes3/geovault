@@ -12,7 +12,7 @@ import logging
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import AnonymousUser
 
-from website.middleware import _resolve_oauth2_access_token
+from website.middleware.auth import _resolve_oauth2_access_token
 from users.api_keys import validate_api_key
 
 logger = logging.getLogger(__name__)
