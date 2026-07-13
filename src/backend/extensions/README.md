@@ -145,7 +145,7 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.GeoVault`** — `{ registry, utils, toast, platformState }` (the same `utils`/`toast`/`platformState`/`registry` passed into `setup()`, for use from components that weren't given them directly)
 - **`window.gv_core.createRouteWrapper`** — see above
 - **`window.gv_core.Vue`**, **`VueRouter`**, **`Vuex`**, **`axios`** — Vue ecosystem (externalized so extensions share core's single instance)
-- **`window.gv_core.HeroiconsOutline`**, **`HeroiconsSolid`** — Heroicons
+- **`window.gv_core.resolveHeroiconByName(name)`** — resolves an *outline* heroicon by name, lazily fetching only that one icon. Rejects (doesn't silently return `null`) for a name that isn't a real outline heroicon. Heroicons itself is *not* externalized/shared (see below) - this is purely a convenience for the rare case where you need to look up an icon by a runtime string rather than a static `import { XIcon } from '@heroicons/vue/24/outline'`.
 - **`window.gv_core.ol`** — OpenLayers (`source`, `layer`, `proj`, `geom`, `style`, `interaction`, `Feature`). Loaded lazily: `null` until you call and `await` **`window.gv_core.loadOl()`**, which resolves to (and also populates) this value.
 - **`window.gv_core.maplibre`** — MapLibre GL JS. Loaded lazily: `null` until you call and `await` **`window.gv_core.loadMaplibreGl()`**, which resolves to (and also populates) this value.
 - **`window.gv_core.tileSourceCatalog`** — shared, cached basemap/tile-source catalog singleton (`.load()`)
@@ -158,7 +158,9 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.realtimeSocket`**, **`WebSocketHeartbeat`** — the multiplexed `/ws/realtime/` connection and the ping/pong zombie-connection detector
 - **`window.gv_core.BaseButton`**, **`BaseModal`**, **`Loader`**, **`LocationIcon`**, **`ScrollingSelect`**, **`SearchableCheckboxList`**, **`ToggleButton`**, **`SettingsInput`** — shared UI components (also globally registered, so you can use them in templates without importing)
 
-The Vue-ecosystem/Heroicons values are also exposed at top level (`window.Vue`, `window.HeroiconsOutline`, etc.) purely so UMD builds that externalize these dependencies keep working. `window.ol`/`window.maplibregl` are similarly exposed at top level, but (like their `gv_core` counterparts) only after `loadOl()`/`loadMaplibreGl()` has resolved at least once. Prefer `window.gv_core.*` in your source.
+The Vue-ecosystem values are also exposed at top level (`window.Vue`, `window.axios`, etc.) purely so UMD builds that externalize these dependencies keep working. `window.ol`/`window.maplibregl` are similarly exposed at top level, but (like their `gv_core` counterparts) only after `loadOl()`/`loadMaplibreGl()` has resolved at least once. Prefer `window.gv_core.*` in your source.
+
+**Heroicons is intentionally not shared/externalized.** Add `@heroicons/vue` as your own dependency (`npm install @heroicons/vue`) and import icons the normal way (`import { MapIcon } from '@heroicons/vue/24/outline'`) - Vite tree-shakes your build down to only the icons you actually use, so there's no meaningful duplication even if another extension imports the same icon. This is the one exception to "core provides it as a shared global": eagerly loading the entire ~391KB icon library on every page load just so it could be shared wasn't worth it for a handful of nav icons.
 
 ### Self-containment: no `platform/utils/...` imports, no hardcoded extensions in core
 
@@ -182,7 +184,7 @@ export default createExtensionViteConfig({
 })
 ```
 
-This builds your extension as a UMD library, externalizes Vue/Vue Router/Vuex/axios/MapLibre/OpenLayers/Heroicons/shared UI parts (so you never bundle a second copy), and aliases `@` to your own `src/`.
+This builds your extension as a UMD library, externalizes Vue/Vue Router/Vuex/axios/MapLibre/OpenLayers/shared UI parts (so you never bundle a second copy), and aliases `@` to your own `src/`. Heroicons is deliberately *not* externalized - see above.
 
 ### Lint and type-check config
 

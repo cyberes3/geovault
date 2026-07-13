@@ -39,9 +39,12 @@ const CORE_GLOBALS = {
     'ol/style.js': 'ol.style',
     'ol/interaction': 'ol.interaction',
     'ol/Feature': 'ol.Feature',
-    'ol/Feature.js': 'ol.Feature',
-    '@heroicons/vue/24/outline': 'HeroiconsOutline',
-    '@heroicons/vue/24/solid': 'HeroiconsSolid'
+    'ol/Feature.js': 'ol.Feature'
+    // Heroicons is deliberately NOT externalized: core only needs it for a handful of nav icons
+    // (loaded lazily by name, see resolveExtensionIcon.ts), so eagerly loading the entire ~391KB
+    // library on every page just to share it as a global was pure waste. Extensions add
+    // `@heroicons/vue` as their own dependency and import icons by name as usual - Vite tree-shakes
+    // each extension bundle down to only the icons it actually uses.
 }
 
 /** Shared UI parts core exposes on `window.gv_core`/top-level globals - see main.js. */

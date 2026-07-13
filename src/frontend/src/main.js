@@ -44,8 +44,6 @@ import { searchGeocoding, getGeocodingResultCoordinates, getGeocodingResultLabel
 import { listUsers } from '@/api/services/userApi';
 import { realtimeSocket } from '@/assets/js/websocket/realtimeSocket';
 import { WebSocketHeartbeat } from '@/assets/js/websocket/WebSocketHeartbeat';
-import * as HeroiconsOutline from '@heroicons/vue/24/outline';
-import * as HeroiconsSolid from '@heroicons/vue/24/solid';
 import { tileSourceCatalog, RasterTileUrls, openLayersBasemap, OSM_TILE_SOURCE_ID } from '@/utils/map/openlayers/index.js';
 import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
 import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre/locationMarker.js';
@@ -70,6 +68,14 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 const platformState = createPlatformStateBridge(store);
+
+// Lazily resolves an arbitrary heroicon by name, fetching only that one icon instead of the whole
+// library. This trampoline is a plain function so `window.gv_core.resolveHeroiconByName` is always
+// callable, but the actual `import.meta.glob(...)`-backed resolver (and its ~300-entry stub map)
+// only gets fetched on first use - see `extensions/lazyHeroiconResolver.ts`.
+function resolveHeroiconByName(name) {
+    return import('@/extensions/lazyHeroiconResolver').then((m) => m.resolveHeroiconByName(name));
+}
 
 // Shared, cross-cutting helpers made available to every extension. There is no raw store here on
 // purpose: extensions get read-mostly access to app state through `platformState` above.
@@ -104,8 +110,7 @@ window.gv_core = {
     VueRouter: VueRouterState,
     Vuex: VuexState,
     axios,
-    HeroiconsOutline,
-    HeroiconsSolid,
+    resolveHeroiconByName,
     // Null until something calls loadOl()/loadMaplibreGl() - see lazyOl.js/lazyMaplibreGl.js for
     // why these aren't populated eagerly here.
     ol: null,
@@ -143,8 +148,6 @@ window.Vue = window.gv_core.Vue;
 window.VueRouter = window.gv_core.VueRouter;
 window.Vuex = window.gv_core.Vuex;
 window.axios = window.gv_core.axios;
-window.HeroiconsOutline = window.gv_core.HeroiconsOutline;
-window.HeroiconsSolid = window.gv_core.HeroiconsSolid;
 
 // No eager `loadOl()`/`loadMaplibreGl()` calls here on purpose - see lazyOl.js/lazyMaplibreGl.js.
 // Map-rendering code calls `window.gv_core.loadOl()`/`loadMaplibreGl()` itself, right before it

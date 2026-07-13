@@ -64,8 +64,8 @@ declare global {
             VueRouter: unknown;
             Vuex: unknown;
             axios: unknown;
-            HeroiconsOutline: unknown;
-            HeroiconsSolid: unknown;
+            /** Resolves an outline heroicon by name, lazily fetching just that one icon rather than the whole library. Rejects for an unrecognized name - see `resolveExtensionIcon.ts`'s `createHeroiconResolver`. */
+            resolveHeroiconByName: (name: string) => Promise<Component>;
             /** Null until `loadOl()` resolves - OpenLayers is loaded lazily, not eagerly at boot. */
             ol: unknown;
             /** Lazily loads OpenLayers (core + submodules), caching the result. Prefer this over reading `ol` directly when you can't guarantee it has already loaded. */

@@ -3,8 +3,6 @@
  * path to a static `.svg` file) into a Vue component usable in nav links / tool entries.
  */
 import { defineComponent, h, markRaw, onBeforeUnmount, onMounted, onUpdated, ref, type Component } from 'vue';
-import * as HeroiconsOutline from '@heroicons/vue/24/outline';
-import * as HeroiconsSolid from '@heroicons/vue/24/solid';
 import { httpClient } from '@/api/httpClient';
 
 /**
@@ -73,7 +71,52 @@ function createSvgIconComponent(svgString: string): Component {
     }));
 }
 
-export async function resolveExtensionIcon(icon: string | null | undefined, kebabName: string): Promise<Component | null> {
+export type IconGlobMap = Record<string, () => Promise<Component>>;
+
+/**
+ * Builds a heroicon name -> Component resolver from a Vite `import.meta.glob()` map of the
+ * outline icon set (every extension manifest's `icon = "..."` value today is an outline name -
+ * see `manifest.py` across `src/backend/extensions/*`). Rejects for an unrecognized name instead
+ * of silently resolving to null/undefined, so a typo'd or removed icon name shows up as a loud
+ * `console.error` (via `extensionLoader.ts`'s `Promise.allSettled` around icon resolution) rather
+ * than a silently missing icon nobody notices. Caches per-name promises - including rejections -
+ * so repeated lookups for the same name share one fetch/one failure instead of re-resolving or
+ * re-throwing every time.
+ *
+ * Takes the glob map as plain data rather than calling `import.meta.glob()` itself so this stays
+ * importable under plain `node --test` (which never runs through Vite's transform) - only `main.js`
+ * needs the literal `import.meta.glob(...)` call, since that's the one place Vite can statically
+ * detect and rewrite it.
+ */
+export function createHeroiconResolver(outlineIcons: IconGlobMap) {
+    const cache = new Map<string, Promise<Component>>();
+
+    return function resolveHeroiconByName(name: string): Promise<Component> {
+        const cached = cache.get(name);
+        if (cached) return cached;
+
+        const key = Object.keys(outlineIcons).find((path) => path.endsWith(`/${name}.js`));
+        const promise = key
+            ? outlineIcons[key]().then(markRaw)
+            : Promise.reject(new Error(`Unknown heroicon: "${name}"`));
+
+        cache.set(name, promise);
+        return promise;
+    };
+}
+
+function defaultResolveHeroicon(name: string): Promise<Component> {
+    if (typeof window === 'undefined') {
+        return Promise.reject(new Error(`Cannot resolve heroicon "${name}": window.gv_core is unavailable`));
+    }
+    return window.gv_core.resolveHeroiconByName(name);
+}
+
+export async function resolveExtensionIcon(
+    icon: string | null | undefined,
+    kebabName: string,
+    resolveHeroicon: (name: string) => Promise<Component> = defaultResolveHeroicon
+): Promise<Component | null> {
     if (!icon || typeof icon !== 'string') {
         return null;
     }
@@ -88,11 +131,14 @@ export async function resolveExtensionIcon(icon: string | null | undefined, keba
         }
     }
 
-    if (!icon.includes('/')) {
-        const heroicons = HeroiconsOutline as Partial<Record<string, Component>>;
-        const heroiconsSolid = HeroiconsSolid as Partial<Record<string, Component>>;
-        const match = heroicons[icon] ?? heroiconsSolid[icon];
-        if (match) return markRaw(match);
+    // A bare name with no slash and no `.svg` extension is the only shape that's ever a heroicon
+    // name (e.g. caltopo's manifest `icon = "icon.svg"` must skip straight to the file-fetch
+    // block below, not get treated as an unrecognized heroicon name).
+    if (!icon.includes('/') && !icon.endsWith('.svg')) {
+        // Intentionally not caught here - an unknown heroicon name should fail loudly, and
+        // `extensionLoader.ts`'s `Promise.allSettled` around icon resolution is what turns that
+        // into a logged error + a null icon instead of a crashed extension load.
+        return await resolveHeroicon(icon);
     }
 
     if (icon.endsWith('.svg') || icon.includes('/')) {
