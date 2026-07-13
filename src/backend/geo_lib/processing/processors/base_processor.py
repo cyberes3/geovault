@@ -3,16 +3,15 @@ Base processor class for unified file import pipeline.
 Defines common processing logic that all file type processors inherit.
 """
 
-import json
 import os
-import subprocess
-import tempfile
 import time
 import traceback
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Tuple, Union, List, Optional
+from xml.parsers.expat import ExpatError
 
+import defusedxml.minidom as minidom
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, UserSettings
@@ -34,6 +33,7 @@ from geo_lib.processing.utils import inject_feature_hashes
 from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.security.exceptions import FileValidationError
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.togeojson import togeojson
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.types.geojson import GeojsonRawProperty
 from geo_lib.utils.feature_utils import build_feature_type_summary
@@ -837,6 +837,18 @@ class BaseProcessor(ABC):
         self.import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.DEBUG)
         return timeout_seconds
 
+    def calculate_job_ceiling_seconds(self) -> int:
+        """
+        Defense-in-depth ceiling for the *entire* job, not just the conversion step.
+
+        Scaled off the same file-size formula as `_calculate_timeout()` but with a larger
+        multiplier, so it backstops every pipeline stage (splitting, elevation, tagging,
+        DB write) rather than just conversion. Callers (`ProcessJob._check_job_timeout`)
+        compare this against total elapsed wall-clock time for the job.
+        """
+        multiplier = get_required_setting('PROCESSING_TIMEOUT_JOB_CEILING_MULTIPLIER')
+        return self._calculate_timeout() * multiplier
+
     def _decode_content(self) -> str:
         """
         Decode file data to string if needed.
@@ -913,144 +925,53 @@ class BaseProcessor(ABC):
                 return self.file_data[1:]
             return self.file_data
 
-    def _convert_to_geojson(self, content: Union[str, bytes], suffix: str, file_type_name: str, is_text: bool = True) -> Dict[str, Any]:
+    def _convert_to_geojson(self, content: str, file_type_name: str) -> Dict[str, Any]:
         """
-        Convert file to GeoJSON using a temporary file.
-        Handles temp file creation, conversion, and cleanup.
-        
-        Args:
-            content: File content as string or bytes
-            suffix: File suffix (e.g., '.gpx', '.kml', '.kmz')
-            file_type_name: Name of file type for logging (e.g., "GPX", "KML", "KMZ")
-            is_text: Whether to write in text mode (True) or binary mode (False)
-            
-        Returns:
-            GeoJSON data as dictionary
-        """
-        # Create temporary file with appropriate mode
-        if is_text:
-            with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
-        else:
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
+        Convert KML/GPX content to GeoJSON in-process via geo_lib.togeojson.
 
-        try:
-            # Use the shared Node.js conversion logic
-            geojson_data = self._convert_via_nodejs(temp_file_path, file_type_name)
-            return geojson_data
-        finally:
-            # Clean up temporary file
-            os.unlink(temp_file_path)
+        `content` must already be fully prepared (decoded, namespace-stripped for KML) by
+        the caller -- this method just parses and converts it. `file_type_name` (e.g. "KML",
+        "GPX", "KMZ") is used only for log/error messages; `togeojson()` auto-detects KML vs
+        GPX from the parsed root element, so this one method serves all three processors with
+        no format branching.
 
-    def _convert_via_nodejs(self, file_path: str, file_type_name: str) -> Dict[str, Any]:
-        """
-        Convert file to GeoJSON using JavaScript togeojson library.
-        Common conversion logic shared between KML, KMZ, and GPX processors.
-        
-        Args:
-            file_path: Path to the file to convert
-            file_type_name: Name of file type for logging (e.g., "KML", "KMZ", "GPX")
-            
-        Returns:
-            GeoJSON data as dictionary
+        The conversion call itself runs in a single-use thread bounded by `_calculate_timeout()`
+        -- a stuck/pathological conversion (or a future regression in the port) must fail the
+        job rather than hang the queue worker forever. This is a soft/cooperative timeout (the
+        thread isn't force-killed -- Python threads can't be from outside themselves), the same
+        limitation `_is_canceled()` already accepts for mid-step cancellation elsewhere in this
+        class, but it correctly unblocks the worker and fails the job instead of hanging it.
         """
         try:
-            # Get the path to the togeojson converter
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            togeojson_path = os.path.join(current_dir, '..', 'togeojson', 'index.js')
-            togeojson_path = os.path.normpath(togeojson_path)  # Normalize path
+            document = minidom.parseString(content)
+        except ExpatError as e:
+            error_msg = f"{file_type_name} file contains invalid XML: {e}"
+            _logger.error(error_msg)
+            self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+            raise Exception(f"XML parsing error: {e}")
 
-            # Verify the converter script exists
-            if not os.path.exists(togeojson_path):
-                error_msg = f"Node.js converter script not found at {togeojson_path}"
-                _logger.error(error_msg)
-                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
-                raise FileNotFoundError(error_msg)
+        self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
 
-            # Get file info for logging
-            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
-            file_size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
-            filename = self.filename or os.path.basename(file_path)
-
-            # Verify the input file exists
-            if not os.path.exists(file_path):
-                error_msg = f"Input file does not exist: {file_path}"
-                _logger.error(error_msg)
-                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
-                raise FileNotFoundError(error_msg)
-
-            # Use the JavaScript converter with file path
-            # Note: Timing is handled by the base processor's process() method
-            self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
-
-            # Increase Node.js heap size to handle large files (8GB)
-            # Use --max-old-space-size to allow Node.js to use more memory
-            result = subprocess.run(
-                ['node', '--max-old-space-size=8192', togeojson_path, file_path],
-                capture_output=True,
-                text=True,
-                timeout=self._calculate_timeout()
-            )
-
-            if result.returncode != 0:
-                # Capture detailed error information
-                stderr_output = result.stderr.strip() if result.stderr else "No error output"
-                stdout_output = result.stdout.strip() if result.stdout else "No output"
-
-                error_msg = f"{file_type_name} file conversion failed"
-                detailed_error = f"Node.js conversion failed for '{filename}' (return code: {result.returncode})"
-
-                if stderr_output:
-                    detailed_error += f"\nNode.js stderr: {stderr_output}"
-                if stdout_output and not stdout_output.startswith('{'):
-                    # Only log stdout if it's not valid JSON (which would be the error message)
-                    detailed_error += f"\nNode.js stdout: {stdout_output}"
-
-                _logger.error(detailed_error)
-                self.import_log.add(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}", "File Conversion", DatabaseLogLevel.ERROR)
-                raise Exception(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}")
-
-            # Validate that we got valid output
-            if not result.stdout or not result.stdout.strip():
-                error_msg = f"{file_type_name} conversion produced no output"
-                _logger.error(f"{error_msg} for file '{filename}'")
-                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
-                raise Exception(error_msg)
-
+        timeout_seconds = self._calculate_timeout()
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            future = executor.submit(togeojson, document)
             try:
-                geojson_data = json.loads(result.stdout)
-                return geojson_data
-            except json.JSONDecodeError as json_err:
-                # Log the actual output that failed to parse
-                output_preview = result.stdout[:500] if len(result.stdout) > 500 else result.stdout
-                error_msg = f"{file_type_name} conversion produced invalid JSON output"
-                detailed_error = f"{error_msg} for file '{filename}': {str(json_err)}\nOutput preview: {output_preview}"
-                _logger.error(detailed_error)
-                self.import_log.add(f"{error_msg} - file may be corrupted or invalid", "File Conversion", DatabaseLogLevel.ERROR)
-                raise Exception(f"{error_msg}: {str(json_err)}")
-
-        except subprocess.TimeoutExpired as e:
-            timeout_seconds = self._calculate_timeout()
-            error_msg = f"{file_type_name} conversion timed out after {timeout_seconds}s"
-            _logger.error(f"{error_msg} for file '{filename}' ({file_size_mb:.2f} MB)")
-            self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
-            raise Exception(f"{file_type_name} file conversion timed out")
-        except FileNotFoundError:
-            error_msg = f"Node.js not found - cannot convert {file_type_name} file"
-            _logger.error(f"{error_msg} for file '{filename}'. Is Node.js installed?")
-            self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
-            raise Exception(error_msg)
-        except Exception as e:
-            # Re-raise if it's already been handled above
-            if "conversion" in str(e).lower() or "timeout" in str(e).lower():
+                return future.result(timeout=timeout_seconds)
+            except TimeoutError:
+                error_msg = f"{file_type_name} conversion timed out after {timeout_seconds}s"
+                _logger.error(f"{error_msg} for file '{self.filename}'")
+                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+                raise TimeoutError(f"{file_type_name} file conversion timed out")
+            except Exception as e:
+                error_msg = f"{file_type_name} file conversion failed: {e}"
+                _logger.error(f"{error_msg}\n{traceback.format_exc()}")
+                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
                 raise
-
-            _logger.error(f"{error_msg} for file '{filename}': {traceback.format_exc()}")
-            self.import_log.add(f"{file_type_name} conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
-            raise
+        finally:
+            # Non-blocking shutdown: never wait on a thread that just timed out -- it isn't
+            # force-killed and may still be running (see docstring above).
+            executor.shutdown(wait=False)
 
     def get_file_metadata(self) -> Dict[str, Any]:
         """

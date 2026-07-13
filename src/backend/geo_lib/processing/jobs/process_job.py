@@ -6,7 +6,6 @@ Handles converting uploaded files to geojson representation.
 import base64
 import json
 import re
-import subprocess
 import time
 import traceback
 from typing import Dict, Any, Optional, List
@@ -29,7 +28,7 @@ from geo_lib.processing.messages import (
     PROCESSING_TIMEOUT,
     ERROR_TYPE_PROCESSING_FAILED
 )
-from geo_lib.processing.processors import get_processor
+from geo_lib.processing.processors import BaseProcessor, get_processor
 from geo_lib.processing.queue_worker import start_worker_for_user
 from geo_lib.processing.redis_queue import get_processing_queue
 from geo_lib.processing.utils import (
@@ -355,6 +354,7 @@ class ProcessJob(BaseJob):
             # Check if job was canceled after validation
             if self._check_cancellation(job_id, realtime_log, "after validation"):
                 return
+            self._check_job_timeout(job_id, overall_start_time, realtime_log, processor, "after validation")
 
             # Calculate progress percentages based on path type (fast path vs normal)
             validation_progress = 20.0 if is_replacement else 36.0
@@ -384,6 +384,7 @@ class ProcessJob(BaseJob):
             # Check for cancellation after conversion
             if self._check_cancellation(job_id, realtime_log, "after GeoJSON conversion"):
                 return
+            self._check_job_timeout(job_id, overall_start_time, realtime_log, processor, "after GeoJSON conversion")
 
             # Calculate progress percentages for remaining steps
             # For normal path: 48 (conv) -> 60 (split) -> 72 (elev) -> 80 (tags) -> 88 (reverse geocode) -> 96 (db)
@@ -414,6 +415,7 @@ class ProcessJob(BaseJob):
                 # Check for cancellation after splitting
                 if self._check_cancellation(job_id, realtime_log, "after feature splitting"):
                     return
+                self._check_job_timeout(job_id, overall_start_time, realtime_log, processor, "after feature splitting")
             else:
                 # For replacement uploads, still need to split features but don't show progress
                 processor.processed_features, split_log = processor.step_4_split_and_validate_features(processor.geojson_data)
@@ -436,6 +438,7 @@ class ProcessJob(BaseJob):
                 # Check for cancellation after elevation filling
                 if self._check_cancellation(job_id, realtime_log, "after elevation filling"):
                     return
+                self._check_job_timeout(job_id, overall_start_time, realtime_log, processor, "after elevation filling")
             else:
                 # For replacement uploads, still fill elevations but don't show progress
                 elevation_log = processor.step_5_fill_elevations()
@@ -459,10 +462,12 @@ class ProcessJob(BaseJob):
                 # Check for cancellation after tagging and reverse geocoding
                 if self._check_cancellation(job_id, realtime_log, "after tagging and reverse geocoding"):
                     return
+                self._check_job_timeout(job_id, overall_start_time, realtime_log, processor, "after tagging and reverse geocoding")
 
             # Check if job was canceled before finalization
             if self._check_cancellation(job_id, realtime_log, "before feature finalization"):
                 return
+            self._check_job_timeout(job_id, overall_start_time, realtime_log, processor, "before feature finalization")
 
             # Finalize features (hashing, type summary, track override, duplicate detection)
             finalization_start = time.time()
@@ -505,8 +510,8 @@ class ProcessJob(BaseJob):
             self._finalize_job_success(job_id, user_id, import_queue_id, feature_count,
                                        overall_duration, geojson_data, realtime_log)
 
-        except (TimeoutError, subprocess.TimeoutExpired):
-            # Timeout during processing (e.g., subprocess timeout)
+        except TimeoutError:
+            # Timeout during processing (conversion step timeout or overall job ceiling)
             overall_duration = time.time() - overall_start_time
             _logger.error(f"Upload processing timeout for job {job_id} after {overall_duration:.2f}s")
             realtime_log.add(PROCESSING_TIMEOUT, "ProcessJob", DatabaseLogLevel.ERROR)
@@ -602,6 +607,25 @@ class ProcessJob(BaseJob):
             processing_log.add(f"Processing canceled {stage}", "ProcessJob", DatabaseLogLevel.WARNING)
             return True
         return False
+
+    def _check_job_timeout(self, job_id: str, overall_start_time: float,
+                           processing_log: RealTimeImportLog, processor: BaseProcessor, stage: str) -> None:
+        """
+        Defense-in-depth overall job ceiling, independent of the per-conversion timeout in
+        `BaseProcessor._convert_to_geojson`. That timeout only bounds one pipeline step; this
+        bounds the whole job's wall-clock time so it can never occupy a user's queue worker
+        indefinitely, even if some other stage (splitting, elevation, tagging, DB write)
+        regresses without its own bound.
+
+        Raises TimeoutError (caught by the same top-level handler as the conversion timeout)
+        if the job has run longer than its size-scaled ceiling.
+        """
+        elapsed = time.time() - overall_start_time
+        ceiling_seconds = processor.calculate_job_ceiling_seconds()
+        if elapsed > ceiling_seconds:
+            _logger.error(f"Job {job_id} exceeded overall processing ceiling of {ceiling_seconds}s (elapsed {elapsed:.1f}s) {stage}")
+            processing_log.add(f"Processing exceeded overall time ceiling {stage}", "ProcessJob", DatabaseLogLevel.ERROR)
+            raise TimeoutError(f"Job exceeded overall processing ceiling of {ceiling_seconds}s")
 
     def _update_and_broadcast_status(self, job_id: str, user_id: int,
                                      import_queue_id: int, message: str, progress: float):

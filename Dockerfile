@@ -27,11 +27,6 @@ WORKDIR /app
 COPY src/backend/requirements.txt /app/src/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/src/backend/requirements.txt
 
-# Copy togeojson package.json first for better caching
-COPY src/backend/geo_lib/processing/togeojson/package.json /app/src/backend/geo_lib/processing/togeojson/
-WORKDIR /app/src/backend/geo_lib/processing/togeojson
-RUN npm install
-
 # Copy frontend package.json first for better caching
 COPY src/frontend/package.json /app/src/frontend/
 WORKDIR /app/src/frontend

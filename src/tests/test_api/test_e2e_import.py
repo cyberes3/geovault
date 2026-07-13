@@ -9,13 +9,14 @@ import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
@@ -1337,6 +1338,48 @@ class TestE2EImport(TransactionTestCase):
             'placemark' in error_message,
             f"Error message should mention missing geographic features. Got: {error_message}"
         )
+
+    @override_settings(PROCESSING_TIMEOUT_BASE_SECONDS=1, PROCESSING_TIMEOUT_PER_MB_SECONDS=0)
+    def test_e2e_conversion_timeout_fails_job_instead_of_hanging(self):
+        """
+        A stuck/pathological KML->GeoJSON conversion must fail the job with
+        PROCESSING_TIMEOUT rather than hanging the queue worker forever.
+
+        Regression test for the togeojson in-process cutover: conversion now runs
+        in-process (no subprocess), so its only timeout enforcement is the
+        thread-bounded future.result(timeout=...) in
+        BaseProcessor._convert_to_geojson. This simulates a conversion that never
+        returns in time and verifies the job still terminates, quickly, as FAILED.
+        """
+        from geo_lib.processing.messages import PROCESSING_TIMEOUT
+
+        def _hanging_conversion(document, options=None):
+            time.sleep(5)
+            return {'type': 'FeatureCollection', 'features': []}
+
+        kml_content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+
+        with patch('geo_lib.processing.processors.base_processor.togeojson', side_effect=_hanging_conversion):
+            start = time.time()
+            job_id, item_id, job_status = self._upload_file(kml_content, 'hanging.kml', timeout=10.0)
+            elapsed = time.time() - start
+
+        self.assertEqual(job_status['status'], ProcessingStatus.FAILED.value,
+                          f"Job with a hanging conversion should fail, not hang. Status: {job_status}")
+        self.assertEqual(job_status['message'], PROCESSING_TIMEOUT)
+        # The configured timeout is 1s; give generous slack for scheduling overhead, but this
+        # must be nowhere near the 5s the mocked conversion sleeps for.
+        self.assertLess(elapsed, 5.0, f"Job should have failed via timeout, not by outliving the hang ({elapsed:.1f}s)")
 
     def test_e2e_import_already_imported(self):
         """Test trying to import an item that was already imported."""

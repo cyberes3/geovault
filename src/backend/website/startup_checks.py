@@ -9,11 +9,10 @@ This module performs essential checks when the server starts up:
 5. Redis connection
 6. Writable directories (tile cache, icon storage)
 7. Frontend static files are built
-8. togeojson Node.js converter is installed
-9. Site configuration (for email confirmation URLs)
-10. Clean up stale Redis queues and job status data
-11. Clear Redis cache (ensures fresh data on startup)
-12. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
+8. Site configuration (for email confirmation URLs)
+9. Clean up stale Redis queues and job status data
+10. Clear Redis cache (ensures fresh data on startup)
+11. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
 
 Warning checks (don't fail startup):
 - Configuration file exists

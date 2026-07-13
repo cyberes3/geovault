@@ -584,6 +584,9 @@ IMPORT_PROCESSING_THREADS = config.get_int('processing.import_threads', 10)
 # Processing timeout settings
 PROCESSING_TIMEOUT_BASE_SECONDS = config.get_int('processing.timeout_base_seconds', 30)
 PROCESSING_TIMEOUT_PER_MB_SECONDS = config.get_int('processing.timeout_per_mb_seconds', 2)
+# Defense-in-depth ceiling for an entire import job (not just conversion), expressed as a
+# multiplier on the per-conversion timeout above. Backstops every pipeline stage.
+PROCESSING_TIMEOUT_JOB_CEILING_MULTIPLIER = config.get_int('processing.timeout_job_ceiling_multiplier', 6)
 
 # Duplicate detection settings
 DUPLICATE_DETECTION_BATCH_SIZE = config.get_int('processing.duplicate_detection_batch_size', 100)

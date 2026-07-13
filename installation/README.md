@@ -79,16 +79,10 @@ backend/venv/bin/python3.13 -m pip install --upgrade pip setuptools wheel
 
 ## NodeJS
 
-NodeJS is required for the frontend as well as the internal GeoJSON converter. One-line installer:
+NodeJS is required for the frontend. One-line installer:
 
 ```shell
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
-```
-
-Install the GeoJSON parser:
-
-```shell
-npm install --prefix backend/geo_lib/processing/togeojson
 ```
 
 Build the frontend:

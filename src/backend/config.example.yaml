@@ -191,6 +191,11 @@ processing:
   # Additional timeout per MB of file size
   timeout_per_mb_seconds: 2
 
+  # Defense-in-depth ceiling for an entire import job (not just conversion), as a multiplier
+  # on the per-conversion timeout above (timeout_base_seconds + timeout_per_mb_seconds * size).
+  # Backstops every pipeline stage (splitting, elevation, tagging, DB write).
+  timeout_job_ceiling_multiplier: 6
+
   # Batch size for duplicate detection
   duplicate_detection_batch_size: 100
 

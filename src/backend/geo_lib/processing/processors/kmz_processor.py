@@ -42,8 +42,8 @@ class KMZProcessor(KMLProcessor):
             _logger.info(error_msg)
             raise Exception(error_msg)
 
-        # Convert the extracted KML using parent's logic (text mode for KML)
-        geojson_data = self._convert_to_geojson(kml_content, '.kml', 'KML', is_text=True)
+        # Convert the extracted KML using parent's in-process conversion logic
+        geojson_data = self._convert_to_geojson(kml_content, 'KML')
 
         # Process icons in GeoJSON (still need original KMZ data for icon extraction)
         geojson_data = process_geojson_icons(

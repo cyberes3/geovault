@@ -54,8 +54,8 @@ class KMLProcessor(BaseProcessor):
         # Prepare KML content
         content = self._prepare_kml_content()
 
-        # Convert using shared temp file helper
-        geojson_data = self._convert_to_geojson(content, '.kml', 'KML', is_text=True)
+        # Convert in-process via geo_lib.togeojson
+        geojson_data = self._convert_to_geojson(content, 'KML')
 
         # Process icons in GeoJSON
         geojson_data = process_geojson_icons(

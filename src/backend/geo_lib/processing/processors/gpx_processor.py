@@ -28,5 +28,5 @@ class GPXProcessor(BaseProcessor):
         # Decode content using shared helper
         content = self._decode_content()
 
-        # Convert using shared temp file helper
-        return self._convert_to_geojson(content, '.gpx', 'GPX', is_text=True)
+        # Convert in-process via geo_lib.togeojson
+        return self._convert_to_geojson(content, 'GPX')
