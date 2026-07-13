@@ -16,11 +16,15 @@ import './assets/main.css';
  * 
  * @type {import('platform/types/geovault').ExtensionSetup}
  */
-async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
-    // 1. Provide Context
-    // We use provide/inject so any sub-component in this extension 
-    // can easily access the API without needing it passed down as a prop.
-    app.provide('exampleExtensionApi', api);
+async function setup({ router, registry, api, platformState, metadata }) {
+    // 1. Wrap Components
+    // `createRouteWrapper` gives every route/settings-tab component its own scoped `inject`
+    // (api via 'extensionApi', router via 'extensionRouter', platformState via 'platformState'),
+    // an error boundary that contains a crash to this extension instead of taking down the whole
+    // app, and a `.gv-ext-<name>` CSS scoping class. Always wrap route and settings-tab
+    // components with it.
+    const createRouteWrapper = window.gv_core.createRouteWrapper;
+    const wrap = (component) => createRouteWrapper(component, { api, router, platformState });
 
     // 2. Register Navigation Link
     // Adds a link to the main top-level navigation bar.
@@ -36,7 +40,7 @@ async function setup({ app, router, store, registry, api, utils, toast, metadata
     registry.registerSettingsTab({
         id: 'example-extension',
         label: 'Example Extension',
-        component: ExampleSettings,
+        component: wrap(ExampleSettings),
         icon: metadata.icon  // Icon from manifest (heroicon, SVG file, or inline SVG)
     });
 
@@ -47,7 +51,7 @@ async function setup({ app, router, store, registry, api, utils, toast, metadata
         path: '/page',
         name: 'example-extension-page',
         meta: { title: 'Example Extension' },
-        component: ExamplePage
+        component: wrap(ExamplePage)
     });
 
     // Example: Using the enhanced API

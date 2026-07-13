@@ -269,10 +269,10 @@ import { ref, onMounted, inject, computed } from 'vue';
   The 'api' object is an ExtensionApi instance injected from main.js.
   It provides convenience methods (get, post, put, delete) with automatic:
   - CSRF token handling
-  - URL scoping (/api/extensions/<name>/)
+  - URL scoping (/api/extensions/<kebab-name>/)
   - Error handling and toast notifications
 */
-const api = inject('exampleExtensionApi');
+const api = inject('extensionApi');
 
 /*
   TOAST UTILITY

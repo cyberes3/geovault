@@ -2,7 +2,7 @@
 
 This template should help get you started developing with Vue 3 in Vite.
 
-When loaded by the GeoVault app, shared platform APIs are available on **`window.gv_core`** (e.g. `window.gv_core.GeoVault`, `window.gv_core.store`, `window.gv_core.ol`). See the [extensions README](../../README.md) for the full list.
+When loaded by the GeoVault app, shared platform APIs are available on **`window.gv_core`** (e.g. `window.gv_core.GeoVault`, `window.gv_core.platformState`, `window.gv_core.ol`). See the [extensions README](../../README.md) for the full list.
 
 ## Recommended IDE Setup
 
