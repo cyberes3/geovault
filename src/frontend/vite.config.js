@@ -73,7 +73,7 @@ export default defineConfig({
         assetsDir: 'static',
         rollupOptions: {
             output: {
-                manualChunks: (id, { getModuleInfo }) => {
+                manualChunks: (id) => {
                     // Vite's virtual dynamic-import() helper is needed by every chunk that contains a
                     // `import()` (ours: lazyOl.js/lazyMaplibreGl.js/route-level code-splitting; third
                     // party: geotiff's internal lazy codec loading, etc). Left unassigned, Rollup
@@ -163,20 +163,17 @@ export default defineConfig({
                     if (id.includes('node_modules/simple-code-editor')) {
                         return 'code-editor'
                     }
-                    // Icon library: only bucket icons core statically imports directly in its own
-                    // .vue components (`import { XIcon } from '@heroicons/vue/24/outline'`) into
-                    // the shared "icons" chunk - those already load together as part of whichever
-                    // route needs them. Icons reachable ONLY through the runtime `import.meta.glob`
-                    // map in main.js (used by `resolveHeroiconByName`, see resolveExtensionIcon.ts)
-                    // are deliberately left unassigned so Rollup gives each its own tiny chunk -
-                    // looking up one icon by name should download just that icon, not the library.
+                    // Split icon library into its own chunk. This includes both icons core
+                    // statically imports directly in its own .vue components AND every outline
+                    // icon reachable through the runtime `import.meta.glob` map in
+                    // lazyHeroiconResolver.ts (used by `resolveHeroiconByName`, see
+                    // resolveExtensionIcon.ts) - bundling them together instead of letting Rollup
+                    // give each glob-matched icon its own tiny chunk keeps the build output sane
+                    // (hundreds of one-off files otherwise) at the cost of a single ~47KB-gzip
+                    // fetch on the rare occasions something actually resolves an icon by name.
+                    // Neither case is on the eager boot path either way - see lazyHeroiconResolver.ts.
                     if (id.includes('node_modules/@heroicons')) {
-                        const info = getModuleInfo(id)
-                        const hasStaticImporter = info?.importers.some((importerId) => !importerId.includes('node_modules'))
-                        if (hasStaticImporter) {
-                            return 'icons'
-                        }
-                        return undefined
+                        return 'icons'
                     }
                     // Split HTTP client
                     if (id.includes('node_modules/axios')) {
