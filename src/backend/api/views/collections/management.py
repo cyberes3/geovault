@@ -4,6 +4,7 @@ from django.db import transaction
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
+from api.services.feature_serialization import build_feature_collection_from_instances
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import (
     success_response,
@@ -181,37 +182,13 @@ def get_collection_features(request, collection_id):
     # Get all feature IDs that match the collection criteria
     feature_ids_set = get_collection_feature_ids(collection)
 
-    # Get all features by their IDs
-    features = FeatureStore.objects.filter(id__in=feature_ids_set).exclude(geometry__isnull=True).order_by('id')
+    # Get all features by their IDs. Collections can legitimately span any scope (a
+    # user-defined grouping, not a map view), so no scope filter is applied here.
+    features = FeatureStore.objects.filter(id__in=feature_ids_set).with_geometry().order_by('id')
 
-    # Convert to GeoJSON format
-    geojson_features = []
-    for feature in features:
-        geojson_data = feature.geojson
-        if geojson_data and 'geometry' in geojson_data:
-            properties = geojson_data.get('properties', {}).copy()
-
-            # Tags are already separated - user tags only in tags field
-            # System tags are in system_tags field and not shown to user
-
-            # Include database ID in properties
-            properties['database_id'] = feature.id
-
-            geojson_feature = {
-                "type": "Feature",
-                "geometry": geojson_data.get('geometry'),
-                "properties": properties,
-                "geojson_hash": feature.geojson_hash
-            }
-            geojson_features.append(geojson_feature)
-
-    # Create GeoJSON FeatureCollection
-    geojson_data = {
-        "type": "FeatureCollection",
-        "features": geojson_features
-    }
+    geojson_data = build_feature_collection_from_instances(features)
 
     return success_response({
         'data': geojson_data,
-        'feature_count': len(geojson_features)
+        'feature_count': len(geojson_data['features'])
     })

@@ -201,9 +201,9 @@ def _get_hidden_features_with_names(user, hidden_feature_ids):
     """
     hidden_features_with_names = []
     if hidden_feature_ids:
-        # Query all hidden features at once
-        features = FeatureStore.objects.filter(
-            user=user,
+        # Query all hidden features at once. Main-map only -- "hide on map" is a main-map
+        # UI feature and extension-scoped features (e.g. `places`) can't appear here.
+        features = FeatureStore.objects.owned_by(user).main_map().filter(
             id__in=[int(fid) for fid in hidden_feature_ids if fid.isdigit()]
         ).only('id', 'geojson')
 

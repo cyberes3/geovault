@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore, Collection
+from api.services.feature_service import FeatureService
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, not_found_response
 from api.validation.feature_updates import validate_payload, UnifiedSharePayload
@@ -69,10 +70,9 @@ def create_share(request, validated_data):
         if len(tag) > tag_max_length:
             return error_response(f'Tag name exceeds maximum length of {tag_max_length} characters', code=400)
         
-        # Verify that the tag exists in the user's features
-        tag_exists = FeatureStore.objects.filter(
-            user=request.user
-        ).filter(
+        # Verify that the tag exists in the user's main-map features (extension-scoped
+        # features, e.g. `places`, are never shareable through this endpoint).
+        tag_exists = FeatureStore.objects.owned_by(request.user).main_map().filter(
             Q(geojson__properties__tags__contains=[tag]) |
             Q(geojson__properties__system_tags__contains=[tag])
         ).exists()
@@ -123,9 +123,9 @@ def create_share(request, validated_data):
             return error_response('feature_id is required when share_type is "feature"', code=400)
         include_tags = validated_data.get('include_tags', False)
         
-        # Verify feature exists and belongs to user
-        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-        
+        # Verify feature exists, belongs to user, and is a main-map feature
+        feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
+
         # Check if a share already exists for this feature
         existing_share = FeatureShare.objects.filter(feature=feature, user=request.user).first()
         if existing_share:

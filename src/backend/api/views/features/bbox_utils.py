@@ -8,6 +8,7 @@ from django.db.models import QuerySet, Q
 from django.http import JsonResponse
 
 from api.models import FeatureStore, Collection
+from api.services.feature_serialization import strip_private_tags
 from api.views.collections.utils import get_collection_feature_ids
 from geo_lib.logging.console import get_tagged_logger
 from website.settings_utils import get_required_setting
@@ -178,7 +179,7 @@ def _build_collection_query(user_id: int, collection_id: uuid.UUID) -> QuerySet:
     feature_ids_set = get_collection_feature_ids(collection)
 
     # Start with base user filter
-    base_query = FeatureStore.objects.filter(user_id=user_id).exclude(geometry__isnull=True)
+    base_query = FeatureStore.objects.owned_by(user_id).with_geometry()
 
     # Filter by the combined set of feature IDs
     if feature_ids_set:
@@ -206,13 +207,10 @@ def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.
     if collection_id is not None:
         return _build_collection_query(user_id, collection_id)
 
-    base_query = FeatureStore.objects.filter(user_id=user_id).exclude(geometry__isnull=True)
+    base_query = FeatureStore.objects.owned_by(user_id).with_geometry()
 
     # Filter by scope (default to main map scope which is null)
-    if scope is None:
-        base_query = base_query.filter(scope__isnull=True)
-    else:
-        base_query = base_query.filter(scope=scope)
+    base_query = base_query.main_map() if scope is None else base_query.in_scope(scope)
 
     # Add tag filter if provided (search in both tags and system_tags)
     if tag:
@@ -223,53 +221,6 @@ def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.
 
     # Order by id to ensure consistent results when slicing
     return base_query.order_by('id')
-
-
-def strip_private_tags(properties: dict) -> None:
-    """
-    Remove `tags`/`system_tags` from a properties dict in place.
-
-    These can carry private information, so they must never reach a public-safe
-    (unauthenticated share) response — GeoJSON view, KMZ download, or otherwise —
-    unless the sharer explicitly opted in via `include_tags`. This is the single
-    source of truth for that stripping so every share touchpoint (map view, single
-    feature share, bulk KMZ export) stays consistent.
-    """
-    properties.pop('tags', None)
-    properties.pop('system_tags', None)
-
-
-def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> dict[str, str | Any] | None:
-    """
-    Convert FeatureStore instance to GeoJSON Feature dictionary.
-    
-    Args:
-        feature: FeatureStore instance
-        public_safe: If True, excludes tags from properties unless include_tags is True (for public shares)
-        include_tags: If True and public_safe=True, includes tags in properties (otherwise tags are excluded for public shares)
-    
-    Returns:
-        GeoJSON Feature dictionary
-    """
-    geojson_data = feature.geojson
-    if not geojson_data or 'geometry' not in geojson_data:
-        return None
-
-    # Create feature properties
-    properties = geojson_data.get('properties', {}).copy()
-
-    # Always include database_id for frontend processing
-    properties['database_id'] = feature.id
-
-    if public_safe and not include_tags:
-        strip_private_tags(properties)
-
-    return {
-        "type": "Feature",
-        "geometry": geojson_data.get('geometry'),
-        "properties": properties,
-        "geojson_hash": feature.geojson_hash
-    }
 
 
 def _build_tags_sql_filter(tags: List[str], match_mode: str = 'AND') -> Tuple[str, List[Any]]:

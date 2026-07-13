@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
+from api.services.feature_serialization import build_feature_collection, geojson_feature_from_parts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -240,24 +241,12 @@ def search_features(request):
         if isinstance(geojson_data, str):
             geojson_data = json.loads(geojson_data)
 
-        if geojson_data and 'geometry' in geojson_data:
-            properties = geojson_data.get('properties', {}).copy()
-            properties['database_id'] = feature_id
-            geojson_features.append({
-                "type": "Feature",
-                "geometry": geojson_data.get('geometry'),
-                "properties": properties,
-                "geojson_hash": geojson_hash
-            })
-
-    # Create GeoJSON FeatureCollection
-    geojson_data = {
-        "type": "FeatureCollection",
-        "features": geojson_features
-    }
+        feature = geojson_feature_from_parts(feature_id, geojson_data, geojson_hash)
+        if feature is not None:
+            geojson_features.append(feature)
 
     response_data = {
-        'data': geojson_data,
+        'data': build_feature_collection(geojson_features),
         'feature_count': len(geojson_features),
         'query': query
     }
@@ -340,31 +329,17 @@ def get_all_features(request):
     API endpoint to get all features for the user.
     Returns a list of all features with their basic information for selection purposes.
     """
-    # Get all features for the user (default scope only)
-    features = FeatureStore.objects.filter(user=request.user, scope__isnull=True).exclude(geometry__isnull=True).order_by('id')
+    # Get all main-map features for the user (extension-scoped features, e.g. `places`,
+    # are excluded -- they're surfaced through their own extension API).
+    features = FeatureStore.objects.owned_by(request.user).main_map().with_geometry().order_by('id')
 
-    # Convert to GeoJSON format
-    geojson_features = []
-    for feature in features:
-        geojson_data = feature.geojson
-        if geojson_data and 'geometry' in geojson_data:
-            properties = geojson_data.get('properties', {}).copy()
-            properties['database_id'] = feature.id
-            geojson_features.append({
-                "type": "Feature",
-                "geometry": geojson_data.get('geometry'),
-                "properties": properties,
-                "geojson_hash": feature.geojson_hash
-            })
-
-    # Create GeoJSON FeatureCollection
-    geojson_data = {
-        "type": "FeatureCollection",
-        "features": geojson_features
-    }
+    geojson_features = [
+        f for f in (geojson_feature_from_parts(feature.id, feature.geojson, feature.geojson_hash) for feature in features)
+        if f is not None
+    ]
 
     response_data = {
-        'data': geojson_data,
+        'data': build_feature_collection(geojson_features),
         'feature_count': len(geojson_features)
     }
 

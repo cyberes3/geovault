@@ -5,9 +5,7 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from api.models import FeatureStore
-from api.utils.authorization import get_object_or_404_for_user
-from api.utils.feature_scope import require_default_scope_feature
+from api.services.feature_service import FeatureService
 from api.utils.responses import handle_404
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.elevation_service import MAX_POINTS_PER_REQUEST, _fetch_elevation_batch_with_retry
@@ -28,8 +26,7 @@ def get_feature(request, feature_id):
     - feature_id: ID of the feature to retrieve
     """
     # Get the feature from database
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    require_default_scope_feature(feature)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
 
     # Include database ID in properties for frontend editing (same as _get_features_in_bbox)
     geojson_data = feature.geojson.copy()
@@ -62,8 +59,7 @@ def get_feature_elevations_external(request, feature_id):
     - coordinates: List of [lon, lat, elevation] arrays
     """
     # Get the feature from database and verify user ownership
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    require_default_scope_feature(feature)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
 
     # Extract coordinates from the feature's GeoJSON (without elevation)
     geojson_data = feature.geojson
@@ -107,8 +103,7 @@ def get_feature_elevations_internal(request, feature_id):
     - coordinates: List of [lon, lat, elevation] arrays (elevation may be None if not stored)
     """
     # Get the feature from database and verify user ownership
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    require_default_scope_feature(feature)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
 
     # Extract coordinates from the feature's GeoJSON (with elevation if present)
     geojson_data = feature.geojson

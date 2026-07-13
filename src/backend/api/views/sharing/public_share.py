@@ -129,13 +129,15 @@ def resolve_public_share_extent(share_id: str):
         return None
 
     if share_type == "tag":
+        # Main-map only, matching the scope get_features_in_bbox already applies when
+        # actually listing features for this same tag share.
         return (
-            FeatureStore.objects.filter(user=share.user)
+            FeatureStore.objects.owned_by(share.user).main_map()
             .filter(
                 Q(geojson__properties__tags__contains=[share.tag])
                 | Q(geojson__properties__system_tags__contains=[share.tag])
             )
-            .exclude(geometry__isnull=True)
+            .with_geometry()
             .aggregate(extent=Extent("geometry"))
             .get("extent")
         )
@@ -145,8 +147,8 @@ def resolve_public_share_extent(share_id: str):
         if not feature_ids:
             return None
         return (
-            FeatureStore.objects.filter(user=share.user, id__in=feature_ids)
-            .exclude(geometry__isnull=True)
+            FeatureStore.objects.owned_by(share.user).filter(id__in=feature_ids)
+            .with_geometry()
             .aggregate(extent=Extent("geometry"))
             .get("extent")
         )

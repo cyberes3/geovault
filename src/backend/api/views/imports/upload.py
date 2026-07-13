@@ -3,8 +3,7 @@ from django import forms
 from django.http import Http404
 from django.views.decorators.http import require_http_methods
 
-from api.models import FeatureStore
-from api.utils.authorization import get_object_or_404_for_user
+from api.services.feature_service import FeatureService
 from api.utils.responses import error_response, success_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
@@ -70,7 +69,7 @@ def upload_item(request):
             # ImportQueue row; the geometry-apply step re-checks this too, but that's defense in
             # depth, not the primary gate.
             try:
-                get_object_or_404_for_user(FeatureStore, request.user, id=replacement_feature_id)
+                FeatureService.get_owned_feature_or_404(request.user, replacement_feature_id)
             except Http404:
                 return error_response(
                     'Replacement feature not found or access denied',

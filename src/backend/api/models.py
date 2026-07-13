@@ -34,6 +34,39 @@ class ImportQueue(django_models.Model):
         ]
 
 
+class FeatureStoreQuerySet(models.QuerySet):
+    """
+    Chainable, self-documenting query methods for `FeatureStore`.
+
+    `scope` distinguishes main-map features (`scope=None`) from features owned by an
+    extension (e.g. `places`). Every read/write site should build its query through these
+    methods rather than hand-rolling `.filter(scope=...)`/`.filter(scope__isnull=...)` --
+    that makes the "did this endpoint forget to exclude extension-scoped features"
+    class of bug structurally impossible to reintroduce instead of something that has to
+    be remembered at each of the 19+ call sites across the codebase.
+    """
+
+    def owned_by(self, user) -> "FeatureStoreQuerySet":
+        """Restrict to features owned by `user`."""
+        return self.filter(user=user)
+
+    def main_map(self) -> "FeatureStoreQuerySet":
+        """Restrict to main-map features (i.e. not owned by an extension scope)."""
+        return self.filter(scope__isnull=True)
+
+    def in_scope(self, scope: str) -> "FeatureStoreQuerySet":
+        """Restrict to features owned by the given extension scope (e.g. 'places')."""
+        return self.filter(scope=scope)
+
+    def with_geometry(self) -> "FeatureStoreQuerySet":
+        """Exclude features with no geometry (e.g. failed/partial imports)."""
+        return self.exclude(geometry__isnull=True)
+
+
+class FeatureStoreManager(models.Manager.from_queryset(FeatureStoreQuerySet)):
+    pass
+
+
 class FeatureStore(models.Model):
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -43,6 +76,8 @@ class FeatureStore(models.Model):
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
     scope = models.CharField(max_length=255, null=True, blank=True, default=None, db_index=True, help_text="Scope of the feature (e.g., 'places'). Null means global/standard feature.")
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    objects = FeatureStoreManager()
 
     class Meta:
         indexes = [

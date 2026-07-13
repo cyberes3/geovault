@@ -78,8 +78,7 @@ def get_data_extent_hint(request):
     Used when the first viewport bbox load returns no features (e.g. no geolocation).
     """
     extent = (
-        FeatureStore.objects.filter(user=request.user, scope__isnull=True)
-        .exclude(geometry__isnull=True)
+        FeatureStore.objects.owned_by(request.user).main_map().with_geometry()
         .aggregate(extent=Extent("geometry"))
         .get("extent")
     )

@@ -7,6 +7,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, Collection
+from api.services.feature_service import FeatureService
 from api.utils.authorization import get_object_or_404_for_user
 from api.views.features.bbox_utils import _build_base_query, _build_collection_query, strip_private_tags
 from api.views.sharing.utils import find_share_by_id, validate_share_id
@@ -259,11 +260,10 @@ def _handle_user_bulk_download(request, tag_name: Optional[str], collection_id_s
         share_name = "All Features"
 
     elif tag_name:
-        # Verify tag exists in user's data
-        # We can check if any feature has this tag
-        tag_exists = FeatureStore.objects.filter(
-            user=request.user
-        ).filter(
+        # Verify tag exists on a main-map feature (extension-scoped features, e.g.
+        # `places`, are never bulk-exportable through this endpoint -- matches the
+        # scope `_build_base_query` below already applies when actually fetching features).
+        tag_exists = FeatureStore.objects.owned_by(request.user).main_map().filter(
             Q(geojson__properties__tags__contains=[tag_name]) |
             Q(geojson__properties__system_tags__contains=[tag_name])
         ).exists()
@@ -355,8 +355,8 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
                 {"error": "Unauthorized", "code": 401},
                 status=401,
             )
-        # Ensure the feature belongs to the requesting user
-        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+        # Ensure the feature belongs to the requesting user and is a main-map feature
+        feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
 
     geojson = feature.geojson or {}
     props = geojson.get("properties") or {}

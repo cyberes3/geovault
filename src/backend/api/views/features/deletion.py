@@ -6,8 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
-from api.utils.authorization import get_object_or_404_for_user
-from api.utils.feature_scope import require_default_scope_feature
+from api.services.feature_service import FeatureService
 from api.utils.responses import handle_404, error_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
@@ -25,8 +24,7 @@ def delete_feature(request, feature_id):
     URL parameter:
     - feature_id: ID of the feature to delete
     """
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    require_default_scope_feature(feature)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
     feature.delete()
     return JsonResponse({
         'message': 'Feature deleted successfully',
@@ -61,12 +59,10 @@ def bulk_delete_features_by_tag(request):
         return error_response('Tag must be a string', 400)
 
     with transaction.atomic():
-        # Query all features for the current user that have this tag
+        # Query all main-map features for the current user that have this tag (extension-
+        # scoped features, e.g. `places`, are never touched by this endpoint).
         # Check both 'tags' and 'system_tags' arrays in the JSONB properties
-        features = FeatureStore.objects.filter(
-            user=request.user,
-            scope__isnull=True,
-        ).filter(
+        features = FeatureStore.objects.owned_by(request.user).main_map().filter(
             Q(geojson__properties__tags__contains=[tag]) |
             Q(geojson__properties__system_tags__contains=[tag])
         )

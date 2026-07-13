@@ -7,8 +7,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
+from api.services.feature_service import FeatureService
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.feature_scope import require_default_scope_feature
 from api.utils.responses import error_response, handle_404
 from api.validation.feature_updates import validate_payload, ReplacementGeometryPayload
 from api.views.features.updates.shared import (
@@ -53,8 +53,7 @@ def update_feature(request, feature_id):
     Request body: GeoJSON feature object
     """
     # Get the feature from database
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    require_default_scope_feature(feature)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
 
     # Parse request body
     try:
@@ -232,8 +231,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     - regenerate_tags: (optional) Boolean, if True, regenerates tags based on the new geometry
     """
     # Get the feature from database
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    require_default_scope_feature(feature)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
 
     import_queue_id = validated_data['import_queue_id']
     feature_index = validated_data['feature_index']
