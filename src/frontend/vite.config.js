@@ -74,6 +74,18 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 manualChunks: (id) => {
+                    // Vite's virtual dynamic-import() helper is needed by every chunk that contains a
+                    // `import()` (ours: lazyOl.js/lazyMaplibreGl.js/route-level code-splitting; third
+                    // party: geotiff's internal lazy codec loading, etc). Left unassigned, Rollup
+                    // placed its single canonical copy in whichever eager chunk it reached first
+                    // (core-utils) - which then had to be imported by `vendor` (geotiff needs it) even
+                    // though `vendor` is itself a dependency of `vue-vendor`/`core-utils`, producing a
+                    // core-utils -> vue-vendor -> vendor -> core-utils circular chunk dependency.
+                    // Vendor has no dependents of its own reaching back into core-utils/vue-vendor, so
+                    // giving the helper a home there instead breaks the cycle.
+                    if (id.includes('vite/preload-helper')) {
+                        return 'vendor'
+                    }
                     // Pervasive core utilities (used eagerly by the store/App.vue AND by dozens of
                     // unrelated route chunks) must never be left for Rollup to auto-place. Without an
                     // explicit home, Rollup happened to bundle them into whichever heavy, mostly-lazy
