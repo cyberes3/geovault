@@ -69,9 +69,9 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 const platformState = createPlatformStateBridge(store);
 
-// Lazily resolves an arbitrary heroicon by name, fetching only that one icon instead of the whole
-// library. This trampoline is a plain function so `window.gv_core.resolveHeroiconByName` is always
-// callable, but the actual `import.meta.glob(...)`-backed resolver (and its ~300-entry stub map)
+// Lazily resolves an arbitrary heroicon by name instead of bundling the whole library eagerly.
+// This trampoline is a plain function so `window.gv_core.resolveHeroiconByName` is always callable,
+// but the actual `import.meta.glob(...)`-backed resolver (and the lazy "icons" chunk it pulls in)
 // only gets fetched on first use - see `extensions/lazyHeroiconResolver.ts`.
 function resolveHeroiconByName(name) {
     return import('@/extensions/lazyHeroiconResolver').then((m) => m.resolveHeroiconByName(name));

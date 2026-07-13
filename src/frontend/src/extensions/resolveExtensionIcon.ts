@@ -84,9 +84,9 @@ export type IconGlobMap = Record<string, () => Promise<Component>>;
  * re-throwing every time.
  *
  * Takes the glob map as plain data rather than calling `import.meta.glob()` itself so this stays
- * importable under plain `node --test` (which never runs through Vite's transform) - only `main.js`
- * needs the literal `import.meta.glob(...)` call, since that's the one place Vite can statically
- * detect and rewrite it.
+ * importable under plain `node --test` (which never runs through Vite's transform) - the literal
+ * `import.meta.glob(...)` call lives in `extensions/lazyHeroiconResolver.ts` instead, which Vite
+ * can statically detect and rewrite.
  */
 export function createHeroiconResolver(outlineIcons: IconGlobMap) {
     const cache = new Map<string, Promise<Component>>();
