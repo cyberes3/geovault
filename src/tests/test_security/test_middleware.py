@@ -2,15 +2,17 @@
 Tests for security middleware (CORS and CSP).
 """
 import re
-import json
+from unittest.mock import patch
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import TestCase, override_settings
 
 from geo_lib.tile_sources.registry import get_all_tile_sources
+from website.middleware.activity import ACTIVITY_TRACKING_THROTTLE_SECONDS
 from website.middleware.logging import _get_content_length
 from website.middleware.security_headers import get_tile_source_origins
 
@@ -400,4 +402,75 @@ class TestSecurityMiddleware(TestCase):
         # Verify we detected at least some origins
         self.assertGreater(len(detected_origins), 0,
             "Should detect at least one external tile source origin")
+
+
+class TestActivityTrackingCacheBounding(TestCase):
+    """
+    Regression tests for the activity-tracking cache-bounding fix (Phase 7,
+    website/middleware/activity.py): activity updates are throttled via the cache framework
+    (auto-expiring keys, one per user) instead of an unbounded module-level dict that never
+    pruned entries for users who visited once and never returned.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='activity@example.com',
+            password='testpass123',
+            username='activityuser',
+        )
+        self.client.force_login(self.user)
+        cache.clear()
+
+    def _cache_key(self, user):
+        return f"user_activity_tracking:{user.id}"
+
+    def test_repeated_requests_within_throttle_window_update_activity_once(self):
+        """Three requests in quick succession must only write to the DB once."""
+        with patch('users.models.UserProfile.update_activity') as mock_update:
+            for _ in range(3):
+                response = self.client.get('/api/config/')
+                self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_update.call_count, 1)
+
+    def test_activity_cache_key_is_added_with_bounded_timeout(self):
+        """The throttle key is set via cache.add() with an explicit expiring timeout, not
+        stored forever in an unbounded structure."""
+        with patch('website.middleware.activity.cache.add', wraps=cache.add) as mock_add:
+            self.client.get('/api/config/')
+        mock_add.assert_called_once_with(
+            self._cache_key(self.user), True, timeout=ACTIVITY_TRACKING_THROTTLE_SECONDS,
+        )
+
+    def test_activity_tracking_no_longer_uses_an_unbounded_module_level_dict(self):
+        """Guards against regressing back to the pre-fix `_activity_tracking_cache` dict,
+        which grew forever since entries were never pruned."""
+        import website.middleware.activity as activity_module
+        self.assertFalse(hasattr(activity_module, '_activity_tracking_cache'))
+
+    def test_activity_update_resumes_once_throttle_key_expires(self):
+        """Once the cache-backed throttle key is gone (window elapsed), the next request
+        updates activity again -- proving the throttle is time-bounded, not permanent."""
+        with patch('users.models.UserProfile.update_activity') as mock_update:
+            self.client.get('/api/config/')
+            self.assertEqual(mock_update.call_count, 1)
+
+            cache.delete(self._cache_key(self.user))
+
+            self.client.get('/api/config/')
+            self.assertEqual(mock_update.call_count, 2)
+
+    def test_different_users_tracked_independently_with_separate_bounded_keys(self):
+        """Each user gets their own throttle key rather than sharing (or exhausting) a single
+        global entry."""
+        other_user = User.objects.create_user(
+            email='activity2@example.com',
+            password='testpass123',
+            username='activityuser2',
+        )
+        with patch('users.models.UserProfile.update_activity') as mock_update:
+            self.client.get('/api/config/')
+            self.client.logout()
+            self.client.force_login(other_user)
+            self.client.get('/api/config/')
+        self.assertEqual(mock_update.call_count, 2)
 

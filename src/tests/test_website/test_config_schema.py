@@ -1,18 +1,22 @@
 """
-Tests for website.config.schema.GeoVaultConfig: field validators, and a two-way sync check
+Tests for website.config.schema.GeoVaultConfig: field validators, a two-way sync check
 between config.example.yaml and the schema (the single source of truth for every valid config
-key). This guards against the class of drift that let `processing.show_detailed_error_messages`
-go documented in config.example.yaml but never actually wired up as a real Django setting.
+key), and rejection of invalid types/values (fail-loud-at-startup behavior). This guards
+against the class of drift that let `processing.show_detailed_error_messages` go documented
+in config.example.yaml but never actually wired up as a real Django setting.
 """
+import tempfile
 import typing
 from pathlib import Path
 from typing import get_args, get_origin
 
 import yaml
+from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from website.config.schema import ExtensionsConfig, GeoVaultConfig
+from website.config.loader import load_config
+from website.config.schema import CeleryConfig, ExtensionsConfig, GeoVaultConfig
 
 _EXAMPLE_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / 'backend' / 'config.example.yaml'
 
@@ -125,3 +129,121 @@ class TestGeocodingSearchModeValidation(SimpleTestCase):
     def test_invalid_value_returns_none(self):
         config = GeoVaultConfig.model_validate({'geocoding_search_mode': 'nominatim'})
         self.assertIsNone(config.geocoding_search_mode)
+
+
+class TestGeoVaultConfigRejectsBadTypes(SimpleTestCase):
+    """
+    GeoVaultConfig.model_validate must reject bad types/values with a clear, field-path-naming
+    error rather than silently coercing or defaulting -- the core "fail loud at startup" promise
+    of the Pydantic schema replacing the old dot-path ConfigLoader.
+    """
+
+    def test_rejects_non_numeric_string_for_int_field(self):
+        with self.assertRaises(ValidationError) as ctx:
+            GeoVaultConfig.model_validate({'database': {'port': 'not-a-number'}})
+        self.assertIn('database.port', str(ctx.exception))
+
+    def test_rejects_non_boolean_string_for_bool_field(self):
+        with self.assertRaises(ValidationError) as ctx:
+            GeoVaultConfig.model_validate({'security': {'debug': 'maybe'}})
+        self.assertIn('security.debug', str(ctx.exception))
+
+    def test_rejects_wrong_type_for_list_field(self):
+        with self.assertRaises(ValidationError) as ctx:
+            GeoVaultConfig.model_validate({'security': {'additional_allowed_hosts': 'not-a-list'}})
+        self.assertIn('security.additional_allowed_hosts', str(ctx.exception))
+
+    def test_rejects_out_of_range_type_nested_two_levels_deep(self):
+        with self.assertRaises(ValidationError) as ctx:
+            GeoVaultConfig.model_validate({'database': {'pool': {'min_size': 'lots'}}})
+        self.assertIn('database.pool.min_size', str(ctx.exception))
+
+    def test_accepts_a_fully_valid_nested_config(self):
+        config = GeoVaultConfig.model_validate({
+            'database': {'port': 5432, 'pool': {'min_size': 2, 'max_size': 30}},
+            'security': {'debug': True, 'additional_allowed_hosts': ['example.com']},
+        })
+        self.assertEqual(config.database.port, 5432)
+        self.assertTrue(config.security.debug)
+
+
+class TestCeleryConfigRejectsBadTypes(SimpleTestCase):
+    """
+    CeleryConfig closes the gap where 8 `celery.*` settings keys were read but never validated
+    (see this module's docstring and Phase 5/6 of the backend cleanup). Its fields must reject
+    bad values the same as every other config section.
+    """
+
+    def test_default_celery_config_is_valid(self):
+        config = CeleryConfig.model_validate({})
+        self.assertEqual(config.default_queue, 'default')
+        self.assertFalse(config.task_always_eager)
+
+    def test_rejects_non_boolean_task_always_eager(self):
+        with self.assertRaises(ValidationError) as ctx:
+            CeleryConfig.model_validate({'task_always_eager': 'yes-please'})
+        self.assertIn('task_always_eager', str(ctx.exception))
+
+    def test_rejects_non_numeric_worker_startup_timeout(self):
+        with self.assertRaises(ValidationError) as ctx:
+            CeleryConfig.model_validate({'worker_startup_timeout_seconds': 'soon'})
+        self.assertIn('worker_startup_timeout_seconds', str(ctx.exception))
+
+    def test_rejects_non_numeric_beat_heartbeat_max_age(self):
+        with self.assertRaises(ValidationError) as ctx:
+            CeleryConfig.model_validate({'beat_heartbeat_max_age_seconds': 'never'})
+        self.assertIn('beat_heartbeat_max_age_seconds', str(ctx.exception))
+
+    def test_rejects_bad_celery_section_nested_under_full_config(self):
+        """The full GeoVaultConfig tree surfaces CeleryConfig field errors with a `celery.` prefix."""
+        with self.assertRaises(ValidationError) as ctx:
+            GeoVaultConfig.model_validate({'celery': {'beat_startup_wait_seconds': 'a while'}})
+        self.assertIn('celery.beat_startup_wait_seconds', str(ctx.exception))
+
+
+class TestLoadConfigFailsLoudOnInvalidValues(SimpleTestCase):
+    """
+    website.config.loader.load_config() is the actual startup entrypoint: any invalid value in
+    config.yaml must raise ImproperlyConfigured naming the offending field, instead of silently
+    falling back to a default (the bug class this whole schema replaces).
+    """
+
+    def _write_config(self, tmp_path: Path, contents: dict) -> Path:
+        config_path = tmp_path / 'config.yaml'
+        with open(config_path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(contents, f)
+        return config_path
+
+    def test_raises_improperly_configured_for_bad_database_port(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = self._write_config(Path(tmp_dir), {'database': {'port': 'not-a-number'}})
+            with self.assertRaises(ImproperlyConfigured) as ctx:
+                load_config(config_path)
+            self.assertIn('database.port', str(ctx.exception))
+
+    def test_raises_improperly_configured_for_bad_celery_value(self):
+        # worker_startup_timeout_seconds has no env-var override, so this exercises YAML-driven
+        # validation directly rather than being masked by run-tests.sh's CELERY_TASK_ALWAYS_EAGER.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = self._write_config(
+                Path(tmp_dir), {'celery': {'worker_startup_timeout_seconds': 'not-a-number'}},
+            )
+            with self.assertRaises(ImproperlyConfigured) as ctx:
+                load_config(config_path)
+            self.assertIn('celery.worker_startup_timeout_seconds', str(ctx.exception))
+
+    def test_valid_config_loads_without_error(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = self._write_config(Path(tmp_dir), {
+                'database': {'port': 5432},
+                'celery': {'worker_startup_timeout_seconds': 7},
+            })
+            config = load_config(config_path)
+            self.assertEqual(config.database.port, 5432)
+            self.assertEqual(config.celery.worker_startup_timeout_seconds, 7)
+
+    def test_missing_config_file_loads_defaults_without_error(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / 'does-not-exist.yaml'
+            config = load_config(config_path)
+            self.assertIsInstance(config, GeoVaultConfig)

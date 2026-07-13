@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings, RequestFactory
 
 from api.utils.rate_limiting import rate_limited
 from api.utils.responses import success_response
-from geo_lib.security.rate_limit import RedisRateLimiter
+from geo_lib.security.rate_limit import RateLimitExceeded, RedisRateLimiter
 
 User = get_user_model()
 
@@ -216,6 +216,32 @@ class TestRateLimitDecorator(TestCase):
         response2 = rate_limit_test_view(request)
         # Should be blocked because first request already set the key
         self.assertEqual(response2.status_code, 429)
+
+
+class TestRedisRateLimiterEnforce(TestCase):
+    """
+    Direct unit tests for `RedisRateLimiter.enforce()`: it's a pure `geo_lib` primitive with no
+    HTTP-response concerns (Phase 3 moved that translation out of `geo_lib` into
+    `api.utils.rate_limiting.rate_limited`, see that module and `rate_limit.py`'s docstring).
+    These tests exercise the exception itself, independent of any Django view/decorator.
+    """
+
+    def setUp(self):
+        caches['rate_limiting'].clear()
+        self.limiter = RedisRateLimiter(name='test_enforce_unit', limit=1, window_seconds=1.0)
+
+    def test_enforce_does_not_raise_when_within_limit(self):
+        self.limiter.enforce('identity-a')  # first call, should not raise
+
+    def test_enforce_raises_rate_limit_exceeded_when_over_limit(self):
+        self.limiter.enforce('identity-b')
+        with self.assertRaises(RateLimitExceeded) as ctx:
+            self.limiter.enforce('identity-b')
+        self.assertEqual(ctx.exception.limiter_name, 'test_enforce_unit')
+
+    def test_enforce_is_independent_per_identity(self):
+        self.limiter.enforce('identity-c')
+        self.limiter.enforce('identity-d')  # different identity, should not raise
 
 
 class TestRateLimiterForConsumer(TestCase):
