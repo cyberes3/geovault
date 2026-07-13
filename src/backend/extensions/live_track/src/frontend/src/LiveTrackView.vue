@@ -1859,7 +1859,7 @@ export default {
       fetchIncomingShared();
       await fetchGroups();
       await fetchTrackers();
-      requestAnimationFrame(() => trackMap.initMap());
+      requestAnimationFrame(() => { void trackMap.initMap(); });
       trackSocket.connect();
     });
 

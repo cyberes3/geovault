@@ -42,8 +42,14 @@ function getMarkerColors() {
   };
 }
 
-function getMaplibre() {
-  return window.gv_core?.maplibre || window.maplibregl || null;
+/**
+ * MapLibre GL JS loads lazily (see `lazyMaplibreGl.js` in core), so `window.gv_core.maplibre` may
+ * still be null the first time places renders its map - nothing else is guaranteed to have loaded
+ * it already (e.g. navigating straight to Places without ever visiting the main map). Await the
+ * shared loader (idempotent/cached after the first call) instead of assuming it's already there.
+ */
+async function getMaplibre() {
+  return window.gv_core?.maplibre ?? window.maplibregl ?? (await window.gv_core?.loadMaplibreGl?.()) ?? null;
 }
 
 function applyInteractionPolicy(map, mode) {
@@ -121,7 +127,7 @@ export async function createPlacesMap({
   initialPointFeatures = null,
   initialFitOptions = {}
 }) {
-  const maplibre = getMaplibre();
+  const maplibre = await getMaplibre();
   if (!maplibre) {
     throw new Error('MapLibre is not available on window.gv_core.maplibre or window.maplibregl');
   }

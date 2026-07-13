@@ -816,12 +816,12 @@ export default {
       }
     });
 
-    function initMap() {
-      const maplibregl = window.gv_core?.maplibre || window.maplibregl;
+    async function initMap() {
+      const maplibregl = window.gv_core?.maplibre ?? window.maplibregl ?? (await window.gv_core?.loadMaplibreGl?.()) ?? null;
       const hasData = trackData.value || (groupTracks.value?.length > 0);
       if (!mapContainer.value || !maplibregl || !hasData) {
         if (!maplibregl) console.warn('WorldShareView: MapLibre not available');
-        return Promise.resolve();
+        return;
       }
 
       const layerValue = selectedLayer.value;

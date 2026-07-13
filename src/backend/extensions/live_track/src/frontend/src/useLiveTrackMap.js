@@ -14,11 +14,13 @@ const { isValidMapLngLatPair, setupCopyMapCoordinatesOnContextMenu } = window.gv
 
 /**
  * MapLibre GL JS loads lazily (see lazyMaplibreGl.js in core), so `window.gv_core.maplibre` may
- * still be null at the moment this module is first evaluated. Read it at call time in every
- * function that needs it instead of caching it once at module scope.
+ * still be null at the moment this module is first evaluated - and nothing else is guaranteed to
+ * have loaded it before this view's own map needs it (e.g. navigating straight to a live-track
+ * link without ever visiting the main map). Await the shared loader (idempotent/cached after the
+ * first call) instead of assuming it's already populated.
  */
-function getMaplibreGl() {
-  return window.gv_core?.maplibre || window.maplibregl || null;
+async function getMaplibreGl() {
+  return window.gv_core?.maplibre ?? window.maplibregl ?? (await window.gv_core?.loadMaplibreGl?.()) ?? null;
 }
 
 const LINES_SOURCE_ID = 'live-track-lines';
@@ -218,7 +220,7 @@ export function useLiveTrackMap({
   }
 
   async function runUpdateMapFeatures() {
-    if (!map || !maplibregl) return;
+    if (!map) return;
     const lineSource = map.getSource(LINES_SOURCE_ID);
     const pointSource = map.getSource(POINTS_SOURCE_ID);
     if (lineSource) lineSource.setData(buildLinesGeoJSON());
@@ -411,7 +413,7 @@ export function useLiveTrackMap({
   }
 
   async function switchMapLayer(layerValue) {
-    const maplibregl = getMaplibreGl();
+    const maplibregl = await getMaplibreGl();
     if (!map || !maplibregl) return;
     const tileSource = tileSources.value.find((s) => s.id === layerValue);
     if (!tileSource) return;
@@ -520,8 +522,8 @@ export function useLiveTrackMap({
     }
   }
 
-  function initMap() {
-    const maplibregl = getMaplibreGl();
+  async function initMap() {
+    const maplibregl = await getMaplibreGl();
     if (!mapContainer.value || !maplibregl) return;
 
     const layerValue = selectedLayer.value;

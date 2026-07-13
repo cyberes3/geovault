@@ -94,8 +94,9 @@
             title="Error Loading Map"
         />
 
-        <!-- Loading Indicator -->
+        <!-- Loading Indicator (hidden while the map-initializing overlay above is already showing) -->
         <MapLoadingIndicator
+            v-if="!isMapInitializing && map"
             :is-loading="isDataLoading"
         />
 
