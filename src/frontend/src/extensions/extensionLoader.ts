@@ -3,7 +3,7 @@
  * `setup()` with a scoped router/registry plus the shared platform contract (`ExtensionApi`,
  * `platformState`, `utils`, `toast`). This is the only place that talks to `listExtensions()`.
  */
-import type { App } from 'vue';
+import type { App, Component } from 'vue';
 import type { Router, RouteRecordRaw } from 'vue-router';
 import type { Store } from 'vuex';
 import { markRaw } from 'vue';
@@ -46,6 +46,55 @@ function findSetupFunction(extensionName: string): ((ctx: ExtensionSetupContext)
 function withPrefixedPath(prefix: string, rawPath: string): string {
     const relPath = rawPath === '' || rawPath === '/' ? '' : (rawPath.startsWith('/') ? rawPath : `/${rawPath}`);
     return `${prefix}${relPath}`;
+}
+
+interface PrefetchedExtension {
+    ext: DiscoveredExtension;
+    kebabName: string;
+    module: PromiseSettledResult<unknown>;
+    icon: PromiseSettledResult<Component | null>;
+}
+
+interface PrefetchExtensionsDeps {
+    importModule: (entry: string) => Promise<unknown>;
+    resolveIcon: (icon: string | null | undefined, kebabName: string) => Promise<Component | null>;
+}
+
+const defaultPrefetchDeps: PrefetchExtensionsDeps = {
+    importModule: (entry) => import(/* @vite-ignore */ entry),
+    resolveIcon: resolveExtensionIcon
+};
+
+/**
+ * Fetches every extension's UMD bundle and icon concurrently instead of one at a time. Extensions
+ * are independent, network-bound, unrelated bundles - fetching them sequentially (as a naive
+ * `for` loop with `await` inside would) means each one waits for the previous one's fetch *and*
+ * `setup()` call to finish before its own fetch even starts, which showed up as an almost fully
+ * serialized waterfall in production (~1.75s for 4 small bundles that could load in well under a
+ * second in parallel). `Promise.allSettled` per extension ensures a rejected fetch here can never
+ * produce an unhandled-rejection warning even though we don't inspect the result until later.
+ *
+ * `deps` defaults to the real `import()`/`resolveExtensionIcon` and only exists so tests can
+ * substitute stubs with controllable timing/rejection without mocking ESM dynamic import.
+ */
+export function prefetchExtensions(
+    list: DiscoveredExtension[],
+    deps: PrefetchExtensionsDeps = defaultPrefetchDeps
+): Map<DiscoveredExtension, Promise<PrefetchedExtension>> {
+    const prefetches = new Map<DiscoveredExtension, Promise<PrefetchedExtension>>();
+
+    for (const ext of list) {
+        if (!ext.frontend_entry) continue;
+
+        const kebabName = toKebabCase(ext.name);
+        const entry = ext.frontend_entry;
+        prefetches.set(ext, Promise.allSettled([
+            deps.importModule(entry),
+            deps.resolveIcon(ext.icon, kebabName)
+        ]).then(([module, icon]) => ({ ext, kebabName, module, icon })));
+    }
+
+    return prefetches;
 }
 
 export function createScopedRouter(router: Router, prefix: string) {
@@ -93,12 +142,18 @@ export async function loadExtensions(deps: LoadExtensionsDeps): Promise<void> {
             list.filter((ext) => ext.public_share_route).map((ext) => `/extensions/${toKebabCase(ext.name)}/share`));
 
         const successfullyLoaded: string[] = [];
+        const prefetches = prefetchExtensions(list);
 
         for (const ext of list) {
-            if (!ext.frontend_entry) continue;
+            const prefetch = prefetches.get(ext);
+            if (!prefetch) continue;
 
             try {
-                await import(/* @vite-ignore */ ext.frontend_entry);
+                const { kebabName, module, icon } = await prefetch;
+
+                if (module.status === 'rejected') {
+                    throw module.reason;
+                }
 
                 if (ext.frontend_css) {
                     const link = document.createElement('link');
@@ -107,7 +162,6 @@ export async function loadExtensions(deps: LoadExtensionsDeps): Promise<void> {
                     document.head.appendChild(link);
                 }
 
-                const kebabName = toKebabCase(ext.name);
                 const prefix = `/extensions/${kebabName}`;
                 const setup = findSetupFunction(ext.name);
 
@@ -120,7 +174,10 @@ export async function loadExtensions(deps: LoadExtensionsDeps): Promise<void> {
                 }
 
                 const api = new ExtensionApi(ext.name);
-                const resolvedIcon = await resolveExtensionIcon(ext.icon, kebabName);
+                if (icon.status === 'rejected') {
+                    console.error(`Failed to resolve icon for extension ${ext.name}:`, icon.reason);
+                }
+                const resolvedIcon = icon.status === 'fulfilled' ? icon.value : null;
 
                 await setup({
                     app,
