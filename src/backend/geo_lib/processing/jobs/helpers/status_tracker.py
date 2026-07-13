@@ -1,16 +1,21 @@
 """
-In-memory status tracker for asynchronous file processing.
-Tracks multiple concurrent file processing jobs and their status.
+Cross-process status tracker for asynchronous file processing.
+
+`ProcessJob`'s actual work runs inside Celery worker processes, while jobs are created and
+polled from the Django web process (and possibly several of each, across multiple hosts). An
+in-memory tracker cannot work in that topology: state has to live somewhere every one of those
+processes can see, so Redis (via `redis_job_storage`) is the only store, full stop. This class
+adds the typed domain layer on top of it: `ProcessingStatus`/`JobType` enums and a
+`ProcessingJob` dataclass instead of raw JSON dicts.
 """
 
-import threading
 import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
-from website.settings_utils import get_required_setting
+from geo_lib.processing.jobs.helpers import redis_job_storage
 
 
 class ProcessingStatus(Enum):
@@ -25,6 +30,7 @@ class ProcessingStatus(Enum):
 class JobType(Enum):
     """Type of job being processed."""
     PROCESS = "process"  # File processing job (converting to geojson)
+    IMPORT = "import"  # Importing a single item to the feature store
     DELETE = "delete"  # Item deletion job
     BULK_IMPORT = "bulk_import"  # Bulk import job
     BULK_DELETE = "bulk_delete"  # Bulk delete job
@@ -44,157 +50,118 @@ class ProcessingJob:
     progress: float = 0.0  # 0.0 to 100.0
     message: str = ""
     error_message: Optional[str] = None
-    result_data: Optional[Dict[str, Any]] = None
     import_queue_id: Optional[int] = None
+
+
+def _job_from_redis_data(data: Dict[str, Any]) -> ProcessingJob:
+    return ProcessingJob(
+        job_id=data['job_id'],
+        filename=data['filename'],
+        user_id=data['user_id'],
+        status=ProcessingStatus(data['status']),
+        job_type=JobType(data['job_type']),
+        created_at=data['created_at'],
+        started_at=data.get('started_at'),
+        completed_at=data.get('completed_at'),
+        progress=data.get('progress', 0.0),
+        message=data.get('message', ''),
+        error_message=data.get('error_message'),
+        import_queue_id=data.get('import_queue_id'),
+    )
 
 
 class ProcessingStatusTracker:
     """
-    Thread-safe in-memory tracker for file processing jobs.
-    Supports multiple concurrent uploads and processing.
-    """
+    Redis-backed tracker for background processing jobs.
 
-    def __init__(self):
-        self._jobs: Dict[str, ProcessingJob] = {}
-        self._lock = threading.RLock()
-        self._cleanup_interval = get_required_setting('JOB_CLEANUP_INTERVAL_SECONDS')  # 1 hour
-        self._max_job_age = get_required_setting('MAX_JOB_AGE_SECONDS')  # 2 hours
-        self._last_cleanup = time.time()
+    Safe to share across the Django web process and any number of Celery worker processes:
+    every method reads/writes straight through to Redis, so job state is always visible
+    cross-process, with no in-memory caching to go stale or fall out of sync.
+    """
 
     def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.PROCESS) -> str:
         """Create a new processing job and return its ID."""
         job_id = str(uuid.uuid4())
-        job = ProcessingJob(
+        redis_job_storage.store_job_started(
             job_id=job_id,
-            filename=filename,
             user_id=user_id,
-            status=ProcessingStatus.QUEUED,
-            job_type=job_type,
-            created_at=time.time()
+            job_type=job_type.value,
+            filename=filename,
+            created_at=time.time(),
         )
-
-        with self._lock:
-            self._jobs[job_id] = job
-            self._cleanup_old_jobs()
-
-        # Job creation logged at higher level if needed
         return job_id
 
     def get_job(self, job_id: str) -> Optional[ProcessingJob]:
         """Get a processing job by ID."""
-        with self._lock:
-            return self._jobs.get(job_id)
+        data = redis_job_storage.get_job_status(job_id)
+        return _job_from_redis_data(data) if data else None
 
     def update_job_status(self, job_id: str, status: ProcessingStatus,
                           message: str = "", progress: float = None,
                           error_message: str = None) -> bool:
         """Update a job's status and return True if successful."""
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if not job:
-                return False
+        existing = redis_job_storage.get_job_status(job_id)
+        if not existing:
+            return False
 
-            job.status = status
-            job.message = message
-            if progress is not None:
-                job.progress = progress
-            if error_message:
-                job.error_message = error_message
+        started_at = existing.get('started_at')
+        completed_at = existing.get('completed_at')
+        if status == ProcessingStatus.PROCESSING and not started_at:
+            started_at = time.time()
+        elif status in (ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED):
+            completed_at = time.time()
 
-            # Update timestamps
-            if status == ProcessingStatus.PROCESSING and not job.started_at:
-                job.started_at = time.time()
-            elif status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]:
-                job.completed_at = time.time()
+        return redis_job_storage.update_job_status(
+            job_id, status.value, message=message, progress=progress, error_message=error_message,
+            started_at=started_at, completed_at=completed_at,
+        )
 
-            # Status updates are handled via WebSocket and database logging
-            return True
+    def set_job_import_queue_id(self, job_id: str, import_queue_id: int) -> bool:
+        """Attach the owning ImportQueue row ID to a job."""
+        existing = redis_job_storage.get_job_status(job_id)
+        if not existing:
+            return False
+        return redis_job_storage.update_job_status(
+            job_id, existing['status'], import_queue_id=import_queue_id,
+        )
 
-    def set_job_result(self, job_id: str, result_data: Dict[str, Any],
-                       import_queue_id: int = None) -> bool:
-        """Set the result data for a completed job."""
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if not job:
-                return False
-
-            job.result_data = result_data
-            job.import_queue_id = import_queue_id
-            return True
-
-    def get_user_jobs(self, user_id: int) -> list[ProcessingJob]:
+    def get_user_jobs(self, user_id: int) -> List[ProcessingJob]:
         """Get all jobs for a specific user."""
-        with self._lock:
-            return [job for job in self._jobs.values() if job.user_id == user_id]
+        return [_job_from_redis_data(data) for data in redis_job_storage.get_user_jobs(user_id)]
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get job status as a dictionary for API responses."""
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if not job:
-                return None
+        data = redis_job_storage.get_job_status(job_id)
+        if not data:
+            return None
 
-            return {
-                'job_id': job.job_id,
-                'filename': job.filename,
-                'job_type': job.job_type.value,
-                'status': job.status.value,
-                'progress': job.progress,
-                'message': job.message,
-                'error_message': job.error_message,
-                'created_at': job.created_at,
-                'started_at': job.started_at,
-                'completed_at': job.completed_at,
-                'import_queue_id': job.import_queue_id
-            }
+        return {
+            'job_id': data['job_id'],
+            'filename': data['filename'],
+            'job_type': data['job_type'],
+            'status': data['status'],
+            'progress': data.get('progress', 0.0),
+            'message': data.get('message', ''),
+            'error_message': data.get('error_message'),
+            'created_at': data['created_at'],
+            'started_at': data.get('started_at'),
+            'completed_at': data.get('completed_at'),
+            'import_queue_id': data.get('import_queue_id'),
+        }
 
     def cancel_job(self, job_id: str) -> bool:
         """Cancel a job if it's not already completed."""
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if not job or job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]:
-                return False
+        existing = redis_job_storage.get_job_status(job_id)
+        if not existing:
+            return False
+        if existing['status'] in (ProcessingStatus.COMPLETED.value, ProcessingStatus.FAILED.value,
+                                   ProcessingStatus.CANCELED.value):
+            return False
 
-            job.status = ProcessingStatus.CANCELED
-            job.completed_at = time.time()
-            job.message = "Job canceled by user"
-
-            # Job cancellation logged at higher level if needed
-            return True
-
-    def _cleanup_old_jobs(self):
-        """Remove old completed jobs to prevent memory leaks."""
-        current_time = time.time()
-        if current_time - self._last_cleanup < self._cleanup_interval:
-            return
-
-        self._last_cleanup = current_time
-        cutoff_time = current_time - self._max_job_age
-
-        jobs_to_remove = []
-        for job_id, job in self._jobs.items():
-            if (job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]
-                    and job.created_at < cutoff_time):
-                jobs_to_remove.append(job_id)
-
-        for job_id in jobs_to_remove:
-            del self._jobs[job_id]
-            # Job cleanup is internal maintenance, no need to log
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Get statistics about current jobs."""
-        with self._lock:
-            total_jobs = len(self._jobs)
-            status_counts = {}
-            for status in ProcessingStatus:
-                status_counts[status.value] = sum(1 for job in self._jobs.values() if job.status == status)
-
-            return {
-                'total_jobs': total_jobs,
-                'status_counts': status_counts,
-                'oldest_job': min((job.created_at for job in self._jobs.values()), default=None),
-                'newest_job': max((job.created_at for job in self._jobs.values()), default=None)
-            }
+        return redis_job_storage.update_job_status(
+            job_id, ProcessingStatus.CANCELED.value,
+            message="Job canceled by user", completed_at=time.time(),
+        )
 
 
 # Global instance for the application

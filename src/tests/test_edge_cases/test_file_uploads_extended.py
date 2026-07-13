@@ -12,7 +12,6 @@ from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
-from geo_lib.processing.queue_worker import stop_all_workers
 
 
 class TestLargeFileUploads(TransactionTestCase):
@@ -36,13 +35,10 @@ class TestLargeFileUploads(TransactionTestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all background workers to prevent them from accessing deleted objects
-        stop_all_workers()
-        time.sleep(0.5)  # Give workers time to stop
-        
-        # Wait a bit for any in-flight jobs to complete or fail
-        time.sleep(1.0)
-        
+        # Import processing now runs as a Celery task dispatched synchronously (eager mode) by
+        # the upload view itself, so the response has already waited for it - no background
+        # worker to stop or in-flight job to wait out here.
+
         # Clean up any features created during tests
         FeatureStore.objects.filter(user=self.user).delete()
         # Clean up import queue items
@@ -147,13 +143,10 @@ class TestCorruptedFiles(TransactionTestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all background workers to prevent them from accessing deleted objects
-        stop_all_workers()
-        time.sleep(0.5)  # Give workers time to stop
-        
-        # Wait a bit for any in-flight jobs to complete or fail
-        time.sleep(1.0)
-        
+        # Import processing now runs as a Celery task dispatched synchronously (eager mode) by
+        # the upload view itself, so the response has already waited for it - no background
+        # worker to stop or in-flight job to wait out here.
+
         # Clean up any features created during tests
         FeatureStore.objects.filter(user=self.user).delete()
         # Clean up import queue items
@@ -232,13 +225,10 @@ class TestCorruptedKMZ(TransactionTestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all background workers to prevent them from accessing deleted objects
-        stop_all_workers()
-        time.sleep(0.5)  # Give workers time to stop
-        
-        # Wait a bit for any in-flight jobs to complete or fail
-        time.sleep(1.0)
-        
+        # Import processing now runs as a Celery task dispatched synchronously (eager mode) by
+        # the upload view itself, so the response has already waited for it - no background
+        # worker to stop or in-flight job to wait out here.
+
         # Clean up any features created during tests
         FeatureStore.objects.filter(user=self.user).delete()
         # Clean up import queue items
@@ -323,13 +313,10 @@ class TestInvalidCoordinates(TransactionTestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all background workers to prevent them from accessing deleted objects
-        stop_all_workers()
-        time.sleep(0.5)  # Give workers time to stop
-        
-        # Wait a bit for any in-flight jobs to complete or fail
-        time.sleep(1.0)
-        
+        # Import processing now runs as a Celery task dispatched synchronously (eager mode) by
+        # the upload view itself, so the response has already waited for it - no background
+        # worker to stop or in-flight job to wait out here.
+
         # Clean up any features created during tests
         FeatureStore.objects.filter(user=self.user).delete()
         # Clean up import queue items
@@ -420,13 +407,10 @@ class TestEmptyFiles(TransactionTestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all background workers to prevent them from accessing deleted objects
-        stop_all_workers()
-        time.sleep(0.5)  # Give workers time to stop
-        
-        # Wait a bit for any in-flight jobs to complete or fail
-        time.sleep(1.0)
-        
+        # Import processing now runs as a Celery task dispatched synchronously (eager mode) by
+        # the upload view itself, so the response has already waited for it - no background
+        # worker to stop or in-flight job to wait out here.
+
         # Clean up any features created during tests
         FeatureStore.objects.filter(user=self.user).delete()
         # Clean up import queue items
@@ -493,13 +477,10 @@ class TestSpecialCharactersInFiles(TransactionTestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        # Stop all background workers to prevent them from accessing deleted objects
-        stop_all_workers()
-        time.sleep(0.5)  # Give workers time to stop
-        
-        # Wait a bit for any in-flight jobs to complete or fail
-        time.sleep(1.0)
-        
+        # Import processing now runs as a Celery task dispatched synchronously (eager mode) by
+        # the upload view itself, so the response has already waited for it - no background
+        # worker to stop or in-flight job to wait out here.
+
         # Clean up any features created during tests
         FeatureStore.objects.filter(user=self.user).delete()
         # Clean up import queue items

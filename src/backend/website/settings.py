@@ -321,7 +321,9 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_ENABLE_UTC = True
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_DEFAULT_QUEUE = config.get_str("celery.default_queue", "default")
-CELERY_TASK_ALWAYS_EAGER = config.get_bool("celery.task_always_eager", False)
+CELERY_TASK_ALWAYS_EAGER = config.get_bool_with_env_override(
+    "celery.task_always_eager", "CELERY_TASK_ALWAYS_EAGER", False,
+)
 CELERY_TASK_EAGER_PROPAGATES = config.get_bool("celery.task_eager_propagates", True)
 CELERY_BEAT_SCHEDULE = {
     "replacement_cleanup_every_60_seconds": {

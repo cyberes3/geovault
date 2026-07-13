@@ -1939,7 +1939,7 @@ class TestImportJobWebSocket(TestCase):
 
 
 class TestSequentialProcessing(TestCase):
-    """Test sequential processing with Redis queue."""
+    """Test that file uploads dispatch to the import job pipeline asynchronously."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -1953,8 +1953,8 @@ class TestSequentialProcessing(TestCase):
 
     @patch('api.views.imports.upload.process_job')
     @patch('api.views.imports.upload.status_tracker')
-    def test_redis_queue_is_used_for_processing(self, mock_status_tracker, mock_process_job):
-        """Test that files are enqueued to Redis queue for processing."""
+    def test_upload_enqueues_job_for_processing(self, mock_status_tracker, mock_process_job):
+        """Test that files are enqueued via ProcessJob.enqueue_job for async processing."""
         # Setup mocks
         mock_status_tracker.create_job.return_value = 'test-job-id'
         mock_process_job.enqueue_job.return_value = True

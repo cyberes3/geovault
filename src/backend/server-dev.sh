@@ -12,7 +12,7 @@ python manage.py migrate --no-input
 python -u manage.py runserver 0.0.0.0:8000
 
 # Run Celery in separate terminals:
-# celery -A website.celery_app worker --loglevel=info --queues=default,maintenance,extensions,live_track
+# celery -A website.celery_app worker --loglevel=info --queues=default,maintenance,extensions,live_track,imports
 # celery -A website.celery_app beat --loglevel=info
 
 # Heplful Reminders

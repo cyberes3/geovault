@@ -21,6 +21,7 @@ from geo_lib.processing.duplicate_detection.duplicate_detection import remove_in
 from geo_lib.processing.duplicate_detection.models import split_duplicates_by_match_type
 from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.file_types import FileType, detect_file_type
+from geo_lib.processing.job_ceiling import calculate_conversion_timeout_seconds, calculate_job_ceiling_seconds
 from geo_lib.processing.geo import (
     extract_track_created_date,
     geojson_property_generation,
@@ -819,6 +820,10 @@ class BaseProcessor(ABC):
 
         return processed_features, feature_log, skipped_count, was_split
 
+    def _file_size_bytes(self) -> int:
+        """Size of the in-memory file data, decoding to UTF-8 bytes if it's still a str."""
+        return len(self.file_data) if isinstance(self.file_data, bytes) else len(self.file_data.encode('utf-8'))
+
     def _calculate_timeout(self) -> int:
         """
         Calculate timeout based on file size.
@@ -826,14 +831,10 @@ class BaseProcessor(ABC):
         Returns:
             Timeout in seconds
         """
-        file_size = len(self.file_data) if isinstance(self.file_data, bytes) else len(self.file_data.encode('utf-8'))
+        file_size = self._file_size_bytes()
+        timeout_seconds = calculate_conversion_timeout_seconds(file_size)
+
         file_size_mb = file_size / (1024 * 1024)
-
-        # Base timeout plus additional timeout per MB for large files
-        timeout_base = get_required_setting('PROCESSING_TIMEOUT_BASE_SECONDS')
-        timeout_per_mb = get_required_setting('PROCESSING_TIMEOUT_PER_MB_SECONDS')
-        timeout_seconds = max(timeout_base, int(timeout_base + (file_size_mb * timeout_per_mb)))
-
         self.import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.DEBUG)
         return timeout_seconds
 
@@ -846,8 +847,7 @@ class BaseProcessor(ABC):
         DB write) rather than just conversion. Callers (`ProcessJob._check_job_timeout`)
         compare this against total elapsed wall-clock time for the job.
         """
-        multiplier = get_required_setting('PROCESSING_TIMEOUT_JOB_CEILING_MULTIPLIER')
-        return self._calculate_timeout() * multiplier
+        return calculate_job_ceiling_seconds(self._file_size_bytes())
 
     def _decode_content(self) -> str:
         """

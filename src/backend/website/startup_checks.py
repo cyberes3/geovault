@@ -10,9 +10,8 @@ This module performs essential checks when the server starts up:
 6. Writable directories (tile cache, icon storage)
 7. Frontend static files are built
 8. Site configuration (for email confirmation URLs)
-9. Clean up stale Redis queues and job status data
-10. Clear Redis cache (ensures fresh data on startup)
-11. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
+9. Clear Redis cache (ensures fresh data on startup)
+10. Recover interrupted jobs (redispatch jobs that were processing when server stopped)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -690,73 +689,6 @@ def check_site_configuration():
         return False
 
 
-def cleanup_redis_queues():
-    """
-    Clean up Redis processing queues, job status data, and old locks on startup.
-    
-    This clears any stale queues from previous server instances and removes
-    old processing locks (for migration from lock-based to queue-based system).
-    Also clears job status data to ensure a clean slate on server restart.
-    """
-    try:
-        redis_client = get_redis_connection()
-
-        # Find all processing queue keys
-        queue_keys = redis_client.keys('processing_queue:user:*')
-
-        # Find all old processing lock keys (for migration)
-        lock_keys = redis_client.keys('processing_lock:*')
-
-        # Find all job status keys
-        job_keys = redis_client.keys('job:*')
-
-        # Find all user jobs set keys
-        user_jobs_keys = redis_client.keys('user_jobs:*')
-
-        total_deleted = 0
-
-        if queue_keys:
-            # Delete all processing queues
-            deleted_count = redis_client.delete(*queue_keys)
-            total_deleted += deleted_count
-            _logger.info(f"✓ Cleaned up {deleted_count} stale Redis processing queue(s)")
-        else:
-            _logger.info("✓ No stale Redis processing queues found")
-
-        if lock_keys:
-            # Delete all old processing locks (migration cleanup)
-            deleted_count = redis_client.delete(*lock_keys)
-            total_deleted += deleted_count
-            _logger.info(f"✓ Cleaned up {deleted_count} old Redis processing lock(s)")
-        else:
-            _logger.info("✓ No old Redis processing locks found")
-
-        if job_keys:
-            # Delete all job status data
-            deleted_count = redis_client.delete(*job_keys)
-            total_deleted += deleted_count
-            _logger.info(f"✓ Cleaned up {deleted_count} stale Redis job status record(s)")
-        else:
-            _logger.info("✓ No stale Redis job status records found")
-
-        if user_jobs_keys:
-            # Delete all user jobs sets
-            deleted_count = redis_client.delete(*user_jobs_keys)
-            total_deleted += deleted_count
-            _logger.info(f"✓ Cleaned up {deleted_count} stale Redis user jobs set(s)")
-        else:
-            _logger.info("✓ No stale Redis user jobs sets found")
-
-        if total_deleted == 0:
-            _logger.info("✓ Redis is clean (no stale queues, jobs, or locks)")
-
-        return True
-    except Exception as e:
-        _logger.warning(f"⚠ Failed to cleanup Redis queues: {e}")
-        # This is not critical
-        return True
-
-
 def clear_redis_cache():
     """
     Clear the Redis cache on startup.
@@ -779,12 +711,12 @@ def clear_redis_cache():
 
 def recover_interrupted_jobs():
     """
-    Recover and re-enqueue jobs that were interrupted during processing.
-    
-    When the server restarts, Redis queues are cleared but ImportQueue entries
-    persist in the database. This function finds jobs that were being processed
-    but didn't complete, and re-enqueues them for processing.
-    
+    Recover and redispatch jobs that were interrupted during processing.
+
+    ImportQueue entries persist in the database independently of Celery, so this finds jobs
+    that were being processed but didn't complete (e.g. a worker was killed mid-job) and
+    redispatches them to the `imports` Celery queue.
+
     This is non-critical - if recovery fails, the server can still start.
     """
     try:
@@ -992,10 +924,9 @@ def run_startup_checks():
     8. Check frontend files are built
     9. Validate file type max_size values (< 200MB)
     10. Verify Site configuration (for email confirmation URLs)
-    11. Clean up stale Redis processing queues and job status data
-    12. Clear Redis cache (ensures fresh data on startup)
-    13. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
-    14. Check for duplicate extension names
+    11. Clear Redis cache (ensures fresh data on startup)
+    12. Recover interrupted jobs (redispatch jobs that were processing when server stopped)
+    13. Check for duplicate extension names
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -1038,10 +969,6 @@ def run_startup_checks():
     check_config_file()
     check_maxmind_database()
     check_email_config()
-
-    # Cleanup stale Redis queues and locks (non-critical)
-    _logger.info("Cleaning up stale Redis queues...")
-    cleanup_redis_queues()
 
     # Clear Redis cache on startup (non-critical)
     _logger.info("Clearing Redis cache...")

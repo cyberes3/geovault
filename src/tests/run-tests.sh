@@ -40,6 +40,11 @@ export DJANGO_SETTINGS_MODULE=website.settings
 # of the developer's local config.yaml.
 export GEOVAULT_FORCE_ENABLED_EXTENSIONS="example_extension"
 
+# Import/processing runs as a real Celery task (queue `imports`); tests assert on the
+# resulting job status/features right after making a request, so tasks need to run
+# synchronously in-process rather than waiting on a separate worker that isn't running here.
+export CELERY_TASK_ALWAYS_EAGER="true"
+
 # Prepare test database: drop all tables and let migrations recreate them
 echo "Preparing test database (dropping all tables)..."
 "$VENV_PYTHON" "$SCRIPT_DIR/prepare_test_db.py" || exit 1

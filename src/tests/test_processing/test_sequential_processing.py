@@ -1,608 +1,149 @@
 """
-Tests for sequential processing with Redis queue.
-Verifies that files are processed in FIFO order and only one at a time per user.
+Tests for per-user serialization of import/processing jobs.
+
+Sequential processing is now enforced by a Redis lock keyed per-user (see
+`geo_lib.processing.jobs.process_job.ProcessJob.process_locked`) rather than an in-process
+worker thread, so these tests exercise the lock directly instead of racing real background
+threads against `time.sleep()`.
 """
 
-import time
-import threading
 from unittest.mock import patch
-from django.test import TransactionTestCase
-from django.contrib.auth import get_user_model
 
-from geo_lib.processing.jobs.process_job import ProcessJob
-from geo_lib.processing.queue_worker import QueueWorker, WorkerRegistry, WorkerState
-from geo_lib.processing.redis_queue import get_processing_queue
-from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
-from geo_lib.utils.redis_connection import get_redis_connection
+import pytest
+from celery.exceptions import Retry
+from django.contrib.auth import get_user_model
+from django.test import TransactionTestCase
+
+from api.tasks import IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, process_import_job
+from geo_lib.processing.jobs.process_job import ImportLockContention, ProcessJob
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
+from geo_lib.utils.redis_locks import try_acquire_lock
 
 User = get_user_model()
 
 
-class TestSequentialProcessing(TransactionTestCase):
-    """Test sequential file processing with queue."""
-    
-    @classmethod
-    def setUpClass(cls):
-        """Set up once for all tests in this class."""
-        super().setUpClass()
-        # Stop all workers at class level
-        WorkerRegistry.stop_all_workers()
-        time.sleep(2.0)  # Workers now respond within 1 second
-    
+def _make_job_data(user_id: int, filename: str = 'test.kml') -> dict:
+    job_id = status_tracker.create_job(filename, user_id)
+    job_data = {
+        'job_id': job_id,
+        'import_queue_id': 1,
+        'filename': filename,
+        'user_id': user_id,
+        'timestamp': 0.0,
+        'replacement_feature_id': None,
+        'job_ceiling_seconds': 300,
+    }
+    return job_id, job_data
+
+
+class TestPerUserProcessingLock(TransactionTestCase):
+    """Test that ProcessJob.process_locked serializes processing per-user via a Redis lock."""
+
     def setUp(self):
-        """Set up test fixtures."""
-        # Clean up Redis before test
-        redis_client = get_redis_connection()
-        keys = redis_client.keys('processing_queue:*')
-        if keys:
-            redis_client.delete(*keys)
-        
-        # Stop all workers and wait for them to exit
-        WorkerRegistry.stop_all_workers()
-        time.sleep(2.0)  # Workers respond within 1 second
-        
         self.user = User.objects.create_user(
-            email=f'sequential{time.time()}@example.com',
+            email='sequential1@example.com',
             password='testpass123',
-            username=f'sequential_user_{time.time()}'
+            username='sequential_user1',
         )
-        self.process_job = ProcessJob(status_tracker)
-        
-        # Track processing order
-        self.processing_order = []
-        self.processing_lock = threading.Lock()
-    
-    def tearDown(self):
-        """Clean up after tests."""
-        # Stop all workers
-        WorkerRegistry.stop_all_workers()
-        time.sleep(2.0)  # Workers respond within 1 second
-        
-        # Clean up Redis after test
-        redis_client = get_redis_connection()
-        keys = redis_client.keys('processing_queue:*')
-        if keys:
-            redis_client.delete(*keys)
-    
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up once after all tests in this class."""
-        WorkerRegistry.stop_all_workers()
-        time.sleep(2.0)
-        super().tearDownClass()
-    
-    def test_files_processed_sequentially(self):
-        """Test that multiple files are processed one at a time in FIFO order."""
-        # Mock the _execute_job method to track processing
-        original_execute = self.process_job._execute_job
-        
-        def mock_execute(job_id, kwargs):
-            with self.processing_lock:
-                self.processing_order.append(job_id)
-            # Simulate some processing time
-            time.sleep(0.2)
-        
-        with patch.object(self.process_job, '_execute_job', side_effect=mock_execute):
-            # Create and enqueue 5 jobs
-            job_ids = []
-            for i in range(5):
-                job_id = status_tracker.create_job(f'file{i}.kml', self.user.id)
-                job_ids.append(job_id)
-                
-                file_data = f'test content {i}'.encode('utf-8')
-                result = self.process_job.enqueue_job(
-                    job_id, file_data, f'file{i}.kml', self.user.id
-                )
-                assert result is not False
-            
-            # Wait for all jobs to complete
-            # With 0.2s per job, 5 jobs should take ~1 second
-            time.sleep(2.0)
-        
-        # Verify all jobs were processed
-        assert len(self.processing_order) == 5
-        
-        # Verify jobs were processed in order
-        for i, job_id in enumerate(job_ids):
-            assert self.processing_order[i] == job_id
-    
-    def test_queue_length_tracking(self):
-        """Test that queue length is correctly tracked."""
-        queue = get_processing_queue(self.user.id)
-        
-        # Enqueue multiple jobs (mock execute to prevent actual processing)
-        with patch.object(self.process_job, '_execute_job'):
-            for i in range(3):
-                job_id = status_tracker.create_job(f'queue{i}.kml', self.user.id)
-                file_data = f'queue test {i}'.encode('utf-8')
-                self.process_job.enqueue_job(
-                    job_id, file_data, f'queue{i}.kml', self.user.id
-                )
-            
-            # Check queue length (may be less than 3 if worker already started processing)
-            initial_length = queue.get_queue_length()
-            assert 0 <= initial_length <= 3
-    
-    def test_processing_with_failures(self):
-        """Test that queue continues processing after a job fails."""
-        processing_count = {'count': 0}
-        
-        def mock_execute_with_failure(job_id, kwargs):
-            processing_count['count'] += 1
-            # Fail on second job
-            if processing_count['count'] == 2:
-                raise Exception("Simulated processing error")
-            # Succeed on others
-            time.sleep(0.1)
-        
-        with patch.object(self.process_job, '_execute_job', side_effect=mock_execute_with_failure):
-            # Enqueue 4 jobs
-            for i in range(4):
-                job_id = status_tracker.create_job(f'fail{i}.kml', self.user.id)
-                file_data = f'fail test {i}'.encode('utf-8')
-                self.process_job.enqueue_job(
-                    job_id, file_data, f'fail{i}.kml', self.user.id
-                )
-            
-            # Wait for processing
-            time.sleep(2.0)
-        
-        # Verify all 4 jobs were attempted (including the failed one)
-        assert processing_count['count'] == 4
-    
-    def test_user_isolation(self):
-        """Test that different users' queues are independent."""
-        user2 = User.objects.create_user(
+        self.other_user = User.objects.create_user(
             email='sequential2@example.com',
             password='testpass123',
-            username='sequential_user2'
+            username='sequential_user2',
         )
-        
-        user1_order = []
-        user2_order = []
-        lock = threading.Lock()
-        
-        def mock_execute(job_id, kwargs):
-            user_id = kwargs['user_id']
-            with lock:
-                if user_id == self.user.id:
-                    user1_order.append(job_id)
-                else:
-                    user2_order.append(job_id)
-            time.sleep(0.1)
-        
-        with patch.object(self.process_job, '_execute_job', side_effect=mock_execute):
-            # Enqueue jobs for both users
-            user1_jobs = []
-            user2_jobs = []
-            
-            for i in range(3):
-                # User 1 job
-                job_id1 = status_tracker.create_job(f'user1-file{i}.kml', self.user.id)
-                user1_jobs.append(job_id1)
-                self.process_job.enqueue_job(
-                    job_id1, f'user1 content {i}'.encode(), f'user1-file{i}.kml', self.user.id
-                )
-                
-                # User 2 job
-                job_id2 = status_tracker.create_job(f'user2-file{i}.kml', user2.id)
-                user2_jobs.append(job_id2)
-                self.process_job.enqueue_job(
-                    job_id2, f'user2 content {i}'.encode(), f'user2-file{i}.kml', user2.id
-                )
-            
-            # Wait for all jobs to complete
-            time.sleep(2.0)
-        
-        # Both users should have processed all their jobs
-        assert len(user1_order) == 3
-        assert len(user2_order) == 3
-        
-        # Each user's jobs should be in order
-        assert user1_order == user1_jobs
-        assert user2_order == user2_jobs
-    
-    def test_timestamp_preserved(self):
-        """Test that timestamps are preserved through queue."""
-        timestamps = []
-        
-        def mock_execute(job_id, kwargs):
-            # Access the job data if available
-            time.sleep(0.05)
-        
-        with patch.object(self.process_job, '_execute_job', side_effect=mock_execute):
-            # Enqueue jobs with small delays to ensure different timestamps
-            for i in range(3):
-                job_id = status_tracker.create_job(f'ts{i}.kml', self.user.id)
-                file_data = f'timestamp test {i}'.encode()
-                
-                result = self.process_job.enqueue_job(
-                    job_id, file_data, f'ts{i}.kml', self.user.id
-                )
-                assert result is not False
-                timestamps.append(time.time())
-                time.sleep(0.05)  # Small delay between enqueues
-            
-            # Wait for processing
-            time.sleep(1.0)
-        
-        # Verify timestamps are in ascending order (jobs enqueued in order)
-        for i in range(len(timestamps) - 1):
-            assert timestamps[i] < timestamps[i + 1]
-    
-    def test_worker_exits_after_idle(self):
-        """Test that worker exits after idle timeout."""
-        # Set a short idle timeout for testing
-        original_timeout = QueueWorker.IDLE_TIMEOUT
-        QueueWorker.IDLE_TIMEOUT = 1  # 1 second timeout
-        
+        self.process_job = ProcessJob(status_tracker)
+
+    def test_process_locked_runs_execute_job_when_lock_is_free(self):
+        job_id, job_data = _make_job_data(self.user.id)
+
+        with patch.object(self.process_job, '_execute_job') as mock_execute:
+            self.process_job.process_locked(job_id, job_data)
+
+        mock_execute.assert_called_once_with(job_id, job_data)
+
+    def test_process_locked_raises_contention_when_user_already_locked(self):
+        job_id, job_data = _make_job_data(self.user.id)
+
+        held_lock = try_acquire_lock(f"import_processing_lock:user:{self.user.id}", timeout_seconds=60)
+        self.assertIsNotNone(held_lock, "Precondition: should be able to acquire the lock manually")
+
         try:
-            # Enqueue and process one job
-            with patch.object(self.process_job, '_execute_job'):
-                job_id = status_tracker.create_job('idle.kml', self.user.id)
-                self.process_job.enqueue_job(
-                    job_id, b'idle test', 'idle.kml', self.user.id
-                )
-                
-                # Worker should start
-                time.sleep(0.5)
-                initial_count = WorkerRegistry.get_active_worker_count()
-                assert initial_count >= 1, f"Worker should have started, found {initial_count}"
-                
-                # Wait for idle timeout plus buffer
-                time.sleep(2.5)
-                
-                # Worker for this user should have exited
-                worker = WorkerRegistry.get_worker_for_user(self.user.id)
-                assert worker is None, "Worker should have exited after idle timeout"
+            with patch.object(self.process_job, '_execute_job') as mock_execute:
+                with self.assertRaises(ImportLockContention):
+                    self.process_job.process_locked(job_id, job_data)
+            mock_execute.assert_not_called()
         finally:
-            # Restore original timeout
-            QueueWorker.IDLE_TIMEOUT = original_timeout
-    
-    def test_only_one_worker_per_user(self):
-        """Test that only one worker runs per user at a time."""
-        def mock_execute(job_id, kwargs):
-            time.sleep(0.5)  # Longer processing time
-        
-        with patch.object(self.process_job, '_execute_job', side_effect=mock_execute):
-            # Quickly enqueue multiple jobs
-            for i in range(5):
-                job_id = status_tracker.create_job(f'worker{i}.kml', self.user.id)
-                self.process_job.enqueue_job(
-                    job_id, f'worker test {i}'.encode(), f'worker{i}.kml', self.user.id
-                )
-            
-            # Give worker time to start
-            time.sleep(0.5)
-            
-            # Should only have 1 worker for this user
-            worker = WorkerRegistry.get_worker_for_user(self.user.id)
-            assert worker is not None, "Worker should exist for user"
-            assert worker.get_state() in (WorkerState.STARTING, WorkerState.RUNNING), \
-                f"Worker should be active, got state: {worker.get_state().value}"
-            
-            # Total active workers should be 1
-            active_count = WorkerRegistry.get_active_worker_count()
-            assert active_count == 1, f"Expected 1 worker, found {active_count}"
-    
-    def test_job_status_progression(self):
-        """Test that job statuses progress correctly: QUEUED → PROCESSING → COMPLETED."""
-        
-        # Use an event to control when jobs complete
-        job_events = {}
-        
-        def mock_execute(job_id, kwargs):
-            # Create an event for this job
-            job_events[job_id] = threading.Event()
-            
-            # Update status to PROCESSING (simulating what _execute_job does)
-            status_tracker.update_job_status(
-                job_id, ProcessingStatus.PROCESSING,
-                "Processing...", 50.0
-            )
-            # Wait for the test to signal completion (or timeout)
-            job_events[job_id].wait(timeout=5.0)
-            # Update to COMPLETED (simulating success)
-            status_tracker.update_job_status(
-                job_id, ProcessingStatus.COMPLETED,
-                "Processing completed", 100.0
-            )
-        
-        with patch.object(self.process_job, '_execute_job', side_effect=mock_execute):
-            # Create and enqueue all 3 jobs first
-            job_ids = []
-            for i in range(1, 4):
-                job_id = status_tracker.create_job(f'status{i}.kml', self.user.id)
-                job_ids.append(job_id)
-                
-                # Check initial status (QUEUED)
-                job = status_tracker.get_job(job_id)
-                assert job.status == ProcessingStatus.QUEUED, f"Job {i} should start as QUEUED"
-                
-                # Enqueue the job
-                file_data = f'status test {i}'.encode('utf-8')
-                result = self.process_job.enqueue_job(
-                    job_id, file_data, f'status{i}.kml', self.user.id
-                )
-                assert result is not False
-            
-            # Wait for first job to start processing (worker needs time to start and dequeue)
-            # Poll until job 1 is in PROCESSING state, with timeout
-            max_wait = 2.0
-            start_time = time.time()
-            job1_processing = False
-            while time.time() - start_time < max_wait:
-                job1 = status_tracker.get_job(job_ids[0])
-                if job1 and job1.status == ProcessingStatus.PROCESSING:
-                    job1_processing = True
-                    break
-                time.sleep(0.05)
-            
-            # Verify job 1 is processing (must be PROCESSING, not COMPLETED, since we haven't signaled completion)
-            job1 = status_tracker.get_job(job_ids[0])
-            assert job1 is not None, "Job 1 should exist"
-            assert job1.status == ProcessingStatus.PROCESSING, \
-                f"Job 1 should be PROCESSING (waiting on event), got {job1.status.value}"
-            
-            # Second and third jobs should definitely be QUEUED
-            # (since first job is blocked waiting on event)
-            job2 = status_tracker.get_job(job_ids[1])
-            assert job2.status == ProcessingStatus.QUEUED, \
-                f"Job 2 should be QUEUED while job 1 is processing, got {job2.status.value}"
-            
-            job3 = status_tracker.get_job(job_ids[2])
-            assert job3.status == ProcessingStatus.QUEUED, \
-                f"Job 3 should be QUEUED while job 1 is processing, got {job3.status.value}"
-            
-            # This is the KEY test: verify only ONE job is processing at a time
-            # Check that exactly one job is in PROCESSING state
-            statuses = [
-                status_tracker.get_job(jid).status for jid in job_ids 
-                if status_tracker.get_job(jid)
-            ]
-            processing_count = sum(1 for s in statuses if s == ProcessingStatus.PROCESSING)
-            assert processing_count == 1, \
-                f"Should have exactly 1 job PROCESSING at a time, found {processing_count}"
-            
-            # Signal job 1 to complete
-            if job_ids[0] in job_events:
-                job_events[job_ids[0]].set()
-            
-            # Wait for job 1 to complete
-            max_wait = 2.0
-            start_time = time.time()
-            while time.time() - start_time < max_wait:
-                job1 = status_tracker.get_job(job_ids[0])
-                if job1 and job1.status == ProcessingStatus.COMPLETED:
-                    break
-                time.sleep(0.05)
-            
-            # Verify job 1 completed
-            job1 = status_tracker.get_job(job_ids[0])
-            assert job1 is not None, "Job 1 should exist"
-            assert job1.status == ProcessingStatus.COMPLETED, \
-                f"Job 1 should be COMPLETED after signaling, got {job1.status.value}"
-            
-            # Wait for job 2 to start processing (sequential processing)
-            max_wait = 1.0
-            start_time = time.time()
-            while time.time() - start_time < max_wait:
-                job2 = status_tracker.get_job(job_ids[1])
-                if job2 and job2.status == ProcessingStatus.PROCESSING:
-                    break
-                time.sleep(0.05)
-            
-            job2 = status_tracker.get_job(job_ids[1])
-            assert job2 is not None, "Job 2 should exist"
-            assert job2.status == ProcessingStatus.PROCESSING, \
-                f"Job 2 should be PROCESSING after job 1 completed (sequential processing), got {job2.status.value}"
-            
-            # Verify job 3 is still QUEUED (only one job processes at a time)
-            job3 = status_tracker.get_job(job_ids[2])
-            assert job3 is not None, "Job 3 should exist"
-            assert job3.status == ProcessingStatus.QUEUED, \
-                f"Job 3 should still be QUEUED while job 2 is processing, got {job3.status.value}"
-            
-            # Verify only one job is processing at a time
-            statuses = [
-                status_tracker.get_job(jid).status for jid in job_ids 
-                if status_tracker.get_job(jid)
-            ]
-            processing_count = sum(1 for s in statuses if s == ProcessingStatus.PROCESSING)
-            assert processing_count == 1, \
-                f"Should have exactly 1 job PROCESSING at a time, found {processing_count}"
-            
-            # Signal remaining jobs to complete as they start
-            # We need to wait for each job to create its event before signaling
-            for job_id in job_ids[1:]:
-                # Wait for the job's event to be created (max 2 seconds)
-                max_wait = 2.0
-                start_time = time.time()
-                while time.time() - start_time < max_wait:
-                    if job_id in job_events:
-                        job_events[job_id].set()
-                        break
-                    time.sleep(0.05)
-            
-            # Wait for all jobs to complete
-            time.sleep(1.0)
-            
-            # Verify all jobs eventually completed
-            completed_count = 0
-            for i, job_id in enumerate(job_ids, 1):
-                job = status_tracker.get_job(job_id)
-                # Job might be COMPLETED or removed from tracker
-                if job:
-                    assert job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED], \
-                        f"Job {i} should be COMPLETED or FAILED, got {job.status.value}"
-                    if job.status == ProcessingStatus.COMPLETED:
-                        completed_count += 1
-            
-            # At least some jobs should have completed successfully
-            assert completed_count >= 1, "At least one job should have completed"
-    
-    def test_websocket_status_updates(self):
-        """Test that WebSocket status updates are sent correctly for queued/processing jobs."""
-        websocket_events = []
-        
-        # Mock the WebSocket broadcast method
-        def mock_broadcast(user_id, job_id, status, progress, message, **kwargs):
-            websocket_events.append({
-                'job_id': job_id,
-                'status': status,
-                'message': message,
-                'import_queue_id': kwargs.get('import_queue_id')
-            })
-        
-        with patch.object(self.process_job, '_broadcast_job_status_updated', side_effect=mock_broadcast):
-            with patch.object(self.process_job, '_execute_job'):
-                # Enqueue 2 jobs
-                job_id1 = status_tracker.create_job('ws1.kml', self.user.id)
-                self.process_job.enqueue_job(
-                    job_id1, b'ws test 1', 'ws1.kml', self.user.id
-                )
-                
-                job_id2 = status_tracker.create_job('ws2.kml', self.user.id)
-                self.process_job.enqueue_job(
-                    job_id2, b'ws test 2', 'ws2.kml', self.user.id
-                )
-                
-                time.sleep(0.2)
-        
-        # Verify WebSocket events were sent
-        assert len(websocket_events) >= 2, "Should have sent at least 2 status updates"
-        
-        # Both jobs should have received 'queued' status updates
-        queued_events = [e for e in websocket_events if e['status'] == 'queued']
-        assert len(queued_events) >= 2, f"Should have 2 'queued' events, got {len(queued_events)}"
-        
-        # Verify the queued messages
-        for event in queued_events:
-            assert 'waiting' in event['message'].lower() or 'queue' in event['message'].lower(), \
-                f"Queued message should mention waiting/queue: {event['message']}"
-    
-    def test_multiple_files_status_display(self):
-        """
-        Integration test: Upload multiple files and verify status display logic.
-        Tests the exact scenario from the UI where all files show as 'Processing'.
-        """
-        # This test simulates what the frontend receives
-        # Use an event to precisely control when processing advances
-        processing_event = threading.Event()
-        
-        def slow_execute(job_id, kwargs):
-            # Call the original method to set status to PROCESSING, but catch it early
-            # We'll manually set the status and then sleep
-            self.process_job.status_tracker.update_job_status(
-                job_id, ProcessingStatus.PROCESSING,
-                "Processing...", 50.0
-            )
-            # Wait for the test to signal us to continue (or timeout after 2 seconds)
-            processing_event.wait(timeout=2.0)
+            held_lock.release()
 
-        with patch.object(self.process_job, '_execute_job', side_effect=slow_execute):
-            # Upload first file and wait for it to start processing
-            job_ids = []
-            job_id = status_tracker.create_job('display0.kml', self.user.id)
-            job_ids.append(job_id)
-            self.process_job.enqueue_job(
-                job_id, 'display test 0'.encode(), 'display0.kml', self.user.id
-            )
-            
-            # Wait for first job to start processing
-            max_wait = 2.0
-            start_time = time.time()
-            first_job_processing = False
-            while time.time() - start_time < max_wait:
-                job = status_tracker.get_job(job_ids[0])
-                if job and job.status == ProcessingStatus.PROCESSING:
-                    first_job_processing = True
-                    break
-                time.sleep(0.05)
-            
-            assert first_job_processing, "First job should have started processing"
-            
-            # Now enqueue the remaining 3 files while first job is processing
-            # Check immediately after enqueueing to catch the state before worker processes more
-            for i in range(1, 4):
-                job_id = status_tracker.create_job(f'display{i}.kml', self.user.id)
-                job_ids.append(job_id)
-                self.process_job.enqueue_job(
-                    job_id, f'display test {i}'.encode(), f'display{i}.kml', self.user.id
-                )
-            
-            # Check statuses immediately - first job should be processing, others should be queued
-            # (Note: worker might have already dequeued additional jobs, so we check right away)
-            # Add a small delay to allow worker to dequeue jobs that were enqueued
-            time.sleep(0.1)
-            
-            jobs_status = []
-            for job_id in job_ids:
-                job = status_tracker.get_job(job_id)
-                if job:
-                    jobs_status.append({
-                        'job_id': job_id,
-                        'status': job.status.value,
-                        'filename': job.filename
-                    })
-            
-            processing_count = sum(1 for j in jobs_status if j['status'] == 'processing')
-            queued_count = sum(1 for j in jobs_status if j['status'] == 'queued')
-            
-            # The key assertion: at the moment we check, first job should be processing
-            # The worker may have dequeued additional jobs and set them to PROCESSING,
-            # but since _execute_job is blocked on the event, only one job should actually
-            # be executing. However, the worker sets status to PROCESSING before calling
-            # _execute_job, so multiple jobs can show as PROCESSING even though only one
-            # is actually executing.
-            # 
-            # The important thing is that we have at least one job processing and at least
-            # one job queued, demonstrating that not all jobs are processed immediately.
-            assert processing_count >= 1, \
-                f"Expected at least 1 job PROCESSING, found {processing_count}. Statuses: {jobs_status}"
-            assert job_ids[0] in [j['job_id'] for j in jobs_status if j['status'] == 'processing'], \
-                f"First job should be PROCESSING. Statuses: {jobs_status}"
-            
-            # Verify that not all jobs are processing - at least one should be queued
-            # This demonstrates sequential processing (worker can't process all jobs at once)
-            assert queued_count >= 1, \
-                f"Expected at least 1 job QUEUED (demonstrating sequential processing), found {queued_count}. Statuses: {jobs_status}"
-            
-            # Signal processing can complete
-            processing_event.set()
-            
-            # Wait for first job to complete
-            time.sleep(0.6)
-            
-            # Check statuses again
-            jobs_status_after = []
-            for job_id in job_ids:
-                job = status_tracker.get_job(job_id)
-                if job:
-                    jobs_status_after.append({
-                        'job_id': job_id,
-                        'status': job.status.value,
-                        'filename': job.filename
-                    })
-            
-            # Now first should be COMPLETED and second should be PROCESSING
-            completed_or_none = sum(
-                1 for j in jobs_status_after 
-                if j['job_id'] == job_ids[0] and j['status'] in ['completed', 'failed']
-            )
-            second_processing = sum(
-                1 for j in jobs_status_after 
-                if j['job_id'] == job_ids[1] and j['status'] == 'processing'
-            )
-            
-            # First job might have been cleaned from tracker if completed
-            if completed_or_none == 0:
-                # Job was cleaned from tracker (acceptable)
-                pass
-            else:
-                assert completed_or_none == 1, \
-                    f"First job should be COMPLETED. Statuses: {jobs_status_after}"
-            
-            assert second_processing == 1, \
-                f"Second job should now be PROCESSING. Statuses: {jobs_status_after}"
+    def test_process_locked_releases_lock_after_success(self):
+        job_id, job_data = _make_job_data(self.user.id)
 
+        with patch.object(self.process_job, '_execute_job'):
+            self.process_job.process_locked(job_id, job_data)
+
+        # Lock should be free again, so a fresh acquire should succeed immediately.
+        lock = try_acquire_lock(f"import_processing_lock:user:{self.user.id}", timeout_seconds=60)
+        self.assertIsNotNone(lock, "Lock should have been released after process_locked returned")
+        lock.release()
+
+    def test_process_locked_releases_lock_even_if_execute_job_raises(self):
+        job_id, job_data = _make_job_data(self.user.id)
+
+        with patch.object(self.process_job, '_execute_job', side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self.process_job.process_locked(job_id, job_data)
+
+        lock = try_acquire_lock(f"import_processing_lock:user:{self.user.id}", timeout_seconds=60)
+        self.assertIsNotNone(lock, "Lock should be released even when _execute_job raises")
+        lock.release()
+
+    def test_process_locked_skips_canceled_job(self):
+        job_id, job_data = _make_job_data(self.user.id)
+        status_tracker.cancel_job(job_id)
+
+        with patch.object(self.process_job, '_execute_job') as mock_execute:
+            self.process_job.process_locked(job_id, job_data)
+
+        mock_execute.assert_not_called()
+
+    def test_different_users_do_not_contend_for_the_same_lock(self):
+        """Two different users' jobs must be able to process concurrently."""
+        job_id_a, job_data_a = _make_job_data(self.user.id)
+        job_id_b, job_data_b = _make_job_data(self.other_user.id)
+
+        held_lock = try_acquire_lock(f"import_processing_lock:user:{self.user.id}", timeout_seconds=60)
+        self.assertIsNotNone(held_lock)
+
+        try:
+            # User A is locked, but user B's job should be unaffected.
+            with patch.object(self.process_job, '_execute_job') as mock_execute:
+                self.process_job.process_locked(job_id_b, job_data_b)
+            mock_execute.assert_called_once_with(job_id_b, job_data_b)
+        finally:
+            held_lock.release()
+
+
+class TestImportTaskLockContentionRetry(TransactionTestCase):
+    """Test that the Celery task wrapper retries (rather than fails) on lock contention."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='sequential3@example.com',
+            password='testpass123',
+            username='sequential_user3',
+        )
+
+    def test_task_retries_with_expected_countdown_on_contention(self):
+        _, job_data = _make_job_data(self.user.id)
+
+        held_lock = try_acquire_lock(f"import_processing_lock:user:{self.user.id}", timeout_seconds=60)
+        self.assertIsNotNone(held_lock)
+
+        try:
+            with patch.object(process_import_job, 'retry', side_effect=Retry) as mock_retry:
+                with pytest.raises(Retry):
+                    process_import_job.run(job_data['job_id'], job_data)
+            mock_retry.assert_called_once_with(
+                countdown=IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, max_retries=None,
+            )
+        finally:
+            held_lock.release()

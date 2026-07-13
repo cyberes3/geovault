@@ -1754,6 +1754,7 @@ class TestE2EImport(TransactionTestCase):
         response = self.client.delete(f'/api/item/import/delete/{item_id}')
         self.assertEqual(response.status_code, 200,
                         f"Delete should succeed: {response.content}")
+        delete_job_id = json.loads(response.content)['job_id']
         
         # Wait for processing to complete or timeout
         try:
@@ -1762,6 +1763,13 @@ class TestE2EImport(TransactionTestCase):
             # The important thing is no errors/crashes
         except (TimeoutError, ValueError):
             # Job might be cancelled/removed after deletion - that's fine
+            pass
+        
+        # The DELETE endpoint runs asynchronously (its own background job, separate from the
+        # process job above), so wait for it to actually finish before asserting on its effects.
+        try:
+            self._wait_for_job_completion(delete_job_id, timeout=10.0)
+        except (TimeoutError, ValueError):
             pass
         
         # Verify the import item was deleted from database

@@ -8,7 +8,7 @@ Type=simple
 User=geovault
 SyslogIdentifier=geovault-celery
 WorkingDirectory=/srv/geovault/geovault/src/backend
-ExecStart=/srv/geovault/geovault/src/backend/venv/bin/celery -A website.celery_app worker --loglevel=INFO --queues=default,maintenance,extensions,live_track
+ExecStart=/srv/geovault/geovault/src/backend/venv/bin/celery -A website.celery_app worker --loglevel=INFO --queues=default,maintenance,extensions,live_track,imports
 Restart=always
 RestartSec=5s
 

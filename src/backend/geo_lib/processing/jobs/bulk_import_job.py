@@ -54,12 +54,6 @@ class BulkImportJob(BaseJob):
         filename = f"Bulk import of {len(item_ids)} item(s)"
         job_id = self.status_tracker.create_job(filename, user_id, JobType.BULK_IMPORT)
 
-        # Store item IDs and settings in result data
-        self.status_tracker.set_job_result(job_id, {
-            'item_ids': item_ids,
-            'import_custom_icons': import_custom_icons
-        })
-
         # Start the job
         if self.start_job(job_id, item_ids=item_ids, user_id=user_id, import_custom_icons=import_custom_icons):
             return job_id

@@ -44,7 +44,7 @@ class DeleteJob(BaseJob):
         job_id = self.status_tracker.create_job(filename, user_id, JobType.DELETE)
 
         # Set the import_queue_id for tracking
-        self.status_tracker.set_job_result(job_id, {}, item_id)
+        self.status_tracker.set_job_import_queue_id(job_id, item_id)
 
         # Start the job
         if self.start_job(job_id, item_id=item_id, user_id=user_id, filename=filename):

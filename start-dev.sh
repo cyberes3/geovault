@@ -27,7 +27,7 @@ mkdir -p "$CELERY_SCHEDULE_DIR"
 EXT_NAMES=("Django" "CeleryWorker" "CeleryBeat" "Vite")
 EXT_CMDS=(
     "cd $SCRIPT_DIR/src/backend && ./server-dev.sh"
-    "cd $SCRIPT_DIR/src/backend && ./venv/bin/celery -A website.celery_app worker --loglevel=info --queues=default,maintenance,extensions,live_track"
+    "cd $SCRIPT_DIR/src/backend && ./venv/bin/celery -A website.celery_app worker --loglevel=info --queues=default,maintenance,extensions,live_track,imports"
     "cd $SCRIPT_DIR/src/backend && ./venv/bin/celery -A website.celery_app beat --loglevel=info --schedule \"$CELERY_SCHEDULE_FILE\""
     "cd $SCRIPT_DIR/src/frontend && npm run dev"
 )
@@ -44,7 +44,7 @@ done
 
 echo "Starting Django, Celery, and Vite dev servers..."
 echo "Django will run on: http://0.0.0.0:8000"
-echo "Celery worker queue(s): default,maintenance,extensions,live_track"
+echo "Celery worker queue(s): default,maintenance,extensions,live_track,imports"
 echo "Celery beat: periodic tasks scheduler"
 echo "Celery beat schedule state: $CELERY_SCHEDULE_FILE"
 echo "Vite will run on: http://0.0.0.0:5173 (or next available port)"

@@ -1,7 +1,9 @@
 """
 Tests for job recovery functionality.
 
-Tests that interrupted jobs are correctly identified and re-enqueued.
+Tests that interrupted jobs are correctly identified and redispatched to the `imports` Celery
+queue. `dispatch_import_job` itself is mocked throughout so these tests exercise only the
+recovery bookkeeping (which rows qualify, what job_data gets built), not real file processing.
 """
 
 import pytest
@@ -11,7 +13,7 @@ from api.models import ImportQueue
 from geo_lib.processing.job_recovery import (
     recover_interrupted_jobs,
     get_interrupted_jobs_count,
-    _reenqueue_job
+    _redispatch_job,
 )
 
 
@@ -103,12 +105,9 @@ class TestJobRecovery:
         count = get_interrupted_jobs_count()
         assert count == 0
 
-    @patch('geo_lib.processing.job_recovery.start_worker_for_user')
-    @patch('geo_lib.processing.job_recovery.get_processing_queue')
-    @patch('geo_lib.processing.job_recovery.status_tracker')
-    def test_recover_single_job(self, mock_tracker, mock_queue, mock_worker, user):
+    @patch('geo_lib.processing.job_recovery.dispatch_import_job')
+    def test_recover_single_job(self, mock_dispatch, user):
         """Test recovering a single interrupted job."""
-        # Create an interrupted job
         job = ImportQueue.objects.create(
             user=user,
             original_filename='test.gpx',
@@ -117,52 +116,36 @@ class TestJobRecovery:
             imported=False,
             unparsable=False
         )
-        
-        # Mock the status tracker
-        mock_tracker.create_job.return_value = 'test-job-id'
-        mock_tracker.set_job_result.return_value = None
-        
-        # Mock the queue
-        mock_queue_instance = MagicMock()
-        mock_queue_instance.enqueue.return_value = True
-        mock_queue.return_value = mock_queue_instance
-        
-        # Recover jobs
+
         result = recover_interrupted_jobs()
         
         assert result['total_found'] == 1
         assert result['recovered'] == 1
         assert result['failed'] == 0
         assert result['users_affected'] == 1
-        
-        # Verify that job was created and enqueued
-        mock_tracker.create_job.assert_called_once_with('test.gpx', user.id)
-        mock_tracker.set_job_result.assert_called_once_with('test-job-id', {}, job.id)
-        mock_queue_instance.enqueue.assert_called_once()
-        mock_worker.assert_called_once()
-        
-        # Verify the job_data structure (file_data is NOT in Redis - it's in the database)
-        enqueue_call = mock_queue_instance.enqueue.call_args[0][0]
-        assert enqueue_call['job_id'] == 'test-job-id'
-        assert enqueue_call['import_queue_id'] == job.id
-        assert enqueue_call['filename'] == 'test.gpx'
-        assert enqueue_call['user_id'] == user.id
-        assert 'file_data' not in enqueue_call  # File data is in database, not Redis
-        assert enqueue_call['replacement_feature_id'] is None
 
-    @patch('geo_lib.processing.job_recovery.start_worker_for_user')
-    @patch('geo_lib.processing.job_recovery.get_processing_queue')
-    @patch('geo_lib.processing.job_recovery.status_tracker')
-    def test_recover_multiple_jobs(self, mock_tracker, mock_queue, mock_worker, user, django_user_model):
+        mock_dispatch.assert_called_once()
+        dispatched_job_id, job_data = mock_dispatch.call_args[0]
+
+        # Verify the job_data structure (file_data is NOT included - it's read from the
+        # database by the task itself using import_queue_id).
+        assert job_data['job_id'] == dispatched_job_id
+        assert job_data['import_queue_id'] == job.id
+        assert job_data['filename'] == 'test.gpx'
+        assert job_data['user_id'] == user.id
+        assert 'file_data' not in job_data
+        assert job_data['replacement_feature_id'] is None
+        assert job_data['job_ceiling_seconds'] > 0
+
+    @patch('geo_lib.processing.job_recovery.dispatch_import_job')
+    def test_recover_multiple_jobs(self, mock_dispatch, user, django_user_model):
         """Test recovering multiple interrupted jobs for different users."""
-        # Create a second user
         another_user = django_user_model.objects.create_user(
             username='testuser2',
             email='testuser2@example.com',
             password='testpass123'
         )
         
-        # Create interrupted jobs for two users
         ImportQueue.objects.create(
             user=user,
             original_filename='test1.gpx',
@@ -180,43 +163,22 @@ class TestJobRecovery:
             imported=False,
             unparsable=False
         )
-        
-        # Mock the status tracker
-        mock_tracker.create_job.side_effect = ['job-1', 'job-2']
-        mock_tracker.set_job_result.return_value = None
-        
-        # Mock the queue
-        mock_queue_instance = MagicMock()
-        mock_queue_instance.enqueue.return_value = True
-        mock_queue.return_value = mock_queue_instance
-        
-        # Recover jobs
+
         result = recover_interrupted_jobs()
         
         assert result['total_found'] == 2
         assert result['recovered'] == 2
         assert result['failed'] == 0
         assert result['users_affected'] == 2
-        
-        # Verify that jobs were created and enqueued
-        assert mock_tracker.create_job.call_count == 2
-        assert mock_queue_instance.enqueue.call_count == 2
-        assert mock_worker.call_count == 2
-        
-        # Verify both jobs have correct data
-        enqueue_calls = [call[0][0] for call in mock_queue_instance.enqueue.call_args_list]
-        assert len(enqueue_calls) == 2
-        # Check that file_data is NOT in Redis (it's in the database)
-        assert all('file_data' not in call for call in enqueue_calls)
-        # Check that import_queue_ids are set (used to read file_data from database)
-        assert all('import_queue_id' in call and call['import_queue_id'] for call in enqueue_calls)
 
-    @patch('geo_lib.processing.job_recovery.start_worker_for_user')
-    @patch('geo_lib.processing.job_recovery.get_processing_queue')
-    @patch('geo_lib.processing.job_recovery.status_tracker')
-    def test_recover_with_replacement(self, mock_tracker, mock_queue, mock_worker, user, feature_store):
+        assert mock_dispatch.call_count == 2
+        dispatched_job_data = [call[0][1] for call in mock_dispatch.call_args_list]
+        assert all('file_data' not in job_data for job_data in dispatched_job_data)
+        assert all(job_data.get('import_queue_id') for job_data in dispatched_job_data)
+
+    @patch('geo_lib.processing.job_recovery.dispatch_import_job')
+    def test_recover_with_replacement(self, mock_dispatch, user, feature_store):
         """Test recovering a job that was a replacement upload."""
-        # Create an interrupted replacement job
         job = ImportQueue.objects.create(
             user=user,
             original_filename='replacement.gpx',
@@ -226,34 +188,23 @@ class TestJobRecovery:
             unparsable=False,
             replacement=feature_store.id
         )
-        
-        # Mock the status tracker
-        mock_tracker.create_job.return_value = 'test-job-id'
-        mock_tracker.set_job_result.return_value = None
-        
-        # Mock the queue
-        mock_queue_instance = MagicMock()
-        mock_queue_instance.enqueue.return_value = True
-        mock_queue.return_value = mock_queue_instance
-        
-        # Recover jobs
+
         result = recover_interrupted_jobs()
         
         assert result['total_found'] == 1
         assert result['recovered'] == 1
-        
-        # Verify that the replacement feature ID was preserved
-        enqueue_call = mock_queue_instance.enqueue.call_args[0][0]
-        assert enqueue_call['replacement_feature_id'] == feature_store.id
-        assert enqueue_call['import_queue_id'] == job.id
-        assert 'file_data' not in enqueue_call  # File data is in database, not Redis
 
-    @patch('geo_lib.processing.job_recovery.get_processing_queue')
-    @patch('geo_lib.processing.job_recovery.status_tracker')
-    def test_recovery_handles_enqueue_failure(self, mock_tracker, mock_queue, user):
-        """Test that recovery handles enqueue failures gracefully."""
-        # Create an interrupted job
-        ImportQueue.objects.create(
+        _, job_data = mock_dispatch.call_args[0]
+        assert job_data['replacement_feature_id'] == feature_store.id
+        assert job_data['import_queue_id'] == job.id
+        assert 'file_data' not in job_data
+
+    def test_recovery_skips_row_already_locked_by_another_process(self, user):
+        """
+        If another process already holds the per-row recovery-dispatch lock (e.g. a concurrent
+        recovery run), this row must be skipped rather than dispatched twice.
+        """
+        job = ImportQueue.objects.create(
             user=user,
             original_filename='test.gpx',
             raw_file='<gpx>test content</gpx>',
@@ -261,20 +212,20 @@ class TestJobRecovery:
             imported=False,
             unparsable=False
         )
-        
-        # Mock the status tracker
-        mock_tracker.create_job.return_value = 'test-job-id'
-        mock_tracker.set_job_result.return_value = None
-        
-        # Mock the queue to fail enqueue
-        mock_queue_instance = MagicMock()
-        mock_queue_instance.enqueue.return_value = False
-        mock_queue.return_value = mock_queue_instance
-        
-        # Recover jobs
-        result = recover_interrupted_jobs()
-        
-        assert result['total_found'] == 1
-        assert result['recovered'] == 0
-        assert result['failed'] == 1
 
+        with patch('geo_lib.processing.job_recovery.try_acquire_lock', return_value=None):
+            with patch('geo_lib.processing.job_recovery.dispatch_import_job') as mock_dispatch:
+                recovered = _redispatch_job(job)
+
+        assert recovered is False
+        mock_dispatch.assert_not_called()
+
+    def test_recovery_skips_job_with_no_raw_file(self, user):
+        """A row with no raw_file can't be recovered, even if it slipped through the queryset."""
+        job = MagicMock(id=1, raw_file='', original_filename='test.gpx', user_id=user.id)
+
+        with patch('geo_lib.processing.job_recovery.dispatch_import_job') as mock_dispatch:
+            recovered = _redispatch_job(job)
+
+        assert recovered is False
+        mock_dispatch.assert_not_called()

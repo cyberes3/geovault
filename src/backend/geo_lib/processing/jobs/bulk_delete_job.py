@@ -48,9 +48,6 @@ class BulkDeleteJob(BaseJob):
             JobType.BULK_DELETE
         )
 
-        # Store item IDs in result data
-        self.status_tracker.set_job_result(job_id, {'item_ids': item_ids})
-
         # Start the job
         if self.start_job(job_id, item_ids=item_ids, user_id=user_id):
             return job_id

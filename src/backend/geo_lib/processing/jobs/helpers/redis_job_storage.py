@@ -1,19 +1,39 @@
 """
-Redis-based storage for background job status.
-Provides persistent storage for job status that can be queried via API.
+Low-level Redis storage for background job status.
+
+This module is intentionally unaware of `ProcessingStatus`/`JobType` (see
+`geo_lib.processing.jobs.helpers.status_tracker`): it stores whatever plain JSON-serializable
+dict it's given, keyed by job ID, so it has no dependency on the higher-level tracker that
+wraps it. This is the single source of truth for job status: it must be readable from every
+process that might touch a job (the Django web process and any number of Celery worker
+processes), so nothing here may be cached in memory.
 """
 
 import json
 from typing import Dict, Any, Optional, List
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.utils.redis_connection import get_redis_connection
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
-# TTL for completed/failed jobs: 10 minutes
+# TTL for jobs that reached a terminal state (completed/failed/canceled): 10 minutes.
+# Short-lived, since the frontend only needs to observe the final state briefly after polling.
 COMPLETED_JOB_TTL = 600
+
+_TERMINAL_STATUS_VALUES = frozenset({'completed', 'failed', 'canceled'})
+
+
+def _active_job_ttl() -> int:
+    """
+    TTL applied to jobs still queued/processing, refreshed on every update.
+
+    This is a self-healing ceiling, not an expected lifetime: a job that's actively
+    progressing gets its TTL refreshed well before this elapses, so it only ever kicks in if
+    something (e.g. a killed worker) stops updating a job's status entirely.
+    """
+    return get_required_setting('MAX_JOB_AGE_SECONDS')
 
 
 def _get_job_key(job_id: str) -> str:
@@ -34,7 +54,7 @@ def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
     Args:
         job_id: Unique job identifier
         user_id: ID of the user who owns the job
-        job_type: Type of job (import, delete, bulk_import, bulk_delete)
+        job_type: Type of job (import, delete, bulk_import, bulk_delete, process)
         filename: Name of the file or description
         created_at: Timestamp when job was created
         **kwargs: Additional job metadata
@@ -50,7 +70,7 @@ def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
             'user_id': user_id,
             'job_type': job_type,
             'filename': filename,
-            'status': ProcessingStatus.QUEUED.value,
+            'status': 'queued',
             'progress': 0.0,
             'message': '',
             'error_message': None,
@@ -60,10 +80,7 @@ def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
             **kwargs
         }
 
-        # Store job data
-        redis_client.set(_get_job_key(job_id), json.dumps(job_data))
-
-        # Add to user's job set
+        redis_client.setex(_get_job_key(job_id), _active_job_ttl(), json.dumps(job_data))
         redis_client.sadd(_get_user_jobs_key(user_id), job_id)
 
         return True
@@ -72,7 +89,7 @@ def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
         return False
 
 
-def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
+def update_job_status(job_id: str, status: str, message: str = "",
                       progress: Optional[float] = None, error_message: Optional[str] = None,
                       started_at: Optional[float] = None, completed_at: Optional[float] = None,
                       **kwargs) -> bool:
@@ -81,7 +98,7 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
     
     Args:
         job_id: Unique job identifier
-        status: Current job status
+        status: Current job status value (e.g. ProcessingStatus.PROCESSING.value)
         message: Status message
         progress: Progress percentage (0-100)
         error_message: Error message if failed
@@ -95,7 +112,6 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
     redis_client = get_redis_connection()
     job_key = _get_job_key(job_id)
 
-    # Get existing job data
     existing_data = redis_client.get(job_key)
     if not existing_data:
         _logger.warning(f"Job {job_id} not found in Redis for status update")
@@ -103,8 +119,7 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
 
     job_data = json.loads(existing_data)
 
-    # Update fields
-    job_data['status'] = status.value
+    job_data['status'] = status
     if message:
         job_data['message'] = message
     if progress is not None:
@@ -116,19 +131,10 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
     if completed_at is not None:
         job_data['completed_at'] = completed_at
 
-    # Update any additional fields
     job_data.update(kwargs)
 
-    # Determine TTL: set 10-minute TTL for completed/failed jobs
-    ttl = None
-    if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]:
-        ttl = COMPLETED_JOB_TTL
-
-    # Update job data
-    if ttl:
-        redis_client.setex(job_key, ttl, json.dumps(job_data))
-    else:
-        redis_client.set(job_key, json.dumps(job_data))
+    ttl = COMPLETED_JOB_TTL if status in _TERMINAL_STATUS_VALUES else _active_job_ttl()
+    redis_client.setex(job_key, ttl, json.dumps(job_data))
 
     return True
 
@@ -166,12 +172,10 @@ def get_user_jobs(user_id: int) -> List[Dict[str, Any]]:
     redis_client = get_redis_connection()
     user_jobs_key = _get_user_jobs_key(user_id)
 
-    # Get all job IDs for this user
     job_ids = redis_client.smembers(user_jobs_key)
     if not job_ids:
         return []
 
-    # Fetch all job data
     jobs = []
     for job_id in job_ids:
         job_data = get_job_status(job_id)
@@ -181,7 +185,6 @@ def get_user_jobs(user_id: int) -> List[Dict[str, Any]]:
             # Job expired or was deleted, remove from set
             redis_client.srem(user_jobs_key, job_id)
 
-    # Sort by created_at descending (newest first)
     jobs.sort(key=lambda x: x.get('created_at', 0), reverse=True)
 
     return jobs

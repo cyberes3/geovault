@@ -11,12 +11,15 @@ import traceback
 from typing import Dict, Any, Optional, List
 
 from asgiref.sync import async_to_sync
+from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
 from django.contrib.auth.models import User
 from django.db import transaction
+from redis.exceptions import LockError
 
 from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.job_ceiling import calculate_job_ceiling_seconds
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.utils.secure_path import secure_filename
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
@@ -29,24 +32,45 @@ from geo_lib.processing.messages import (
     ERROR_TYPE_PROCESSING_FAILED
 )
 from geo_lib.processing.processors import BaseProcessor, get_processor
-from geo_lib.processing.queue_worker import start_worker_for_user
-from geo_lib.processing.redis_queue import get_processing_queue
 from geo_lib.processing.utils import (
     encode_raw_file_data,
     build_skipped_feature_ids
 )
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.advisory_locks import advisory_lock
+from geo_lib.utils.redis_locks import try_acquire_lock
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
+from website.celery_app import celery_app
 from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger('ProcessJob')
+
+# Name of the Celery task (defined in `api.tasks`) that runs a queued job's `_execute_job`.
+# See `dispatch_import_job` for why this is looked up by name instead of importing the task.
+IMPORT_CELERY_TASK_NAME = "api.import_processing.process_import_job"
+IMPORT_CELERY_QUEUE_NAME = "imports"
+
+# Celery's hard time_limit SIGKILLs the worker process shortly after soft_time_limit raises
+# SoftTimeLimitExceeded inside it; this buffer is how long that in-process handling gets to run.
+IMPORT_CELERY_TIME_LIMIT_BUFFER_SECONDS = 30
+
+# The per-user lock must outlive the Celery task's own hard time_limit, so a slow job can never
+# have its lock expire (and let a second job for the same user start) before Celery kills it.
+IMPORT_LOCK_TTL_BUFFER_SECONDS = 60
+
+
+class ImportLockContention(Exception):
+    """Raised when another import job for this user already holds the per-user processing lock."""
 
 
 class ProcessJob(BaseJob):
     """
     Handles asynchronous file processing (converting to geojson).
-    Uses Redis queue for sequential processing per user.
+
+    Dispatches to a Celery task (queue `imports`) rather than a thread: `process_locked` is
+    the actual entry point the task calls, and enforces the same one-file-at-a-time-per-user
+    serialization the old single-worker-thread-per-user design provided, via a Redis lock
+    instead of an in-process queue.
     """
 
     def get_job_type(self) -> str:
@@ -54,7 +78,7 @@ class ProcessJob(BaseJob):
 
     def enqueue_job(self, job_id: str, file_data: bytes, filename: str, user_id: int, replacement_feature_id: Optional[int] = None):
         """
-        Enqueue a file processing job to the Redis queue.
+        Persist a job's ImportQueue entry and hand it off to the `imports` Celery queue.
         
         Args:
             job_id: Unique job identifier
@@ -67,33 +91,24 @@ class ProcessJob(BaseJob):
         import_queue_id = self._create_initial_import_queue_entry(
             filename, user_id, job_id, file_data, replacement_feature_id=replacement_feature_id
         )
-        self.status_tracker.set_job_result(job_id, {}, import_queue_id)
+        self.status_tracker.set_job_import_queue_id(job_id, import_queue_id)
         self._broadcast_item_added(user_id, import_queue_id)
 
-        # Enqueue job to Redis (only metadata - file data is in database)
-        queue = get_processing_queue(user_id)
         job_data = {
             'job_id': job_id,
             'import_queue_id': import_queue_id,
             'filename': filename,
             'user_id': user_id,
             'timestamp': time.time(),
-            'replacement_feature_id': replacement_feature_id
+            'replacement_feature_id': replacement_feature_id,
+            'job_ceiling_seconds': calculate_job_ceiling_seconds(len(file_data)),
         }
 
-        success = queue.enqueue(job_data)
-        if not success:
-            _logger.error(f"Failed to enqueue job {job_id} for user {user_id}")
-            return
-
-        # Update job status to QUEUED (will be set to PROCESSING when worker picks it up)
         self.status_tracker.update_job_status(
             job_id,
             ProcessingStatus.QUEUED,
             "Waiting in queue for processing"
         )
-
-        # Broadcast status update to frontend
         self._broadcast_job_status_updated(
             user_id,
             job_id,
@@ -103,8 +118,36 @@ class ProcessJob(BaseJob):
             import_queue_id=import_queue_id
         )
 
-        # Start worker for this user if not already running
-        start_worker_for_user(user_id, self)
+        dispatch_import_job(job_id, job_data)
+
+    def process_locked(self, job_id: str, job_data: Dict[str, Any]) -> None:
+        """
+        Process one queued job while holding an exclusive per-user lock.
+
+        This is what makes files uploaded by the same user process one at a time: if another
+        job for this user is already running, raises `ImportLockContention` instead of
+        blocking, so the Celery task wrapper (`api.tasks.process_import_job`) can retry later
+        rather than tying up a worker slot waiting on it.
+        """
+        user_id = job_data['user_id']
+        lock_ttl_seconds = job_data['job_ceiling_seconds'] + IMPORT_LOCK_TTL_BUFFER_SECONDS
+        lock = try_acquire_lock(f"import_processing_lock:user:{user_id}", timeout_seconds=lock_ttl_seconds)
+        if lock is None:
+            raise ImportLockContention(f"Another import job is already processing for user {user_id}")
+
+        try:
+            job = self.status_tracker.get_job(job_id)
+            if not job or job.status == ProcessingStatus.CANCELED:
+                _logger.info(f"Job {job_id} was canceled before processing started")
+                return
+
+            self.status_tracker.update_job_status(job_id, ProcessingStatus.PROCESSING, "Processing...", 0.0)
+            self._execute_job(job_id, job_data)
+        finally:
+            try:
+                lock.release()
+            except LockError:
+                pass  # Lock already expired; nothing to release.
 
     def _mark_import_queue_as_failed(self, import_queue_id: int, error_message: str):
         """
@@ -153,7 +196,7 @@ class ProcessJob(BaseJob):
 
     def _finalize_job_success(self, job_id: str, user_id: int, import_queue_id: int,
                               feature_count: int, overall_duration: float,
-                              geojson_data: Dict[str, Any], realtime_log: RealTimeImportLog) -> None:
+                              realtime_log: RealTimeImportLog) -> None:
         """
         Finalize successful job completion with broadcasts and result setting.
         
@@ -163,7 +206,6 @@ class ProcessJob(BaseJob):
             import_queue_id: Import queue ID
             feature_count: Number of features processed
             overall_duration: Total processing duration in seconds
-            geojson_data: Processed GeoJSON data
             realtime_log: Real-time log
         """
         # Mark as completed
@@ -190,31 +232,24 @@ class ProcessJob(BaseJob):
         })
         realtime_log.add(completion_msg, "ProcessJob", DatabaseLogLevel.INFO)
 
-        # Set result data
-        self.status_tracker.set_job_result(
-            job_id,
-            {'geojson_data': geojson_data, 'processing_log': realtime_log},
-            import_queue_id
-        )
-
         # Log completion with features and time
         _logger.info(f"Job {job_id} completed: {feature_count} features processed in {overall_duration:.1f}s")
 
-        # Update Redis with completion status
         self._broadcast_job_completed(user_id, job_id)
 
     def _execute_job(self, job_id: str, kwargs: Dict[str, Any]):
         """
         Execute the process job processing logic.
-        
-        This method signature matches the BaseJob interface but ProcessJob uses
-        Redis queue instead of threading, so kwargs is actually the full job_data dict.
-        
+
+        This method signature matches the abstract `BaseJob._execute_job` interface, but
+        ProcessJob is only ever invoked via `process_locked` (from the Celery task), so
+        `kwargs` here is actually the full `job_data` dict built by `enqueue_job`/
+        `job_recovery`, not a `**kwargs`-style call.
+
         Args:
             job_id: Job ID (part of BaseJob interface, also in kwargs)
-            kwargs: Job data from Redis queue containing job_id, import_queue_id, filename, user_id
+            kwargs: Job data containing job_id, import_queue_id, filename, user_id, etc.
         """
-        # Extract job parameters (kwargs is actually job_data from Redis)
         job_data = kwargs
         filename = job_data['filename']
         user_id = job_data['user_id']
@@ -508,10 +543,12 @@ class ProcessJob(BaseJob):
             overall_duration = time.time() - overall_start_time
             _logger.info(f"Completed upload processing for job {job_id}: {feature_count} features processed in {overall_duration:.2f}s")
             self._finalize_job_success(job_id, user_id, import_queue_id, feature_count,
-                                       overall_duration, geojson_data, realtime_log)
+                                       overall_duration, realtime_log)
 
-        except TimeoutError:
-            # Timeout during processing (conversion step timeout or overall job ceiling)
+        except (TimeoutError, SoftTimeLimitExceeded):
+            # Timeout during processing: the per-conversion timeout, the overall job ceiling
+            # check (both in-process, see _check_job_timeout), or Celery's own soft_time_limit
+            # (a backstop for stages with no explicit checkpoint of their own)
             overall_duration = time.time() - overall_start_time
             _logger.error(f"Upload processing timeout for job {job_id} after {overall_duration:.2f}s")
             realtime_log.add(PROCESSING_TIMEOUT, "ProcessJob", DatabaseLogLevel.ERROR)
@@ -642,17 +679,6 @@ class ProcessJob(BaseJob):
         self.status_tracker.update_job_status(
             job_id, ProcessingStatus.PROCESSING,
             message, progress
-        )
-
-        # Update Redis with processing status
-        from geo_lib.processing.jobs.helpers.redis_job_storage import update_job_status as update_redis_job_status
-        job = self.status_tracker.get_job(job_id)
-        update_redis_job_status(
-            job_id=job_id,
-            status=ProcessingStatus.PROCESSING,
-            message=message,
-            progress=progress,
-            started_at=job.started_at
         )
 
         self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
@@ -811,3 +837,26 @@ class ProcessJob(BaseJob):
                     'data': data
                 }
             )
+
+
+def dispatch_import_job(job_id: str, job_data: Dict[str, Any]) -> None:
+    """
+    Hand a queued job off to the `imports` Celery queue.
+
+    Looked up by task *name* through the app's task registry, rather than importing the task
+    function directly: the task lives in `api.tasks` (a proper Django app, so Celery can
+    autodiscover it), and `geo_lib` must not import from `api`/`website` app code. Using
+    `apply_async` (rather than `Celery.send_task`, which explicitly ignores
+    `task_always_eager`) means this still runs synchronously in tests/local dev when eager
+    mode is enabled.
+
+    `time_limit`/`soft_time_limit` are set per-dispatch (rather than as static task defaults)
+    since they're scaled to this specific file's size via `job_data['job_ceiling_seconds']`.
+    """
+    job_ceiling_seconds = job_data['job_ceiling_seconds']
+    celery_app.tasks[IMPORT_CELERY_TASK_NAME].apply_async(
+        args=[job_id, job_data],
+        queue=IMPORT_CELERY_QUEUE_NAME,
+        soft_time_limit=job_ceiling_seconds,
+        time_limit=job_ceiling_seconds + IMPORT_CELERY_TIME_LIMIT_BUFFER_SECONDS,
+    )
