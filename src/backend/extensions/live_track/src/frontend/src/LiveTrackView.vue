@@ -522,12 +522,8 @@
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
-import { trackersLiveSocket } from './trackersLiveSocket.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import LocationIcon from 'platform/components/parts/LocationIcon.vue';
-import { geolocationManager } from 'platform/utils/map/geolocationManager.js';
-import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
-import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from 'platform/utils/map/maplibre/locationMarker.js';
 import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -543,24 +539,13 @@ import LiveTrackSettingsSidebarContent from './LiveTrackSettingsSidebarContent.v
 import TrackerListContent from './TrackerListContent.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
 import { shouldReloadGeometryForSettingsChange } from './settingsChangePolicy.js';
-import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
-import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
-import {
-  buildAccuracyCircleLayerSpec,
-  DEFAULT_ACCURACY_CIRCLE_LAYER_ID,
-  resolveSelectedTrackAccuracyMeters
-} from './mapAccuracyCircle.js';
-import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
-import { setupMapFollowListeners } from './mapFollowLock.js';
-import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { useTileSources } from './useTileSources.js';
+import { useMobileView } from './useMobileView.js';
+import { useLiveTrackMap, MAP_SNAP_DURATION } from './useLiveTrackMap.js';
+import { useLiveTrackGeolocation } from './useLiveTrackGeolocation.js';
+import { useLiveTrackSocket } from './useLiveTrackSocket.js';
+import { normalizeTrackForMemory } from './trackNormalization.js';
 import { formatTimestampLocal } from './paramFormatters.js';
-import {
-  isRollingRecentDataWindow,
-  pruneCoordinatesForRecentDataWindow,
-  shouldClearGeometryForSessionTransition,
-  shouldReloadGeometryForSessionTransition,
-} from './recentDataWindowGeometryPolicy.js';
 import {
   buildGroupUnhidePayload,
   buildHiddenItemsClearPayload,
@@ -578,23 +563,8 @@ import {
   isVisibleOwnedGroup,
   isVisibleOwnedTracker
 } from './sharingSelectors.js';
-import { normalizeTimestampMs, isActiveButDeadTrack } from './activeButDeadTrack.js';
+import { isActiveButDeadTrack } from './activeButDeadTrack.js';
 
-const maplibregl = window.gv_core?.maplibre || window.maplibregl;
-
-const LINES_SOURCE_ID = 'live-track-lines';
-const POINTS_SOURCE_ID = 'live-track-points';
-const LINES_LAYER_ID = 'live-track-lines';
-const LINES_WHITE_OUTLINE_LAYER_ID = 'live-track-lines-white-outline';
-const LINES_BLACK_OUTLINE_LAYER_ID = 'live-track-lines-black-outline';
-const POINTS_LAYER_ID = 'live-track-points';
-const ACCURACY_CIRCLE_LAYER_ID = DEFAULT_ACCURACY_CIRCLE_LAYER_ID;
-const BASE_SOURCE_ID = 'base-raster';
-const BASE_LAYER_ID = 'base-raster-layer';
-const MIN_ZOOM = 0;
-const MAX_ZOOM = 18;
-const LAYER_MAX_ZOOM = MAX_ZOOM + 1;
-const TILE_SOURCES_API_URL = '/api/tiles/sources/';
 /** Shared button class for all right-sidebar action icons. Ring only on focus-visible so tap on mobile doesn't show thick border; no tap highlight. */
 const SIDEBAR_ACTION_BUTTON_CLASS =
   'p-1.5 sm:p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white [-webkit-tap-highlight-color:transparent]';
@@ -602,9 +572,6 @@ const SIDEBAR_ACTION_ICON_CLASS = 'h-5 w-5 sm:h-6 sm:w-6';
 const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
 const DEFAULT_SORT_KEY = 'extensions.live_track.default_sort';
 const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
-const CENTER_DEBOUNCE_MS = 220;
-/** Duration (ms) for minimal map snap animations. */
-const MAP_SNAP_DURATION = 200;
 const MAP_EDGE_PADDING_PX = 80;
 const LIST_TABS = [
   { id: 'trackers', label: 'Trackers' },
@@ -617,6 +584,8 @@ export default {
   components: { BaseButton, LocationIcon, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
+    /** @type {import('platform/extensions/platformState').PlatformStateBridge} */
+    const platformState = inject('platformState');
     const trackers = ref([]);
     const groups = ref([]);
     const highlightStaleData = ref(false);
@@ -632,78 +601,19 @@ export default {
     const activeGroupId = ref(null);
     const followLocked = ref(false);
     const isAutoMoving = ref(false);
-    const isMobileView = ref(
-      typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
-    );
-    const isSheetOpen = ref(false);
-    let mobileQueryListener = null;
-
-    const mobileDrawerRef = ref(null);
-    const mobileActionsMenuOpen = ref(false);
-    const mobileActionsMenuRootRef = ref(null);
-    let mobileActionsOutsideStop = null;
-
-    function closeMobileActionsMenu() {
-      mobileActionsMenuOpen.value = false;
-    }
-
-    watch(isMobileView, (mobile) => {
-      if (!mobile) closeMobileActionsMenu();
-    });
-
-    watch(mobileActionsMenuOpen, (open) => {
-      if (mobileActionsOutsideStop) {
-        mobileActionsOutsideStop();
-        mobileActionsOutsideStop = null;
-      }
-      if (!open || typeof document === 'undefined') return;
-      const handler = (e) => {
-        const root = mobileActionsMenuRootRef.value;
-        if (root && !root.contains(e.target)) {
-          mobileActionsMenuOpen.value = false;
-        }
-      };
-      document.addEventListener('pointerdown', handler, true);
-      mobileActionsOutsideStop = () => {
-        document.removeEventListener('pointerdown', handler, true);
-        mobileActionsOutsideStop = null;
-      };
-    });
-
-    const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800);
     const rootContainer = ref(null);
-    let resizeListenerAttached = false;
-    let bodyOverflowBeforeLock = '';
 
-    function updateWindowHeight() {
-      if (typeof window === 'undefined') return;
-      windowHeight.value = window.innerHeight;
-    }
-
-    function setBodyScrollLocked(locked) {
-      if (typeof document === 'undefined') return;
-      if (locked) {
-        if (document.body.style.overflow !== 'hidden') {
-          bodyOverflowBeforeLock = document.body.style.overflow;
-          document.body.style.overflow = 'hidden';
-        }
-        return;
-      }
-      document.body.style.overflow = bodyOverflowBeforeLock;
-    }
-
-    watch([isMobileView, isSheetOpen], ([mobile, open]) => {
-      setBodyScrollLocked(mobile && open);
-    }, { immediate: true });
-
-    const trackerMaxHeight = computed(() => {
-      // App nav = 64px, tracker title bar = 64px, small buffer = 4px.
-      // Max sheet height = viewport minus those so sheet stops at bottom of tracker title.
-      const APP_NAV_PX = 64;
-      const TRACKER_HEADER_PX = 64;
-      const BUFFER_PX = 4;
-      return Math.max(65, windowHeight.value - APP_NAV_PX - TRACKER_HEADER_PX - BUFFER_PX);
-    });
+    const {
+      isMobileView,
+      isSheetOpen,
+      trackerMaxHeight,
+      mobileDrawerRef,
+      mobileActionsMenuOpen,
+      mobileActionsMenuRootRef,
+      closeMobileActionsMenu,
+      collapseDrawerToPeek,
+      getDrawerPeekHeight
+    } = useMobileView();
 
     function isRecentlyUpdated(track) {
       if (!track.last_timestamp_ms) return false;
@@ -821,9 +731,6 @@ export default {
     const leavingShareId = ref(null);
     const sharedWithMeRefreshing = ref(false);
     const actionStripRefreshing = ref(false);
-    const trackingEnabled = ref(false);
-    const userLocation = ref(null);
-    const locationMarker = ref(null);
     const showLayerSidebar = ref(false);
     const showSettingsSidebar = ref(false);
     const isUnhideAllTrackersLoading = ref(false);
@@ -877,73 +784,9 @@ export default {
     const highlightedId = ref(null);
     const userLogin = ref('');
     const { tileSources, selectedLayer, fetchTileSources } = useTileSources({
-      apiUrl: TILE_SOURCES_API_URL,
       afterFetch: (tileSourcesRef, selectedLayerRef) => applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef)
     });
-    let map = null;
-    let trackUpdatedHandler = null;
-    let centerDebounceId = null;
-    const latestSessionStartMsByTrackId = new Map();
-
     const formatTime = (ms) => formatTimestampLocal(ms);
-
-    function normalizeTrackForMemory(track) {
-      const geom = track.geometry || { type: 'LineString', coordinates: [] };
-      const coords = geom.coordinates || [];
-      const last = coords[coords.length - 1];
-      // Use last_point from metadata when geometry has no coordinates (e.g. list or failed geometry fetch)
-      const lastPoint = last ?? track.last_point;
-      const { point_params, last_point: _lp, ...rest } = track;
-      const latestPointParams = (point_params && point_params.length)
-        ? point_params[point_params.length - 1]
-        : {};
-      return {
-        ...rest,
-        geometry: geom,
-        last_position: lastPoint && lastPoint.length >= 2 ? { lon: lastPoint[0], lat: lastPoint[1] } : null,
-        last_timestamp_ms: (() => {
-          if (!lastPoint || lastPoint.length < 3) return null;
-          return normalizeTimestampMs(lastPoint[2]);
-        })(),
-        updated_at_ms: normalizeTimestampMs(track.updated_at),
-        latestPointParams
-      };
-    }
-
-    function getRecentDataWindow(track) {
-      return typeof track?.settings?.recent_data_window === 'string'
-        ? track.settings.recent_data_window
-        : null;
-    }
-
-    function isSessionWindowTrack(track) {
-      const windowKey = getRecentDataWindow(track);
-      return windowKey === 'session' || windowKey === 'current_session';
-    }
-
-    function getStarttimestampMsFromProps(props) {
-      if (!props || typeof props !== 'object') return null;
-      return normalizeTimestampMs(props.starttimestamp);
-    }
-
-    function getKnownSessionStartMsForTrack(track) {
-      const id = track?.id;
-      if (id == null) return null;
-      const fromCache = latestSessionStartMsByTrackId.get(String(id));
-      if (fromCache != null) return fromCache;
-      return getStarttimestampMsFromProps(track.latestPointParams);
-    }
-
-    function refreshSessionStartCacheFromTrackers(trackList) {
-      latestSessionStartMsByTrackId.clear();
-      for (const track of trackList || []) {
-        if (!isSessionWindowTrack(track)) continue;
-        const startMs = getStarttimestampMsFromProps(track.latestPointParams);
-        if (startMs != null && track?.id != null) {
-          latestSessionStartMsByTrackId.set(String(track.id), startMs);
-        }
-      }
-    }
 
     async function fetchGroups() {
       try {
@@ -988,8 +831,8 @@ export default {
         });
 
         trackers.value = withGeometry;
-        refreshSessionStartCacheFromTrackers(withGeometry);
-        updateMapFeatures();
+        trackSocket.refreshSessionCache(withGeometry);
+        trackMap.updateMapFeatures();
       } catch (e) {
         const err = api.handleError && api.handleError(e);
         if (window.gv_core?.GeoVault?.toast) {
@@ -1054,575 +897,96 @@ export default {
       }
     }
 
-    function syncUserLocationMarker() {
-      if (!trackingEnabled.value || !userLocation.value || !map) return;
-      if (locationMarker.value) {
-        removeUserLocationMarker(locationMarker.value);
-      }
-      locationMarker.value = createUserLocationMarker(map, userLocation.value);
-    }
-
-    function stopLocationTracking() {
-      geolocationManager.stopTracking();
-      trackingEnabled.value = false;
-      userLocation.value = null;
-      if (locationMarker.value) {
-        removeUserLocationMarker(locationMarker.value);
-        locationMarker.value = null;
-      }
-    }
-
-    function handleLocationUpdate(coords) {
-      userLocation.value = coords;
-      if (!map || !coords) return;
-      if (!locationMarker.value) {
-        locationMarker.value = createUserLocationMarker(map, coords);
-        return;
-      }
-      updateUserLocationMarker(locationMarker.value, coords);
-    }
-
-    function handleLocationError(error) {
-      console.error('Geolocation error:', error);
-      stopLocationTracking();
-      if (error?.code === 1) {
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error('Location permission denied.');
-      } else {
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error('Failed to get your location.');
-      }
-    }
-
-    function toggleLocationTracking() {
-      if (trackingEnabled.value) {
-        stopLocationTracking();
-        return;
-      }
-      // Use getCurrentPosition first to trigger the browser's permission prompt (more reliable
-      // on localhost and in some browsers). Then start watchPosition for ongoing updates.
-      trackingEnabled.value = true;
-      geolocationManager.getCurrentPosition()
-        .then((coords) => {
-          handleLocationUpdate(coords);
-          geolocationManager.startTracking(handleLocationUpdate, handleLocationError);
-        })
-        .catch(handleLocationError);
-    }
-
-    function buildLinesGeoJSON() {
-      const groupId = activeGroupId.value;
-      const groupTrackIds =
-        groupId != null && activeGroup.value
-          ? new Set((activeGroup.value.track_ids || []).map((id) => String(id)))
-          : null;
-      const features = [];
-      for (const track of trackers.value) {
-        if (isHiddenOwnedTracker(track)) continue;
-        if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
-        const coordsSorted = getCoordsSortedByTime(track);
-        const coords = coordsSorted.map((c) => [c[0], c[1]]);
-        if (coords.length < 2) continue;
-        const segments = splitTrackIntoSegments(coords);
-        const props = {
-          trackId: track.id,
-          color: track.color || '#6C93DE',
-          selected: selectedId.value === track.id
-        };
-        for (const segment of segments) {
-          features.push({
-            type: 'Feature',
-            properties: props,
-            geometry: { type: 'LineString', coordinates: segment }
-          });
-        }
-      }
-      return { type: 'FeatureCollection', features };
-    }
-
-    function hexToRgb(hex) {
-      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#6C93DE');
-      return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [51, 136, 255];
-    }
-
-    function buildPointsGeoJSON() {
-      const groupId = activeGroupId.value;
-      const groupTrackIds =
-        groupId != null && activeGroup.value
-          ? new Set((activeGroup.value.track_ids || []).map((id) => String(id)))
-          : null;
-      const features = [];
-      for (const track of trackers.value) {
-        if (isHiddenOwnedTracker(track)) continue;
-        if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
-        const coordsSorted = getCoordsSortedByTime(track);
-        const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
-        const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
-        if (!pos) continue;
-        const color = track.color || '#6C93DE';
-        const selected = selectedId.value === track.id;
-        const accuracy = resolveSelectedTrackAccuracyMeters(track, selected);
-        const props = {
-          trackId: track.id,
-          color,
-          selected,
-          rotation: getTrackDirectionAngle(track),
-          iconImage: getArrowImageId(color, selected),
-          accuracy
-        };
-        if (accuracy > 0) props.colorRgb = hexToRgb(color);
-        props.latitude = pos[1];
-        features.push({
-          type: 'Feature',
-          properties: props,
-          geometry: { type: 'Point', coordinates: pos }
-        });
-      }
-      return { type: 'FeatureCollection', features };
-    }
-
-    async function updateMapFeatures() {
-      if (!map || !maplibregl) return;
-      const lineSource = map.getSource(LINES_SOURCE_ID);
-      const pointSource = map.getSource(POINTS_SOURCE_ID);
-      if (lineSource) lineSource.setData(buildLinesGeoJSON());
-      if (!pointSource) return;
-      const pointsGeoJSON = buildPointsGeoJSON();
-      const imageKeys = [...new Set(pointsGeoJSON.features.map((f) => `${f.properties.color}:${f.properties.selected}`))];
-      await Promise.all(
-        imageKeys.map((key) => {
-          const lastColon = key.lastIndexOf(':');
-          const color = key.slice(0, lastColon);
-          const selected = key.slice(lastColon + 1) === 'true';
-          return ensureArrowImage(map, color, selected);
-        })
-      );
-      pointSource.setData(pointsGeoJSON);
-    }
-
-    const lineWhiteOutlineLayerSpec = {
-      id: LINES_WHITE_OUTLINE_LAYER_ID,
-      type: 'line',
-      source: LINES_SOURCE_ID,
-      paint: {
-        'line-color': '#fff',
-        'line-width': ['case', ['get', 'selected'], 7, 5],
-        'line-opacity': 1
-      },
-      layout: { 'line-join': 'round', 'line-cap': 'round' }
-    };
-    const lineBlackOutlineLayerSpec = {
-      id: LINES_BLACK_OUTLINE_LAYER_ID,
-      type: 'line',
-      source: LINES_SOURCE_ID,
-      paint: {
-        'line-color': '#000',
-        'line-width': ['case', ['get', 'selected'], 6, 4],
-        'line-opacity': 1
-      },
-      layout: { 'line-join': 'round', 'line-cap': 'round' }
-    };
-    const lineLayerSpec = {
-      id: LINES_LAYER_ID,
-      type: 'line',
-      source: LINES_SOURCE_ID,
-      paint: {
-        'line-color': ['get', 'color'],
-        'line-width': ['case', ['get', 'selected'], 3, 2],
-        'line-opacity': 1
-      },
-      layout: { 'line-join': 'round', 'line-cap': 'round' }
-    };
-    const accuracyCircleLayerSpec = buildAccuracyCircleLayerSpec({
-      layerId: ACCURACY_CIRCLE_LAYER_ID,
-      sourceId: POINTS_SOURCE_ID
-    });
-
-    const pointsLayerSpec = {
-      id: POINTS_LAYER_ID,
-      type: 'symbol',
-      source: POINTS_SOURCE_ID,
-      layout: {
-        'icon-image': ['get', 'iconImage'],
-        'icon-size': 0.2,
-        'icon-rotate': ['get', 'rotation'],
-        'icon-anchor': 'center',
-        'icon-pitch-alignment': 'viewport',
-        'icon-rotation-alignment': 'map',
-        'icon-allow-overlap': true,
-        'icon-ignore-placement': true
-      }
-    };
-
-    async function addLiveTrackLayersAndData() {
-      if (!map || !map.getStyle()) return;
-      if (!map.getSource(LINES_SOURCE_ID)) {
-        map.addSource(LINES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      }
-      if (!map.getSource(POINTS_SOURCE_ID)) {
-        map.addSource(POINTS_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      }
-      if (!map.getLayer(POINTS_LAYER_ID)) {
-        await ensureArrowImage(map, '#6C93DE', false);
-        map.addLayer(pointsLayerSpec);
-      }
-      if (!map.getLayer(LINES_WHITE_OUTLINE_LAYER_ID)) {
-        map.addLayer(lineWhiteOutlineLayerSpec, POINTS_LAYER_ID);
-      }
-      if (!map.getLayer(LINES_BLACK_OUTLINE_LAYER_ID)) {
-        map.addLayer(lineBlackOutlineLayerSpec, POINTS_LAYER_ID);
-      }
-      if (!map.getLayer(LINES_LAYER_ID)) {
-        map.addLayer(lineLayerSpec, POINTS_LAYER_ID);
-      }
-      if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
-        map.addLayer(accuracyCircleLayerSpec, LINES_WHITE_OUTLINE_LAYER_ID);
-      }
-      await updateMapFeatures();
-    }
-
-    async function switchMapLayer(layerValue) {
-      if (!map || !maplibregl) return;
-      const tileSource = tileSources.value.find((s) => s.id === layerValue);
-      if (!tileSource) return;
-      const clientConfig = tileSource.client_config || {};
-      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
-
-      if (isStyleBased) {
-        const styleUrl = clientConfig.style_url;
-        if (!styleUrl) return;
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const bearing = map.getBearing();
-        map.setStyle(styleUrl);
-        map.once('styledata', async () => {
-          if (!map) return;
-          map.resize();
-          await addLiveTrackLayersAndData();
-          syncUserLocationMarker();
-          setTimeout(() => {
-            if (map) {
-              map.resize();
-              map.jumpTo({ center, zoom, bearing, duration: 0 });
-            }
-          }, 0);
-        });
-      } else {
-        const wasStyleBased = !map.getSource(BASE_SOURCE_ID);
-        if (wasStyleBased) {
-          const center = map.getCenter();
-          const zoom = map.getZoom();
-          const bearing = map.getBearing();
-          if (locationMarker.value) {
-            removeUserLocationMarker(locationMarker.value);
-            locationMarker.value = null;
-          }
-          map.remove();
-          map = null;
-          const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
-          const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-          const style = {
-            version: 8,
-            sources: {
-              [BASE_SOURCE_ID]: rasterSpec,
-              [LINES_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-              [POINTS_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
-            },
-            layers: [
-              { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
-              accuracyCircleLayerSpec,
-              lineWhiteOutlineLayerSpec,
-              lineBlackOutlineLayerSpec,
-              lineLayerSpec
-            ]
-          };
-          map = new maplibregl.Map({
-            container: mapContainer.value,
-            style,
-            center: [center.lng, center.lat],
-            zoom,
-            bearing,
-            minZoom: MIN_ZOOM,
-            maxZoom: MAX_ZOOM,
-            maxPitch: 0,
-            attributionControl: false
-          });
-          map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
-          setupMapFollowListenersForView();
-          disableMapRotation();
-          map.once('load', () => {
-            if (!map) return;
-            map.resize();
-            ensureArrowImage(map, '#6C93DE', false).then(() => {
-              if (!map || !map.getStyle()) return;
-              if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
-              updateMapFeatures().then(() => {
-                syncUserLocationMarker();
-                setTimeout(() => {
-                  if (map) {
-                    map.resize();
-                    map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-                  }
-                }, 0);
-              }).catch(() => {
-                setTimeout(() => {
-                  if (map) {
-                    map.resize();
-                    map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
-                  }
-                }, 0);
-              });
-            });
-          });
-        } else {
-          const spec = getRasterSourceSpec(layerValue, tileSource);
-          const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-          replaceRasterBaseLayer(map, {
-            sourceId: BASE_SOURCE_ID,
-            layerId: BASE_LAYER_ID,
-            sourceSpec: spec,
-            layerSpec: {
-              id: BASE_LAYER_ID,
-              type: 'raster',
-              source: BASE_SOURCE_ID,
-              minzoom: clientConfig.minzoom ?? 0,
-              maxzoom: layerMaxZoom
-            },
-            insertBeforeLayerId: ACCURACY_CIRCLE_LAYER_ID
-          });
-        }
-      }
-    }
-
-    function onLayerChange() {
-      switchMapLayer(selectedLayer.value);
-    }
-
-    function initMap() {
-      if (!mapContainer.value || !maplibregl) return;
-
-      const layerValue = selectedLayer.value;
-      const tileSource = tileSources.value.find((s) => s.id === layerValue) || tileSources.value[0];
-      const clientConfig = tileSource?.client_config || {};
-      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
-
-      if (isStyleBased && clientConfig.style_url) {
-        map = new maplibregl.Map({
-          container: mapContainer.value,
-          style: clientConfig.style_url,
-          center: [0, 0],
-          zoom: 2,
-          minZoom: MIN_ZOOM,
-          maxZoom: MAX_ZOOM,
-          maxPitch: 0,
-          attributionControl: false
-        });
-        map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
-        setupMapFollowListenersForView();
-        disableMapRotation();
-        map.on('load', () => {
-          if (!map) return;
-          map.resize();
-          addLiveTrackLayersAndData().then(() => {
-            syncUserLocationMarker();
-            setTimeout(() => {
-              if (map) {
-                map.resize();
-                fitMapToTracks();
-              }
-            }, 0);
-          }).catch(() => {
-            setTimeout(() => {
-              if (map) {
-                map.resize();
-                fitMapToTracks();
-              }
-            }, 0);
-          });
-        });
-        return;
-      }
-
-      const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
-      const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-      const style = {
-        version: 8,
-        sources: {
-          [BASE_SOURCE_ID]: rasterSpec,
-          [LINES_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-          [POINTS_SOURCE_ID]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
-        },
-        layers: [
-          { id: BASE_LAYER_ID, type: 'raster', source: BASE_SOURCE_ID, minzoom: clientConfig.minzoom ?? 0, maxzoom: layerMaxZoom },
-          accuracyCircleLayerSpec,
-          lineWhiteOutlineLayerSpec,
-          lineBlackOutlineLayerSpec,
-          lineLayerSpec
-        ]
+    function getMapPadding() {
+      const bottomInset = isMobileView.value && isSheetOpen.value && !isMapSidebarOpen.value
+        ? getDrawerPeekHeight()
+        : 0;
+      return {
+        top: MAP_EDGE_PADDING_PX,
+        left: MAP_EDGE_PADDING_PX,
+        right: MAP_EDGE_PADDING_PX,
+        bottom: MAP_EDGE_PADDING_PX + bottomInset
       };
-
-      map = new maplibregl.Map({
-        container: mapContainer.value,
-        style,
-        center: [0, 0],
-        zoom: 2,
-        minZoom: MIN_ZOOM,
-        maxZoom: MAX_ZOOM,
-        maxPitch: 0,
-        attributionControl: false
-      });
-
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
-      setupMapFollowListenersForView();
-      disableMapRotation();
-
-      map.once('load', () => {
-        if (!map) return;
-        map.resize();
-        ensureArrowImage(map, '#6C93DE', false).then(() => {
-          if (!map || !map.getStyle()) return;
-          if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
-          updateMapFeatures().then(() => {
-            syncUserLocationMarker();
-            setTimeout(() => {
-              if (map) {
-                map.resize();
-                fitMapToTracks();
-              }
-            }, 0);
-          }).catch(() => {
-            setTimeout(() => {
-              if (map) {
-                map.resize();
-                fitMapToTracks();
-              }
-            }, 0);
-          });
-        });
-      });
     }
 
-    const LAST_POINTS_FIT = 10;
-
-    function getLastNCoords(track, n) {
-      const coords = getCoordsSortedByTime(track);
-      const slice = coords.length ? coords.slice(-n) : [];
-      return slice.map((c) => [c[0], c[1]]);
-    }
-
-    function getSelectedTrackLastPoint() {
-      if (!selectedId.value) return null;
-      const track = trackers.value.find((t) => t.id === selectedId.value);
-      if (!track) return null;
-      const coords = getLastNCoords(track, 1);
-      return coords.length ? coords[0] : null;
-    }
-
-    function centerOnSelectedTrackLastPoint() {
-      if (!map) return;
-      const center = getSelectedTrackLastPoint();
-      if (!center || center.length < 2) return;
-      if (!isValidMapLngLatPair(center[0], center[1])) return;
-      isAutoMoving.value = true;
-      map.easeTo({ center, zoom: map.getZoom(), duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-      setTimeout(() => {
-        isAutoMoving.value = false;
-      }, MAP_SNAP_DURATION + 50);
-    }
-
-    function setupMapFollowListenersForView() {
-      if (!map) return;
-      setupMapFollowListeners(map, {
-        getLocked: () => followLocked.value,
-        setLocked: (v) => { followLocked.value = v; if (!v) selectedId.value = null; }
-      });
-      const TRACK_LAYER_IDS = [
-        POINTS_LAYER_ID,
-        LINES_LAYER_ID,
-        LINES_BLACK_OUTLINE_LAYER_ID,
-        LINES_WHITE_OUTLINE_LAYER_ID
-      ];
-      function getClickableTrackLayers() {
-        return TRACK_LAYER_IDS.filter((id) => map.getLayer(id));
-      }
-      map.on('click', (e) => {
-        const layers = getClickableTrackLayers();
-        if (layers.length === 0) return;
-        const features = map.queryRenderedFeatures(e.point, { layers });
-        const feature = features[0];
-        if (feature?.properties?.trackId) {
-          const trackId = feature.properties.trackId;
-          const track = trackers.value.find((t) => String(t.id) === String(trackId));
-          if (track) {
-            if (visibleTrackersTab.value.some((t) => String(t.id) === String(trackId))) {
-              listTab.value = 'trackers';
-            } else if (visibleSharedTab.value.some((t) => String(t.id) === String(trackId))) {
-              listTab.value = 'shared';
-            }
-          }
-          highlightedId.value = trackId;
-          if (isMobileView.value) {
-            const snap = mobileDrawerRef.value?.snapPx?.value ?? mobileDrawerRef.value?.snapPx;
-            const maxH = Array.isArray(snap) ? snap[1] : undefined;
-            if (maxH != null) {
-              const hp = mobileDrawerRef.value?.heightPx;
-              if (hp && typeof hp === 'object' && 'value' in hp) hp.value = maxH;
-            }
-          }
-          function scrollListToTrack() {
-            const container = listScrollContainer.value;
-            if (!container) {
-              // Last-resort fallback if list container ref is not resolved yet.
-              const rowOnly = document.querySelector(`[data-track-id="${trackId}"]`);
-              rowOnly?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-              return;
-            }
-            const row = container.querySelector(`[data-track-id="${trackId}"]`);
-            if (!row) return;
-            const padding = 8;
-            const rowTop = row.offsetTop;
-            const rowHeight = row.offsetHeight;
-            const containerHeight = container.clientHeight;
-            const scrollTop = container.scrollTop;
-            if (rowTop < scrollTop) {
-              container.scrollTo({ top: Math.max(0, rowTop - padding), behavior: 'smooth' });
-            } else if (rowTop + rowHeight > scrollTop + containerHeight) {
-              container.scrollTo({
-                top: rowTop + rowHeight - containerHeight + padding,
-                behavior: 'smooth'
-              });
-            }
-          }
-          nextTick(() => {
-            scrollListToTrack();
-            nextTick(() => {
-              if (!listScrollContainer.value?.querySelector(`[data-track-id="${trackId}"]`)) {
-                setTimeout(scrollListToTrack, 80);
-              }
-            });
-          });
-        } else {
-          highlightedId.value = null;
+    /** A track feature on the map was clicked: switch to its tab, highlight it, and scroll it into view in the list. */
+    function onMapFeatureClick(trackId) {
+      const track = trackers.value.find((t) => String(t.id) === String(trackId));
+      if (track) {
+        if (visibleTrackersTab.value.some((t) => String(t.id) === String(trackId))) {
+          listTab.value = 'trackers';
+        } else if (visibleSharedTab.value.some((t) => String(t.id) === String(trackId))) {
+          listTab.value = 'shared';
         }
-      });
-      map.on('mousemove', (e) => {
-        const canvas = map.getCanvas();
-        if (!canvas) return;
-        const layers = getClickableTrackLayers();
-        if (layers.length === 0) {
-          canvas.style.cursor = '';
+      }
+      highlightedId.value = trackId;
+      if (isMobileView.value) {
+        const snap = mobileDrawerRef.value?.snapPx?.value ?? mobileDrawerRef.value?.snapPx;
+        const maxH = Array.isArray(snap) ? snap[1] : undefined;
+        if (maxH != null) {
+          const hp = mobileDrawerRef.value?.heightPx;
+          if (hp && typeof hp === 'object' && 'value' in hp) hp.value = maxH;
+        }
+      }
+      function scrollListToTrack() {
+        const container = listScrollContainer.value;
+        if (!container) {
+          // Last-resort fallback if list container ref is not resolved yet.
+          const rowOnly = document.querySelector(`[data-track-id="${trackId}"]`);
+          rowOnly?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
           return;
         }
-        const features = map.queryRenderedFeatures(e.point, { layers });
-        canvas.style.cursor = features.length ? 'pointer' : '';
+        const row = container.querySelector(`[data-track-id="${trackId}"]`);
+        if (!row) return;
+        const padding = 8;
+        const rowTop = row.offsetTop;
+        const rowHeight = row.offsetHeight;
+        const containerHeight = container.clientHeight;
+        const scrollTop = container.scrollTop;
+        if (rowTop < scrollTop) {
+          container.scrollTo({ top: Math.max(0, rowTop - padding), behavior: 'smooth' });
+        } else if (rowTop + rowHeight > scrollTop + containerHeight) {
+          container.scrollTo({
+            top: rowTop + rowHeight - containerHeight + padding,
+            behavior: 'smooth'
+          });
+        }
+      }
+      nextTick(() => {
+        scrollListToTrack();
+        nextTick(() => {
+          if (!listScrollContainer.value?.querySelector(`[data-track-id="${trackId}"]`)) {
+            setTimeout(scrollListToTrack, 80);
+          }
+        });
       });
-      setupCopyMapCoordinatesOnContextMenu(map);
     }
 
-    /** Disable map rotation (drag, touch pinch, keyboard) so north stays up. See maplibre disable-map-rotation example. */
-    function disableMapRotation() {
-      if (!map) return;
-      if (map.dragRotate && map.dragRotate.disable) map.dragRotate.disable();
-      if (map.touchZoomRotate && map.touchZoomRotate.disableRotation) map.touchZoomRotate.disableRotation();
-      if (map.keyboard && map.keyboard.disableRotation) map.keyboard.disableRotation();
+    function onMapBackgroundClick() {
+      highlightedId.value = null;
+    }
+
+    const trackMap = useLiveTrackMap({
+      mapContainer,
+      tileSources,
+      selectedLayer,
+      trackers,
+      selectedId,
+      activeGroupId,
+      activeGroup,
+      followLocked,
+      isAutoMoving,
+      getMapPadding,
+      onFeatureClick: onMapFeatureClick,
+      onBackgroundClick: onMapBackgroundClick
+    });
+
+    const geo = useLiveTrackGeolocation({ getMap: trackMap.getMap });
+    trackMap.onStyleReady(() => geo.syncUserLocationMarker());
+    const { trackingEnabled, toggleLocationTracking } = geo;
+
+    function onLayerChange() {
+      trackMap.switchMapLayer(selectedLayer.value);
     }
 
     function onTrackListClick(track) {
@@ -1636,96 +1000,20 @@ export default {
       }
       selectedId.value = track.id;
       followLocked.value = true;
-      updateMapFeatures();
-      const lastPoint = getLastNCoords(track, 1);
-      if (map && lastPoint.length > 0) {
-        const c = lastPoint[0];
-        if (c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
-          isAutoMoving.value = true;
-          const zoom = Math.max(map.getZoom(), 14);
-          map.easeTo({ center: c, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-          setTimeout(() => {
-            isAutoMoving.value = false;
-          }, MAP_SNAP_DURATION + 50);
-        }
-      }
+      trackMap.updateMapFeatures();
+      trackMap.panToTrackLastPoint(track, { minZoom: 14 });
       if (isMobileView.value) collapseDrawerToPeek();
-    }
-
-    /** Collapse drawer to 25% – just set height; no close animation, no bounce. */
-    function collapseDrawerToPeek() {
-      if (!isMobileView.value) return;
-      mobileDrawerRef.value?.collapseToPeek?.();
-    }
-
-    function getDrawerPeekHeight() {
-      const snap = mobileDrawerRef.value?.snapPx?.[0];
-      if (Number.isFinite(snap) && snap > 0) return snap;
-      return Math.round(trackerMaxHeight.value * 0.25);
-    }
-
-    function getMapPadding() {
-      const bottomInset = isMobileView.value && isSheetOpen.value && !isMapSidebarOpen.value
-        ? getDrawerPeekHeight()
-        : 0;
-      return {
-        top: MAP_EDGE_PADDING_PX,
-        left: MAP_EDGE_PADDING_PX,
-        right: MAP_EDGE_PADDING_PX,
-        bottom: MAP_EDGE_PADDING_PX + bottomInset
-      };
-    }
-
-    function fitBoundsFromCoords(coords) {
-      if (!map || !coords.length) return;
-      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-      for (const c of coords) {
-        const lon = c[0];
-        const lat = c[1];
-        if (!isValidMapLngLatPair(lon, lat)) continue;
-        minLon = Math.min(minLon, lon);
-        minLat = Math.min(minLat, lat);
-        maxLon = Math.max(maxLon, lon);
-        maxLat = Math.max(maxLat, lat);
-      }
-      if (minLon === Infinity) return;
-      const pad = 0.002;
-      if (maxLon <= minLon) { minLon -= pad; maxLon += pad; }
-      if (maxLat <= minLat) { minLat -= pad; maxLat += pad; }
-      map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
-        padding: getMapPadding(),
-        maxZoom: 15,
-        duration: MAP_SNAP_DURATION
-      });
-    }
-
-    function fitMapToTracks() {
-      if (!map || trackers.value.length === 0) return;
-      const allCoords = [];
-      for (const track of trackers.value) {
-        if (isHiddenOwnedTracker(track)) continue;
-        allCoords.push(...getLastNCoords(track, LAST_POINTS_FIT));
-      }
-      fitBoundsFromCoords(allCoords);
-    }
-
-    function fitMapToSelectedTrack() {
-      if (!map || !selectedId.value) return;
-      const track = trackers.value.find((t) => t.id === selectedId.value);
-      if (!track) return;
-      const coords = getLastNCoords(track, LAST_POINTS_FIT);
-      if (coords.length === 0) return;
-      fitBoundsFromCoords(coords);
     }
 
     async function goHome() {
       selectedId.value = null;
       followLocked.value = false;
-      await updateMapFeatures();
+      await trackMap.updateMapFeatures();
       if (trackers.value.length > 0) {
-        fitMapToTracks();
-      } else if (map) {
-        map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
+        trackMap.fitMapToTracks();
+      } else {
+        const map = trackMap.getMap();
+        if (map) map.easeTo({ center: [0, 0], zoom: 2, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
       }
     }
 
@@ -1830,7 +1118,7 @@ export default {
           const settings = { ...(t.settings || {}), hidden: false };
           trackers.value = trackers.value.slice(0, idx).concat({ ...t, settings }).concat(trackers.value.slice(idx + 1));
         }
-        updateMapFeatures();
+        trackMap.updateMapFeatures();
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker shown on map and in list');
       } catch (e) {
         const err = api.handleError?.(e);
@@ -1877,7 +1165,7 @@ export default {
           const g = groups.value[idx];
           groups.value = groups.value.slice(0, idx).concat({ ...g, hidden: false }).concat(groups.value.slice(idx + 1));
         }
-        updateMapFeatures();
+        trackMap.updateMapFeatures();
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group shown on map and in list');
       } catch (e) {
         const err = api.handleError?.(e);
@@ -1923,7 +1211,7 @@ export default {
       } else {
         trackers.value = [...trackers.value, normalized];
       }
-      if (options.updateMap !== false) updateMapFeatures();
+      if (options.updateMap !== false) trackMap.updateMapFeatures();
       return true;
     }
 
@@ -1940,7 +1228,7 @@ export default {
         incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== idStr);
       }
       if (String(selectedId.value) === idStr) selectedId.value = null;
-      if (options.updateMap !== false) updateMapFeatures();
+      if (options.updateMap !== false) trackMap.updateMapFeatures();
     }
 
     function upsertGroupInLocalState(group, options = {}) {
@@ -1963,7 +1251,7 @@ export default {
       if (options.removeIncoming !== false) {
         incomingSharedGroups.value = incomingSharedGroups.value.filter((g) => String(g.id) !== idStr);
       }
-      if (options.updateMap !== false) updateMapFeatures();
+      if (options.updateMap !== false) trackMap.updateMapFeatures();
       return true;
     }
 
@@ -2003,7 +1291,7 @@ export default {
       if (trackIds.length === 0 && payload?.action === 'created') {
         fetchAndMergeGroup(group.id);
       }
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
     }
 
     async function onGroupsSidebarRefreshed() {
@@ -2036,7 +1324,7 @@ export default {
       if (options.removeTrackers === true && selectedId.value != null && trackIdsInGroup.has(String(selectedId.value))) {
         selectedId.value = null;
       }
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
     }
 
     async function onGroupsSidebarLeave(group) {
@@ -2052,24 +1340,11 @@ export default {
       }
     }
 
-    function fitMapToGroupTracks(group) {
-      if (!map || !group?.track_ids?.length) return;
-      const trackIds = new Set(group.track_ids.map((id) => String(id)));
-      const coords = [];
-      for (const track of trackers.value) {
-        if (!trackIds.has(String(track.id))) continue;
-        if (isHiddenOwnedTracker(track)) continue;
-        coords.push(...getLastNCoords(track, LAST_POINTS_FIT));
-      }
-      if (coords.length === 0) return;
-      fitBoundsFromCoords(coords);
-    }
-
     function onGroupListClick(group) {
       activeGroupId.value = group?.id ?? null;
       selectedId.value = null;
-      updateMapFeatures();
-      fitMapToGroupTracks(group);
+      trackMap.updateMapFeatures();
+      trackMap.fitMapToGroupTracks(group);
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
@@ -2081,8 +1356,8 @@ export default {
       const g = groupQuickViewGroup.value;
       if (!g) return;
       activeGroupId.value = g.id ?? null;
-      updateMapFeatures();
-      fitMapToGroupTracks(g);
+      trackMap.updateMapFeatures();
+      trackMap.fitMapToGroupTracks(g);
     }
 
     function zoomToTrackInGroup(track) {
@@ -2090,19 +1365,8 @@ export default {
       activeGroupId.value = null;
       selectedId.value = track.id;
       followLocked.value = true;
-      updateMapFeatures();
-      const lastPoint = getLastNCoords(track, 1);
-      if (map && lastPoint.length > 0) {
-        const c = lastPoint[0];
-        if (c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
-          isAutoMoving.value = true;
-          const zoom = Math.max(map.getZoom(), 14);
-          map.easeTo({ center: c, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-          setTimeout(() => {
-            isAutoMoving.value = false;
-          }, MAP_SNAP_DURATION + 50);
-        }
-      }
+      trackMap.updateMapFeatures();
+      trackMap.panToTrackLastPoint(track, { minZoom: 14 });
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
@@ -2113,7 +1377,7 @@ export default {
       listTab.value = 'trackers';
       selectedId.value = track.id;
       followLocked.value = true;
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
       nextTick(() => {
         const scrollEl = listScrollContainer.value;
         if (scrollEl) {
@@ -2126,13 +1390,13 @@ export default {
 
     function deselectGroup() {
       activeGroupId.value = null;
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
     }
 
     function deselectSelection() {
       activeGroupId.value = null;
       selectedId.value = null;
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
@@ -2200,7 +1464,7 @@ export default {
       trackers.value = trackers.value.slice(0, idx).concat([{ ...t, settings }]).concat(trackers.value.slice(idx + 1));
       // Avoid a transient redraw when we're only waiting for refreshed geometry.
       if (hasHiddenUpdate) {
-        updateMapFeatures();
+        trackMap.updateMapFeatures();
       }
       const selectedSidebarTrackId = trackSidebarTrack.value?.id ?? null;
       if (shouldReloadGeometryForSettingsChange(refresh_map, trackId, selectedSidebarTrackId)) {
@@ -2242,7 +1506,7 @@ export default {
       if (idx < 0) return;
       const g = groups.value[idx];
       groups.value = groups.value.slice(0, idx).concat([{ ...g, hidden: !!value }]).concat(groups.value.slice(idx + 1));
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
     }
 
     async function onSharedUnsubscribeGroup(group) {
@@ -2352,7 +1616,7 @@ export default {
               fetchAndMergeTracker(trackId);
             }
           }
-          updateMapFeatures();
+          trackMap.updateMapFeatures();
         } else if (payload.action === 'removed') {
           removeGroupFromLocalState(item, { removeTrackers: true, removeIncoming: false });
         }
@@ -2393,7 +1657,7 @@ export default {
         } else {
           trackers.value = [...trackers.value, normalized];
         }
-        updateMapFeatures();
+        trackMap.updateMapFeatures();
       } catch {
         // Keep optimistic stub; map may have no geometry for this track
       }
@@ -2408,7 +1672,7 @@ export default {
         if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker added');
         incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== String(tracker.id));
         addOptimisticTracker(tracker);
-        updateMapFeatures();
+        trackMap.updateMapFeatures();
         fetchAndMergeTracker(tracker.id);
       } catch (e) {
         const err = api.handleError?.(e);
@@ -2493,33 +1757,31 @@ export default {
             }
             fetchAndMergeTracker(trackId);
           }
-          updateMapFeatures();
+          trackMap.updateMapFeatures();
         }
         listTab.value = preservedListTab;
       }
     }
 
     watch(selectedId, () => {
-      updateMapFeatures();
+      trackMap.updateMapFeatures();
       if (selectedId.value && !followLocked.value) {
-        fitMapToSelectedTrack();
+        trackMap.fitMapToSelectedTrack();
       }
       // When unselecting we only unlock; do not reset zoom (no fitMapToTracks)
     });
 
     function applyDefaultSortFromStore() {
-      const store = window.gv_core?.store;
       const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-      if (!store || !getNestedValue) return;
-      const saved = getNestedValue(store.getters?.['userSettings/userSettings'], DEFAULT_SORT_KEY);
+      if (!getNestedValue) return;
+      const saved = getNestedValue(platformState.userSettings.value, DEFAULT_SORT_KEY);
       if (saved && VALID_SORT_VALUES.has(saved)) sortBy.value = saved;
     }
 
     function applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef) {
-      const store = window.gv_core?.store;
       const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-      if (!store || !getNestedValue || !tileSourcesRef?.value?.length) return;
-      const defaultMap = getNestedValue(store.getters?.['userSettings/userSettings'], DEFAULT_MAP_KEY);
+      if (!getNestedValue || !tileSourcesRef?.value?.length) return;
+      const defaultMap = getNestedValue(platformState.userSettings.value, DEFAULT_MAP_KEY);
       if (defaultMap && tileSourcesRef.value.some((s) => s.id === defaultMap)) {
         selectedLayerRef.value = defaultMap;
       }
@@ -2533,19 +1795,28 @@ export default {
       } catch (_) { /* ignore */ }
     });
 
+    const trackSocket = useLiveTrackSocket({
+      api,
+      trackers,
+      selectedId,
+      followLocked,
+      updateMapFeatures: trackMap.updateMapFeatures,
+      scheduleCenterOnSelectedTrack: trackMap.scheduleCenterOnSelectedTrack,
+      fetchAndMergeTracker,
+      onReconnect: () => {
+        fetchTrackers().then(() => {
+          if (followLocked.value && selectedId.value) trackMap.centerOnSelectedTrackLastPoint();
+        });
+      }
+    });
+
     onMounted(async () => {
       try {
         if (typeof localStorage !== 'undefined' && localStorage.getItem('liveTrack.highlightStaleData') === '1') {
           highlightStaleData.value = true;
         }
       } catch (_) { /* ignore */ }
-      if (typeof window !== 'undefined' && !resizeListenerAttached) {
-        window.addEventListener('resize', updateWindowHeight);
-        updateWindowHeight();
-        resizeListenerAttached = true;
-      }
-      const store = window.gv_core?.store;
-      const userInfo = store?.getters?.['auth/userInfo'];
+      const userInfo = platformState.currentUser.value;
       if (userInfo?.email) userLogin.value = userInfo.email;
       applyDefaultSortFromStore();
       await fetchTileSources();
@@ -2556,178 +1827,35 @@ export default {
       fetchIncomingShared();
       await fetchGroups();
       await fetchTrackers();
-      requestAnimationFrame(() => initMap());
-
-      function scheduleCenterOnSelectedTrack() {
-        if (centerDebounceId) clearTimeout(centerDebounceId);
-        centerDebounceId = setTimeout(() => {
-          centerDebounceId = null;
-          if (followLocked.value && selectedId.value && map) centerOnSelectedTrackLastPoint();
-        }, CENTER_DEBOUNCE_MS);
-      }
-
-      trackUpdatedHandler = (data) => {
-        if (!data || !data.track_id) return;
-        const updates = Array.isArray(data.updates) ? data.updates : (data.point != null ? [{ point: data.point, props: data.props, index: data.index }] : null);
-        if (!updates?.length) return;
-        const idx = trackers.value.findIndex((t) => t.id === data.track_id);
-        if (idx < 0) return;
-        let track = trackers.value[idx];
-        let geom = track.geometry ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] } : { type: 'LineString', coordinates: [] };
-        if (!geom.coordinates) geom.coordinates = [];
-        let latestPointParams = {};
-        const windowKey = getRecentDataWindow(track);
-        const isSessionWindow = isSessionWindowTrack(track);
-        let reloadAfterApply = false;
-        let activeSessionStartMs = getKnownSessionStartMsForTrack(track);
-        let appliedUpdateCount = 0;
-        for (const u of updates) {
-          const point = u?.point;
-          if (!Array.isArray(point)) continue;
-          const incomingSessionStartMs = getStarttimestampMsFromProps(u?.props);
-          if (isSessionWindow && incomingSessionStartMs != null) {
-            if (activeSessionStartMs != null && incomingSessionStartMs < activeSessionStartMs) {
-              continue;
-            }
-            if (shouldReloadGeometryForSessionTransition(windowKey, activeSessionStartMs, incomingSessionStartMs)) {
-              reloadAfterApply = true;
-            }
-            if (shouldClearGeometryForSessionTransition(windowKey, activeSessionStartMs, incomingSessionStartMs)) {
-              geom.coordinates = [];
-            }
-            activeSessionStartMs = incomingSessionStartMs;
-          }
-          const indexOutOfBounds =
-            typeof u.index === 'number' &&
-            Number.isInteger(u.index) &&
-            (u.index < 0 || u.index > geom.coordinates.length);
-          if (indexOutOfBounds) {
-            api.get(`/trackers/${data.track_id}/geometry/`).then((geomRes) => {
-              const trackIdx = trackers.value.findIndex((t) => t.id === data.track_id);
-              if (trackIdx < 0) return;
-              const existing = trackers.value[trackIdx];
-              const normalized = normalizeTrackForMemory({
-                ...geomRes.data,
-                is_owner: existing.is_owner,
-                owner_email: existing.owner_email,
-                visibility: existing.visibility
-              });
-              trackers.value = trackers.value.slice(0, trackIdx).concat(normalized).concat(trackers.value.slice(trackIdx + 1));
-              updateMapFeatures();
-              if (data.track_id === selectedId.value && followLocked.value && map) {
-                scheduleCenterOnSelectedTrack();
-              }
-            }).catch(() => {});
-            return;
-          }
-          if (typeof u.index === 'number' && Number.isInteger(u.index)) {
-            geom.coordinates.splice(u.index, 0, point);
-          } else {
-            geom.coordinates.push(point);
-          }
-          appliedUpdateCount += 1;
-          if (u.props && typeof u.props === 'object') latestPointParams = u.props;
-        }
-        if (appliedUpdateCount === 0) return;
-        if (isRollingRecentDataWindow(windowKey)) {
-          geom.coordinates = pruneCoordinatesForRecentDataWindow(geom.coordinates, windowKey);
-        }
-        if (isSessionWindow && activeSessionStartMs != null) {
-          latestSessionStartMsByTrackId.set(String(track.id), activeSessionStartMs);
-        } else {
-          latestSessionStartMsByTrackId.delete(String(track.id));
-        }
-        const last = geom.coordinates[geom.coordinates.length - 1];
-        const newPoint = updates[updates.length - 1]?.point;
-        const last_position = newPoint && newPoint.length >= 2 ? { lon: newPoint[0], lat: newPoint[1] } : (last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null);
-        const rawLastTs = newPoint && newPoint.length >= 3 ? newPoint[2] : (last && last.length >= 3 ? last[2] : null);
-        const last_timestamp_ms = rawLastTs != null ? normalizeTimestampMs(rawLastTs) : null;
-        const updated = {
-          ...track,
-          geometry: geom,
-          last_position,
-          last_timestamp_ms,
-          updated_at_ms: normalizeTimestampMs(track.updated_at),
-          latestPointParams
-        };
-        trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
-        updateMapFeatures();
-        if (data.track_id === selectedId.value && followLocked.value && map) {
-          scheduleCenterOnSelectedTrack();
-        }
-        if (reloadAfterApply) {
-          fetchAndMergeTracker(data.track_id);
-        }
-      };
-      trackersLiveSocket.onReconnect = () => {
-        fetchTrackers().then(() => {
-          if (followLocked.value && selectedId.value && map) centerOnSelectedTrackLastPoint();
-        });
-      };
-      trackersLiveSocket.connect();
-      trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
-      trackersLiveSocket.subscribe('track_updated', trackUpdatedHandler);
-
-      const mq = window.matchMedia('(max-width: 639px)');
-      isMobileView.value = mq.matches;
-      isSheetOpen.value = mq.matches;
-      mobileQueryListener = (e) => {
-        isMobileView.value = e.matches;
-        isSheetOpen.value = e.matches;
-      };
-      mq.addEventListener('change', mobileQueryListener);
-
+      requestAnimationFrame(() => trackMap.initMap());
+      trackSocket.connect();
     });
 
     onActivated(() => {
       applyDefaultSortFromStore();
       applyDefaultMapFromStore(tileSources, selectedLayer);
-      if (map && tileSources.value.some((s) => s.id === selectedLayer.value)) {
-        switchMapLayer(selectedLayer.value);
+      if (trackMap.getMap() && tileSources.value.some((s) => s.id === selectedLayer.value)) {
+        trackMap.switchMapLayer(selectedLayer.value);
       }
     });
 
     watch(
-      () => window.gv_core?.store?.getters?.['userSettings/userSettings'],
+      () => platformState.userSettings.value,
       (userSettings) => {
         if (!userSettings) return;
         applyDefaultSortFromStore();
         applyDefaultMapFromStore(tileSources, selectedLayer);
-        if (map && tileSources.value.length && tileSources.value.some((s) => s.id === selectedLayer.value)) {
-          switchMapLayer(selectedLayer.value);
+        if (trackMap.getMap() && tileSources.value.length && tileSources.value.some((s) => s.id === selectedLayer.value)) {
+          trackMap.switchMapLayer(selectedLayer.value);
         }
       },
       { deep: true, immediate: true }
     );
 
     onBeforeUnmount(() => {
-      setBodyScrollLocked(false);
-      if (typeof window !== 'undefined' && resizeListenerAttached) {
-        window.removeEventListener('resize', updateWindowHeight);
-        resizeListenerAttached = false;
-      }
-      if (mobileActionsOutsideStop) {
-        mobileActionsOutsideStop();
-        mobileActionsOutsideStop = null;
-      }
-      if (mobileQueryListener && typeof window !== 'undefined') {
-        window.matchMedia('(max-width: 639px)').removeEventListener('change', mobileQueryListener);
-        mobileQueryListener = null;
-      }
-      if (centerDebounceId) {
-        clearTimeout(centerDebounceId);
-        centerDebounceId = null;
-      }
-      trackersLiveSocket.onReconnect = null;
-      if (trackUpdatedHandler) {
-        trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);
-      }
-      trackersLiveSocket.disconnect();
-      stopLocationTracking();
-      if (map && mapContainer.value) {
-        map.remove();
-        map = null;
-      }
+      trackSocket.disconnect();
+      geo.stopLocationTracking();
+      trackMap.destroyMap();
     });
 
     return {
@@ -2845,7 +1973,6 @@ export default {
       onGroupListClick,
       deselectGroup,
       deselectSelection,
-      fitMapToGroupTracks,
       leaveGroup,
       onTrackSidebarSaved,
       onTrackSettingsChanged,
