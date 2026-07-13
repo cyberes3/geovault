@@ -4,10 +4,10 @@ MapTiler Forward Geocoding API backend for place search.
 from urllib.parse import quote
 
 import requests
+from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.search_geocoding.common import GeocodingBackendError
-from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
 
@@ -134,11 +134,11 @@ def _search_maptiler(query: str) -> dict:
     Returns {"query": str, "features": list} with features in place-search shape.
     Raises requests.exceptions.Timeout on timeout, GeocodingBackendError when all requests fail.
     """
-    api_key = get_config_loader().get_maptiler_api_key()
+    api_key = settings.MAPTILER_API_KEY
     if not api_key:
         raise GeocodingBackendError("MapTiler API key is not configured")
 
-    site_domain = get_config_loader().get_str('site.domain')
+    site_domain = settings.SITE_DOMAIN
     headers = {'Origin': site_domain}
     api_url = f"https://api.maptiler.com/geocoding/{quote(query)}.json"
 

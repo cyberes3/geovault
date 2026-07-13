@@ -14,11 +14,11 @@ from typing import Optional
 from django.http import Http404
 
 from api.models import FeatureStore
-from api.views.features.updates.shared import _validate_and_preserve_feature
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.import_operations.styling import apply_bulk_operations as apply_bulk_operations_to_features
 from geo_lib.processing.logging import ImportLog
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, is_protected_tag
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.types.feature import (
     GeoFeatureSupported,
@@ -27,7 +27,9 @@ from geo_lib.types.feature import (
     PointFeature,
     PolygonFeature,
 )
+from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger('FEATURE_SERVICE')
 
@@ -45,6 +47,10 @@ class UnsupportedFeatureGeometryError(ValueError):
     """Raised when a feature's geometry type can't be mapped to a feature class for tag regeneration."""
 
 
+class FeatureValidationError(ValueError):
+    """Raised when user-supplied feature data (tags, properties) fails a service-level validation check."""
+
+
 class FeatureService:
     """Mutation/lookup pipeline for `FeatureStore`."""
 
@@ -60,6 +66,75 @@ class FeatureService:
             return qs.get(id=feature_id)
         except FeatureStore.DoesNotExist:
             raise Http404("Feature not found or access denied")
+
+    @staticmethod
+    def extract_system_tags(feature: dict) -> list:
+        """Extract and normalize `system_tags` from a feature dict (or its `properties` sub-dict)."""
+        if isinstance(feature, dict):
+            properties = feature.get('properties', feature)
+            system_tags = properties.get('system_tags', [])
+            if isinstance(system_tags, list):
+                return system_tags
+        return []
+
+    @staticmethod
+    def validate_and_preserve_feature(feature: dict) -> dict:
+        """
+        Validate and normalize a feature, preserving its `system_tags` and `geojson_hash`.
+
+        Raises:
+            GeometryValidationError: if validation fails.
+        """
+        system_tags = FeatureService.extract_system_tags(feature)
+        normalized_feature = validate_and_normalize_geojson_feature(
+            feature,
+            preserve_system_tags=system_tags,
+            preserve_geojson_hash=True,
+        )
+        normalized_feature['properties']['system_tags'] = system_tags
+        return normalized_feature
+
+    @staticmethod
+    def preserve_system_tags(properties: dict, original_system_tags: list) -> list:
+        """
+        Strip any client-supplied `system_tags` from `properties` (in place) and return the
+        real system tags from the database -- clients can never set their own system tags.
+        """
+        if not isinstance(original_system_tags, list):
+            original_system_tags = []
+        properties.pop('system_tags', None)
+        return original_system_tags
+
+    @staticmethod
+    def validate_user_tags(tags) -> list:
+        """
+        Validate a list of user-supplied tags: must be a list of non-empty, non-control-character
+        strings within `TAG_MAX_LENGTH`, none of which are protected system tag names.
+
+        Raises:
+            FeatureValidationError: on the first invalid tag found, with a human-readable message.
+        """
+        if not isinstance(tags, list):
+            raise FeatureValidationError('tags must be an array')
+
+        tag_max_length = get_required_setting('TAG_MAX_LENGTH')
+        for tag in tags:
+            if not isinstance(tag, str):
+                raise FeatureValidationError('all tags must be strings')
+            if is_protected_tag(tag, CONST_INTERNAL_TAGS):
+                raise FeatureValidationError(
+                    'System tags (type, import-year, import-month, feature-year, feature-month, '
+                    'source-file, track, elevation, reverse geocoding) cannot be added as user tags'
+                )
+            if len(tag) > tag_max_length:
+                raise FeatureValidationError(
+                    f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters'
+                )
+            if not tag.strip():
+                raise FeatureValidationError('Tags cannot be empty or contain only whitespace')
+            if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
+                raise FeatureValidationError('Tags cannot contain control characters')
+        return tags
 
     @staticmethod
     def apply_bulk_operations(queryset, bulk_ops: dict) -> int:
@@ -91,7 +166,7 @@ class FeatureService:
         updated_geojson = updated_features[0]
 
         try:
-            normalized_feature = _validate_and_preserve_feature(updated_geojson)
+            normalized_feature = FeatureService.validate_and_preserve_feature(updated_geojson)
         except GeometryValidationError as e:
             _logger.warning(f"Feature validation failed for feature {feature.id} in bulk operations: {str(e)}")
             return False
@@ -135,7 +210,7 @@ class FeatureService:
         geojson_data['properties']['tags'] = existing_user_tags
         geojson_data['properties']['system_tags'] = new_system_tags
 
-        normalized_feature = _validate_and_preserve_feature(geojson_data)
+        normalized_feature = FeatureService.validate_and_preserve_feature(geojson_data)
 
         feature.geojson = normalized_feature
         feature.save()

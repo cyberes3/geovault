@@ -173,19 +173,19 @@ class TestExtensionHooks:
         def import_callback(*args, **kwargs):
             pass
         
-        def processing_callback(*args, **kwargs):
+        def other_callback(*args, **kwargs):
             pass
         
         register_hook('import', 'import_hook', import_callback)
-        register_hook('processing', 'processing_hook', processing_callback)
+        register_hook('other_type', 'other_hook', other_callback)
         
         import_hooks = get_hooks('import')
-        processing_hooks = get_hooks('processing')
+        other_hooks = get_hooks('other_type')
         
         assert len(import_hooks) == 1
-        assert len(processing_hooks) == 1
+        assert len(other_hooks) == 1
         assert import_hooks[0][0] == 'test_extension.import_hook'
-        assert processing_hooks[0][0] == 'test_extension.processing_hook'
+        assert other_hooks[0][0] == 'test_extension.other_hook'
         
         clear_extension_context()
     
@@ -270,14 +270,14 @@ class TestExtensionHooks:
             pass
         
         register_hook('import', 'import_hook', callback)
-        register_hook('processing', 'processing_hook', callback)
+        register_hook('other_type', 'other_hook', callback)
         
         all_hooks = get_registered_hooks()
         
         assert 'import' in all_hooks
-        assert 'processing' in all_hooks
+        assert 'other_type' in all_hooks
         assert 'test_extension.import_hook' in all_hooks['import']
-        assert 'test_extension.processing_hook' in all_hooks['processing']
+        assert 'test_extension.other_hook' in all_hooks['other_type']
         
         clear_extension_context()
     
@@ -642,9 +642,9 @@ class TestExtensionLoaderWithAppConfig:
             # Don't create apps.py - should use dynamic config
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config') as mock_loader_get:
                 mock_config = MagicMock()
-                mock_config.get_bool.return_value = True
+                mock_config.extension_settings.return_value = {'enabled': True}
                 mock_loader_get.return_value = mock_config
                 
                 apps = registry.discover_extensions()

@@ -99,9 +99,8 @@ class ExampleExtensionConfig(ExtensionAppConfig):
             True if configuration is valid, False otherwise
         """
         # Example validation - in a real extension, check actual config values
-        # from website.config_loader import get_config_loader
-        # config = get_config_loader()
-        # some_setting = config.get('extensions.example_extension.some_setting')
+        # from django.conf import settings
+        # some_setting = settings.EXTENSIONS_CONFIG.get('example_extension', {}).get('some_setting')
         # if not some_setting:
         #     return False
         

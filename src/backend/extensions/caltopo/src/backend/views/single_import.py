@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 from api.models import FeatureStore
 from api.utils.responses import error_response, success_response
 from api.validation.decorators import validate_payload
-from api.views.features.updates.geometry import _normalize_geometry_coordinates
+from geo_lib.spatial.coordinates import ensure_3d_geometry_coordinates
 from extensions.caltopo.src.backend.services.caltopo_api import get_feature, convert_caltopo_to_geojson
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, VALID_CALTOPO_FEATURE_CLASSES
 from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limited
@@ -192,7 +192,7 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
     geometry = None
     if normalized_feature.get('geometry'):
         # Normalize coordinates to ensure all have Z dimension
-        geom_data = _normalize_geometry_coordinates(normalized_feature['geometry'].copy())
+        geom_data = ensure_3d_geometry_coordinates(normalized_feature['geometry'].copy())
         geometry = GEOSGeometry(json.dumps(geom_data))
 
     # Create FeatureStore entry

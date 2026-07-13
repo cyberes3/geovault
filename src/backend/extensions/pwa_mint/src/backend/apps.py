@@ -1,6 +1,7 @@
 import logging
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 from website.extensions.extension_hooks import (
     register_bg_task,
@@ -71,6 +72,7 @@ class PwaMintConfig(ExtensionAppConfig):
     name = 'extensions.pwa_mint.src.backend'
     label = 'pwa_mint'
     verbose_name = 'PWA Minting'
+    path = str(Path(__file__).parent.resolve())
 
     def extension_ready(self):
         # Register .well-known items

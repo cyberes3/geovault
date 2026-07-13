@@ -46,7 +46,7 @@ from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_r
 from geo_lib.tile_sources.registry import get_tile_source
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.celery_app import celery_app
-from website.config_loader import get_config_loader
+from website.config.loader import get_config_path
 from website.settings_utils import get_required_setting
 from website.extensions.extension_loader import get_extension_registry
 from api.tasks import CELERY_BEAT_HEARTBEAT_KEY
@@ -382,8 +382,7 @@ def check_social_preview_tilesource():
         bool: True when valid, False otherwise.
     """
     try:
-        config_loader = get_config_loader()
-        source_id = config_loader.get_str("tilesources.social_preview_raster_source", "osm").strip() or "osm"
+        source_id = get_required_setting('TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE').strip() or "osm"
         cfg = get_tile_source(source_id)
 
         if not cfg:
@@ -543,8 +542,7 @@ def check_config_file():
     This is a warning-only check.
     """
     try:
-        config_loader = get_config_loader()
-        config_path = config_loader.config_path
+        config_path = get_config_path()
 
         if not config_path.exists():
             _logger.warning(f"⚠ Configuration file not found: {config_path}")
@@ -642,12 +640,11 @@ def check_site_configuration():
             return False
 
         # Check if site.domain is explicitly set (not using default)
-        config_loader = get_config_loader()
         default_domain = 'geovault.example.com'
 
-        # Check if site.domain is set in the config
-        site_domain_config = config_loader.get('site.domain', None)
-        if site_domain_config is None or site_domain_config == default_domain:
+        # SITE_DOMAIN always has a value (defaults to default_domain when unset in config.yaml)
+        site_domain_config = settings.SITE_DOMAIN
+        if not site_domain_config or site_domain_config == default_domain:
             _logger.error("✗ Site domain is not configured: 'site.domain' must be explicitly set in config.yaml")
             _logger.error(f"  Current value: {site_domain_config if site_domain_config else 'not set (using default: ' + default_domain + ')'}")
             _logger.error("  Please set 'site.domain' in your config.yaml file to your actual domain name")
@@ -834,8 +831,7 @@ def check_celery_worker(suppress_logging=False):
         suppress_logging: If True, do not log success or failure (for health endpoint).
     """
     try:
-        config_loader = get_config_loader()
-        timeout_seconds = max(1, config_loader.get_int("celery.worker_startup_timeout_seconds", 5))
+        timeout_seconds = max(1, get_required_setting('CELERY_WORKER_STARTUP_TIMEOUT_SECONDS'))
         result = celery_app.send_task("api.celery_health.ping_worker", queue="maintenance")
         value = result.get(timeout=timeout_seconds)
         if value != "pong":
@@ -873,9 +869,8 @@ def check_celery_beat(suppress_logging=False, wait_for_heartbeat=True):
             If False, check once and return immediately (for health endpoint).
     """
     try:
-        config_loader = get_config_loader()
-        max_age = max(5, config_loader.get_int("celery.beat_heartbeat_max_age_seconds", 20))
-        wait_seconds = max(0, config_loader.get_int("celery.beat_startup_wait_seconds", 10))
+        max_age = max(5, get_required_setting('CELERY_BEAT_HEARTBEAT_MAX_AGE_SECONDS'))
+        wait_seconds = max(0, get_required_setting('CELERY_BEAT_STARTUP_WAIT_SECONDS'))
         deadline = time.time() + wait_seconds
         redis_client = get_redis_connection()
 

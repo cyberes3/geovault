@@ -18,7 +18,7 @@ from api.utils.responses import (
 from api.validation.decorators import validate_payload
 from api.validation.payloads.features import FeatureUpdatePayload
 from api.validation.payloads.imports import ImportToFeaturestorePayload
-from api.views.features.updates.shared import extract_system_tags
+from api.services.feature_service import FeatureService
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.delete_job import DeleteJob
 from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
@@ -327,7 +327,7 @@ def update_import_item(request, item_id, validated_data):
                 merged_feature = copy.deepcopy(existing_feature)
 
                 # Preserve existing system_tags from original feature
-                original_system_tags = extract_system_tags(existing_feature)
+                original_system_tags = FeatureService.extract_system_tags(existing_feature)
 
                 # Get the partial update fields
                 update_fields = updates_by_id[feature_id]

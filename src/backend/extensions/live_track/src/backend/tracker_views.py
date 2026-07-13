@@ -8,6 +8,7 @@ import secrets
 import uuid
 from xml.etree import ElementTree as ET
 
+from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -16,7 +17,6 @@ from django.views.decorators.http import require_http_methods
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
 from website.auth_decorators import api_or_login_required_401
-from website.config_loader import get_config_loader
 from website.public_url import build_public_url
 
 from pydantic import ValidationError as PydanticValidationError
@@ -77,6 +77,14 @@ from .validation import (
 
 
 User = get_user_model()
+
+_DEFAULT_GEOMETRY_MAX_RESPONSE_BYTES = 1048576
+
+
+def _live_track_geometry_max_response_bytes() -> int:
+    """Max geometry payload size per tracker in bytes (extensions.live_track.geometry_max_response_bytes)."""
+    value = settings.EXTENSIONS_CONFIG.get('live_track', {}).get('geometry_max_response_bytes')
+    return int(value) if value is not None else _DEFAULT_GEOMETRY_MAX_RESPONSE_BYTES
 
 
 @api_or_login_required_401()
@@ -710,10 +718,7 @@ def tracker_get_geometry(request, tracker_id):
             all_data=True,
         )
     else:
-        max_bytes = get_config_loader().get_int(
-            "extensions.live_track.geometry_max_response_bytes",
-            1048576,
-        )
+        max_bytes = _live_track_geometry_max_response_bytes()
         response_payload = _bounded_track_geometry_payload(track, is_owner, max_bytes)
 
     return JsonResponse(
@@ -753,10 +758,7 @@ def tracker_get_geometry_bulk(request):
         if len(ordered_ids) >= 200:
             break
 
-    max_bytes = get_config_loader().get_int(
-        "extensions.live_track.geometry_max_response_bytes",
-        1048576,
-    )
+    max_bytes = _live_track_geometry_max_response_bytes()
     result = []
     for tracker_id in ordered_ids:
         try:
@@ -921,7 +923,7 @@ def ingress_body_template(request):
 @csrf_exempt
 def hauk_config(request):
     """Return Hauk-related config for the frontend (e.g. instructions modal). hauk_domain is used to build the server URL."""
-    domain = get_config_loader().get_str("extensions.live_track.hauk_domain", "").strip()
+    domain = (settings.EXTENSIONS_CONFIG.get('live_track', {}).get('hauk_domain') or '').strip()
     return JsonResponse({"hauk_domain": domain})
 
 

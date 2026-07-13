@@ -6,15 +6,10 @@ from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from api.services.feature_service import FeatureService
+from api.services.feature_service import FeatureService, FeatureValidationError
 from api.utils.responses import error_response, handle_404
 from api.validation.decorators import validate_payload
 from api.validation.payloads.features import FeatureMetadataUpdate, BulkFeatureUpdatePayload
-from api.views.features.updates.shared import (
-    _validate_tags,
-    extract_system_tags,
-    _validate_and_preserve_feature
-)
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
@@ -77,7 +72,7 @@ def update_feature_metadata(request, feature_id, validated_data):
     merged_feature = copy.deepcopy(original_geojson)
 
     # Preserve existing system_tags from original feature
-    original_system_tags = extract_system_tags(original_geojson)
+    original_system_tags = FeatureService.extract_system_tags(original_geojson)
 
     # Ensure the feature has the required structure (type, geometry, properties)
     # Always set these explicitly to ensure they exist
@@ -135,9 +130,10 @@ def update_feature_metadata(request, feature_id, validated_data):
     for field, value in update_fields.items():
         if field == 'tags':
             # Validate tags
-            is_valid, error_resp = _validate_tags(value)
-            if not is_valid:
-                return error_resp
+            try:
+                FeatureService.validate_user_tags(value)
+            except FeatureValidationError as e:
+                return error_response(str(e), 400)
 
             # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
             user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
@@ -178,7 +174,7 @@ def update_feature_metadata(request, feature_id, validated_data):
 
     # Run the merged feature through validate_and_normalize_geojson_feature()
     try:
-        normalized_feature = _validate_and_preserve_feature(merged_feature)
+        normalized_feature = FeatureService.validate_and_preserve_feature(merged_feature)
         # Ensure system_tags are preserved after normalization
         normalized_feature['properties']['system_tags'] = updated_system_tags
     except GeometryValidationError as e:
@@ -264,7 +260,7 @@ def bulk_update_features_metadata(request, validated_data):
                 merged_feature = copy.deepcopy(original_geojson)
 
                 # Preserve existing system_tags from original feature
-                original_system_tags = extract_system_tags(original_geojson)
+                original_system_tags = FeatureService.extract_system_tags(original_geojson)
 
                 # Ensure the feature has the required structure (type, geometry, properties)
                 merged_feature['type'] = 'Feature'
@@ -288,7 +284,7 @@ def bulk_update_features_metadata(request, validated_data):
 
                 # Run the merged feature through validate_and_normalize_geojson_feature()
                 try:
-                    normalized_feature = _validate_and_preserve_feature(merged_feature)
+                    normalized_feature = FeatureService.validate_and_preserve_feature(merged_feature)
                     # Ensure system_tags are preserved after normalization
                     normalized_feature['properties']['system_tags'] = updated_system_tags
                 except GeometryValidationError:

@@ -32,14 +32,11 @@ def _point_coords(lon, lat):
 
 def _patch_places_enabled():
     """Return a context manager that mocks config so the places extension is considered enabled."""
-    def mock_get_bool(key, default=False):
-        if key == 'extensions.places.enabled':
-            return True
-        return default
-
     mock_config = MagicMock()
-    mock_config.get_bool.side_effect = mock_get_bool
-    return patch('website.extensions.extension_loader.get_config_loader', return_value=mock_config)
+    mock_config.extension_settings.side_effect = (
+        lambda name: {'enabled': True} if name == 'places' else {}
+    )
+    return patch('website.extensions.extension_loader.get_config', return_value=mock_config)
 
 class TestPlacesAPI(TestCase):
     """Test Places extension API endpoints."""

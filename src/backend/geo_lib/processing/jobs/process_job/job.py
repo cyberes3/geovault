@@ -11,6 +11,7 @@ import traceback
 from typing import Dict, Any, Optional
 
 from celery.exceptions import SoftTimeLimitExceeded
+from django.conf import settings
 from redis.exceptions import LockError
 
 from api.models import ImportQueue
@@ -44,7 +45,6 @@ from geo_lib.processing.messages import (
 from geo_lib.processing.processors import get_processor
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.redis_locks import try_acquire_lock
-from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger('ProcessJob')
 
@@ -533,8 +533,7 @@ class ProcessJob(BaseJob):
             _logger.error(f"Upload processing error for job {job_id} after {overall_duration:.2f}s: file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc()}")
 
             # Check if detailed error messages are enabled (default: True)
-            config_loader = get_config_loader()
-            show_detailed = config_loader.get_bool('processing.show_detailed_error_messages', True)
+            show_detailed = settings.PROCESSING_SHOW_DETAILED_ERROR_MESSAGES
 
             if show_detailed:
                 # Capture exception type and message, truncate if too long

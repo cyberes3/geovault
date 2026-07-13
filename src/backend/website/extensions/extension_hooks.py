@@ -82,7 +82,7 @@ def register_hook(hook_type: str, hook_id: str, callback: Callable) -> None:
         )
 
     # Validate hook_type
-    valid_hook_types = ['import', 'processing', 'export']  # Extensible for future types
+    valid_hook_types = ['import']
     if hook_type not in valid_hook_types:
         logger.warning(
             f"Unknown hook type '{hook_type}' registered by extension '{_current_extension_name}'. "

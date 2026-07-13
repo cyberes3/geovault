@@ -4,10 +4,10 @@ Google Geocoding API backend for place search.
 from urllib.parse import urlencode
 
 import requests
+from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.search_geocoding.common import GeocodingBackendError
-from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
 
@@ -78,7 +78,7 @@ def _search_google(query: str) -> dict:
     Returns {"query": str, "features": list} with features in same shape as MapTiler (coordinates, text, place_name, bbox, id).
     Raises requests.exceptions.Timeout on timeout, GeocodingBackendError on API error.
     """
-    api_key = get_config_loader().get_google_api_key()
+    api_key = settings.GOOGLE_GEOCODING_API_KEY
     if not api_key:
         raise GeocodingBackendError("Google API key is not configured")
 

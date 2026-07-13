@@ -58,7 +58,7 @@ Define models as usual; set `app_label` to your extension's label. Run migration
 
 ### Views
 
-Normal Django views. Use `@api_or_login_required_401()` (from `website.auth_decorators`) for auth. Use `api.utils.responses.success_response` / `error_response` and `api.utils.authorization.get_object_or_404_for_user` when working with platform features (e.g. `FeatureStore`). The example_extension views show simple CRUD and feature create/modify/delete.
+Normal Django views. Use `@api_or_login_required_401()` (from `website.auth_decorators`) for auth, and `api.utils.responses.success_response` / `error_response` for consistent JSON responses. When working with platform features (`FeatureStore`), go through `api.services.feature_service.FeatureService` rather than building queries or validation by hand: `FeatureService.get_owned_feature_or_404(user, feature_id, scope=...)` for scoped lookups, `FeatureService.validate_and_preserve_feature(...)` / `validate_user_tags(...)` for feature/tag validation, and the `FeatureStore` manager's chainable scope methods (`.owned_by(user)`, `.main_map()`, `.in_scope(scope)`) for querysets. This keeps every extension's feature access correctly scoped by construction instead of each one re-implementing (and potentially getting wrong) the same ownership/scope checks. See `example_extension`'s views for simple CRUD and feature create/modify/delete, and `places/src/backend/services/place_service.py` for a scoped-feature service built on top of `FeatureService`.
 
 ## Frontend
 
@@ -242,7 +242,7 @@ Hook IDs are prefixed with your extension name. **Import** hooks run after a suc
 
 ## Troubleshooting
 
-- **Extension not loading** — Check `extensions.<name>.enabled` in config; ensure `manifest.py` has `name` and `version` and `src/backend/` exists.
+- **Extension not loading** — Check `extensions.<name>.enabled` in config; ensure `manifest.py` has `name` and `version`. `src/backend/` is optional — frontend-only extensions (e.g. `exif_geotagger`) register their frontend metadata without a Django app.
 - **"No valid setup function"** — Use `export default setup` (default export); build must output a format the platform can load (UMD, via the shared Vite factory).
 - **`inject('platformState')` / `inject('extensionApi')` is `undefined`** — The component wasn't wrapped with `createRouteWrapper`, or `platformState`/`api` wasn't passed in the options object to `wrap()`.
 - **Hook error "outside of extension context"** — Register hooks only inside `extension_ready()` on an `ExtensionAppConfig` subclass.

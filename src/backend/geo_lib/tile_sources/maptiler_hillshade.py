@@ -1,19 +1,15 @@
-from website.config_loader import get_config_loader
+from django.conf import settings
+
 from geo_lib.tile_sources.base import TileSource
 
 
 class MapTilerHillshadeTileSource(TileSource):
     """MapTiler hillshade tile source."""
-    
+
     def __init__(self):
-        self._config = get_config_loader()
-        self._api_key = self._config.get_with_env_override(
-            'maptiler.api_key',
-            'MAPTILER_API_KEY',
-            None
-        )
-        self._use_proxy = self._config.get_bool('maptiler.proxy_tiles', False)
-        self._site_domain = self._config.get_str('site.domain')
+        self._api_key = settings.MAPTILER_API_KEY
+        self._use_proxy = settings.MAPTILER_PROXY_TILES
+        self._site_domain = settings.SITE_DOMAIN
     
     @property
     def enabled(self):

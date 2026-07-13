@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from geo_lib.tile_sources.forest_service_topo_2016 import ForestServiceTopo2016TileSource
 from geo_lib.tile_sources.global_imagery import GlobalImageryTileSource
 from geo_lib.tile_sources.google_maps import GoogleMapsTileSource
@@ -11,7 +13,6 @@ from geo_lib.tile_sources.mb_topo import MapbuilderTopoTileSource
 from geo_lib.tile_sources.openhikingmap import OpenHikingMapTileSource
 from geo_lib.tile_sources.opentopomap import OpenTopoMapTileSource
 from geo_lib.tile_sources.osm import OSMTileSource
-from website.config_loader import get_config_loader
 
 _tile_sources = {}
 _registered = False
@@ -44,21 +45,15 @@ def _initialize_tile_sources():
     single_sources.extend(generate_maptiler_sources())
 
     # Get list of tile sources that should be proxied from config
-    config_loader = get_config_loader()
-    proxy_sources = config_loader.get('tilesources.proxy_sources', [])
-    if not isinstance(proxy_sources, list):
-        proxy_sources = []
+    proxy_sources = list(settings.TILESOURCES_PROXY_SOURCES)
     # When proxy_osm is true, proxy OSM-related sources (osm, opentopomap, openhikingmap) for caching and valid headers
-    if config_loader.get('tilesources.proxy_osm', False):
+    if settings.TILESOURCES_PROXY_OSM:
         proxy_sources = list(set(proxy_sources) | {'osm', 'opentopomap', 'openhikingmap'})
 
     # Filter out MapTiler sources - maptiler.proxy_tiles controls MapTiler proxying
     proxy_sources = [source_id for source_id in proxy_sources if not source_id.startswith('maptiler-')]
 
-    hidden_sources = config_loader.get('tilesources.hidden', [])
-    if not isinstance(hidden_sources, list):
-        hidden_sources = []
-    hidden_set = {s for s in hidden_sources if s and isinstance(s, str)}
+    hidden_set = {s for s in settings.TILESOURCES_HIDDEN if s and isinstance(s, str)}
 
     for source in single_sources:
         config = source.to_dict()

@@ -30,15 +30,15 @@ from areas_lib import lookup_admin, lookup_common, lookup_places, lookup_protect
 
 
 def _areas_server_base_url():
-    from website.config_loader import get_config_loader
-    url = (get_config_loader().get_str("reverse_geocoding.areas_server.api_url", "") or "").strip()
+    from django.conf import settings
+    url = (settings.AREAS_SERVER_URL or "").strip()
     return url.rstrip("/") if url else ""
 
 
 def _areas_server_timeout():
     """Request timeout in seconds for real areas server calls (from config, or 15)."""
-    from website.config_loader import get_config_loader
-    return get_config_loader().get_int("reverse_geocoding.areas_server.request_timeout_seconds", 15)
+    from django.conf import settings
+    return settings.AREAS_SERVER_TIMEOUT or 15
 
 
 def _http_get(url, timeout=None):

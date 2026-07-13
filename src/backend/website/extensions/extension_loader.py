@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 
 from django.conf import settings
 
-from website.config_loader import get_config_loader
+from website.config.loader import get_config
 from website.extensions.extension_base import ExtensionAppConfig
 
 logger = logging.getLogger('website.extension_loader')
@@ -91,34 +91,32 @@ class ExtensionRegistry:
             sys.path.insert(0, str(self.extensions_dir))
 
         installed_apps_additions: List[str] = []
-        loaded_names: List[str] = []
-
-        # Track extension names to detect duplicates before loading
-        extension_names: Dict[str, List[str]] = {}  # name -> list of folder names
 
         logger.info(f"Scanning for extensions in {self.extensions_dir}")
 
-        # First pass: scan all manifests to detect duplicates
-        for item in self.extensions_dir.iterdir():
-            if item.is_dir():
-                manifest_path = item / 'manifest.py'
-                if manifest_path.exists():
-                    try:
-                        spec = importlib.util.spec_from_file_location("manifest", manifest_path)
-                        if spec is None or spec.loader is None:
-                            continue
+        # Load each extension's manifest exactly once (iterating in sorted order for
+        # deterministic discovery), then reuse the loaded module both to detect
+        # duplicate extension names and to actually load the extension below.
+        extension_paths: Dict[str, Path] = {}  # folder name -> extension directory
+        manifests: Dict[str, Any] = {}  # folder name -> loaded manifest module
+        extension_names: Dict[str, List[str]] = {}  # manifest name -> list of folder names
 
-                        manifest = importlib.util.module_from_spec(spec)
-                        sys.modules[f"extensions.{item.name}.manifest"] = manifest
-                        spec.loader.exec_module(manifest)
+        for item in sorted(self.extensions_dir.iterdir()):
+            if not item.is_dir():
+                continue
+            manifest_path = item / 'manifest.py'
+            if not manifest_path.exists():
+                continue
+            try:
+                manifest = self._load_manifest_module(item.name, manifest_path)
+            except Exception as e:
+                logger.warning(f"Could not read manifest for {item.name}: {e}")
+                continue
 
-                        if hasattr(manifest, 'name'):
-                            ext_name = manifest.name
-                            if ext_name not in extension_names:
-                                extension_names[ext_name] = []
-                            extension_names[ext_name].append(item.name)
-                    except Exception as e:
-                        logger.warning(f"Could not read manifest for {item.name}: {e}")
+            extension_paths[item.name] = item
+            manifests[item.name] = manifest
+            if hasattr(manifest, 'name'):
+                extension_names.setdefault(manifest.name, []).append(item.name)
 
         # Check for duplicates
         duplicates = {name: folders for name, folders in extension_names.items() if len(folders) > 1}
@@ -136,20 +134,17 @@ class ExtensionRegistry:
             logger.error("=" * 60)
             sys.exit(1)
 
-        # Second pass: load extensions (now we know there are no duplicates)
-        for item in self.extensions_dir.iterdir():
-            if item.is_dir():
-                manifest_path = item / 'manifest.py'
-                if manifest_path.exists():
-                    try:
-                        app_config = self._load_extension(item, manifest_path)
-                        if app_config:
-                            installed_apps_additions.append(app_config)
-                            # Extract extension name for logging
-                            loaded_names.append(item.name)
-                    except Exception as e:
-                        logger.error(f"Failed to load extension {item.name}: {e}", exc_info=True)
+        # Load extensions (now we know there are no duplicates), reusing the manifests
+        # already loaded above instead of re-executing manifest.py a second time.
+        for folder_name, manifest in manifests.items():
+            try:
+                app_config = self._load_extension(extension_paths[folder_name], manifest)
+                if app_config:
+                    installed_apps_additions.append(app_config)
+            except Exception as e:
+                logger.error(f"Failed to load extension {folder_name}: {e}", exc_info=True)
 
+        loaded_names = list(self.loaded_extensions.keys())
         if loaded_names:
             logger.info(f"Successfully loaded {len(loaded_names)} extensions: {', '.join(loaded_names)}")
         else:
@@ -157,21 +152,26 @@ class ExtensionRegistry:
 
         return installed_apps_additions
 
-    def _load_extension(self, extension_path: Path, manifest_path: Path) -> Optional[str]:
+    def _load_manifest_module(self, folder_name: str, manifest_path: Path) -> Any:
         """
-        Validates manifest and registers the extension.
-        Returns the AppConfig string/class path if successful.
+        Executes an extension's manifest.py and returns the resulting module.
+        Raises if the spec/loader can't be created or the manifest itself raises.
         """
-        # Load manifest
         spec = importlib.util.spec_from_file_location("manifest", manifest_path)
         if spec is None or spec.loader is None:
-            logger.error(f"Could not load manifest for {extension_path.name}")
-            return None
+            raise ImportError(f"Could not create module spec for {manifest_path}")
 
         manifest = importlib.util.module_from_spec(spec)
-        sys.modules[f"extensions.{extension_path.name}.manifest"] = manifest
+        sys.modules[f"extensions.{folder_name}.manifest"] = manifest
         spec.loader.exec_module(manifest)
+        return manifest
 
+    def _load_extension(self, extension_path: Path, manifest: Any) -> Optional[str]:
+        """
+        Validates the (already-loaded) manifest and registers the extension.
+        Returns the AppConfig string/class path if the extension provides a Django
+        app, or None if it's disabled or frontend-only (no 'src/backend' directory).
+        """
         # Validate required fields
         if not hasattr(manifest, 'name') or not hasattr(manifest, 'version'):
             logger.error(f"Extension at {extension_path} missing 'name' or 'version' in manifest.py")
@@ -183,7 +183,10 @@ class ExtensionRegistry:
         # config key: extensions.<name>.enabled
         # Default to manifest.enabled_by_default (True if not specified)
         default_enabled = getattr(manifest, 'enabled_by_default', True)
-        enabled = get_config_loader().get_bool(f'extensions.{ext_name}.enabled', default_enabled)
+        # Intentional exception to the settings-only config rule: extension discovery runs
+        # during Django app loading (INSTALLED_APPS computation in website.settings), before
+        # django.conf.settings exists, so this must read the validated config object directly.
+        enabled = bool(get_config().extension_settings(ext_name).get('enabled', default_enabled))
 
         if ext_name in self.forced_enabled_extensions:
             enabled = True
@@ -194,67 +197,71 @@ class ExtensionRegistry:
 
         logger.info(f"Loading extension: {ext_name} v{manifest.version}")
 
-        # Determine the Django app path
-        # Assumption: Logic lives in src/backend relative to extension root
+        # Determine the Django app path, if any.
+        # Assumption: Logic lives in src/backend relative to extension root.
+        # Extensions without a 'src/backend' directory are frontend-only: they still
+        # get their frontend metadata registered below, but contribute no Django app.
         backend_path = extension_path / 'src' / 'backend'
+        has_backend = backend_path.exists()
 
-        if not backend_path.exists():
-            logger.warning(f"Extension {ext_name} has no 'src/backend' directory. Skipping Django app registration.")
-            return None
-
-        # Check for existing apps.py
-        apps_py_path = backend_path / 'apps.py'
         module_name = f"{extension_path.name}.src.backend"
         # Use full module path with extensions. prefix to match import paths used in code
         full_module_name = f"extensions.{module_name}"
 
-        # Determine the AppConfig to use
-        if apps_py_path.exists():
-            # When apps.py exists, we need to find the AppConfig class
-            # Import the apps module and find the AppConfig class
-            # Import using short name since extensions/ is in sys.path
-            apps_module_name = f"{module_name}.apps"
-            try:
-                apps_module = importlib.import_module(apps_module_name)
-                
-                # Register modules with extensions. prefix so they're importable
-                # using the full path that matches AppConfig.name
-                if module_name not in sys.modules:
-                    importlib.import_module(module_name)
-                if module_name in sys.modules:
-                    _register_module_with_prefix(module_name, full_module_name, sys.modules[module_name])
-                
-                full_apps_module_name = f"{full_module_name}.apps"
-                _register_module_with_prefix(apps_module_name, full_apps_module_name, apps_module)
-                
-                # Find the AppConfig class (look for classes ending in "Config" that inherit from AppConfig)
-                from django.apps import AppConfig as DjangoAppConfig
-                from website.extensions.extension_base import ExtensionAppConfig
-                app_config_class = None
-                for attr_name in dir(apps_module):
-                    if attr_name.endswith('Config'):
-                        attr = getattr(apps_module, attr_name)
-                        if (isinstance(attr, type) and 
-                            issubclass(attr, DjangoAppConfig) and 
-                            attr is not DjangoAppConfig and
-                            attr is not ExtensionAppConfig and
-                            (attr.__module__ == apps_module_name or 
-                             attr.__module__ == full_apps_module_name)):
-                            app_config_class = attr_name
-                            break
-                
-                if app_config_class:
-                    # Return full path with extensions. prefix to match AppConfig.name
-                    app_config_path = f"{full_module_name}.apps.{app_config_class}"
-                else:
-                    # Fallback: just use module name (Django will try to auto-discover)
-                    logger.warning(f"Could not find AppConfig class in {apps_module_name}, using module name")
-                    app_config_path = full_module_name
-            except Exception as e:
-                logger.warning(f"Failed to import {apps_module_name}: {e}, using module name")
-                app_config_path = full_module_name
+        if not has_backend:
+            logger.info(f"Extension '{ext_name}' has no 'src/backend' directory; registering as frontend-only.")
+            app_config_path = None
         else:
-            app_config_path = self._create_dynamic_app_config(ext_name, module_name, full_module_name, backend_path)
+            # Check for existing apps.py
+            apps_py_path = backend_path / 'apps.py'
+
+            # Determine the AppConfig to use
+            if apps_py_path.exists():
+                # When apps.py exists, we need to find the AppConfig class
+                # Import the apps module and find the AppConfig class
+                # Import using short name since extensions/ is in sys.path
+                apps_module_name = f"{module_name}.apps"
+                try:
+                    apps_module = importlib.import_module(apps_module_name)
+
+                    # Register modules with extensions. prefix so they're importable
+                    # using the full path that matches AppConfig.name
+                    if module_name not in sys.modules:
+                        importlib.import_module(module_name)
+                    if module_name in sys.modules:
+                        _register_module_with_prefix(module_name, full_module_name, sys.modules[module_name])
+
+                    full_apps_module_name = f"{full_module_name}.apps"
+                    _register_module_with_prefix(apps_module_name, full_apps_module_name, apps_module)
+
+                    # Find the AppConfig class (look for classes ending in "Config" that inherit from AppConfig)
+                    from django.apps import AppConfig as DjangoAppConfig
+                    from website.extensions.extension_base import ExtensionAppConfig
+                    app_config_class = None
+                    for attr_name in dir(apps_module):
+                        if attr_name.endswith('Config'):
+                            attr = getattr(apps_module, attr_name)
+                            if (isinstance(attr, type) and
+                                issubclass(attr, DjangoAppConfig) and
+                                attr is not DjangoAppConfig and
+                                attr is not ExtensionAppConfig and
+                                (attr.__module__ == apps_module_name or
+                                 attr.__module__ == full_apps_module_name)):
+                                app_config_class = attr_name
+                                break
+
+                    if app_config_class:
+                        # Return full path with extensions. prefix to match AppConfig.name
+                        app_config_path = f"{full_module_name}.apps.{app_config_class}"
+                    else:
+                        # Fallback: just use module name (Django will try to auto-discover)
+                        logger.warning(f"Could not find AppConfig class in {apps_module_name}, using module name")
+                        app_config_path = full_module_name
+                except Exception as e:
+                    logger.warning(f"Failed to import {apps_module_name}: {e}, using module name")
+                    app_config_path = full_module_name
+            else:
+                app_config_path = self._create_dynamic_app_config(ext_name, module_name, full_module_name, backend_path)
 
         # Extract frontend metadata
         frontend_entry = None
@@ -311,9 +318,9 @@ class ExtensionRegistry:
                     frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_css[0].name}"
                     frontend_css = _static_url_with_version(frontend_css_path, frontend_css)
 
-        # Check for urls.py
+        # Check for urls.py (frontend-only extensions have no backend, so no routes)
         urls_module = None
-        if (backend_path / 'urls.py').exists():
+        if has_backend and (backend_path / 'urls.py').exists():
             # Use full module path with extensions. prefix to match import paths
             urls_module = f"{full_module_name}.urls"
 

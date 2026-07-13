@@ -19,21 +19,11 @@ from extensions.live_track.src.backend.models import LiveTrack
 
 def _patch_live_track_enabled():
     """Return a context manager that mocks config so the live_track extension is considered enabled."""
-
-    def mock_get_bool(key, default=False):
-        if key == "extensions.live_track.enabled":
-            return True
-        return default
-
-    def mock_get_int(key, default=0):
-        if key == "extensions.live_track.geometry_max_response_bytes":
-            return 1048576
-        return default
-
     mock_config = MagicMock()
-    mock_config.get_bool.side_effect = mock_get_bool
-    mock_config.get_int.side_effect = mock_get_int
-    return patch("website.extensions.extension_loader.get_config_loader", return_value=mock_config)
+    mock_config.extension_settings.side_effect = (
+        lambda name: {"enabled": True} if name == "live_track" else {}
+    )
+    return patch("website.extensions.extension_loader.get_config", return_value=mock_config)
 
 
 _GVL2_MAGIC = b"GVL2"

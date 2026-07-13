@@ -14,14 +14,12 @@ import logging
 from pathlib import Path
 from .utils import get_assetlinks, get_keystore_info, get_keystore_base64, get_apk_cache_path
 from website.celery_app import celery_app
-from website.config_loader import get_config_loader
 
 logger = logging.getLogger("website.pwa_mint")
 
 def _get_site_domain():
     """Domain for PWA/APK (package name, assetlinks). Always from config, never request host."""
-    config = get_config_loader()
-    return config.get_str("site.domain", "geovault.example.com")
+    return settings.SITE_DOMAIN
 
 def asset_links(request):
     """
@@ -42,19 +40,14 @@ def _perform_pwa_generation(request):
     Returns (JsonResponse, success_bool).
     """
     # PWABuilder configuration
-    config = get_config_loader()
     domain = _get_site_domain()
     protocol = "https" if request.is_secure() else "http"
     site_url = f"{protocol}://{domain}"
     # PWABuilder requires HTTPS URLs for manifest and icons
     https_site_url = f"https://{domain}"
     package_id = f"com.geovault.webview.{domain.replace('.', '_')}".lower()
-    
-    pwa_builder_url = config.get_with_env_override(
-        'extensions.pwa_mint.pwa_builder_url', 
-        'PWA_BUILDER_URL', 
-        'http://pwabuilder:5858'
-    )
+
+    pwa_builder_url = settings.EXTENSIONS_CONFIG.get('pwa_mint', {}).get('pwa_builder_url') or 'http://pwabuilder:5858'
     
     keystore_info = get_keystore_info()
     if not keystore_info:

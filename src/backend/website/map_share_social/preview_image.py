@@ -3,12 +3,12 @@ import traceback
 from io import BytesIO
 
 import requests
+from django.conf import settings
 from PIL import Image
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source
 from geo_lib.tile_upstream import build_tile_upstream_headers
-from website.config_loader import get_config_loader
 from website.public_url import public_base_url
 
 SOCIAL_PREVIEW_CACHE_SECONDS = 60 * 60 * 24 * 30
@@ -22,7 +22,7 @@ _logger = get_tagged_logger("social_preview")
 
 
 def get_social_preview_source_id() -> str:
-    source_id = get_config_loader().get_str("tilesources.social_preview_raster_source", "osm").strip()
+    source_id = settings.TILESOURCES_SOCIAL_PREVIEW_RASTER_SOURCE.strip()
     return source_id or "osm"
 
 

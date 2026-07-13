@@ -9,10 +9,10 @@ import functools
 from typing import Optional
 
 import requests
+from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.base import TileSource
-from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
 
@@ -20,8 +20,8 @@ _STYLE_FETCH_TIMEOUT_SECONDS = 5
 
 
 def get_maptiler_api_key() -> Optional[str]:
-    """Read the configured MapTiler API key (env override supported), or None if unset."""
-    return get_config_loader().get_with_env_override('maptiler.api_key', 'MAPTILER_API_KEY', None)
+    """Read the configured MapTiler API key (env override applied at settings load), or None if unset."""
+    return settings.MAPTILER_API_KEY
 
 
 def build_maptiler_style_url(map_id: str, api_key: str) -> str:
@@ -103,8 +103,6 @@ def generate_maptiler_sources():
         List of MapTilerMapTileSource instances. Returns empty list if API key 
         is not configured or no maps are configured.
     """
-    config = get_config_loader()
-
     # Get MapTiler API key
     api_key = get_maptiler_api_key()
 
@@ -113,8 +111,8 @@ def generate_maptiler_sources():
         return []
 
     # Get list of map IDs to show in basemap selector and to hide (hidden = registered but not in selector)
-    map_ids = config.get_list('maptiler.maps', [])
-    hidden_map_ids = config.get_list('maptiler.hidden_maps', [])
+    map_ids = settings.MAPTILER_MAPS
+    hidden_map_ids = settings.MAPTILER_HIDDEN_MAPS
     hidden_set = {m for m in hidden_map_ids if m and isinstance(m, str)}
 
     # Register maps from both lists so hidden_maps does not need to duplicate maptiler.maps
@@ -124,10 +122,10 @@ def generate_maptiler_sources():
         return []
 
     # Get site domain for MapTiler API requests
-    site_domain = config.get_str('site.domain', '')
+    site_domain = settings.SITE_DOMAIN
 
     # Get proxy setting
-    use_proxy = config.get_bool('maptiler.proxy_tiles', False)
+    use_proxy = settings.MAPTILER_PROXY_TILES
 
     # Build tile sources for each map (hidden = in maptiler.hidden_maps)
     sources = []

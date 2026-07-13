@@ -1,9 +1,9 @@
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, TAG_PRIORITIES
 from website.auth_decorators import api_or_login_required_401
-from website.config_loader import get_config_loader
 
 
 @api_or_login_required_401()
@@ -21,9 +21,8 @@ def get_config(request):
     }
 
     # Add MapTiler settings if configured (only expose if API key is set)
-    config_loader = get_config_loader()
-    maptiler_api_key = config_loader.get_maptiler_api_key()
-    use_proxy = config_loader.get_bool('maptiler.proxy_tiles', False)
+    maptiler_api_key = settings.MAPTILER_API_KEY
+    use_proxy = settings.MAPTILER_PROXY_TILES
 
     if maptiler_api_key:
         maptiler_config = {

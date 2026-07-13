@@ -17,14 +17,11 @@ from django.test import TestCase
 
 
 def _patch_ngs_data_enabled() -> object:
-    def mock_get_bool(key, default=False):
-        if key == "extensions.ngs_data.enabled":
-            return True
-        return default
-
     mock_config = MagicMock()
-    mock_config.get_bool.side_effect = mock_get_bool
-    return patch("website.extensions.extension_loader.get_config_loader", return_value=mock_config)
+    mock_config.extension_settings.side_effect = (
+        lambda name: {"enabled": True} if name == "ngs_data" else {}
+    )
+    return patch("website.extensions.extension_loader.get_config", return_value=mock_config)
 
 
 @patch.dict(os.environ, {}, clear=False)

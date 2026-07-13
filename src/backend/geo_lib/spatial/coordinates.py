@@ -12,6 +12,41 @@ def _decimal_places_for_tolerance(tolerance: float) -> int:
     return max(0, -math.floor(math.log10(tolerance)))
 
 
+def ensure_3d_geometry_coordinates(geom_data: dict) -> dict:
+    """
+    Ensure a GeoJSON geometry dict's `coordinates` have 3 dimensions (append `0.0` elevation
+    to any 2D coordinate), for `Point`/`LineString`/`Polygon` geometries. Other geometry types
+    (e.g. `GeometryCollection`) are returned unchanged.
+    """
+    if not geom_data or not geom_data.get('type') or not geom_data.get('coordinates'):
+        return geom_data
+
+    coords = geom_data['coordinates']
+    geom_type = geom_data['type']
+
+    if geom_type == 'Point':
+        if len(coords) == 2:
+            coords = [coords[0], coords[1], 0.0]
+        elif len(coords) == 3:
+            coords = [coords[0], coords[1], coords[2]]
+        geom_data['coordinates'] = coords
+    elif geom_type == 'LineString':
+        geom_data['coordinates'] = [
+            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+            for coord in coords
+        ]
+    elif geom_type == 'Polygon':
+        geom_data['coordinates'] = [
+            [
+                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                for coord in ring
+            ]
+            for ring in coords
+        ]
+
+    return geom_data
+
+
 def normalize_coordinates(coords: List, tolerance: float = COORDINATE_TOLERANCE) -> List:
     """Normalize coordinates by rounding to a precision derived from `tolerance`."""
     if not coords:

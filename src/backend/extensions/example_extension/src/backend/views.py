@@ -8,9 +8,8 @@ from .models import ExampleItem
 
 # Import platform utilities for feature operations
 from api.models import FeatureStore
-from api.utils.authorization import get_object_or_404_for_user
+from api.services.feature_service import FeatureService, FeatureValidationError
 from api.utils.responses import error_response, success_response, handle_404
-from api.views.features.updates.shared import extract_system_tags, _validate_and_preserve_feature, _validate_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.logging import ImportLog
@@ -134,13 +133,14 @@ def create_feature(request):
     if tags:
         # Filter out system tags first (defensive - user shouldn't be able to add them)
         user_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
-        
+
         # Validate remaining user tags
         if user_tags:
-            is_valid, error_resp = _validate_tags(user_tags)
-            if not is_valid:
-                return error_resp
-        
+            try:
+                FeatureService.validate_user_tags(user_tags)
+            except FeatureValidationError as e:
+                return error_response(str(e), 400)
+
         # Prepare user tags (lowercase and deduplicate)
         user_tags = prepare_user_tags(user_tags)
     else:
@@ -237,7 +237,7 @@ def modify_feature(request, feature_id):
     - feature: Modified feature data
     """
     # Get the feature from database
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
     
     # Get original feature data
     original_geojson = feature.geojson
@@ -245,7 +245,7 @@ def modify_feature(request, feature_id):
         return error_response('Invalid feature data in database', 500)
     
     # Preserve existing system_tags
-    original_system_tags = extract_system_tags(original_geojson)
+    original_system_tags = FeatureService.extract_system_tags(original_geojson)
     
     # Get existing user tags
     existing_tags = original_geojson.get('properties', {}).get('tags', [])
@@ -278,7 +278,7 @@ def modify_feature(request, feature_id):
     
     # Validate and normalize the modified feature
     try:
-        normalized_feature = _validate_and_preserve_feature(modified_feature)
+        normalized_feature = FeatureService.validate_and_preserve_feature(modified_feature)
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', 400)
     
@@ -311,7 +311,7 @@ def delete_feature(request, feature_id):
     - feature_id: ID of the deleted feature
     """
     # Get the feature from database
-    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
     
     # Store ID for response
     deleted_id = feature.id

@@ -39,21 +39,16 @@ from extensions.live_track.src.backend.world_share_views import (
 
 def _patch_live_track_enabled():
     """Return a context manager that mocks config so the live_track extension is considered enabled."""
-
-    def mock_get_bool(key, default=False):
-        if key == "extensions.live_track.enabled":
-            return True
-        return default
-
-    def mock_get_int(key, default=0):
-        if key == "extensions.live_track.geometry_max_response_bytes":
-            return 1048576
-        return default
-
     mock_config = MagicMock()
-    mock_config.get_bool.side_effect = mock_get_bool
-    mock_config.get_int.side_effect = mock_get_int
-    return patch("website.extensions.extension_loader.get_config_loader", return_value=mock_config)
+    mock_config.extension_settings.side_effect = (
+        lambda name: {"enabled": True} if name == "live_track" else {}
+    )
+    return patch("website.extensions.extension_loader.get_config", return_value=mock_config)
+
+
+def _override_live_track_geometry_max_response_bytes(value: int):
+    """Return an override_settings context manager for extensions.live_track.geometry_max_response_bytes."""
+    return override_settings(EXTENSIONS_CONFIG={"live_track": {"geometry_max_response_bytes": value}})
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -2945,8 +2940,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 1200
+            with _override_live_track_geometry_max_response_bytes(1200):
                 response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
         self.assertEqual(response.status_code, 200)
         self.assertLessEqual(len(response.content), 1200)
@@ -2979,8 +2973,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 1200
+            with _override_live_track_geometry_max_response_bytes(1200):
                 response = self.client.get(
                     f"/api/extensions/live-track/trackers/{track_id}/geometry/",
                     {"all": "true"},
@@ -3010,8 +3003,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 1048576
+            with _override_live_track_geometry_max_response_bytes(1048576):
                 started = time.perf_counter()
                 response = self.client.get(f"/api/extensions/live-track/trackers/{track_id}/geometry/")
                 elapsed = time.perf_counter() - started
@@ -3043,8 +3035,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 1200
+            with _override_live_track_geometry_max_response_bytes(1200):
                 response = self.client.post(
                     "/api/extensions/live-track/trackers/geometry/",
                     data=json.dumps({"tracker_ids": [track_id]}),
@@ -3086,8 +3077,7 @@ class TestLiveTrackAPI(TestCase):
         track.save(update_fields=["geometry", "point_params", "updated_at"])
 
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader") as mock_cfg:
-                mock_cfg.return_value.get_int.return_value = 1200
+            with _override_live_track_geometry_max_response_bytes(1200):
                 get_response = self.client.get(
                     f"/api/extensions/live-track/trackers/{track_id}/geometry/"
                 )
@@ -3882,10 +3872,8 @@ class TestLiveTrackAPI(TestCase):
 
     def test_hauk_config_returns_domain(self):
         """GET hauk-config/ returns 200 and JSON with hauk_domain (empty when not configured)."""
-        mock_loader = MagicMock()
-        mock_loader.get_str.side_effect = lambda key, default="": default
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader", return_value=mock_loader):
+            with override_settings(EXTENSIONS_CONFIG={"live_track": {}}):
                 response = self.client.get("/api/extensions/live-track/hauk-config/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -3894,12 +3882,8 @@ class TestLiveTrackAPI(TestCase):
 
     def test_hauk_config_returns_configured_domain(self):
         """GET hauk-config/ returns hauk_domain from config when set."""
-        mock_loader = MagicMock()
-        mock_loader.get_str.side_effect = (
-            lambda key, default="": "hauk.example.com" if key == "extensions.live_track.hauk_domain" else default
-        )
         with _patch_live_track_enabled():
-            with patch.object(tracker_views, "get_config_loader", return_value=mock_loader):
+            with override_settings(EXTENSIONS_CONFIG={"live_track": {"hauk_domain": "hauk.example.com"}}):
                 response = self.client.get("/api/extensions/live-track/hauk-config/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["hauk_domain"], "hauk.example.com")

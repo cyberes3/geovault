@@ -1,19 +1,18 @@
 import logging
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.test import RequestFactory
 
 from .views import _perform_pwa_generation
 from .utils import get_apk_cache_path
-from website.config_loader import get_config_loader
 from website.celery_app import celery_app
 
 logger = logging.getLogger("website.pwa_mint.worker")
 
 def _should_regenerate() -> bool:
     """Check if the cached APK is missing or older than 24 hours."""
-    config = get_config_loader()
-    domain = config.get_str("site.domain", "geovault.example.com")
+    domain = settings.SITE_DOMAIN
     package_id = f"com.geovault.webview.{domain.replace('.', '_')}".lower()
     cache_path = get_apk_cache_path(package_id)
 
@@ -34,8 +33,7 @@ def _should_regenerate() -> bool:
 def _regenerate_apk() -> bool:
     """Generate APK by calling the existing generation helper with a synthetic request."""
     factory = RequestFactory()
-    config = get_config_loader()
-    domain = config.get_str("site.domain", "geovault.example.com")
+    domain = settings.SITE_DOMAIN
 
     request = factory.post(f"https://{domain}/api/extensions/pwa-mint/generate/")
     request.META["HTTP_HOST"] = domain

@@ -3,12 +3,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as
 
 import requests
 import urllib3
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
 from website.auth_decorators import api_or_login_required_401
-from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting, get_setting
 from website.startup_checks import (
     check_celery_beat,
@@ -41,9 +41,6 @@ def health_check(request):
     overall_healthy = True
 
     try:
-        # Get configuration once
-        config = get_config_loader()
-
         # Build list of checks to run in parallel
         # Always run critical health checks (suppress verbose logging)
         checks_to_run = [
@@ -55,7 +52,7 @@ def health_check(request):
         ]
 
         # Check areas server only if reverse geocoding is enabled
-        reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
+        reverse_geocoding_enabled = settings.REVERSE_GEOCODING_ENABLED
         if reverse_geocoding_enabled:
             base_url = (get_setting("AREAS_SERVER_URL") or "").strip()
             if base_url:
@@ -73,16 +70,16 @@ def health_check(request):
             checks_to_run.append(("elevation_api", check_elevation_api))
 
         # Check forward reverse_geocoding API based on geocoding_search_mode
-        geocoding_mode = config.get_geocoding_search_mode()
+        geocoding_mode = settings.GEOCODING_SEARCH_MODE
         if geocoding_mode is None:
             components["forward_geocoding_api"] = "not_configured"
         elif geocoding_mode == "maptiler":
-            if config.get_maptiler_api_key():
+            if settings.MAPTILER_API_KEY:
                 checks_to_run.append(("maptiler_geocoding_api", check_maptiler_geocoding_api))
             else:
                 components["maptiler_geocoding_api"] = "not_configured"
         elif geocoding_mode == "google":
-            if config.get_google_api_key():
+            if settings.GOOGLE_GEOCODING_API_KEY:
                 checks_to_run.append(("google_geocoding_api", check_google_geocoding_api))
             else:
                 components["google_geocoding_api"] = "not_configured"
@@ -201,12 +198,11 @@ def check_maptiler_geocoding_api() -> bool:
         True if API is healthy, False otherwise
     """
     try:
-        config = get_config_loader()
-        api_key = config.get_maptiler_api_key()
+        api_key = settings.MAPTILER_API_KEY
         if not api_key:
             return True
 
-        site_domain = config.get_str('site.domain', '')
+        site_domain = settings.SITE_DOMAIN
         headers = {'Origin': site_domain} if site_domain else {}
         response = requests.get(
             "https://api.maptiler.com/geocoding/test.json",
@@ -231,8 +227,7 @@ def check_google_geocoding_api() -> bool:
         True if API is healthy, False otherwise
     """
     try:
-        config = get_config_loader()
-        api_key = config.get_google_api_key()
+        api_key = settings.GOOGLE_GEOCODING_API_KEY
         if not api_key:
             return True
 

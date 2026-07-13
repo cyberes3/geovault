@@ -1,5 +1,6 @@
 import logging
 from importlib import import_module
+from pathlib import Path
 
 from website.extensions.extension_base import ExtensionAppConfig
 from website.extensions.extension_hooks import register_bg_task, register_websocket_route
@@ -12,6 +13,7 @@ class LiveTrackConfig(ExtensionAppConfig):
     name = "extensions.live_track.src.backend"
     label = "live_track"
     verbose_name = "Live Track"
+    path = str(Path(__file__).parent.resolve())
 
     def extension_ready(self):
         base_module = self.module.__name__

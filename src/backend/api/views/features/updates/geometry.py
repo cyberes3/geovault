@@ -6,23 +6,18 @@ from django.contrib.gis.geos import GEOSGeometry
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
-from api.services.feature_service import FeatureService
+from api.services.feature_service import FeatureService, FeatureValidationError
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404, success_response
 from api.validation.decorators import validate_payload
 from api.validation.payloads.replacement import ReplacementGeometryPayload
-from api.views.features.updates.shared import (
-    _validate_tags,
-    extract_system_tags,
-    _validate_and_preserve_feature,
-    _validate_and_preserve_system_tags
-)
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
 from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.spatial.coordinates import ensure_3d_geometry_coordinates
 from geo_lib.types.feature import (
     PointFeature,
     LineStringFeature,
@@ -76,23 +71,19 @@ def update_feature(request, feature_id):
         return error_response(str(e), 400)
 
     # Preserve existing system_tags from original feature
-    original_system_tags = extract_system_tags(original_geojson)
+    original_system_tags = FeatureService.extract_system_tags(original_geojson)
 
     # Validate, whitelist, and normalize the feature
     try:
-        feature_data = _validate_and_preserve_feature(feature_data)
+        feature_data = FeatureService.validate_and_preserve_feature(feature_data)
     except GeometryValidationError as e:
         return error_response(str(e), 400)
 
     # Get new properties after normalization
     new_properties = feature_data.get('properties', {})
 
-    # Validate that system_tags were preserved correctly
-    is_valid, error_resp, preserved_system_tags = _validate_and_preserve_system_tags(
-        new_properties, original_system_tags
-    )
-    if not is_valid:
-        return error_resp
+    # Strip any client-supplied system_tags; the real ones come from the original feature
+    preserved_system_tags = FeatureService.preserve_system_tags(new_properties, original_system_tags)
 
     # Update system tags if created date was changed
     original_created = original_properties.get('created')
@@ -111,9 +102,10 @@ def update_feature(request, feature_id):
         new_tags = []
 
     # Validate tags
-    is_valid, error_resp = _validate_tags(new_tags)
-    if not is_valid:
-        return error_resp
+    try:
+        FeatureService.validate_user_tags(new_tags)
+    except FeatureValidationError as e:
+        return error_response(str(e), 400)
 
     # Filter out any system tags that user might have added
     user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
@@ -301,7 +293,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
 
     # Validate and normalize the feature (including color/icon validation)
     try:
-        feature_data = _validate_and_preserve_feature(feature_data)
+        feature_data = FeatureService.validate_and_preserve_feature(feature_data)
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', 400)
 
@@ -318,7 +310,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     if regenerate_tags:
         try:
             # Preserve original import-year and import-month tags from the original feature
-            original_system_tags = extract_system_tags(original_geojson)
+            original_system_tags = FeatureService.extract_system_tags(original_geojson)
 
             # Extract import-year and import-month tags from original system_tags
             preserved_import_tags = [
@@ -374,7 +366,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                     try:
                         # Temporarily set system_tags for validation
                         feature_data['properties']['system_tags'] = new_system_tags
-                        feature_data = _validate_and_preserve_feature(feature_data)
+                        feature_data = FeatureService.validate_and_preserve_feature(feature_data)
                     except GeometryValidationError as e:
                         _logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration in replacement: {str(e)}")
                         # Continue without regenerating tags if validation fails
@@ -463,45 +455,6 @@ def _validate_feature_with_class(feature_data: dict, feature_id: str = None) -> 
         return False, None, 'Feature validation failed'
 
 
-def _normalize_geometry_coordinates(geom_data: dict) -> dict:
-    """
-    Ensure coordinates have 3 dimensions for consistency.
-    
-    Args:
-        geom_data: Geometry data dictionary with 'type' and 'coordinates'
-        
-    Returns:
-        Geometry data with normalized coordinates
-    """
-    if not geom_data or not geom_data.get('type') or not geom_data.get('coordinates'):
-        return geom_data
-
-    coords = geom_data['coordinates']
-    geom_type = geom_data['type']
-
-    if geom_type == 'Point':
-        if len(coords) == 2:
-            coords = [coords[0], coords[1], 0.0]
-        elif len(coords) == 3:
-            coords = [coords[0], coords[1], coords[2]]
-        geom_data['coordinates'] = coords
-    elif geom_type == 'LineString':
-        geom_data['coordinates'] = [
-            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-            for coord in coords
-        ]
-    elif geom_type == 'Polygon':
-        geom_data['coordinates'] = [
-            [
-                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                for coord in ring
-            ]
-            for ring in coords
-        ]
-
-    return geom_data
-
-
 def _update_feature_geometry_field(feature: FeatureStore, feature_data: dict, feature_id: str):
     """
     Update the Django geometry field from the feature data.
@@ -521,7 +474,7 @@ def _update_feature_geometry_field(feature: FeatureStore, feature_data: dict, fe
                 pass
             elif geom_data.get('coordinates'):
                 # Normalize coordinates to 3D
-                geom_data = _normalize_geometry_coordinates(geom_data)
+                geom_data = ensure_3d_geometry_coordinates(geom_data)
                 feature.geometry = GEOSGeometry(json.dumps(geom_data))
     except Exception:
         _logger.error("Error updating geometry for feature %s:\n%s", feature_id, traceback.format_exc())

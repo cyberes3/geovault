@@ -63,6 +63,25 @@ database:
   host: 127.0.0.1
   port: 5432
 
+  # Postgres connection pooling (psycopg 3 pool). Omit this whole section to disable pooling
+  # (persistent connections are reused for 300s instead). Defaults sized for 3 workers
+  # (3 x 30 = 90 connections, under PostgreSQL's default max_connections of 97).
+  # pool:
+  #   min_size: 2
+  #   max_size: 30
+  #   timeout: 60
+
+  # Dedicated test database used by src/tests/run-tests.sh (--reuse-db keeps the database
+  # between runs; conftest.py/prepare_test_db.py drop and recreate tables each run).
+  # Only needed for running the backend test suite, not for a production deployment.
+  # test:
+  #   name: gv_tests
+  #   user: gv_tests
+  #   # Password can be overridden with TEST_DB_PASSWORD environment variable
+  #   password: your-test-database-password
+  #   host: 127.0.0.1
+  #   port: 5432
+
 
 redis:
   host: 127.0.0.1
@@ -83,6 +102,11 @@ tilesources:
   # When true, proxy all OSM-related tile sources (OSM, OpenTopoMap, OpenHikingMap) through the server.
   # Good for when OSM blocks you.
   # proxy_osm: false
+
+  # Source IDs to proxy through the server even though they aren't OSM-related (see proxy_osm
+  # above for the OSM sources). Useful for sources that block direct browser requests.
+  # proxy_sources:
+  #   - opentopomap
 
   # Source IDs to hide from the website map's basemap selector.
   # hidden:
@@ -148,6 +172,9 @@ icons:
   # Timeout for fetching remote icons in seconds
   fetch_timeout: 5
 
+  # Maximum size for icons extracted from KML/KMZ imports or fetched from a remote URL (1MB)
+  max_size_bytes: 1048576
+
   # Maximum size for user-uploaded icons (500KB)
   upload_max_size_bytes: 512000
 
@@ -179,6 +206,17 @@ reverse_geocoding:
 
   # Number of points to sample along linestrings/multilinestrings for reverse geocoding. Points are equally spaced by distance along the track. Final tags are deduplicated per feature.
   linestring_geocode_points: 4
+
+
+elevation:
+  # API used to fill missing elevation data on imported features
+  api_url: https://elevation.racemap.com/api
+
+  # Enable or disable elevation lookups
+  enabled: true
+
+  # Request timeout in seconds
+  timeout_seconds: 30
 
 
 processing:
@@ -213,6 +251,37 @@ processing:
 
   # Show detailed error messages in import process logs (includes exception type and message)
   show_detailed_error_messages: true
+
+
+# Celery broker/backend and task behavior. This entire section is optional: omit it (or any
+# key within it) to use the defaults below. broker_url/result_backend default to Redis DBs 3
+# and 4 on the `redis` host/port configured above.
+celery:
+  # Can be overridden with the CELERY_BROKER_URL environment variable.
+  # broker_url: redis://127.0.0.1:6379/3
+
+  # Can be overridden with the CELERY_RESULT_BACKEND environment variable.
+  # result_backend: redis://127.0.0.1:6379/4
+
+  # Default Celery queue name for tasks that don't specify one explicitly.
+  default_queue: default
+
+  # Run tasks synchronously in-process instead of dispatching to a worker (used by the test
+  # suite; see src/tests/run-tests.sh). Can be overridden with CELERY_TASK_ALWAYS_EAGER.
+  task_always_eager: false
+
+  # When task_always_eager is true, propagate task exceptions to the caller instead of
+  # swallowing them into the (unused, in-process) result backend.
+  task_eager_propagates: true
+
+  # How long to wait for a worker to respond to a health-check ping before considering it down.
+  worker_startup_timeout_seconds: 5
+
+  # Maximum age (seconds) of the celery-beat heartbeat before it's considered stale.
+  beat_heartbeat_max_age_seconds: 20
+
+  # How long to wait for a fresh beat heartbeat at startup before failing the check.
+  beat_startup_wait_seconds: 10
 
 
 maxmind:
@@ -268,6 +337,7 @@ extensions:
     enabled: false
     # URL of the self-hosted pwabuilder-google-play container.
     # If running in Docker, use the service name (e.g., http://pwabuilder:5858)
+    # Can be overridden with the PWA_BUILDER_URL environment variable.
     pwa_builder_url: "http://pwabuilder:5858"
 
   live_track:

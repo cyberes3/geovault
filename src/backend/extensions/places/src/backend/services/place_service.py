@@ -4,11 +4,10 @@ from django.contrib.gis.geos import GEOSGeometry
 from django.db import IntegrityError
 from django.db.models import F
 from django.db.models.functions import Coalesce, Greatest
-from django.http import Http404
 from django.utils import timezone
 
 from api.models import FeatureStore
-from api.utils.authorization import get_object_or_404_for_user
+from api.services.feature_service import FeatureService
 from api.utils.responses import error_response
 from extensions.places.src.backend.constants import DEFAULT_SORT, PLACES_SCOPE, VALID_SORT
 from extensions.places.src.backend.models import PlaceMetadata
@@ -33,7 +32,7 @@ class PlaceService:
         if sort_key not in VALID_SORT:
             sort_key = DEFAULT_SORT
 
-        qs = FeatureStore.objects.filter(user=user, scope=PLACES_SCOPE).select_related('place_metadata')
+        qs = FeatureStore.objects.owned_by(user).in_scope(PLACES_SCOPE).select_related('place_metadata')
         if sort_key == 'created':
             qs = qs.order_by('-timestamp')
         elif sort_key == 'modified':
@@ -106,13 +105,7 @@ class PlaceService:
         meta.save(update_fields=['last_navigated_at'])
 
     def _get_place_feature(self, user, feature_id):
-        feature = get_object_or_404_for_user(FeatureStore, user, id=feature_id)
-        self._ensure_places_scope(feature)
-        return feature
-
-    def _ensure_places_scope(self, feature):
-        if feature.scope != PLACES_SCOPE:
-            raise Http404('Feature is not a place')
+        return FeatureService.get_owned_feature_or_404(user, feature_id, scope=PLACES_SCOPE)
 
     def _normalize_payload(self, payload_dict):
         try:

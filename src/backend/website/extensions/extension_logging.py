@@ -48,17 +48,3 @@ def register_logging_filter(filter_instance: logging.Filter) -> None:
     _registered_filters.append(filter_instance)
     
     logger.debug(f"Registered logging filter: {filter_instance.__class__.__name__}")
-
-
-def apply_filters_to_handler(handler: logging.Handler) -> None:
-    """
-    Apply all registered extension filters to a handler.
-    
-    This is called when new handlers are created to ensure extension filters
-    are applied. This is typically called by the logging system or Django.
-    
-    Args:
-        handler: A logging handler to apply filters to
-    """
-    for filter_instance in _registered_filters:
-        handler.addFilter(filter_instance)

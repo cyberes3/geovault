@@ -38,8 +38,8 @@ def _http_get(url: str, timeout: int = 30):
 
 
 def _areas_server_base_url():
-    from website.config_loader import get_config_loader
-    url = (get_config_loader().get_str("reverse_geocoding.areas_server.api_url", "") or "").strip()
+    from django.conf import settings
+    url = (settings.AREAS_SERVER_URL or "").strip()
     return url.rstrip("/") if url else ""
 
 
