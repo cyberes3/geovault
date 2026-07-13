@@ -11,7 +11,15 @@ import { isHiddenOwnedTracker } from './sharingSelectors.js';
 import { createCoalescedTask } from './asyncTaskCoalescer.js';
 
 const { isValidMapLngLatPair, setupCopyMapCoordinatesOnContextMenu } = window.gv_core;
-const maplibregl = window.gv_core?.maplibre || window.maplibregl;
+
+/**
+ * MapLibre GL JS loads lazily (see lazyMaplibreGl.js in core), so `window.gv_core.maplibre` may
+ * still be null at the moment this module is first evaluated. Read it at call time in every
+ * function that needs it instead of caching it once at module scope.
+ */
+function getMaplibreGl() {
+  return window.gv_core?.maplibre || window.maplibregl || null;
+}
 
 const LINES_SOURCE_ID = 'live-track-lines';
 const POINTS_SOURCE_ID = 'live-track-points';
@@ -402,6 +410,7 @@ export function useLiveTrackMap({
   }
 
   async function switchMapLayer(layerValue) {
+    const maplibregl = getMaplibreGl();
     if (!map || !maplibregl) return;
     const tileSource = tileSources.value.find((s) => s.id === layerValue);
     if (!tileSource) return;
@@ -511,6 +520,7 @@ export function useLiveTrackMap({
   }
 
   function initMap() {
+    const maplibregl = getMaplibreGl();
     if (!mapContainer.value || !maplibregl) return;
 
     const layerValue = selectedLayer.value;

@@ -24,13 +24,13 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
   }
 
   /** Re-sync the marker onto the current map instance - call after a map style (re)load. */
-  function syncUserLocationMarker() {
+  async function syncUserLocationMarker() {
     const map = getMap();
     if (!trackingEnabled.value || !userLocation.value || !map) return;
     if (locationMarker.value) {
       removeUserLocationMarker(locationMarker.value);
     }
-    locationMarker.value = createUserLocationMarker(map, userLocation.value);
+    locationMarker.value = await createUserLocationMarker(map, userLocation.value);
   }
 
   function stopLocationTracking() {
@@ -43,12 +43,12 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
     }
   }
 
-  function handleLocationUpdate(coords) {
+  async function handleLocationUpdate(coords) {
     userLocation.value = coords;
     const map = getMap();
     if (!map || !coords) return;
     if (!locationMarker.value) {
-      locationMarker.value = createUserLocationMarker(map, coords);
+      locationMarker.value = await createUserLocationMarker(map, coords);
       return;
     }
     updateUserLocationMarker(locationMarker.value, coords);
@@ -70,7 +70,7 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
     trackingEnabled.value = true;
     geolocationManager.getCurrentPosition()
       .then((coords) => {
-        handleLocationUpdate(coords);
+        void handleLocationUpdate(coords);
         geolocationManager.startTracking(handleLocationUpdate, handleLocationError);
       })
       .catch(handleLocationError);

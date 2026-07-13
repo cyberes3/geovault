@@ -101,11 +101,11 @@ export function useMapGeolocation(deps: MapGeolocationDeps) {
         });
     }
 
-    function handleLocationUpdate(coords: UserLocation): void {
+    async function handleLocationUpdate(coords: UserLocation): Promise<void> {
         userLocation.value = coords;
 
         if (!locationMarker.value && map.value) {
-            locationMarker.value = createUserLocationMarker(map.value, coords) as Marker;
+            locationMarker.value = await createUserLocationMarker(map.value, coords) as Marker;
         } else if (locationMarker.value) {
             updateUserLocationMarker(locationMarker.value, coords);
         }
@@ -150,7 +150,7 @@ export function useMapGeolocation(deps: MapGeolocationDeps) {
             trackingState.value = 'locked';
             hasInitialZoomed.value = false;
             geolocationManager.startTracking(
-                (coords: UserLocation) => { handleLocationUpdate(coords); },
+                (coords: UserLocation) => { void handleLocationUpdate(coords); },
                 (error: { code?: number; message?: string }) => { handleLocationError(error); },
             );
         } else {

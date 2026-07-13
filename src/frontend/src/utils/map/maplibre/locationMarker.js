@@ -3,16 +3,17 @@
  * Handles the creation and management of the user's location marker on the map.
  */
 
-import maplibregl from 'maplibre-gl'
+import { loadMaplibreGl } from './lazyMaplibreGl.js'
 
 /**
  * Create a user location marker
  * @param {Object} map - MapLibre map instance
  * @param {Object} coords - {latitude, longitude}
- * @returns {Object} MapLibre Marker instance
+ * @returns {Promise<Object|null>} MapLibre Marker instance
  */
-export function createUserLocationMarker(map, coords) {
+export async function createUserLocationMarker(map, coords) {
   if (!map || !coords) return null;
+  const maplibregl = await loadMaplibreGl();
 
   const el = document.createElement('div');
   el.className = 'user-location-marker';
