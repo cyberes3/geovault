@@ -12,6 +12,7 @@ import type Interaction from 'ol/interaction/Interaction';
 import type { FeatureLike } from 'ol/Feature';
 import type { Style } from 'ol/style';
 import { openLayersBasemap } from '@/utils/map/openlayers/index.js';
+import { WORLD_VIEW_CENTER_LONLAT, WORLD_VIEW_ZOOM } from '@/utils/map/worldViewDefault';
 
 /**
  * A minimal GeoJSON Feature shape - matches what the import/feature-replacement APIs return.
@@ -63,8 +64,9 @@ export interface ZoomToFeatureOptions extends FitOptions {
     forceBufferMeters?: number;
 }
 
-const DEFAULT_CENTER_LONLAT: [number, number] = [-104.692626, 38.881215];
-const DEFAULT_ZOOM = 10;
+/** "No better answer yet" fallback, matching every other map instance in the app (see `worldViewDefault.ts`). */
+const DEFAULT_CENTER_LONLAT: [number, number] = WORLD_VIEW_CENTER_LONLAT;
+const DEFAULT_ZOOM = WORLD_VIEW_ZOOM;
 const DEFAULT_FIT_PADDING: [number, number, number, number] = [50, 50, 50, 50];
 const DEFAULT_FIT_MAX_ZOOM = 15;
 

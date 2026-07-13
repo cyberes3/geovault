@@ -316,7 +316,7 @@ export function useLiveTrackMap({
     return slice.map((c) => [c[0], c[1]]);
   }
 
-  function fitBoundsFromCoords(coords) {
+  function fitBoundsFromCoords(coords, { duration = MAP_SNAP_DURATION } = {}) {
     if (!map || !coords.length) return;
     let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
     for (const c of coords) {
@@ -335,18 +335,19 @@ export function useLiveTrackMap({
     map.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
       padding: getMapPadding(),
       maxZoom: 15,
-      duration: MAP_SNAP_DURATION
+      duration
     });
   }
 
-  function fitMapToTracks() {
+  /** @param {{ duration?: number }} [options] - pass `{ duration: 0 }` for an instant fit (e.g. right after map construction, before first paint). */
+  function fitMapToTracks({ duration = MAP_SNAP_DURATION } = {}) {
     if (!map || trackers.value.length === 0) return;
     const allCoords = [];
     for (const track of trackers.value) {
       if (isHiddenOwnedTracker(track)) continue;
       allCoords.push(...getLastNCoords(track, LAST_POINTS_FIT));
     }
-    fitBoundsFromCoords(allCoords);
+    fitBoundsFromCoords(allCoords, { duration });
   }
 
   function fitMapToSelectedTrack() {
@@ -542,6 +543,9 @@ export function useLiveTrackMap({
       map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
       setupMapFollowListenersForView();
       disableMapRotation();
+      // Fit to the already-fetched tracker data now, before the browser paints the [0,0]/zoom 2
+      // construction default, instead of waiting for 'load' and animating into place.
+      fitMapToTracks({ duration: 0 });
       map.on('load', () => {
         if (!map) return;
         map.resize();
@@ -550,14 +554,14 @@ export function useLiveTrackMap({
           setTimeout(() => {
             if (map) {
               map.resize();
-              fitMapToTracks();
+              fitMapToTracks({ duration: 0 });
             }
           }, 0);
         }).catch(() => {
           setTimeout(() => {
             if (map) {
               map.resize();
-              fitMapToTracks();
+              fitMapToTracks({ duration: 0 });
             }
           }, 0);
         });
@@ -598,6 +602,10 @@ export function useLiveTrackMap({
     setupMapFollowListenersForView();
     disableMapRotation();
 
+    // Fit to the already-fetched tracker data now, before the browser paints the [0,0]/zoom 2
+    // construction default, instead of waiting for 'load' and animating into place.
+    fitMapToTracks({ duration: 0 });
+
     map.once('load', () => {
       if (!map) return;
       map.resize();
@@ -609,14 +617,14 @@ export function useLiveTrackMap({
           setTimeout(() => {
             if (map) {
               map.resize();
-              fitMapToTracks();
+              fitMapToTracks({ duration: 0 });
             }
           }, 0);
         }).catch(() => {
           setTimeout(() => {
             if (map) {
               map.resize();
-              fitMapToTracks();
+              fitMapToTracks({ duration: 0 });
             }
           }, 0);
         });

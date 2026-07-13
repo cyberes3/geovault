@@ -33,6 +33,17 @@
         <div ref="mapWrapperRef" class="relative flex-1 min-h-0 w-full flex flex-col">
           <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
 
+          <div
+            v-if="mapInitializing"
+            class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-500/40 pointer-events-auto cursor-wait"
+            aria-busy="true"
+            aria-live="polite"
+          >
+            <div class="inline-flex bg-white rounded-lg shadow-lg border border-gray-200 px-4 py-3">
+              <Loader size="sm" layout="inline" :show-message="true" message="Loading map..."/>
+            </div>
+          </div>
+
           <!-- Mobile: map actions behind hamburger (desktop uses right strip below) -->
           <div
             v-if="isMobileView && !isShareMapSidebarOpen"
@@ -263,6 +274,8 @@ export default {
   components: { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar, MapTrackList, MobileMapDrawer },
   setup() {
     const loading = ref(true);
+    /** Cleared once `initMap()` resolves; separate from `loading` so the map area shows its own overlay instead of nothing during the gap after the page-level loading screen disappears. */
+    const mapInitializing = ref(true);
     const error = ref('');
     const trackName = ref('');
     const groupName = ref('');
@@ -776,6 +789,7 @@ export default {
         await nextTick();
         await new Promise((r) => setTimeout(r, 50));
         await initMap();
+        mapInitializing.value = false;
 
         if (!error.value && shareIdRef.value) {
           pollTimerId = setInterval(async () => {
@@ -831,6 +845,9 @@ export default {
         map.on('error', (e) => {
           console.warn('WorldShareView: map error', e.error?.message || e);
         });
+        // Fit to the already-loaded track/group data now (duration 0), before the browser paints
+        // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.
+        fitMapToTrack();
         return new Promise((resolve) => {
           map.once('load', async () => {
             if (!map) {
@@ -923,6 +940,10 @@ export default {
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
 
+      // Fit to the already-loaded track/group data now (duration 0), before the browser paints
+      // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.
+      fitMapToTrack();
+
       return new Promise((resolve) => {
         map.once('load', async () => {
           if (!map) {
@@ -969,6 +990,7 @@ export default {
 
     return {
       loading,
+      mapInitializing,
       error,
       displayTitle,
       mapContainer,

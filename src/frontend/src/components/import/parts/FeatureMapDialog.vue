@@ -49,6 +49,7 @@ import {
 } from '@/composables/useOpenLayersPreviewMap'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import Loader from '@/components/parts/Loader.vue'
+import { getDefaultBasemapFromStore } from '@/utils/map/mapConfigUtils'
 import type { GeoJsonFeature } from '@/types/geospatial'
 
 const props = withDefaults(defineProps<{
@@ -197,7 +198,8 @@ const {
   cleanup
 } = useOpenLayersPreviewMap({
   getFeatureStyle,
-  getLabelStyle
+  getLabelStyle,
+  tileSourceId: getDefaultBasemapFromStore()
 })
 
 async function initializeMap(): Promise<void> {

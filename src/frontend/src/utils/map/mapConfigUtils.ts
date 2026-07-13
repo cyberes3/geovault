@@ -5,6 +5,8 @@
  */
 
 import type {MapConfig} from '@/types/geospatial';
+import {WORLD_VIEW_CENTER_LONLAT, WORLD_VIEW_ZOOM} from '@/utils/map/worldViewDefault';
+import store from '@/assets/js/store';
 
 /**
  * Calculate appropriate zoom level based on location type
@@ -53,13 +55,15 @@ function getStateExtentConfig(location: any): MapConfig {
 }
 
 /**
- * First paint: origin (0,0) at low zoom. MapPage then recenters from geolocation on the main map,
- * or mapshare loads data and fits features to the viewport.
+ * Fallback world view: origin (0,0) at low zoom, used only when there's no better answer yet
+ * (no geolocation, URL-driven view, or mapshare fit target). Callers resolve the real initial
+ * camera (geolocation recenter, feature-extent fit, etc.) upfront and pass it straight into map
+ * construction, so this is not the guaranteed first-paint state - just the last resort.
  */
 export function getInitialMapConfig(_userLocation?: unknown): MapConfig {
     return {
-        center: [0, 0],
-        zoom: 2
+        center: WORLD_VIEW_CENTER_LONLAT,
+        zoom: WORLD_VIEW_ZOOM
     };
 }
 
@@ -77,6 +81,16 @@ export function getMapRecenterFromUserLocation(userLocation: any): MapConfig | n
         return null;
     }
     return getStateExtentConfig(userLocation);
+}
+
+/**
+ * Read the user's preferred default basemap (`map.default_basemap`) straight from the Vuex
+ * store singleton, for call sites that aren't Vue components with `useStore()` access (e.g. the
+ * OpenLayers preview dialogs' `useOpenLayersPreviewMap()` factory calls).
+ */
+export function getDefaultBasemapFromStore(): string | undefined {
+    const settings = store.getters['userSettings/userSettings'] as { map?: { default_basemap?: string } } | null;
+    return settings?.map?.default_basemap;
 }
 
 /**

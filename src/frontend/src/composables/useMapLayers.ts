@@ -16,13 +16,14 @@ import { restoreGeoJsonFeatures, restoreMapView, getMapState, getGeoJsonData } f
 import { getTileSources, type TileSource } from '@/api/services/tilesApi';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
-import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
+import { MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL, resolveMapStyle } from '@/utils/map/maplibre/mapInitialization.js';
+import type { StyleSpecification } from 'maplibre-gl';
 
 export interface UseMapLayersDeps {
     map: ShallowRef<MapLibreMap | null>;
     labelMarkerManager: ShallowRef<LabelMarkerManager | null>;
     showAllLabels: Ref<boolean>;
-    createMapInstance: (mapConfig: { center: [number, number]; zoom: number; pitch?: number; bearing?: number }) => void;
+    createMapInstance: (mapConfig: { center: [number, number]; zoom: number; pitch?: number; bearing?: number; style?: StyleSpecification | string }) => void;
     destroyMap: () => void;
     ensureMapResize: () => void;
     waitForMapEvent: (eventName: string, timeout?: number) => Promise<void>;
@@ -174,57 +175,10 @@ export function useMapLayers(deps: UseMapLayersDeps) {
             return;
         }
 
-        const clientConfig = tileSource.client_config;
-        const isStyleBased = !!clientConfig.style_url || clientConfig.type === 'maptiler';
-
-        if (isStyleBased) {
-            mapInstance.setStyle(clientConfig.style_url as string);
-            await waitForMapEvent('styledata');
-            mapInstance.setMaxZoom(MAX_ZOOM_LEVEL);
-            updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1);
-        } else {
-            const url = clientConfig.url ?? `/api/tiles/${layerValue}/{z}/{x}/{y}`;
-
-            let tiles: string[];
-            if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
-                tiles = clientConfig.tileSubdomains.map((subdomain: string) => url.replace('{s}', subdomain));
-            } else {
-                tiles = [url.replace('{s}', (clientConfig.tileSubdomains as string[] | undefined)?.[0] ?? 'a')];
-            }
-
-            mapInstance.setStyle({
-                version: 8,
-                glyphs: '/api/fonts/{fontstack}/{range}.pbf',
-                sources: {},
-                layers: [],
-            });
-
-            await waitForMapEvent('styledata');
-            mapInstance.setMaxZoom(MAX_ZOOM_LEVEL);
-
-            const sourceMaxZoom = clientConfig.maxzoom ?? MAX_ZOOM_LEVEL;
-            const layerMaxZoom = Math.max(sourceMaxZoom, MAX_ZOOM_LEVEL + 1);
-
-            mapInstance.addSource('raster-source', {
-                type: 'raster',
-                tiles,
-                tileSize: clientConfig.tileSize ?? 256,
-                attribution: clientConfig.attribution ?? '',
-            });
-
-            if (!mapInstance.getLayer('raster-layer')) {
-                mapInstance.addLayer({
-                    id: 'raster-layer',
-                    type: 'raster',
-                    source: 'raster-source',
-                    minzoom: clientConfig.minzoom ?? 0,
-                    maxzoom: layerMaxZoom,
-                });
-            } else {
-                const currentMinZoom = mapInstance.getLayer('raster-layer')?.minzoom ?? 0;
-                mapInstance.setLayerZoomRange('raster-layer', currentMinZoom, layerMaxZoom);
-            }
-        }
+        mapInstance.setStyle(resolveMapStyle(tileSource, DEFAULT_GLYPHS_URL));
+        await waitForMapEvent('styledata');
+        mapInstance.setMaxZoom(MAX_ZOOM_LEVEL);
+        updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1);
     }
 
     async function applyTerrainAndHillshade(layerValue: string): Promise<void> {

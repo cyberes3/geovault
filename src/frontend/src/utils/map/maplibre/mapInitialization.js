@@ -4,8 +4,13 @@
 
 import maplibregl from 'maplibre-gl'
 
+/** @typedef {import('maplibre-gl').StyleSpecification} StyleSpecification */
+
 // Maximum allowed zoom level for the map
 export const MAX_ZOOM_LEVEL = 18
+
+// Default glyphs URL template used by every MapLibre style built in this app
+export const DEFAULT_GLYPHS_URL = '/api/fonts/{fontstack}/{range}.pbf'
 
 // Hosts that require a valid Referer when loading tiles directly (OSMF / openmaps.fr policy)
 const OSM_TILE_HOSTS = ['tile.openstreetmap.org', 'tile.openmaps.fr']
@@ -50,6 +55,63 @@ export function createTransformRequest(customTransformRequest) {
 }
 
 /**
+ * Resolve the MapLibre style to use for a given tile source, so callers can pass it
+ * straight into `initializeMap()`/`new maplibregl.Map()` (avoiding an empty-style flash)
+ * or into `map.setStyle()` (avoiding a separate addSource/addLayer step).
+ * @param {Object} [tileSource] - Tile source record (with `client_config`); falls back to a blank style if omitted
+ * @param {string} [glyphsUrl] - Glyphs URL template
+ * @returns {string|StyleSpecification} Either a style URL (style-based/MapTiler sources) or a full style spec object
+ */
+export function resolveMapStyle(tileSource, glyphsUrl = DEFAULT_GLYPHS_URL) {
+  if (!tileSource) {
+    return {
+      version: 8,
+      glyphs: glyphsUrl,
+      sources: {},
+      layers: []
+    }
+  }
+
+  const clientConfig = tileSource.client_config
+  const isStyleBased = !!clientConfig.style_url || clientConfig.type === 'maptiler'
+
+  if (isStyleBased) {
+    return clientConfig.style_url
+  }
+
+  const url = clientConfig.url ?? `/api/tiles/${tileSource.id}/{z}/{x}/{y}`
+  const tiles =
+    clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)
+      ? clientConfig.tileSubdomains.map((subdomain) => url.replace('{s}', subdomain))
+      : [url.replace('{s}', clientConfig.tileSubdomains?.[0] ?? 'a')]
+
+  const sourceMaxZoom = clientConfig.maxzoom ?? MAX_ZOOM_LEVEL
+  const layerMaxZoom = Math.max(sourceMaxZoom, MAX_ZOOM_LEVEL + 1)
+
+  return {
+    version: 8,
+    glyphs: glyphsUrl,
+    sources: {
+      'raster-source': {
+        type: 'raster',
+        tiles,
+        tileSize: clientConfig.tileSize ?? 256,
+        attribution: clientConfig.attribution ?? ''
+      }
+    },
+    layers: [
+      {
+        id: 'raster-layer',
+        type: 'raster',
+        source: 'raster-source',
+        minzoom: clientConfig.minzoom ?? 0,
+        maxzoom: layerMaxZoom
+      }
+    ]
+  }
+}
+
+/**
  * Initialize a MapLibre map instance
  * @param {HTMLElement} container - Map container element
  * @param {Object} config - Map configuration
@@ -60,6 +122,7 @@ export function createTransformRequest(customTransformRequest) {
  * @param {string} config.glyphsUrl - Glyphs URL template
  * @param {boolean} config.antialias - Enable anti-aliasing (default: false)
  * @param {Function} [config.transformRequest] - Optional transformRequest function for custom headers (chained with OSM referrer)
+ * @param {string|StyleSpecification} [config.style] - Initial style URL or style spec object (default: blank style, see `resolveMapStyle()`)
  * @returns {Object} MapLibre map instance
  */
 export function initializeMap(container, config) {
@@ -68,16 +131,25 @@ export function initializeMap(container, config) {
     throw new Error('Invalid container: must be an HTMLElement')
   }
 
-  const { center, zoom, pitch = 0, bearing = 0, glyphsUrl = '/api/fonts/{fontstack}/{range}.pbf', antialias = false, transformRequest = undefined } = config
-
-  const mapConfig = {
-    container: container,
-    style: {
+  const {
+    center,
+    zoom,
+    pitch = 0,
+    bearing = 0,
+    glyphsUrl = DEFAULT_GLYPHS_URL,
+    antialias = false,
+    transformRequest = undefined,
+    style = {
       version: 8,
       glyphs: glyphsUrl,
       sources: {},
       layers: []
-    },
+    }
+  } = config
+
+  const mapConfig = {
+    container: container,
+    style: style,
     center: center, // [lon, lat]
     zoom: zoom,
     pitch: pitch,

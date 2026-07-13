@@ -6,7 +6,7 @@
  * center/zoom/pitch/bearing used to restore the map after `keep-alive` deactivation.
  */
 import { markRaw, ref, shallowRef, type Ref, type ShallowRef } from 'vue';
-import maplibregl, { type LngLat, type Map as MapLibreMap, type MapMouseEvent } from 'maplibre-gl';
+import maplibregl, { type LngLat, type Map as MapLibreMap, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
 import {
     initializeMap,
     setupGeoJsonSource,
@@ -16,7 +16,7 @@ import {
     loadIconImage,
     LabelMarkerManager,
 } from '@/utils/map/maplibre';
-import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
+import { MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL } from '@/utils/map/maplibre/mapInitialization.js';
 import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { setupUserGestureTrackingUnlock } from '@/utils/map/maplibre/trackingLock.js';
 import { toast } from '@/utils/toast';
@@ -26,6 +26,8 @@ export interface MapConfigInit {
     zoom: number;
     pitch?: number;
     bearing?: number;
+    /** Initial style URL or style spec (defaults to a blank style) - pass the resolved basemap style to avoid a flash. */
+    style?: StyleSpecification | string;
 }
 
 export interface MapEventCallbacks {
@@ -244,8 +246,9 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
                 zoom: mapConfig.zoom,
                 pitch: mapConfig.pitch ?? 0,
                 bearing: mapConfig.bearing ?? 0,
-                glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf',
+                glyphsUrl: DEFAULT_GLYPHS_URL,
                 antialias: deps.getEnableAntialias(),
+                style: mapConfig.style,
             }) as MapLibreMap,
         );
 

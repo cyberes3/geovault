@@ -42,6 +42,18 @@
           ]"
         ></div>
 
+        <!-- Map Initializing Overlay: shown while resolving basemap/camera before the map is constructed -->
+        <div
+            v-if="isMapInitializing || !map"
+            class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-500/40 pointer-events-auto cursor-wait"
+            aria-busy="true"
+            aria-live="polite"
+        >
+          <div class="inline-flex bg-white rounded-lg shadow-lg border border-gray-200 px-4 py-3">
+            <Loader size="sm" layout="inline" :show-message="true" message="Loading map..."/>
+          </div>
+        </div>
+
         <!-- 3D Terrain Toggle Button (hidden on public mapshare) -->
         <div
             v-if="maptilerConfig && !isPublicShareMode"
@@ -220,7 +232,8 @@ import type { GeoJSONSource } from 'maplibre-gl';
 import type { RootState } from '@/assets/js/store';
 import type { UserInfo } from '@/assets/js/types/store-types';
 
-import { getInitialMapConfig as getWorldInitialMapConfig } from '@/utils/map/mapConfigUtils';
+import { getInitialMapConfig as getWorldInitialMapConfig, getMapRecenterFromUserLocation } from '@/utils/map/mapConfigUtils';
+import { resolveMapStyle, MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js';
 import { useDocumentTitle } from '@/utils/documentTitle.js';
 
 import FeatureListSidebar from './FeatureListSidebar.vue';
@@ -230,6 +243,7 @@ import MapErrorOverlay from './MapErrorOverlay.vue';
 import MapLoadingIndicator from './MapLoadingIndicator.vue';
 import MobileControlsBar from './MobileControlsBar.vue';
 import LocationControl from './LocationControl.vue';
+import Loader from '@/components/parts/Loader.vue';
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue')) as Component;
@@ -298,6 +312,26 @@ const hiddenFeatureSummaries = computed(() => {
 function getUserMapSettings(): MapUserSettings {
     const settings = getters.value['userSettings/userSettings'] as { map?: MapUserSettings } | null;
     return settings?.map ?? {};
+}
+
+/**
+ * Wait briefly for `App.vue`'s `userSettings/fetchUserSettings` dispatch to resolve (or dispatch
+ * it once ourselves if it still hasn't), so `fetchTileSources()` reads the real default basemap
+ * instead of racing `App.vue` and falling back to the first tile source. Mirrors the Places
+ * extension's `ensureUserSettingsLoaded` (`placesMapSettings.js`).
+ */
+function hasUserSettingsLoaded(): boolean {
+    return getters.value['userSettings/userSettings'] != null;
+}
+
+async function ensureUserMapSettingsLoaded(waitMs = 3000, pollMs = 50): Promise<void> {
+    if (hasUserSettingsLoaded()) return;
+    const deadline = Date.now() + waitMs;
+    while (!hasUserSettingsLoaded() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    if (hasUserSettingsLoaded()) return;
+    await store.dispatch('userSettings/fetchUserSettings');
 }
 
 /*
@@ -456,11 +490,25 @@ const mapLayers = useMapLayers({
 
 // --- Flat bindings for template + script-internal use (script setup auto-unwraps top-level refs). ---
 
-const { mapContainer, map, showAllLabels, isMapInitializing, mapWasDestroyed, savedMapCenter, savedMapZoom, savedMapPitch, savedMapBearing, createMapInstance, performMapDestruction, ensureMapResize, waitForElement } =
+const { mapContainer, map, showAllLabels, isMapInitializing, mapWasDestroyed, savedMapCenter, savedMapZoom, savedMapPitch, savedMapBearing, createMapInstance, performMapDestruction, ensureMapResize, waitForElement, updateLayerMaxZoom } =
     mapInit;
 
-const { tileSources, selectedLayer, maptilerConfig, terrainEnabled, showTerrainTooltip, hillshadeEnabled, fetchTileSources, fetchMaptilerConfig, setupTerrain, addHillshadeIfNeeded, toggleTerrain, switchMapLayer, handleHillshadeChange } =
-    mapLayers;
+const {
+    tileSources,
+    selectedLayer,
+    maptilerConfig,
+    terrainEnabled,
+    showTerrainTooltip,
+    hillshadeEnabled,
+    fetchTileSources,
+    fetchMaptilerConfig,
+    setupTerrain,
+    addHillshadeIfNeeded,
+    toggleTerrain,
+    switchMapLayer,
+    applyTerrainAndHillshade,
+    handleHillshadeChange,
+} = mapLayers;
 
 const { isDataLoading, isInitialLoad, loadError, featuresInExtent, featureCount } = featureData;
 
@@ -518,7 +566,7 @@ const {
     filterExistingFeaturesByTags,
 } = collectionTagFilters;
 
-const { userLocation, trackingState, getUserLocation, applyInitialUserLocationRecenter, centerToHomeExtent, toggleLocationTracking, handleGeocodingResult, clearGeocodingMarker } = mapGeolocation;
+const { userLocation, trackingState, getUserLocation, centerToHomeExtent, toggleLocationTracking, handleGeocodingResult, clearGeocodingMarker } = mapGeolocation;
 
 /** Preserved for parity with the template's original binding name (see `getLocationDisplayName()` call in the template). */
 function getLocationDisplayName(): string {
@@ -612,12 +660,30 @@ function handleFeatureListHover(feature: GeoJsonFeature | null): void {
 
 // --- Boot / keep-alive lifecycle orchestration ---
 
-async function initializeMap(): Promise<void> {
+async function initializeMap(mapConfig: Parameters<typeof createMapInstance>[0]): Promise<void> {
     if (!mapContainer.value || !(mapContainer.value instanceof HTMLElement)) {
         throw new Error('Map container is not available or is not an HTMLElement');
     }
-    createMapInstance(getWorldInitialMapConfig());
+    createMapInstance(mapConfig);
     ensureMapResize();
+}
+
+/**
+ * Compute the initial camera to paint the map with on first construction: the URL-driven views
+ * (collection/tag/featureId) fit themselves after data loads, so they start at the world view;
+ * otherwise use the geolocation-based recenter if we have one, falling back to the world view
+ * (in which case `syncPendingExtentFitWithoutGeolocation` fits to loaded feature data instead).
+ */
+function getInitialCameraConfig(skipUrlDrivenCamera: boolean) {
+    if (skipUrlDrivenCamera) return getWorldInitialMapConfig();
+    return getMapRecenterFromUserLocation(userLocation.value) ?? getWorldInitialMapConfig();
+}
+
+/** Re-applies the map/layer maxzoom overrides once the (freshly baked-in) style has loaded. */
+function applyPostLoadMaxZoom(): void {
+    if (!map.value) return;
+    map.value.setMaxZoom(MAX_ZOOM_LEVEL);
+    updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1);
 }
 
 function logMapState(): void {
@@ -693,9 +759,15 @@ async function restoreMap(): Promise<void> {
     }
 
     try {
+        if (!isMapshareRoute.value && getters.value['auth/userInfo']) {
+            await ensureUserMapSettingsLoaded();
+        }
+
         if (getters.value['auth/userInfo']) {
             await fetchAvailableTags();
         }
+
+        const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
 
         let mapConfig;
         if (savedMapCenter.value && savedMapZoom.value !== null) {
@@ -706,11 +778,11 @@ async function restoreMap(): Promise<void> {
                 bearing: savedMapBearing.value ?? 0,
             };
         } else {
-            const worldConfig = getWorldInitialMapConfig();
-            mapConfig = { ...worldConfig, pitch: 0, bearing: 0 };
+            mapConfig = { ...getInitialCameraConfig(skipUrlDrivenCamera), pitch: 0, bearing: 0 };
         }
 
-        createMapInstance(mapConfig);
+        const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
+        createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
 
         await new Promise<void>((resolve) => {
             if (map.value?.loaded()) {
@@ -720,9 +792,7 @@ async function restoreMap(): Promise<void> {
             }
         });
 
-        if (selectedLayer.value && tileSources.value.length > 0) {
-            void switchMapLayer(selectedLayer.value);
-        }
+        applyPostLoadMaxZoom();
 
         if (terrainEnabled.value && maptilerConfig.value?.isAvailable()) {
             await setupTerrain();
@@ -733,10 +803,6 @@ async function restoreMap(): Promise<void> {
         }
 
         if (!savedMapCenter.value) {
-            const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
-            if (!skipUrlDrivenCamera) {
-                applyInitialUserLocationRecenter();
-            }
             featureData.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera);
         } else {
             featureData.pendingExtentFitWithoutGeolocation.value = false;
@@ -785,6 +851,10 @@ onMounted(async () => {
         return;
     }
 
+    if (!isMapshareRoute.value && getters.value['auth/userInfo']) {
+        await ensureUserMapSettingsLoaded();
+    }
+
     const tileSourcesPromise = fetchTileSources();
     const userLocationPromise = isMapshareRoute.value ? Promise.resolve() : getUserLocation();
     const tagsPromise = getters.value['auth/userInfo'] ? fetchAvailableTags() : Promise.resolve();
@@ -792,8 +862,16 @@ onMounted(async () => {
     const [fetchedTileSources] = await Promise.all([tileSourcesPromise, userLocationPromise, tagsPromise]);
     await fetchMaptilerConfig(fetchedTileSources);
 
+    // Everything the initial camera/basemap need (settings, geolocation, tile sources) is
+    // already resolved above, so bake both into map construction instead of birthing the map
+    // at the blank/world-view default and correcting it after 'load'.
+    const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
+    const initialCamera = getInitialCameraConfig(skipUrlDrivenCamera);
+    const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
+    const initialStyle = resolveMapStyle(initialTileSource);
+
     try {
-        await initializeMap();
+        await initializeMap({ ...initialCamera, style: initialStyle });
     } catch (error) {
         console.error('Error initializing map:', error);
         loadError.value = error instanceof Error ? error.message : 'Failed to initialize map. Please refresh the page.';
@@ -822,18 +900,16 @@ onMounted(async () => {
     terrainEnabled.value = defaultTerrainOn && !!maptilerConfig.value?.isAvailable();
     hillshadeEnabled.value = defaultHillshadeOn && !!maptilerConfig.value?.isAvailable();
 
-    if (selectedLayer.value && tileSources.value.length > 0) {
-        await switchMapLayer(selectedLayer.value, true);
+    applyPostLoadMaxZoom();
+
+    if (selectedLayer.value) {
+        await applyTerrainAndHillshade(selectedLayer.value);
     }
 
     if (terrainEnabled.value && map.value) {
         map.value.setPitch(50);
     }
 
-    const skipUrlDrivenCamera = !!collectionId.value || !!route.query.featureId || !!route.query.tag;
-    if (!skipUrlDrivenCamera) {
-        applyInitialUserLocationRecenter();
-    }
     featureData.syncPendingExtentFitWithoutGeolocation(skipUrlDrivenCamera);
 
     if (collectionId.value) {

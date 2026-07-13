@@ -57,6 +57,17 @@
     <main ref="mapColumnRef" class="live-track-map-column flex-1 relative min-h-0">
       <div ref="mapContainer" class="absolute inset-0 w-full h-full bg-gray-100" />
 
+      <div
+          v-if="mapInitializing"
+          class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-500/40 pointer-events-auto cursor-wait"
+          aria-busy="true"
+          aria-live="polite"
+      >
+        <div class="inline-flex bg-white rounded-lg shadow-lg border border-gray-200 px-4 py-3">
+          <Loader size="sm" layout="inline" :show-message="true" message="Loading map..."/>
+        </div>
+      </div>
+
       <!-- Mobile: map actions behind a hamburger control (desktop uses right strip below) -->
       <div
         v-if="isMobileView && !isMapSidebarOpen"
@@ -524,6 +535,7 @@ import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMa
 import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import LocationIcon from 'platform/components/parts/LocationIcon.vue';
+import Loader from 'platform/components/parts/Loader.vue';
 import TrackSidebar from './TrackSidebar.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -581,7 +593,7 @@ const LIST_TABS = [
 
 export default {
   name: 'LiveTrackView',
-  components: { BaseButton, LocationIcon, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
+  components: { BaseButton, LocationIcon, Loader, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
     const api = inject('extensionApi');
     /** @type {import('platform/extensions/platformState').PlatformStateBridge} */
@@ -597,6 +609,8 @@ export default {
     const unsubscribingId = ref(null);
     const unsubscribingGroupId = ref(null);
     const loading = ref(true);
+    /** Cleared once the map's style/data first finish loading (via `trackMap.onStyleReady`), so a loading overlay can mask the gap between mount and the map settling into its correct basemap/camera. */
+    const mapInitializing = ref(true);
     const selectedId = ref(null);
     const activeGroupId = ref(null);
     const followLocked = ref(false);
@@ -983,6 +997,7 @@ export default {
 
     const geo = useLiveTrackGeolocation({ getMap: trackMap.getMap });
     trackMap.onStyleReady(() => geo.syncUserLocationMarker());
+    trackMap.onStyleReady(() => { mapInitializing.value = false; });
     const { trackingEnabled, toggleLocationTracking } = geo;
 
     function onLayerChange() {
@@ -1787,6 +1802,22 @@ export default {
       }
     }
 
+    /**
+     * Wait briefly for `App.vue`'s settings fetch (or fetch once ourselves) so `fetchTileSources()`'s
+     * `applyDefaultMapFromStore` reads the real `extensions.live_track.default_map` on the very
+     * first paint instead of racing it and being corrected later by the `platformState.userSettings`
+     * watcher (visible as a style swap). Mirrors the Places extension's `ensureUserSettingsLoaded`.
+     */
+    async function ensureUserSettingsLoaded(waitMs = 3000, pollMs = 50) {
+      if (platformState.userSettings.value != null) return;
+      const deadline = Date.now() + waitMs;
+      while (platformState.userSettings.value == null && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+      if (platformState.userSettings.value != null) return;
+      await platformState.fetchUserSettings();
+    }
+
     watch(highlightStaleData, (v) => {
       try {
         if (typeof localStorage !== 'undefined') {
@@ -1818,6 +1849,7 @@ export default {
       } catch (_) { /* ignore */ }
       const userInfo = platformState.currentUser.value;
       if (userInfo?.email) userLogin.value = userInfo.email;
+      await ensureUserSettingsLoaded();
       applyDefaultSortFromStore();
       await fetchTileSources();
       const ingressData = await getIngressBodyTemplate(api);
@@ -1876,6 +1908,7 @@ export default {
       selectedTrackSharedGroup,
       listEmptyForTab,
       loading,
+      mapInitializing,
       selectedId,
       activeGroupId,
       highlightedId,

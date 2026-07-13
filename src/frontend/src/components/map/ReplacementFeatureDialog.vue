@@ -296,6 +296,7 @@ import { DragPan, MouseWheelZoom } from 'ol/interaction'
 import type { FeatureLike } from 'ol/Feature'
 import { openLayersBasemap } from '@/utils/map/openlayers/index.js'
 import { useOpenLayersPreviewMap } from '@/composables/useOpenLayersPreviewMap'
+import { getDefaultBasemapFromStore } from '@/utils/map/mapConfigUtils'
 import { getFeature, applyFeatureReplacement } from '@/api/services/featuresApi'
 import { uploadImportFile, getImportJobStatus, getImportQueueFeatures, deleteImportItem } from '@/api/services/importApi'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -447,7 +448,8 @@ function createReplacementMapInstance(pointRadius: number) {
     getFeatureStyle: (feature) => getReplacementFeatureStyle(feature, pointRadius),
     controls: [],
     interactions: [new DragPan(), new MouseWheelZoom()],
-    maxZoom: 18
+    maxZoom: 18,
+    tileSourceId: getDefaultBasemapFromStore()
   })
 }
 
