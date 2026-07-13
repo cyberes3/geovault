@@ -3,15 +3,10 @@ Realtime WebSocket consumer for global real-time updates.
 """
 
 import json
-import traceback
-
-from channels.generic.websocket import AsyncWebsocketConsumer
-from django.contrib.auth.models import AnonymousUser
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.security.rate_limit import RedisRateLimiter
-from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
-from geo_lib.websocket.force_disconnect import user_sockets_group_name
+from geo_lib.utils.ip_utils import get_user_identifier
 from geo_lib.websocket.ping_pong import is_ping_message, pong_payload
 from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
 from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
@@ -21,6 +16,8 @@ from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.process_job_module import ProcessJobModule
 from geo_lib.websocket.registry import get_registered_websocket_modules
 
+from api.ws_consumers.base import AuthenticatedJsonConsumer
+
 _logger = get_tagged_logger()
 
 # Ping is expected every 30s; generous headroom above that for legitimate bursts of module
@@ -28,7 +25,7 @@ _logger = get_tagged_logger()
 _receive_rate_limiter = RedisRateLimiter(name='realtime_ws_receive', limit=60, window_seconds=10.0)
 
 
-class RealtimeConsumer(AsyncWebsocketConsumer):
+class RealtimeConsumer(AuthenticatedJsonConsumer):
     """Global WebSocket consumer for realtime updates."""
 
     def __init__(self, *args, **kwargs):
@@ -46,96 +43,21 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         for name, module_class in get_registered_websocket_modules():
             self.modules[name] = module_class(self)
 
-    async def connect(self):
-        """Handle WebSocket connection."""
+    async def on_connect(self, path, client_ip):
+        """Join the user's realtime room, accept the connection, and load modules."""
+        self.room_group_name = f"realtime_{self.user.id}"
+        await self.join_group(self.room_group_name)
+        await self.accept()
 
-        path = self.scope.get('path', 'unknown')
-        client_ip = 'unknown'
+        user_identifier = get_user_identifier(self.scope)
+        _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip}")
 
-        try:
-            # Get user from scope (AuthMiddlewareStack should set this)
-            self.user = self.scope.get("user")
-            if self.user is None:
-                # If user is not in scope, default to AnonymousUser
-                self.user = AnonymousUser()
+        # Load modules now that user is available
+        self._load_modules()
 
-            client_ip = get_client_ip(self.scope)
-
-            # Reject connection if user is not authenticated
-            if isinstance(self.user, AnonymousUser):
-                _logger.warning(f"WebSocket connection rejected: {path} - Anonymous - {client_ip}")
-                # Don't accept the connection - just return without accepting
-                # This will cause the connection to fail gracefully
-                return
-
-            # Create user-specific room group
-            self.room_group_name = f"realtime_{self.user.id}"
-            self.user_sockets_group_name = user_sockets_group_name(self.user.id)
-
-            # Join room group, plus the cross-consumer group used to force-disconnect this
-            # user's sockets on auth revocation (logout, API key delete, OAuth revoke).
-            await self.channel_layer.group_add(
-                self.room_group_name,
-                self.channel_name
-            )
-            await self.channel_layer.group_add(
-                self.user_sockets_group_name,
-                self.channel_name
-            )
-
-            await self.accept()
-
-            # Log successful connection
-            user_identifier = get_user_identifier(self.scope)
-            _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip}")
-
-            # Load modules now that user is available
-            self._load_modules()
-
-            # Send initial state for all modules
-            for module in self.modules.values():
-                await module.send_initial_state()
-
-        except:
-            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
-
-            # Try to accept and close the connection with error code if not already accepted
-            try:
-                # Check if connection was already accepted by checking if room_group_name exists
-                if not hasattr(self, 'room_group_name') or not self.room_group_name:
-                    # Connection not accepted yet, just don't accept it
-                    return
-                else:
-                    # Connection was accepted, close it properly
-                    await self.close(code=1011)  # 1011 = Internal Server Error
-            except:
-                pass
-
-    async def disconnect(self, close_code):
-        """Handle WebSocket disconnection."""
-
-        path = self.scope.get('path', 'unknown')
-        client_ip = 'unknown'
-
-        try:
-            client_ip = get_client_ip(self.scope)
-            user_identifier = get_user_identifier(self.scope)
-            _logger.info(f"WebSocket disconnected: {path} - {user_identifier} - {client_ip} - Close code: {close_code}")
-
-            # Leave room groups if they were created
-            if hasattr(self, 'room_group_name') and self.room_group_name:
-                await self.channel_layer.group_discard(
-                    self.room_group_name,
-                    self.channel_name
-                )
-            if hasattr(self, 'user_sockets_group_name') and self.user_sockets_group_name:
-                await self.channel_layer.group_discard(
-                    self.user_sockets_group_name,
-                    self.channel_name
-                )
-        except:
-            # Log the error but don't raise - we're already disconnecting
-            _logger.error(f"WebSocket disconnect error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
+        # Send initial state for all modules
+        for module in self.modules.values():
+            await module.send_initial_state()
 
     @_receive_rate_limiter.for_consumer()
     async def receive(self, text_data=None, bytes_data=None):
@@ -161,11 +83,6 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
     async def live_track_track_updated(self, event):
         """No-op: live_track updates use the trackers-live consumer, not this realtime channel."""
         pass
-
-    async def force_disconnect(self, event):
-        """Close this socket in response to auth revocation (logout, API key delete, OAuth revoke)."""
-        _logger.info(f"WebSocket force-disconnected: user {getattr(self.user, 'id', 'unknown')} - reason: {event.get('reason', '')}")
-        await self.close(code=4001)
 
     # Dynamic event routing - automatically route events to modules
     def __getattr__(self, name):

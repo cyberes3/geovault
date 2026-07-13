@@ -2,14 +2,14 @@
 import uuid
 
 from django.db.models import Q
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore, Collection
 from api.services.feature_service import FeatureService
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, not_found_response
-from api.validation.feature_updates import validate_payload, UnifiedSharePayload
+from api.validation.decorators import validate_payload
+from api.validation.payloads.sharing import UnifiedSharePayload
 from api.views.sharing.utils import build_share_url, generate_unique_share_id
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
@@ -90,7 +90,7 @@ def create_share(request, validated_data):
         )
         trigger_social_preview_warmup_async(tag_share.share_id)
 
-        return JsonResponse(_share_summary(request, tag_share, 'tag', tag=tag_share.tag))
+        return success_response(_share_summary(request, tag_share, 'tag', tag=tag_share.tag))
     
     elif share_type == 'collection':
         collection_id_str = validated_data.get('collection_id')
@@ -112,7 +112,7 @@ def create_share(request, validated_data):
         )
         trigger_social_preview_warmup_async(collection_share.share_id)
 
-        return JsonResponse(_share_summary(
+        return success_response(_share_summary(
             request, collection_share, 'collection',
             collection_id=str(collection.id), collection_name=collection.name,
         ))
@@ -129,7 +129,7 @@ def create_share(request, validated_data):
         # Check if a share already exists for this feature
         existing_share = FeatureShare.objects.filter(feature=feature, user=request.user).first()
         if existing_share:
-            return JsonResponse(_share_summary(request, existing_share, 'feature', feature_id=feature.id))
+            return success_response(_share_summary(request, existing_share, 'feature', feature_id=feature.id))
         
         # Create new share
         feature_share = FeatureShare.objects.create(
@@ -141,7 +141,7 @@ def create_share(request, validated_data):
         )
         trigger_social_preview_warmup_async(feature_share.share_id)
 
-        return JsonResponse(_share_summary(request, feature_share, 'feature', feature_id=feature.id))
+        return success_response(_share_summary(request, feature_share, 'feature', feature_id=feature.id))
     
     else:
         return error_response(f'Invalid share_type: {share_type}', code=400)
@@ -176,7 +176,7 @@ def list_shares(request):
     # Sort by created_at descending (newest first)
     shares_list.sort(key=lambda x: x['created_at'], reverse=True)
 
-    return JsonResponse({
+    return success_response({
         'shares': shares_list
     })
 

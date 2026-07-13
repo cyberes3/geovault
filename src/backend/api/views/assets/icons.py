@@ -6,9 +6,11 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 from django import forms
-from django.http import HttpResponse, Http404, JsonResponse
+from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 
+from api.services.icon_recolor_service import recolor_icon_file_to_png_bytes
+from api.utils.responses import error_response, success_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.icons.get import ICON_CONTENT_TYPES, parse_user_icon_hash
 from geo_lib.processing.icons.icon_manager import store_icon
@@ -47,17 +49,11 @@ def upload_icon(request):
     Returns: JSON with success status and icon URL path
     """
     if not request.FILES:
-        return JsonResponse({
-            'error': 'No file provided',
-            'code': 400
-        }, status=400)
+        return error_response('No file provided', code=400)
 
     form = IconUploadForm(request.POST, request.FILES)
     if not form.is_valid():
-        return JsonResponse({
-            'error': 'Invalid form data',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid form data', code=400)
 
     uploaded_file = request.FILES['file']
     file_name = secure_filename(uploaded_file.name)
@@ -69,29 +65,23 @@ def upload_icon(request):
     file_ext = os.path.splitext(file_name)[1].lower()
     allowed_extensions = get_required_setting('ICON_UPLOAD_ALLOWED_EXTENSIONS')
     if file_ext not in allowed_extensions:
-        return JsonResponse({
-            'error': f'Invalid file extension. Allowed extensions: {", ".join(sorted(allowed_extensions))}',
-            'code': 400
-        }, status=400)
+        return error_response(
+            f'Invalid file extension. Allowed extensions: {", ".join(sorted(allowed_extensions))}',
+            code=400
+        )
 
     # Read file data
     try:
         icon_data = uploaded_file.read()
-    except:
+    except Exception:
         _logger.error(f"Error reading uploaded icon file: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to read file',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to read file', code=500)
 
     # Validate file size (500KB limit for uploads)
     max_upload_bytes = get_required_setting('ICON_UPLOAD_MAX_SIZE_BYTES')
     if len(icon_data) > max_upload_bytes:
         max_size_mb = max_upload_bytes / 1024
-        return JsonResponse({
-            'error': f'File size exceeds maximum allowed size of {max_size_mb:.0f}KB',
-            'code': 400
-        }, status=400)
+        return error_response(f'File size exceeds maximum allowed size of {max_size_mb:.0f}KB', code=400)
 
     # WEBP is accepted as an upload input but converted to PNG here so every stored
     # user icon is PNG or JPG, regardless of what the browser originally sent.
@@ -103,10 +93,7 @@ def upload_icon(request):
                 img.convert('RGBA').save(output, format='PNG')
                 icon_data = output.getvalue()
         except (UnidentifiedImageError, OSError, ValueError):
-            return JsonResponse({
-                'error': 'Invalid WEBP image',
-                'code': 400
-            }, status=400)
+            return error_response('Invalid WEBP image', code=400)
         file_name = os.path.splitext(file_name)[0] + '.png'
 
     # Store icon using existing icon manager
@@ -115,15 +102,9 @@ def upload_icon(request):
     icon_url = store_icon(icon_data, file_name, import_log, stats={'successful': 0, 'failed': 0})
 
     if not icon_url:
-        return JsonResponse({
-            'error': 'Failed to store icon',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to store icon', code=500)
 
-    return JsonResponse({
-        'icon_url': icon_url,
-        'code': 200
-    }, status=200)
+    return success_response({'icon_url': icon_url})
 
 
 @require_http_methods(["GET"])
@@ -216,24 +197,15 @@ def recolor_icon(request):
 
     # Validate icon path
     if not icon_path_param:
-        return JsonResponse({
-            'error': 'Missing required parameter: icon',
-            'code': 400
-        }, status=400)
+        return error_response('Missing required parameter: icon', code=400)
 
     # Validate color format (hex color: #RRGGBB)
     if not color or not re.match(r'^#[0-9A-Fa-f]{6}$', color):
-        return JsonResponse({
-            'error': 'Invalid color format. Must be hex color (e.g., #00ff30)',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid color format. Must be hex color (e.g., #00ff30)', code=400)
 
     # Security: Prevent directory traversal
     if '..' in icon_path_param or icon_path_param.startswith('/'):
-        return JsonResponse({
-            'error': 'Invalid icon path',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid icon path', code=400)
 
     icon_path_param = secure_path(icon_path_param)
 
@@ -241,66 +213,17 @@ def recolor_icon(request):
     icon_path = (assets_icons_dir / icon_path_param).resolve()
 
     if not is_path_under_base(icon_path, assets_icons_dir):
-        return JsonResponse({
-            'error': 'Invalid icon path',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid icon path', code=400)
 
     # Check if icon exists
     if not icon_path.exists() or not icon_path.is_file():
         raise Http404("Icon not found")
 
-    # Load image using PIL
     try:
-        img = Image.open(icon_path)
-        # Convert to RGBA if not already (ensures we have alpha channel)
-        if img.mode != 'RGBA':
-            img = img.convert('RGBA')
-    except:
+        image_data = recolor_icon_file_to_png_bytes(icon_path, color)
+    except (UnidentifiedImageError, OSError, ValueError):
         _logger.error(f"Error loading icon {icon_path_param}: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': f'Failed to load icon',
-            'code': 500
-        }, status=500)
-
-    # Parse color
-    hex_color = color.replace('#', '')
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-
-    # Get image data
-    pixels = img.load()
-    width, height = img.size
-
-    # Threshold for converting to pure black/white (brightness < 200)
-    brightness_threshold = 200
-
-    # Recolor dark pixels
-    pixels_recolored = 0
-    total_pixels = 0
-
-    for y in range(height):
-        for x in range(width):
-            pixel = pixels[x, y]
-            pixel_r, pixel_g, pixel_b, pixel_a = pixel
-
-            # Only process non-transparent pixels
-            if pixel_a > 0:
-                total_pixels += 1
-                # Calculate brightness using relative luminance
-                brightness = 0.299 * pixel_r + 0.587 * pixel_g + 0.114 * pixel_b
-
-                # If pixel is dark enough, replace with target color
-                if brightness < brightness_threshold:
-                    pixels[x, y] = (r, g, b, pixel_a)  # Keep original alpha
-                    pixels_recolored += 1
-
-    # Convert image to PNG bytes
-    output = BytesIO()
-    img.save(output, format='PNG')
-    output.seek(0)
-    image_data = output.read()
+        return error_response('Failed to load icon', code=500)
 
     # Create response
     response = _icon_response(image_data, 'image/png')

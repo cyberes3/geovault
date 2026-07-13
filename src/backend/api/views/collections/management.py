@@ -10,7 +10,8 @@ from api.utils.responses import (
     success_response,
     handle_404,
 )
-from api.validation.feature_updates import validate_payload, CollectionCreatePayload, CollectionUpdatePayload
+from api.validation.decorators import validate_payload
+from api.validation.payloads.collections import CollectionCreatePayload, CollectionUpdatePayload
 from api.views.collections.utils import (
     _count_collection_features,
     _serialize_collection,

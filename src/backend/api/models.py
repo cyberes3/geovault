@@ -4,7 +4,6 @@ from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.db import models as django_models
-from api.fields import EncryptedTextField
 
 
 class ImportQueue(django_models.Model):

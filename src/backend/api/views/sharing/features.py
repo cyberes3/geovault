@@ -1,15 +1,15 @@
 """Feature sharing operations"""
-import json
 import traceback
 
 from django.db.models import F
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureShare
 from api.services.feature_service import FeatureService
 from api.services.feature_serialization import geojson_feature_from_instance
-from api.utils.responses import error_response, handle_404
+from api.utils.responses import error_response, handle_404, success_response
+from api.validation.decorators import validate_payload
+from api.validation.payloads.sharing import UpdateFeatureSharePayload
 from api.views.sharing.public_share import invalid_share_response
 from api.views.sharing.utils import build_share_url, validate_share_id
 from api.views.features.retrieval import (
@@ -42,7 +42,7 @@ def get_feature_share(request, feature_id):
     # Build full URL using configured site domain
     share_url = build_share_url(request, share.share_id)
 
-    return JsonResponse({
+    return success_response({
         'share_id': share.share_id,
         'url': share_url,
         'created_at': share.created_at.isoformat(),
@@ -55,7 +55,8 @@ def get_feature_share(request, feature_id):
 @api_or_login_required_401()
 @require_http_methods(["PATCH"])
 @handle_404
-def update_feature_share(request, feature_id):
+@validate_payload(UpdateFeatureSharePayload)
+def update_feature_share(request, feature_id, validated_data):
     """
     Update the allow_downloads and/or include_tags settings for a feature share.
 
@@ -63,22 +64,8 @@ def update_feature_share(request, feature_id):
     - allow_downloads: boolean - Whether to allow downloads
     - include_tags: boolean - Whether to include tags in the shared feature
     """
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return error_response('Invalid JSON in request body', code=400)
-
-    allow_downloads = data.get('allow_downloads')
-    include_tags = data.get('include_tags')
-
-    if allow_downloads is None and include_tags is None:
-        return error_response('allow_downloads or include_tags is required', code=400)
-
-    if allow_downloads is not None and not isinstance(allow_downloads, bool):
-        return error_response('allow_downloads must be a boolean', code=400)
-
-    if include_tags is not None and not isinstance(include_tags, bool):
-        return error_response('include_tags must be a boolean', code=400)
+    allow_downloads = validated_data.get('allow_downloads')
+    include_tags = validated_data.get('include_tags')
 
     # Verify feature exists, belongs to user, and is a main-map feature (matches the
     # scope guard get_feature_share above enforces via FeatureService).
@@ -100,7 +87,7 @@ def update_feature_share(request, feature_id):
         # Build full URL using configured site domain
         share_url = build_share_url(request, share.share_id)
 
-        return JsonResponse({
+        return success_response({
             'share_id': share.share_id,
             'url': share_url,
             'created_at': share.created_at.isoformat(),
@@ -141,7 +128,7 @@ def get_public_feature_share(request, share_id):
     )
 
     # Build response with single feature
-    return JsonResponse({
+    return success_response({
         'type': 'FeatureCollection',
         'features': [feature_geojson] if feature_geojson else [],
         'allow_downloads': share.allow_downloads
@@ -175,10 +162,7 @@ def get_public_feature_elevations_internal(request, share_id):
     coordinates = _extract_coordinates_with_elevation_from_geojson(geojson_data)
     
     if not coordinates:
-        return JsonResponse({
-            'error': 'Feature does not contain LineString or MultiLineString geometry',
-            'code': 400
-        }, status=400)
+        return error_response('Feature does not contain LineString or MultiLineString geometry', code=400)
     
     # Convert to [lon, lat, elevation] format, including elevation if present
     coordinates_with_elevations = []
@@ -190,7 +174,7 @@ def get_public_feature_elevations_internal(request, share_id):
             # No elevation data stored
             coordinates_with_elevations.append([lon, lat])
     
-    return JsonResponse({
+    return success_response({
         'coordinates': coordinates_with_elevations
     })
 

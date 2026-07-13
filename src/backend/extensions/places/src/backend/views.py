@@ -2,7 +2,7 @@ from django.http import HttpResponse
 from django.views.decorators.http import require_http_methods
 
 from api.utils.responses import handle_404, success_response
-from api.validation.feature_updates import validate_payload
+from api.validation.decorators import validate_payload
 from extensions.places.src.backend.constants import DEFAULT_SORT, VALID_SORT
 from extensions.places.src.backend.services.place_service import (
     PlaceServiceError,

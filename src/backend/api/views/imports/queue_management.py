@@ -15,7 +15,9 @@ from api.utils.responses import (
     server_error_response,
     handle_404,
 )
-from api.validation.feature_updates import validate_payload, FeatureUpdatePayload, ImportToFeaturestorePayload
+from api.validation.decorators import validate_payload
+from api.validation.payloads.features import FeatureUpdatePayload
+from api.validation.payloads.imports import ImportToFeaturestorePayload
 from api.views.features.updates.shared import extract_system_tags
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.delete_job import DeleteJob
@@ -253,22 +255,21 @@ def search_import_item_features(request, item_id: int):
 
 
 @api_or_login_required_401()
+@require_http_methods(["DELETE"])
 @handle_404
 def delete_import_item(request, id):
-    if request.method == 'DELETE':
-        queue = get_object_or_404_for_user(ImportQueue, request.user, id=id)
+    queue = get_object_or_404_for_user(ImportQueue, request.user, id=id)
 
-        # Start async delete job
-        job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
+    # Start async delete job
+    job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
 
-        if job_id:
-            return success_response({
-                'msg': 'Delete job started',
-                'job_id': job_id
-            })
-        else:
-            return server_error_response('Failed to start delete job')
-    return HttpResponse(status=405)
+    if job_id:
+        return success_response({
+            'msg': 'Delete job started',
+            'job_id': job_id
+        })
+    else:
+        return server_error_response('Failed to start delete job')
 
 
 @api_or_login_required_401()

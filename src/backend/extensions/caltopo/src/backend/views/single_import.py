@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from api.models import FeatureStore
 from api.utils.responses import error_response, success_response
-from api.validation.feature_updates import validate_payload
+from api.validation.decorators import validate_payload
 from api.views.features.updates.geometry import _normalize_geometry_coordinates
 from extensions.caltopo.src.backend.services.caltopo_api import get_feature, convert_caltopo_to_geojson
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, VALID_CALTOPO_FEATURE_CLASSES

@@ -345,11 +345,16 @@ class TestMaxFeaturesLimit(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.features.bbox_utils.get_required_setting')
-    def test_max_features_limit_enforced(self, mock_get_setting):
+    @patch('api.views.features.bbox.execution.get_required_setting')
+    @patch('api.views.features.bbox.response.get_required_setting')
+    @patch('api.views.features.bbox.params.get_required_setting')
+    def test_max_features_limit_enforced(self, mock_params_setting, mock_response_setting, mock_execution_setting):
         """Test that MAX_FEATURES_PER_REQUEST limit is enforced."""
-        # Set a low limit for testing
-        mock_get_setting.return_value = 5
+        # Set a low limit for testing (applied identically across every bbox submodule,
+        # matching the pre-split single-module get_required_setting mock behavior)
+        mock_params_setting.return_value = 5
+        mock_response_setting.return_value = 5
+        mock_execution_setting.return_value = 5
         
         # Create more features than the limit
         for i in range(20):
@@ -384,11 +389,15 @@ class TestMaxFeaturesLimit(TestCase):
         # Verify the limit is in the response
         self.assertEqual(data['max_features_limit'], 5)
 
-    @patch('api.views.features.bbox_utils.get_required_setting')
-    def test_max_features_unlimited(self, mock_get_setting):
+    @patch('api.views.features.bbox.execution.get_required_setting')
+    @patch('api.views.features.bbox.response.get_required_setting')
+    @patch('api.views.features.bbox.params.get_required_setting')
+    def test_max_features_unlimited(self, mock_params_setting, mock_response_setting, mock_execution_setting):
         """Test behavior when limit is -1 (unlimited)."""
-        # Set limit to -1 (unlimited)
-        mock_get_setting.return_value = -1
+        # Set limit to -1 (unlimited), applied identically across every bbox submodule
+        mock_params_setting.return_value = -1
+        mock_response_setting.return_value = -1
+        mock_execution_setting.return_value = -1
         
         # Create many features
         for i in range(50):

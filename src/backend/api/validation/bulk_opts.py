@@ -2,7 +2,8 @@ from typing import Dict, Any, Tuple, Optional
 
 from pydantic import ValidationError
 
-from api.validation.feature_updates import validate_pydantic_model, BulkOperationsPayload
+from api.validation.decorators import validate_pydantic_model
+from api.validation.payloads.bulk_operations import BulkOperationsPayload
 
 
 def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Optional[str]]:

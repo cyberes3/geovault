@@ -1,13 +1,12 @@
-import json
-
 from django.db import transaction
 from django.db.models import Q
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from api.services.feature_service import FeatureService
-from api.utils.responses import handle_404, error_response
+from api.utils.responses import handle_404, success_response
+from api.validation.decorators import validate_payload
+from api.validation.payloads.features import BulkDeleteByTagPayload
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -26,7 +25,7 @@ def delete_feature(request, feature_id):
     """
     feature = FeatureService.get_owned_feature_or_404(request.user, feature_id)
     feature.delete()
-    return JsonResponse({
+    return success_response({
         'message': 'Feature deleted successfully',
         'feature_id': feature_id
     })
@@ -34,7 +33,8 @@ def delete_feature(request, feature_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def bulk_delete_features_by_tag(request):
+@validate_payload(BulkDeleteByTagPayload)
+def bulk_delete_features_by_tag(request, validated_data):
     """
     API endpoint to bulk delete all features that have a specific tag.
     Used for deleting system tags along with all their features.
@@ -46,17 +46,7 @@ def bulk_delete_features_by_tag(request):
     - deleted_count: int - Number of features successfully deleted
     - tag: string - The tag that was searched for
     """
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return error_response('Invalid JSON in request body', 400)
-
-    tag = data.get('tag')
-    if not tag:
-        return error_response('Tag parameter is required', 400)
-
-    if not isinstance(tag, str):
-        return error_response('Tag must be a string', 400)
+    tag = validated_data['tag']
 
     with transaction.atomic():
         # Query all main-map features for the current user that have this tag (extension-
@@ -69,7 +59,7 @@ def bulk_delete_features_by_tag(request):
 
         deleted_count = features.count()
         if deleted_count == 0:
-            return JsonResponse({
+            return success_response({
                 'deleted_count': 0,
                 'tag': tag,
                 'message': 'No features found with this tag'
@@ -77,7 +67,7 @@ def bulk_delete_features_by_tag(request):
 
         features.delete()
 
-        return JsonResponse({
+        return success_response({
             'deleted_count': deleted_count,
             'tag': tag,
             'message': f'Successfully deleted {deleted_count} feature(s)'

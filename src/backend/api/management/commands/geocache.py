@@ -10,7 +10,6 @@ Usage:
 
 from django.core.management.base import BaseCommand
 from django.core.cache import caches
-from django.conf import settings
 
 
 class Command(BaseCommand):

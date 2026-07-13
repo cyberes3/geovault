@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, List
 
-from api.validation.feature_updates import validate_payload, validate_pydantic_model
+from api.validation.decorators import validate_payload, validate_pydantic_model
 
 User = get_user_model()
 

@@ -6,8 +6,10 @@ from django.views.decorators.http import require_http_methods
 from api.models import Collection
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.format_encoding import create_bbox_response
-from api.utils.responses import handle_404
-from api.views.features.bbox_utils import _validate_bbox_params, get_features_in_bbox, _build_bbox_response
+from api.utils.responses import error_response, handle_404
+from api.views.features.bbox.execution import get_features_in_bbox
+from api.views.features.bbox.params import _validate_bbox_params
+from api.views.features.bbox.response import _build_bbox_response
 from geo_lib.website.auth import api_or_login_required_401
 
 
@@ -38,10 +40,7 @@ def get_geojson_data(request):
             # Verify collection belongs to user
             get_object_or_404_for_user(Collection, request.user, id=collection_id)
         except (ValueError, TypeError):
-            return JsonResponse({
-                'error': 'Invalid collection ID. Expected UUID',
-                'code': 400
-            }, status=400)
+            return error_response('Invalid collection ID. Expected UUID', code=400)
 
     # Get tags and match mode parameters
     tags = request.GET.getlist('tags')

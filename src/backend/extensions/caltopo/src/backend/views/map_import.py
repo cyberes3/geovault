@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from api.models import ImportQueue
 from api.utils.responses import error_response, success_response
-from api.validation.feature_updates import validate_payload
+from api.validation.decorators import validate_payload
 from extensions.caltopo.src.backend.services.caltopo_api import get_map_features, convert_caltopo_to_geojson
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, is_valid_caltopo_feature_class
 from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limiter

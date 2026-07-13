@@ -1,12 +1,7 @@
 """
 Single source of truth for converting `FeatureStore` rows into GeoJSON `Feature`
-dicts and `FeatureCollection` responses.
-
-Before this module existed, essentially the same "geojson + database_id + geojson_hash,
-optionally strip private tags for public shares" logic was duplicated across
-`bbox_utils.py` (both the ORM and raw-SQL paths), `search.py` (twice), and
-`collections/management.py`. Every one of those call sites now builds its response
-through here instead.
+dicts and `FeatureCollection` responses (geojson + database_id + geojson_hash,
+optionally stripping private tags for public shares).
 """
 from typing import Any, Iterable, Optional
 

@@ -2,9 +2,9 @@
 API endpoints for IP-based geolocation services.
 """
 
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from api.utils.responses import error_response, success_response
 from geo_lib.ip_geolocation import get_geolocation_service
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
@@ -32,7 +32,7 @@ def get_user_location(request):
     location_data = geo_service.get_location_from_ip(client_ip)
 
     if location_data is None:
-        return JsonResponse({'location': None})
+        return success_response({'location': None})
 
     # Prepare response data - only include fields used by frontend
     response_data = {
@@ -45,7 +45,7 @@ def get_user_location(request):
         }
     }
 
-    return JsonResponse(response_data)
+    return success_response(response_data)
 
 
 @api_or_login_required_401()
@@ -68,10 +68,7 @@ def get_location_by_ip(request):
         ip_address = geo_service.get_client_ip(request)
 
     if not ip_address or len(ip_address.split('.')) != 4:
-        return JsonResponse({
-            'error': 'Invalid IP address format',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid IP address format', code=400)
 
     location_data = geo_service.get_location_from_ip(ip_address)
 
@@ -81,14 +78,11 @@ def get_location_by_ip(request):
             ip_address,
             request.path,
         )
-        return JsonResponse({
-            'error': f'Location not found for IP address: {ip_address}',
-            'location': None,
-            'ip_info': {
-                'ip': ip_address,
-                'accuracy_radius': None
-            }
-        }, status=500)
+        return error_response(
+            f'Location not found for IP address: {ip_address}',
+            code=500,
+            details={'location': None, 'ip_info': {'ip': ip_address, 'accuracy_radius': None}},
+        )
 
     # Prepare response data
     response_data = {
@@ -108,4 +102,4 @@ def get_location_by_ip(request):
     }
 
     _logger.info(f"Location lookup successful for IP {ip_address}")
-    return JsonResponse(response_data)
+    return success_response(response_data)

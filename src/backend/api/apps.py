@@ -3,7 +3,7 @@ from django.apps import AppConfig
 from website.celery_app import celery_app
 
 
-class DatamanageConfig(AppConfig):
+class ApiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'api'
 

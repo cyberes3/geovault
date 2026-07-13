@@ -3,21 +3,19 @@ Process status WebSocket consumer for specific import item updates.
 """
 
 import json
-import traceback
 
 from asgiref.sync import sync_to_async
-from channels.generic.websocket import AsyncWebsocketConsumer
-from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
 
 from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.security.rate_limit import RedisRateLimiter
-from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
-from geo_lib.websocket.force_disconnect import user_sockets_group_name
+from geo_lib.utils.ip_utils import get_user_identifier
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 from geo_lib.websocket.ping_pong import is_ping_message, pong_payload
+
+from api.ws_consumers.base import AuthenticatedJsonConsumer
 
 _logger = get_tagged_logger()
 
@@ -26,75 +24,25 @@ _logger = get_tagged_logger()
 _receive_rate_limiter = RedisRateLimiter(name='process_status_ws_receive', limit=30, window_seconds=10.0)
 
 
-class ProcessStatusConsumer(AsyncWebsocketConsumer):
+class ProcessStatusConsumer(AuthenticatedJsonConsumer):
     """WebSocket consumer for process status updates for a specific import item."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.item_id = None
         self.room_group_name = None
-        self.user_sockets_group_name = None
 
-    async def connect(self):
-        """Handle WebSocket connection."""
+    def disconnect_log_context(self) -> str:
+        return f" - Item: {self.item_id or 'Unknown'}"
 
-        path = self.scope.get('path', 'unknown')
-        client_ip = 'unknown'
-        user_identifier = 'unknown'
-
-        # Get user from scope (AuthMiddlewareStack should set this)
-        self.user = self.scope.get("user")
-        if self.user is None:
-            # If user is not in scope, default to AnonymousUser
-            self.user = AnonymousUser()
-
-        client_ip = get_client_ip(self.scope)
-
-        # Reject connection if user is not authenticated
-        if isinstance(self.user, AnonymousUser):
-            _logger.warning(f"WebSocket connection rejected: {path} - Anonymous - {client_ip}")
-            # Don't accept the connection - just return without accepting
-            # This will cause the connection to fail gracefully
-            return
-
-        # Get item_id from URL parameters
+    async def on_connect(self, path, client_ip):
+        """Verify the user owns the requested import item, then accept and load its status module."""
         self.item_id = self.scope['url_route']['kwargs']['item_id']
 
         try:
-            # Verify user owns this import item using async database query
-
             # Use sync_to_async to make the database query async-safe
             get_item = sync_to_async(get_object_or_404_for_user)
             item = await get_item(ImportQueue, self.user, id=self.item_id)
-
-            # Only accept the connection if the item exists and user owns it
-            await self.accept()
-
-            # Log successful connection
-            user_identifier = get_user_identifier(self.scope)
-            _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip} - Item: {self.item_id}")
-
-            # Create item-specific room group
-            self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
-            self.user_sockets_group_name = user_sockets_group_name(self.user.id)
-
-            # Join room group, plus the cross-consumer group used to force-disconnect this
-            # user's sockets on auth revocation (logout, API key delete, OAuth revoke).
-            await self.channel_layer.group_add(
-                self.room_group_name,
-                self.channel_name
-            )
-            await self.channel_layer.group_add(
-                self.user_sockets_group_name,
-                self.channel_name
-            )
-
-            # Load process status module
-            self.process_status_module = ProcessStatusModule(self, item)
-
-            # Send initial state
-            await self.process_status_module.send_initial_state()
-
         except Http404:
             # Accept connection briefly to send error message, then close
             await self.accept()
@@ -108,40 +56,21 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                 }
             }))
             await self.close(code=4004)  # 4004 = 404 Not Found
-        except:
-            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)} - {client_ip}: {traceback.format_exc()}")
+            return
 
-            # Try to accept and close the connection with error code if not already accepted
-            try:
-                # Check if connection was already accepted by checking if room_group_name exists
-                if not hasattr(self, 'room_group_name') or not self.room_group_name:
-                    # Connection not accepted yet, just don't accept it
-                    return
-                else:
-                    # Connection was accepted, close it properly
-                    await self.close(code=1011)  # 1011 = Internal Server Error
-            except:
-                pass
+        # Only accept the connection if the item exists and user owns it
+        await self.accept()
 
-    async def disconnect(self, close_code):
-        """Handle WebSocket disconnection."""
-        path = self.scope.get('path', 'unknown')
-        client_ip = get_client_ip(self.scope)
         user_identifier = get_user_identifier(self.scope)
-        item_id = getattr(self, 'item_id', 'Unknown')
-        _logger.info(f"WebSocket disconnected: {path} - {user_identifier} - {client_ip} - Item: {item_id} - Close code: {close_code}")
+        _logger.info(f"WebSocket connected: {path} - {user_identifier} - {client_ip} - Item: {self.item_id}")
 
-        if self.room_group_name:
-            # Leave room group
-            await self.channel_layer.group_discard(
-                self.room_group_name,
-                self.channel_name
-            )
-        if self.user_sockets_group_name:
-            await self.channel_layer.group_discard(
-                self.user_sockets_group_name,
-                self.channel_name
-            )
+        # Create item-specific room group
+        self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
+        await self.join_group(self.room_group_name)
+
+        # Load process status module and send initial state
+        self.process_status_module = ProcessStatusModule(self, item)
+        await self.process_status_module.send_initial_state()
 
     @_receive_rate_limiter.for_consumer()
     async def receive(self, text_data=None, bytes_data=None):
@@ -200,8 +129,3 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
     async def duplicates_updated(self, event):
         """Handle duplicates updated event."""
         await self.process_status_module.handle_duplicates_updated(event['data'])
-
-    async def force_disconnect(self, event):
-        """Close this socket in response to auth revocation (logout, API key delete, OAuth revoke)."""
-        _logger.info(f"WebSocket force-disconnected: user {getattr(self.user, 'id', 'unknown')} - reason: {event.get('reason', '')}")
-        await self.close(code=4001)

@@ -176,7 +176,7 @@ class TestTagDeletion(TestCase):
         
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
-        self.assertIn('Tag parameter is required', data['error'])
+        self.assertIn('tag', data['error'].lower())
 
     def test_bulk_delete_invalid_tag_type(self):
         """Test bulk delete with non-string tag."""
@@ -188,7 +188,8 @@ class TestTagDeletion(TestCase):
         
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
-        self.assertIn('Tag must be a string', data['error'])
+        self.assertIn('tag', data['error'].lower())
+        self.assertIn('valid string', data['error'].lower())
 
     def test_bulk_delete_empty_tag(self):
         """Test bulk delete with empty string tag."""

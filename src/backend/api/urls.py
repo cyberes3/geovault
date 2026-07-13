@@ -16,7 +16,7 @@ from website.internal_apps import internal_apps_page
 from api.views.config import get_config
 from api.views.features.creation import create_quick_point
 from api.views.features.deletion import delete_feature, bulk_delete_features_by_tag
-from api.views.features.export import export_feature_kmz
+from api.views.features.export.views import export_feature_kmz
 from api.views.features.get_data_extent_hint import get_data_extent_hint
 from api.views.features.get_geojson_data import get_geojson_data
 from api.views.features.retrieval import get_feature, get_feature_elevations_external, get_feature_elevations_internal

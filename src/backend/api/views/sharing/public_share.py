@@ -7,15 +7,18 @@ from django.http import JsonResponse
 
 from api.models import FeatureStore
 from api.utils.format_encoding import create_bbox_response
+from api.utils.responses import error_response
 from api.views.collections.utils import get_collection_feature_ids
-from api.views.features.bbox_utils import _build_bbox_response, _validate_bbox_params, get_features_in_bbox
+from api.views.features.bbox.execution import get_features_in_bbox
+from api.views.features.bbox.params import _validate_bbox_params
+from api.views.features.bbox.response import _build_bbox_response
 from api.views.sharing.utils import find_share_by_id, validate_share_id
 
 
 def invalid_share_response() -> JsonResponse:
     """Standard 404 for any invalid/unknown share_id, shared across all share types so a
     malformed ID and a well-formed-but-nonexistent one are indistinguishable to the caller."""
-    return JsonResponse({'error': 'Invalid share link', 'code': 404}, status=404)
+    return error_response('Invalid share link', code=404)
 
 
 def resolve_public_bbox_share(

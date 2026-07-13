@@ -8,7 +8,8 @@ from django.views.decorators.http import require_http_methods
 
 from api.services.feature_service import FeatureService
 from api.utils.responses import error_response, handle_404
-from api.validation.feature_updates import validate_payload, FeatureMetadataUpdate, BulkFeatureUpdatePayload
+from api.validation.decorators import validate_payload
+from api.validation.payloads.features import FeatureMetadataUpdate, BulkFeatureUpdatePayload
 from api.views.features.updates.shared import (
     _validate_tags,
     extract_system_tags,

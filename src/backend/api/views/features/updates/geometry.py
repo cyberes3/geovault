@@ -3,14 +3,14 @@ import json
 import traceback
 
 from django.contrib.gis.geos import GEOSGeometry
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
 from api.services.feature_service import FeatureService
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, handle_404
-from api.validation.feature_updates import validate_payload, ReplacementGeometryPayload
+from api.utils.responses import error_response, handle_404, success_response
+from api.validation.decorators import validate_payload
+from api.validation.payloads.replacement import ReplacementGeometryPayload
 from api.views.features.updates.shared import (
     _validate_tags,
     extract_system_tags,
@@ -207,7 +207,7 @@ def update_feature(request, feature_id):
     # Save the updated feature
     feature.save()
 
-    return JsonResponse({
+    return success_response({
         'message': 'Feature updated successfully',
         'feature_id': feature.id
     })
@@ -382,7 +382,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
 
                     # Update the feature's geojson with regenerated tags
                     feature.geojson = feature_data
-        except:
+        except Exception:
             _logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
             # Continue without regenerating tags if there's an error
 
@@ -392,7 +392,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     # Delete the ImportQueue row after successful application
     import_queue.delete()
 
-    return JsonResponse({
+    return success_response({
         'message': 'Replacement geometry applied successfully',
         'feature_id': feature.id
     })

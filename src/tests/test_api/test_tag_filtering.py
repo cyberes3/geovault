@@ -4,7 +4,7 @@ import json
 from django.urls import reverse
 from django.contrib.gis.geos import Point, Polygon
 from api.models import FeatureStore
-from api.views.features.bbox_utils import get_features_in_bbox
+from api.views.features.bbox.execution import get_features_in_bbox
 
 @pytest.fixture
 def tagged_features(user):

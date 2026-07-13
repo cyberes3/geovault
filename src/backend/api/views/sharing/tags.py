@@ -1,8 +1,8 @@
 """Tag sharing operations"""
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare
+from api.utils.responses import success_response
 from api.views.sharing.public_share import invalid_share_response, resolve_public_bbox_share, resolve_public_share_info
 from geo_lib.logging.console import get_tagged_logger
 
@@ -21,7 +21,7 @@ def get_public_share_info(request, share_id):
     if info is None:
         # Share not found - return same error message to prevent information disclosure
         return invalid_share_response()
-    return JsonResponse(info)
+    return success_response(info)
 
 
 @require_http_methods(["GET"])

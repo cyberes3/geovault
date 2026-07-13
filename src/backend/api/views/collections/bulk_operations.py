@@ -1,5 +1,4 @@
 """Bulk operations on collections"""
-import json
 
 from django.db import transaction
 from django.views.decorators.http import require_http_methods
@@ -7,16 +6,18 @@ from django.views.decorators.http import require_http_methods
 from api.models import Collection, FeatureStore
 from api.services.feature_service import FeatureService
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, success_response, handle_404
+from api.utils.responses import success_response, handle_404
 from api.views.collections.utils import get_collection_feature_ids
-from api.validation.bulk_opts import validate_bulk_operations_payload
+from api.validation.decorators import validate_payload
+from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
 from geo_lib.website.auth import api_or_login_required_401
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
-def apply_bulk_operations_to_collection(request, collection_id):
+@validate_payload(SaveBulkOperationsPayload)
+def apply_bulk_operations_to_collection(request, collection_id, validated_data):
     """
     Apply bulk operations to all features in a collection.
 
@@ -31,18 +32,7 @@ def apply_bulk_operations_to_collection(request, collection_id):
       }
     }
     """
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return error_response('Invalid JSON in request body', code=400)
-
-    if not isinstance(data, dict):
-        return error_response('Request body must be a valid JSON object', code=400)
-
-    bulk_ops = data.get("bulk_operations", {})
-    is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
-    if not is_valid:
-        return error_response(error_message, code=400)
+    bulk_ops = validated_data.get("bulk_operations", {})
 
     collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
 

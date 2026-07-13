@@ -1,21 +1,20 @@
 """
 API views for feature creation.
 """
-import traceback
 from typing import Optional
 
-import requests
 from django.contrib.gis.geos import Point
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from api.utils.responses import error_response, success_response
-from api.validation.feature_updates import validate_payload
+from api.validation.decorators import validate_payload
 from api.views.features.payload import QuickPointCreatePayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.elevation_service import _fetch_elevation_batch_with_retry
+from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.tags.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
 from geo_lib.types.feature import PointFeature
@@ -93,7 +92,7 @@ def create_quick_point(request, validated_data):
             preserve_system_tags=None,
             preserve_geojson_hash=False
         )
-    except GeometryValidationError as e:
+    except GeometryValidationError:
         return error_response('Feature validation failed', 400)
 
     # Generate hash first (needed for PointFeature type)
@@ -105,7 +104,6 @@ def create_quick_point(request, validated_data):
     normalized_feature['properties']['geojson_hash'] = geojson_hash
 
     # Generate system tags using PointFeature type (skip reverse_geocoding for async processing)
-    from geo_lib.processing.logging import ImportLog
     point_feature = PointFeature(**normalized_feature)
     system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='quick-point', skip_reverse_geocoding=True)
 

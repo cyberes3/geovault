@@ -13,7 +13,7 @@ celery_app.config_from_object("django.conf:settings", namespace="CELERY")
 
 # Registers the lazy autodiscovery signal; the app registry isn't ready yet at this point (this
 # module is imported before Django finishes loading INSTALLED_APPS), so discovery can't be
-# forced here. See `api.apps.DatamanageConfig.ready` for where it's actually forced.
+# forced here. See `api.apps.ApiConfig.ready` for where it's actually forced.
 celery_app.autodiscover_tasks()
 
 

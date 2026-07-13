@@ -9,7 +9,7 @@ from enum import Enum
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator, model_serializer
+from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator
 
 from geo_lib.tile_sources.registry import get_all_tile_sources
 

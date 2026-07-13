@@ -79,7 +79,7 @@ class Command(BaseCommand):
                 errors += 1
                 self.stdout.write(self.style.ERROR(f'  Feature {feature.id}: {e}'))
 
-        self.stdout.write(f'Backfill complete.')
+        self.stdout.write('Backfill complete.')
         self.stdout.write(f'  Set from column (geojson_hash): {updated_from_column}')
         self.stdout.write(f'  Generated and set: {updated_generated}')
         if skipped_duplicate:

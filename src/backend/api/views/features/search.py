@@ -1,15 +1,16 @@
 import json
 
 from django.db import connection
-from django.db.models import Q
-from django.db.models.expressions import RawSQL
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from api.services.feature_serialization import build_feature_collection, geojson_feature_from_parts
+from api.utils.responses import error_response, success_response
+from api.views.features.bbox.execution import get_features_in_bbox
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
+from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
@@ -141,7 +142,7 @@ def get_features_by_tag(request):
         'system_tags': system_tags_dict
     }
 
-    return JsonResponse(response_data)
+    return success_response(response_data)
 
 
 @api_or_login_required_401()
@@ -201,10 +202,7 @@ def search_features(request):
     query = request.GET.get('query', '').strip()
 
     if not query:
-        return JsonResponse({
-            'error': 'query parameter is required',
-            'code': 400
-        }, status=400)
+        return error_response('query parameter is required', code=400)
 
     user_id = request.user.id
     table_name = FeatureStore._meta.db_table
@@ -251,7 +249,7 @@ def search_features(request):
         'query': query
     }
 
-    return JsonResponse(response_data)
+    return success_response(response_data)
 
 
 @api_or_login_required_401()
@@ -276,23 +274,16 @@ def filter_features_by_tags(request):
     tags = [tag.strip() for tag in tags if tag.strip()]
 
     if not tags:
-        return JsonResponse({
-            'error': 'At least one tag parameter is required',
-            'code': 400
-        }, status=400)
+        return error_response('At least one tag parameter is required', code=400)
 
     # Get match mode (default to AND)
     match_mode = request.GET.get('match_mode', 'AND').upper()
     if match_mode not in ['AND', 'OR']:
-        return JsonResponse({
-            'error': 'match_mode must be either AND or OR',
-            'code': 400
-        }, status=400)
+        return error_response('match_mode must be either AND or OR', code=400)
 
-    # Use the optimized shared logic from bbox_utils
+    # Use the optimized shared logic from the bbox execution module
     # Pass bbox=None to skip spatial filtering and search all features
-    from api.views.features.bbox_utils import get_features_in_bbox
-    
+
     # We pass None for bbox to search everywhere
     # The function respects MAX_FEATURES_PER_REQUEST, but for tag filtering 
     # we ideally want all matches. If the limit hits, we might need adjustments
@@ -319,7 +310,7 @@ def filter_features_by_tags(request):
         'match_mode': match_mode
     }
 
-    return JsonResponse(response_data)
+    return success_response(response_data)
 
 
 @api_or_login_required_401()
@@ -332,6 +323,11 @@ def get_all_features(request):
     # Get all main-map features for the user (extension-scoped features, e.g. `places`,
     # are excluded -- they're surfaced through their own extension API).
     features = FeatureStore.objects.owned_by(request.user).main_map().with_geometry().order_by('id')
+    total_count = features.count()
+
+    max_features = get_required_setting('MAX_FEATURES_PER_REQUEST')
+    if max_features > 0:
+        features = features[:max_features]
 
     geojson_features = [
         f for f in (geojson_feature_from_parts(feature.id, feature.geojson, feature.geojson_hash) for feature in features)
@@ -340,51 +336,9 @@ def get_all_features(request):
 
     response_data = {
         'data': build_feature_collection(geojson_features),
-        'feature_count': len(geojson_features)
+        'feature_count': len(geojson_features),
+        'total_features': total_count,
+        'max_features_limit': max_features,
     }
 
-    return JsonResponse(response_data)
-
-
-def _create_minimal_feature(feature):
-    """
-    Create a minimal feature object with only essential fields for display.
-    
-    Args:
-        feature: FeatureStore instance
-        
-    Returns:
-        dict: Minimal feature object with id, name, description, and geometry type
-    """
-    geojson_data = feature.geojson
-    if not geojson_data or 'properties' not in geojson_data:
-        return None
-
-    properties = geojson_data.get('properties', {})
-    geometry_data = geojson_data.get('geometry', {})
-
-    return {
-        "properties": {
-            "database_id": feature.id,
-            "name": properties.get('name', 'Unnamed Feature'),
-            "description": properties.get('description', '')
-        },
-        "geometry": {
-            "type": geometry_data.get('type', 'Unknown') if isinstance(geometry_data, dict) else 'Unknown'
-        }
-    }
-
-
-def _normalize_tags(tags):
-    """
-    Normalize tags to ensure they're a list of strings.
-    
-    Args:
-        tags: Tags value (could be list, None, or other)
-        
-    Returns:
-        list: Normalized list of tag strings
-    """
-    if not isinstance(tags, list):
-        return []
-    return [tag for tag in tags if isinstance(tag, str) and tag]
+    return success_response(response_data)

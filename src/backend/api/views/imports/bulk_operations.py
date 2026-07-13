@@ -1,14 +1,13 @@
 """Import bulk operations management"""
-import json
-import traceback
 
 from django.views.decorators.http import require_http_methods
 
 from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, success_response, server_error_response, handle_404
-from api.validation.bulk_opts import validate_bulk_operations_payload
-from api.validation.feature_updates import validate_payload, SkipStatePayload
+from api.utils.responses import error_response, success_response, handle_404
+from api.validation.decorators import validate_payload
+from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
+from api.validation.payloads.imports import SkipStatePayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
@@ -19,7 +18,8 @@ _logger = get_tagged_logger()
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 @handle_404
-def save_bulk_operations(request, item_id):
+@validate_payload(SaveBulkOperationsPayload)
+def save_bulk_operations(request, item_id, validated_data):
     """
     Save bulk operations (tags, styling) for an import queue item.
     These operations will be applied during import.
@@ -33,29 +33,11 @@ def save_bulk_operations(request, item_id):
             code=400
         )
 
-    try:
-        data = json.loads(request.body)
-        if not isinstance(data, dict):
-            raise ValueError('Invalid data format. Expected a JSON object.')
+    # Save bulk operations to the import queue item
+    import_item.bulk_operations = validated_data.get('bulk_operations', {})
+    import_item.save(update_fields=['bulk_operations'])
 
-        # Validate bulk operations structure
-        bulk_ops = data.get('bulk_operations', {})
-        if not isinstance(bulk_ops, dict):
-            raise ValueError('bulk_operations must be a JSON object')
-
-        # Validate payload using shared helper
-        is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
-        if not is_valid:
-            raise ValueError(error_message or 'Invalid bulk_operations payload')
-
-        # Save bulk operations to the import queue item
-        import_item.bulk_operations = bulk_ops
-        import_item.save(update_fields=['bulk_operations'])
-
-        return success_response({'msg': 'Bulk operations saved successfully'})
-
-    except (json.JSONDecodeError, ValueError):
-        return error_response('Invalid request data', code=400)
+    return success_response({'msg': 'Bulk operations saved successfully'})
 
 
 @api_or_login_required_401()

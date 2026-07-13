@@ -1,8 +1,9 @@
-from django.http import JsonResponse, HttpResponse
+from django.http import HttpResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import UserSettings, FeatureStore
-from api.validation.feature_updates import validate_payload
+from api.utils.responses import error_response, success_response
+from api.validation.decorators import validate_payload
 from api.validation.user_settings import (
     validate_settings,
     UserSettingsUpdatePayload,
@@ -38,7 +39,7 @@ def get_user_settings(request):
     # Fetch feature names for hidden features to avoid frontend making individual API calls
     hidden_features_with_names = _get_hidden_features_with_names(request.user, hidden_feature_ids)
 
-    return JsonResponse({
+    return success_response({
         'settings': settings_dict,
         'hidden_features': hidden_features_with_names,
     })
@@ -67,15 +68,9 @@ def update_user_setting(request, validated_data):
     is_valid, error_message, error_details, validated_settings = validate_settings(merged_settings)
 
     if not is_valid:
-        response_data = {
-            'error': error_message,
-            'code': 400
-        }
-        # Add detailed error information if available
-        if error_details:
-            response_data['errors'] = error_details
         _logger.warning(f"Setting validation failed for user {request.user.id}: {error_message}")
-        return JsonResponse(response_data, status=400)
+        details = {'errors': error_details} if error_details else None
+        return error_response(error_message, code=400, details=details)
 
     # Update the settings (do not modify hidden_features here)
     user_settings.settings = validated_settings
@@ -83,7 +78,7 @@ def update_user_setting(request, validated_data):
 
     # Skip fetching hidden_features since this endpoint only updates settings
     # Hidden features are managed by separate endpoints and don't change here
-    return JsonResponse({
+    return success_response({
         'settings': validated_settings,
     })
 

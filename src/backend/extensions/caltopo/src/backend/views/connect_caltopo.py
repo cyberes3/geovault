@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from requests.exceptions import ReadTimeout, Timeout
 
 from api.utils.responses import error_response, success_response
-from api.validation.feature_updates import validate_payload
+from api.validation.decorators import validate_payload
 from extensions.caltopo.src.backend.models import CalTopoUser
 from extensions.caltopo.src.backend.services.caltopo_api import get_caltopo_session, CalTopoTimeoutError
 from extensions.caltopo.src.backend.utils.caltopo_helpers import perform_caltopo_call
