@@ -643,3 +643,40 @@ def wait_for_import(wait_for_job_completion):
     return _wait
 
 
+def get_geovault_tests_dir() -> Path | None:
+    """
+    Resolve the path to the external `geovault-tests` corpus repo
+    (https://git.evulid.cc/cyberes/geovault-tests, a sibling repo to this
+    one -- see its own README), used by tests that need a large/diverse
+    real-world file corpus rather than a handful of hand-picked fixtures
+    (e.g. the togeojson golden-master tests).
+
+    Checks the `GEOVAULT_TESTS_DIR` env var first, then falls back to the
+    `src/tests/files/geovault-tests` symlink. Returns None if neither
+    resolves to an existing directory (e.g. on a machine that never cloned
+    the corpus repo), so callers can skip cleanly instead of failing.
+    """
+    env_override = os.environ.get('GEOVAULT_TESTS_DIR')
+    if env_override:
+        candidate = Path(env_override)
+        return candidate if candidate.is_dir() else None
+
+    candidate = script_dir / 'files' / 'geovault-tests'
+    return candidate if candidate.is_dir() else None
+
+
+@pytest.fixture
+def geovault_tests_dir() -> Path:
+    """
+    Pytest fixture wrapping `get_geovault_tests_dir()`; skips the test if the
+    corpus isn't available on this machine.
+    """
+    path = get_geovault_tests_dir()
+    if path is None:
+        pytest.skip(
+            "geovault-tests corpus not found -- set GEOVAULT_TESTS_DIR or "
+            "symlink it at src/tests/files/geovault-tests"
+        )
+    return path
+
+

@@ -24,6 +24,9 @@ celerybeat-schedule-wal
 
 external sources/
 
+# symlinked from the sibling geovault-tests repo (personal test corpus, not committed here)
+src/tests/files/geovault-tests
+
 # symlinked from other repository source
 src/android-survey-data-viewer
 src/android-ngs-navigator

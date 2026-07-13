@@ -93,6 +93,27 @@ The test suite is organized into the following directories:
 
 Some tests need external config (e.g. areas server DB for waterways checks). Copy `tests/.env.example` to `tests/.env` and set variables as needed. `tests/.env` is gitignored. If not set, those tests are skipped.
 
+## The `geovault-tests` corpus repo
+
+Some tests (e.g. the togeojson golden-master corpus tests in
+`test_geo_lib/test_togeojson/`) need a much larger and more diverse set of
+real-world KML/KMZ/GPX files than it makes sense to commit into this repo.
+Those live in a separate sibling repo, `geovault-tests`.
+
+By default, tests look for it via the `files/geovault-tests` symlink in this
+directory:
+
+```shell
+ln -s "../../../geovault-tests" tests/files/geovault-tests
+# (adjust the relative path to wherever you cloned geovault-tests)
+```
+
+If you keep the corpus somewhere else, set `GEOVAULT_TESTS_DIR` (in
+`tests/.env` or your shell environment) to its absolute path instead. Tests
+that depend on this corpus use the `geovault_tests_dir` fixture (or the
+`get_geovault_tests_dir()` helper directly), and skip cleanly if neither the
+symlink nor the env var resolves to an existing directory.
+
 ## Database Setup
 
 Before running tests for the first time, you need to create the PostGIS extension in the test database.

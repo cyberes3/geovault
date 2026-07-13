@@ -505,59 +505,6 @@ def check_font_glyphs():
         return False
 
 
-def check_togeojson_installation():
-    """
-    Check if togeojson Node.js converter is installed and available.
-    
-    Returns:
-        bool: True if togeojson is properly installed, False otherwise
-    """
-    try:
-        # Path to togeojson directory relative to BASE_DIR
-        togeojson_dir = Path(get_required_setting('BASE_DIR')) / 'geo_lib' / 'processing' / 'togeojson'
-
-        # Check if togeojson directory exists
-        if not togeojson_dir.exists():
-            _logger.error(f"✗ togeojson directory not found: {togeojson_dir}")
-            _logger.error("  Please ensure togeojson is installed in src/backend/geo_lib/processing/togeojson")
-            return False
-
-        # Check if index.js exists
-        index_js = togeojson_dir / 'index.js'
-        if not index_js.exists():
-            _logger.error(f"✗ togeojson index.js not found: {index_js}")
-            _logger.error("  Please ensure togeojson index.js is present")
-            return False
-
-        # Check if node_modules exists (indicating npm packages are installed)
-        node_modules = togeojson_dir / 'node_modules'
-        if not node_modules.exists() or not node_modules.is_dir():
-            _logger.error(f"✗ togeojson node_modules not found: {node_modules}")
-            _logger.error("  Please install dependencies: cd src/backend/geo_lib/processing/togeojson && npm install")
-            return False
-
-        # Check if required dependencies are installed
-        required_deps = ['@tmcw/togeojson', '@xmldom/xmldom', 'adm-zip']
-        missing_deps = []
-        for dep in required_deps:
-            # Check if the dependency directory exists in node_modules
-            dep_path = node_modules / dep
-            if not dep_path.exists():
-                missing_deps.append(dep)
-
-        if missing_deps:
-            _logger.error(f"✗ Missing required togeojson dependencies: {', '.join(missing_deps)}")
-            _logger.error("  Please install dependencies: cd src/backend/geo_lib/processing/togeojson && npm install")
-            return False
-
-        _logger.info(f"✓ togeojson is installed: {togeojson_dir}")
-        return True
-
-    except Exception as e:
-        _logger.error(f"✗ togeojson installation check failed: {e}")
-        return False
-
-
 def check_file_type_max_size():
     """
     Check that all FILE_TYPE_CONFIGS max_size values are less than 200MB.
@@ -1044,13 +991,12 @@ def run_startup_checks():
     6. Check Redis connection
     7. Check writable directories (create if needed)
     8. Check frontend files are built
-    9. Check togeojson installation
-    10. Validate file type max_size values (< 200MB)
-    11. Verify Site configuration (for email confirmation URLs)
-    12. Clean up stale Redis processing queues and job status data
-    13. Clear Redis cache (ensures fresh data on startup)
-    14. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
-    15. Check for duplicate extension names
+    9. Validate file type max_size values (< 200MB)
+    10. Verify Site configuration (for email confirmation URLs)
+    11. Clean up stale Redis processing queues and job status data
+    12. Clear Redis cache (ensures fresh data on startup)
+    13. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
+    14. Check for duplicate extension names
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -1074,7 +1020,6 @@ def run_startup_checks():
         ("Frontend Files", check_frontend_files),
         ("Font Glyphs", check_font_glyphs),
         ("Social Preview Tile Source", check_social_preview_tilesource),
-        ("togeojson Installation", check_togeojson_installation),
         ("File Type Max Size", check_file_type_max_size),
         ("Site Configuration", check_site_configuration),
         ("Extensions", check_extensions),
@@ -1124,7 +1069,6 @@ def run_startup_checks():
         _logger.error("  - Ensure Redis is running and accessible")
         _logger.error("  - Build frontend: cd frontend && npm run build")
         _logger.error("  - Generate fonts: cd src/backend && ./generate-map-fonts.sh")
-        _logger.error("  - Install togeojson: cd src/backend/geo_lib/processing/togeojson && npm install")
         _logger.error("  - Ensure directories are writable")
         _logger.error("=" * 60)
         sys.exit(1)
