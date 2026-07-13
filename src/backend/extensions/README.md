@@ -146,8 +146,8 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.createRouteWrapper`** — see above
 - **`window.gv_core.Vue`**, **`VueRouter`**, **`Vuex`**, **`axios`** — Vue ecosystem (externalized so extensions share core's single instance)
 - **`window.gv_core.HeroiconsOutline`**, **`HeroiconsSolid`** — Heroicons
-- **`window.gv_core.ol`** — OpenLayers (`source`, `layer`, `proj`, `geom`, `style`, `interaction`, `Feature`)
-- **`window.gv_core.maplibre`** — MapLibre GL JS
+- **`window.gv_core.ol`** — OpenLayers (`source`, `layer`, `proj`, `geom`, `style`, `interaction`, `Feature`). Loaded lazily: `null` until you call and `await` **`window.gv_core.loadOl()`**, which resolves to (and also populates) this value.
+- **`window.gv_core.maplibre`** — MapLibre GL JS. Loaded lazily: `null` until you call and `await` **`window.gv_core.loadMaplibreGl()`**, which resolves to (and also populates) this value.
 - **`window.gv_core.tileSourceCatalog`** — shared, cached basemap/tile-source catalog singleton (`.load()`)
 - **`window.gv_core.RasterTileUrls`**, **`OSM_TILE_SOURCE_ID`** — raster tile URL helpers
 - **`window.gv_core.openLayersBasemap`** — shared OpenLayers basemap singleton
@@ -158,7 +158,7 @@ All shared platform resources live on **`window.gv_core`** only. Use `window.gv_
 - **`window.gv_core.realtimeSocket`**, **`WebSocketHeartbeat`** — the multiplexed `/ws/realtime/` connection and the ping/pong zombie-connection detector
 - **`window.gv_core.BaseButton`**, **`BaseModal`**, **`Loader`**, **`LocationIcon`**, **`ScrollingSelect`**, **`SearchableCheckboxList`**, **`ToggleButton`**, **`SettingsInput`** — shared UI components (also globally registered, so you can use them in templates without importing)
 
-The Vue-ecosystem/OpenLayers/Heroicons values are also exposed at top level (`window.Vue`, `window.ol`, etc.) purely so UMD builds that externalize these dependencies keep working. Prefer `window.gv_core.*` in your source.
+The Vue-ecosystem/Heroicons values are also exposed at top level (`window.Vue`, `window.HeroiconsOutline`, etc.) purely so UMD builds that externalize these dependencies keep working. `window.ol`/`window.maplibregl` are similarly exposed at top level, but (like their `gv_core` counterparts) only after `loadOl()`/`loadMaplibreGl()` has resolved at least once. Prefer `window.gv_core.*` in your source.
 
 ### Self-containment: no `platform/utils/...` imports, no hardcoded extensions in core
 

@@ -66,8 +66,14 @@ declare global {
             axios: unknown;
             HeroiconsOutline: unknown;
             HeroiconsSolid: unknown;
+            /** Null until `loadOl()` resolves - OpenLayers is loaded lazily, not eagerly at boot. */
             ol: unknown;
+            /** Lazily loads OpenLayers (core + submodules), caching the result. Prefer this over reading `ol` directly when you can't guarantee it has already loaded. */
+            loadOl: () => Promise<unknown>;
+            /** Null until `loadMaplibreGl()` resolves - MapLibre GL JS is loaded lazily, not eagerly at boot. */
             maplibre: unknown;
+            /** Lazily loads MapLibre GL JS (and its CSS), caching the result. Prefer this over reading `maplibre` directly when you can't guarantee it has already loaded. */
+            loadMaplibreGl: () => Promise<unknown>;
             createRouteWrapper: (component: Component, options: { api: ExtensionApi; platformState?: PlatformStateBridge; router?: unknown; [key: string]: unknown }) => Component;
             BaseButton: unknown;
             BaseModal: unknown;

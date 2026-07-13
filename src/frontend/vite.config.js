@@ -74,8 +74,44 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 manualChunks: (id) => {
+                    // Pervasive core utilities (used eagerly by the store/App.vue AND by dozens of
+                    // unrelated route chunks) must never be left for Rollup to auto-place. Without an
+                    // explicit home, Rollup happened to bundle them into whichever heavy, mostly-lazy
+                    // chunk first pulled them in transitively (e.g. configService.ts, needed by both
+                    // maptilerIntegration.js and App.vue) - which then forced EVERY chunk needing
+                    // httpClient/toast/etc. to statically import that heavy chunk too, defeating lazy
+                    // loading almost entirely. Keep them in their own small, always-eager chunk instead.
+                    if (id.includes('/src/api/httpClient') ||
+                        id.includes('/src/utils/cookies') ||
+                        id.includes('/src/utils/toast.js') ||
+                        id.includes('/src/utils/apiError') ||
+                        id.includes('/src/utils/configService') ||
+                        // The Vuex store and its direct dependencies (auth, websocket helpers, user
+                        // API) are eager (imported by main.js at boot) but have no manualChunks rule
+                        // of their own, so Rollup's automatic grouping was merging them into whichever
+                        // other eager-but-unrelated bucket shared their reachability set (previously
+                        // map-utils, for no reason related to maps at all). Give them an explicit,
+                        // dedicated home instead of leaving it to chance.
+                        id.includes('/src/assets/js/store/') ||
+                        id.includes('/src/assets/js/auth.ts') ||
+                        id.includes('/src/assets/js/websocket/') ||
+                        id.includes('/src/api/services/userApi')) {
+                        return 'core-utils'
+                    }
                     // Split MapLibre GL JS into its own chunk
                     if (id.includes('maplibre-gl')) {
+                        return 'maplibre-gl'
+                    }
+                    // Our own utilities that statically import maplibre-gl (map init, feature
+                    // rendering, label markers) must live in the SAME chunk as the library itself.
+                    // Otherwise they'd drag maplibre-gl into whatever shared chunk they're grouped
+                    // into below (map-utils), which many maplibre-gl-free pages also depend on for
+                    // things like coordinate parsing - forcing every page to eagerly load the ~1MB
+                    // map-rendering library. `locationMarker.js`/`lazyMaplibreGl.js` load MapLibre
+                    // lazily via a dynamic import instead, so they stay out of this bucket.
+                    if (id.includes('/utils/map/maplibre/') &&
+                        !id.includes('/utils/map/maplibre/locationMarker.js') &&
+                        !id.includes('/utils/map/maplibre/lazyMaplibreGl.js')) {
                         return 'maplibre-gl'
                     }
                     // Split OpenLayers into its own chunk (for misc maps)

@@ -57,18 +57,8 @@ import { createRouteWrapper } from '@/extensions/routeWrapper';
 import { createPlatformStateBridge } from '@/extensions/platformState';
 import { loadExtensions } from '@/extensions/extensionLoader';
 
-// OpenLayers imports for shared use
-import * as ol from 'ol';
-import * as olSource from 'ol/source';
-import * as olLayer from 'ol/layer';
-import * as olProj from 'ol/proj';
-import * as olGeom from 'ol/geom';
-import * as olStyle from 'ol/style';
-import * as olInteraction from 'ol/interaction';
-import Feature from 'ol/Feature';
-
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import { loadOl } from '@/utils/map/openlayers/lazyOl.js';
+import { loadMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 
 // PWA Install Prompt Handling
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -97,17 +87,6 @@ const extensionUtils = {
     listUsers
 };
 
-const olNamespace = {
-    ...ol,
-    source: olSource,
-    layer: olLayer,
-    proj: olProj,
-    geom: olGeom,
-    style: olStyle,
-    interaction: olInteraction,
-    Feature: Feature
-};
-
 // Shared platform APIs: single namespace for clarity. Top-level aliases kept for extension UMD builds.
 const GeoVault = {
     registry: extensionRegistry,
@@ -127,8 +106,12 @@ window.gv_core = {
     axios,
     HeroiconsOutline,
     HeroiconsSolid,
-    ol: olNamespace,
-    maplibre: maplibregl,
+    // Null until something calls loadOl()/loadMaplibreGl() - see lazyOl.js/lazyMaplibreGl.js for
+    // why these aren't populated eagerly here.
+    ol: null,
+    loadOl,
+    maplibre: null,
+    loadMaplibreGl,
     createRouteWrapper,
     tileSourceCatalog,
     RasterTileUrls,
@@ -162,8 +145,10 @@ window.Vuex = window.gv_core.Vuex;
 window.axios = window.gv_core.axios;
 window.HeroiconsOutline = window.gv_core.HeroiconsOutline;
 window.HeroiconsSolid = window.gv_core.HeroiconsSolid;
-window.ol = window.gv_core.ol;
-window.maplibregl = window.gv_core.maplibre;
+
+// No eager `loadOl()`/`loadMaplibreGl()` calls here on purpose - see lazyOl.js/lazyMaplibreGl.js.
+// Map-rendering code calls `window.gv_core.loadOl()`/`loadMaplibreGl()` itself, right before it
+// needs to render a map. Both populate `window.ol`/`window.maplibregl` as a side effect once resolved.
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
