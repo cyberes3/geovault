@@ -106,7 +106,7 @@ export interface ShareableUser {
     email: string;
 }
 
-/** GET /api/users/ - other users with an email set, for share-recipient pickers (e.g. live_track). */
+/** GET /api/users/ - other users with an email set, for share-recipient pickers. */
 export async function listUsers(): Promise<ShareableUser[]> {
     const response = await httpClient.get<{ users?: ShareableUser[] }>('/api/users/');
     return response.data.users ?? [];

@@ -29,8 +29,6 @@ export interface ExtensionSetupUtils {
     ): Record<string, unknown>;
     keyValueToNested(key: string, value: unknown): unknown;
     getNestedValue(obj: unknown, key: string): unknown;
-    getCurrentPosition(): Promise<GeolocationPosition>;
-    checkGeolocationPermission(): Promise<PermissionState | 'unknown'>;
     parseCoordinates(input: string): { lat: number; lon: number } | null;
     looksLikeCoordinates(input: string): boolean;
     validateCoordinates(lat: number, lon: number): boolean;

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mock } from 'node:test';
 import { createPlatformStateBridge } from './platformState.ts';
 
-function createMockStore(userSettings) {
+function createMockStore(userSettings, userInfo = null) {
   return {
-    getters: { 'userSettings/userSettings': userSettings },
+    getters: { 'userSettings/userSettings': userSettings, 'auth/userInfo': userInfo },
     dispatch: mock.fn(async () => {})
   };
 }
@@ -34,11 +34,18 @@ test('fetchUserSettings dispatches the userSettings/fetchUserSettings action', a
   assert.equal(store.dispatch.mock.calls[0].arguments[0], 'userSettings/fetchUserSettings');
 });
 
-test('the bridge exposes exactly userSettings/fetchUserSettings/saveUserSetting, not the raw store', () => {
+test('currentUser reflects the auth/userInfo getter', () => {
+  const store = createMockStore(null, { email: 'a@example.com', id: 1 });
+  const bridge = createPlatformStateBridge(store);
+
+  assert.deepEqual(bridge.currentUser.value, { email: 'a@example.com', id: 1 });
+});
+
+test('the bridge exposes exactly userSettings/currentUser/fetchUserSettings/saveUserSetting, not the raw store', () => {
   const store = createMockStore(null);
   const bridge = createPlatformStateBridge(store);
 
-  assert.deepEqual(Object.keys(bridge).sort(), ['fetchUserSettings', 'saveUserSetting', 'userSettings']);
+  assert.deepEqual(Object.keys(bridge).sort(), ['currentUser', 'fetchUserSettings', 'saveUserSetting', 'userSettings']);
   assert.equal(bridge.dispatch, undefined);
   assert.equal(bridge.commit, undefined);
   assert.equal(bridge.state, undefined);

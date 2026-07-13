@@ -43,9 +43,14 @@ import { parseCoordinates, looksLikeCoordinates, validateCoordinates } from '@/u
 import { searchGeocoding, getGeocodingResultCoordinates, getGeocodingResultLabel } from '@/utils/geocodingSearch.js';
 import { listUsers } from '@/api/services/userApi';
 import { realtimeSocket } from '@/assets/js/websocket/realtimeSocket';
+import { WebSocketHeartbeat } from '@/assets/js/websocket/WebSocketHeartbeat';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
 import * as HeroiconsSolid from '@heroicons/vue/24/solid';
-import { tileSourceCatalog, RasterTileUrls } from '@/utils/map/openlayers/index.js';
+import { tileSourceCatalog, RasterTileUrls, openLayersBasemap, OSM_TILE_SOURCE_ID } from '@/utils/map/openlayers/index.js';
+import { isValidMapLngLatPair } from '@/utils/map/mapGeography.js';
+import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre/locationMarker.js';
+import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
+import { useDocumentTitle } from '@/utils/documentTitle.js';
 
 import { extensionRegistry } from '@/utils/extensionRegistry.js';
 import { createRouteWrapper } from '@/extensions/routeWrapper';
@@ -83,8 +88,6 @@ const extensionUtils = {
     loadSettingsFromValues,
     keyValueToNested,
     getNestedValue,
-    getCurrentPosition: () => geolocationManager.getCurrentPosition(),
-    checkGeolocationPermission: () => geolocationManager.checkPermission(),
     parseCoordinates,
     looksLikeCoordinates,
     validateCoordinates,
@@ -112,7 +115,8 @@ const GeoVault = {
     toast,
     platformState,
     tileSourceCatalog,
-    RasterTileUrls
+    RasterTileUrls,
+    geolocationManager
 };
 
 window.gv_core = {
@@ -128,8 +132,18 @@ window.gv_core = {
     createRouteWrapper,
     tileSourceCatalog,
     RasterTileUrls,
+    openLayersBasemap,
+    OSM_TILE_SOURCE_ID,
+    geolocationManager,
     platformState,
     realtimeSocket,
+    WebSocketHeartbeat,
+    isValidMapLngLatPair,
+    createUserLocationMarker,
+    updateUserLocationMarker,
+    removeUserLocationMarker,
+    setupCopyMapCoordinatesOnContextMenu,
+    useDocumentTitle,
     BaseButton: null, // set below after import
     BaseModal: null, // set below after import
     Loader: null, // set below after import

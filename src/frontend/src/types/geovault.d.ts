@@ -15,7 +15,9 @@ import type {
     ScopedExtensionRegistry,
     ToastService
 } from '@/extensions/extensionContractTypes';
-import type { TileSourceCatalog, RasterTileUrls } from '@/utils/map/openlayers';
+import type { TileSourceCatalog, RasterTileUrls, OpenLayersBasemapFactory } from '@/utils/map/openlayers';
+import type { WebSocketHeartbeat, WebSocketHeartbeatOptions } from '@/assets/js/websocket/WebSocketHeartbeat';
+import type { GeolocationManager } from '@/utils/map/geolocationManager.js';
 
 export type {
     ExtensionMetadata,
@@ -46,6 +48,7 @@ export interface GeoVaultGlobal {
     platformState: PlatformStateBridge;
     tileSourceCatalog: TileSourceCatalog;
     RasterTileUrls: typeof RasterTileUrls;
+    geolocationManager: GeolocationManager;
 }
 
 /**
@@ -76,8 +79,18 @@ declare global {
             SettingsInput: unknown;
             tileSourceCatalog: TileSourceCatalog;
             RasterTileUrls: typeof RasterTileUrls;
+            openLayersBasemap: OpenLayersBasemapFactory;
+            OSM_TILE_SOURCE_ID: string;
+            geolocationManager: GeolocationManager;
             platformState: PlatformStateBridge;
             realtimeSocket: unknown;
+            WebSocketHeartbeat: new (options: WebSocketHeartbeatOptions) => WebSocketHeartbeat;
+            isValidMapLngLatPair: (lon: number, lat: number) => boolean;
+            createUserLocationMarker: (map: unknown, coords: { latitude: number; longitude: number }) => unknown;
+            updateUserLocationMarker: (marker: unknown, coords: { latitude: number; longitude: number }) => void;
+            removeUserLocationMarker: (marker: unknown) => void;
+            setupCopyMapCoordinatesOnContextMenu: (map: unknown, deps?: { toast?: ToastService }) => () => void;
+            useDocumentTitle: (titleSource: string | (() => string) | { value: string }) => void;
         };
         GeoVault: GeoVaultGlobal;
     }
