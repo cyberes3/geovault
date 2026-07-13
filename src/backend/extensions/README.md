@@ -58,7 +58,7 @@ Define models as usual; set `app_label` to your extension's label. Run migration
 
 ### Views
 
-Normal Django views. Use `@api_or_login_required_401()` (from `geo_lib.website.auth`) for auth. Use `api.utils.responses.success_response` / `error_response` and `api.utils.authorization.get_object_or_404_for_user` when working with platform features (e.g. `FeatureStore`). The example_extension views show simple CRUD and feature create/modify/delete.
+Normal Django views. Use `@api_or_login_required_401()` (from `website.auth_decorators`) for auth. Use `api.utils.responses.success_response` / `error_response` and `api.utils.authorization.get_object_or_404_for_user` when working with platform features (e.g. `FeatureStore`). The example_extension views show simple CRUD and feature create/modify/delete.
 
 ## Frontend
 

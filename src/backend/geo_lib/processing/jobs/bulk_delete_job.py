@@ -121,7 +121,7 @@ class BulkDeleteJob(BaseJob):
                             'filename': item.original_filename,
                             'error': result['error']
                         })
-                except:
+                except Exception:
                     # Log detailed error internally
                     _logger.error(f"Bulk delete job {job_id}: Error deleting item {item.id}: {traceback.format_exc()}")
                     failed_deletes.append({
@@ -157,7 +157,7 @@ class BulkDeleteJob(BaseJob):
 
             _logger.info(f"Successfully completed bulk delete job {job_id}: {successful_deletes} deleted, {len(failed_deletes)} failed")
 
-        except:
+        except Exception:
             _logger.error(f"Bulk delete job {job_id} error: {traceback.format_exc()}")
             error_msg = BULK_DELETE_JOB_FAILED
             self.status_tracker.update_job_status(
@@ -187,7 +187,7 @@ class BulkDeleteJob(BaseJob):
 
             return {'success': True}
 
-        except:
+        except Exception:
             _logger.error(f"Error deleting item {import_queue_item.id}: {traceback.format_exc()}")
             return {'success': False, 'error': ITEM_DELETE_FAILED}
 
@@ -222,7 +222,7 @@ class BulkDeleteJob(BaseJob):
             else:
                 _logger.info(f"No active process jobs found for item {item_id}")
 
-        except:
+        except Exception:
             _logger.warning(f"Error canceling active processing jobs for item {item_id}: {traceback.format_exc()}")
             # Don't fail the delete job for this, just log the warning
 

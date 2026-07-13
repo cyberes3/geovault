@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import caches
 from django.test import TestCase, override_settings, RequestFactory
 
+from api.utils.rate_limiting import rate_limited
 from api.utils.responses import success_response
 from geo_lib.security.rate_limit import RedisRateLimiter
 
@@ -48,13 +49,13 @@ class _FakeConsumer:
         self.calls += 1
 
 
-@_test_limiter()
+@rate_limited(_test_limiter)
 def rate_limit_test_view(request):
     """Test view function for rate limiting."""
     return success_response({'message': 'success'})
 
 
-@_test_limiter()
+@rate_limited(_test_limiter)
 def different_route_view(request):
     """Second view sharing the same limiter instance, to test per-route buckets."""
     return success_response({'message': 'different'})

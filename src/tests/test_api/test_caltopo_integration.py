@@ -201,7 +201,7 @@ class TestCalTopoIntegration(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
-    @patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job')
+    @patch('geo_lib.processing.jobs.process_job.job.ProcessJob.enqueue_job')
     @patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker')
     def test_reimport_map_flow_import_delete_some_reimport_verify_cleanup(
         self, mock_status_tracker, mock_enqueue, mock_convert, mock_get_features
@@ -325,7 +325,7 @@ class TestCalTopoIntegration(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
-    @patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job')
+    @patch('geo_lib.processing.jobs.process_job.job.ProcessJob.enqueue_job')
     @patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker')
     @patch('geo_lib.processing.hooks.execute_import_hooks')
     def test_imported_features_mapping_is_updated_after_map_import(

@@ -1,7 +1,7 @@
 """
 Registry of forward reverse_geocoding backends (MapTiler, Google).
 """
-from geo_lib.search_geocoding.constants import GEOCODING_SEARCH_MODES, GOOGLE, MAPTILER
+from geo_lib.search_geocoding.constants import GOOGLE, MAPTILER
 from geo_lib.search_geocoding.google import _search_google
 from geo_lib.search_geocoding.maptiler import _search_maptiler
 from website.config_loader import get_config_loader
@@ -18,10 +18,6 @@ def get_search_backend():
     if mode not in _SEARCH_BACKENDS:
         raise ValueError(f"Unknown reverse_geocoding search mode: {mode!r}")
     return _SEARCH_BACKENDS[mode]
-
-
-def list_search_backends():
-    return list(GEOCODING_SEARCH_MODES)
 
 
 def get_geocoding_not_available_message():
@@ -41,7 +37,3 @@ def get_geocoding_not_available_message():
         if not api_key:
             return "Google geocoding is not available (API key not configured)."
     return None
-
-
-def check_geocoding_enabled():
-    return get_geocoding_not_available_message() is None

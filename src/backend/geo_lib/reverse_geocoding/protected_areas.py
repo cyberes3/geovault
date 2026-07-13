@@ -1,65 +1,10 @@
 """
-Protected area classification and parsing.
+Protected area classification.
 
 Protected area data is provided by the is_in area server in production.
-This module provides classify_protected_area() and get_protected_areas() (for test fixtures only).
+This module classifies the area records the area server returns into a tag prefix.
 """
-from typing import Any, Dict, List, Optional, Tuple
-
-from geo_lib.reverse_geocoding.geometry_helpers import point_in_polygon, point_in_bounds
-from geo_lib.reverse_geocoding.osm_tags import get_name_from_tags
-
-
-def get_protected_areas(
-    response: Optional[Dict[str, Any]],
-    latitude: float,
-    longitude: float,
-) -> Tuple[List[Dict[str, str]], List[str]]:
-    """
-    Parse protected areas from an Overpass response (for test fixtures only).
-    Production uses the is_in area server.
-    """
-    protected_areas = []
-    errors = []
-    if not response:
-        return protected_areas, errors
-    for element in response.get('elements', []):
-        tags = element.get('tags', {})
-        name = get_name_from_tags(tags)
-        if not name:
-            continue
-        boundary = tags.get('boundary', '')
-        leisure = tags.get('leisure', '')
-        landuse = tags.get('landuse', '')
-        if (boundary != 'protected_area' and boundary != 'national_park' and
-                leisure != 'nature_reserve' and leisure != 'park' and
-                landuse != 'recreation_ground'):
-            continue
-        elem_type = element.get('type', '')
-        contains = False
-        if elem_type == 'area':
-            contains = True
-        elif elem_type in ('relation', 'way'):
-            geometry = element.get('geometry')
-            bounds = element.get('bounds')
-            if geometry and isinstance(geometry, list):
-                contains = point_in_polygon(latitude, longitude, geometry)
-            elif bounds:
-                contains = point_in_bounds(latitude, longitude, bounds)
-        if not contains:
-            continue
-        area_info = {
-            'name': name,
-            'protection_title': tags.get('protection_title', ''),
-            'protect_class': tags.get('protect_class', ''),
-            'designation': tags.get('designation', ''),
-            'operator': tags.get('operator', ''),
-            'leisure': leisure,
-            'landuse': landuse,
-            'boundary': boundary
-        }
-        protected_areas.append(area_info)
-    return protected_areas, errors
+from typing import Dict
 
 
 def classify_protected_area(area: Dict[str, str]) -> str:

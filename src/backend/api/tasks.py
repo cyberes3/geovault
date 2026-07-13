@@ -5,12 +5,12 @@ from celery import shared_task
 
 from api.services.replacement_cleanup_service import cleanup_orphaned_replacements
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
-from geo_lib.processing.jobs.process_job import (
+from geo_lib.processing.jobs.process_job.dispatch import (
     ImportLockContention,
     IMPORT_CELERY_QUEUE_NAME,
     IMPORT_CELERY_TASK_NAME,
-    ProcessJob,
 )
+from geo_lib.processing.jobs.process_job.job import ProcessJob
 from geo_lib.utils.redis_connection import get_redis_connection
 
 CELERY_BEAT_HEARTBEAT_KEY = "celery_beat_heartbeat"
@@ -45,7 +45,7 @@ def process_import_job(self, job_id: str, job_data: Dict[str, Any]) -> None:
     the specific file's size, so they aren't repeated as static decorator options here.
 
     Not called directly: dispatched by name from
-    `geo_lib.processing.jobs.process_job.dispatch_import_job`, which builds `job_data`.
+    `geo_lib.processing.jobs.process_job.dispatch.dispatch_import_job`, which builds `job_data`.
     """
     try:
         ProcessJob(status_tracker).process_locked(job_id, job_data)

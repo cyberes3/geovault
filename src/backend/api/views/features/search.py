@@ -9,7 +9,7 @@ from api.services.feature_serialization import build_feature_collection, geojson
 from api.utils.responses import error_response, success_response
 from api.views.features.bbox.execution import get_features_in_bbox
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()

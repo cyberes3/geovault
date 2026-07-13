@@ -78,7 +78,7 @@ def _validate_kml_content(uploaded_file: UploadedFile):
         raise SecurityError("The file contains invalid text encoding. Please save the file with UTF-8 encoding and try again.")
     except (SecurityError, FileValidationError):
         raise
-    except:
+    except Exception:
         raise SecurityError("KML file validation failed")
 
 
@@ -95,7 +95,7 @@ def _validate_gpx_content(uploaded_file: UploadedFile):
         raise SecurityError("The file contains invalid text encoding. Please save the file with UTF-8 encoding and try again.")
     except (SecurityError, FileValidationError):
         raise
-    except:
+    except Exception:
         raise SecurityError("GPX file validation failed")
 
 
@@ -119,7 +119,7 @@ def _validate_kml_structure(kml_content: str):
         raise FileValidationError("The KML file contains invalid XML structure. Please check the file format and try again.")
     except (SecurityError, FileValidationError):
         raise
-    except:
+    except Exception:
         raise SecurityError("KML file structure validation failed")
 
 
@@ -143,7 +143,7 @@ def _validate_gpx_structure(gpx_content: str):
         raise FileValidationError("The GPX file contains invalid XML structure. Please check the file format and try again.")
     except (SecurityError, FileValidationError):
         raise
-    except:
+    except Exception:
         raise SecurityError("GPX file structure validation failed")
 
 

@@ -64,7 +64,7 @@ def _fix_nested_caltopo_url(url: str) -> str:
 
         # Not nested or validation failed, return original
         return url
-    except:
+    except Exception:
         _logger.debug(f"Failed to fix nested CalTopo URL {url}: {traceback.format_exc()}")
         return url
 

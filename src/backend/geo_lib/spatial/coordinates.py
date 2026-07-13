@@ -1,17 +1,26 @@
+import math
 from typing import List, Tuple
 
 from geo_lib.reverse_geocoding.constants import COORDINATE_PRECISION
 from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
 
 
+def _decimal_places_for_tolerance(tolerance: float) -> int:
+    """Convert a coordinate tolerance (e.g. 5e-6 degrees) to a rounding precision in decimal places."""
+    if tolerance <= 0:
+        return 6
+    return max(0, -math.floor(math.log10(tolerance)))
+
+
 def normalize_coordinates(coords: List, tolerance: float = COORDINATE_TOLERANCE) -> List:
-    """Normalize coordinates by rounding to specified tolerance."""
+    """Normalize coordinates by rounding to a precision derived from `tolerance`."""
     if not coords:
         return []
 
     if isinstance(coords[0], (int, float)):
         # Single coordinate pair
-        return [round(coord, 6) for coord in coords]
+        decimal_places = _decimal_places_for_tolerance(tolerance)
+        return [round(coord, decimal_places) for coord in coords]
     else:
         # Nested coordinates (LineString or Polygon)
         return [normalize_coordinates(coord, tolerance) for coord in coords]
@@ -65,11 +74,6 @@ def geometries_match(
         geometries_match(c1, c2, tolerance)
         for c1, c2 in zip(coords1, coords2)
     )
-
-
-def coordinates_match(coord1: List, coord2: List, tolerance: float = COORDINATE_TOLERANCE) -> bool:
-    """Check if two coordinate sets match within tolerance."""
-    return geometries_match(coord1, coord2, tolerance)
 
 
 def round_coordinate(latitude: float, longitude: float) -> Tuple[float, float]:

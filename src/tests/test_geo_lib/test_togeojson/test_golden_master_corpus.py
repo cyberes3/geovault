@@ -28,7 +28,7 @@ import pytest
 
 from geo_lib.processing.processors.gpx_processor import GPXProcessor
 from geo_lib.processing.processors.kml_processor import KMLProcessor
-from geo_lib.security.SecureFileValidator import secure_kmz_to_kml
+from geo_lib.security.secure_file_validator import secure_kmz_to_kml
 from geo_lib.togeojson import gpx, kml
 from tests.conftest import get_geovault_tests_dir
 

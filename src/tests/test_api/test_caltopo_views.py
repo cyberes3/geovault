@@ -747,7 +747,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
-    @patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job')
+    @patch('geo_lib.processing.jobs.process_job.job.ProcessJob.enqueue_job')
     @patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker')
     def test_import_map_queues_successfully(self, mock_status_tracker, mock_enqueue, mock_convert, mock_get_features):
         """Test POST /api/extensions/caltopo/import/map/ queues map import successfully."""
@@ -883,7 +883,7 @@ class TestCalTopoViews(TestCase):
         # So we need to return the feature twice
         mock_convert.side_effect = [geojson_feature, geojson_feature]
         
-        with patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job'), \
+        with patch('geo_lib.processing.jobs.process_job.job.ProcessJob.enqueue_job'), \
              patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker') as mock_tracker:
             import uuid
             job_id = str(uuid.uuid4())
@@ -940,7 +940,7 @@ class TestCalTopoViews(TestCase):
         # So we need to return the feature twice
         mock_convert.side_effect = [geojson_feature, geojson_feature]
         
-        with patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job'), \
+        with patch('geo_lib.processing.jobs.process_job.job.ProcessJob.enqueue_job'), \
              patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker') as mock_tracker:
             import uuid
             job_id = str(uuid.uuid4())

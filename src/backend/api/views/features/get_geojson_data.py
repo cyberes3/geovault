@@ -10,7 +10,7 @@ from api.utils.responses import error_response, handle_404
 from api.views.features.bbox.execution import get_features_in_bbox
 from api.views.features.bbox.params import _validate_bbox_params
 from api.views.features.bbox.response import _build_bbox_response
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 
 @api_or_login_required_401()

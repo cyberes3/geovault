@@ -12,10 +12,10 @@ from api.utils.responses import error_response, success_response
 from api.validation.decorators import validate_payload
 from extensions.caltopo.src.backend.services.caltopo_api import get_map_features, convert_caltopo_to_geojson
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, is_valid_caltopo_feature_class
-from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limiter
+from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limited
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
-from geo_lib.processing.jobs.process_job import ProcessJob
-from geo_lib.website.auth import api_or_login_required_401
+from geo_lib.processing.jobs.process_job.job import ProcessJob
+from website.auth_decorators import api_or_login_required_401
 
 # Create singleton instance
 process_job = ProcessJob(status_tracker)
@@ -31,7 +31,7 @@ class CalTopoMapImportPayload(BaseModel):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @validate_payload(CalTopoMapImportPayload)
-@caltopo_rate_limiter()
+@caltopo_rate_limited
 def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> JsonResponse:
     """
     Import all features from a CalTopo map.

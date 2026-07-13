@@ -10,7 +10,7 @@ from extensions.places.src.backend.services.place_service import (
     place_service_error_response,
 )
 from extensions.places.src.backend.validation import PlaceFeaturePayload
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 
 @api_or_login_required_401()

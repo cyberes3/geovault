@@ -3,14 +3,22 @@ from typing import Dict, Any, Optional
 from asgiref.sync import sync_to_async
 
 from api.models import DatabaseLogging, FeatureStore, ImportQueue
-from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.messages import ERROR_TYPE_FILE_UNPARSABLE, PROCESSING_FAILED_WITH_LOGS
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
-from geo_lib.spatial.bbox import get_feature_bounding_box_center
 from geo_lib.websocket.base_module import BaseWebSocketModule
 from geo_lib.websocket.modules.file_duplicate_utils import check_all_features_duplicate
+from geo_lib.websocket.modules.process_status_duplicates import (
+    build_geometry_duplicate_maps,
+    build_hash_duplicate_maps,
+    build_queue_hash_to_item,
+)
+from geo_lib.websocket.modules.process_status_pagination import (
+    build_other_queue_sorted_indices,
+    build_pagination_metadata,
+    normalize_page_bounds,
+    sort_features_spatially,
+)
 
 logger = get_tagged_logger('websocket')
 
@@ -212,6 +220,22 @@ class ProcessStatusModule(BaseWebSocketModule):
 
         return await get_items()
 
+    async def _get_existing_hashes_and_ids(self):
+        """Get the set of existing FeatureStore geojson_hash values for this user, and a hash -> id mapping for linking."""
+
+        @sync_to_async
+        def get_existing_hashes_and_ids():
+            hash_to_id = {}
+            hashes = set()
+            for f in FeatureStore.objects.filter(user_id=self.import_item.user_id).values('id', 'geojson_hash'):
+                if f['geojson_hash']:
+                    hashes.add(f['geojson_hash'])
+                    if f['geojson_hash'] not in hash_to_id:
+                        hash_to_id[f['geojson_hash']] = f['id']
+            return hashes, hash_to_id
+
+        return await get_existing_hashes_and_ids()
+
     async def _get_paginated_features(self, page: int, page_size: int) -> Dict[str, Any]:
         """Get paginated features for the import item."""
         if self.import_item.imported:
@@ -240,241 +264,46 @@ class ProcessStatusModule(BaseWebSocketModule):
                 }
             }
 
-        # Validate pagination parameters
-        if page < 1:
-            page = 1
-        # Force page_size to 50
-        page_size = 50
-
-        # Sort features spatially before pagination
-        features_with_indices = []
-        for original_idx, feature in enumerate(self.import_item.geofeatures):
-            # Sort by (-lat, lon) to get north-to-south, west-to-east ordering
-            center = get_feature_bounding_box_center(feature)
-            assert center is not None
-            sort_key = (-center[0], center[1])
-            features_with_indices.append((feature, original_idx, sort_key))
-
-        # Sort by spatial center
-        features_with_indices.sort(key=lambda x: x[2])
-
-        # Extract sorted features and create mapping from original index to new index
-        sorted_features = [item[0] for item in features_with_indices]
-        original_to_new_index = {item[1]: new_idx for new_idx, item in enumerate(features_with_indices)}
-
-        # Calculate pagination
+        # Sort features spatially before pagination, and compute page bounds
+        sorted_features, original_to_new_index = sort_features_spatially(self.import_item.geofeatures)
         total_features = len(sorted_features)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-
-        # Get paginated features from sorted list
+        page, page_size, start_idx, end_idx = normalize_page_bounds(page)
         paginated_features = sorted_features[start_idx:end_idx]
 
-        # Get duplicate information for current page
-        # New structure: four separate arrays for each duplicate type
-        feature_store_hash_duplicates = []
-        feature_store_geometry_duplicates = []
-        cross_queue_hash_duplicates = []
-        cross_queue_geometry_duplicates = []
-        geometry_duplicate_hashes_for_skipping = []  # For skipped_feature_ids
-
-        # Import necessary functions
-
-        # Get other unimported ImportQueue items for cross-queue checking
+        # Get other unimported ImportQueue items for cross-queue duplicate checking,
+        # and their spatially-sorted indices (needed to navigate to a duplicate's
+        # position in the target item)
         other_queue_items = await self._get_other_queue_items()
+        queue_item_sorted_indices = build_other_queue_sorted_indices(other_queue_items)
 
-        # Build a mapping of queue_item_id to sorted feature indices
-        # This is needed to correctly navigate to features in other queue items
-        queue_item_sorted_indices = {}
-        for queue_item in other_queue_items:
-            if not queue_item.geofeatures:
-                continue
-            # Apply same sorting logic as used for current item
-            features_with_indices = []
-            for idx, feat in enumerate(queue_item.geofeatures):
-                # Sort by (-lat, lon) to get north-to-south, west-to-east ordering
-                center = get_feature_bounding_box_center(feat)
-                assert center is not None
-                sort_key = (-center[0], center[1])
-                features_with_indices.append((feat, idx, sort_key))
-            features_with_indices.sort(key=lambda x: x[2])
+        # Get hash to feature_store_id mapping for linking
+        existing_store_hashes, hash_to_store_id = await self._get_existing_hashes_and_ids()
 
-            # Create mapping from original index to sorted index
-            original_to_sorted = {item[1]: sorted_idx for sorted_idx, item in enumerate(features_with_indices)}
-            queue_item_sorted_indices[queue_item.id] = original_to_sorted
+        # Compute duplicate maps for the current page. Priority rule: feature_store
+        # duplicates take precedence over cross_queue, and hash duplicates take
+        # precedence over geometry duplicates.
+        queue_hash_to_item = build_queue_hash_to_item(other_queue_items)
+        feature_store_hash_duplicates, cross_queue_hash_duplicates, all_hash_duplicate_hashes = build_hash_duplicate_maps(
+            self.import_item.geofeatures, original_to_new_index, start_idx, end_idx,
+            existing_store_hashes, hash_to_store_id, queue_hash_to_item, queue_item_sorted_indices,
+        )
 
-        # ======================================================================================================================
-        # Duplicate mapping
-
-        @sync_to_async
-        def get_existing_hashes_and_ids():
-            # Get hash to feature_store_id mapping for linking
-            hash_to_id = {}
-            hashes = set()
-            for f in FeatureStore.objects.filter(user_id=self.import_item.user_id).values('id', 'geojson_hash'):
-                if f['geojson_hash']:
-                    hashes.add(f['geojson_hash'])
-                    if f['geojson_hash'] not in hash_to_id:
-                        hash_to_id[f['geojson_hash']] = f['id']
-            return hashes, hash_to_id
-
-        existing_store_hashes, hash_to_store_id = await get_existing_hashes_and_ids()
-
-        # Build hash map from other queue items
-        queue_hash_to_item = {}
-        for queue_item in other_queue_items:
-            for feature_idx, feature in enumerate(queue_item.geofeatures):
-                geojson_hash = feature.get('properties', {}).get('geojson_hash')
-                if not geojson_hash:
-                    geojson_hash = generate_geojson_hash(feature)
-                if geojson_hash not in queue_hash_to_item:
-                    queue_hash_to_item[geojson_hash] = {
-                        'queue_item_id': queue_item.id,
-                        'queue_item_filename': queue_item.original_filename,
-                        'feature_index': feature_idx  # Index in the target queue item
-                    }
-
-        # Track all hash duplicates (both sources) to exclude from geometry checking
-        all_hash_duplicate_hashes = set()
-
-        # Check each feature for hash duplicates
-        # Priority rule: feature_store takes precedence over cross_queue
-        for original_idx, feature in enumerate(self.import_item.geofeatures):
-            geojson_hash = feature.get('properties', {}).get('geojson_hash')
-            if not geojson_hash:
-                geojson_hash = generate_geojson_hash(feature)
-
-            # Convert to sorted index for page display
-            if original_idx not in original_to_new_index:
-                continue
-            new_idx = original_to_new_index[original_idx]
-
-            # Check FeatureStore hash duplicates first (takes precedence)
-            if geojson_hash in existing_store_hashes:
-                all_hash_duplicate_hashes.add(geojson_hash)
-                if start_idx <= new_idx < end_idx:
-                    dup_obj = {
-                        'hash': geojson_hash,
-                        'page_index': new_idx - start_idx,
-                        'global_index': new_idx  # For cross-queue navigation
-                    }
-                    if geojson_hash in hash_to_store_id:
-                        dup_obj['feature_store_id'] = hash_to_store_id[geojson_hash]
-                    feature_store_hash_duplicates.append(dup_obj)
-            # Check cross-queue hash duplicates (only if not in FeatureStore)
-            elif geojson_hash in queue_hash_to_item:
-                all_hash_duplicate_hashes.add(geojson_hash)
-                queue_info = queue_hash_to_item[geojson_hash]
-                if start_idx <= new_idx < end_idx:
-                    # Get sorted index for the target queue item
-                    target_queue_id = queue_info['queue_item_id']
-                    original_idx = queue_info['feature_index']
-                    sorted_idx = queue_item_sorted_indices.get(target_queue_id, {}).get(original_idx, original_idx)
-
-                    cross_queue_hash_duplicates.append({
-                        'hash': geojson_hash,
-                        'page_index': new_idx - start_idx,
-                        'global_index': sorted_idx,  # Sorted index in the TARGET queue item
-                        'queue_item_id': queue_info['queue_item_id'],
-                        'queue_item_filename': queue_info['queue_item_filename']
-                    })
-
-        # Now process geometry duplicates from the stored duplicate_features
-        # These have already been filtered to exclude hash duplicates during processing
         duplicate_features_list = self.import_item.duplicate_features if self.import_item.duplicate_features else []
-
-        for dup_info in duplicate_features_list:
-            # Check source and match_type to categorize properly
-            source = dup_info.get('source')
-            match_type = dup_info.get('match_type')
-            dup_feature = dup_info.get('feature')
-            existing_features = dup_info.get('existing_features', [])
-
-            if not dup_feature or not source or not match_type:
-                continue
-
-            # Get feature hash
-            dup_geojson_hash = dup_feature.get('properties', {}).get('geojson_hash')
-            if not dup_geojson_hash:
-                dup_geojson_hash = generate_geojson_hash(dup_feature)
-
-            # Skip if this is a hash duplicate (already processed above)
-            if dup_geojson_hash in all_hash_duplicate_hashes:
-                continue
-
-            # Only process geometry duplicates here
-            if match_type != DuplicateMatchType.GEOMETRY:
-                continue
-
-            # Find the feature in geofeatures to get its index
-            feature_idx = None
-            for idx, feat in enumerate(self.import_item.geofeatures):
-                feat_geojson_hash = feat.get('properties', {}).get('geojson_hash')
-                if not feat_geojson_hash:
-                    feat_geojson_hash = generate_geojson_hash(feat)
-                if feat_geojson_hash == dup_geojson_hash:
-                    feature_idx = idx
-                    break
-
-            if feature_idx is None or feature_idx not in original_to_new_index:
-                continue
-
-            new_idx = original_to_new_index[feature_idx]
-
-            # Track for skipped_feature_ids
-            geometry_duplicate_hashes_for_skipping.append(dup_geojson_hash)
-
-            # Only add to arrays if on current page
-            if start_idx <= new_idx < end_idx:
-                dup_obj = {
-                    'hash': dup_geojson_hash,
-                    'page_index': new_idx - start_idx,
-                    'global_index': new_idx  # For cross-queue navigation
-                }
-
-                # Add linking information from existing_features
-                if existing_features and len(existing_features) > 0:
-                    first_existing = existing_features[0]
-                    if source == DuplicateSource.FEATURE_STORE:
-                        # Link to feature store (map)
-                        if 'id' in first_existing:
-                            dup_obj['feature_store_id'] = first_existing['id']
-                    elif source == DuplicateSource.CROSS_QUEUE:
-                        # Link to queue item
-                        if 'id' in first_existing and 'name' in first_existing:
-                            dup_obj['queue_item_id'] = first_existing['id']
-                            dup_obj['queue_item_filename'] = first_existing['name']
-                            # Convert original feature_index to sorted index for navigation
-                            if 'feature_index' in first_existing:
-                                target_queue_id = first_existing['id']
-                                original_idx = first_existing['feature_index']
-                                sorted_idx = queue_item_sorted_indices.get(target_queue_id, {}).get(original_idx, original_idx)
-                                dup_obj['global_index'] = sorted_idx
-
-                # Add to appropriate array based on source
-                if source == DuplicateSource.FEATURE_STORE:
-                    feature_store_geometry_duplicates.append(dup_obj)
-                elif source == DuplicateSource.CROSS_QUEUE:
-                    cross_queue_geometry_duplicates.append(dup_obj)
+        # The third return value (geometry-duplicate hashes) isn't consumed here -- `skipped_feature_ids`
+        # below comes directly from the persisted import item, not from this page-scoped computation.
+        feature_store_geometry_duplicates, cross_queue_geometry_duplicates, _ = build_geometry_duplicate_maps(
+            duplicate_features_list, self.import_item.geofeatures, original_to_new_index, start_idx, end_idx,
+            all_hash_duplicate_hashes, queue_item_sorted_indices,
+        )
 
         # Return all skipped_feature_ids (geometry duplicates + manually skipped non-duplicates)
         # Hash duplicates are always blocked and should not be in skipped_feature_ids (enforced during processing)
         # We return all skipped_feature_ids to preserve manually skipped non-duplicate features
         skipped_feature_ids = self.import_item.skipped_feature_ids if self.import_item.skipped_feature_ids else []
 
-        # End duplicate mapping
-        # ======================================================================================================================
-
         return {
             'data': paginated_features,
-            'pagination': {
-                'page': page,
-                'page_size': page_size,
-                'total_features': total_features,
-                'total_pages': (total_features + page_size - 1) // page_size,
-                'has_next': end_idx < total_features,
-                'has_previous': page > 1
-            },
+            'pagination': build_pagination_metadata(page, page_size, total_features, end_idx),
             'duplicates': {
                 'feature_store_hash': feature_store_hash_duplicates,
                 'feature_store_geometry': feature_store_geometry_duplicates,

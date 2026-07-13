@@ -10,7 +10,7 @@ from geo_lib.processing.file_types import FileType
 from geo_lib.processing.file_types import detect_file_type
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker
 from geo_lib.processing.logging import RealTimeImportLog
-from .base_processor import BaseProcessor
+from .base.processor import BaseProcessor
 from .geojson_processor import GeoJSONProcessor
 from .gpx_processor import GPXProcessor
 from .kml_processor import KMLProcessor

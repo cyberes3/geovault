@@ -10,14 +10,15 @@ from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from api.services.icon_recolor_service import recolor_icon_file_to_png_bytes
+from api.utils.rate_limiting import rate_limited
 from api.utils.responses import error_response, success_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.icons.get import ICON_CONTENT_TYPES, parse_user_icon_hash
-from geo_lib.processing.icons.icon_manager import store_icon
+from geo_lib.processing.icons.storage import store_icon
 from geo_lib.processing.logging import ImportLog
 from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.secure_path import is_path_under_base, secure_filename, secure_path
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
@@ -39,7 +40,7 @@ class IconUploadForm(forms.Form):
 
 
 @api_or_login_required_401()
-@_upload_icon_rate_limiter()
+@rate_limited(_upload_icon_rate_limiter)
 @require_http_methods(["POST"])
 def upload_icon(request):
     """

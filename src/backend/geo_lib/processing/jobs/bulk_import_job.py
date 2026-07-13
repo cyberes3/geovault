@@ -136,7 +136,7 @@ class BulkImportJob(BaseJob):
                             'filename': item.original_filename,
                             'error': result['error']
                         })
-                except:
+                except Exception:
                     # Log detailed error internally
                     _logger.error(f"Bulk import job {job_id}: Error importing item {item.id}: {traceback.format_exc()}")
                     # Use generic error message for user
@@ -180,7 +180,7 @@ class BulkImportJob(BaseJob):
                         f"({failed_item['filename']}): {failed_item['error']}"
                     )
 
-        except:
+        except Exception:
             _logger.error(f"Bulk import job {job_id} error: {traceback.format_exc()}")
             error_msg = BULK_IMPORT_JOB_FAILED
             self.status_tracker.update_job_status(
@@ -285,6 +285,6 @@ class BulkImportJob(BaseJob):
                 error_msg = "No features were imported. " + ". ".join(error_parts) + "."
                 return job_error_result(error_msg)
 
-        except:
+        except Exception:
             _logger.error(f"Error importing item {import_item.id}: {traceback.format_exc()}")
             return job_error_result(ITEM_IMPORT_FAILED)

@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from api.utils.responses import error_response, handle_404
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 from .models import (
     LiveTrack,

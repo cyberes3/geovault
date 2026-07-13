@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from geo_lib.websocket.force_disconnect import WebSocketForceDisconnector
 
 _logger = get_tagged_logger(__name__)

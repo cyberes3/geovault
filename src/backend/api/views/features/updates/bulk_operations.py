@@ -10,7 +10,7 @@ from api.utils.responses import error_response, success_response
 from api.validation.decorators import validate_payload
 from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

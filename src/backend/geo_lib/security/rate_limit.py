@@ -8,6 +8,12 @@ extensions, and WebSocket consumers) so there is exactly one implementation of
 Backed by the dedicated 'rate_limiting' Redis cache alias (see CACHES in
 website/settings.py), which works correctly across multiple worker processes,
 unlike the default LocMemCache alias.
+
+This module has no HTTP-response concerns: exceeding a limit raises `RateLimitExceeded`.
+Django view decorating (translating that exception into a 429 response) lives in
+`api.utils.rate_limiting.rate_limited`, since constructing an HTTP response is an
+application-layer concern, not a library one. WebSocket consumer support (`for_consumer`)
+stays here since it only ever sends a WS error frame, never a Django response.
 """
 import json
 import time
@@ -16,22 +22,25 @@ from typing import Callable, Optional
 
 from asgiref.sync import sync_to_async
 from django.core.cache import caches
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest
 
-from api.utils.responses import error_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip
 
 _logger = get_tagged_logger('RateLimit')
 
-_RATE_LIMIT_MESSAGE = 'Rate limit exceeded, please slow down.'
+RATE_LIMIT_MESSAGE = 'Rate limit exceeded, please slow down.'
 
 
-def _rate_limit_response() -> HttpResponse:
-    return error_response(_RATE_LIMIT_MESSAGE, code=429)
+class RateLimitExceeded(Exception):
+    """Raised by `RedisRateLimiter.enforce()` when the caller's identity is over its limit."""
+
+    def __init__(self, limiter_name: str):
+        self.limiter_name = limiter_name
+        super().__init__(f"Rate limit '{limiter_name}' exceeded")
 
 
-def _default_identity(request: HttpRequest) -> str:
+def default_identity(request: HttpRequest) -> str:
     """Rate-limit identity: authenticated user id if available, else client IP."""
     user = getattr(request, 'user', None)
     if user is not None and getattr(user, 'is_authenticated', False):
@@ -97,56 +106,25 @@ class RedisRateLimiter:
             return True
         return count <= self.limit
 
-    def enforce(self, identity: str) -> Optional[HttpResponse]:
+    def enforce(self, identity: str) -> None:
         """
-        Check `identity` against the limit and return a ready-to-return 429
-        HttpResponse if it's exceeded, or None if the request may proceed.
+        Check `identity` against the limit and raise `RateLimitExceeded` if it's exceeded.
 
-        Use this directly (as a guard clause) only when the rate-limit identity
-        can't be derived from the request alone and is instead computed partway
-        through a view (e.g. a resource id resolved from the request body) — so
-        the `__call__` decorator can't be used. Prefer `@limiter()` otherwise.
+        Use this directly (as a guard clause) when the rate-limit identity can't be derived
+        from the request alone and is instead computed partway through a view (e.g. a
+        resource id resolved from the request body) — so `api.utils.rate_limiting.rate_limited`
+        can't be used as a decorator. Prefer that decorator otherwise.
         """
-        if self.check(identity):
-            return None
-        return _rate_limit_response()
-
-    def __call__(self, identity_func: Optional[Callable[[HttpRequest], str]] = None) -> Callable:
-        """
-        Decorator factory for Django views. This is the standard way to rate-limit
-        a view: instantiate one `RedisRateLimiter` per limit tier and decorate the
-        view(s) with it, e.g. `@_my_limiter()`.
-
-        Identity defaults to the authenticated user's id (falling back to client
-        IP), namespaced per decorated view so each endpoint gets its own bucket
-        automatically — the same limiter instance can be reused across multiple
-        views without their counters colliding. Pass `identity_func` to customize
-        (e.g. to key on something other than user/IP).
-        """
-        resolve_identity = identity_func or _default_identity
-
-        def decorator(view_func: Callable) -> Callable:
-            bucket = f"{view_func.__module__}.{view_func.__qualname__}"
-
-            @wraps(view_func)
-            def _wrapped(request: HttpRequest, *args, **kwargs):
-                identity = f"{bucket}:{resolve_identity(request)}"
-                response = self.enforce(identity)
-                if response is not None:
-                    return response
-                return view_func(request, *args, **kwargs)
-
-            return _wrapped
-
-        return decorator
+        if not self.check(identity):
+            raise RateLimitExceeded(self.name)
 
     def for_consumer(self, identity_func: Optional[Callable[[object], str]] = None) -> Callable:
         """
-        Decorator factory for an async WebSocket consumer method (typically `receive`). Same
-        one-limiter-per-tier, `@_my_limiter.for_consumer()` usage as the view decorator above, just
-        adapted for consumers: identity is resolved from the consumer instance (`self`) rather than
-        a `request`, and the check itself runs off the event loop via `sync_to_async` since the
-        underlying cache client is synchronous.
+        Decorator factory for an async WebSocket consumer method (typically `receive`): one
+        `RedisRateLimiter` per limit tier, decorate the method with `@_my_limiter.for_consumer()`.
+        Identity is resolved from the consumer instance (`self`) rather than a `request`, and the
+        check itself runs off the event loop via `sync_to_async` since the underlying cache
+        client is synchronous.
 
         Exceeding the limit drops the incoming message and sends a rate_limit error frame back to
         the client instead of closing the connection -- one noisy message shouldn't kill an
@@ -164,7 +142,7 @@ class RedisRateLimiter:
                 if not allowed:
                     await consumer.send(text_data=json.dumps({
                         'type': 'error',
-                        'data': {'code': 429, 'message': _RATE_LIMIT_MESSAGE},
+                        'data': {'code': 429, 'message': RATE_LIMIT_MESSAGE},
                     }))
                     return None
                 return await method(consumer, *args, **kwargs)

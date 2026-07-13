@@ -75,7 +75,13 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/zip',
             'application/x-zip-compressed',
             'application/vnd.google-earth.kmz',
-            'application/vnd.google-earth.kmz+xml'
+            'application/vnd.google-earth.kmz+xml',
+            # libmagic's KMZ heuristic only fires when the archive contains a member
+            # literally named "doc.kml" (the common convention). KMZ archives whose root
+            # KML file has any other name are still valid per the KMZ spec, but sniff as
+            # generic binary data. The subsequent archive/content validation still verifies
+            # a real KML document is present, so this doesn't weaken that check.
+            'application/octet-stream'
         ],
         max_size=get_required_setting('FILE_UPLOAD_MAX_MEMORY_SIZE'),
         xml_root_elements=['kml'],

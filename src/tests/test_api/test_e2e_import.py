@@ -1369,7 +1369,7 @@ class TestE2EImport(TransactionTestCase):
   </Document>
 </kml>"""
 
-        with patch('geo_lib.processing.processors.base_processor.togeojson', side_effect=_hanging_conversion):
+        with patch('geo_lib.processing.processors.base.conversion_runner.togeojson', side_effect=_hanging_conversion):
             start = time.time()
             job_id, item_id, job_status = self._upload_file(kml_content, 'hanging.kml', timeout=10.0)
             elapsed = time.time() - start

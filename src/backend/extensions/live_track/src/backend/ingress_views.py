@@ -18,8 +18,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.security.rate_limit import RedisRateLimiter
-from geo_lib.website.auth import api_or_login_required_401
+from geo_lib.security.rate_limit import RATE_LIMIT_MESSAGE, RateLimitExceeded, RedisRateLimiter
+from website.auth_decorators import api_or_login_required_401
 from pydantic import ValidationError as PydanticValidationError
 
 from api.utils.authorization import get_object_or_404_for_user
@@ -134,9 +134,10 @@ def ingress(request):
 
     request.user = user  # So logging middleware shows identity instead of Anonymous
 
-    rate_limit_response = _ingress_rate_limiter.enforce(str(track.id))
-    if rate_limit_response is not None:
-        return rate_limit_response
+    try:
+        _ingress_rate_limiter.enforce(str(track.id))
+    except RateLimitExceeded:
+        return error_response(RATE_LIMIT_MESSAGE, 429)
 
     raw = parse_ingress_body(request)
     try:
@@ -520,9 +521,10 @@ def app_ingress(request):
 
     track = get_object_or_404_for_user(LiveTrack, request.user, id=tracker_uuid)
 
-    rate_limit_response = _ingress_rate_limiter.enforce(str(track.id))
-    if rate_limit_response is not None:
-        return rate_limit_response
+    try:
+        _ingress_rate_limiter.enforce(str(track.id))
+    except RateLimitExceeded:
+        return error_response(RATE_LIMIT_MESSAGE, 429)
 
     if not points:
         return JsonResponse({"ok": True}, status=200)

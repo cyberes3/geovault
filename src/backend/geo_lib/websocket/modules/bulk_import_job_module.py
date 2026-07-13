@@ -60,7 +60,7 @@ class BulkImportJobModule(BaseWebSocketModule):
             else:
                 await self.send_to_client('error', {'message': 'Failed to start bulk import job'})
 
-        except:
+        except Exception:
             logger.error(f"Error handling start_bulk_import: {traceback.format_exc()}")
             await self.send_to_client('error', {'message': 'Error starting bulk import'})
 

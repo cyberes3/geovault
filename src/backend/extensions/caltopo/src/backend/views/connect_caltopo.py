@@ -16,7 +16,7 @@ from extensions.caltopo.src.backend.models import CalTopoUser
 from extensions.caltopo.src.backend.services.caltopo_api import get_caltopo_session, CalTopoTimeoutError
 from extensions.caltopo.src.backend.utils.caltopo_helpers import perform_caltopo_call
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger('CalTopoAuth')
 
@@ -78,7 +78,7 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
             # Delete credentials if verification fails
             caltopo_user.delete()
             return error_resp
-    except:
+    except Exception:
         # Delete credentials if verification fails (non-timeout exceptions)
         caltopo_user.delete()
         # Log detailed error internally
@@ -160,7 +160,7 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
             'connected': False,
             'status': 'timeout'
         })
-    except:
+    except Exception:
         # Other exceptions - invalid credentials
         _logger.warning(f'Error validating CalTopo credentials: {traceback.format_exc()}')
         return success_response({

@@ -2,7 +2,7 @@
 Tests for per-user serialization of import/processing jobs.
 
 Sequential processing is now enforced by a Redis lock keyed per-user (see
-`geo_lib.processing.jobs.process_job.ProcessJob.process_locked`) rather than an in-process
+`geo_lib.processing.jobs.process_job.job.ProcessJob.process_locked`) rather than an in-process
 worker thread, so these tests exercise the lock directly instead of racing real background
 threads against `time.sleep()`.
 """
@@ -15,7 +15,8 @@ from django.contrib.auth import get_user_model
 from django.test import TransactionTestCase
 
 from api.tasks import IMPORT_LOCK_RETRY_COUNTDOWN_SECONDS, process_import_job
-from geo_lib.processing.jobs.process_job import ImportLockContention, ProcessJob
+from geo_lib.processing.jobs.process_job.dispatch import ImportLockContention
+from geo_lib.processing.jobs.process_job.job import ProcessJob
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.utils.redis_locks import try_acquire_lock
 

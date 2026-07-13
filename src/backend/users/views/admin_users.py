@@ -7,7 +7,7 @@ from django.http import JsonResponse
 
 from api.models import FeatureStore, ImportQueue, TagShare, CollectionShare
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from users.models import UserProfile
 
 User = get_user_model()

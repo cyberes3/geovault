@@ -16,7 +16,7 @@ from api.validation.decorators import validate_payload
 from api.views.features.updates.geometry import _normalize_geometry_coordinates
 from extensions.caltopo.src.backend.services.caltopo_api import get_feature, convert_caltopo_to_geojson
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, VALID_CALTOPO_FEATURE_CLASSES
-from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limiter
+from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limited
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.duplicate_detection.find import _find_hash_duplicates, _find_geometry_duplicates
@@ -24,7 +24,7 @@ from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.types.validation import match_geometry_class
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 
 class CalTopoSingleImportPayload(BaseModel):
@@ -75,7 +75,7 @@ class CalTopoSingleImportPayload(BaseModel):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @validate_payload(CalTopoSingleImportPayload)
-@caltopo_rate_limiter()
+@caltopo_rate_limited
 def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any]) -> JsonResponse:
     """
     Import a single feature from CalTopo.

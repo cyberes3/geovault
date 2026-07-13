@@ -49,7 +49,7 @@ from api.views.imports.queue_management import (
 from api.views.imports.upload import upload_item
 from api.views.geocoding import geocoding_search
 from api.views.geolocation import get_user_location, get_location_by_ip
-from geo_lib.tiles import tile_proxy, get_tile_sources, style_proxy
+from api.views.tiles import tile_proxy, get_tile_sources, style_proxy
 from api.views.sharing.collections import get_public_collection_share
 from api.views.sharing.features import (
     get_feature_share,

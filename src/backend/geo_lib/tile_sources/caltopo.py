@@ -3,9 +3,11 @@ CalTopo tile service headers.
 
 This module provides HTTP headers for accessing CalTopo's public tile service.
 These headers are used by general-purpose tile sources that happen to use CalTopo's tile infrastructure.
+
+No `User-Agent` entry: `geo_lib.tile_upstream.build_tile_upstream_headers()` always sets the
+standard outbound `User-Agent` for tile requests, overriding any per-source value.
 """
 CALTOPO_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0',
     'Accept': '*/*',
     'Accept-Language': 'en-US,en;q=0.5',
     'Accept-Encoding': 'identity',

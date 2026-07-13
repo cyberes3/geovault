@@ -731,7 +731,7 @@ def recover_interrupted_jobs():
             if result['users_affected'] > 0:
                 _logger.info(f"  Affected users: {result['users_affected']}")
 
-    except:
+    except Exception:
         _logger.warning(f"⚠ Failed to recover interrupted jobs: {traceback.format_exc()}")
         # This is not critical - server can still start
 

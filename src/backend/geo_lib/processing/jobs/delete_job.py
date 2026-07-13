@@ -139,8 +139,8 @@ class DeleteJob(BaseJob):
 
             _logger.info(f"Successfully completed delete job {job_id} for item {item_id}")
 
-        except:
-            _logger.error(f"Delete job {job_id} error: {traceback.format_exc}")
+        except Exception:
+            _logger.error(f"Delete job {job_id} error: {traceback.format_exc()}")
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,
                 DELETE_JOB_FAILED, error_message=DELETE_JOB_FAILED
@@ -202,6 +202,6 @@ class DeleteJob(BaseJob):
             else:
                 _logger.info(f"No active process jobs found for item {item_id}")
 
-        except:
+        except Exception:
             _logger.warning(f"Error canceling active processing jobs for item {item_id}: {traceback.format_exc()}")
             # Don't fail the delete job for this, just log the warning

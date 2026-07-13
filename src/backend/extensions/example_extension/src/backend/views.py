@@ -15,12 +15,12 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
-from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.validation.geometry_validation import GeometryValidationError
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger(__name__)
 

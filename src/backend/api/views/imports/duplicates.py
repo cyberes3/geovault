@@ -15,7 +15,7 @@ from geo_lib.processing.duplicate_detection.duplicate_detection import (
 )
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

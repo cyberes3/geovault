@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from geo_lib.websocket.force_disconnect import WebSocketForceDisconnector
 from users.models import ApiKey
 from users.api_keys import create_user_api_key, validate_api_key

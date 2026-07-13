@@ -11,9 +11,9 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from geo_lib.processing.file_types import FileType
-from geo_lib.security.SecureFileValidator import validate_file, basic_file_security_check
+from geo_lib.security.secure_file_validator import validate_file, basic_file_security_check
 from geo_lib.security.exceptions import FileValidationError, SecurityError
-from geo_lib.security.SecureFileValidator import validate_kml_content, secure_kmz_to_kml
+from geo_lib.security.secure_file_validator import validate_kml_content, secure_kmz_to_kml
 
 
 class TestSecureFileValidator:

@@ -1,8 +1,8 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, TAG_PRIORITIES
-from geo_lib.website.auth import api_or_login_required_401
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, TAG_PRIORITIES
+from website.auth_decorators import api_or_login_required_401
 from website.config_loader import get_config_loader
 
 

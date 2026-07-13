@@ -167,7 +167,7 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str, import_log: ImportLog
             DatabaseLogLevel.WARNING
         )
         return None
-    except:
+    except Exception:
         error_msg = f"Failed to extract icon from KMZ: {traceback.format_exc()}"
         _logger.error(error_msg)
         import_log.add(
@@ -255,7 +255,7 @@ def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Option
             DatabaseLogLevel.WARNING
         )
         return None
-    except:
+    except Exception:
         error_msg = f"Failed to fetch remote icon: {url} - {traceback.format_exc()}"
         _logger.error(error_msg)
         import_log.add(

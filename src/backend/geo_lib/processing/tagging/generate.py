@@ -84,7 +84,7 @@ def generate_auto_tags_batch(
                 tags = generator.process(feature, import_log=import_log, filename=filename, file_content=file_content)
                 if tags:
                     all_feature_tags[i].extend(tags)
-            except:
+            except Exception:
                 _logger.warning(f"Tag generator {generator.__class__.__name__} failed for feature {i}: {traceback.format_exc()}")
                 import_log.add(
                     f"Tag generator {generator.__class__.__name__} failed",
@@ -98,7 +98,7 @@ def generate_auto_tags_batch(
             reverse_geocode_tags = reverse_geocoding_gen.process_batch(features, import_log=import_log)
             for i, tags in reverse_geocode_tags.items():
                 all_feature_tags[i].extend(tags)
-        except:
+        except Exception:
             _logger.warning(f"Batch reverse geocoding failed: {traceback.format_exc()}")
             import_log.add(
                 f"Batch reverse geocoding failed",

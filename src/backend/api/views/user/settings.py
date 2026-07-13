@@ -10,7 +10,7 @@ from api.validation.user_settings import (
     BulkUpdateHiddenFeaturesPayload,
 )
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

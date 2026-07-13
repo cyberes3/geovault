@@ -10,7 +10,7 @@ from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
 from api.validation.payloads.imports import SkipStatePayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

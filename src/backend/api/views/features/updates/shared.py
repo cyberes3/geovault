@@ -1,6 +1,6 @@
 """Shared utilities for feature updates"""
 from api.utils.responses import error_response
-from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, is_protected_tag
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, is_protected_tag
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from website.settings_utils import get_required_setting
 

@@ -10,7 +10,7 @@ from api.utils.responses import success_response, handle_404
 from api.views.collections.utils import get_collection_feature_ids
 from api.validation.decorators import validate_payload
 from api.validation.payloads.bulk_operations import SaveBulkOperationsPayload
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 
 @api_or_login_required_401()

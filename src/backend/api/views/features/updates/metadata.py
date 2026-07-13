@@ -18,11 +18,11 @@ from api.views.features.updates.shared import (
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
-from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
 from geo_lib.validation.coordinate.helpers import CoordinateValidationError
 from geo_lib.validation.geometry_validation import GeometryValidationError
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 logger = get_tagged_logger()
 

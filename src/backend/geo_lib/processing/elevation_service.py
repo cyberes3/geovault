@@ -124,7 +124,7 @@ def _fetch_elevation_batch_with_retry(
             import_log.add(f"Elevation API request failed{context_str}: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
             return None
 
-        except:
+        except Exception:
             context_str = f" for {context_info}" if context_info else ""
             import_log.add(f"Unexpected error fetching elevation data{context_str}: {traceback.format_exc()}", "Elevation Service", DatabaseLogLevel.ERROR)
             return None
@@ -320,7 +320,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
                 encountered_preparing_point_error += 1
                 _logger.error(f"Error preparing coordinate for feature {feature_idx}, line {line_idx}, point {point_idx}: {str(e)}")
                 continue
-    except:
+    except Exception:
         import_log.add('Error preparing coordinates for API', "Elevation Service", DatabaseLogLevel.ERROR)
         _logger.error(f"Error preparing coordinates for API: {traceback.format_exc()}")
         return geojson_data
@@ -404,7 +404,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
                 # Update coordinate from [lon, lat] to [lon, lat, elevation]
                 line[point_idx] = [line[point_idx][0], line[point_idx][1], elevation]
                 updated_count += 1
-    except:
+    except Exception:
         import_log.add('Error updating coordinates with elevation data', "Elevation Service", DatabaseLogLevel.ERROR)
         _logger.error(f"Error updating coordinates with elevation data: {traceback.format_exc()}")
 

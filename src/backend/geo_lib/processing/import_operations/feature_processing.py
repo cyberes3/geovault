@@ -13,7 +13,7 @@ from api.models import ImportQueue, FeatureStore
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.duplicate_detection.models import SkippedDuplicateFeature
 from geo_lib.processing.import_operations.styling import strip_icon_properties
-from geo_lib.tags.const_strings import prepare_user_tags
+from geo_lib.processing.tagging.const_strings import prepare_user_tags
 from geo_lib.types.validation import match_geometry_class
 from geo_lib.validation.styling_validation import normalize_feature_colors_and_styles
 

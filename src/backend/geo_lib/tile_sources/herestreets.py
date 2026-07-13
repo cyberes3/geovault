@@ -37,9 +37,10 @@ class HereStreetsTileSource(TileSource):
 
     @property
     def proxy_config(self):
+        # No 'User-Agent' entry: geo_lib.tile_upstream.build_tile_upstream_headers() always
+        # sets the standard outbound User-Agent for tile requests, overriding any per-source value.
         return {
             'headers': {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0',
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.5',
                 'Accept-Encoding': 'identity',

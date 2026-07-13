@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from api.models import FeatureStore, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger(__name__)
 

@@ -4,14 +4,15 @@ from django.http import Http404
 from django.views.decorators.http import require_http_methods
 
 from api.services.feature_service import FeatureService
+from api.utils.rate_limiting import rate_limited
 from api.utils.responses import error_response, success_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
-from geo_lib.processing.jobs.process_job import ProcessJob
-from geo_lib.security.SecureFileValidator import basic_file_security_check
+from geo_lib.processing.jobs.process_job.job import ProcessJob
+from geo_lib.security.secure_file_validator import basic_file_security_check
 from geo_lib.security.rate_limit import RedisRateLimiter
 from geo_lib.utils.secure_path import secure_filename
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 
@@ -26,7 +27,7 @@ class DocumentForm(forms.Form):
 
 
 @api_or_login_required_401()
-@_upload_item_rate_limiter()
+@rate_limited(_upload_item_rate_limiter)
 @require_http_methods(["POST"])
 def upload_item(request):
     """

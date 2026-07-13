@@ -80,16 +80,6 @@ def _validate_point_coordinate(point: List[Any]) -> Tuple[float, float]:
         # Other errors from coordinate-parser
         raise CoordinateValidationError(f"Coordinate validation failed: {str(e)}")
 
-    # Additional bounds check (coordinate-parser should have already validated, but double-check)
-    if not (-180 <= lon <= 180):
-        raise CoordinateValidationError(f"Longitude {lon} is out of bounds [-180, 180]")
-    if abs(lat) > 90:
-        raise CoordinateValidationError(
-            f"Coordinates appear to be swapped. Latitude {lat} is outside valid range [-90, 90]."
-        )
-    if not (-90 <= lat <= 90):
-        raise CoordinateValidationError(f"Latitude {lat} is out of bounds [-90, 90]")
-
     return lon, lat
 
 
@@ -126,9 +116,9 @@ def _check_multiple_points_for_swap(points: List[Tuple[float, float]]) -> Option
     # If majority of points look swapped, report it
     if total_checked >= 2 and swap_count > total_checked * 0.5:
         return (
-            f"Multiple coordinates appear to be swapped. "
-            f"Expected [longitude, latitude] format. "
-            f"Longitude should be first (range -180 to 180), latitude second (range -90 to 90)."
+            "Multiple coordinates appear to be swapped. "
+            "Expected [longitude, latitude] format. "
+            "Longitude should be first (range -180 to 180), latitude second (range -90 to 90)."
         )
 
     return None

@@ -159,7 +159,7 @@ def bulk_create_features_with_fallback(
         successful_imports = len(features_to_create)
         # After bulk_create, objects have their IDs assigned
         created_objects = features_to_create
-    except:
+    except Exception:
         _logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {traceback.format_exc()}")
 
         # Fallback to individual creation if bulk fails
@@ -176,7 +176,7 @@ def bulk_create_features_with_fallback(
                 else:
                     # Unexpected integrity error
                     _logger.error(f"Unexpected integrity error for user {user_id}: {traceback.format_exc()}")
-            except:
+            except Exception:
                 _logger.error(f"Error creating individual feature for user {user_id}: {traceback.format_exc()}")
 
     return successful_imports, duplicates_skipped, created_objects

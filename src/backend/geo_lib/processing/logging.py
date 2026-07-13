@@ -128,7 +128,7 @@ class RealTimeImportLog:
             # Broadcast to WebSocket
             self._broadcast_log_to_websocket(log_msg)
 
-        except:
+        except Exception:
             _logger.error(f"Failed to write real-time log to database: {traceback.format_exc()}")
             # Don't raise the exception - we still want processing to continue
 
@@ -174,7 +174,7 @@ class RealTimeImportLog:
             if len(messages_to_add) > 0:
                 self._broadcast_logs_batch_to_websocket(messages_to_add)
 
-        except:
+        except Exception:
             _logger.error(f"Failed to write real-time logs to database: {traceback.format_exc()}")
 
     async def extend_async(self, msgs: 'ImportLog'):
@@ -226,7 +226,7 @@ class RealTimeImportLog:
             except ImportQueue.DoesNotExist:
                 # Import item not found, skip broadcasting
                 pass
-        except:
+        except Exception:
             _logger.error(f"Failed to broadcast log to WebSocket: {traceback.format_exc()}")
             # Don't raise the exception - we still want processing to continue
 
@@ -262,5 +262,5 @@ class RealTimeImportLog:
                     )
             except ImportQueue.DoesNotExist:
                 pass
-        except:
+        except Exception:
             _logger.error(f"Failed to broadcast log batch to WebSocket: {traceback.format_exc()}")

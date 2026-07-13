@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from website.config_loader import get_config_loader
 from website.public_url import build_public_url
 

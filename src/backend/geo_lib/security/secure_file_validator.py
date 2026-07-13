@@ -43,7 +43,7 @@ def validate_file(uploaded_file: UploadedFile) -> Tuple[bool, str]:
 
     except (SecurityError, FileValidationError) as e:
         return False, str(e)
-    except:
+    except Exception:
         return False, "Invalid file format"
 
 
@@ -71,7 +71,7 @@ def validate_kml_content(kml_content: str) -> bool:
         return True
     except SecurityError:
         raise
-    except:
+    except Exception:
         raise SecurityError("Invalid KML content")
 
 
@@ -136,7 +136,7 @@ def basic_file_security_check(uploaded_file: UploadedFile) -> Tuple[bool, str]:
 
         return True, "Basic security check passed"
 
-    except:
+    except Exception:
         return False, "File validation error"
 
 
@@ -184,5 +184,5 @@ def secure_kmz_to_kml(kmz_data: Union[str, bytes]) -> str:
         raise SecurityError("Invalid ZIP file structure")
     except (SecurityError, FileValidationError):
         raise
-    except:
-        raise SecurityError(f"KMZ to KML conversion failed")
+    except Exception:
+        raise SecurityError("KMZ to KML conversion failed")

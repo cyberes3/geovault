@@ -12,7 +12,7 @@ from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.job_ceiling import calculate_job_ceiling_seconds
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
-from geo_lib.processing.jobs.process_job import dispatch_import_job
+from geo_lib.processing.jobs.process_job.dispatch import dispatch_import_job
 from geo_lib.utils.redis_locks import try_acquire_lock
 
 _logger = get_tagged_logger('JobRecovery')
@@ -69,7 +69,7 @@ def recover_interrupted_jobs() -> Dict[str, Any]:
                 failed += 1
                 _logger.warning(f"✗ Failed to recover job: {job.original_filename} (ID: {job.id})")
 
-        except:
+        except Exception:
             failed += 1
             _logger.error(f"✗ Error recovering job {job.id}: {traceback.format_exc()}", exc_info=True)
 

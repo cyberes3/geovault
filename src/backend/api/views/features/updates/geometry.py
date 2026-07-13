@@ -22,7 +22,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
-from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.types.feature import (
     PointFeature,
     LineStringFeature,
@@ -35,7 +35,7 @@ from geo_lib.validation.geometry_validation import (
     GeometryValidationError
 )
 from geo_lib.validation.styling_validation import is_valid_icon_url
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

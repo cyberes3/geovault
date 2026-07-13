@@ -4,8 +4,9 @@ from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from api.utils.rate_limiting import rate_limited
 from geo_lib.security.rate_limit import RedisRateLimiter
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 User = get_user_model()
 
@@ -15,7 +16,7 @@ _list_users_rate_limiter = RedisRateLimiter(name='list_users', limit=20, window_
 
 
 @api_or_login_required_401()
-@_list_users_rate_limiter()
+@rate_limited(_list_users_rate_limiter)
 @require_http_methods(["GET"])
 def list_users(request):
     """

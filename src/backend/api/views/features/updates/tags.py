@@ -6,7 +6,7 @@ from api.services.feature_service import FeatureService, UnsupportedFeatureGeome
 from api.utils.responses import error_response, handle_404
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.validation.geometry_validation import GeometryValidationError
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 logger = get_tagged_logger()
 

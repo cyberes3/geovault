@@ -7,7 +7,7 @@ from typing import Dict, Any
 
 from geo_lib.processing.icons.icon_manager import process_geojson_icons
 from geo_lib.processing.logging import DatabaseLogLevel
-from geo_lib.security.SecureFileValidator import secure_kmz_to_kml
+from geo_lib.security.secure_file_validator import secure_kmz_to_kml
 from .kml_processor import KMLProcessor
 from ...logging.console import get_tagged_logger
 

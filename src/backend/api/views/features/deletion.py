@@ -8,7 +8,7 @@ from api.utils.responses import handle_404, success_response
 from api.validation.decorators import validate_payload
 from api.validation.payloads.features import BulkDeleteByTagPayload
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

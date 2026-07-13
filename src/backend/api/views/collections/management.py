@@ -19,7 +19,7 @@ from api.views.collections.utils import (
     filter_feature_ids_for_user,
     get_collection_feature_ids,
 )
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 
 @api_or_login_required_401()

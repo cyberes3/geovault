@@ -8,7 +8,7 @@ from allauth.account.forms import ChangePasswordForm
 from allauth.account.models import EmailAddress
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from users.constants import (
     EMAIL_VERIFICATION_CACHE_KEY,
     EMAIL_VERIFICATION_COOLDOWN_SECONDS,

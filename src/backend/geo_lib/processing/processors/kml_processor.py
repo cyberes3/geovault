@@ -7,7 +7,7 @@ import re
 from typing import Dict, Any
 
 from geo_lib.processing.icons.icon_manager import process_geojson_icons
-from .base_processor import BaseProcessor
+from .base.processor import BaseProcessor
 from ...logging.console import get_tagged_logger
 
 _logger = get_tagged_logger('KMLPROCESSOR')

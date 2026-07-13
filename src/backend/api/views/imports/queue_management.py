@@ -24,9 +24,9 @@ from geo_lib.processing.jobs.delete_job import DeleteJob
 from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.processing.tagging.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger()
 

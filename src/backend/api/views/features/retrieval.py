@@ -6,7 +6,7 @@ from api.services.feature_service import FeatureService
 from api.utils.responses import error_response, handle_404, success_response
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.elevation_service import MAX_POINTS_PER_REQUEST, _fetch_elevation_batch_with_retry
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()

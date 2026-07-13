@@ -15,7 +15,7 @@ from geo_lib.search_geocoding.common import (
     GeocodingBackendError,
     get_geocoding_cache_key,
 )
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _logger = get_tagged_logger(__name__)
 

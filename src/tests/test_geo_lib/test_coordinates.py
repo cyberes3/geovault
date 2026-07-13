@@ -1,12 +1,7 @@
 """
 Unit tests for coordinate normalization and geometry matching (duplicate detection).
 """
-from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
-from geo_lib.spatial.coordinates import (
-    coordinates_match,
-    geometries_match,
-    normalize_coordinates,
-)
+from geo_lib.spatial.coordinates import geometries_match, normalize_coordinates
 
 
 class TestGeometriesMatch:
@@ -98,9 +93,9 @@ class TestNormalizeCoordinates:
         assert len(normalized) == 2
         assert len(normalized[0]) == 2
 
-
-class TestCoordinatesMatch:
-    def test_delegates_to_geometries_match(self):
-        a = [-105.64053, 38.79543]
-        b = [-105.64053344726562, 38.79542922973633]
-        assert coordinates_match(a, b) == geometries_match(a, b, COORDINATE_TOLERANCE)
+    def test_respects_custom_tolerance(self):
+        # A coarser tolerance (1e-3) should round to 3 decimal places instead of the default 6.
+        assert normalize_coordinates([-105.640533, 38.795429], tolerance=1e-3) == [
+            -105.641,
+            38.795,
+        ]

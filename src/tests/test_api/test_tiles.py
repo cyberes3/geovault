@@ -6,7 +6,6 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 from urllib.response import addinfourl
 
-import requests
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 
@@ -46,7 +45,7 @@ class TestTilesAPI(TestCase):
         self.assertIn('sources', data)
         self.assertIn('map_config_errors', data)
 
-    @patch('geo_lib.tiles.get_tile_sources_for_client')
+    @patch('api.views.tiles.get_tile_sources_for_client')
     def test_get_tile_sources_reports_missing_maplibre_configuration(self, mock_sources):
         """No MapLibre style source is reported as an admin setup error."""
         mock_sources.return_value = [
@@ -67,7 +66,7 @@ class TestTilesAPI(TestCase):
         self.assertIn('Code: maplibre_not_configured', data['map_config_errors'][0]['message'])
         self.assertNotIn('maptiler.api_key', data['map_config_errors'][0]['message'])
 
-    @patch('geo_lib.tiles.get_tile_sources_for_client')
+    @patch('api.views.tiles.get_tile_sources_for_client')
     def test_get_tile_sources_hidden_maplibre_source_counts_as_configured(self, mock_sources):
         """Hidden MapTiler utility styles still prove MapLibre is configured."""
         mock_sources.return_value = [
@@ -86,7 +85,7 @@ class TestTilesAPI(TestCase):
         data = json.loads(response.content)
         self.assertEqual([], data['map_config_errors'])
 
-    @patch('geo_lib.tiles.get_tile_sources_for_client')
+    @patch('api.views.tiles.get_tile_sources_for_client')
     def test_get_tile_sources_has_no_config_errors_when_map_ready(self, mock_sources):
         """A visible MapLibre style clears explicit setup errors."""
         mock_sources.return_value = [
@@ -258,7 +257,7 @@ class TestTilesAPI(TestCase):
         self.assertEqual(headers['User-Agent'], USER_AGENT)
         self.assertEqual(headers['Referer'], 'https://public.example.test/')
 
-    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(DEBUG=False, SITE_DOMAIN='public.example.test', TILE_CACHE_ENABLED=False)
     def test_tile_proxy_fallback_referer_ignores_internal_proxy_host(self, mock_requests_get):
         """Fallback tile Referer must not use backend/reverse-proxy hosts."""
@@ -276,7 +275,7 @@ class TestTilesAPI(TestCase):
         self.assertEqual(actual_headers.get('Referer'), 'https://public.example.test/')
         self.assertNotIn('172.0.2.102', actual_headers.get('Referer', ''))
 
-    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_forwards_source_headers_and_user_agent(self, mock_requests_get):
         """Tile proxy merges per-source proxy headers with the standard outbound User-Agent."""
@@ -302,7 +301,7 @@ class TestTilesAPI(TestCase):
         x = random.randint(0, 2**z - 1)
         y = random.randint(0, 2**z - 1)
         
-        response = self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
+        self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
 
         # Verify requests.get was called
         self.assertTrue(mock_requests_get.called, "requests.get should have been called")
@@ -521,7 +520,7 @@ class TestTilesAPI(TestCase):
         self.assertIsNone(get_tile_source('no-such-source-id'))
         self._reset_registry()
 
-    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_cache_control_header_uses_cache_expiry_days(self, mock_requests_get):
         """Test that Cache-Control header uses TILE_CACHE_EXPIRY_DAYS setting."""
@@ -557,7 +556,7 @@ class TestTilesAPI(TestCase):
         self.assertIn('public', cache_control)
         self.assertIn(f'max-age={expected_max_age}', cache_control)
 
-    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False, TILE_CACHE_EXPIRY_DAYS=7)
     def test_tile_proxy_cache_control_header_respects_custom_cache_expiry_days(self, mock_requests_get):
         """Test that Cache-Control header respects custom TILE_CACHE_EXPIRY_DAYS setting."""
@@ -594,7 +593,7 @@ class TestTilesAPI(TestCase):
         # Verify it's NOT using the default 30 days
         self.assertNotIn('max-age=2592000', cache_control)
 
-    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_removes_set_cookie_header_for_cloudflare_caching(self, mock_requests_get):
         """Test that tile proxy responses do not include Set-Cookie headers to allow Cloudflare caching."""
@@ -734,16 +733,9 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('geo_lib.tiles.requests.get')
-    @patch('geo_lib.tiles.get_config_loader')
-    def test_style_proxy_replaces_tile_urls(self, mock_get_config_loader, mock_requests_get):
+    @patch('api.views.tiles.requests.get')
+    def test_style_proxy_replaces_tile_urls(self, mock_requests_get):
         """Test that style_proxy endpoint replaces MapTiler tile URLs with proxy URLs."""
-        # Mock config loader
-        mock_config_loader = MagicMock()
-        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
-        mock_config_loader.get_str.return_value = 'example.com'
-        mock_get_config_loader.return_value = mock_config_loader
-        
         # Mock style.json response from MapTiler
         mock_style_response = MagicMock()
         mock_style_response.status_code = 200
@@ -798,15 +790,9 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('geo_lib.tiles.requests.get')
-    @patch('geo_lib.tiles.get_config_loader')
-    def test_style_proxy_adds_glyphs_for_text_layers(self, mock_get_config_loader, mock_requests_get):
+    @patch('api.views.tiles.requests.get')
+    def test_style_proxy_adds_glyphs_for_text_layers(self, mock_requests_get):
         """Text-bearing proxied styles should use GeoVault's server-side glyph endpoint."""
-        mock_config_loader = MagicMock()
-        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
-        mock_config_loader.get_str.return_value = 'example.com'
-        mock_get_config_loader.return_value = mock_config_loader
-
         mock_style_response = MagicMock()
         mock_style_response.status_code = 200
         mock_style_response.json.return_value = {
@@ -838,15 +824,9 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('geo_lib.tiles.requests.get')
-    @patch('geo_lib.tiles.get_config_loader')
-    def test_style_proxy_preserves_existing_glyphs(self, mock_get_config_loader, mock_requests_get):
+    @patch('api.views.tiles.requests.get')
+    def test_style_proxy_preserves_existing_glyphs(self, mock_requests_get):
         """Valid upstream glyph templates should not be rewritten."""
-        mock_config_loader = MagicMock()
-        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
-        mock_config_loader.get_str.return_value = 'example.com'
-        mock_get_config_loader.return_value = mock_config_loader
-
         upstream_glyphs = 'https://example.test/fonts/{fontstack}/{range}.pbf'
         mock_style_response = MagicMock()
         mock_style_response.status_code = 200
@@ -880,7 +860,7 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
-    @patch('geo_lib.tiles.requests.get')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_handles_pbf_vector_tiles(self, mock_requests_get):
         """Test that tile proxy correctly handles .pbf vector tile files."""
@@ -932,10 +912,10 @@ class TestTilesAPI(TestCase):
         response = self.client.get('/api/tiles/style/nonexistent-map')
         self.assertEqual(response.status_code, 404)
 
-    @patch('geo_lib.tiles.get_tile_cache_path')
-    @patch('geo_lib.tiles.is_tile_cached')
-    @patch('geo_lib.tiles.read_tile_from_cache')
-    @patch('geo_lib.tiles.requests.get')
+    @patch('api.views.tiles.get_tile_cache_path')
+    @patch('api.views.tiles.is_tile_cached')
+    @patch('api.views.tiles.read_tile_from_cache')
+    @patch('geo_lib.tile_sources.tile_fetch.requests.get')
     @override_settings(TILE_CACHE_ENABLED=True)
     def test_tile_proxy_uses_correct_extension_from_url_template(self, mock_requests_get, 
                                                                    mock_read_tile_from_cache,

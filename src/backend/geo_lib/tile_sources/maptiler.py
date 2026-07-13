@@ -6,11 +6,27 @@ MapTiler maps are vector tile sources that can be used directly without a proxy.
 """
 
 import functools
+from typing import Optional
 
 import requests
 
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.base import TileSource
 from website.config_loader import get_config_loader
+
+_logger = get_tagged_logger()
+
+_STYLE_FETCH_TIMEOUT_SECONDS = 5
+
+
+def get_maptiler_api_key() -> Optional[str]:
+    """Read the configured MapTiler API key (env override supported), or None if unset."""
+    return get_config_loader().get_with_env_override('maptiler.api_key', 'MAPTILER_API_KEY', None)
+
+
+def build_maptiler_style_url(map_id: str, api_key: str) -> str:
+    """Build the upstream MapTiler style.json URL for a given map id."""
+    return f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}'
 
 
 class MapTilerMapTileSource(TileSource):
@@ -90,11 +106,7 @@ def generate_maptiler_sources():
     config = get_config_loader()
 
     # Get MapTiler API key
-    api_key = config.get_with_env_override(
-        'maptiler.api_key',
-        'MAPTILER_API_KEY',
-        None
-    )
+    api_key = get_maptiler_api_key()
 
     # If no API key, skip registration
     if not api_key:
@@ -146,12 +158,12 @@ def _fetch_map_name(map_id, api_key, site_domain):
         Display name from the style.json, or a formatted fallback name
     """
     try:
-        style_url = f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}'
+        style_url = build_maptiler_style_url(map_id, api_key)
         # MapTiler expects just the domain in Origin header to match their allowed origins list
         headers = {
             'Origin': site_domain
         }
-        response = requests.get(style_url, headers=headers, timeout=5)
+        response = requests.get(style_url, headers=headers, timeout=_STYLE_FETCH_TIMEOUT_SECONDS)
 
         if response.status_code == 200:
             style_data = response.json()
@@ -160,7 +172,7 @@ def _fetch_map_name(map_id, api_key, site_domain):
                 return f"MapTiler {style_data['name']}"
     except Exception as e:
         # Log error but continue with fallback name
-        print(f"Warning: Could not fetch name for map '{map_id}': {e}")
+        _logger.warning(f"Could not fetch name for map '{map_id}': {e}")
 
     # Fallback: format the map ID as a display name
     return f"MapTiler {map_id.replace('-', ' ').title()}"

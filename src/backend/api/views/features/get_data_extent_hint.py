@@ -8,7 +8,7 @@ from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field
 
 from api.models import FeatureStore
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 _MAX_MERCATOR_LAT = 85.05112878
 # Minimum half-width in degrees when extent collapses to a point or near-degenerate line

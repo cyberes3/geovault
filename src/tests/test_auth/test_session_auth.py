@@ -53,7 +53,7 @@ class TestSessionAuth(TestCase):
         self.assertIn(response.status_code, [405, 400])
 
     def test_login_required_401_decorator(self):
-        """Test login_required_401 decorator."""
+        """Test api_or_login_required_401 decorator."""
         # Without login
         response = self.client.get('/api/features/all/')
         self.assertEqual(response.status_code, 401)

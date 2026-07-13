@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from api.models import FeatureStore
 from allauth.account.models import EmailAddress
 

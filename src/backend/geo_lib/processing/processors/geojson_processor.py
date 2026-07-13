@@ -5,7 +5,7 @@ Handles GeoJSON-specific parsing and validation.
 import json
 from typing import Dict, Any
 
-from .base_processor import BaseProcessor
+from .base.processor import BaseProcessor
 from ..logging import DatabaseLogLevel
 from ...logging.console import get_tagged_logger
 from ...validation.geometry_validation import GeometryValidationError

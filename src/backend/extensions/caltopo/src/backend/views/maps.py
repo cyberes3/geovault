@@ -8,14 +8,14 @@ from api.models import ImportQueue, FeatureStore
 from api.utils.responses import success_response, not_found_response
 from extensions.caltopo.src.backend.services.caltopo_api import list_maps, get_map_features
 from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, is_valid_caltopo_feature_class
-from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limiter
+from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limited
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
-@caltopo_rate_limiter()
+@caltopo_rate_limited
 def list_caltopo_maps(request: HttpRequest) -> JsonResponse:
     """
     List all available CalTopo maps for the current user.
@@ -38,7 +38,7 @@ def list_caltopo_maps(request: HttpRequest) -> JsonResponse:
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
-@caltopo_rate_limiter()
+@caltopo_rate_limited
 def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
     """
     Get all features from a specific CalTopo map.
@@ -178,7 +178,7 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
-@caltopo_rate_limiter()
+@caltopo_rate_limited
 def get_caltopo_map_details(request: HttpRequest, map_id: str) -> JsonResponse:
     """
     Get details about a specific CalTopo map.

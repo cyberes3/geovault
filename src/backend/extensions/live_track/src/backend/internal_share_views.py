@@ -3,7 +3,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 
 from .internal_share_links import INVALID_INTERNAL_SHARE_RESPONSE, resolve_internal_share_data, resolve_internal_share_info
 from .validation import InternalShareInfoResponse

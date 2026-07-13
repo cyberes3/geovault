@@ -12,7 +12,7 @@ from api.validation.decorators import validate_payload
 from api.validation.payloads.sharing import UnifiedSharePayload
 from api.views.sharing.utils import build_share_url, generate_unique_share_id
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.website.auth import api_or_login_required_401
+from website.auth_decorators import api_or_login_required_401
 from website.map_share_social.preview_warmup import trigger_social_preview_warmup_async
 from website.settings_utils import get_required_setting
 

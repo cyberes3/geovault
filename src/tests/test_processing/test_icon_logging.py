@@ -9,12 +9,12 @@ import pytest
 from PIL import Image
 
 from geo_lib.processing.icons.icon_manager import (
-    store_icon,
     process_icon_href,
     process_geojson_icons,
     _process_single_icon_href,
     _process_properties_icons
 )
+from geo_lib.processing.icons.storage import store_icon
 from geo_lib.processing.icons.get import extract_icon_from_kmz, fetch_remote_icon
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
@@ -48,7 +48,7 @@ class TestIconLoggingBehavior:
         # Create icon data that exceeds size limit
         large_icon_data = b'x' * (10 * 1024 * 1024)  # 10MB
         
-        with patch('geo_lib.processing.icons.icon_manager.get_required_setting') as mock_get_setting:
+        with patch('geo_lib.processing.icons.storage.get_required_setting') as mock_get_setting:
             mock_get_setting.return_value = 1024 * 1024  # 1MB limit
             
             result = store_icon(large_icon_data, 'test.png', import_log, stats)
@@ -87,9 +87,9 @@ class TestIconLoggingBehavior:
         
         icon_data = _valid_png_bytes()
         
-        with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
+        with patch('geo_lib.processing.icons.storage._get_icon_extension') as mock_ext:
             mock_ext.return_value = '.png'
-            with patch('geo_lib.processing.icons.icon_manager._get_storage_path') as mock_path:
+            with patch('geo_lib.processing.icons.storage._get_storage_path') as mock_path:
                 mock_storage_path = Mock()
                 mock_storage_path.exists.return_value = False
                 mock_storage_path.write_bytes.side_effect = Exception("Disk full")
@@ -113,14 +113,14 @@ class TestIconLoggingBehavior:
         
         icon_data = _valid_png_bytes()
         
-        with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
+        with patch('geo_lib.processing.icons.storage._get_icon_extension') as mock_ext:
             mock_ext.return_value = '.png'
-            with patch('geo_lib.processing.icons.icon_manager._get_storage_path') as mock_path:
+            with patch('geo_lib.processing.icons.storage._get_storage_path') as mock_path:
                 mock_storage_path = Mock()
                 mock_storage_path.exists.return_value = False
                 mock_path.return_value = mock_storage_path
                 
-                with patch('geo_lib.processing.icons.icon_manager.hashlib') as mock_hashlib:
+                with patch('geo_lib.processing.icons.storage.hashlib') as mock_hashlib:
                     mock_hash = Mock()
                     mock_hash.hexdigest.return_value = 'abc123'
                     mock_hashlib.sha256.return_value = mock_hash
@@ -431,13 +431,13 @@ class TestIconStatisticsTracking:
         
         icon_data = _valid_png_bytes()
         
-        with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
+        with patch('geo_lib.processing.icons.storage._get_icon_extension') as mock_ext:
             mock_ext.return_value = '.png'
-            with patch('geo_lib.processing.icons.icon_manager._get_storage_path') as mock_path:
+            with patch('geo_lib.processing.icons.storage._get_storage_path') as mock_path:
                 mock_storage_path = Mock()
                 mock_storage_path.exists.return_value = False
                 mock_path.return_value = mock_storage_path
-                with patch('geo_lib.processing.icons.icon_manager.hashlib') as mock_hashlib:
+                with patch('geo_lib.processing.icons.storage.hashlib') as mock_hashlib:
                     mock_hash = Mock()
                     mock_hash.hexdigest.return_value = 'abc123'
                     mock_hashlib.sha256.return_value = mock_hash
@@ -503,13 +503,13 @@ class TestIconStatisticsTracking:
         # Successful icon - increments successful
         with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
             mock_fetch.return_value = _valid_png_bytes()
-            with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
+            with patch('geo_lib.processing.icons.storage._get_icon_extension') as mock_ext:
                 mock_ext.return_value = '.png'
-                with patch('geo_lib.processing.icons.icon_manager._get_storage_path') as mock_path:
+                with patch('geo_lib.processing.icons.storage._get_storage_path') as mock_path:
                     mock_storage = Mock()
                     mock_storage.exists.return_value = False
                     mock_path.return_value = mock_storage
-                    with patch('geo_lib.processing.icons.icon_manager.hashlib') as mock_hashlib:
+                    with patch('geo_lib.processing.icons.storage.hashlib') as mock_hashlib:
                         mock_hash = Mock()
                         mock_hash.hexdigest.return_value = 'hash1'
                         mock_hashlib.sha256.return_value = mock_hash
@@ -529,13 +529,13 @@ class TestIconStatisticsTracking:
         # CalTopo non-point that succeeds - increments successful
         with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
             mock_fetch.return_value = _valid_png_bytes()
-            with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
+            with patch('geo_lib.processing.icons.storage._get_icon_extension') as mock_ext:
                 mock_ext.return_value = '.png'
-                with patch('geo_lib.processing.icons.icon_manager._get_storage_path') as mock_path:
+                with patch('geo_lib.processing.icons.storage._get_storage_path') as mock_path:
                     mock_storage = Mock()
                     mock_storage.exists.return_value = False
                     mock_path.return_value = mock_storage
-                    with patch('geo_lib.processing.icons.icon_manager.hashlib') as mock_hashlib:
+                    with patch('geo_lib.processing.icons.storage.hashlib') as mock_hashlib:
                         mock_hash = Mock()
                         mock_hash.hexdigest.return_value = 'hash2'
                         mock_hashlib.sha256.return_value = mock_hash
@@ -596,7 +596,7 @@ class TestFailureMessageContent:
         
         large_data = b'x' * (5 * 1024 * 1024)  # 5MB
         
-        with patch('geo_lib.processing.icons.icon_manager.get_required_setting') as mock_get_setting:
+        with patch('geo_lib.processing.icons.storage.get_required_setting') as mock_get_setting:
             mock_get_setting.return_value = 1024 * 1024  # 1MB
             
             store_icon(large_data, 'large.png', import_log, stats)
@@ -735,7 +735,7 @@ class TestFailureMessageContent:
         stats = {'successful': 0, 'failed': 0}
         
         # WARNING: Size limit
-        with patch('geo_lib.processing.icons.icon_manager.get_required_setting') as mock_get_setting:
+        with patch('geo_lib.processing.icons.storage.get_required_setting') as mock_get_setting:
             mock_get_setting.return_value = 1024
             store_icon(b'x' * 10000, 'large.png', import_log, stats)
         
@@ -746,9 +746,9 @@ class TestFailureMessageContent:
         with patch('geo_lib.processing.icons.get.build_ssrf_safe_opener', return_value=mock_opener):
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
         # ERROR: Storage failure
-        with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
+        with patch('geo_lib.processing.icons.storage._get_icon_extension') as mock_ext:
             mock_ext.return_value = '.png'
-            with patch('geo_lib.processing.icons.icon_manager._get_storage_path') as mock_path:
+            with patch('geo_lib.processing.icons.storage._get_storage_path') as mock_path:
                 mock_storage = Mock()
                 mock_storage.exists.return_value = False
                 mock_storage.write_bytes.side_effect = Exception("Disk error")

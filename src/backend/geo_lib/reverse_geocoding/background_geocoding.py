@@ -91,7 +91,7 @@ def reverse_geocode_feature_async(feature_id: int):
                 reverse_geocoding_generator = ReverseGeocodingTagGenerator()
                 try:
                     reverse_geocoding_tags = reverse_geocoding_generator.process(feature_instance, import_log=None)
-                except:
+                except Exception:
                     _logger.warning(f"Reverse reverse_geocoding tag generation failed for feature {feature_id}: {traceback.format_exc()}")
                     return
 
@@ -102,7 +102,7 @@ def reverse_geocode_feature_async(feature_id: int):
 
                 feature_store.geojson = geojson
                 feature_store.save(update_fields=['geojson'])
-        except:
+        except Exception:
             # Log error but don't raise - this is background processing
             _logger.error(f"Error in background reverse geocoding for feature {feature_id}: {traceback.format_exc()}")
 

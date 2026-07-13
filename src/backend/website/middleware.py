@@ -72,7 +72,7 @@ def _get_content_length(response):
         if hasattr(response, '_headers'):
             header_val = response._headers.get('content-length', ('', ''))
             return header_val[1] if isinstance(header_val, tuple) else header_val
-    except:
+    except Exception:
         pass
     return ''
 
