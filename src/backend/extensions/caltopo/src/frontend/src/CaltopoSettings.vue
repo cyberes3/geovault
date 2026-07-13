@@ -323,7 +323,11 @@ export default {
     BaseButton,
     Loader
   },
-  inject: ['caltopoExtensionApi', 'caltopoExtensionRouter', 'caltopoExtensionMainRouter'],
+  inject: {
+    injectedApi: 'extensionApi',
+    injectedRouter: 'extensionRouter',
+    injectedMainRouter: 'mainRouter'
+  },
   data() {
     return {
       connectionStatus: {
@@ -360,16 +364,16 @@ export default {
   },
   computed: {
     api() {
-      return this.caltopoExtensionApi
+      return this.injectedApi
     },
     toast() {
       return window.gv_core.GeoVault?.toast
     },
     router() {
-      return this.caltopoExtensionRouter || this.$router
+      return this.injectedRouter || this.$router
     },
     mainRouter() {
-      return this.caltopoExtensionMainRouter || this.$router
+      return this.injectedMainRouter || this.$router
     },
     isMapImported() {
       return this.queueStatus === 'done'

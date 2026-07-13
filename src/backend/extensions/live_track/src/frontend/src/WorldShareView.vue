@@ -183,13 +183,13 @@ import MobileMapDrawer from './MobileMapDrawer.vue';
 import { buildLineFeatures, buildPointFeature, fitMapToTracks, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
 import { buildAccuracyCircleLayerSpec } from './mapAccuracyCircle.js';
 import { setupMapFollowListeners } from './mapFollowLock.js';
-import { setupCopyMapCoordinatesOnContextMenu } from 'platform/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { ensureArrowImage } from './trackArrowMap.js';
 import { trackToParamsModalShape } from './trackParamsShape.js';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
 import { useTileSources } from './useTileSources.js';
 import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls.js';
-import { useDocumentTitle } from 'platform/utils/documentTitle.js';
+
+const { setupCopyMapCoordinatesOnContextMenu, useDocumentTitle } = window.gv_core;
 const LIVE_TRACK_API_BASE_URL = '/api/extensions/live-track';
 const LINES_SOURCE_ID = 'world-share-lines';
 const POINTS_SOURCE_ID = 'world-share-points';
@@ -273,7 +273,7 @@ export default {
     const mapContainer = ref(null);
     const mapWrapperRef = ref(null);
     const mobileDrawerRef = ref(null);
-    const { tileSources, selectedLayer, fetchTileSources } = useTileSources({ apiUrl: '/api/tiles/sources/' });
+    const { tileSources, selectedLayer, fetchTileSources } = useTileSources();
     const showLayerSidebar = ref(false);
     const showParamsSidebar = ref(false);
     const paramsModalTrack = ref(null);

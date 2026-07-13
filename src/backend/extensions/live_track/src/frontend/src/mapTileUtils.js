@@ -1,13 +1,15 @@
 /**
  * Shared tile source and layer helpers for MapLibre raster layers.
- * Used by LiveTrackView and WorldShareView.
+ * Used by LiveTrackView and WorldShareView. Delegates tile-URL building to core's shared
+ * `RasterTileUrls` class (via `window.gv_core`) instead of reimplementing it, so live_track can't
+ * drift from how the main map builds the same raster spec.
  */
 
 const DEFAULT_MAX_ZOOM = 18;
 const DEFAULT_LAYER_MAX_ZOOM = 19;
 
 export const defaultOsmSource = {
-  id: 'osm',
+  id: window.gv_core.OSM_TILE_SOURCE_ID,
   name: 'OpenStreetMap',
   type: 'osm',
   client_config: {
@@ -19,16 +21,9 @@ export const defaultOsmSource = {
 
 export function getRasterSourceSpec(layerValue, tileSource) {
   const clientConfig = tileSource?.client_config || {};
-  const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`;
-  let tiles;
-  if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
-    tiles = clientConfig.tileSubdomains.map((sub) => url.replace('{s}', sub));
-  } else {
-    tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')];
-  }
   return {
     type: 'raster',
-    tiles,
+    tiles: window.gv_core.RasterTileUrls.fromTileSource(tileSource ?? { id: layerValue }),
     tileSize: clientConfig.tileSize || 256,
     attribution: clientConfig.attribution || ''
   };

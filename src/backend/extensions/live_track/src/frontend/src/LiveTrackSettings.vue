@@ -37,10 +37,11 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, reactive, ref, computed, watch } from 'vue';
+import { onMounted, onBeforeUnmount, inject, reactive, ref, computed, watch } from 'vue';
 
-const { updateUserSetting, loadSettingsFromStore, keyValueToNested } = window.gv_core.GeoVault.utils;
-const store = window.gv_core?.store || null;
+const { loadSettingsFromValues, keyValueToNested } = window.gv_core.GeoVault.utils;
+/** @type {import('platform/extensions/platformState').PlatformStateBridge} */
+const platformState = inject('platformState');
 
 const config = [
   { key: 'extensions.live_track.default_sort', defaultValue: 'alphabetical' },
@@ -61,24 +62,15 @@ const defaultMapOptions = computed(() => {
 
 async function fetchTileSources() {
   try {
-    const response = await fetch('/api/tiles/sources/');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    if (data.sources && Array.isArray(data.sources)) {
-      tileSources.value = data.sources.filter((s) => !s.hidden);
-    }
-    if (tileSources.value.length === 0) {
-      tileSources.value = [{ id: 'osm', name: 'OpenStreetMap' }];
-    }
+    tileSources.value = await window.gv_core.tileSourceCatalog.load();
   } catch (e) {
     console.error('Live Track settings: fetch tile sources failed', e);
-    tileSources.value = [{ id: 'osm', name: 'OpenStreetMap' }];
+    tileSources.value = [{ id: window.gv_core.OSM_TILE_SOURCE_ID, name: 'OpenStreetMap' }];
   }
 }
 
 function load() {
-  if (!store?.getters?.['userSettings/userSettings']) return;
-  const values = loadSettingsFromStore(config, store);
+  const values = loadSettingsFromValues(config, platformState.userSettings.value);
   Object.assign(settingsValues, values);
 }
 
@@ -88,16 +80,11 @@ function handleSettingChange(key, value) {
   saveTimers[key] = setTimeout(async () => {
     try {
       const update = keyValueToNested(key, value);
-      const response = await updateUserSetting(update);
-      if (response?.success && store) {
-        store.dispatch('userSettings/setUserSettings', response.settings);
-        successCheckmarks[key] = true;
-        setTimeout(() => { successCheckmarks[key] = false; }, 3000);
-      }
+      await platformState.saveUserSetting(update);
+      successCheckmarks[key] = true;
+      setTimeout(() => { successCheckmarks[key] = false; }, 3000);
     } catch (err) {
-      if (window.gv_core?.GeoVault?.toast) {
-        window.gv_core.GeoVault.toast.error(err.message || 'Failed to save setting');
-      }
+      window.gv_core?.GeoVault?.toast?.error(err.message || 'Failed to save setting');
       load();
     }
   }, 500);
@@ -107,7 +94,7 @@ onMounted(async () => {
   await fetchTileSources();
   load();
 });
-watch(() => store?.getters?.['userSettings/userSettings'], () => load(), { deep: true });
+watch(() => platformState.userSettings.value, () => load(), { deep: true });
 onBeforeUnmount(() => {
   Object.values(saveTimers).forEach(t => clearTimeout(t));
 });

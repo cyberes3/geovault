@@ -131,7 +131,6 @@ import 'ol/ol.css';
 import { Map, View } from 'ol';
 import { Vector as VectorSource } from 'ol/source';
 import { Vector as VectorLayer } from 'ol/layer';
-import { openLayersBasemap } from 'platform/utils/map/openlayers/index.js';
 import { fromLonLat, toLonLat } from 'ol/proj.js';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
@@ -144,7 +143,6 @@ import {
   ArrowDownTrayIcon,
   InformationCircleIcon
 } from '@heroicons/vue/24/outline';
-import { toastApiError } from 'platform/utils/apiError.js';
 
 export default {
     name: 'Geotagger',
@@ -155,6 +153,7 @@ export default {
       ArrowDownTrayIcon,
       InformationCircleIcon
     },
+    inject: ['extensionApi'],
     data() {
         return {
             imageFile: null,
@@ -201,7 +200,7 @@ export default {
                 })
             });
 
-            const basemapLayer = await openLayersBasemap.createTileLayer();
+            const basemapLayer = await window.gv_core.openLayersBasemap.createTileLayer();
 
             this.map = new Map({
                 target: this.$refs.mapContainer,
@@ -337,30 +336,21 @@ export default {
             this.isSearching = true;
 
             try {
-                // Using the relative path as discovered in FeatureListSidebar
-                const response = await fetch(`/api/geocoding/search/?q=${encodeURIComponent(query)}`, {
-                    credentials: 'include'
-                });
-                const data = await response.json();
-                
+                const { searchGeocoding } = window.gv_core.GeoVault.utils;
+                const result = await searchGeocoding(query);
+
                 // Only update if this is still the current query
                 if (this.currentSearchQuery !== query) {
                     return;
                 }
 
-                // Response structure is { data: { features: [...] } }
-                if (data.data && data.data.features) {
-                    this.searchResults = data.data.features;
-                } else if (data.features) {
-                    this.searchResults = data.features;
-                } else if (Array.isArray(data)) {
-                    this.searchResults = data;
-                } else {
-                    this.searchResults = [];
+                if (!result.ok) {
+                    throw new Error(result.error || 'Location search failed');
                 }
+                this.searchResults = result.features;
             } catch (e) {
                 console.error("Search failed", e);
-                toastApiError(e, 'Location search failed');
+                this.extensionApi.toastError(e, 'Location search failed');
                 if (this.currentSearchQuery === query) {
                     this.searchResults = [];
                 }
@@ -375,12 +365,12 @@ export default {
             this.showResults = false;
             this.searchResults = [];
             this.searchQuery = '';
-            const coords = result.coordinates || result.center;
-            if (coords && coords.length >= 2) {
-                const [lon, lat] = coords;
-                this.updateCoords(lat, lon);
+            const { getGeocodingResultCoordinates } = window.gv_core.GeoVault.utils;
+            const coords = getGeocodingResultCoordinates(result);
+            if (coords) {
+                this.updateCoords(coords.lat, coords.lon);
                 this.map.getView().animate({
-                    center: fromLonLat([lon, lat]),
+                    center: fromLonLat([coords.lon, coords.lat]),
                     zoom: 12,
                     duration: 500
                 });

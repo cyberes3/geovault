@@ -5,21 +5,21 @@ import PlacesSettings from './PlacesSettings.vue';
 /**
  * Uses platform createRouteWrapper so extensionApi/extensionRouter are provided per-route.
  */
-async function setup({ router, registry, api, metadata }) {
+async function setup({ router, registry, api, platformState, metadata }) {
     registry.registerNavLink({
         label: 'Places',
         path: ''
     });
 
+    const createRouteWrapper = window.gv_core.createRouteWrapper;
+    const wrap = (component) => createRouteWrapper(component, { api, router, platformState });
+
     registry.registerSettingsTab({
         id: 'places',
         label: 'Places',
-        component: PlacesSettings,
+        component: wrap(PlacesSettings),
         icon: metadata?.icon
     });
-
-    const createRouteWrapper = window.gv_core?.createRouteWrapper;
-    const wrap = (component) => createRouteWrapper ? createRouteWrapper(component, { api, router }) : component;
 
     router.addRoute({
         path: '',

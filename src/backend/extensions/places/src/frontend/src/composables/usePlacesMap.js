@@ -1,6 +1,6 @@
 import { shallowRef } from 'vue';
 import { createPlacesMap } from '@/utils/placesMaplibre.js';
-import { ensureUserSettingsLoaded, getDefaultMapSourceIdFromStore } from '@/utils/placesMapSettings.js';
+import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings.js';
 
 const INITIAL_CENTER = [0, 0];
 const INITIAL_ZOOM = 2;
@@ -72,7 +72,7 @@ export function usePlacesMap({
       mode,
       sourceId,
       layerId,
-      preferredSourceId: getDefaultMapSourceIdFromStore(),
+      preferredSourceId: getDefaultMapSourceId(),
       minZoom: 1,
       maxZoom: 18,
       initialPointFeatures: initialFeatures,
@@ -88,7 +88,7 @@ export function usePlacesMap({
     if (!mapController.value) {
       return null;
     }
-    const desired = getDefaultMapSourceIdFromStore();
+    const desired = getDefaultMapSourceId();
     try {
       const nextId = await mapController.value.setBaseSource(desired);
       updateMapFeatures(places, selectedPlaceId, hoveredPlaceId);

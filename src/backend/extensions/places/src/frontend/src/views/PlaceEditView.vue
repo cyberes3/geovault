@@ -83,8 +83,7 @@ import { useGeocodingSearch } from '@/composables/useGeocodingSearch.js';
 import { usePlaceForm } from '@/composables/usePlaceForm.js';
 import { usePlacesApi } from '@/composables/usePlacesApi.js';
 import { createPlacesMap } from '@/utils/placesMaplibre.js';
-import { ensureUserSettingsLoaded, getDefaultMapSourceIdFromStore } from '@/utils/placesMapSettings.js';
-import { useDocumentTitle } from 'platform/utils/documentTitle.js';
+import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings.js';
 
 const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';
 const PLACE_EDIT_LAYER_ID = 'gv_places_overlay_edit_layer';
@@ -94,7 +93,7 @@ const INITIAL_ZOOM = 2;
 const route = useRoute();
 const router = inject('extensionRouter');
 const toast = window.gv_core?.GeoVault?.toast ?? { success: () => {}, error: () => {} };
-const utils = window.gv_core?.GeoVault?.utils ?? null;
+const useDocumentTitle = window.gv_core.useDocumentTitle;
 
 const { getPlace, createPlace, updatePlace } = usePlacesApi();
 const {
@@ -200,7 +199,7 @@ async function initMap() {
     mode: 'edit',
     sourceId: PLACE_EDIT_SOURCE_ID,
     layerId: PLACE_EDIT_LAYER_ID,
-    preferredSourceId: getDefaultMapSourceIdFromStore(),
+    preferredSourceId: getDefaultMapSourceId(),
     minZoom: 1,
     maxZoom: 18,
   });
@@ -222,7 +221,7 @@ async function applyDefaultBasemapFromUserSettings() {
   if (!mapController.value) {
     return;
   }
-  const desired = getDefaultMapSourceIdFromStore();
+  const desired = getDefaultMapSourceId();
   try {
     selectedBaseSourceId.value = await mapController.value.setBaseSource(desired);
     updateMarkerFromCoords();
@@ -272,27 +271,13 @@ async function useCurrentLocation() {
   }
   isGettingLocation.value = true;
   try {
-    if (typeof utils?.checkGeolocationPermission === 'function') {
-      const permission = await utils.checkGeolocationPermission();
-      if (permission === 'denied') {
-        toast.error('Location permission denied. Please enable it in your browser settings.');
-        return;
-      }
+    const geolocationManager = window.gv_core.geolocationManager;
+    const permission = await geolocationManager.checkPermission();
+    if (permission === 'denied') {
+      toast.error('Location permission denied. Please enable it in your browser settings.');
+      return;
     }
-    const getPos = typeof utils?.getCurrentPosition === 'function'
-      ? utils.getCurrentPosition
-      : () => new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('Geolocation is not supported'));
-          return;
-        }
-        navigator.geolocation.getCurrentPosition(
-          (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-          reject,
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-        );
-      });
-    const coords = await getPos();
+    const coords = await geolocationManager.getCurrentPosition();
     setCoords(coords.latitude, coords.longitude);
     updateMarkerFromCoords(true);
     if (map.value) {

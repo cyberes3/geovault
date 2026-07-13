@@ -1,8 +1,8 @@
 import { ref } from 'vue';
-import { TileSourceCatalog } from 'platform/utils/map/tileSources/TileSourceCatalog.js';
-import { OSM_TILE_SOURCE_ID } from 'platform/utils/map/tileSources/constants.js';
 
-const sharedCatalog = new TileSourceCatalog();
+/** Reuse core's singleton catalog instance so places shares its cache/in-flight fetch with the rest of the app. */
+const sharedCatalog = window.gv_core.tileSourceCatalog;
+const OSM_TILE_SOURCE_ID = window.gv_core.OSM_TILE_SOURCE_ID;
 
 /**
  * @returns {{ tileSources: import('vue').Ref<object[]>, selectedBaseSourceId: import('vue').Ref<string>, baseSourceOptions: import('vue').Ref<{ id: string, name: string }[]>, loadTileSources: () => Promise<void> }}

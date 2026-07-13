@@ -5,7 +5,8 @@
 
 import { getArrowImageId } from './trackArrowMap.js';
 import { resolveSelectedTrackAccuracyMeters } from './mapAccuracyCircle.js';
-import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
+
+const isValidMapLngLatPair = window.gv_core.isValidMapLngLatPair;
 
 export { isValidMapLngLatPair };
 

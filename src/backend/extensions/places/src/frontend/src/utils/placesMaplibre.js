@@ -1,6 +1,3 @@
-import { isValidMapLngLatPair } from 'platform/utils/map/mapGeography.js';
-import { TileSourceCatalog } from 'platform/utils/map/tileSources/TileSourceCatalog.js';
-import { OSM_TILE_SOURCE_ID } from 'platform/utils/map/tileSources/constants.js';
 import {
   applyEditInteractionPolicy,
   applyListDesktopInteractionPolicy,
@@ -17,7 +14,10 @@ import {
 
 const DEFAULT_CENTER = [0, 0];
 const DEFAULT_ZOOM = 2;
-const tileSourceCatalog = new TileSourceCatalog();
+/** Reuse core's singleton catalog instance so places shares its cache/in-flight fetch with the rest of the app. */
+const tileSourceCatalog = window.gv_core.tileSourceCatalog;
+const OSM_TILE_SOURCE_ID = window.gv_core.OSM_TILE_SOURCE_ID;
+const isValidMapLngLatPair = window.gv_core.isValidMapLngLatPair;
 
 /** Basemap raster ids — must not collide with layers inside vector styles (e.g. MapTiler). */
 const GV_PLACES_BASE_RASTER_SOURCE_ID = 'gv_places_basemap_raster';

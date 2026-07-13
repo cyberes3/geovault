@@ -1,9 +1,6 @@
 import { ref } from 'vue';
-import {
-  getGeocodingResultCoordinates,
-  getGeocodingResultLabel,
-  searchGeocoding,
-} from 'platform/utils/geocodingSearch.js';
+
+const { getGeocodingResultCoordinates, getGeocodingResultLabel, searchGeocoding } = window.gv_core.GeoVault.utils;
 
 /**
  * Shared geocoding search with debounce, abort, and stale-request protection.

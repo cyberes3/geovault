@@ -3,7 +3,7 @@
  * Used by LiveTrackView for live track_updated events only. Same-origin; cookie/session auth.
  */
 
-import { WebSocketHeartbeat } from 'platform/assets/js/websocket/WebSocketHeartbeat.js';
+const WebSocketHeartbeat = window.gv_core.WebSocketHeartbeat;
 
 class TrackersLiveSocket {
   constructor() {

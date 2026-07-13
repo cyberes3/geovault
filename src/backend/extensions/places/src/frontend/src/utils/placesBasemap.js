@@ -1,4 +1,4 @@
-import { RasterTileUrls } from 'platform/utils/map/tileSources/RasterTileUrls.js';
+const RasterTileUrls = window.gv_core.RasterTileUrls;
 
 export function isStyleBasedSource(tileSource) {
   const clientConfig = tileSource?.client_config || {};

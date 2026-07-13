@@ -8,13 +8,14 @@ function normalizeMapSourceId(value) {
 }
 
 /**
- * Read default Places basemap from the Vuex store using the same dot-key rules as
- * loadSettingsFromStore / SettingsInput (Live Track uses getNestedValue for extensions.live_track.default_map).
+ * Read default Places basemap from the shared platformState bridge, using the same dot-key
+ * rules as loadSettingsFromValues / SettingsInput (Live Track uses getNestedValue for
+ * extensions.live_track.default_map).
  */
-export function getDefaultMapSourceIdFromStore() {
-  const store = window.gv_core?.store || null;
+export function getDefaultMapSourceId() {
+  const platformState = window.gv_core?.platformState;
   const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-  const settings = store?.getters?.['userSettings/userSettings'];
+  const settings = platformState?.userSettings?.value;
   if (!settings) {
     return PLACES_FALLBACK_MAP_SOURCE_ID;
   }
@@ -26,16 +27,16 @@ export function getDefaultMapSourceIdFromStore() {
 
 /** Wait for App.vue settings fetch (or fetch once) so the map starts on the user's basemap. */
 export async function ensureUserSettingsLoaded({ waitMs = 3000, pollMs = 50 } = {}) {
-  const store = window.gv_core?.store;
-  if (!store || store.getters['userSettings/userSettings'] != null) {
+  const platformState = window.gv_core?.platformState;
+  if (!platformState || platformState.userSettings.value != null) {
     return;
   }
   const deadline = Date.now() + waitMs;
-  while (store.getters['userSettings/userSettings'] == null && Date.now() < deadline) {
+  while (platformState.userSettings.value == null && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  if (store.getters['userSettings/userSettings'] != null) {
+  if (platformState.userSettings.value != null) {
     return;
   }
-  await store.dispatch('userSettings/fetchUserSettings');
+  await platformState.fetchUserSettings();
 }
