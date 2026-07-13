@@ -52,6 +52,8 @@
       >
         <div
           @click="handleFeatureClick(item)"
+          @mouseenter="handleFeatureMouseEnter(item)"
+          @mouseleave="handleFeatureMouseLeave"
           @contextmenu.prevent="handleFeatureContextMenu(item)"
           class="px-1.5 py-1.5 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-1 xl:px-1.5 xl:py-1.5"
           :style="{ borderLeft: `3px solid ${featureRowVisualsById.get(String(item.database_id))?.color ?? DEFAULT_GEOMETRY_COLOR}` }"
@@ -119,6 +121,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'feature-click': [feature: GeoJsonFeature];
   'feature-hide': [feature: GeoJsonFeature];
+  'feature-hover': [feature: GeoJsonFeature | null];
 }>();
 
 const API_BASE_URL = '/api/features/search/';
@@ -191,6 +194,14 @@ const featureRowVisualsById = computed<Map<string, FeatureRowVisuals>>(() => {
 
 function handleFeatureClick(feature: GeoJsonFeature) {
   emit('feature-click', feature);
+}
+
+function handleFeatureMouseEnter(feature: GeoJsonFeature) {
+  emit('feature-hover', feature);
+}
+
+function handleFeatureMouseLeave() {
+  emit('feature-hover', null);
 }
 
 function handleFeatureContextMenu(feature: GeoJsonFeature) {

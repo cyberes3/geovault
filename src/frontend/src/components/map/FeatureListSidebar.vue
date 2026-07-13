@@ -70,6 +70,7 @@
       :can-hide-features="canHideFeatures"
       @feature-click="onFeatureClick"
       @feature-hide="(feature) => emit('feature-hide', feature)"
+      @feature-hover="(feature) => emit('feature-hover', feature)"
     />
 
     <TagFilterTab
@@ -129,6 +130,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'feature-click': [feature: GeoJsonFeature];
   'feature-hide': [feature: GeoJsonFeature];
+  'feature-hover': [feature: GeoJsonFeature | null];
   'tag-filter-change': [payload: { tags: string[]; matchMode: 'AND' | 'OR' }];
   'tag-filter-loading-change': [loading: boolean];
   'tag-filter-start': [];

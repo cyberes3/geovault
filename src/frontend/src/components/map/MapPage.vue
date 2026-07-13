@@ -14,6 +14,7 @@
         @close="activeMobileSidebar = null"
         @feature-click="handleFeatureListClick"
         @feature-hide="handleHideFeature"
+        @feature-hover="handleFeatureListHover"
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isDataLoading = $event"
         @tag-filter-start="handleTagFilterStart"
@@ -246,6 +247,7 @@ import { useCollectionTagFilters } from '@/composables/useCollectionTagFilters';
 import { useMapGeolocation, type GeocodingResult } from '@/composables/useMapGeolocation';
 import type { LoadContext, LoadContextType, MapUserSettings } from '@/composables/mapPageTypes';
 import type { HiddenFeature } from '@/assets/js/store/modules/userSettings';
+import type { GeoJsonFeature } from '@/types/geospatial';
 
 /** Narrow view of root getters this component reads by namespaced key. */
 interface RootGetters {
@@ -598,6 +600,14 @@ function handleTagFilterStart(): void {
 /** `FeatureListSidebar` types this emit as `unknown` since the geocoding result shape is search-provider-specific. */
 function handleReverseGeocodingResultClick(result: unknown): void {
     void handleGeocodingResult(result as GeocodingResult | null);
+}
+
+/** Sidebar row hover: reuse the map's existing hover-highlight channel so a hovered row highlights its feature on the map. */
+function handleFeatureListHover(feature: GeoJsonFeature | null): void {
+    const id = (feature?.properties.database_id ?? null) as string | number | null;
+    if (featureSelection.hoveredFeatureId.value === id) return;
+    featureSelection.hoveredFeatureId.value = id;
+    featureSelection.updateFeatureHighlighting();
 }
 
 // --- Boot / keep-alive lifecycle orchestration ---
