@@ -19,6 +19,19 @@ interface AxiosLikeError {
     message?: string;
 }
 
+/**
+ * True for `AbortController.abort()`/axios-canceled requests (e.g. a viewport bbox fetch
+ * superseded by a newer one). Checks `cause` too, since `ApiError.from` preserves the
+ * original error there even after normalizing an error's `name`/`code` away.
+ */
+export function isAbortError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    if (error.name === 'AbortError' || error.name === 'CanceledError') return true;
+    const { code, cause } = error as { code?: string; cause?: unknown };
+    if (code === 'ERR_CANCELED') return true;
+    return cause !== undefined && (cause as unknown) !== error && isAbortError(cause);
+}
+
 /** Response body field names that different backend endpoints use for their error string. */
 const MESSAGE_FIELDS = ['error', 'message', 'msg'] as const;
 
@@ -64,6 +77,12 @@ export class ApiError extends Error {
     static from(error: unknown, fallback = 'An error occurred'): ApiError {
         if (error instanceof ApiError) {
             return error;
+        }
+
+        if (isAbortError(error)) {
+            const apiError = new ApiError('canceled', { cause: error });
+            apiError.name = 'CanceledError';
+            return apiError;
         }
 
         const axiosLike = error as AxiosLikeError;

@@ -13,16 +13,10 @@ import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.j
 import { getFeatureIconUrl, getIconSourceUrl, loadIconImage } from '@/utils/map/maplibre/featureStyling.js';
 import { getFeaturesInBbox, getExtentHint } from '@/api/services/featuresApi';
 import { getPublicShareTagFeatures, getPublicShareCollectionFeatures, getPublicShareFeature } from '@/api/services/sharingApi';
-import { ApiError } from '@/utils/apiError';
+import { ApiError, isAbortError } from '@/utils/apiError';
 import type { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js';
 import type { GeoJsonFeatureCollection } from '@/types/geospatial';
 import type { LoadContext, MapPageFeature, MapUserSettings } from './mapPageTypes';
-
-function isAbortError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    if (error.name === 'AbortError' || error.name === 'CanceledError') return true;
-    return (error as { code?: string }).code === 'ERR_CANCELED';
-}
 
 export interface UseFeatureDataDeps {
     map: ShallowRef<MapLibreMap | null>;

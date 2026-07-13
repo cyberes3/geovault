@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import com.geovault.common.coroutines.rethrowIfCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -56,6 +57,7 @@ class GeoVaultDownloadsWriter(context: Context) {
 
             Result.success(uri)
         } catch (t: Throwable) {
+            t.rethrowIfCancellation()
             runCatching { resolver.delete(uri, null, null) }
             Result.failure(t)
         }

@@ -6,6 +6,7 @@
 import { computed, ref, type Ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getPublicShareInfo } from '@/api/services/sharingApi';
+import { isAbortError } from '@/utils/apiError';
 import type { PublicShareInfo, MapPageFeature } from './mapPageTypes';
 
 export interface UseMapShareDeps {
@@ -81,7 +82,7 @@ export function useMapShare(deps: UseMapShareDeps) {
 
             return true;
         } catch (error) {
-            if (error instanceof Error && (error.name === 'AbortError' || error.name === 'CanceledError')) {
+            if (isAbortError(error)) {
                 return false;
             }
             console.error('Error fetching share info:', error);
