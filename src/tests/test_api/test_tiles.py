@@ -311,8 +311,12 @@ class TestTilesAPI(TestCase):
         call_args = mock_requests_get.call_args
         actual_headers = call_args.kwargs.get('headers', {})
 
+        # User-Agent is always overridden by the standard outbound USER_AGENT,
+        # even if the source's own proxy_config defines one (checked above).
         self.assertEqual(actual_headers.get('User-Agent'), USER_AGENT)
         for header_name, header_value in expected_headers.items():
+            if header_name == 'User-Agent':
+                continue
             self.assertEqual(
                 actual_headers.get(header_name),
                 header_value,

@@ -2,6 +2,7 @@ import hashlib
 import importlib
 import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -64,9 +65,14 @@ class ExtensionRegistry:
     Registry for discovering and loading extensions.
     """
 
-    def __init__(self, extensions_dir: Path):
+    def __init__(self, extensions_dir: Path, forced_enabled_extensions: Optional[set] = None):
         self.extensions_dir = extensions_dir
         self.loaded_extensions: Dict[str, Dict[str, Any]] = {}
+        # Test-only escape hatch: names in this set are treated as enabled regardless
+        # of config.yaml/manifest defaults. Only populated for the real app-loading
+        # registry (see module-level discover_extensions()), never for ad hoc registries
+        # that tests construct directly to exercise the enable/disable logic itself.
+        self.forced_enabled_extensions = forced_enabled_extensions or set()
 
     def discover_extensions(self) -> List[str]:
         """
@@ -178,6 +184,9 @@ class ExtensionRegistry:
         # Default to manifest.enabled_by_default (True if not specified)
         default_enabled = getattr(manifest, 'enabled_by_default', True)
         enabled = get_config_loader().get_bool(f'extensions.{ext_name}.enabled', default_enabled)
+
+        if ext_name in self.forced_enabled_extensions:
+            enabled = True
 
         if not enabled:
             logger.info(f"Extension '{ext_name}' is disabled in configuration.")
@@ -429,12 +438,23 @@ class ExtensionRegistry:
         return patterns
 
 
+def _forced_enabled_extensions_from_env() -> set:
+    """
+    Test-only escape hatch: GEOVAULT_FORCE_ENABLED_EXTENSIONS is a comma-separated
+    list of extension names that should be treated as enabled regardless of
+    config.yaml/manifest defaults (e.g. the demo example_extension, which ships
+    disabled by default but has a real test suite exercising its live endpoints).
+    Only consulted for the singleton registry backing real Django app loading.
+    """
+    return {name.strip() for name in os.environ.get('GEOVAULT_FORCE_ENABLED_EXTENSIONS', '').split(',') if name.strip()}
+
+
 def get_extension_registry() -> ExtensionRegistry:
     """Returns the global extension registry instance."""
     global _registry
     if _registry is None:
         from website.settings import EXTENSIONS_DIR
-        _registry = ExtensionRegistry(EXTENSIONS_DIR)
+        _registry = ExtensionRegistry(EXTENSIONS_DIR, forced_enabled_extensions=_forced_enabled_extensions_from_env())
     return _registry
 
 
@@ -447,5 +467,5 @@ def discover_extensions(extensions_dir: Path) -> List[str]:
     """
     global _registry
     if _registry is None:
-        _registry = ExtensionRegistry(extensions_dir)
+        _registry = ExtensionRegistry(extensions_dir, forced_enabled_extensions=_forced_enabled_extensions_from_env())
     return _registry.discover_extensions()

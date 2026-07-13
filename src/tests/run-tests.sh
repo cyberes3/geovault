@@ -35,6 +35,11 @@ fi
 export PYTHONPATH="$BACKEND_DIR:$SCRIPT_DIR/..:$PYTHONPATH"
 export DJANGO_SETTINGS_MODULE=website.settings
 
+# example_extension ships disabled by default (it's a demo extension) but has a real
+# test suite that exercises its live endpoints, so force it on for test runs regardless
+# of the developer's local config.yaml.
+export GEOVAULT_FORCE_ENABLED_EXTENSIONS="example_extension"
+
 # Prepare test database: drop all tables and let migrations recreate them
 echo "Preparing test database (dropping all tables)..."
 "$VENV_PYTHON" "$SCRIPT_DIR/prepare_test_db.py" || exit 1
