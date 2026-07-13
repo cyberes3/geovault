@@ -422,7 +422,12 @@ watch(
 
 onMounted(async () => {
   await fetchPlaces();
-  await setupMap();
+  try {
+    await setupMap();
+  } catch (error) {
+    console.error('Failed to initialize map', error);
+    window.gv_core?.GeoVault?.toast?.error?.('Failed to load map');
+  }
 });
 
 onActivated(() => {

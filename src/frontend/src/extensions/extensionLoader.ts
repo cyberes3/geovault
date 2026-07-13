@@ -60,8 +60,23 @@ interface PrefetchExtensionsDeps {
     resolveIcon: (icon: string | null | undefined, kebabName: string) => Promise<Component | null>;
 }
 
+/**
+ * Extension UMD bundles are built against `window.ol`/`window.maplibregl` as externals (see
+ * `vite.extension-shared.mjs`) so they share core's single instance instead of bundling their own
+ * stale copy. An extension that statically `import`s from `'ol'`/`'maplibre-gl'` (e.g. exif_geotagger's
+ * `import { Vector } from 'ol/source'`) dereferences those globals synchronously the moment its UMD
+ * wrapper is evaluated - not lazily on first actual use - so if `loadOl()`/`loadMaplibreGl()` haven't
+ * resolved yet, the extension's own module fails to load at all ("b.ol is undefined"). Only `ol` is
+ * awaited here since no extension currently imports `maplibre-gl` as a build-time external (live_track/
+ * places both read `window.gv_core.maplibre` at runtime instead), keeping MapLibre itself lazy.
+ */
+async function importExtensionModule(entry: string): Promise<unknown> {
+    await window.gv_core.loadOl();
+    return import(/* @vite-ignore */ entry);
+}
+
 const defaultPrefetchDeps: PrefetchExtensionsDeps = {
-    importModule: (entry) => import(/* @vite-ignore */ entry),
+    importModule: importExtensionModule,
     resolveIcon: resolveExtensionIcon
 };
 
