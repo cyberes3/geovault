@@ -10,8 +10,10 @@
         <!-- Overview Section -->
         <section>
           <div class="space-y-2 text-gray-700">
-            <p>To connect GeoVault to your CalTopo account, you'll need to obtain three pieces of information from
-              CalTopo:</p>
+            <p>
+To connect GeoVault to your CalTopo account, you'll need to obtain three pieces of information from
+              CalTopo:
+</p>
             <ul class="list-disc list-inside space-y-1 ml-4">
               <li><strong>Account ID</strong> - A 6-character identifier for your CalTopo account</li>
               <li><strong>Credential Code</strong> - A 12-character identifier for the API credential</li>
@@ -43,8 +45,10 @@
           <div class="space-y-4 text-gray-700">
             <div>
               <h5 class="text-base font-semibold text-gray-900 mb-2">Step 1: Open CalTopo Activation Page</h5>
-              <p class="text-sm mt-2">Make sure you are signed in to your CalTopo account (you should see your
-                username in the top right corner).</p>
+              <p class="text-sm mt-2">
+Make sure you are signed in to your CalTopo account (you should see your
+                username in the top right corner).
+</p>
               <p class="text-sm mb-2">In a new browser tab, navigate to:</p>
               <div class="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md font-mono text-sm break-all">
                 <a href="https://caltopo.com/app/activate/offline?redirect=localhost" target="_blank"
@@ -58,7 +62,8 @@
               <h5 class="text-base font-semibold text-gray-900 mb-2">Step 2: Create a New Credential</h5>
               <p class="text-sm mb-2">On the activation page:</p>
               <ol class="list-decimal list-inside ml-4 space-y-1 text-sm">
-                <li>Type a name for "Your device will be synced as" (e.g., "GeoVault Integration" or
+                <li>
+Type a name for "Your device will be synced as" (e.g., "GeoVault Integration" or
                   "caltopo_python") - the exact name is not important, but it will help you keep track of
                   credentials if you have several. This name will appear in the Credentials section of your CalTopo
                   account settings.
@@ -66,8 +71,10 @@
                 <li>Check the checkbox to agree to the terms</li>
                 <li>Click the "Sync Account" button</li>
               </ol>
-              <p class="text-sm mt-2">You may see an error page after clicking "Sync Account" - this is normal and
-                expected.</p>
+              <p class="text-sm mt-2">
+You may see an error page after clicking "Sync Account" - this is normal and
+                expected.
+</p>
             </div>
 
             <div>
@@ -76,8 +83,10 @@
               <div class="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md font-mono text-sm">
                 https://caltopo.com/app/activate/localhost/client/finish-activate?code=XXXXXXXX&name=GeoVault
               </div>
-              <p class="text-sm mt-2">The 8-character value after <code
-                  class="px-1 py-0.5 bg-gray-200 rounded text-xs">code=</code> from that request URL.</p>
+              <p class="text-sm mt-2">
+The 8-character value after <code
+                  class="px-1 py-0.5 bg-gray-200 rounded text-xs">code=</code> from that request URL.
+</p>
             </div>
 
             <div>
@@ -86,10 +95,14 @@
               <div class="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md font-mono text-sm break-all">
                 caltopo.com/api/v1/activate?code=<span class="text-blue-600">YOUR_8_CHARACTER_CODE</span>
               </div>
-              <p class="text-sm mt-2 mb-2">Replace <code class="px-1 py-0.5 bg-gray-200 rounded text-xs">YOUR_8_CHARACTER_CODE</code>
-                with the 8-character code from the previous step.</p>
-              <p class="text-sm mb-2">This should load a page that looks like the following (possibly all compressed
-                into one line):</p>
+              <p class="text-sm mt-2 mb-2">
+Replace <code class="px-1 py-0.5 bg-gray-200 rounded text-xs">YOUR_8_CHARACTER_CODE</code>
+                with the 8-character code from the previous step.
+</p>
+              <p class="text-sm mb-2">
+This should load a page that looks like the following (possibly all compressed
+                into one line):
+</p>
               <div
                   class="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md font-mono text-xs overflow-x-auto">
                     <pre class="whitespace-pre-wrap">{{
@@ -137,8 +150,10 @@
 
             <div>
               <h5 class="text-base font-semibold text-gray-900 mb-2">Step 6: Enter Credentials in GeoVault</h5>
-              <p class="text-sm">Return to this page and enter the three values you copied into the connection form
-                above. Click "Connect to CalTopo" to complete the setup.</p>
+              <p class="text-sm">
+Return to this page and enter the three values you copied into the connection form
+                above. Click "Connect to CalTopo" to complete the setup.
+</p>
             </div>
           </div>
         </section>
@@ -149,19 +164,27 @@
           <div class="space-y-3 text-gray-700">
             <div>
               <h5 class="text-base font-semibold text-gray-900 mb-1">Can't find the finish-activate request?</h5>
-              <p class="text-sm">Make sure network monitoring is active (red indicator in Network tab) before
-                clicking "Sync Account". Try refreshing the activation page and starting over.</p>
+              <p class="text-sm">
+Make sure network monitoring is active (red indicator in Network tab) before
+                clicking "Sync Account". Try refreshing the activation page and starting over.
+</p>
             </div>
             <div>
               <h5 class="text-base font-semibold text-gray-900 mb-1">The activation API returns an error?</h5>
-              <p class="text-sm">Make sure you're using the 8-character code from the finish-activate request, not
-                the credential code. The code expires quickly, so use it immediately after copying.</p>
+              <p class="text-sm">
+Make sure you're using the 8-character code from the finish-activate request, not
+                the credential code. The code expires quickly, so use it immediately after copying.
+</p>
             </div>
             <div>
-              <h5 class="text-base font-semibold text-gray-900 mb-1">Connection fails after entering
-                credentials?</h5>
-              <p class="text-sm">Double-check that you copied all three values correctly, including the full
-                44-character key. Make sure there are no extra spaces or line breaks.</p>
+              <h5 class="text-base font-semibold text-gray-900 mb-1">
+Connection fails after entering
+                credentials?
+</h5>
+              <p class="text-sm">
+Double-check that you copied all three values correctly, including the full
+                44-character key. Make sure there are no extra spaces or line breaks.
+</p>
             </div>
           </div>
         </section>
@@ -170,10 +193,11 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import BaseModal from 'platform/components/parts/BaseModal.vue'
 
-export default {
+export default defineComponent({
   name: 'CaltopoSetupModal',
   components: {
     BaseModal
@@ -181,16 +205,16 @@ export default {
   props: {
     show: {
       type: Boolean,
-      required: true,
-      default: false
+      required: true
     }
   },
+  emits: ['close'],
   methods: {
-    close() {
+    close(): void {
       this.$emit('close')
     }
   }
-};
+});
 </script>
 
 <style scoped>

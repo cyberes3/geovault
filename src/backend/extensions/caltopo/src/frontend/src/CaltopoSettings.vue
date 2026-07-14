@@ -21,7 +21,7 @@
         <!-- Loading Spinner -->
         <div v-if="connectionStatus.checking" class="p-4">
           <div class="flex items-center justify-between">
-            <Loader size="sm" layout="inline" message="Checking CalTopo connection status..." :showMessage="true"/>
+            <Loader size="sm" layout="inline" message="Checking CalTopo connection status..." :show-message="true"/>
             <div class="h-[2.25rem]"></div>
           </div>
         </div>
@@ -62,8 +62,10 @@
               Disconnect
             </BaseButton>
           </div>
-          <p class="text-xs text-yellow-700 mt-2">Your stored credentials are no longer valid. Please reconnect with new
-            credentials.</p>
+          <p class="text-xs text-yellow-700 mt-2">
+Your stored credentials are no longer valid. Please reconnect with new
+            credentials.
+</p>
         </div>
 
         <!-- Connection Status: Timeout -->
@@ -299,7 +301,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import {
   CheckCircleIcon,
   ClockIcon,
@@ -310,8 +313,25 @@ import {
 import CaltopoSetupModal from './CaltopoSetupModal.vue'
 import BaseButton from 'platform/components/parts/BaseButton.vue'
 import Loader from 'platform/components/parts/Loader.vue'
+import type { ExtensionApi } from './types/extension-api'
+import type { RouterLike } from './types/extension-setup'
 
-export default {
+interface CaltopoMap {
+  id: string;
+  title?: string;
+}
+
+interface CaltopoFeature {
+  id: string;
+  properties?: { title?: string; name?: string; class?: string };
+  is_imported?: boolean;
+  is_valid?: boolean;
+  database_id?: string | number;
+}
+
+type ConnectionState = 'not_connected' | 'invalid' | 'timeout' | 'connected' | null;
+
+export default defineComponent({
   name: 'CaltopoSettings',
   components: {
     InformationCircleIcon,
@@ -333,7 +353,7 @@ export default {
       connectionStatus: {
         connected: false,
         checking: false,
-        status: null // 'not_connected', 'invalid', 'timeout', or 'connected'
+        status: null as ConnectionState
       },
       connectForm: {
         account_id: '',
@@ -343,49 +363,50 @@ export default {
       connecting: false,
       connectMessage: '',
       connectMessageType: '',
-      maps: [],
+      maps: [] as CaltopoMap[],
       loadingMaps: false,
       selectedMapId: '',
       selectedMapTitle: '',
-      features: [],
+      features: [] as CaltopoFeature[],
       loadingFeatures: false,
-      importingFeatures: {},
+      importingFeatures: {} as Record<string, boolean>,
       importingMap: false,
-      importWarnings: [],
+      importWarnings: [] as string[],
       showSetupModal: false,
       mapInQueue: false,
-      importQueueId: null,
-      queueStatus: null,
-      featureLoadError: null
+      importQueueId: null as string | number | null,
+      queueStatus: null as string | null,
+      featureLoadError: null as string | null
     }
   },
   async created() {
     await this.checkConnectionStatus()
   },
   computed: {
-    api() {
-      return this.injectedApi
+    api(): ExtensionApi {
+      return this.injectedApi as ExtensionApi
     },
     toast() {
       return window.gv_core.GeoVault?.toast
     },
-    router() {
-      return this.injectedRouter || this.$router
+    router(): RouterLike {
+      return this.injectedRouter as RouterLike
     },
-    mainRouter() {
-      return this.injectedMainRouter || this.$router
+    mainRouter(): RouterLike {
+      return this.injectedMainRouter as RouterLike
     },
-    isMapImported() {
+    isMapImported(): boolean {
       return this.queueStatus === 'done'
     }
   },
   methods: {
-    async checkConnectionStatus() {
+    async checkConnectionStatus(): Promise<void> {
       this.connectionStatus.checking = true
       try {
         const response = await this.api.get('/status/')
-        this.connectionStatus.connected = response.data.connected || false
-        this.connectionStatus.status = response.data.status || (response.data.connected ? 'connected' : 'not_connected')
+        const data = response.data as { connected?: boolean; status?: ConnectionState }
+        this.connectionStatus.connected = data.connected ?? false
+        this.connectionStatus.status = data.status ?? (data.connected ? 'connected' : 'not_connected')
         this.connectionStatus.checking = false
         if (this.connectionStatus.status === 'connected') {
           await this.loadMaps()
@@ -397,12 +418,12 @@ export default {
         this.api.toastError(error, 'Failed to check CalTopo connection')
       }
     },
-    async handleConnect() {
+    async handleConnect(): Promise<void> {
       this.connecting = true
       this.connectMessage = ''
 
       try {
-        const response = await this.api.post('/connect/', this.connectForm)
+        await this.api.post('/connect/', this.connectForm)
         this.connectMessage = 'Successfully connected to CalTopo!'
         this.connectMessageType = 'success'
         this.connectionStatus.connected = true
@@ -415,17 +436,17 @@ export default {
         }
       } catch (error) {
         const errorInfo = this.api.handleError(error)
-        if (errorInfo.details?.error_code === 'CALTOPO_TIMEOUT') {
+        if ((errorInfo.data as { error_code?: string } | null)?.error_code === 'CALTOPO_TIMEOUT') {
           this.connectMessage = 'CalTopo request timed out.'
         } else {
-          this.connectMessage = errorInfo.message || 'Failed to connect to CalTopo'
+          this.connectMessage = errorInfo.message
         }
         this.connectMessageType = 'error'
       } finally {
         this.connecting = false
       }
     },
-    async disconnectCaltopo() {
+    async disconnectCaltopo(): Promise<void> {
       if (!confirm('Are you sure you want to disconnect from CalTopo? This will remove your saved credentials.')) {
         return
       }
@@ -442,19 +463,20 @@ export default {
         this.queueStatus = null
         this.connectMessage = 'Disconnected from CalTopo'
         this.connectMessageType = 'success'
-        this.toast.success('Disconnected from CalTopo')
+        this.toast?.success('Disconnected from CalTopo')
       } catch (error) {
         const errorInfo = this.api.handleError(error)
-        this.connectMessage = errorInfo.message || 'Failed to disconnect from CalTopo'
+        this.connectMessage = errorInfo.message
         this.connectMessageType = 'error'
-        this.toast.error(errorInfo.message || 'Failed to disconnect from CalTopo')
+        this.toast?.error(errorInfo.message)
       }
     },
-    async loadMaps() {
+    async loadMaps(): Promise<void> {
       this.loadingMaps = true
       try {
         const response = await this.api.get('/maps/')
-        this.maps = response.data.maps || []
+        const data = response.data as { maps?: CaltopoMap[] }
+        this.maps = data.maps ?? []
       } catch (error) {
         const errorInfo = this.api.handleError(error)
         console.error('Failed to load maps:', errorInfo)
@@ -463,7 +485,7 @@ export default {
         this.loadingMaps = false
       }
     },
-    async handleMapSelect() {
+    async handleMapSelect(): Promise<void> {
       if (!this.selectedMapId) {
         this.features = []
         this.mapInQueue = false
@@ -474,11 +496,11 @@ export default {
       }
 
       const map = this.maps.find(m => m.id === this.selectedMapId)
-      this.selectedMapTitle = map?.title || this.selectedMapId
+      this.selectedMapTitle = map?.title ?? this.selectedMapId
 
       await this.loadFeatures()
     },
-    async loadFeatures() {
+    async loadFeatures(): Promise<void> {
       this.loadingFeatures = true
       this.features = []
       this.mapInQueue = false
@@ -487,21 +509,25 @@ export default {
 
       try {
         const response = await this.api.get(`/maps/${this.selectedMapId}/features/`)
-        this.features = response.data.features || []
+        const data = response.data as {
+          features?: CaltopoFeature[];
+          is_in_queue?: boolean;
+          import_queue_id?: string | number;
+          queue_status?: string;
+        }
+        this.features = data.features ?? []
         this.features.forEach(feature => {
-          if (feature.is_valid === undefined) {
-            feature.is_valid = true
-          }
+          feature.is_valid ??= true
         })
-        this.mapInQueue = response.data.is_in_queue || false
-        this.importQueueId = response.data.import_queue_id || null
-        this.queueStatus = response.data.queue_status || null
+        this.mapInQueue = data.is_in_queue ?? false
+        this.importQueueId = data.import_queue_id ?? null
+        this.queueStatus = data.queue_status ?? null
       } catch (error) {
         const errorInfo = this.api.handleError(error)
-        if (errorInfo.details?.error_code === 'CALTOPO_TIMEOUT') {
+        if ((errorInfo.data as { error_code?: string } | null)?.error_code === 'CALTOPO_TIMEOUT') {
           this.featureLoadError = 'CalTopo request timed out.'
         } else {
-          this.featureLoadError = errorInfo.message || 'Failed to load features'
+          this.featureLoadError = errorInfo.message
         }
         this.mapInQueue = false
         this.importQueueId = null
@@ -510,10 +536,10 @@ export default {
         this.loadingFeatures = false
       }
     },
-    async handleImportFeature(feature) {
+    async handleImportFeature(feature: CaltopoFeature): Promise<void> {
       if (feature.is_valid === false) {
-        const featureClass = feature.properties?.class || 'Unknown'
-        this.toast.error(`Feature type '${featureClass}' is not supported for import`)
+        const featureClass = feature.properties?.class ?? 'Unknown'
+        this.toast?.error(`Feature type '${featureClass}' is not supported for import`)
         return
       }
 
@@ -524,37 +550,42 @@ export default {
         const response = await this.api.post('/import/feature/', {
           map_id: this.selectedMapId,
           feature_id: feature.id,
-          feature_class: feature.properties?.class || 'Marker'
+          feature_class: feature.properties?.class ?? 'Marker'
         })
+        const data = response.data as {
+          feature?: { properties?: { database_id?: string | number } };
+          warnings?: Array<{ type?: string; message?: string }>;
+        }
 
         const featureIndex = this.features.findIndex(f => f.id === feature.id)
         if (featureIndex !== -1) {
           this.features[featureIndex].is_imported = true
-          if (response.data.feature && response.data.feature.properties && response.data.feature.properties.database_id) {
-            this.features[featureIndex].database_id = response.data.feature.properties.database_id
+          const databaseId = data.feature?.properties?.database_id
+          if (databaseId) {
+            this.features[featureIndex].database_id = databaseId
           }
         }
 
-        if (response.data.warnings && response.data.warnings.length > 0) {
-          this.importWarnings = response.data.warnings.map(w => {
+        if (data.warnings && data.warnings.length > 0) {
+          this.importWarnings = data.warnings.map(w => {
             if (w.type === 'hash') {
               return `Hash duplicate: Feature with identical hash already exists`
             } else if (w.type === 'geometry') {
               return `Geometry duplicate: Feature with similar geometry already exists`
             }
-            return w.message || 'Unknown warning'
+            return w.message ?? 'Unknown warning'
           })
         }
 
-        this.toast.success('Feature imported successfully')
+        this.toast?.success('Feature imported successfully')
       } catch (error) {
         const errorInfo = this.api.handleError(error)
-        this.toast.error(errorInfo.message || 'Failed to import feature')
+        this.toast?.error(errorInfo.message)
       } finally {
         this.importingFeatures[feature.id] = false
       }
     },
-    getMapViewUrl(mapId) {
+    getMapViewUrl(mapId: string): { path: string; query: { tag: string } } {
       // Generate URL to view map with tag filter for the imported CalTopo map
       const tag = `source-file:caltopo_map_${mapId}.geojson`
       return {
@@ -562,29 +593,22 @@ export default {
         query: {tag: tag}
       }
     },
-    handleViewInMap(feature) {
+    handleViewInMap(feature: CaltopoFeature): void {
       const featureId = feature.database_id
       if (featureId) {
         // Use main router to navigate to the platform map page
-        if (this.mainRouter) {
-          this.mainRouter.push({
-            path: '/map',
-            query: {featureId: featureId}
-          })
-        } else if (this.$router) {
-          this.$router.push({
-            path: '/map',
-            query: {featureId: featureId}
-          })
-        }
+        void this.mainRouter.push({
+          path: '/map',
+          query: {featureId: featureId}
+        })
       } else {
         console.error('Feature missing database_id:', feature)
-        this.toast.error('Unable to view feature: missing ID')
+        this.toast?.error('Unable to view feature: missing ID')
       }
     },
-    getFeatureButtonTooltip(feature) {
+    getFeatureButtonTooltip(feature: CaltopoFeature): string {
       if (feature.is_valid === false) {
-        const featureClass = feature.properties?.class || 'Unknown'
+        const featureClass = feature.properties?.class ?? 'Unknown'
         return `Feature type '${featureClass}' is not supported for import`
       }
       if (this.mapInQueue || this.importingMap) {
@@ -592,7 +616,7 @@ export default {
       }
       return ''
     },
-    async handleImportMap() {
+    async handleImportMap(): Promise<void> {
       if (this.mapInQueue) {
         return
       }
@@ -613,18 +637,19 @@ export default {
         const response = await this.api.post('/import/map/', {
           map_id: this.selectedMapId
         })
+        const data = response.data as { import_queue_id?: string | number; feature_count?: number }
 
         this.mapInQueue = true
-        this.importQueueId = response.data.import_queue_id || null
+        this.importQueueId = data.import_queue_id ?? null
 
-        this.toast.success(`Map import queued. Processing ${response.data.feature_count || 0} features.`)
+        this.toast?.success(`Map import queued. Processing ${data.feature_count ?? 0} features.`)
       } catch (error) {
         const errorInfo = this.api.handleError(error)
-        this.toast.error(errorInfo.message || 'Failed to import map')
+        this.toast?.error(errorInfo.message)
       } finally {
         this.importingMap = false
       }
     }
   },
-}
+})
 </script>
