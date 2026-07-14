@@ -7,6 +7,7 @@ export interface BulkOperations {
   pointIcon: string | null;
   lineColor: string | null;
   polyColor: string | null;
+  [key: string]: unknown;
 }
 
 /** Raw bulk operations as loaded from/saved to the backend; keys may be entirely absent. */

@@ -42,17 +42,18 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import {ExclamationCircleIcon, HomeIcon, MapIcon} from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'NotFoundPage',
   components: {
     ExclamationCircleIcon,
     HomeIcon,
     MapIcon
   }
-}
+})
 </script>
 
 <style scoped>

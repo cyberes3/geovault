@@ -15,8 +15,7 @@
 
             <!-- Create New Share Section -->
             <div v-if="shareType !== 'feature'" class="mb-6 flex-shrink-0">
-
-              <div class="space-y-4">
+<div class="space-y-4">
                 <!-- Name (read-only) - Only show for collections, not tags -->
                 <div v-if="shareType === 'collection'">
                   <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -152,7 +151,7 @@
                             v-if="updatingIncludeTags"
                             size="sm"
                             layout="inline"
-                            :showMessage="false"
+                            :show-message="false"
                           />
                         </div>
 
@@ -174,7 +173,7 @@
                             v-if="updatingAllowDownloads"
                             size="sm"
                             layout="inline"
-                            :showMessage="false"
+                            :show-message="false"
                           />
                         </div>
 
@@ -289,7 +288,8 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import BaseModal from './BaseModal.vue'
 import Loader from './Loader.vue'
 import ToggleButton from './ToggleButton.vue'
@@ -300,11 +300,27 @@ import {
   getFeatureShare,
   createShare as createShareApi,
   deleteShare as deleteShareApi,
-  updateFeatureShare
+  updateFeatureShare,
+  type ShareRecord,
+  type ShareType
 } from '@/api/services/sharingApi'
-import { getApiErrorMessage } from '@/utils/apiError'
+import { getApiErrorMessage, ApiError } from '@/utils/apiError'
 
-export default {
+// For tags: pass { tag: 'tagName' }
+// For collections: pass { id: 'uuid', name: 'collectionName' }
+// For features: pass feature object with properties.name and id (either a plain object,
+// or a MapLibre-style feature exposing `.get('properties')`)
+export interface ShareDialogItem {
+  tag?: string;
+  id?: string | number;
+  collection_id?: string | number;
+  name?: string;
+  properties?: { name?: string; database_id?: string | number; id?: string | number };
+  get?: (key: string) => { name?: string; database_id?: string | number; id?: string | number } | undefined;
+  [key: string]: unknown;
+}
+
+export default defineComponent({
   name: 'ShareDialog',
   components: {
     BaseModal,
@@ -320,30 +336,27 @@ export default {
       required: true
     },
     shareType: {
-      type: String,
+      type: String as PropType<ShareType>,
       required: true,
-      validator: (value) => ['tag', 'collection', 'feature'].includes(value)
+      validator: (value: string) => ['tag', 'collection', 'feature'].includes(value)
     },
-    // For tags: pass { tag: 'tagName' }
-    // For collections: pass { id: 'uuid', name: 'collectionName' }
-    // For features: pass feature object with properties.name and id
     item: {
-      type: Object,
+      type: Object as PropType<ShareDialogItem>,
       required: true
     }
   },
   emits: ['close'],
   data() {
     return {
-      shareData: null,
-      shares: [],
+      shareData: null as ShareRecord | null,
+      shares: [] as ShareRecord[],
       loading: false,
       creating: false,
-      error: null,
-      successMessage: null,
-      copiedShareId: null,
+      error: null as string | null,
+      successMessage: null as string | null,
+      copiedShareId: null as string | null,
       copied: false,
-      deletingShareId: null,
+      deletingShareId: null as string | null,
       includeTags: false,
       allowDownloads: false,
       updatingAllowDownloads: false,
@@ -351,37 +364,38 @@ export default {
     }
   },
   computed: {
-    dialogTitle() {
+    dialogTitle(): string {
       return {
         tag: 'Share Tag',
         collection: 'Share Collection',
         feature: 'Share Feature'
       }[this.shareType]
     },
-    computedMaxWidth() {
+    computedMaxWidth(): 'lg' | '2xl' {
       return this.shareType === 'feature' ? 'lg' : '2xl'
     },
-    displayName() {
+    displayName(): string {
       if (this.shareType === 'tag') {
-        return this.item.tag || 'Unknown Tag'
+        return this.item.tag ?? 'Unknown Tag'
       } else if (this.shareType === 'collection') {
-        return this.item.name || 'Unknown Collection'
+        return this.item.name ?? 'Unknown Collection'
       } else {
         // Feature name can be in properties.name or accessed via .get() for MapLibre features
-        const props = this.item.properties || (this.item.get && this.item.get('properties')) || {}
-        return props.name || 'Unnamed Feature'
+        const props = this.item.properties ?? this.item.get?.('properties') ?? {}
+        return props.name ?? 'Unnamed Feature'
       }
     },
-    itemId() {
+    itemId(): string | number | null {
       if (this.shareType === 'collection') {
-        return this.item.id || this.item.collection_id
+        return this.item.id ?? this.item.collection_id ?? null
       } else if (this.shareType === 'feature') {
         // Feature ID can be in different places depending on the source
         // Try properties.database_id first (most common), then id, then properties.id
-        return this.item.properties?.database_id || 
-               this.item.id || 
-               this.item.properties?.id ||
-               (this.item.get && this.item.get('properties')?.database_id)
+        return this.item.properties?.database_id ??
+               this.item.id ??
+               this.item.properties?.id ??
+               this.item.get?.('properties')?.database_id ??
+               null
       }
       return null
     }
@@ -389,14 +403,14 @@ export default {
   watch: {
     isOpen: {
       immediate: true,
-      handler(newVal) {
+      handler(newVal: boolean) {
         if (!newVal) {
           return
         }
         if (this.shareType === 'feature') {
-          this.loadOrCreateFeatureShare()
+          void this.loadOrCreateFeatureShare()
         } else {
-          this.loadShares()
+          void this.loadShares()
           this.resetForm()
         }
       }
@@ -428,8 +442,8 @@ export default {
           item: this.item,
           shareType: this.shareType,
           hasItem: !!this.item,
-          hasProperties: !!this.item?.properties,
-          hasGet: typeof this.item?.get === 'function'
+          hasProperties: !!this.item.properties,
+          hasGet: typeof this.item.get === 'function'
         })
         this.error = 'Invalid feature: missing feature ID'
         return
@@ -450,7 +464,7 @@ export default {
           this.includeTags = data.include_tags
         }
       } catch (error) {
-        if (error.status === 404) {
+        if (ApiError.from(error).status === 404) {
           // No share exists, create one
           await this.createShare()
         } else {
@@ -503,8 +517,8 @@ export default {
         // shared item; everything else (include_tags/allow_downloads) is identical.
         const typeSpecificField = {
           tag: { tag: this.item.tag },
-          collection: { collection_id: this.itemId },
-          feature: { feature_id: this.itemId }
+          collection: { collection_id: this.itemId != null ? String(this.itemId) : undefined },
+          feature: { feature_id: this.itemId ?? undefined }
         }[this.shareType]
 
         const data = await createShareApi({
@@ -539,7 +553,7 @@ export default {
         this.creating = false
       }
     },
-    async deleteShare(shareId) {
+    async deleteShare(shareId: string) {
       if (!confirm('Are you sure you want to delete this share link?')) {
         return
       }
@@ -568,8 +582,8 @@ export default {
     // Feature shares are toggled in place via PATCH (unlike tag/collection shares, which
     // have no per-item settings UI - only create/delete). Both toggles hit the same
     // endpoint and only differ in which field + loading flag they touch.
-    async updateFeatureShareField(field, updatingFlag, value) {
-      if (this.shareType !== 'feature' || !this.shareData) {
+    async updateFeatureShareField(field: 'allow_downloads' | 'include_tags', updatingFlag: 'updatingAllowDownloads' | 'updatingIncludeTags', value: boolean) {
+      if (this.shareType !== 'feature' || !this.shareData || this.itemId == null) {
         return
       }
 
@@ -584,7 +598,7 @@ export default {
         console.error(`Error updating ${field}:`, error)
         this.error = getApiErrorMessage(error, 'Failed to update share setting. Please try again.')
         // Revert the toggle if there was an error
-        this.$nextTick(() => {
+        void this.$nextTick(() => {
           if (this.shareData) {
             this.shareData[field] = !value
           }
@@ -593,16 +607,16 @@ export default {
         this[updatingFlag] = false
       }
     },
-    updateAllowDownloads(value) {
+    updateAllowDownloads(value: boolean) {
       return this.updateFeatureShareField('allow_downloads', 'updatingAllowDownloads', value)
     },
-    updateIncludeTags(value) {
+    updateIncludeTags(value: boolean) {
       return this.updateFeatureShareField('include_tags', 'updatingIncludeTags', value)
     },
-    getFullUrl(path) {
-      return `${window.location.origin}${path || ''}`
+    getFullUrl(path: string | null | undefined): string {
+      return `${window.location.origin}${path ?? ''}`
     },
-    async copyToClipboard(text, shareId) {
+    async copyToClipboard(text: string, shareId?: string) {
       try {
         // Construct full URL from path
         const urlToCopy = this.getFullUrl(text)
@@ -624,6 +638,6 @@ export default {
       }
     }
   }
-}
+})
 </script>
 

@@ -1,5 +1,5 @@
 import type { Module } from 'vuex';
-import { ImportTableItem } from '../../types/import-types';
+import type { ImportTableItem } from '../../types/import-types';
 import { realtimeSocket } from '../../websocket/realtimeSocket';
 
 export interface ImportHistoryItem {

@@ -51,7 +51,8 @@
   </Teleport>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { 
   CheckCircleIcon, 
   XCircleIcon, 
@@ -59,9 +60,9 @@ import {
   InformationCircleIcon,
   XMarkIcon 
 } from '@heroicons/vue/24/outline'
-import { toast } from '@/utils/toast'
+import { toast, type ToastPayload, type ToastType } from '@/utils/toast'
 
-export default {
+export default defineComponent({
   name: 'ToastContainer',
   components: {
     CheckCircleIcon,
@@ -72,17 +73,18 @@ export default {
   },
   data() {
     return {
-      toasts: []
+      toasts: [] as ToastPayload[],
+      unsubscribe: null as (() => void) | null
     }
   },
   mounted() {
     // Subscribe to toast events
-    this.unsubscribe = toast.subscribe((toastData) => {
-      if (toastData.action === 'clearAll') {
+    this.unsubscribe = toast.subscribe((toastEvent) => {
+      if ('action' in toastEvent && toastEvent.action === 'clearAll') {
         this.toasts = [];
         return;
       }
-      this.addToast(toastData)
+      this.addToast(toastEvent as ToastPayload)
     })
   },
   beforeUnmount() {
@@ -92,14 +94,14 @@ export default {
     }
   },
   methods: {
-    onToastSurfaceClick(event, id) {
-      const el = event.target;
-      if (el && typeof el.closest === 'function' && el.closest('a, button')) {
+    onToastSurfaceClick(event: MouseEvent, id: number) {
+      const el = event.target as HTMLElement | null;
+      if (el?.closest('a, button')) {
         return;
       }
       this.removeToast(id);
     },
-    addToast(toastData) {
+    addToast(toastData: ToastPayload) {
       if (toastData.replaceKey != null) {
         this.toasts = this.toasts.filter((t) => t.replaceKey !== toastData.replaceKey)
       }
@@ -112,20 +114,20 @@ export default {
         }, toastData.duration)
       }
     },
-    removeToast(id) {
+    removeToast(id: number) {
       const index = this.toasts.findIndex(t => t.id === id)
       if (index > -1) {
         this.toasts.splice(index, 1)
       }
     },
-    getToastClasses(toast) {
+    getToastClasses(toast: ToastPayload): string {
       // If plain option is set, use plain white styling
       if (toast.plain) {
         return 'bg-white border-gray-200'
       }
       
       const baseClasses = 'bg-white border-gray-200'
-      const typeClasses = {
+      const typeClasses: Record<ToastType, string> = {
         success: 'bg-green-50 border-green-200',
         error: 'bg-red-50 border-red-200',
         warning: 'bg-yellow-50 border-yellow-200',
@@ -133,13 +135,13 @@ export default {
       }
       return typeClasses[toast.type] || baseClasses
     },
-    getTextColor(toast) {
+    getTextColor(toast: ToastPayload): string {
       // If plain option is set, use gray text
       if (toast.plain) {
         return 'text-gray-800'
       }
       
-      const colors = {
+      const colors: Record<ToastType, string> = {
         success: 'text-green-800',
         error: 'text-red-800',
         warning: 'text-yellow-800',
@@ -147,13 +149,13 @@ export default {
       }
       return colors[toast.type] || 'text-gray-800'
     },
-    getIconColor(toast) {
+    getIconColor(toast: ToastPayload): string {
       // If plain option is set, use gray icon
       if (toast.plain) {
         return 'h-5 w-5 text-gray-600'
       }
       
-      const colors = {
+      const colors: Record<ToastType, string> = {
         success: 'h-5 w-5 text-green-600',
         error: 'h-5 w-5 text-red-600',
         warning: 'h-5 w-5 text-yellow-600',
@@ -162,7 +164,7 @@ export default {
       return colors[toast.type] || 'h-5 w-5 text-blue-600'
     }
   }
-}
+})
 </script>
 
 <style scoped>

@@ -55,12 +55,15 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import moment from "moment";
 import BaseModal from '@/components/parts/BaseModal.vue'
 import { DocumentIcon } from '@heroicons/vue/24/outline';
+import { getLevelName, getLevelClass } from '@/utils/import/featureProcessing';
+import type { ImportLogEntry } from '@/assets/js/types/import-types';
 
-export default {
+export default defineComponent({
   name: 'LogViewModal',
   components: {
     BaseModal,
@@ -72,63 +75,35 @@ export default {
       default: false
     },
     logs: {
-      type: Array,
+      type: Array as PropType<ImportLogEntry[]>,
       default: () => []
     }
   },
-  data() {
-    return {
-      modalStyle: {
-        width: '100vw',
-        height: '100vh',
-        left: '0',
-        top: '0'
-      }
-    }
-  },
+  emits: ['close'],
   watch: {
     logs() {
-      this.$nextTick(this.scrollToBottom);
+      void this.$nextTick(() => { this.scrollToBottom() });
     },
-    isOpen(open) {
+    isOpen(open: boolean) {
       if (open) {
-        this.$nextTick(this.scrollToBottom);
+        void this.$nextTick(() => { this.scrollToBottom() });
       }
     }
   },
   methods: {
+    getLevelName,
+    getLevelClass,
     scrollToBottom() {
-      const el = this.$refs.logScrollContainer;
+      const el = this.$refs.logScrollContainer as HTMLElement | undefined;
       if (el) {
         el.scrollTop = el.scrollHeight;
       }
     },
-    getLevelName(level) {
-      const levelMap = {
-        10: 'DEBUG',
-        20: 'INFO',
-        30: 'WARNING',
-        40: 'ERROR',
-        50: 'CRITICAL'
-      };
-      return levelMap[level] || 'UNKNOWN';
-    },
-    getLevelClass(level) {
-      if (level >= 40) { // ERROR or CRITICAL
-        return 'bg-red-100 text-red-800';
-      } else if (level >= 30) { // WARNING
-        return 'bg-yellow-100 text-yellow-800';
-        } else if (level >= 20) { // INFO
-          return 'bg-blue-100 text-blue-700';
-        } else { // DEBUG
-        return 'bg-gray-100 text-gray-800';
-      }
-    },
-    formatTimestamp(timestamp) {
+    formatTimestamp(timestamp: string | undefined): string {
       if (!timestamp) return '';
       return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
     }
   }
-}
+})
 </script>
 

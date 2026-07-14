@@ -25,7 +25,7 @@
           :value="option.value"
           :checked="modelValue === option.value"
           type="radio"
-          @change="$emit('update:modelValue', $event.target.value)"
+          @change="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
           class="radio-custom mt-1 h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300"
         />
         <div class="ml-3">
@@ -69,7 +69,7 @@
           </div>
           <ToggleButton
             :id="setting.key"
-            :model-value="modelValue"
+            :model-value="booleanModelValue"
             :label="setting.label || setting.title"
             @update:model-value="$emit('update:modelValue', $event)"
           />
@@ -83,8 +83,8 @@
         <input
           type="checkbox"
           :id="setting.key"
-          :checked="modelValue"
-          @change="$emit('update:modelValue', $event.target.checked)"
+          :checked="booleanModelValue"
+          @change="$emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
           class="checkbox-custom"
         />
       </div>
@@ -114,8 +114,8 @@
     <div v-else-if="setting.type === 'select'" class="space-y-2">
       <select
         :id="setting.key"
-        :value="isLoading ? '' : modelValue"
-        @change="$emit('update:modelValue', $event.target.value)"
+        :value="isLoading ? '' : stringModelValue"
+        @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
         :disabled="isLoading"
         class="select-custom w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
       >
@@ -137,10 +137,10 @@
     <div v-else-if="setting.type === 'text'" class="space-y-2">
       <input
         :id="setting.key"
-        :value="modelValue"
+        :value="stringModelValue"
         type="text"
         :placeholder="setting.placeholder"
-        @input="$emit('update:modelValue', $event.target.value)"
+        @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
       />
       <p v-if="setting.description" class="text-sm text-gray-500">
@@ -152,13 +152,13 @@
     <div v-else-if="setting.type === 'number'" class="space-y-2">
       <input
         :id="setting.key"
-        :value="modelValue"
+        :value="stringModelValue"
         type="number"
         :min="setting.min"
         :max="setting.max"
         :step="setting.step"
         :placeholder="setting.placeholder"
-        @input="$emit('update:modelValue', parseFloat($event.target.value) || 0)"
+        @input="$emit('update:modelValue', parseFloat(($event.target as HTMLInputElement).value) || 0)"
         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
       />
       <p v-if="setting.description" class="text-sm text-gray-500">
@@ -170,10 +170,10 @@
     <div v-else-if="setting.type === 'textarea'" class="space-y-2">
       <textarea
         :id="setting.key"
-        :value="modelValue"
+        :value="stringModelValue"
         :rows="setting.rows || 4"
         :placeholder="setting.placeholder"
-        @input="$emit('update:modelValue', $event.target.value)"
+        @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
       ></textarea>
       <p v-if="setting.description" class="text-sm text-gray-500">
@@ -190,24 +190,27 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
+import { mapGetters } from 'vuex'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
+import type { SettingDefinition, SettingValue } from '@/composables/useSettingsSection'
 
-export default {
+export default defineComponent({
   name: 'SettingsInput',
   components: {
     ToggleButton
   },
   props: {
     setting: {
-      type: Object,
+      type: Object as PropType<SettingDefinition>,
       required: true,
-      validator(value) {
-        return value.key && value.type && value.title;
+      validator(value: SettingDefinition): boolean {
+        return Boolean(value.key && value.title);
       }
     },
     modelValue: {
-      type: [String, Number, Boolean],
+      type: [String, Number, Boolean] as PropType<SettingValue | null>,
       default: null
     },
     showSuccess: {
@@ -217,21 +220,28 @@ export default {
   },
   emits: ['update:modelValue'],
   computed: {
-    isLoading() {
-      // Check if settings are still loading from the store
-      // If userSettings is null, settings are still being fetched
-      const userSettings = this.$store?.state?.userSettings;
-      const settingsLoading = userSettings === null;
-      
+    // `userSettings/userSettings` is null until the store's initial fetch resolves.
+    ...mapGetters('userSettings', ['userSettings']),
+    // Narrowed views of `modelValue` for the DOM attribute bindings below, which each only
+    // ever receive one specific type depending on `setting.type`.
+    booleanModelValue(): boolean {
+      return Boolean(this.modelValue);
+    },
+    stringModelValue(): string {
+      return this.modelValue == null ? '' : String(this.modelValue);
+    },
+    isLoading(): boolean {
+      const settingsLoading: boolean = this.userSettings === null;
+
       // For select dropdowns, also check if options are empty (e.g., default_basemap)
       // Options might be populated asynchronously after component creation
-      const optionsEmpty = this.setting.type === 'select' && 
+      const optionsEmpty = this.setting.type === 'select' &&
         (!this.setting.options || this.setting.options.length === 0);
-      
+
       return settingsLoading || optionsEmpty;
     }
   }
-}
+})
 </script>
 
 <style scoped>

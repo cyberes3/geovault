@@ -8,4 +8,3 @@ import json from 'highlight.js/lib/languages/json'
 hljs.registerLanguage('json', json)
 
 export default hljs
-

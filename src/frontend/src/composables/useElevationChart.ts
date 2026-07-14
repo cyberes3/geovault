@@ -20,6 +20,7 @@ import {
   calculateSpeeds,
   calculateSpeedStats,
 } from '@/utils/map/elevationProfileUtils';
+import type { SpeedSegment } from '@/utils/map/elevationProfileUtils';
 
 Chart.register(...registerables);
 
@@ -50,21 +51,6 @@ export interface ElevationStats {
   averageMovingSpeed?: string | null;
   totalMovingTime?: string;
   totalTrackTime?: string;
-}
-
-interface ProcessedElevationData {
-  distances: number[];
-  distancesMeters: number[];
-  elevations: number[];
-  coordinateMapping: ElevationCoordinate[];
-  timestamps: string[];
-}
-
-interface SpeedStats {
-  averageSpeed: string | null;
-  averageMovingSpeed: string | null;
-  totalTrackTime: string;
-  totalMovingTime: string;
 }
 
 interface UserSettingsGetterShape {
@@ -237,7 +223,7 @@ export function useElevationChart(
     const averageElevation = elevationsUserUnit.reduce((sum, elev) => sum + elev, 0) / elevationsUserUnit.length;
 
     // Use smoothed elevation data to filter out GPS noise when computing gross ascent/descent.
-    const smoothedElevations = smoothElevationData(elevationsUserUnit) as number[];
+    const smoothedElevations = smoothElevationData(elevationsUserUnit);
     let grossAscent = 0;
     let grossDescent = 0;
 
@@ -268,8 +254,8 @@ export function useElevationChart(
 
     // Speed stats are only available for GPX tracks/routes with time data.
     if (timestamps && timestamps.length >= 2 && distancesMeters && distancesMeters.length >= 2) {
-      const speeds = calculateSpeeds(distancesMeters, timestamps) as unknown[];
-      const speedStats = calculateSpeedStats(speeds, distancesMeters, timestamps) as SpeedStats | null;
+      const speeds: SpeedSegment[] = calculateSpeeds(distancesMeters, timestamps);
+      const speedStats = calculateSpeedStats(speeds, distancesMeters, timestamps);
       if (speedStats) {
         result.averageSpeed = speedStats.averageSpeed;
         result.averageMovingSpeed = speedStats.averageMovingSpeed;
@@ -444,7 +430,7 @@ export function useElevationChart(
           return;
         }
 
-        const coordinate = mapDistanceToCoordinate(distanceMiles, distances, coordinateMapping) as ElevationCoordinate | null;
+        const coordinate = mapDistanceToCoordinate(distanceMiles, distances, coordinateMapping);
         if (coordinate) {
           const coordKey = `${coordinate[0].toFixed(6)},${coordinate[1].toFixed(6)}`;
           const lastKey = lastHoverCoordinate ? `${lastHoverCoordinate[0].toFixed(6)},${lastHoverCoordinate[1].toFixed(6)}` : null;
@@ -675,7 +661,7 @@ export function useElevationChart(
           return;
         }
       } else {
-        coordinates = extractCoordinates(geometry) as number[][];
+        coordinates = extractCoordinates(geometry);
 
         if (coordinates.length === 0) {
           hasElevationData.value = false;
@@ -695,8 +681,8 @@ export function useElevationChart(
       }
     }
 
-    const timestamps = extractTimestamps(currentFeature) as string[] | null;
-    const processed = processElevationData(coordinates, timestamps) as ProcessedElevationData;
+    const timestamps = extractTimestamps(currentFeature);
+    const processed = processElevationData(coordinates, timestamps);
     const { distances: distancesUserUnit, distancesMeters, elevations, coordinateMapping: mapping, timestamps: validTimestamps } = processed;
 
     if (distancesUserUnit.length === 0 || elevations.length === 0) {

@@ -17,7 +17,7 @@
             v-for="(item, index) in logs"
             :key="`logitem-${index}`"
             class="border-l-4 pl-2 pb-2 sm:py-1"
-            :class="item.level >= 40 ? 'bg-red-50 border-red-400' : 'border-transparent'"
+            :class="(item.level ?? 0) >= 40 ? 'bg-red-50 border-red-400' : 'border-transparent'"
           >
             <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[190px_140px_80px_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1 sm:items-start">
               <!-- Level + Source -->
@@ -43,7 +43,7 @@
 
               <!-- Message -->
               <p
-                :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'"
+                :class="(item.level ?? 0) >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'"
                 class="text-xs sm:text-sm leading-relaxed break-words sm:col-start-4 sm:row-start-1 sm:row-span-2"
               >
                 {{ item.msg }}
@@ -62,19 +62,21 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import moment from 'moment';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/vue/24/outline';
-import { getLevelName, getLevelClass } from '@/utils/import/featureProcessing.js';
+import { getLevelName, getLevelClass } from '@/utils/import/featureProcessing';
+import type { ImportLogEntry } from '@/assets/js/types/import-types';
 
-export default {
+export default defineComponent({
   name: 'ProcessingLogsPanel',
   components: {
     ArrowTopRightOnSquareIcon
   },
   props: {
     logs: {
-      type: Array,
+      type: Array as PropType<ImportLogEntry[]>,
       default: () => []
     },
     isLoading: {
@@ -82,14 +84,15 @@ export default {
       default: false
     }
   },
+  emits: ['open-full-logs'],
   methods: {
     getLevelName,
     getLevelClass,
-    formatTimestamp(timestamp) {
+    formatTimestamp(timestamp: string | undefined): string {
       if (!timestamp) return '';
       return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
     }
   }
-};
+});
 </script>
 

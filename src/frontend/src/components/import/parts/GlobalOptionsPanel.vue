@@ -30,7 +30,7 @@
           @click="$emit('recheck-duplicates')"
           title="Recheck for Duplicate Features"
         >
-          <Loader v-if="isRecheckingDuplicates" size="sm" layout="inline" :showMessage="false" color="#1d4ed8" />
+          <Loader v-if="isRecheckingDuplicates" size="sm" layout="inline" :show-message="false" color="#1d4ed8" />
           {{ isRecheckingDuplicates ? 'Rechecking...' : 'Recheck Duplicates' }}
         </BaseButton>
 
@@ -51,13 +51,14 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue';
 import BaseButton from '@/components/parts/BaseButton.vue';
 import Loader from '@/components/parts/Loader.vue';
 import { RectangleStackIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'GlobalOptionsPanel',
   components: {
     ToggleButton,
@@ -108,11 +109,11 @@ export default {
     }
   },
   computed: {
-    isDisabled() {
+    isDisabled(): boolean {
       return this.lockButtons || this.isImporting || this.isSaving || this.isImported;
     }
   },
   emits: ['update:import-custom-icons', 'recheck-duplicates', 'open-bulk-operations']
-};
+});
 </script>
 

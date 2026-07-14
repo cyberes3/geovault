@@ -37,17 +37,31 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue';
 import Loader from './Loader.vue';
 
-export default {
+export interface ScrollingSelectItem {
+  value?: string | number | null;
+  id?: string | number | null;
+  label?: string | null;
+  email?: string | null;
+  [key: string]: unknown;
+}
+
+interface EffectiveItem {
+  value: string;
+  label: string;
+}
+
+export default defineComponent({
   name: 'ScrollingSelect',
   components: { Loader },
   props: {
     /** Options to show. Each: { value: string, label: string } (or id/label for compatibility). */
-    items: { type: Array, default: () => [] },
+    items: { type: Array as PropType<ScrollingSelectItem[]>, default: () => [] },
     /** Values that are selected (shown highlighted; click toggles when not disabled). */
-    selectedValues: { type: Array, default: () => [] },
+    selectedValues: { type: Array as PropType<Array<string | number>>, default: () => [] },
     /** Max height of the scroll area (CSS value, e.g. '12rem' or '200px'). */
     maxHeight: { type: String, default: '12rem' },
     loading: { type: Boolean, default: false },
@@ -57,21 +71,21 @@ export default {
   },
   emits: ['select'],
   computed: {
-    effectiveItems() {
-      return (this.items || []).map((it) => ({
-        value: it.value != null ? String(it.value) : (it.id != null ? String(it.id) : ''),
-        label: it.label != null ? it.label : (it.email != null ? it.email : String(it.value ?? it.id ?? '')),
+    effectiveItems(): EffectiveItem[] {
+      return this.items.map((it): EffectiveItem => ({
+        value: it.value != null ? String(it.value) : String(it.id ?? ''),
+        label: it.label ?? it.email ?? String(it.value ?? it.id ?? ''),
       })).filter((it) => it.value !== '' || it.label !== '');
     },
   },
   methods: {
-    isSelected(value) {
-      return this.selectedValues && this.selectedValues.some((v) => String(v) === String(value));
+    isSelected(value: string): boolean {
+      return this.selectedValues.some((v) => String(v) === String(value));
     },
-    onSelect(item) {
+    onSelect(item: EffectiveItem) {
       if (this.disabled) return;
       this.$emit('select', item);
     },
   },
-};
+});
 </script>

@@ -111,15 +111,21 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type Component } from 'vue'
+import type { LocationQueryValue, NavigationGuardNext, RouteLocationNormalized } from 'vue-router'
 import AccountSettingsTab from "./AccountSettingsTab.vue";
 import MapSettingsTab from "./MapSettingsTab.vue";
 import SharingSettingsTab from "./SharingSettingsTab.vue";
 import ImportSettingsTab from "./ImportSettingsTab.vue";
-import { extensionRegistry } from "@/utils/extensionRegistry.js";
-import { markRaw } from 'vue';
+import { extensionRegistry } from "@/utils/extensionRegistry";
 
-export default {
+/** Narrows a route query value to a single non-empty tab id string. */
+function isNonEmptyQueryString(value: LocationQueryValue | LocationQueryValue[]): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+export default defineComponent({
   name: 'Settings',
   components: {
     AccountSettingsTab,
@@ -136,42 +142,42 @@ export default {
   },
   computed: {
     // Access extensionRegistry directly from import
-    extensionRegistryState() {
+    extensionRegistryState(): typeof extensionRegistry {
       return extensionRegistry;
     },
-    resolvedComponent() {
-      const nativeComponents = {
+    resolvedComponent(): string | Component {
+      const nativeComponents: Record<string, string> = {
         'account': 'AccountSettingsTab',
         'map': 'MapSettingsTab',
         'sharing': 'SharingSettingsTab',
         'import': 'ImportSettingsTab'
       };
-      
+
       if (nativeComponents[this.activeTab]) {
         return nativeComponents[this.activeTab];
       }
-      
-      const extTab = this.extensionRegistryState.settingsTabs.find(t => t.id === this.activeTab);
-      return extTab ? extTab.component : 'AccountSettingsTab';
+
+      const extTab = this.extensionRegistryState.settingsTabs.find((t) => t.id === this.activeTab);
+      return (extTab?.component as Component | undefined) ?? 'AccountSettingsTab';
     },
-    allTabIds() {
+    allTabIds(): string[] {
       const nativeIds = ['account', 'map', 'sharing', 'import'];
-      const extIds = this.extensionRegistryState.settingsTabs.map(t => t.id);
+      const extIds = this.extensionRegistryState.settingsTabs.map((t) => t.id);
       return [...nativeIds, ...extIds];
     }
   },
   watch: {
-    activeTab(newTab) {
+    activeTab(newTab: string) {
       if (!this.isInitializing && this.$route.path === '/settings' && this.$route.query.tab !== newTab) {
-        this.$router.push({
+        void this.$router.push({
           path: '/settings',
           query: { tab: newTab }
         });
       }
     },
-    '$route.query.tab'(newTab) {
+    '$route.query.tab'(newTab: LocationQueryValue | LocationQueryValue[]) {
       if (this.$route.path !== '/settings') return;
-      if (newTab && this.allTabIds.includes(newTab)) {
+      if (isNonEmptyQueryString(newTab) && this.allTabIds.includes(newTab)) {
         if (this.activeTab !== newTab) {
           this.activeTab = newTab;
         }
@@ -180,7 +186,7 @@ export default {
       }
     }
   },
-  beforeRouteLeave(to, from, next) {
+  beforeRouteLeave(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
     // Let navigation proceed - the global router guard will clean up the tab query param
     // This guard is kept for potential future use or component-specific cleanup
     next();
@@ -195,12 +201,12 @@ export default {
     // Initialize activeTab from query parameter
     const tabFromQuery = this.$route.query.tab;
     // Check if tab is valid (native or extension tab)
-    if (tabFromQuery && this.allTabIds.includes(tabFromQuery)) {
+    if (isNonEmptyQueryString(tabFromQuery) && this.allTabIds.includes(tabFromQuery)) {
       this.activeTab = tabFromQuery;
       // Clean up any other query params that shouldn't be here
-      const otherParams = Object.keys(this.$route.query).filter(key => key !== 'tab');
+      const otherParams = Object.keys(this.$route.query).filter((key) => key !== 'tab');
       if (otherParams.length > 0) {
-        this.$router.replace({
+        void this.$router.replace({
           path: '/settings',
           query: { tab: tabFromQuery }
         });
@@ -213,18 +219,18 @@ export default {
       this.activeTab = targetTab;
       // Use replace synchronously during initialization before watchers can fire
       // Clean up any unrelated query params
-      this.$router.replace({
+      void this.$router.replace({
         path: '/settings',
         query: { tab: targetTab }
       });
     }
 
     // Mark initialization as complete after a tick to ensure watchers are set up
-    this.$nextTick(() => {
+    void this.$nextTick(() => {
       this.isInitializing = false;
     });
   }
-}
+})
 </script>
 
 

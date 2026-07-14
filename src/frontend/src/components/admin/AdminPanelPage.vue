@@ -79,12 +79,21 @@
   </div>
 </template>
 
-<script>
-import {mapGetters} from "vuex";
+<script lang="ts">
+import { defineComponent } from 'vue'
+import type { LocationQueryValue } from 'vue-router'
+import { mapGetters } from "vuex";
 import OverviewTab from "./OverviewTab.vue";
 import UsersListTab from "./UsersListTab.vue";
+import type { UserInfo } from '@/assets/js/types/store-types';
 
-export default {
+type AdminTab = 'overview' | 'users'
+
+function isAdminTab(value: LocationQueryValue | LocationQueryValue[]): value is AdminTab {
+  return value === 'overview' || value === 'users';
+}
+
+export default defineComponent({
   name: 'AdminPanel',
   components: {
     OverviewTab,
@@ -92,11 +101,12 @@ export default {
   },
   computed: {
     ...mapGetters("auth", ["userInfo"]),
-    isAuthorized() {
-      return this.userInfo && this.userInfo.isSuperuser === true;
+    isAuthorized(): boolean {
+      const userInfo = this.userInfo as UserInfo | null;
+      return !!userInfo && userInfo.isSuperuser;
     },
-    currentTabComponent() {
-      const components = {
+    currentTabComponent(): string {
+      const components: Record<AdminTab, string> = {
         'overview': 'OverviewTab',
         'users': 'UsersListTab'
       };
@@ -105,31 +115,31 @@ export default {
   },
   data() {
     return {
-      activeTab: 'overview',
+      activeTab: 'overview' as AdminTab,
       isInitializing: true
     }
   },
   watch: {
-    activeTab(newTab) {
+    activeTab(newTab: AdminTab) {
       // Update URL query parameter when tab changes (but not during initialization)
       // Only update if we're on the /admin route
       if (!this.isInitializing && this.$route.path === '/admin' && this.$route.query.tab !== newTab) {
         // Use push instead of replace so tab changes create history entries
         // This allows back button to navigate through tabs
         // Only include the tab param, don't spread other query params
-        this.$router.push({
+        void this.$router.push({
           path: '/admin',
           query: { tab: newTab }
         });
       }
     },
-    '$route.query.tab'(newTab) {
+    '$route.query.tab'(newTab: LocationQueryValue | LocationQueryValue[]) {
       // Only process tab changes when on /admin route
       if (this.$route.path !== '/admin') {
         return;
       }
       // Update activeTab when route query parameter changes
-      if (newTab && ['overview', 'users'].includes(newTab)) {
+      if (isAdminTab(newTab)) {
         if (this.activeTab !== newTab) {
           this.activeTab = newTab;
         }
@@ -144,19 +154,19 @@ export default {
     if (!this.isAuthorized) {
       // Small delay to show the error message, then redirect
       setTimeout(() => {
-        this.$router.push('/dashboard');
+        void this.$router.push('/dashboard');
       }, 2000);
       return;
     }
 
     // Initialize activeTab from query parameter
     const tabFromQuery = this.$route.query.tab;
-    if (tabFromQuery && ['overview', 'users'].includes(tabFromQuery)) {
+    if (isAdminTab(tabFromQuery)) {
       this.activeTab = tabFromQuery;
       // Clean up any other query params that shouldn't be here
-      const otherParams = Object.keys(this.$route.query).filter(key => key !== 'tab');
+      const otherParams = Object.keys(this.$route.query).filter((key) => key !== 'tab');
       if (otherParams.length > 0) {
-        this.$router.replace({
+        void this.$router.replace({
           path: '/admin',
           query: { tab: tabFromQuery }
         });
@@ -165,21 +175,21 @@ export default {
       // If no valid tab in query, set default tab
       // Update URL immediately using replace to avoid creating history entry
       // This replaces the current /admin entry with /admin?tab=overview
-      const targetTab = 'overview';
+      const targetTab: AdminTab = 'overview';
       this.activeTab = targetTab;
       // Use replace synchronously during initialization before watchers can fire
       // Clean up any unrelated query params
-      this.$router.replace({
+      void this.$router.replace({
         path: '/admin',
         query: { tab: targetTab }
       });
     }
 
     // Mark initialization as complete after a tick to ensure watchers are set up
-    this.$nextTick(() => {
+    void this.$nextTick(() => {
       this.isInitializing = false;
     });
   }
-}
+})
 </script>
 

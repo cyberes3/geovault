@@ -45,7 +45,7 @@
 
           <!-- Icon Section -->
           <IconSelector
-            :icon-url="iconUrl"
+            :icon-url="iconUrl ?? undefined"
             :disabled="isSaving"
             :show-remove="true"
             size="sm"
@@ -128,7 +128,8 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { createQuickPointFeature } from '@/api/services/featuresApi'
 import { getApiErrorMessage } from '@/utils/apiError'
 import BaseModal from '@/components/parts/BaseModal.vue'
@@ -142,8 +143,13 @@ import { parseCoordinates } from '@/utils/geo/coordinates'
 import { geolocationManager } from '@/utils/map/geolocationManager'
 import { toast } from '@/utils/toast'
 import { isSystemIcon, isUserIcon } from '@/utils/map/iconUtils'
+import type { MapPageFeature } from '@/composables/mapPageTypes'
 
-export default {
+interface QuickPointIconSelectedEvent {
+  iconUrl: string | null;
+}
+
+export default defineComponent({
   name: 'QuickPointDialog',
   components: {
     BaseModal,
@@ -160,7 +166,7 @@ export default {
       default: false
     },
     availableTags: {
-      type: Array,
+      type: Array as PropType<string[]>,
       default: () => []
     }
   },
@@ -169,12 +175,12 @@ export default {
     return {
       featureName: '',
       description: '',
-      tags: [],
+      tags: [] as string[],
       markerColor: '#ff0000',
-      iconUrl: null,
+      iconUrl: null as string | null,
       coordinatesInput: '',
-      latitude: null,
-      longitude: null,
+      latitude: null as number | null,
+      longitude: null as number | null,
       coordinateError: '',
       isSaving: false,
       errorMessage: '',
@@ -182,18 +188,18 @@ export default {
     }
   },
   computed: {
-    isValid() {
+    isValid(): boolean {
       return this.featureName.trim() !== '' && 
              this.latitude !== null && 
              this.longitude !== null && 
              !this.coordinateError
     },
-    isCustomIcon() {
+    isCustomIcon(): boolean {
       // Custom icon is a user-uploaded icon or any icon that's not a system icon
       if (!this.iconUrl) return false
       return isUserIcon(this.iconUrl) || !isSystemIcon(this.iconUrl)
     },
-    hasUnsavedData() {
+    hasUnsavedData(): boolean {
       // Check if user has entered any data
       return this.featureName.trim() !== '' ||
              this.description.trim() !== '' ||
@@ -204,7 +210,7 @@ export default {
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
         this.reset()
       }
@@ -261,7 +267,7 @@ export default {
         this.coordinateError = 'Invalid coordinate format'
       }
     },
-    handleIconSelected(event) {
+    handleIconSelected(event: QuickPointIconSelectedEvent) {
       this.iconUrl = event.iconUrl
     },
     handleIconRemoved() {
@@ -269,11 +275,6 @@ export default {
     },
     async useCurrentLocation() {
       if (this.isGettingLocation || this.isSaving) {
-        return
-      }
-      
-      // Prevent multiple simultaneous requests
-      if (this.isGettingLocation) {
         return
       }
 
@@ -302,8 +303,8 @@ export default {
         this.validateCoordinates()
       } catch (error) {
         console.error('Geolocation error:', error)
-        
-        if (error.code === 1) { // PERMISSION_DENIED
+
+        if (error instanceof GeolocationPositionError && error.code === 1) { // PERMISSION_DENIED
           toast.error('Location permission denied.')
         } else {
           toast.error('Failed to get your location.')
@@ -323,7 +324,7 @@ export default {
 
       try {
         // Prepare request payload
-        const payload = {
+        const payload: Record<string, unknown> = {
           latitude: this.latitude,
           longitude: this.longitude,
           name: this.featureName.trim(),
@@ -344,7 +345,7 @@ export default {
         }
 
         // Call backend API
-        const data = await createQuickPointFeature(payload)
+        const data = await createQuickPointFeature(payload) as { feature: MapPageFeature }
 
         // Success - emit event with the created feature and close
         this.$emit('created', data.feature)
@@ -356,7 +357,7 @@ export default {
       }
     }
   }
-}
+})
 </script>
 
 <style scoped>

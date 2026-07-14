@@ -29,13 +29,14 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import BaseButton from '@/components/parts/BaseButton.vue';
 import { CheckIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/outline';
-import { formatDate } from '@/utils/dateUtils.js';
-import { IMPORT_HISTORY_URL } from '@/assets/js/import/url.js';
+import { formatDate } from '@/utils/dateUtils';
+import { IMPORT_HISTORY_URL } from '@/assets/js/import/url';
 
-export default {
+export default defineComponent({
   name: 'ImportProcessHeader',
   components: {
     BaseButton,
@@ -56,18 +57,18 @@ export default {
       default: false
     },
     importItemId: {
-      type: Number,
+      type: Number as PropType<number | null>,
       default: null
     }
   },
   computed: {
-    formattedUploadDate() {
+    formattedUploadDate(): string {
       return formatDate(this.uploadTimestamp);
     },
-    downloadOriginalUrl() {
+    downloadOriginalUrl(): string | null {
       return this.importItemId != null ? `${IMPORT_HISTORY_URL}/${this.importItemId}` : null;
     }
   }
-};
+});
 </script>
 

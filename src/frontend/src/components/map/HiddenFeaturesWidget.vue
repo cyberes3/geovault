@@ -73,18 +73,20 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import HiddenFeaturesModal from './HiddenFeaturesModal.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
+import type { HiddenFeature } from '@/assets/js/store/modules/userSettings'
 
-export default {
+export default defineComponent({
   name: 'HiddenFeaturesWidget',
   components: {
     HiddenFeaturesModal,
   },
   props: {
     hiddenFeatures: {
-      type: Array,
+      type: Array as PropType<HiddenFeature[]>,
       required: true,
     },
     canManageHidden: {
@@ -112,7 +114,7 @@ export default {
   },
   watch: {
     // Close modal when all features are unhidden
-    hiddenFeatures(newVal) {
+    hiddenFeatures(newVal: HiddenFeature[]) {
       if (newVal.length === 0 && this.showModal) {
         this.showModal = false
       }
@@ -120,7 +122,7 @@ export default {
   },
   methods: {
     getGeometryTypeColor,
-    handleUnhide(featureId) {
+    handleUnhide(featureId: string) {
       this.$emit('unhide', featureId)
     },
     handleUnhideAll() {
@@ -128,6 +130,6 @@ export default {
       // Note: Parent will handle closing the modal after the async operation completes
     },
   },
-}
+})
 </script>
 

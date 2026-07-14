@@ -27,21 +27,36 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { formatGeometryTypeForDisplay } from '@/utils/geometryTypeFormatter.js'
+import type { FeatureLike } from 'ol/Feature'
+import type { MapPageFeature } from '@/composables/mapPageTypes'
 
-export default {
+/** This popup historically supported both OpenLayers `Feature`s and plain GeoJSON features; only the GeoJSON path is exercised today (see `MapPage.vue`), but the dual-mode branches are kept intact. */
+type PopupFeature = MapPageFeature | FeatureLike
+
+interface PopupPosition {
+  x: number;
+  y: number;
+  containerWidth: number;
+  containerHeight: number;
+}
+
+function isOlFeature(feature: PopupFeature): feature is FeatureLike {
+  return typeof (feature as FeatureLike).getGeometry === 'function'
+}
+
+export default defineComponent({
   name: 'FeatureSelectionPopup',
   props: {
     features: {
-      type: Array,
-      required: true,
+      type: Array as PropType<PopupFeature[]>,
       default: () => []
     },
     position: {
-      type: Object,
-      required: true,
+      type: Object as PropType<PopupPosition>,
       default: () => ({x: 0, y: 0, containerWidth: 0, containerHeight: 0})
     },
     visible: {
@@ -51,59 +66,41 @@ export default {
   },
   emits: ['select', 'close'],
   computed: {
-    sortedFeatures() {
+    sortedFeatures(): PopupFeature[] {
       // Sort features by geometry type: Points -> Lines -> Polygons
       // Within each group, preserve the original order
-      const getGeometryTypeSortOrder = (feature) => {
-        // Support both OpenLayers Features and plain GeoJSON
-        let geometry
-        if (typeof feature.getGeometry === 'function') {
+      const getGeometryTypeSortOrder = (feature: PopupFeature): number => {
+        let geomType: string | undefined
+        if (isOlFeature(feature)) {
           // OpenLayers Feature
-          geometry = feature.getGeometry()
+          const geometry = feature.getGeometry()
           if (!geometry) return 999
-          const geomType = geometry.getType()
-          
-          // Points first (order 1)
-          if (geomType === 'Point' || geomType === 'MultiPoint') {
-            return 1
-          }
-          // Lines second (order 2)
-          if (geomType === 'LineString' || geomType === 'MultiLineString') {
-            return 2
-          }
-          // Polygons third (order 3)
-          if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
-            return 3
-          }
-          return 999
+          geomType = geometry.getType()
         } else {
           // Plain GeoJSON
-          geometry = feature.geometry
-          if (!geometry || !geometry.type) return 999
-          
-          const geomType = geometry.type
-          
-          // Points first (order 1)
-          if (geomType === 'Point' || geomType === 'MultiPoint') {
-            return 1
-          }
-          // Lines second (order 2)
-          if (geomType === 'LineString' || geomType === 'MultiLineString') {
-            return 2
-          }
-          // Polygons third (order 3)
-          if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
-            return 3
-          }
-          return 999
+          geomType = feature.geometry.type
         }
+
+        // Points first (order 1)
+        if (geomType === 'Point' || geomType === 'MultiPoint') {
+          return 1
+        }
+        // Lines second (order 2)
+        if (geomType === 'LineString' || geomType === 'MultiLineString') {
+          return 2
+        }
+        // Polygons third (order 3)
+        if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+          return 3
+        }
+        return 999
       }
       
       return [...this.features].sort((a, b) => {
         return getGeometryTypeSortOrder(a) - getGeometryTypeSortOrder(b)
       })
     },
-    popupDimensions() {
+    popupDimensions(): { width: number; height: number; halfWidth: number } {
       // Estimate popup dimensions
       // Max width is 200px (max-w-[200px])
       // Each feature button is approximately 44px tall (min-h-[44px])
@@ -122,24 +119,23 @@ export default {
         halfWidth: estimatedWidth / 2
       }
     },
-    arrowPosition() {
+    arrowPosition(): 'top' | 'bottom' {
       // Determine if arrow should be at top or bottom
       const y = this.position.y
-      const containerHeight = this.position.containerHeight
       const { height } = this.popupDimensions
       
       // Check if popup is positioned above or below
       const popupTop = y - height - 10
       return popupTop < 0 ? 'top' : 'bottom'
     },
-    popupStyle() {
+    popupStyle(): Record<string, string> {
       // Position the popup at the tap/click location
       // Coordinates are relative to the map container
-      let x = this.position.x
-      let y = this.position.y
+      const x = this.position.x
+      const y = this.position.y
       const containerWidth = this.position.containerWidth
       const containerHeight = this.position.containerHeight
-      const { width, height, halfWidth } = this.popupDimensions
+      const { height, halfWidth } = this.popupDimensions
 
       // Calculate popup bounds if positioned above (default)
       const popupLeft = x - halfWidth
@@ -181,7 +177,7 @@ export default {
         transform: `translate(${transformX}, ${transformY})`
       }
     },
-    arrowClass() {
+    arrowClass(): string {
       const baseClass = 'absolute left-1/2 transform -translate-x-1/2 w-4 h-4 bg-white border-b border-r border-gray-200 z-10'
       if (this.arrowPosition === 'top') {
         // Arrow at top pointing up - rotate 225deg (45 + 180) to point up
@@ -191,7 +187,7 @@ export default {
         return `${baseClass} rotate-45 -bottom-2`
       }
     },
-    arrowStyle() {
+    arrowStyle(): Record<string, string> {
       // Arrow doesn't need special styling, class handles it
       return {}
     }
@@ -205,83 +201,78 @@ export default {
     }
   },
   methods: {
-    getFeatureKey(feature, index) {
+    getFeatureKey(feature: PopupFeature, index: number): string {
       // Generate a unique key for each feature
-      // Support both OpenLayers Features and plain GeoJSON
-      let properties
-      if (typeof feature.get === 'function') {
+      let properties: Record<string, unknown>
+      if (isOlFeature(feature)) {
         // OpenLayers Feature
-        properties = feature.get('properties') || {}
+        properties = (feature.get('properties') as Record<string, unknown> | undefined) ?? {}
       } else {
         // Plain GeoJSON
-        properties = feature.properties || {}
+        properties = feature.properties
       }
       
       // Use feature ID if available, otherwise use geometry + index
-      if (properties.database_id) {
-        return `feature_${properties.database_id}`
+      const databaseId = properties.database_id as string | number | undefined
+      if (databaseId) {
+        return `feature_${databaseId}`
       }
       
       // Fallback: use geometry type and index
-      let geometry, geomType
-      if (typeof feature.getGeometry === 'function') {
+      let geomType: string
+      if (isOlFeature(feature)) {
         // OpenLayers Feature
-        geometry = feature.getGeometry()
+        const geometry = feature.getGeometry()
         geomType = geometry ? geometry.getType() : 'unknown'
       } else {
         // Plain GeoJSON
-        geometry = feature.geometry
-        geomType = geometry ? geometry.type : 'unknown'
+        geomType = feature.geometry.type
       }
       return `feature_${geomType}_${index}`
     },
-    getFeatureName(feature) {
+    getFeatureName(feature: PopupFeature): string {
       // Support both OpenLayers Features and plain GeoJSON
-      let properties
-      if (typeof feature.get === 'function') {
+      let properties: Record<string, unknown>
+      if (isOlFeature(feature)) {
         // OpenLayers Feature
-        properties = feature.get('properties') || {}
+        properties = (feature.get('properties') as Record<string, unknown> | undefined) ?? {}
       } else {
         // Plain GeoJSON
-        properties = feature.properties || {}
+        properties = feature.properties
       }
-      return properties.name || ''
+      return (properties.name as string | undefined) ?? ''
     },
-    getFeatureGeometryType(feature) {
+    getFeatureGeometryType(feature: PopupFeature): string {
       // Support both OpenLayers Features and plain GeoJSON
-      let geometry, geomType
-      if (typeof feature.getGeometry === 'function') {
+      let geomType: string
+      if (isOlFeature(feature)) {
         // OpenLayers Feature
-        geometry = feature.getGeometry()
+        const geometry = feature.getGeometry()
         if (!geometry) return 'Unknown'
         geomType = geometry.getType()
       } else {
         // Plain GeoJSON
-        geometry = feature.geometry
-        if (!geometry || !geometry.type) return 'Unknown'
-        geomType = geometry.type
+        geomType = feature.geometry.type
       }
       
       // Use shared formatter utility for user-friendly names
       return formatGeometryTypeForDisplay(geomType)
     },
-    getGeometryTypeColor(feature) {
+    getGeometryTypeColor(feature: PopupFeature): string {
       // Support both OpenLayers Features and plain GeoJSON
-      let geometry, geometryType
-      if (typeof feature.getGeometry === 'function') {
+      let geometryType: string
+      if (isOlFeature(feature)) {
         // OpenLayers Feature
-        geometry = feature.getGeometry()
+        const geometry = feature.getGeometry()
         if (!geometry) return '#d1d5db'
         geometryType = geometry.getType()
       } else {
         // Plain GeoJSON
-        geometry = feature.geometry
-        if (!geometry || !geometry.type) return '#d1d5db'
-        geometryType = geometry.type
+        geometryType = feature.geometry.type
       }
       return getGeometryTypeColor(geometryType)
     }
   }
-}
+})
 </script>
 

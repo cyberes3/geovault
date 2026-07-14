@@ -66,7 +66,7 @@
     <div>
       <h3 class="text-md font-medium text-gray-900 mb-3">Your API Keys</h3>
       <div v-if="apiKeysLoading" class="flex items-center justify-center py-12 min-h-[120px]">
-        <Loader size="sm" layout="inline" message="Loading API keys..." :showMessage="true" />
+        <Loader size="sm" layout="inline" message="Loading API keys..." :show-message="true" />
       </div>
       <div v-else-if="apiKeys.length === 0" class="py-8 px-4 text-center text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md">
         No API keys created yet.

@@ -27,7 +27,8 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { HomeIcon } from '@heroicons/vue/24/outline'
 import LocationIcon from '@/components/parts/LocationIcon.vue'
 
@@ -37,8 +38,9 @@ import LocationIcon from '@/components/parts/LocationIcon.vue'
  * 'tracking' - Tracking, but map not locked (Blue crosshair)
  * 'locked'   - Tracking and map locked to location (Blue crosshair with dot)
  */
+type LocationTrackingState = 'disabled' | 'tracking' | 'locked'
 
-export default {
+export default defineComponent({
   name: 'LocationControl',
   components: {
     HomeIcon,
@@ -46,14 +48,14 @@ export default {
   },
   props: {
     trackingState: {
-      type: String,
+      type: String as PropType<LocationTrackingState>,
       default: 'disabled',
-      validator: (value) => ['disabled', 'tracking', 'locked'].includes(value)
+      validator: (value: string) => ['disabled', 'tracking', 'locked'].includes(value)
     }
   },
   emits: ['toggle-location', 'go-home'],
   computed: {
-    locationButtonTitle() {
+    locationButtonTitle(): string {
       switch (this.trackingState) {
         case 'locked': return 'Map locked to location'
         case 'tracking': return 'Lock map to location'
@@ -62,5 +64,5 @@ export default {
       }
     }
   }
-}
+})
 </script>

@@ -17,7 +17,7 @@
     </p>
 
     <div v-if="oauthTokensLoading" class="flex items-center justify-center py-12 min-h-[120px]">
-      <Loader size="sm" layout="inline" message="Loading authorized applications..." :showMessage="true" />
+      <Loader size="sm" layout="inline" message="Loading authorized applications..." :show-message="true" />
     </div>
     <div v-else-if="oauthTokens.length === 0" class="py-8 px-4 text-center text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md">
       No authorized OAuth applications.

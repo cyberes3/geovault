@@ -29,6 +29,17 @@ export interface ImportFeatureGeometry {
     coordinates: unknown;
 }
 
+/** Details of which duplicate match produced the flags on `ImportFeatureItem`, set by `markDuplicateFeatures`. */
+export interface ImportFeatureDuplicateInfo {
+    source?: 'feature_store' | 'cross_queue';
+    match_type?: 'hash' | 'geometry';
+    feature_store_id?: number;
+    hash?: string;
+    global_index?: number;
+    queue_item_id?: number;
+    queue_item_filename?: string;
+}
+
 /**
  * A single feature on the import processing page (an instance of `GeoPoint`/`GeoLineString`/
  * `GeoPolygon`, or a plain object with the same shape while still being parsed).
@@ -43,7 +54,16 @@ export interface ImportFeatureItem {
     isCrossQueueHashDup?: boolean;
     isCrossQueueGeometryDup?: boolean;
     isDuplicate?: boolean;
-    duplicateInfo?: Record<string, unknown>;
+    duplicateInfo?: ImportFeatureDuplicateInfo;
+}
+
+/** A single processing log line, as sent by the backend over the import status WebSocket. */
+export interface ImportLogEntry {
+    id: number;
+    level?: number;
+    msg?: string;
+    source?: string;
+    timestamp?: string;
 }
 
 /** The 4 duplicate-detection lists sent by the backend for a page of features. */
@@ -55,12 +75,12 @@ export interface ImportDuplicateSets {
     indices: number[];
 }
 
-export class ImportTableItem {
+export interface ImportTableItem {
     id: number;
     original_filename: string;
     raw_file_hash: string;
     data: object;
-    log: any[];
+    log: ImportLogEntry[];
     timestamp: string;
     processing: boolean;
     feature_count: number;
@@ -74,25 +94,4 @@ export class ImportTableItem {
     deleting?: boolean;
     deleteProgress?: number;
     deleteError?: string;
-
-    constructor(data: any) {
-        this.id = data.id;
-        this.original_filename = data.original_filename;
-        this.raw_file_hash = data.raw_file_hash;
-        this.data = data.data;
-        this.log = data.log;
-        this.timestamp = data.timestamp;
-        this.processing = data.processing;
-        this.feature_count = data.feature_count;
-        this.imported = data.imported || false;
-        this.processing_failed = data.processing_failed || false;
-        this.queued = data.queued || false;
-        this.file_duplicate = data.file_duplicate || {
-            status: null,
-            originalFilename: null
-        };
-        this.deleting = data.deleting || false;
-        this.deleteProgress = data.deleteProgress || 0;
-        this.deleteError = data.deleteError || null;
-    }
 }

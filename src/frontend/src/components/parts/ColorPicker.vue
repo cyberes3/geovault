@@ -58,13 +58,14 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { SketchPicker } from 'vue-color'
 import 'vue-color/style.css'
 import { normalizeHex, hexToRgb, rgbToHsl } from '@/utils/color/pickerColorUtils'
 
-export default {
+export default defineComponent({
   name: 'ColorPickerDialog',
   components: {
     XMarkIcon,
@@ -94,41 +95,46 @@ export default {
         '#009AFF',
         '#A200FF'
       ],
-      colorValue: null,
-      pickerKey: 0
+      colorValue: '#000000' as string,
+      pickerKey: 0,
+      boundEscapeHandler: null as ((e: KeyboardEvent) => void) | null
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
         this.initializeFromColor(this.modelValue)
         // Prevent body scroll when dialog is open
         document.body.style.overflow = 'hidden'
         // Add escape key listener
-        document.addEventListener('keydown', this.handleEscapeKey)
-        this.$nextTick(() => {
+        this.boundEscapeHandler = (e: KeyboardEvent) => { this.handleEscapeKey(e) }
+        document.addEventListener('keydown', this.boundEscapeHandler)
+        void this.$nextTick(() => {
           this.disableHexInputSpellcheck()
-          setTimeout(() => this.disableHexInputSpellcheck(), 150)
+          setTimeout(() => { this.disableHexInputSpellcheck() }, 150)
         })
       } else {
         document.body.style.overflow = ''
         // Remove escape key listener
-        document.removeEventListener('keydown', this.handleEscapeKey)
+        if (this.boundEscapeHandler) {
+          document.removeEventListener('keydown', this.boundEscapeHandler)
+          this.boundEscapeHandler = null
+        }
       }
     },
-    modelValue(newVal) {
+    modelValue(newVal: string) {
       if (this.isOpen) {
         this.initializeFromColor(newVal)
       }
     },
     pickerKey() {
       if (this.isOpen) {
-        this.$nextTick(() => this.disableHexInputSpellcheck())
+        void this.$nextTick(() => { this.disableHexInputSpellcheck() })
       }
     }
   },
   methods: {
-    initializeFromColor(color) {
+    initializeFromColor(color: string) {
       const normalized = normalizeHex(color)
       // vue-color expects a hex string for modelValue
       this.colorValue = normalized
@@ -145,9 +151,9 @@ export default {
         this.pickerKey += 1
       }
     },
-    handleColorChange(color) {
+    handleColorChange(color: string | { hex: string }) {
       // color can be a string (hex) or an object with hex property
-      const hexColor = typeof color === 'string' ? color : (color.hex || color)
+      const hexColor = typeof color === 'string' ? color : color.hex
       const normalized = normalizeHex(hexColor)
       
       // Check if this is a problematic color that needs a forced re-render
@@ -167,9 +173,7 @@ export default {
       this.$emit('update:modelValue', hexColor)
     },
     handleOk() {
-      const hexColor = typeof this.colorValue === 'string' 
-        ? this.colorValue 
-        : (this.colorValue?.hex || this.modelValue)
+      const hexColor = this.colorValue
       this.$emit('update:modelValue', hexColor)
       this.$emit('confirm', hexColor)
       this.$emit('close')
@@ -180,7 +184,7 @@ export default {
       this.$emit('close')
     },
     disableHexInputSpellcheck() {
-      const wrapper = this.$refs.colorPickerWrapper
+      const wrapper = this.$refs.colorPickerWrapper as HTMLElement | undefined
       if (!wrapper) return
       const hexInput = wrapper.querySelector('.field_double input')
       if (hexInput) {
@@ -189,12 +193,12 @@ export default {
         hexInput.setAttribute('autocapitalize', 'off')
       }
     },
-    handleBackdropMouseDown(event) {
+    handleBackdropMouseDown(event: MouseEvent) {
       if (event.target === event.currentTarget) {
         this.handleCancel()
       }
     },
-    handleEscapeKey(event) {
+    handleEscapeKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && this.isOpen) {
         this.handleCancel()
       }
@@ -202,10 +206,12 @@ export default {
   },
   beforeUnmount() {
     // Clean up event listener if component is destroyed while modal is open
-    document.removeEventListener('keydown', this.handleEscapeKey)
+    if (this.boundEscapeHandler) {
+      document.removeEventListener('keydown', this.boundEscapeHandler)
+    }
     document.body.style.overflow = ''
   }
-}
+})
 </script>
 
 <style scoped>

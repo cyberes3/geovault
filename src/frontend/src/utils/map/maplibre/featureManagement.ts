@@ -16,35 +16,7 @@ import { detectPrimaryColor } from '@/utils/map/iconUtils';
 import { calculatePolygonCentroid, calculateLineCenter, calculatePolygonBottomCenter } from './labelPlacement.js';
 import { checkLabelBorderIntersection, getResolutionFromZoom } from './labelMarkers.js';
 import type { GeoJsonFeature, GeoJsonFeatureCollection } from '@/types/geospatial';
-
-/**
- * Known properties this module reads/writes on a feature, layered over the base
- * `Record<string, any>` properties bag (`GeoJsonFeature['properties']`) so these specific
- * accesses are properly typed instead of resolving to `any`.
- */
-interface MapFeatureProperties {
-    database_id?: string | number;
-    name?: string | null;
-    stroke?: string;
-    'stroke-width'?: number;
-    'marker-color'?: string;
-    _isLabelPoint?: boolean;
-    _isSmallFeatureReplacement?: boolean;
-    _originalFeatureId?: string | number;
-    _originalGeometryType?: string;
-    _isTooSmall?: boolean;
-    _elevation?: unknown;
-    _elevations?: unknown[];
-    coordinateProperties?: { times?: unknown };
-    _coordinateProperties?: { times?: unknown };
-    '_icon-id'?: string;
-    _detectedIconColor?: string;
-    _colorDetectionInProgress?: boolean;
-    [key: string]: unknown;
-}
-
-/** A rendered map feature, which (unlike the base `GeoJsonFeature` type) may carry a GeoJSON `id`. */
-type MapFeature = Omit<GeoJsonFeature, 'properties'> & { id?: string | number; properties: MapFeatureProperties };
+import type { MapFeature } from './mapFeatureTypes.js';
 
 // Web Mercator constant (matches OpenLayers)
 const WEB_MERCATOR_WORLD_SIZE = 156543.03392; // meters per pixel at zoom 0
@@ -569,7 +541,7 @@ export async function addFeaturesToMap(
 
     // Filter out points that are on polygon/line borders
     const allFeatures = Array.from(existingFeatures.values());
-    const filteredFeatures = filterPointsOnBorders(allFeatures) as MapFeature[];
+    const filteredFeatures = filterPointsOnBorders(allFeatures);
     const bordersChangedCount = filteredFeatures.length !== allFeatures.length;
 
     // Add label points only if labels are visible. This significantly improves performance

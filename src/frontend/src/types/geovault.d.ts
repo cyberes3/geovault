@@ -4,7 +4,8 @@
  * The canonical setup-context types live in `@/extensions/extensionContractTypes`; this file only
  * adds the ambient `Window.gv_core` global declaration extensions rely on at runtime.
  */
-import type { Component } from 'vue';
+import type { Component, MaybeRefOrGetter } from 'vue';
+import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import type { ExtensionApi } from '@/utils/extensionApi';
 import type { PlatformStateBridge } from '@/extensions/platformState';
 import type {
@@ -18,6 +19,8 @@ import type {
 import type { TileSourceCatalog, RasterTileUrls, OpenLayersBasemapFactory } from '@/utils/map/openlayers';
 import type { WebSocketHeartbeat, WebSocketHeartbeatOptions } from '@/assets/js/websocket/WebSocketHeartbeat';
 import type { GeolocationManager } from '@/utils/map/geolocationManager.js';
+import type { LocationMarkerCoords } from '@/utils/map/maplibre/locationMarker.js';
+import type { SetupCopyMapCoordinatesDeps } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
 
 export type {
     ExtensionMetadata,
@@ -92,13 +95,30 @@ declare global {
             realtimeSocket: unknown;
             WebSocketHeartbeat: new (options: WebSocketHeartbeatOptions) => WebSocketHeartbeat;
             isValidMapLngLatPair: (lon: number, lat: number) => boolean;
-            createUserLocationMarker: (map: unknown, coords: { latitude: number; longitude: number }) => unknown;
-            updateUserLocationMarker: (marker: unknown, coords: { latitude: number; longitude: number }) => void;
-            removeUserLocationMarker: (marker: unknown) => void;
-            setupCopyMapCoordinatesOnContextMenu: (map: unknown, deps?: { toast?: ToastService }) => () => void;
-            useDocumentTitle: (titleSource: string | (() => string) | { value: string }) => void;
+            createUserLocationMarker: (map: MapLibreMap | null | undefined, coords: LocationMarkerCoords | null | undefined) => Promise<Marker | null>;
+            updateUserLocationMarker: (marker: Marker | null | undefined, coords: LocationMarkerCoords | null | undefined) => void;
+            removeUserLocationMarker: (marker: Marker | null | undefined) => void;
+            setupCopyMapCoordinatesOnContextMenu: (map: MapLibreMap, deps?: SetupCopyMapCoordinatesDeps) => () => void;
+            useDocumentTitle: (titleSource: MaybeRefOrGetter<string>) => void;
         };
         GeoVault: GeoVaultGlobal;
+        /** Mirrors `window.gv_core.ol` once `loadOl()` resolves - see `lazyOl.js`. */
+        ol: unknown;
+        /** Mirrors `window.gv_core.maplibre` once `loadMaplibreGl()` resolves - see `lazyMaplibreGl.js`. */
+        maplibregl: unknown;
+        /** Vue ecosystem + shared UI parts, also exposed at top level so UMD extension builds that externalize these deps keep working. Prefer `window.gv_core.*` in core source. */
+        Vue: unknown;
+        VueRouter: unknown;
+        Vuex: unknown;
+        axios: unknown;
+        BaseButton: unknown;
+        BaseModal: unknown;
+        Loader: unknown;
+        LocationIcon: unknown;
+        ScrollingSelect: unknown;
+        SearchableCheckboxList: unknown;
+        ToggleButton: unknown;
+        SettingsInput: unknown;
     }
 }
 

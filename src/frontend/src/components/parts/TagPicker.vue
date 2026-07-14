@@ -113,21 +113,27 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js'
 import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
 import { getUserTags } from '@/api/services/featuresApi'
 
 // Shared cache for all TagPicker instances to avoid duplicate API calls
 // Cache expires after 5 seconds to ensure fresh data
-const tagCache = {
+const tagCache: {
+  tags: string[] | null
+  timestamp: number | null
+  fetchPromise: Promise<string[]> | null
+  CACHE_TTL: number
+} = {
   tags: null,
   timestamp: null,
   fetchPromise: null,
   CACHE_TTL: 5000 // 5 seconds
 }
 
-export default {
+export default defineComponent({
   name: 'TagPicker',
   components: {
     XMarkIcon,
@@ -135,15 +141,15 @@ export default {
   },
   props: {
     tags: {
-      type: Array,
+      type: Array as PropType<string[]>,
       required: true
     },
     availableTags: {
-      type: Array,
+      type: Array as PropType<string[]>,
       default: () => []
     },
     systemTags: {
-      type: Array,
+      type: Array as PropType<string[]>,
       default: () => []
     },
     disabled: {
@@ -168,32 +174,34 @@ export default {
       hasSystemTagsOverflow: false,
       systemTagError: '',
       systemTagErrorNoSystemTagsStr: 'System tags cannot be added as user tags.',
-      fetchedAvailableTags: [],
-      selectedSuggestionIndex: -1
+      fetchedAvailableTags: [] as string[],
+      selectedSuggestionIndex: -1,
+      boundCheckTagsOverflow: null as (() => void) | null,
+      boundCheckSystemTagsOverflow: null as (() => void) | null
     }
   },
   computed: {
     localTags: {
-      get() {
+      get(): string[] {
         return this.tags
       },
-      set(value) {
+      set(value: string[]) {
         this.$emit('update:tags', value)
       }
     },
-    effectiveAvailableTags() {
+    effectiveAvailableTags(): string[] {
       // Prefer freshly fetched tags when available, fall back to prop otherwise
       return this.fetchedAvailableTags.length > 0 ? this.fetchedAvailableTags : this.availableTags
     },
-    sortedSystemTags() {
+    sortedSystemTags(): string[] {
       // Sort system tags by priority (ascending: 1 first, then 2, ..., then 0), then alphabetically
       return sortTagsByPriority(this.systemTags)
     },
-    filteredTagSuggestions() {
+    filteredTagSuggestions(): string[] {
       // Filter out system tags from suggestions
       const userTags = this.effectiveAvailableTags.filter(tag => !isSystemTag(tag))
 
-      let suggestions;
+      let suggestions: string[];
       if (!this.tagInput.trim()) {
         suggestions = userTags.filter(tag => !this.localTags.includes(tag)).slice(0, 10)
       } else {
@@ -210,30 +218,36 @@ export default {
     }
   },
   mounted() {
-    this.fetchAvailableTags()
+    void this.fetchAvailableTags()
+    this.boundCheckTagsOverflow = () => { this.checkTagsOverflow() }
+    this.boundCheckSystemTagsOverflow = () => { this.checkSystemTagsOverflow() }
     // Add scroll listener for tags container
-    this.$nextTick(() => {
-      if (this.$refs.tagsContainer) {
-        this.$refs.tagsContainer.addEventListener('scroll', this.checkTagsOverflow)
+    void this.$nextTick(() => {
+      const tagsContainer = this.$refs.tagsContainer as HTMLElement | undefined
+      const systemTagsContainer = this.$refs.systemTagsContainer as HTMLElement | undefined
+      if (tagsContainer && this.boundCheckTagsOverflow) {
+        tagsContainer.addEventListener('scroll', this.boundCheckTagsOverflow)
       }
-      if (this.$refs.systemTagsContainer) {
-        this.$refs.systemTagsContainer.addEventListener('scroll', this.checkSystemTagsOverflow)
+      if (systemTagsContainer && this.boundCheckSystemTagsOverflow) {
+        systemTagsContainer.addEventListener('scroll', this.boundCheckSystemTagsOverflow)
       }
     })
   },
   beforeUnmount() {
     // Remove scroll listener
-    if (this.$refs.tagsContainer) {
-      this.$refs.tagsContainer.removeEventListener('scroll', this.checkTagsOverflow)
+    const tagsContainer = this.$refs.tagsContainer as HTMLElement | undefined
+    const systemTagsContainer = this.$refs.systemTagsContainer as HTMLElement | undefined
+    if (tagsContainer && this.boundCheckTagsOverflow) {
+      tagsContainer.removeEventListener('scroll', this.boundCheckTagsOverflow)
     }
-    if (this.$refs.systemTagsContainer) {
-      this.$refs.systemTagsContainer.removeEventListener('scroll', this.checkSystemTagsOverflow)
+    if (systemTagsContainer && this.boundCheckSystemTagsOverflow) {
+      systemTagsContainer.removeEventListener('scroll', this.boundCheckSystemTagsOverflow)
     }
   },
   watch: {
     tags: {
       handler() {
-        this.$nextTick(() => {
+        void this.$nextTick(() => {
           this.checkTagsOverflow()
         })
       },
@@ -241,7 +255,7 @@ export default {
     },
     systemTags: {
       handler() {
-        this.$nextTick(() => {
+        void this.$nextTick(() => {
           this.checkSystemTagsOverflow()
         })
       },
@@ -253,7 +267,7 @@ export default {
         this.selectedSuggestionIndex = -1
       }
     },
-    showTagSuggestions(newVal) {
+    showTagSuggestions(newVal: boolean) {
       // Reset selected index when suggestions are hidden
       if (!newVal) {
         this.selectedSuggestionIndex = -1
@@ -268,7 +282,7 @@ export default {
                           tagCache.timestamp !== null &&
                           (now - tagCache.timestamp) < tagCache.CACHE_TTL
 
-      if (isCacheValid) {
+      if (isCacheValid && tagCache.tags) {
         // Use cached tags immediately
         this.fetchedAvailableTags = tagCache.tags
         return
@@ -279,7 +293,7 @@ export default {
         try {
           const tags = await tagCache.fetchPromise
           this.fetchedAvailableTags = tags
-        } catch (error) {
+        } catch {
           // If the shared fetch fails, fall back to props
           this.fetchedAvailableTags = []
         }
@@ -287,7 +301,7 @@ export default {
       }
 
       // Start a new fetch and cache it
-      tagCache.fetchPromise = (async () => {
+      tagCache.fetchPromise = (async (): Promise<string[]> => {
         try {
           const data = await getUserTags()
 
@@ -300,13 +314,11 @@ export default {
             tagCache.fetchPromise = null
             return sortedTags
           } else {
-            // eslint-disable-next-line no-console
             console.error('Failed to fetch user tags: unexpected response shape')
             tagCache.fetchPromise = null
             return []
           }
         } catch (error) {
-          // eslint-disable-next-line no-console
           console.error('Error fetching user tags:', error)
           tagCache.fetchPromise = null
           return []
@@ -317,7 +329,7 @@ export default {
       try {
         const tags = await tagCache.fetchPromise
         this.fetchedAvailableTags = tags
-      } catch (error) {
+      } catch {
         this.fetchedAvailableTags = []
       }
     },
@@ -349,16 +361,17 @@ export default {
       this.showTagSuggestions = false
       this.selectedSuggestionIndex = -1
     },
-    handleTagInputBlur(event) {
+    handleTagInputBlur() {
       // Use setTimeout to allow click events on suggestions to fire first
       setTimeout(() => {
         // Check if the related target (what we're focusing on) is not within the tag input container
-        if (this.$refs.tagInputContainer && !this.$refs.tagInputContainer.contains(document.activeElement)) {
+        const tagInputContainer = this.$refs.tagInputContainer as HTMLElement | undefined
+        if (tagInputContainer && !tagInputContainer.contains(document.activeElement)) {
           this.showTagSuggestions = false
         }
       }, 200)
     },
-    validateAndAddTag(tag, closeDropdown = true) {
+    validateAndAddTag(tag: string, closeDropdown = true): boolean {
       // Clear any previous error
       this.systemTagError = ''
 
@@ -390,14 +403,15 @@ export default {
 
       return false
     },
-    selectTagSuggestion(tag) {
+    selectTagSuggestion(tag: string) {
       if (this.validateAndAddTag(tag, false)) {
         // Reset selected index
         this.selectedSuggestionIndex = -1
         // Keep dropdown open and refocus the input after a short delay to allow the blur event to complete
         setTimeout(() => {
-          if (this.$refs.tagInputContainer) {
-            const input = this.$refs.tagInputContainer.querySelector('input')
+          const tagInputContainer = this.$refs.tagInputContainer as HTMLElement | undefined
+          if (tagInputContainer) {
+            const input = tagInputContainer.querySelector('input')
             if (input) {
               input.focus()
               // Ensure suggestions remain visible
@@ -454,10 +468,11 @@ export default {
       this.scrollSuggestionIntoView()
     },
     scrollSuggestionIntoView() {
-      this.$nextTick(() => {
-        if (this.selectedSuggestionIndex >= 0 && this.$refs.suggestionsContainer) {
-          const buttons = this.$refs.suggestionsContainer.querySelectorAll('button')
-          if (buttons[this.selectedSuggestionIndex]) {
+      void this.$nextTick(() => {
+        const suggestionsContainer = this.$refs.suggestionsContainer as HTMLElement | undefined
+        if (this.selectedSuggestionIndex >= 0 && suggestionsContainer) {
+          const buttons = suggestionsContainer.querySelectorAll('button')
+          if (this.selectedSuggestionIndex < buttons.length) {
             buttons[this.selectedSuggestionIndex].scrollIntoView({
               behavior: 'smooth',
               block: 'nearest'
@@ -466,32 +481,32 @@ export default {
         }
       })
     },
-    removeTag(index) {
+    removeTag(index: number) {
       const newTags = [...this.localTags]
       newTags.splice(index, 1)
       this.localTags = newTags
-      this.$nextTick(() => {
+      void this.$nextTick(() => {
         this.checkTagsOverflow()
       })
     },
     checkTagsOverflow() {
-      this.$nextTick(() => {
-        if (this.$refs.tagsContainer) {
-          const container = this.$refs.tagsContainer
+      void this.$nextTick(() => {
+        const container = this.$refs.tagsContainer as HTMLElement | undefined
+        if (container) {
           this.hasTagsOverflow = container.scrollHeight > container.clientHeight
         }
       })
     },
     checkSystemTagsOverflow() {
-      this.$nextTick(() => {
-        if (this.$refs.systemTagsContainer) {
-          const container = this.$refs.systemTagsContainer
+      void this.$nextTick(() => {
+        const container = this.$refs.systemTagsContainer as HTMLElement | undefined
+        if (container) {
           this.hasSystemTagsOverflow = container.scrollHeight > container.clientHeight
         }
       })
     }
   }
-}
+})
 </script>
 
 <style scoped>

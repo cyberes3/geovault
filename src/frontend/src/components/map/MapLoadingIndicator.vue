@@ -7,16 +7,17 @@
       size="sm"
       layout="inline"
       message="Loading data..."
-      :showMessage="true"
+      :show-message="true"
       :bold="false"
     />
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import Loader from '@/components/parts/Loader.vue'
 
-export default {
+export default defineComponent({
   name: 'MapLoadingIndicator',
   components: {
     Loader
@@ -27,7 +28,7 @@ export default {
       required: true
     }
   }
-}
+})
 </script>
 
 

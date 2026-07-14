@@ -177,7 +177,7 @@
               @click="$emit('save-changes')"
               title="Save All Changes"
           >
-          <Loader v-if="isSaving" size="sm" layout="inline" :showMessage="false" color="white" />
+          <Loader v-if="isSaving" size="sm" layout="inline" :show-message="false" color="white" />
           <CheckIcon v-else-if="saveStatus === 'success'" class="w-4 h-4 mr-2" />
           <XMarkIcon v-else-if="saveStatus === 'error'" class="w-4 h-4 mr-2" />
           <ArrowDownTrayIcon v-else class="w-4 h-4 mr-2" />
@@ -192,7 +192,7 @@
             @click="$emit('perform-import')"
             title="Import Selected Features"
         >
-          <Loader v-if="isImporting" size="sm" layout="inline" :showMessage="false" color="white" />
+          <Loader v-if="isImporting" size="sm" layout="inline" :show-message="false" color="white" />
           <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
           <span class="inline-block" style="min-width: 140px; text-align: center;">
             {{ isImporting ? `Importing ${importableCount} Feature${importableCount === 1 ? '' : 's'}...` : `Import ${importableCount} Feature${importableCount === 1 ? '' : 's'}` }}
@@ -203,14 +203,23 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
 import ToggleButton from "@/components/parts/ToggleButton.vue";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
 import { ExclamationTriangleIcon, ClipboardDocumentIcon, ExclamationCircleIcon, DocumentIcon, ChevronLeftIcon, ChevronRightIcon, MapIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
-export default {
+/** Whether a queue item's raw file is a duplicate of another file already in the queue/library. */
+interface FileDuplicateInfo {
+  status: string | null;
+  originalFilename: string | null;
+}
+
+type SaveStatus = 'success' | 'error' | null;
+
+export default defineComponent({
   name: 'ImportControls',
   components: {
     Loader,
@@ -286,7 +295,7 @@ export default {
       required: true
     },
     gotoPageInput: {
-      type: Number,
+      type: Number as PropType<number | null>,
       default: null
     },
     showNoFeaturesMessage: {
@@ -294,7 +303,7 @@ export default {
       default: true
     },
     fileDuplicate: {
-      type: Object,
+      type: Object as PropType<FileDuplicateInfo>,
       default: () => ({
         status: null,
         originalFilename: null
@@ -313,7 +322,7 @@ export default {
       default: ''
     },
     saveStatus: {
-      type: String,
+      type: String as PropType<SaveStatus>,
       default: null
     },
     hideDuplicates: {
@@ -321,45 +330,46 @@ export default {
       default: false
     }
   },
+  emits: ['toggle-hide-duplicates', 'previous-page', 'next-page', 'jump-to-page', 'show-map-preview', 'save-changes', 'perform-import'],
   data() {
     return {
       gotoPageInputLocal: this.gotoPageInput
     };
   },
   computed: {
-    isValidPageNumber() {
-      return this.gotoPageInputLocal &&
+    isValidPageNumber(): boolean {
+      return this.gotoPageInputLocal !== null &&
           this.gotoPageInputLocal >= 1 &&
           this.gotoPageInputLocal <= this.totalPages &&
           this.gotoPageInputLocal !== this.currentPage;
     },
-    processingFailedTitle() {
+    processingFailedTitle(): string {
       return PROCESSING_MESSAGES.PROCESSING_FAILED_TITLE;
     },
-    shouldShowActions() {
+    shouldShowActions(): boolean {
       return (
           this.isLoadingPage ||
           this.isImported ||
           this.fileDuplicate.status === 'duplicate_in_queue' ||
-          (this.showNoFeaturesMessage && !this.isLoadingPage && this.importableCount === 0) ||
+          (this.showNoFeaturesMessage && this.importableCount === 0) ||
           this.hasFeatures
       );
     }
   },
   watch: {
-    gotoPageInput(newVal) {
+    gotoPageInput(newVal: number | null) {
       this.gotoPageInputLocal = newVal;
     }
   },
   methods: {
-    jumpToPage() {
+    jumpToPage(): void {
       if (this.isValidPageNumber) {
         this.$emit('jump-to-page', this.gotoPageInputLocal);
         this.gotoPageInputLocal = null;
       }
     }
   }
-}
+})
 </script>
 
 <style scoped>

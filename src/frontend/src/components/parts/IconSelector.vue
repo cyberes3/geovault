@@ -10,7 +10,7 @@
       <div class="flex items-center h-full">
         <div v-if="hasIcon" class="mr-2 flex items-center">
           <img
-            :src="resolveIconUrl(currentIconUrl)"
+            :src="resolveIconUrl(currentIconUrl ?? '')"
             alt="Current icon"
             class="w-8 h-8 object-contain border border-gray-300 rounded bg-white"
             @error="handleIconError"
@@ -77,13 +77,16 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import {APIHOST} from '@/config.js'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import { isSystemIcon, resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
 
+type IconSelectorSize = 'sm' | 'md'
+
 // Helper to normalize icon URLs for comparison (removes APIHOST prefix)
-function normalizeIconUrl(value) {
+function normalizeIconUrl(value: string | null | undefined): string | null {
   if (!value) return null
   let trimmed = String(value).trim()
   if (trimmed === '') return null
@@ -97,12 +100,12 @@ function normalizeIconUrl(value) {
 }
 
 // Helper to normalize color values for comparison
-function normalizeColor(value) {
+function normalizeColor(value: string | null | undefined): string | null {
   if (!value) return null
   return String(value).trim().toLowerCase() || null
 }
 
-export default {
+export default defineComponent({
   name: 'IconSelector',
   components: {
     IconPickerDialog
@@ -122,9 +125,9 @@ export default {
       default: 'Icon'
     },
     size: {
-      type: String,
+      type: String as PropType<IconSelectorSize>,
       default: 'md', // 'sm' or 'md'
-      validator: (value) => ['sm', 'md'].includes(value)
+      validator: (value: string) => ['sm', 'md'].includes(value)
     },
     showRemove: {
       type: Boolean,
@@ -160,8 +163,8 @@ export default {
   data() {
     return {
       isPickerOpen: false,
-      currentIconUrl: null,
-      previewUrl: null
+      currentIconUrl: null as string | null,
+      previewUrl: null as string | null
     }
   },
   computed: {
@@ -171,7 +174,7 @@ export default {
         : 'text-sm'
     },
     hasIcon() {
-      return !!(this.currentIconUrl && this.currentIconUrl.trim())
+      return !!this.currentIconUrl?.trim()
     },
     hasIconChanged() {
       const currentIcon = normalizeIconUrl(this.currentIconUrl)
@@ -187,14 +190,14 @@ export default {
   },
   watch: {
     iconUrl: {
-      handler(newValue) {
+      handler(newValue: string | null) {
         this.updateIconState(newValue)
       },
       immediate: true
     }
   },
   methods: {
-    updateIconState(iconUrl) {
+    updateIconState(iconUrl: string | null) {
       this.currentIconUrl = iconUrl
       this.previewUrl = null
     },
@@ -204,7 +207,7 @@ export default {
     resolveIconUrl,
     handleIconError,
 
-    resetIconState(iconUrl = null) {
+    resetIconState(iconUrl: string | null = null) {
       this.currentIconUrl = iconUrl
       this.previewUrl = null
     },
@@ -217,7 +220,7 @@ export default {
       this.isPickerOpen = false
     },
 
-    handleIconSelected(iconUrl) {
+    handleIconSelected(iconUrl: string) {
       this.currentIconUrl = iconUrl
       this.previewUrl = this.resolveIconUrl(iconUrl)
       
@@ -245,6 +248,6 @@ export default {
       }
     }
   }
-}
+})
 </script>
 

@@ -2,7 +2,7 @@
   <BaseModal
     :is-open="show"
     title="Import Process Guide"
-    max-width="3xl"
+    max-width="4xl"
     @close="close"
   >
     <div class="px-6 py-4">
@@ -209,10 +209,11 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import BaseModal from '@/components/parts/BaseModal.vue'
 
-export default {
+export default defineComponent({
   name: 'ImportHelpModal',
   components: {
     BaseModal
@@ -220,16 +221,16 @@ export default {
   props: {
     show: {
       type: Boolean,
-      required: true,
-      default: false
+      required: true
     }
   },
+  emits: ['close'],
   methods: {
     close() {
       this.$emit('close')
     }
   }
-}
+})
 </script>
 
 <style scoped>

@@ -38,7 +38,7 @@
           class="checkbox-custom"
           :checked="isSelected(item)"
           @click="onCheckboxClick(item, $event)"
-          @change="onCheckboxChange(item, $event.target.checked)"
+          @change="onCheckboxChange(item, ($event.target as HTMLInputElement).checked)"
         />
         <label
           :for="`item-${uid}-${String(getItemId(item))}`"
@@ -60,21 +60,23 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, watch } from 'vue';
+<script lang="ts">
+import { ref, computed, defineComponent, type PropType } from 'vue';
 import { MagnifyingGlassIcon, NoSymbolIcon } from '@heroicons/vue/24/outline';
 import Loader from './Loader.vue';
 
+type ItemId = string | number;
+
 let uidCounter = 0;
 
-export default {
+export default defineComponent({
   name: 'SearchableCheckboxList',
   components: { Loader, MagnifyingGlassIcon, NoSymbolIcon },
   props: {
-    items: { type: Array, default: () => [] },
-    modelValue: { type: Array, default: () => [] },
-    getItemId: { type: Function, required: true },
-    getItemLabel: { type: Function, required: true },
+    items: { type: Array as PropType<unknown[]>, default: () => [] },
+    modelValue: { type: Array as PropType<ItemId[]>, default: () => [] },
+    getItemId: { type: Function as PropType<(item: unknown) => ItemId>, required: true },
+    getItemLabel: { type: Function as PropType<(item: unknown) => string>, required: true },
     label: { type: String, default: '' },
     description: { type: String, default: '' },
     searchPlaceholder: { type: String, default: 'Search...' },
@@ -85,56 +87,56 @@ export default {
     showSelectedCount: { type: Boolean, default: true },
     selectedCountLabel: { type: String, default: 'Selected' },
     /** Optional: filter items by search query. Receives (query, item), return true to include. Default uses getItemLabel. */
-    filterFn: { type: Function, default: null },
+    filterFn: { type: Function as unknown as PropType<((query: string, item: unknown) => boolean) | null>, default: null },
     /**
      * Optional: when this returns a non-empty string, the row cannot be newly checked
      * (checkbox disabled while unchecked). Unchecking an already-selected item still works.
      */
-    getItemAddBlockedReason: { type: Function, default: null },
+    getItemAddBlockedReason: { type: Function as unknown as PropType<((item: unknown) => string) | null>, default: null },
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
     const uid = `scbl-${++uidCounter}`;
     const searchQuery = ref('');
 
-    const selectedIds = computed(() => props.modelValue || []);
+    const selectedIds = computed(() => props.modelValue);
 
     const filteredItems = computed(() => {
-      const list = props.items || [];
-      const q = (searchQuery.value || '').trim().toLowerCase();
+      const list = props.items;
+      const q = searchQuery.value.trim().toLowerCase();
       if (!q) return list;
-      if (props.filterFn && typeof props.filterFn === 'function') {
-        return list.filter((item) => props.filterFn(q, item));
+      if (props.filterFn) {
+        return list.filter((item) => props.filterFn?.(q, item));
       }
       return list.filter((item) => {
-        const label = (props.getItemLabel(item) || '').toLowerCase();
+        const label = props.getItemLabel(item).toLowerCase();
         return label.includes(q);
       });
     });
 
-    function isSelected(item) {
+    function isSelected(item: unknown): boolean {
       const id = props.getItemId(item);
       return selectedIds.value.some((s) => String(s) === String(id));
     }
 
-    function addBlockedReason(item) {
+    function addBlockedReason(item: unknown): string {
       const fn = props.getItemAddBlockedReason;
-      if (typeof fn !== 'function') return '';
+      if (!fn) return '';
       const r = fn(item);
       return typeof r === 'string' && r.trim() ? r.trim() : '';
     }
 
-    function isAddBlockedAndUnchecked(item) {
+    function isAddBlockedAndUnchecked(item: unknown): boolean {
       return Boolean(addBlockedReason(item)) && !isSelected(item);
     }
 
     /** Block toggling on when add is not allowed, without using the native disabled checkbox look. */
-    function onCheckboxClick(item, evt) {
+    function onCheckboxClick(item: unknown, evt: Event) {
       if (!isAddBlockedAndUnchecked(item)) return;
       evt.preventDefault();
     }
 
-    function onCheckboxChange(item, checked) {
+    function onCheckboxChange(item: unknown, checked: boolean) {
       const id = props.getItemId(item);
       const next = [...selectedIds.value];
       const idx = next.findIndex((s) => String(s) === String(id));
@@ -160,5 +162,5 @@ export default {
       onCheckboxChange,
     };
   },
-};
+});
 </script>

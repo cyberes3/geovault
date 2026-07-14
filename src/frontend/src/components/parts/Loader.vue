@@ -9,19 +9,22 @@
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
+<script setup lang="ts">
+import { computed, type PropType } from 'vue'
+
+type LoaderSize = 'xs' | 'sm' | 'md' | 'lg'
+type LoaderLayout = 'centered' | 'inline'
 
 const props = defineProps({
   size: {
-    type: String,
+    type: String as PropType<LoaderSize>,
     default: 'md',
-    validator: (value) => ['xs', 'sm', 'md', 'lg'].includes(value)
+    validator: (value: string) => ['xs', 'sm', 'md', 'lg'].includes(value)
   },
   layout: {
-    type: String,
+    type: String as PropType<LoaderLayout>,
     default: 'centered',
-    validator: (value) => ['centered', 'inline'].includes(value)
+    validator: (value: string) => ['centered', 'inline'].includes(value)
   },
   message: {
     type: String,
@@ -32,7 +35,7 @@ const props = defineProps({
     default: '#4B6BAB'
   },
   showMessage: {
-    type: Boolean,
+    type: Boolean as PropType<boolean | null>,
     default: null // Will be computed based on layout if not provided
   },
   bold: {
@@ -51,7 +54,7 @@ const shouldShowMessage = computed(() => {
 
 // Size classes
 const sizeClasses = computed(() => {
-  const sizes = {
+  const sizes: Record<LoaderSize, { border: string; message: string }> = {
     xs: {
       border: 'w-5 h-5 border-2',
       message: 'text-xs'

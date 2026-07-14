@@ -115,7 +115,7 @@
           <canvas ref="chartCanvas"></canvas>
           <!-- Loading Spinner Overlay -->
           <div v-if="isUpdatingChart" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <Loader size="sm" layout="centered" :showMessage="false" />
+            <Loader size="sm" layout="centered" :show-message="false" />
           </div>
         </div>
         <!-- Loading Spinner -->

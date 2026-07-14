@@ -260,7 +260,7 @@ import { useFeatureSelection } from '@/composables/useFeatureSelection';
 import { useMapShare } from '@/composables/useMapShare';
 import { useCollectionTagFilters } from '@/composables/useCollectionTagFilters';
 import { useMapGeolocation, type GeocodingResult } from '@/composables/useMapGeolocation';
-import type { LoadContext, LoadContextType, MapUserSettings } from '@/composables/mapPageTypes';
+import type { LoadContext, LoadContextType, MapUserSettings, MapViewContext } from '@/composables/mapPageTypes';
 import type { HiddenFeature } from '@/assets/js/store/modules/userSettings';
 import type { GeoJsonFeature } from '@/types/geospatial';
 
@@ -574,7 +574,7 @@ function getLocationDisplayName(): string {
     return mapGeolocation.getLocationDisplayName();
 }
 
-const viewContext = computed(() => {
+const viewContext = computed((): MapViewContext | null => {
     if (isPublicShareMode.value) {
         if (publicShareTag.value) {
             return { type: 'tag', name: publicShareTag.value, isPublicShare: true };
@@ -594,7 +594,7 @@ const viewContext = computed(() => {
 
     const tag = route.query.tag;
     if (tag) {
-        return { type: 'tag', name: Array.isArray(tag) ? tag[0] : tag, isPublicShare: false };
+        return { type: 'tag', name: (Array.isArray(tag) ? tag[0] : tag) ?? '', isPublicShare: false };
     }
 
     return null;

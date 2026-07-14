@@ -10,7 +10,7 @@
         <Loader
           size="sm"
           layout="inline"
-          :showMessage="false"
+          :show-message="false"
         />
       </div>
       <div class="mb-4">
@@ -380,10 +380,10 @@
 
     <!-- Delete Modal -->
     <TagDeleteModal
-        :isOpen="deleteModalOpen"
+        :is-open="deleteModalOpen"
         :tag="selectedTagForDelete"
-        :featureCount="getFeatureCountForTag(selectedTagForDelete)"
-        :isSystemTag="isSystemTag(selectedTagForDelete)"
+        :feature-count="getFeatureCountForTag(selectedTagForDelete)"
+        :is-system-tag="isSystemTag(selectedTagForDelete)"
         @close="closeDeleteModal"
         @delete-all-features="handleDeleteAllFeatures"
         @remove-tag-only="handleRemoveTagOnly"
@@ -391,10 +391,10 @@
 
     <!-- Bulk Operations Modal -->
     <BulkStylingModal
-        :isOpen="bulkOperationsModalOpen"
-        :currentBulkOps="currentBulkOperationsForSelectedTag"
+        :is-open="bulkOperationsModalOpen"
+        :current-bulk-ops="currentBulkOperationsForSelectedTag"
         :saving="bulkOperationsSaving"
-        :autoCloseOnApply="false"
+        :auto-close-on-apply="false"
         @close="closeBulkOperationsModal"
         @apply="handleApplyBulkOperations"
     />

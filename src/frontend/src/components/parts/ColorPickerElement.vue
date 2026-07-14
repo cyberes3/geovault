@@ -39,11 +39,14 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { ArrowPathIcon } from '@heroicons/vue/24/outline'
 import ColorPickerDialog from './ColorPicker.vue'
 
-export default {
+type ColorPickerElementSize = 'sm' | 'md'
+
+export default defineComponent({
   name: 'ColorPickerElement',
   components: {
     ArrowPathIcon,
@@ -79,9 +82,9 @@ export default {
       default: 'Reset to original color'
     },
     size: {
-      type: String,
+      type: String as PropType<ColorPickerElementSize>,
       default: 'md', // 'sm' or 'md'
-      validator: (value) => ['sm', 'md'].includes(value)
+      validator: (value: string) => ['sm', 'md'].includes(value)
     }
   },
   emits: ['update:modelValue', 'reset', 'change'],
@@ -118,16 +121,16 @@ export default {
     closeDialog() {
       this.isDialogOpen = false
     },
-    handleColorChange(value) {
+    handleColorChange() {
       // This is called during real-time updates in the dialog
       // We can emit this if needed, but typically we wait for confirm
     },
-    handleColorConfirm(value) {
+    handleColorConfirm(value: string) {
       this.$emit('update:modelValue', value)
       this.$emit('change', value)
       this.closeDialog()
     }
   }
-}
+})
 </script>
 

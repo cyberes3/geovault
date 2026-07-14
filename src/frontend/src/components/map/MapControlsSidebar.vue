@@ -41,8 +41,10 @@
       </div>
     </div>
 
-    <h2 class="hidden lg:block text-lg font-semibold text-gray-900 mb-4 lg:text-base lg:mb-3 xl:text-lg xl:mb-4">Map
-      Controls</h2>
+    <h2 class="hidden lg:block text-lg font-semibold text-gray-900 mb-4 lg:text-base lg:mb-3 xl:text-lg xl:mb-4">
+Map
+      Controls
+</h2>
 
     <!-- Layer Selection -->
     <div v-if="allowedOptions.mapLayer" class="mb-4 lg:mb-3 xl:mb-4">
@@ -53,7 +55,7 @@
       <select
           id="layer-select"
           :value="selectedLayer"
-          @change="$emit('layer-change', $event.target.value)"
+          @change="$emit('layer-change', ($event.target as HTMLSelectElement).value)"
           class="select-custom w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none lg:px-2 lg:py-1.5 lg:text-xs xl:px-3 xl:py-2 xl:text-sm"
       >
         <option
@@ -159,14 +161,25 @@
   </Teleport>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import {APIHOST} from '@/config.js'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import {ArrowDownTrayIcon, FolderIcon, MapPinIcon, ShareIcon, TagIcon, XMarkIcon} from '@heroicons/vue/24/outline'
 import HiddenFeaturesWidget from './HiddenFeaturesWidget.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
+import type { TileSource } from '@/api/services/tilesApi'
+import type { MapViewContext, UserLocation } from '@/composables/mapPageTypes'
+import type { HiddenFeature } from '@/assets/js/store/modules/userSettings'
 
-export default {
+interface MapControlsAllowedOptions {
+  mapLayer?: boolean;
+  featureStats?: boolean;
+  userLocation?: boolean;
+  [key: string]: unknown;
+}
+
+export default defineComponent({
   name: 'MapControlsSidebar',
   components: {
     BaseButton,
@@ -185,17 +198,15 @@ export default {
       required: true
     },
     tileSources: {
-      type: Array,
-      required: true,
+      type: Array as PropType<TileSource[]>,
       default: () => []
     },
     featureCount: {
       type: Number,
-      required: true,
       default: 0
     },
     userLocation: {
-      type: Object,
+      type: Object as PropType<UserLocation | null>,
       default: null
     },
     locationDisplayName: {
@@ -203,7 +214,7 @@ export default {
       default: ''
     },
     allowedOptions: {
-      type: Object,
+      type: Object as PropType<MapControlsAllowedOptions>,
       default: () => ({
         mapLayer: true,
         featureStats: true,
@@ -227,11 +238,11 @@ export default {
       default: false
     },
     viewContext: {
-      type: Object,
+      type: Object as PropType<MapViewContext | null>,
       default: null
     },
     hiddenFeatures: {
-      type: Array,
+      type: Array as PropType<HiddenFeature[]>,
       default: () => []
     },
     canManageHidden: {
@@ -253,7 +264,7 @@ export default {
   },
   emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change', 'hillshade-change', 'quick-point'],
   computed: {
-    sidebarRootClass() {
+    sidebarRootClass(): string {
       if (this.isMobileOpen) {
         return [
           'bg-white',
@@ -285,7 +296,7 @@ export default {
     }
   },
   watch: {
-    isMobileOpen(open) {
+    isMobileOpen(open: boolean) {
       if (open) {
         document.body.classList.add('overflow-hidden')
       } else {
@@ -305,6 +316,6 @@ export default {
       window.open(url, '_blank')
     }
   }
-}
+})
 </script>
 

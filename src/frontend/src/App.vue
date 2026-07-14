@@ -4,8 +4,7 @@
     <nav :class="['app-nav-shell bg-white shadow-sm border-b border-gray-200 relative', isMapRoute ? 'flex-shrink-0 h-16' : '']">
       <div class="w-full px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
-          
-          <!-- Logo & Hamburger Container -->
+<!-- Logo & Hamburger Container -->
           <div class="flex items-center justify-between w-full md:w-auto">
             <!-- Logo -->
             <div class="flex-shrink-0 flex items-center">
@@ -52,8 +51,7 @@
               mobileMenuOpen && userInfo ? 'mobile-menu-panel fixed inset-x-0 top-16 bottom-0 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200 max-h-[calc(100dvh-4rem)]' : 'hidden'
             ]"
           >
-            
-            <!-- Navigation Links -->
+<!-- Navigation Links -->
             <div v-if="userInfo" class="flex flex-col md:flex-row md:space-x-4 lg:space-x-6 xl:space-x-8 space-y-2 md:space-y-0 md:h-full md:items-center">
               <router-link
                   :class="[
@@ -120,12 +118,12 @@
                   v-for="link in extensionRegistryState.navLinks"
                   :key="link.path"
                   :class="[
-                    $route.path.startsWith(link.fullPath)
+                    $route.path.startsWith(link.fullPath ?? '')
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
-                  :to="link.fullPath"
+                  :to="link.fullPath ?? ''"
                   @click="closeMobileMenu"
               >
                 {{ link.label }}
@@ -154,7 +152,7 @@
                   <router-link
                       v-for="tool in sortedTools"
                       :key="tool.fullPath"
-                      :to="tool.fullPath"
+                      :to="tool.fullPath ?? ''"
                       @click="() => { closeToolsMenu(); closeMobileMenu(); }"
                       :class="[
                         $route.path === tool.fullPath
@@ -173,8 +171,7 @@
             <div class="flex items-center md:ml-auto md:h-full">
               <!-- Logged In -->
               <div v-if="userInfo" class="w-full md:w-auto relative md:ml-3 md:h-full md:flex md:items-center" ref="userMenuRef">
-                
-                <!-- Desktop Trigger -->
+<!-- Desktop Trigger -->
                 <button
                     class="hidden md:flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
                     @click="toggleUserMenu"
@@ -240,8 +237,7 @@
                 Sign In
               </a>
             </div>
-
-          </div>
+</div>
         </div>
       </div>
 
@@ -300,17 +296,20 @@
   </div>
 </template>
 
-<script>
-import {mapGetters} from "vuex";
+<script lang="ts">
+import { defineComponent } from 'vue'
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket";
 import {getCookie} from "@/utils/cookies";
 import {logout} from "@/api/services/authApi";
 import Loader from "@/components/parts/Loader.vue";
 import ToastContainer from "@/components/parts/ToastContainer.vue";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline';
-import { extensionRegistry } from "@/utils/extensionRegistry.js";
+import { extensionRegistry, type ExtensionTool } from "@/utils/extensionRegistry.js";
+import type { UserInfo } from "@/assets/js/types/store-types";
+import type { UserStatus } from "@/assets/js/auth";
+import type { RouteLocationNormalized } from 'vue-router';
 
-export default {
+export default defineComponent({
   name: 'App',
   components: {
     Loader,
@@ -326,43 +325,46 @@ export default {
       toolsMenuOpen: false,
       mobileMenuOpen: false,
       mobileMenuToggleLocked: false,
-      mobileMenuToggleLockTimer: null,
+      mobileMenuToggleLockTimer: null as ReturnType<typeof setTimeout> | null,
       userInfoLoading: true,
       loadingError: false,
       errorMessage: '',
+      boundHandleClickOutside: null as ((event: MouseEvent) => void) | null,
     }
   },
   computed: {
-    ...mapGetters('auth', ["userInfo"]),
+    userInfo(): UserInfo | null {
+      return (this.$store.getters as Record<string, unknown>)['auth/userInfo'] as UserInfo | null;
+    },
     extensionRegistryState() {
       return extensionRegistry;
     },
-    sortedTools() {
+    sortedTools(): ExtensionTool[] {
       return [...this.extensionRegistryState.tools].sort((a, b) => 
         a.label.localeCompare(b.label)
       );
     },
-    isToolActive() {
+    isToolActive(): boolean {
       return this.sortedTools.some(tool => this.$route.path === tool.fullPath);
     },
-    isMapRoute() {
+    isMapRoute(): boolean {
       const path = this.$route.path;
       if (path === '/map' || path === '/mapshare') return true;
-      const prefixes = this.$store.getters['extensionsRuntime/mapRoutePrefixes'] || [];
+      const prefixes = ((this.$store.getters as Record<string, unknown>)['extensionsRuntime/mapRoutePrefixes'] as string[] | undefined) ?? [];
       return prefixes.some(prefix => path.startsWith(prefix));
     },
-    isPublicShareRoute() {
+    isPublicShareRoute(): boolean {
       return this.isPublicSharePath(this.$route.path) || !!this.getPathnameMapShareId();
     }
   },
   watch: {
     userInfo: {
-      handler(newUserInfo, oldUserInfo) {
+      handler(newUserInfo: UserInfo | null, oldUserInfo: UserInfo | null) {
         // If user becomes unauthorized (userInfo is cleared), disconnect WebSocket and redirect
         if (oldUserInfo && !newUserInfo) {
           this.handleLogout();
           // Clear user settings when user logs out
-          this.$store.dispatch('userSettings/clearUserSettings');
+          void this.$store.dispatch('userSettings/clearUserSettings');
           // Redirect to login if not on a public share route
           const hash = window.location.hash || '';
           const pathFromHash = hash.replace(/^#/, '').split('?')[0];
@@ -374,13 +376,13 @@ export default {
         }
         // If user becomes authorized (userInfo is set), ensure WebSocket is connected
         if (newUserInfo && !realtimeSocket.isConnected) {
-          this.setupRealtimeConnection();
+          void this.setupRealtimeConnection();
         }
       },
       deep: true
     },
     $route: {
-      handler(to, from) {
+      handler(to: RouteLocationNormalized) {
         // Close mobile menu on route change
         this.closeMobileMenu();
 
@@ -398,13 +400,13 @@ export default {
         
         // Check admin access
         if (to.meta.requiresAdmin && this.userInfo && !this.userInfo.isSuperuser) {
-          this.$router.push('/');
+          void this.$router.push('/');
           return;
         }
 
         // When navigating to authenticated routes, ensure WebSocket is connected if user is authorized
         if (!this.isPublicShareRoute && this.userInfo && !realtimeSocket.isConnected) {
-          this.setupRealtimeConnection();
+          void this.setupRealtimeConnection();
         }
       },
       immediate: false
@@ -416,7 +418,7 @@ export default {
       immediate: true
     },
     mobileMenuOpen: {
-      handler(isOpen) {
+      handler(isOpen: boolean) {
         if (isOpen) this.userMenuOpen = false;
         this.syncDocumentOverlayState();
       },
@@ -424,9 +426,9 @@ export default {
     }
   },
   methods: {
-    getPathnameMapShareId() {
+    getPathnameMapShareId(): string | null {
       if (typeof window === 'undefined') return null;
-      const match = window.location.pathname.match(/^\/share\/map\/([0-9a-fA-F-]{36})\/?$/);
+      const match = /^\/share\/map\/([0-9a-fA-F-]{36})\/?$/.exec(window.location.pathname);
       return match ? match[1] : null;
     },
     ensurePathnameShareRedirectToHash() {
@@ -436,7 +438,7 @@ export default {
       if (hash.startsWith('#/mapshare')) return;
       window.location.replace(`/#/mapshare?id=${encodeURIComponent(shareId)}`);
     },
-    setMobileMenuGlobalState(isOpen) {
+    setMobileMenuGlobalState(isOpen: boolean) {
       if (typeof document === 'undefined') return;
       const method = isOpen ? 'add' : 'remove';
       document.body.classList[method]('gv-mobile-menu-open');
@@ -449,10 +451,10 @@ export default {
       document.documentElement.style.overflow = shouldLockScroll ? 'hidden' : '';
       this.setMobileMenuGlobalState(this.mobileMenuOpen);
     },
-    isPublicSharePath(path) {
+    isPublicSharePath(path: string): boolean {
       if (!path) return false;
       if (path === '/mapshare') return true;
-      const prefixes = this.$store.getters['extensionsRuntime/publicShareRoutePrefixes'] || [];
+      const prefixes = ((this.$store.getters as Record<string, unknown>)['extensionsRuntime/publicShareRoutePrefixes'] as string[] | undefined) ?? [];
       return prefixes.some(prefix => path.startsWith(prefix));
     },
     async checkAuth() {
@@ -467,9 +469,9 @@ export default {
       this.userInfoLoading = true;
       
       // Use centralized store action to fetch user info
-      const userStatus = await this.$store.dispatch('auth/fetchUserInfo');
+      const userStatus = await this.$store.dispatch('auth/fetchUserInfo') as UserStatus | null;
 
-      if (!userStatus || !userStatus.authorized) {
+      if (!userStatus?.authorized) {
         // User is not authorized (guest)
         if (isPublicShare) {
           // On public share routes, allow access without redirecting
@@ -482,11 +484,11 @@ export default {
       }
 
       this.userInfoLoading = false;
-      const userInfo = this.$store.getters['auth/userInfo'];
+      const userInfo = (this.$store.getters as Record<string, unknown>)['auth/userInfo'] as UserInfo | null;
 
       // Check admin access for initial route
-      if (this.$route.meta.requiresAdmin && !userInfo.isSuperuser) {
-        this.$router.push('/');
+      if (this.$route.meta.requiresAdmin && !userInfo?.isSuperuser) {
+        await this.$router.push('/');
       }
 
       // Parallelize loading user settings and config cache (for faster map initialization)
@@ -535,12 +537,12 @@ export default {
     addRealtimeListeners() {
       // Handle connection status
       realtimeSocket.on('connected', () => {
-        this.$store.dispatch('websocket/setConnected', true);
-        this.$store.dispatch('websocket/setReconnectAttempts', 0);
+        void this.$store.dispatch('websocket/setConnected', true);
+        void this.$store.dispatch('websocket/setReconnectAttempts', 0);
       });
 
       realtimeSocket.on('disconnected', () => {
-        this.$store.dispatch('websocket/setConnected', false);
+        void this.$store.dispatch('websocket/setConnected', false);
       });
     },
     handleLogout() {
@@ -556,8 +558,8 @@ export default {
         const csrfToken = getCookie('csrftoken');
         if (!csrfToken) {
           console.error('CSRF token not found');
-          this.$store.dispatch('auth/clearUserInfo');
-          this.$store.dispatch('userSettings/clearUserSettings');
+          await this.$store.dispatch('auth/clearUserInfo');
+          await this.$store.dispatch('userSettings/clearUserSettings');
           const loginUrl = window.location.origin + '/accounts/login/';
           window.location.replace(loginUrl);
           return;
@@ -565,15 +567,15 @@ export default {
 
         await logout();
 
-        this.$store.dispatch('auth/clearUserInfo');
-        this.$store.dispatch('userSettings/clearUserSettings');
+        await this.$store.dispatch('auth/clearUserInfo');
+        await this.$store.dispatch('userSettings/clearUserSettings');
 
         const loginUrl = window.location.origin + '/accounts/login/';
         window.location.replace(loginUrl);
       } catch (error) {
         console.error('Logout error:', error);
-        this.$store.dispatch('auth/clearUserInfo');
-        this.$store.dispatch('userSettings/clearUserSettings');
+        await this.$store.dispatch('auth/clearUserInfo');
+        await this.$store.dispatch('userSettings/clearUserSettings');
         const loginUrl = window.location.origin + '/accounts/login/';
         window.location.replace(loginUrl);
       }
@@ -607,11 +609,13 @@ export default {
     closeMobileMenu() {
       this.mobileMenuOpen = false;
     },
-    handleClickOutside(event) {
-      if (this.$refs.userMenuRef && !this.$refs.userMenuRef.contains(event.target)) {
+    handleClickOutside(event: MouseEvent) {
+      const userMenuRef = this.$refs.userMenuRef as HTMLElement | undefined;
+      const toolsMenuRef = this.$refs.toolsMenuRef as HTMLElement | undefined;
+      if (userMenuRef && !userMenuRef.contains(event.target as Node)) {
         this.userMenuOpen = false;
       }
-      if (this.$refs.toolsMenuRef && !this.$refs.toolsMenuRef.contains(event.target)) {
+      if (toolsMenuRef && !toolsMenuRef.contains(event.target as Node)) {
         this.toolsMenuOpen = false;
       }
     },
@@ -623,7 +627,7 @@ export default {
     // Wrap checkAuth with a timeout
     const timeoutDuration = 10000; // 10 seconds
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Connection timeout')), timeoutDuration);
+      setTimeout(() => { reject(new Error('Connection timeout')); }, timeoutDuration);
     });
 
     try {
@@ -633,11 +637,12 @@ export default {
       console.error('Error during initial load:', error);
       this.loadingError = true;
       this.userInfoLoading = false;
-      
+
       // Set appropriate error message based on error type
-      if (error.message === 'Connection timeout') {
+      const message = error instanceof Error ? error.message : '';
+      if (message === 'Connection timeout') {
         this.errorMessage = 'The connection to the server timed out.';
-      } else if (error.message && error.message.includes('fetch')) {
+      } else if (message.includes('fetch')) {
         this.errorMessage = 'Unable to reach the server.';
       } else {
         this.errorMessage = 'An unexpected error occurred.';
@@ -647,12 +652,15 @@ export default {
   mounted() {
     // WebSocket connection is managed globally and persists across page navigation
     // Add click outside listener for user menu
-    document.addEventListener('click', this.handleClickOutside);
+    this.boundHandleClickOutside = (event) => { this.handleClickOutside(event) };
+    document.addEventListener('click', this.boundHandleClickOutside);
   },
   beforeUnmount() {
     // Don't disconnect WebSocket here - let it stay connected across the app lifecycle
     // Remove click outside listener
-    document.removeEventListener('click', this.handleClickOutside);
+    if (this.boundHandleClickOutside) {
+      document.removeEventListener('click', this.boundHandleClickOutside);
+    }
     if (this.mobileMenuToggleLockTimer) {
       clearTimeout(this.mobileMenuToggleLockTimer);
       this.mobileMenuToggleLockTimer = null;
@@ -662,7 +670,7 @@ export default {
     document.documentElement.style.overflow = '';
     this.setMobileMenuGlobalState(false);
   }
-};
+});
 </script>
 
 <style scoped>

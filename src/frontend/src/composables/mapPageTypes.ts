@@ -56,4 +56,11 @@ export interface LoadContext {
     matchMode?: 'AND' | 'OR';
 }
 
+/** The tag/collection/feature context currently shown by the map, used by `MapControlsSidebar`'s header. */
+export interface MapViewContext {
+    type: 'tag' | 'collection' | 'feature';
+    name: string;
+    isPublicShare: boolean;
+}
+
 export type { UserLocation };

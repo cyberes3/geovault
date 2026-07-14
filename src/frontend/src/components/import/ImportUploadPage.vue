@@ -83,7 +83,7 @@
             <CloudArrowUpIcon class="mx-auto h-12 w-12 text-gray-400" />
             <div class="mt-4">
               <p class="text-sm text-gray-600">
-                <span class="font-medium text-blue-500 hover:text-blue-500 cursor-pointer" @click="$refs.fileInput.click()">Click to upload</span>
+                <span class="font-medium text-blue-500 hover:text-blue-500 cursor-pointer" @click="($refs.fileInput as HTMLInputElement)?.click()">Click to upload</span>
                 or drag and drop
               </p>
               <p class="text-xs text-gray-500 mt-1">KML, KMZ, or GPX files only (max 5MB)</p>
@@ -154,8 +154,7 @@
             </div>
             <div class="ml-3 flex-1">
               <p :class="messageTextClass" class="text-sm">{{ uploadMsg }}</p>
-
-            </div>
+</div>
           </div>
         </div>
 
@@ -163,8 +162,7 @@
         <div v-if="uploadResults.successful.length > 0 || uploadResults.failed.length > 0 || uploadResults.skipped.length > 0" class="mt-4 bg-gray-50 border border-gray-200 rounded-md p-6">
           <h4 class="text-sm font-medium text-gray-900 mb-3">Upload Details</h4>
           <div class="h-48 overflow-y-auto space-y-2">
-
-            <!-- Successful uploads -->
+<!-- Successful uploads -->
             <div v-if="uploadResults.successful.length > 0">
               <h5 class="text-xs font-medium text-green-600 mb-1">✓ Successful ({{ uploadResults.successful.length }})</h5>
               <div class="space-y-1 ml-2">
@@ -215,15 +213,15 @@
   </div>
 </template>
 
-<script>
-import {mapGetters} from "vuex"
-import {capitalizeFirstLetter} from "@/assets/js/string.js";
-import {ImportTableItem} from "@/assets/js/types/import-types"
+<script lang="ts">
+import { defineComponent } from 'vue'
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
-import {uploadImportFile} from "@/api/services/importApi";
-import {getApiErrorMessage} from "@/utils/apiError";
-import {SECURITY_CONFIG} from "@/config.js";
+import { uploadImportFile } from "@/api/services/importApi";
+import { getApiErrorMessage } from "@/utils/apiError";
+import { SECURITY_CONFIG } from "@/config.js";
+import type { AxiosProgressEvent } from 'axios';
+import type { NavigationGuardNext, RouteLocationNormalized } from 'vue-router';
 import { InformationCircleIcon, CloudArrowUpIcon, ArrowUpTrayIcon, XMarkIcon, DocumentIcon, CheckIcon } from '@heroicons/vue/24/outline';
 import {
   getFileTypeByExtension,
@@ -235,14 +233,44 @@ import {
   getFileTypeConfig
 } from "@/fileTypes.js";
 
-export default {
+interface FileValidationResult {
+  isValid: boolean;
+  error: string | null;
+}
+
+interface UploadResultItem {
+  filename: string;
+  message: string;
+  job_id?: string;
+}
+
+interface UploadResults {
+  successful: UploadResultItem[];
+  failed: UploadResultItem[];
+  skipped: UploadResultItem[];
+}
+
+/** Fields `beforeRouteEnter`'s `next(vm => ...)` callback needs on this component's instance. */
+interface ImportUploadPageInstance {
+  files: File[];
+  currentFileIndex: number;
+  totalFiles: number;
+  disableUpload: boolean;
+  uploadMsg: string;
+  uploadProgress: number;
+  overallProgress: number;
+  isDragOver: boolean;
+  uploadResults: UploadResults;
+  startAutoRefresh: () => void;
+}
+
+export default defineComponent({
+  name: 'ImportUploadPage',
   computed: {
-    ...mapGetters("auth", ["userInfo"]),
-    ...mapGetters("importQueue", ["importTable"]),
-    SECURITY_CONFIG() {
+    SECURITY_CONFIG(): typeof SECURITY_CONFIG {
       return SECURITY_CONFIG
     },
-    progressStatusText() {
+    progressStatusText(): string {
       if (this.uploadProgress === 0 && this.files.length === 0) {
         return "Select files to upload"
       } else if (this.uploadProgress === 0 && this.files.length > 0 && this.overallProgress === 0) {
@@ -270,7 +298,7 @@ export default {
         return `Upload complete (${this.currentFileIndex + 1}/${this.totalFiles})`
       }
     },
-    progressBarWidth() {
+    progressBarWidth(): number {
       if (this.overallProgress === 0 && this.files.length === 0) {
         return 0
       } else if (this.overallProgress === 0 && this.files.length > 0) {
@@ -283,7 +311,7 @@ export default {
         return 0
       }
     },
-    progressBarColor() {
+    progressBarColor(): string {
       if (this.isProcessing) {
         return "bg-blue-500"
       } else if (this.overallProgress === 100 && !this.uploadMsg) {
@@ -298,10 +326,10 @@ export default {
         return "bg-gray-300"
       }
     },
-    isSuccessMessage() {
+    isSuccessMessage(): boolean {
       return (this.overallProgress === 100 && !this.uploadMsg) || this.uploadMsg.toLowerCase().includes("success")
     },
-    messageBoxClass() {
+    messageBoxClass(): string {
       const msg = this.uploadMsg.toLowerCase()
       if (msg.includes("failed") || msg.includes("error") || msg.includes("invalid")) {
         return "bg-red-50 border border-red-200"
@@ -313,7 +341,7 @@ export default {
         return "bg-gray-50 border border-gray-200"
       }
     },
-    messageIconClass() {
+    messageIconClass(): string {
       const msg = this.uploadMsg.toLowerCase()
       if (msg.includes("failed") || msg.includes("error") || msg.includes("invalid")) {
         return "text-red-400"
@@ -325,7 +353,7 @@ export default {
         return "text-gray-400"
       }
     },
-    messageTextClass() {
+    messageTextClass(): string {
       const msg = this.uploadMsg.toLowerCase()
       if (msg.includes("failed") || msg.includes("error") || msg.includes("invalid")) {
         return "text-red-700"
@@ -337,7 +365,7 @@ export default {
         return "text-gray-700"
       }
     },
-    dropzoneClasses() {
+    dropzoneClasses(): string {
       if (this.isDragOver) {
         return "border-blue-600 bg-blue-50"
       } else if (this.files.length > 0) {
@@ -363,7 +391,7 @@ export default {
   },
   data() {
     return {
-      files: [],
+      files: [] as File[],
       currentFileIndex: 0,
       totalFiles: 0,
       disableUpload: false,
@@ -371,32 +399,34 @@ export default {
       uploadProgress: 0,
       overallProgress: 0,
       loadingQueueList: false,
-      refreshInterval: null,
+      refreshInterval: null as ReturnType<typeof setInterval> | null,
       isDragOver: false,
       isRefreshing: false,
       uploadResults: {
-        successful: [],
-        failed: [],
-        skipped: []
+        successful: [] as UploadResultItem[],
+        failed: [] as UploadResultItem[],
+        skipped: [] as UploadResultItem[]
       },
       // Track server processing state
       isProcessing: false,
-      processingStartTime: null,
+      processingStartTime: null as number | null,
       currentFileUploadComplete: false,
       allFilesComplete: false,
       // Help modal state
       showHelpModal: false,
+      boundHandleBeforeUnload: null as ((event: BeforeUnloadEvent) => string | undefined) | null,
     }
   },
   methods: {
-    onFileChange(e) {
-      const selectedFiles = Array.from(e.target.files)
+    onFileChange(e: Event): void {
+      const input = e.target as HTMLInputElement
+      const selectedFiles = Array.from(input.files ?? [])
       this.addFiles(selectedFiles)
-      e.target.value = "" // Reset the input value
+      input.value = "" // Reset the input value
     },
-    addFiles(selectedFiles) {
-      const validFiles = []
-      const errors = []
+    addFiles(selectedFiles: File[]): void {
+      const validFiles: File[] = []
+      const errors: string[] = []
 
       // Reset progress bar and messages when new files are chosen
       this.uploadProgress = 0
@@ -428,7 +458,7 @@ export default {
       this.files = [...this.files, ...validFiles]
       this.totalFiles = this.files.length
     },
-    validateFile(file) {
+    validateFile(file: File): FileValidationResult {
       // Skip frontend validation if disabled (for testing backend validation)
       if (!SECURITY_CONFIG.ENABLE_FRONTEND_VALIDATION) {
         return {isValid: true, error: null}
@@ -453,6 +483,9 @@ export default {
       // Check file size
       if (!validateFileSize(file, fileType)) {
         const config = getFileTypeConfig(fileType)
+        if (!config) {
+          return {isValid: false, error: 'Unsupported file type'}
+        }
         return {isValid: false, error: `${config.displayName} file too large. Maximum size: ${formatFileSize(config.maxSize)}`}
       }
 
@@ -468,28 +501,28 @@ export default {
 
       return {isValid: true, error: null}
     },
-    onDrop(e) {
+    onDrop(e: DragEvent): void {
       e.preventDefault()
       this.isDragOver = false
-      const droppedFiles = Array.from(e.dataTransfer.files)
+      const droppedFiles = Array.from(e.dataTransfer?.files ?? [])
       this.addFiles(droppedFiles)
     },
-    dragEnter(e) {
+    dragEnter(e: DragEvent): void {
       e.preventDefault()
       e.stopPropagation()
       this.isDragOver = true
     },
-    dragLeave(e) {
+    dragLeave(e: DragEvent): void {
       e.preventDefault()
       e.stopPropagation()
       // Only set isDragOver to false if we're leaving the dropzone entirely
       // Check if the related target is outside the dropzone
-      const dropzone = e.currentTarget
-      if (!dropzone.contains(e.relatedTarget)) {
+      const dropzone = e.currentTarget as Node
+      if (!dropzone.contains(e.relatedTarget as Node | null)) {
         this.isDragOver = false
       }
     },
-    removeFile(index) {
+    removeFile(index: number): void {
       this.files.splice(index, 1)
       this.totalFiles = this.files.length
       // Reset progress if no files left
@@ -499,7 +532,7 @@ export default {
         this.uploadMsg = ""
       }
     },
-    clearFiles() {
+    clearFiles(): void {
       this.files = []
       this.totalFiles = 0
       this.uploadProgress = 0
@@ -511,14 +544,14 @@ export default {
       this.currentFileUploadComplete = false
       this.allFilesComplete = false
     },
-    formatFileSize(bytes) {
+    formatFileSize(bytes: number): string {
       if (bytes === 0) return '0 Bytes'
       const k = 1024
       const sizes = ['Bytes', 'KB', 'MB', 'GB']
       const i = Math.floor(Math.log(bytes) / Math.log(k))
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     },
-    async upload() {
+    async upload(): Promise<void> {
       if (this.files.length === 0) {
         return
       }
@@ -556,9 +589,10 @@ export default {
             this.currentFileUploadComplete = false
 
             const data = await uploadImportFile(file, {
-              onUploadProgress: (progressEvent) => {
+              onUploadProgress: (progressEvent: AxiosProgressEvent) => {
                 // Calculate individual file progress
-                const fileProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                const total = progressEvent.total ?? progressEvent.loaded
+                const fileProgress = total > 0 ? Math.round((progressEvent.loaded * 100) / total) : 0
                 // Calculate overall progress: base progress + (current file progress / total files)
                 this.overallProgress = Math.round(baseProgress + (fileProgress / this.files.length))
                 this.uploadProgress = fileProgress
@@ -609,7 +643,7 @@ export default {
             // Handle individual file errors without stopping the entire process
             console.error(`Error uploading file ${file.name}:`, fileError)
 
-            let errorMessage = getApiErrorMessage(fileError, 'Upload failed')
+            const errorMessage = getApiErrorMessage(fileError, 'Upload failed')
 
             this.uploadResults.failed.push({
               filename: file.name,
@@ -635,7 +669,8 @@ export default {
         this.files = []
         this.totalFiles = 0
         this.currentFileIndex = 0
-        this.$refs.fileInput.value = ""
+        const fileInput = this.$refs.fileInput as HTMLInputElement | undefined
+        if (fileInput) fileInput.value = ""
 
         // Reset progress bar and status message after a short delay to show completion
         setTimeout(() => {
@@ -649,7 +684,7 @@ export default {
 
       this.disableUpload = false
     },
-    generateUploadSummary(results) {
+    generateUploadSummary(results: UploadResults): string {
       const {successful, failed, skipped} = results
       const total = successful.length + failed.length + skipped.length
 
@@ -657,7 +692,7 @@ export default {
         return "No files were processed"
       }
 
-      let summary = []
+      const summary: string[] = []
 
       // Add success count
       if (successful.length > 0) {
@@ -676,14 +711,15 @@ export default {
 
       return summary.join('. ') + '.'
     },
-    handleError(error) {
+    handleError(error: unknown): void {
       console.error("Upload failed:", error)
-      console.error("Error response:", error.response)
-      console.error("Error response data:", error.response?.data)
+      const response = (error as { response?: unknown } | undefined)?.response
+      console.error("Error response:", response)
+      console.error("Error response data:", (response as { data?: unknown } | undefined)?.data)
 
       this.uploadMsg = getApiErrorMessage(error, 'Upload failed. Please try again.')
     },
-    startAutoRefresh() {
+    startAutoRefresh(): void {
       // Clear any existing interval
       this.stopAutoRefresh()
 
@@ -692,13 +728,13 @@ export default {
         // WebSocket will handle real-time updates
       }, 1000)
     },
-    stopAutoRefresh() {
+    stopAutoRefresh(): void {
       if (this.refreshInterval) {
         clearInterval(this.refreshInterval)
         this.refreshInterval = null
       }
     },
-    handleBeforeUnload(event) {
+    handleBeforeUnload(event: BeforeUnloadEvent): string | undefined {
       // Check if upload is in progress
       if (this.disableUpload) {
         // Modern browsers ignore the custom message and show their own
@@ -706,51 +742,50 @@ export default {
         event.returnValue = 'Upload is currently in progress. Are you sure you want to leave this page?'
         return 'Upload is currently in progress. Are you sure you want to leave this page?'
       }
+      return undefined
     },
-  },
-  async created() {
-    // Initial fetch of the queue list
-    // WebSocket will handle real-time updates
   },
   async mounted() {
     // Start auto-refresh when component is mounted
     this.startAutoRefresh()
 
     // Add beforeunload event listener to prevent navigation during upload
-    window.addEventListener('beforeunload', this.handleBeforeUnload)
+    this.boundHandleBeforeUnload = (event) => this.handleBeforeUnload(event)
+    window.addEventListener('beforeunload', this.boundHandleBeforeUnload)
   },
   beforeUnmount() {
     // Stop auto-refresh when component is about to be destroyed
     this.stopAutoRefresh()
 
     // Remove beforeunload event listener
-    window.removeEventListener('beforeunload', this.handleBeforeUnload)
+    if (this.boundHandleBeforeUnload) window.removeEventListener('beforeunload', this.boundHandleBeforeUnload)
   },
-  beforeRouteEnter(to, from, next) {
-    next(async vm => {
-      vm.files = []
-      vm.currentFileIndex = 0
-      vm.totalFiles = 0
-      vm.disableUpload = false
-      vm.uploadMsg = ""
-      vm.uploadProgress = 0
-      vm.overallProgress = 0
-      vm.isDragOver = false
-      vm.uploadResults = {
+  beforeRouteEnter(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
+    next((vm) => {
+      const instance = vm as unknown as ImportUploadPageInstance
+      instance.files = []
+      instance.currentFileIndex = 0
+      instance.totalFiles = 0
+      instance.disableUpload = false
+      instance.uploadMsg = ""
+      instance.uploadProgress = 0
+      instance.overallProgress = 0
+      instance.isDragOver = false
+      instance.uploadResults = {
         successful: [],
         failed: [],
         skipped: []
       }
       // Start auto-refresh when entering the route
-      vm.startAutoRefresh()
+      instance.startAutoRefresh()
     })
   },
-  beforeRouteUpdate(to, from, next) {
+  beforeRouteUpdate(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
     // Start auto-refresh when updating to the same route
     this.startAutoRefresh()
     next()
   },
-  beforeRouteLeave(to, from, next) {
+  beforeRouteLeave(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
     // Stop auto-refresh when leaving the route
     this.stopAutoRefresh()
 
@@ -777,12 +812,11 @@ export default {
     }
 
     // Remove beforeunload event listener before navigating away
-    window.removeEventListener('beforeunload', this.handleBeforeUnload)
+    if (this.boundHandleBeforeUnload) window.removeEventListener('beforeunload', this.boundHandleBeforeUnload)
 
     next()
   },
-  watch: {},
-}
+})
 </script>
 
 <style scoped>

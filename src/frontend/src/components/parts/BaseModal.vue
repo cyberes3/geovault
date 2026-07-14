@@ -78,10 +78,13 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 
-export default {
+type ModalMaxWidth = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | '6xl'
+
+export default defineComponent({
   name: 'BaseModal',
   components: {
     XMarkIcon
@@ -96,9 +99,9 @@ export default {
       default: null
     },
     maxWidth: {
-      type: String,
+      type: String as PropType<ModalMaxWidth>,
       default: '2xl',
-      validator: (value) => ['sm', 'md', 'lg', 'xl', '2xl', '4xl', '6xl'].includes(value)
+      validator: (value: string) => ['sm', 'md', 'lg', 'xl', '2xl', '4xl', '6xl'].includes(value)
     },
     closeOnBackdrop: {
       type: Boolean,
@@ -136,6 +139,11 @@ export default {
     }
   },
   emits: ['close'],
+  data() {
+    return {
+      boundEscapeHandler: null as ((e: KeyboardEvent) => void) | null
+    }
+  },
   computed: {
     modalShellClass() {
       // Nav is h-16 (4rem); 1rem margin below nav and 1rem above viewport bottom
@@ -197,8 +205,8 @@ export default {
       }
       return 'flex-1 overflow-y-auto bg-white min-h-0'
     },
-    maxWidthClass() {
-      const widthMap = {
+    maxWidthClass(): string {
+      const widthMap: Record<ModalMaxWidth, string> = {
         sm: 'sm:max-w-sm',
         md: 'sm:max-w-md',
         lg: 'sm:max-w-lg',
@@ -207,37 +215,37 @@ export default {
         '4xl': 'sm:max-w-4xl',
         '6xl': 'sm:max-w-6xl'
       }
-      return widthMap[this.maxWidth] || 'sm:max-w-2xl'
+      return widthMap[this.maxWidth]
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
         // Prevent background scroll
         document.body.classList.add('overflow-hidden')
         // Document-level ESC so it works when focus is inside modal content
-        this._boundEscape = (e) => {
+        this.boundEscapeHandler = (e: KeyboardEvent) => {
           if (e.key === 'Escape') this.handleEscapeKey(e)
         }
-        document.addEventListener('keydown', this._boundEscape)
+        document.addEventListener('keydown', this.boundEscapeHandler)
         // Move modal to body to avoid layout offsets
-        this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el)
+        void this.$nextTick(() => {
+          if (this.$el && (this.$el as Node).parentNode !== document.body) {
+            document.body.appendChild(this.$el as Node)
           }
           // Focus the modal backdrop for keyboard navigation
-          if (this.$refs.modalBackdrop) {
-            this.$refs.modalBackdrop.focus()
-          }
+          const modalBackdrop = this.$refs.modalBackdrop as HTMLElement | undefined
+          modalBackdrop?.focus()
           // Snap scroll to top when modal opens
-          if (this.$refs.contentScroll) {
-            this.$refs.contentScroll.scrollTop = 0
+          const contentScroll = this.$refs.contentScroll as HTMLElement | undefined
+          if (contentScroll) {
+            contentScroll.scrollTop = 0
           }
         })
       } else {
-        if (this._boundEscape) {
-          document.removeEventListener('keydown', this._boundEscape)
-          this._boundEscape = null
+        if (this.boundEscapeHandler) {
+          document.removeEventListener('keydown', this.boundEscapeHandler)
+          this.boundEscapeHandler = null
         }
         // Restore background scroll
         document.body.classList.remove('overflow-hidden')
@@ -253,24 +261,25 @@ export default {
   mounted() {
     // If modal is already open when component mounts, add ESC listener and move to body
     if (this.isOpen) {
-      this._boundEscape = (e) => {
+      this.boundEscapeHandler = (e: KeyboardEvent) => {
         if (e.key === 'Escape') this.handleEscapeKey(e)
       }
-      document.addEventListener('keydown', this._boundEscape)
-      this.$nextTick(() => {
-        if (this.$el && this.$el.parentNode !== document.body) {
-          document.body.appendChild(this.$el)
+      document.addEventListener('keydown', this.boundEscapeHandler)
+      void this.$nextTick(() => {
+        if (this.$el && (this.$el as Node).parentNode !== document.body) {
+          document.body.appendChild(this.$el as Node)
         }
-        if (this.$refs.contentScroll) {
-          this.$refs.contentScroll.scrollTop = 0
+        const contentScroll = this.$refs.contentScroll as HTMLElement | undefined
+        if (contentScroll) {
+          contentScroll.scrollTop = 0
         }
       })
     }
   },
   beforeUnmount() {
-    if (this._boundEscape) {
-      document.removeEventListener('keydown', this._boundEscape)
-      this._boundEscape = null
+    if (this.boundEscapeHandler) {
+      document.removeEventListener('keydown', this.boundEscapeHandler)
+      this.boundEscapeHandler = null
     }
     // Clean up: restore background scroll
     document.body.classList.remove('overflow-hidden')
@@ -279,12 +288,12 @@ export default {
     handleClose() {
       this.$emit('close')
     },
-    handleBackdropMouseDown(event) {
+    handleBackdropMouseDown(event: MouseEvent) {
       if (this.closeOnBackdrop && event.target === event.currentTarget) {
         this.handleClose()
       }
     },
-    handleEscapeKey(event) {
+    handleEscapeKey(event: KeyboardEvent) {
       if (!this.closeOnEscape || event.key !== 'Escape') return
       // Only close if this modal is the topmost. Use all [role="dialog"] so when e.g. ColorPicker
       // is open on top of us, it is the last dialog and we don't close; first ESC closes the picker,
@@ -295,6 +304,6 @@ export default {
       this.handleClose()
     }
   }
-}
+})
 </script>
 

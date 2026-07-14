@@ -44,10 +44,11 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { CheckIcon, DocumentIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'ImportSummaryStats',
   components: {
     CheckIcon,
@@ -72,6 +73,6 @@ export default {
       default: false
     }
   }
-};
+});
 </script>
 

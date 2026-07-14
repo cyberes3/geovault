@@ -237,14 +237,12 @@
   </div>
 </template>
 
-<script>
-/**
- * @typedef {{ by_type: Record<string, number>, total_storage_bytes: number }} StorageUsageResponse
- */
-import {mapGetters} from "vuex";
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { getStorageUsage } from "@/api/services/userApi";
-import { getAppReleases, listExtensions } from "@/api/services/extensionsApi";
+import { getAppReleases, listExtensions, type ExtensionMetadata } from "@/api/services/extensionsApi";
 import BaseButton from "../parts/BaseButton.vue";
+import type { UserInfo } from "@/assets/js/types/store-types";
 import {
   ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
@@ -254,33 +252,32 @@ import {
   ArrowDownOnSquareIcon,
 } from "@heroicons/vue/24/outline";
 
-export default {
-  computed: {
-    ...mapGetters("auth", ["userInfo"]),
-    ...mapGetters("extensionsRuntime", ["deferredPrompt"]),
-    uploaderApkUrl() {
-      return this.appReleases?.uploader_url ? '/api/apps/download/uploader/' : this.releasesPageUrl;
-    },
-    placesApkUrl() {
-      return this.appReleases?.places_url ? '/api/apps/download/places/' : this.releasesPageUrl;
-    },
-    trackerApkUrl() {
-      return this.appReleases?.tracker_url ? '/api/apps/download/tracker/' : this.releasesPageUrl;
-    },
-    pwaMintEnabled() {
-      return this.extensions.some(ext => ext.name === 'pwa_mint');
-    },
-    isDesktop() {
-      if (typeof navigator === 'undefined') return true;
-      return !/Mobile|Android/i.test(navigator.userAgent);
-    },
-    canInstallPWA() {
-      return !!this.deferredPrompt;
-    },
-    releasesPageUrl() {
-      return this.appReleases?.releases_page_url;
-    },
-  },
+interface StorageUsageResponse {
+  by_type: Record<string, number>;
+  total_storage_bytes: number;
+}
+
+interface AppReleasesResponse {
+  uploader_url: string | null;
+  places_url: string | null;
+  tracker_url: string | null;
+  releases_page_url: string;
+}
+
+/** Chrome's `beforeinstallprompt` event, captured by `extensionsRuntime` and replayed on demand. */
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
+/** Narrow view of root getters this component reads by namespaced key. */
+interface RootGetters {
+  'auth/userInfo': UserInfo | null;
+  'extensionsRuntime/deferredPrompt': BeforeInstallPromptEvent | null;
+}
+
+export default defineComponent({
+  name: 'DashboardPage',
   components: {
     BaseButton,
     DevicePhoneMobileIcon,
@@ -292,16 +289,45 @@ export default {
   },
   data() {
     return {
-      storageBytes: null,
+      storageBytes: null as number | null,
       storageLoading: false,
       storageError: false,
-      appReleases: null,
-      extensions: [],
+      appReleases: null as AppReleasesResponse | null,
+      extensions: [] as ExtensionMetadata[],
     };
   },
+  computed: {
+    userInfo(): UserInfo | null {
+      return (this.$store.getters as RootGetters)['auth/userInfo'];
+    },
+    deferredPrompt(): BeforeInstallPromptEvent | null {
+      return (this.$store.getters as RootGetters)['extensionsRuntime/deferredPrompt'];
+    },
+    uploaderApkUrl(): string | undefined {
+      return this.appReleases?.uploader_url ? '/api/apps/download/uploader/' : this.releasesPageUrl;
+    },
+    placesApkUrl(): string | undefined {
+      return this.appReleases?.places_url ? '/api/apps/download/places/' : this.releasesPageUrl;
+    },
+    trackerApkUrl(): string | undefined {
+      return this.appReleases?.tracker_url ? '/api/apps/download/tracker/' : this.releasesPageUrl;
+    },
+    pwaMintEnabled(): boolean {
+      return this.extensions.some(ext => ext.name === 'pwa_mint');
+    },
+    isDesktop(): boolean {
+      return !/Mobile|Android/i.test(navigator.userAgent);
+    },
+    canInstallPWA(): boolean {
+      return !!this.deferredPrompt;
+    },
+    releasesPageUrl(): string | undefined {
+      return this.appReleases?.releases_page_url;
+    },
+  },
   methods: {
-    formatStorage(bytes) {
-      if (bytes === null || bytes === undefined) {
+    formatStorage(bytes: number | null): string {
+      if (bytes === null) {
         return '0 B'
       }
 
@@ -319,21 +345,20 @@ export default {
         return bytes + ' B'
       }
     },
-    async fetchStorageUsage() {
+    async fetchStorageUsage(): Promise<void> {
       this.storageLoading = true
       this.storageError = false
 
       // Create AbortController for timeout handling
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      const timeoutId = setTimeout(() => { controller.abort() }, 10000) // 10 second timeout
 
       try {
-        /** @type {StorageUsageResponse} */
-        const data = await getStorageUsage(controller.signal)
+        const data = (await getStorageUsage(controller.signal)) as StorageUsageResponse
 
         clearTimeout(timeoutId)
 
-        this.storageBytes = data.total_storage_bytes ?? 0
+        this.storageBytes = data.total_storage_bytes
         this.storageError = false
       } catch (error) {
         clearTimeout(timeoutId)
@@ -347,44 +372,41 @@ export default {
         this.storageLoading = false
       }
     },
-    async fetchAppReleases() {
+    async fetchAppReleases(): Promise<void> {
       try {
-        this.appReleases = await getAppReleases();
-      } catch (_) {
+        this.appReleases = (await getAppReleases()) as AppReleasesResponse;
+      } catch {
         // Keep appReleases null; computed URLs fall back to releases page
       }
     },
-    async fetchExtensions() {
+    async fetchExtensions(): Promise<void> {
       try {
         this.extensions = await listExtensions();
-      } catch (_) {
+      } catch {
         this.extensions = [];
       }
     },
-    async installPwa() {
+    async installPwa(): Promise<void> {
       const promptEvent = this.deferredPrompt;
       if (!promptEvent) return;
 
       // Show the install prompt
-      promptEvent.prompt();
+      void promptEvent.prompt();
 
       // Wait for the user to respond to the prompt
       const { outcome } = await promptEvent.userChoice;
       console.log(`PWA: User response to install prompt: ${outcome}`);
 
       // We've used the prompt, and can't use it again, clear it from state
-      this.$store.dispatch("extensionsRuntime/setDeferredPrompt", null);
+      void this.$store.dispatch("extensionsRuntime/setDeferredPrompt", null);
     },
-  },
-  async created() {
   },
   async mounted() {
     await this.fetchStorageUsage();
     await this.fetchAppReleases();
     await this.fetchExtensions();
   },
-  watch: {},
-}
+})
 </script>
 
 <style scoped>

@@ -149,10 +149,12 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { marked } from 'marked'
 import { length } from '@turf/length'
 import { area } from '@turf/area'
+import { feature as turfFeature } from '@turf/helpers'
 import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon, ShareIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import { formatDate } from '@/utils/dateUtils'
@@ -160,8 +162,9 @@ import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 import AreaIcon from '@/components/icons/AreaIcon.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js'
+import type { MapPageFeature } from '@/composables/mapPageTypes'
 
-export default {
+export default defineComponent({
   name: 'FeatureInfoBox',
   components: {
     ChartBarIcon,
@@ -176,7 +179,7 @@ export default {
   },
   props: {
     feature: {
-      type: Object,
+      type: Object as PropType<MapPageFeature | null>,
       default: null
     },
     showDownloadButton: {
@@ -201,58 +204,44 @@ export default {
     return {
       shouldScroll: false,
       showTooltip: false,
-      tooltipStyle: {},
-      touchTimeout: null
+      tooltipStyle: {} as Record<string, string>,
+      touchTimeout: null as ReturnType<typeof setTimeout> | null
     }
   },
   computed: {
-    isLineOrTrack() {
+    isLineOrTrack(): boolean {
       if (!this.feature) return false
       // Pure GeoJSON features only
-      const geometry = this.feature.geometry
-      if (!geometry) return false
-      const geomType = geometry.type
+      const geomType = this.feature.geometry.type
       return geomType === 'LineString' || geomType === 'MultiLineString'
     },
-    isPointOrMultiPoint() {
+    isPointOrMultiPoint(): boolean {
       if (!this.feature) return false
       // Pure GeoJSON features only
-      const geometry = this.feature.geometry
-      if (!geometry) return false
-      const geomType = geometry.type
+      const geomType = this.feature.geometry.type
       return geomType === 'Point' || geomType === 'MultiPoint'
     },
-    isPolygon() {
+    isPolygon(): boolean {
       if (!this.feature) return false
       // Pure GeoJSON features only
-      const geometry = this.feature.geometry
-      if (!geometry) return false
-      const geomType = geometry.type
+      const geomType = this.feature.geometry.type
       return geomType === 'Polygon' || geomType === 'MultiPolygon'
     },
-    featureLength() {
-      if (!this.isLineOrTrack) return null
-      // Pure GeoJSON features only
-      const geometry = this.feature.geometry
-      if (!geometry) return null
-      
+    featureLength(): number | null {
+      if (!this.isLineOrTrack || !this.feature) return null
       try {
         // Use Turf.js to calculate length in meters
-        return length(geometry, { units: 'meters' })
+        return length(turfFeature(this.feature.geometry), { units: 'meters' })
       } catch (error) {
         console.error('Error calculating feature length:', error)
         return null
       }
     },
-    featureArea() {
-      if (!this.isPolygon) return null
-      // Pure GeoJSON features only
-      const geometry = this.feature.geometry
-      if (!geometry) return null
-      
+    featureArea(): number | null {
+      if (!this.isPolygon || !this.feature) return null
       try {
         // Use Turf.js to calculate area in square meters
-        return area(geometry)
+        return area(this.feature.geometry)
       } catch (error) {
         console.error('Error calculating feature area:', error)
         return null
@@ -272,28 +261,30 @@ export default {
   },
   methods: {
     checkNameOverflow() {
-      this.$nextTick(() => {
-        if (this.$refs.nameElement && this.$refs.nameContainer) {
+      void this.$nextTick(() => {
+        const nameElement = this.$refs.nameElement as HTMLElement | undefined
+        const nameContainer = this.$refs.nameContainer as HTMLElement | undefined
+        if (nameElement && nameContainer) {
           // Get the width of one instance of the text
-          const nameItem = this.$refs.nameElement.querySelector('.ticker-item')
+          const nameItem = nameElement.querySelector<HTMLElement>('.ticker-item')
           if (nameItem) {
             const nameWidth = nameItem.offsetWidth
-            const containerWidth = this.$refs.nameContainer.offsetWidth
+            const containerWidth = nameContainer.offsetWidth
             this.shouldScroll = nameWidth > containerWidth
 
             // Set CSS variable for animation duration based on text length
             if (this.shouldScroll) {
               const duration = Math.max(8, nameWidth / 30) // ~30px per second (slower)
-              this.$refs.nameElement.style.setProperty('--ticker-duration', `${duration}s`)
+              nameElement.style.setProperty('--ticker-duration', `${duration}s`)
             }
           }
         }
       })
     },
-    handleNameHover(event) {
+    handleNameHover() {
       if (this.shouldScroll) {
         this.showTooltip = true
-        this.updateTooltipPosition(event)
+        this.updateTooltipPosition()
       }
     },
     handleNameLeave() {
@@ -311,8 +302,8 @@ export default {
     handleNameTouchEnd() {
       // Don't hide immediately to give user time to read
     },
-    updateTooltipPosition(event) {
-      const container = this.$refs.nameContainer
+    updateTooltipPosition() {
+      const container = this.$refs.nameContainer as HTMLElement | undefined
       if (container) {
         const rect = container.getBoundingClientRect()
         // Position relative to the name container
@@ -324,35 +315,33 @@ export default {
         }
       }
     },
-    getFeatureName(feature) {
+    getFeatureName(feature: MapPageFeature): string {
       // Pure GeoJSON features only
-      const properties = feature.properties || {}
-      return properties.name || ''
+      const properties = feature.properties
+      return (properties.name as string | undefined) ?? ''
     },
-    displayName(feature) {
+    displayName(feature: MapPageFeature): string {
       // Return the feature name or 'Untitled Feature' for display
       const name = this.getFeatureName(feature)
       return name || 'Untitled Feature'
     },
-    getFeatureGeometryType(feature) {
+    getFeatureGeometryType(feature: MapPageFeature): string {
       // Pure GeoJSON features only
-      const geometry = feature.geometry
-      if (!geometry) return 'Unknown'
-      return geometry.type
+      return feature.geometry.type
     },
-    getFeatureDescription(feature) {
+    getFeatureDescription(feature: MapPageFeature): string | null {
       // Pure GeoJSON features only
-      const properties = feature.properties || {}
-      return properties.description || null
+      const properties = feature.properties
+      return (properties.description as string | undefined) ?? null
     },
-    getFeatureTags(feature) {
+    getFeatureTags(feature: MapPageFeature): { userTags: string[]; systemTags: string[] } {
       // Pure GeoJSON features only
-      const properties = feature.properties || {}
-      const userTags = Array.isArray(properties.tags)
-        ? properties.tags.filter(tag => tag && tag.trim() !== '')
+      const properties = feature.properties
+      const userTags: string[] = Array.isArray(properties.tags)
+        ? (properties.tags as unknown[]).filter((tag): tag is string => typeof tag === 'string' && tag.trim() !== '')
         : []
-      const systemTags = Array.isArray(properties.system_tags)
-        ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
+      const systemTags: string[] = Array.isArray(properties.system_tags)
+        ? (properties.system_tags as unknown[]).filter((tag): tag is string => typeof tag === 'string' && tag.trim() !== '')
         : []
       // Sort system tags by priority, user tags alphabetically
       return {
@@ -360,22 +349,22 @@ export default {
         systemTags: sortTagsByPriority(systemTags)
       }
     },
-    renderMarkdown(markdown) {
+    renderMarkdown(markdown: string | null): string {
       if (!markdown) return ''
-      return marked.parse(markdown)
+      return marked.parse(markdown, { async: false })
     },
-    getFeatureElevation(feature) {
+    getFeatureElevation(feature: MapPageFeature | null): number | null {
       if (!feature) return null
       
       // First, check if elevation is stored as _elevation property (preserved from coordinates)
       const properties = feature.properties
-      if (properties && properties._elevation != null) {
-        return properties._elevation // Elevation is in meters
+      if (properties._elevation != null) {
+        return properties._elevation as number // Elevation is in meters
       }
       
       // Second, check if elevation is stored as a regular property (from tags)
-      if (properties && properties.elevation != null) {
-        const elevation = parseFloat(properties.elevation)
+      if (properties.elevation != null) {
+        const elevation = parseFloat(properties.elevation as string)
         if (!isNaN(elevation)) {
           return elevation // Elevation is in meters
         }
@@ -383,8 +372,6 @@ export default {
       
       // Otherwise, check geometry coordinates (fallback, may not work with MapLibre v5)
       const geometry = feature.geometry
-      if (!geometry) return null
-
       const geomType = geometry.type
 
       // Only process Point and MultiPoint features
@@ -393,26 +380,19 @@ export default {
       }
 
       try {
-        const geometryJson = geometry
-        const coords = geometryJson.coordinates
+        const coords = geometry.coordinates as number[] | number[][]
 
         if (geomType === 'Point') {
           // Point: coordinates is [lon, lat] or [lon, lat, elevation]
           if (Array.isArray(coords) && coords.length >= 3) {
-            const elevation = coords[2]
-            if (elevation != null) {
-              return elevation // Elevation is in meters
-            }
+            return (coords as number[])[2] // Elevation is in meters
           }
-        } else if (geomType === 'MultiPoint') {
+        } else {
           // MultiPoint: coordinates is [[lon, lat], ...] or [[lon, lat, elevation], ...]
           if (Array.isArray(coords) && coords.length > 0) {
-            const firstPoint = coords[0]
+            const firstPoint = (coords as number[][])[0]
             if (Array.isArray(firstPoint) && firstPoint.length >= 3) {
-              const elevation = firstPoint[2]
-              if (elevation != null) {
-                return elevation // Elevation is in meters
-              }
+              return firstPoint[2] // Elevation is in meters
             }
           }
         }
@@ -422,32 +402,28 @@ export default {
 
       return null
     },
-    formatElevation(elevationMeters) {
+    formatElevation(elevationMeters: number | null): string {
       return formatElevation(elevationMeters)
     },
-    formatDistance(distanceMeters) {
+    formatDistance(distanceMeters: number | null): string {
       return formatDistance(distanceMeters)
     },
-    formatArea(areaSqMeters) {
+    formatArea(areaSqMeters: number | null): string {
       return formatArea(areaSqMeters)
     },
-    getFeatureColor() {
+    getFeatureColor(): string {
       if (!this.feature) return '#d1d5db'
       // Pure GeoJSON features only
-      const geometry = this.feature.geometry
-      if (!geometry) return '#d1d5db'
-      const geometryType = geometry.type
-      return getGeometryTypeColor(geometryType)
+      return getGeometryTypeColor(this.feature.geometry.type)
     },
-    getFeatureCreatedDate(feature) {
+    getFeatureCreatedDate(feature: MapPageFeature | null): string | null {
       if (!feature) return null
       // Pure GeoJSON features only
-      const properties = feature.properties || {}
-      return properties.created || null
+      return (feature.properties.created as string | undefined) ?? null
     },
     formatDate
   }
-}
+})
 </script>
 
 <style scoped>

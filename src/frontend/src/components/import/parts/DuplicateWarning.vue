@@ -32,11 +32,26 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import { MapIcon } from '@heroicons/vue/24/outline'
+import type { ImportFeatureItem } from '@/assets/js/types/import-types'
 
-export default {
+type DuplicateWarningType = 'feature_store_hash' | 'feature_store_geometry' | 'cross_queue_hash' | 'cross_queue_geometry'
+
+interface QueueDuplicateInfo {
+  hash?: string
+  global_index?: number
+  queue_item_id: number
+  queue_item_filename?: string
+}
+
+interface FeatureStoreDuplicateInfo {
+  feature_store_id: number
+}
+
+export default defineComponent({
   name: 'DuplicateWarning',
   components: {
     ExclamationTriangleIcon,
@@ -44,9 +59,9 @@ export default {
   },
   props: {
     type: {
-      type: String,
+      type: String as PropType<DuplicateWarningType>,
       required: true,
-      validator: (value) => [
+      validator: (value: string) => [
         'feature_store_hash',
         'feature_store_geometry',
         'cross_queue_hash',
@@ -54,26 +69,26 @@ export default {
       ].includes(value)
     },
     item: {
-      type: Object,
+      type: Object as PropType<ImportFeatureItem>,
       required: true
     }
   },
   computed: {
-    show() {
+    show(): boolean {
       switch (this.type) {
         case 'feature_store_hash':
-          return this.item.isFeatureStoreHashDup
+          return this.item.isFeatureStoreHashDup ?? false
         case 'feature_store_geometry':
-          return this.item.isFeatureStoreGeometryDup
+          return this.item.isFeatureStoreGeometryDup ?? false
         case 'cross_queue_hash':
-          return this.item.isCrossQueueHashDup
+          return this.item.isCrossQueueHashDup ?? false
         case 'cross_queue_geometry':
-          return this.item.isCrossQueueGeometryDup
+          return this.item.isCrossQueueGeometryDup ?? false
         default:
           return false
       }
     },
-    title() {
+    title(): string {
       switch (this.type) {
         case 'feature_store_hash':
           return 'Exact Duplicate in Feature Library (Blocked)'
@@ -87,7 +102,7 @@ export default {
           return ''
       }
     },
-    message() {
+    message(): string {
       switch (this.type) {
         case 'feature_store_hash':
           return 'This feature is identical to an existing feature in your feature library. Hash duplicates cannot be imported and are automatically blocked.'
@@ -101,44 +116,46 @@ export default {
           return ''
       }
     },
-    queueDuplicateInfo() {
+    queueDuplicateInfo(): QueueDuplicateInfo | null {
       // For cross-queue types, return queue item info
       if (this.type === 'cross_queue_hash' || this.type === 'cross_queue_geometry') {
-        if (this.item.duplicateInfo && this.item.duplicateInfo.queue_item_id) {
+        const info = this.item.duplicateInfo
+        if (info?.queue_item_id != null) {
           return {
-            hash: this.item.duplicateInfo.hash,
-            global_index: this.item.duplicateInfo.global_index,
-            queue_item_id: this.item.duplicateInfo.queue_item_id,
-            queue_item_filename: this.item.duplicateInfo.queue_item_filename
+            hash: info.hash,
+            global_index: info.global_index,
+            queue_item_id: info.queue_item_id,
+            queue_item_filename: info.queue_item_filename
           };
         }
       }
       return null
     },
-    featureStoreInfo() {
+    featureStoreInfo(): FeatureStoreDuplicateInfo | null {
       // For feature store types, return feature store ID for map link
       if (this.type === 'feature_store_hash' || this.type === 'feature_store_geometry') {
-        if (this.item.duplicateInfo && this.item.duplicateInfo.feature_store_id) {
+        const info = this.item.duplicateInfo
+        if (info?.feature_store_id != null) {
           return {
-            feature_store_id: this.item.duplicateInfo.feature_store_id
+            feature_store_id: info.feature_store_id
           };
         }
       }
       return null;
     },
-    containerClasses() {
+    containerClasses(): string {
       return 'mb-4 p-4 rounded-md bg-yellow-100 border border-yellow-300'
     },
-    iconClasses() {
+    iconClasses(): string {
       return 'h-5 w-5 text-yellow-600'
     },
-    titleClasses() {
+    titleClasses(): string {
       return 'text-sm font-medium text-yellow-800'
     },
-    contentClasses() {
+    contentClasses(): string {
       return 'mt-2 text-sm text-yellow-700'
     }
   }
-}
+})
 </script>
 

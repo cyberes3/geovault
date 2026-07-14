@@ -80,7 +80,7 @@
                         :id="`tag-${tag}`"
                         class="checkbox-custom"
                         :checked="formData.tags.includes(tag)"
-                        @change="onTagCheckboxChange(tag, $event.target.checked)"
+                        @change="onTagCheckboxChange(tag, ($event.target as HTMLInputElement).checked)"
                       />
                       <label
                         :for="`tag-${tag}`"
@@ -105,8 +105,8 @@
                     :items="availableFeatures"
                     :model-value="formData.feature_ids"
                     @update:model-value="formData.feature_ids = $event"
-                    :get-item-id="(f) => String(f.properties.database_id)"
-                    :get-item-label="(f) => f.properties.name || 'Unnamed Feature'"
+                    :get-item-id="getFeatureId"
+                    :get-item-label="getFeatureLabel"
                     search-placeholder="Search features..."
                     :loading="loadingFeatures"
                     loading-message="Loading features..."
@@ -150,18 +150,38 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { getFeaturesByTag, getAllFeatures } from "@/api/services/featuresApi";
-import { saveCollection } from "@/api/services/collectionsApi";
+import { saveCollection, type Collection } from "@/api/services/collectionsApi";
 import { getApiErrorMessage } from "@/utils/apiError";
 import BaseModal from '@/components/parts/BaseModal.vue'
 import BaseButton from '@/components/parts/BaseButton.vue'
 import Loader from "@/components/parts/Loader.vue";
 import SearchableCheckboxList from '@/components/parts/SearchableCheckboxList.vue';
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
-import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
+import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils";
+import type { GeoJsonFeature } from '@/types/geospatial';
 
-export default {
+interface FeaturesByTagResponse {
+  user_tags?: Record<string, unknown>;
+  system_tags?: Record<string, unknown>;
+}
+
+interface AllFeaturesResponse {
+  data?: {
+    features?: GeoJsonFeature[];
+  };
+}
+
+interface CollectionFormData {
+  name: string;
+  description: string;
+  tags: string[];
+  feature_ids: (string | number)[];
+}
+
+export default defineComponent({
   name: 'CollectionDialog',
   components: {
     BaseModal,
@@ -176,7 +196,7 @@ export default {
       default: true
     },
     collection: {
-      type: Object,
+      type: Object as PropType<Collection | null>,
       default: null
     }
   },
@@ -188,24 +208,24 @@ export default {
         description: '',
         tags: [],
         feature_ids: []
-      },
+      } as CollectionFormData,
       tagSearchQuery: '',
-      availableTags: [],
-      availableFeatures: [],
+      availableTags: [] as string[],
+      availableFeatures: [] as GeoJsonFeature[],
       loadingTags: false,
       loadingFeatures: false,
       saving: false,
-      error: null
+      error: null as string | null
     }
   },
   computed: {
-    filteredTags() {
-      let tags;
+    filteredTags(): string[] {
+      let tags: string[];
       if (!this.tagSearchQuery.trim()) {
         tags = this.availableTags;
       } else {
         const query = this.tagSearchQuery.toLowerCase();
-        tags = this.availableTags.filter(tag => 
+        tags = this.availableTags.filter(tag =>
           tag.toLowerCase().includes(query)
         );
       }
@@ -218,16 +238,22 @@ export default {
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
-        this.$nextTick(() => {
+        void this.$nextTick(() => {
           this.syncFormFromProps();
         });
       }
     }
   },
   methods: {
-    onTagCheckboxChange(tag, checked) {
+    getFeatureId(feature: unknown): string {
+      return String((feature as GeoJsonFeature).properties.database_id);
+    },
+    getFeatureLabel(feature: unknown): string {
+      return ((feature as GeoJsonFeature).properties.name as string | undefined) ?? 'Unnamed Feature';
+    },
+    onTagCheckboxChange(tag: string, checked: boolean) {
       const index = this.formData.tags.indexOf(tag);
       if (checked && index === -1) {
         this.formData.tags.push(tag);
@@ -235,16 +261,17 @@ export default {
         this.formData.tags.splice(index, 1);
       }
     },
-    featureFilterFn(query, feature) {
+    featureFilterFn(query: string, feature: unknown): boolean {
+      const f = feature as GeoJsonFeature;
       const q = query.toLowerCase();
-      const name = (feature.properties.name || '').toLowerCase();
-      const description = (feature.properties.description || '').toLowerCase();
+      const name = ((f.properties.name as string | undefined) ?? '').toLowerCase();
+      const description = ((f.properties.description as string | undefined) ?? '').toLowerCase();
       return name.includes(q) || description.includes(q);
     },
     async fetchTags() {
       this.loadingTags = true;
       try {
-        const data = await getFeaturesByTag();
+        const data = await getFeaturesByTag() as FeaturesByTagResponse;
 
         // Get user tags and system tags separately
         const userTags = data.user_tags ? Object.keys(data.user_tags) : [];
@@ -266,8 +293,8 @@ export default {
     async fetchFeatures() {
       this.loadingFeatures = true;
       try {
-        const data = await getAllFeatures();
-        this.availableFeatures = (data.data && data.data.features) || [];
+        const data = await getAllFeatures() as AllFeaturesResponse;
+        this.availableFeatures = data.data?.features ?? [];
       } catch (error) {
         console.error('Error fetching features:', error);
         this.availableFeatures = [];
@@ -275,7 +302,7 @@ export default {
         this.loadingFeatures = false;
       }
     },
-    removeTag(tag) {
+    removeTag(tag: string) {
       const index = this.formData.tags.indexOf(tag);
       if (index > -1) {
         this.formData.tags.splice(index, 1);
@@ -295,7 +322,7 @@ export default {
           name: this.formData.name.trim(),
           description: this.formData.description.trim() || null,
           tags: this.formData.tags,
-          feature_ids: this.formData.feature_ids.map(id => parseInt(id))
+          feature_ids: this.formData.feature_ids.map(id => parseInt(String(id), 10))
         }, this.collection?.id);
 
         this.$emit('saved');
@@ -313,12 +340,10 @@ export default {
       this.tagSearchQuery = '';
       this.error = null;
       if (this.collection) {
-        this.formData.name = this.collection.name || '';
-        this.formData.description = this.collection.description || '';
-        this.formData.tags = this.collection.tags ? [...this.collection.tags] : [];
-        this.formData.feature_ids = this.collection.feature_ids
-          ? this.collection.feature_ids.map((id) => String(id))
-          : [];
+        this.formData.name = this.collection.name;
+        this.formData.description = this.collection.description ?? '';
+        this.formData.tags = [...this.collection.tags];
+        this.formData.feature_ids = this.collection.feature_ids.map((id) => String(id));
       } else {
         this.formData.name = '';
         this.formData.description = '';
@@ -326,7 +351,7 @@ export default {
         this.formData.feature_ids = [];
       }
     },
-    handleBackdropMouseDown(event) {
+    handleBackdropMouseDown(event: MouseEvent) {
       if (event.target === event.currentTarget) {
         this.closeDialog();
       }
@@ -336,9 +361,9 @@ export default {
     if (this.isOpen) {
       this.syncFormFromProps();
     }
-    this.fetchTags();
-    this.fetchFeatures();
+    void this.fetchTags();
+    void this.fetchFeatures();
   }
-};
+});
 </script>
 

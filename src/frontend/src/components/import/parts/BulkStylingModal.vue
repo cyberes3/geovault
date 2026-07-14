@@ -31,12 +31,13 @@
                       v-model="enabled.pointColor"
                       :label="''"
                       size="sm"
-                      @update:modelValue="onPointColorToggle"
+                      @update:model-value="onPointColorToggle"
                     />
                   </div>
                 </div>
                 <ColorPicker
-                  v-model="bulkData.pointColor"
+                  :model-value="bulkData.pointColor ?? '#ff0000'"
+                  @update:model-value="bulkData.pointColor = $event"
                   :disabled="!enabled.pointColor"
                   size="md"
                 />
@@ -51,7 +52,7 @@
                       v-model="enabled.pointIcon"
                       :label="''"
                       size="sm"
-                      @update:modelValue="onPointIconToggle"
+                      @update:model-value="onPointIconToggle"
                     />
                   </div>
                 </div>
@@ -64,7 +65,7 @@
                         :label="''"
                         size="sm"
                         :disabled="!enabled.pointIcon"
-                        @update:modelValue="onDefaultIconToggle"
+                        @update:model-value="onDefaultIconToggle"
                       />
                     </div>
                   </div>
@@ -111,12 +112,13 @@
                     v-model="enabled.lineColor"
                     :label="''"
                     size="sm"
-                    @update:modelValue="onLineColorToggle"
+                    @update:model-value="onLineColorToggle"
                   />
                 </div>
               </div>
               <ColorPicker
-                v-model="bulkData.lineColor"
+                :model-value="bulkData.lineColor ?? '#ff0000'"
+                @update:model-value="bulkData.lineColor = $event"
                 :disabled="!enabled.lineColor"
                 size="md"
               />
@@ -134,12 +136,13 @@
                     v-model="enabled.polyColor"
                     :label="''"
                     size="sm"
-                    @update:modelValue="onPolyColorToggle"
+                    @update:model-value="onPolyColorToggle"
                   />
                 </div>
               </div>
               <ColorPicker
-                v-model="bulkData.polyColor"
+                :model-value="bulkData.polyColor ?? '#ff0000'"
+                @update:model-value="bulkData.polyColor = $event"
                 :disabled="!enabled.polyColor"
                 size="md"
               />
@@ -163,7 +166,7 @@
           v-if="saving"
           size="sm"
           layout="inline"
-          :showMessage="false"
+          :show-message="false"
           color="#ffffff"
         />
         {{ saving ? 'Applying...' : 'Apply' }}
@@ -179,7 +182,8 @@
   />
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { PhotoIcon } from '@heroicons/vue/24/outline'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
@@ -188,8 +192,17 @@ import ToggleButton from '@/components/parts/ToggleButton.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import Loader from '@/components/parts/Loader.vue'
 import { resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
+import { type BulkOperations, type RawBulkOperations } from '@/utils/bulkOperations'
 
-export default {
+/** Which bulk-styling toggles are switched on; mirrors the keys of `BulkOperations` minus `tags`. */
+interface BulkOperationsEnabledFlags {
+  pointColor: boolean;
+  pointIcon: boolean;
+  lineColor: boolean;
+  polyColor: boolean;
+}
+
+export default defineComponent({
   name: 'BulkStylingModal',
   components: {
     BaseModal,
@@ -206,11 +219,11 @@ export default {
       default: false
     },
     availableTags: {
-      type: Array,
+      type: Array as PropType<string[]>,
       default: () => []
     },
     currentBulkOps: {
-      type: Object,
+      type: Object as PropType<RawBulkOperations>,
       default: () => ({
         tags: [],
         pointColor: null,
@@ -220,7 +233,7 @@ export default {
       })
     },
     originalBulkOps: {
-      type: Object,
+      type: Object as PropType<RawBulkOperations>,
       default: () => ({})
     },
     // When true, show loading state on OK button and disable it
@@ -246,20 +259,20 @@ export default {
         pointIcon: null,
         lineColor: null,
         polyColor: null
-      },
+      } as BulkOperations,
       enabled: {
         pointColor: false,
         pointIcon: false,
         lineColor: false,
         polyColor: false
-      }
+      } as BulkOperationsEnabledFlags
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
         // Initialize form with current bulk operations when modal opens
-        this.$nextTick(() => {
+        void this.$nextTick(() => {
           this.initializeForm()
         })
       } else {
@@ -291,7 +304,7 @@ export default {
     }
   },
   methods: {
-    resetModal() {
+    resetModal(): void {
       // Reset all internal state to default values
       this.bulkData = {
         tags: [],
@@ -309,19 +322,19 @@ export default {
       this.showIconPicker = false
       this.useDefaultIcon = false
     },
-    initializeForm() {
+    initializeForm(): void {
       // Initialize with current bulk operations (normalized) for values
-      const ops = this.currentBulkOps || {}
+      const ops = this.currentBulkOps
       this.bulkData = {
-        tags: ops.tags || [],
-        pointColor: ops.pointColor || null,
-        pointIcon: ops.pointIcon || null,
-        lineColor: ops.lineColor || null,
-        polyColor: ops.polyColor || null
+        tags: ops.tags ?? [],
+        pointColor: ops.pointColor ?? null,
+        pointIcon: ops.pointIcon ?? null,
+        lineColor: ops.lineColor ?? null,
+        polyColor: ops.polyColor ?? null
       }
       // Use originalBulkOps (raw) to determine which toggles should be enabled
       // This distinguishes between "key not set" (disabled) and "key set to null" (enabled)
-      const rawOps = this.originalBulkOps || {}
+      const rawOps = this.originalBulkOps
       this.enabled = {
         pointColor: rawOps.pointColor !== null && rawOps.pointColor !== undefined && 'pointColor' in rawOps,
         pointIcon: 'pointIcon' in rawOps,
@@ -333,59 +346,53 @@ export default {
       // Note: Default values are set by toggle handlers when toggles are enabled
       this.showIconPicker = false
     },
-    closeModal() {
+    closeModal(): void {
       this.$emit('close')
     },
-    handleIconSelected(iconUrl) {
+    handleIconSelected(iconUrl: string): void {
       this.bulkData.pointIcon = iconUrl
       this.useDefaultIcon = false // Clear default icon flag when an icon is selected
       this.showIconPicker = false
     },
-    clearPointIcon() {
+    clearPointIcon(): void {
       this.bulkData.pointIcon = null
     },
-    onPointColorToggle(enabled) {
+    onPointColorToggle(enabled: boolean): void {
       if (enabled) {
         // When enabling, set default color if not already set
-        if (!this.bulkData.pointColor) {
-          this.bulkData.pointColor = '#ff0000'
-        }
+        this.bulkData.pointColor ??= '#ff0000'
       } else {
         // When disabling, set to null
         this.bulkData.pointColor = null
       }
     },
-    onPointIconToggle(enabled) {
+    onPointIconToggle(enabled: boolean): void {
       if (!enabled) {
         // When disabling, set to null and reset default icon toggle
         this.bulkData.pointIcon = null
         this.useDefaultIcon = false
       }
     },
-    onDefaultIconToggle(enabled) {
+    onDefaultIconToggle(enabled: boolean): void {
       if (enabled) {
         // When enabling default icon, clear any selected icon
         this.bulkData.pointIcon = null
         this.showIconPicker = false
       }
     },
-    onLineColorToggle(enabled) {
+    onLineColorToggle(enabled: boolean): void {
       if (enabled) {
         // When enabling, set default color if not already set
-        if (!this.bulkData.lineColor) {
-          this.bulkData.lineColor = '#ff0000'
-        }
+        this.bulkData.lineColor ??= '#ff0000'
       } else {
         // When disabling, set to null
         this.bulkData.lineColor = null
       }
     },
-    onPolyColorToggle(enabled) {
+    onPolyColorToggle(enabled: boolean): void {
       if (enabled) {
         // When enabling, set default color if not already set
-        if (!this.bulkData.polyColor) {
-          this.bulkData.polyColor = '#ff0000'
-        }
+        this.bulkData.polyColor ??= '#ff0000'
       } else {
         // When disabling, set to null
         this.bulkData.polyColor = null
@@ -395,38 +402,38 @@ export default {
     // shared `@/utils/map/iconUtils` helpers via `this.*`.
     resolveIconUrl,
     handleIconError,
-    handleApply() {
+    handleApply(): void {
       // Emit the bulk data to parent, only including keys for enabled toggles
       // This ensures we don't send keys that weren't explicitly configured
-      const dataToEmit = {
-        tags: this.bulkData.tags || []
+      const dataToEmit: RawBulkOperations = {
+        tags: this.bulkData.tags
       }
-      
+
       // Only include keys when their toggles are enabled
       if (this.enabled.pointColor) {
         dataToEmit.pointColor = this.bulkData.pointColor
       }
-      
+
       if (this.enabled.pointIcon) {
         // If useDefaultIcon is enabled, set to null to remove custom icons
         // Otherwise, include the selected icon (or null if none selected)
-        dataToEmit.pointIcon = this.useDefaultIcon ? null : (this.bulkData.pointIcon || null)
+        dataToEmit.pointIcon = this.useDefaultIcon ? null : (this.bulkData.pointIcon ?? null)
       }
-      
+
       if (this.enabled.lineColor) {
         dataToEmit.lineColor = this.bulkData.lineColor
       }
-      
+
       if (this.enabled.polyColor) {
         dataToEmit.polyColor = this.bulkData.polyColor
       }
-      
+
       this.$emit('apply', dataToEmit)
       if (this.autoCloseOnApply && !this.saving) {
         this.closeModal()
       }
     }
   },
-}
+})
 </script>
 

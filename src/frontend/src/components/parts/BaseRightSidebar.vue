@@ -61,10 +61,11 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import { XMarkIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'BaseRightSidebar',
   components: { XMarkIcon },
   props: {
@@ -86,29 +87,34 @@ export default {
     },
   },
   emits: ['close'],
+  data() {
+    return {
+      boundEscapeHandler: null as ((e: KeyboardEvent) => void) | null
+    };
+  },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
         document.body.classList.add('overflow-hidden');
-        this._boundEscape = (e) => {
+        this.boundEscapeHandler = (e: KeyboardEvent) => {
           if (e.key === 'Escape') this.handleEscapeKey(e);
         };
-        document.addEventListener('keydown', this._boundEscape);
-        this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el);
+        document.addEventListener('keydown', this.boundEscapeHandler);
+        void this.$nextTick(() => {
+          if (this.$el && (this.$el as Node).parentNode !== document.body) {
+            document.body.appendChild(this.$el as Node);
           }
-          if (this.$refs.sidebarBackdrop) {
-            this.$refs.sidebarBackdrop.focus();
-          }
-          if (this.$refs.contentScroll) {
-            this.$refs.contentScroll.scrollTop = 0;
+          const sidebarBackdrop = this.$refs.sidebarBackdrop as HTMLElement | undefined;
+          sidebarBackdrop?.focus();
+          const contentScroll = this.$refs.contentScroll as HTMLElement | undefined;
+          if (contentScroll) {
+            contentScroll.scrollTop = 0;
           }
         });
       } else {
-        if (this._boundEscape) {
-          document.removeEventListener('keydown', this._boundEscape);
-          this._boundEscape = null;
+        if (this.boundEscapeHandler) {
+          document.removeEventListener('keydown', this.boundEscapeHandler);
+          this.boundEscapeHandler = null;
         }
         document.body.classList.remove('overflow-hidden');
       }
@@ -119,24 +125,25 @@ export default {
   },
   mounted() {
     if (this.isOpen) {
-      this._boundEscape = (e) => {
+      this.boundEscapeHandler = (e: KeyboardEvent) => {
         if (e.key === 'Escape') this.handleEscapeKey(e);
       };
-      document.addEventListener('keydown', this._boundEscape);
-      this.$nextTick(() => {
-        if (this.$el && this.$el.parentNode !== document.body) {
-          document.body.appendChild(this.$el);
+      document.addEventListener('keydown', this.boundEscapeHandler);
+      void this.$nextTick(() => {
+        if (this.$el && (this.$el as Node).parentNode !== document.body) {
+          document.body.appendChild(this.$el as Node);
         }
-        if (this.$refs.contentScroll) {
-          this.$refs.contentScroll.scrollTop = 0;
+        const contentScroll = this.$refs.contentScroll as HTMLElement | undefined;
+        if (contentScroll) {
+          contentScroll.scrollTop = 0;
         }
       });
     }
   },
   beforeUnmount() {
-    if (this._boundEscape) {
-      document.removeEventListener('keydown', this._boundEscape);
-      this._boundEscape = null;
+    if (this.boundEscapeHandler) {
+      document.removeEventListener('keydown', this.boundEscapeHandler);
+      this.boundEscapeHandler = null;
     }
     document.body.classList.remove('overflow-hidden');
   },
@@ -144,13 +151,13 @@ export default {
     handleClose() {
       this.$emit('close');
     },
-    handleBackdropMouseDown(event) {
+    handleBackdropMouseDown(event: MouseEvent) {
       if (!this.closeOnBackdrop) return;
       if (event.target === this.$refs.sidebarBackdrop || event.target === this.$refs.backdrop) {
         this.handleClose();
       }
     },
-    handleEscapeKey(event) {
+    handleEscapeKey(event: KeyboardEvent) {
       if (!this.closeOnEscape || event.key !== 'Escape') return;
       const dialogs = document.querySelectorAll('[role="dialog"]');
       const topmost = dialogs.length ? dialogs[dialogs.length - 1] : null;
@@ -158,7 +165,7 @@ export default {
       this.handleClose();
     },
   },
-};
+});
 </script>
 
 <style scoped>

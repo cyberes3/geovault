@@ -7,7 +7,7 @@
           <div class="flex items-center">
             <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Import Data</h1>
             <div v-if="isRefreshing" class="ml-3 flex items-center text-sm text-gray-500">
-              <Loader size="sm" layout="inline" :showMessage="false" />
+              <Loader size="sm" layout="inline" :show-message="false" />
               <span class="ml-2">Updating...</span>
             </div>
           </div>
@@ -63,14 +63,16 @@
           </div>
 
           <!-- Loading States -->
-          <div v-for="n in 3" v-if="combinedHistoryLoading" :key="`history-loading-${n}`" class="flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none animate-pulse">
-            <div class="flex-1 mb-2 md:mb-0">
-              <div class="w-3/4 md:w-32 h-4 bg-gray-200 rounded"></div>
+          <template v-if="combinedHistoryLoading">
+            <div v-for="n in 3" :key="`history-loading-${n}`" class="flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none animate-pulse">
+              <div class="flex-1 mb-2 md:mb-0">
+                <div class="w-3/4 md:w-32 h-4 bg-gray-200 rounded"></div>
+              </div>
+              <div class="flex-1 md:text-center">
+                <div class="w-1/2 md:w-24 h-4 bg-gray-200 rounded md:mx-auto"></div>
+              </div>
             </div>
-            <div class="flex-1 md:text-center">
-              <div class="w-1/2 md:w-24 h-4 bg-gray-200 rounded md:mx-auto"></div>
-            </div>
-          </div>
+          </template>
 
           <!-- Empty State -->
           <div v-if="!combinedHistoryLoading && importHistory.length === 0" class="py-12 text-center">
@@ -119,17 +121,37 @@
   </div>
 </template>
 
-<script>
-import {mapGetters} from "vuex"
-import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
-import {getImportHistory} from "@/api/services/importApi";
+<script lang="ts">
+import { defineComponent } from 'vue'
+import { IMPORT_HISTORY_URL } from "@/assets/js/import/url.js";
+import { getImportHistory } from "@/api/services/importApi";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
 import { CloudArrowUpIcon, ArrowLeftIcon, ArrowRightIcon } from '@heroicons/vue/24/outline';
 import { formatDate } from "@/utils/dateUtils.js";
+import type { NavigationGuardNext, RouteLocationNormalized } from 'vue-router';
+import type {
+  ImportHistoryItem,
+  ImportHistoryPagination,
+  BackendImportHistoryPagination,
+} from "@/assets/js/store/modules/importQueue";
 
-export default {
+/** Narrow view of root getters this component reads by namespaced key. */
+interface RootGetters {
+  'importQueue/importHistory': ImportHistoryItem[];
+  'importQueue/importHistoryLoaded': boolean;
+  'importQueue/importHistoryPagination': ImportHistoryPagination;
+}
+
+/** Fields `beforeRouteEnter`'s `next(vm => ...)` callback needs on this component's instance. */
+interface ImportHomePageInstance {
+  refreshTables: () => Promise<void>;
+  startAutoRefresh: () => void;
+}
+
+export default defineComponent({
+  name: 'ImportHomePage',
   components: {
     ImportTable: ImportTable,
     Loader,
@@ -138,30 +160,37 @@ export default {
     ArrowLeftIcon,
     ArrowRightIcon
   },
+  data() {
+    return {
+      importTableIsLoading: true,
+      hasImportTableLoaded: false,
+      refreshInterval: null as ReturnType<typeof setInterval> | null,
+      isRefreshing: false,
+      isLoadingHistoryPage: false,
+    }
+  },
   computed: {
-    ...mapGetters("auth", ["userInfo"]),
-    ...mapGetters("importQueue", ["importTable", "importHistory", "importHistoryLoaded", "importHistoryPagination"]),
-    combinedHistoryLoading() {
+    importHistory(): ImportHistoryItem[] {
+      return (this.$store.getters as RootGetters)['importQueue/importHistory'];
+    },
+    importHistoryLoaded(): boolean {
+      return (this.$store.getters as RootGetters)['importQueue/importHistoryLoaded'];
+    },
+    importHistoryPagination(): ImportHistoryPagination {
+      return (this.$store.getters as RootGetters)['importQueue/importHistoryPagination'];
+    },
+    combinedHistoryLoading(): boolean {
       // Show loading placeholders only when:
       // 1. We haven't received initial data from WebSocket yet
       // 2. AND we don't have any data yet
       return !this.importHistoryLoaded && this.importHistory.length === 0;
     },
   },
-  data() {
-    return {
-      importTableIsLoading: true,
-      hasImportTableLoaded: false,
-      refreshInterval: null,
-      isRefreshing: false,
-      isLoadingHistoryPage: false,
-    }
-  },
   methods: {
-    IMPORT_HISTORY_URL() {
+    IMPORT_HISTORY_URL(): string {
       return IMPORT_HISTORY_URL
     },
-    async fetchImportTable(showLoading = true) {
+    async fetchImportTable(showLoading = true): Promise<void> {
       if (showLoading) {
         this.importTableIsLoading = true
       }
@@ -172,7 +201,7 @@ export default {
       }
       this.hasImportTableLoaded = true
     },
-    startAutoRefresh() {
+    startAutoRefresh(): void {
       // Clear any existing interval
       this.stopAutoRefresh()
 
@@ -184,13 +213,13 @@ export default {
         // History is now handled by WebSocket
       }, 5000)
     },
-    stopAutoRefresh() {
+    stopAutoRefresh(): void {
       if (this.refreshInterval) {
         clearInterval(this.refreshInterval)
         this.refreshInterval = null
       }
     },
-    async refreshTables() {
+    async refreshTables(): Promise<void> {
       // Force immediate refresh of import table with loading indicators
       // Import history is now handled by WebSocket
       this.isRefreshing = true
@@ -200,7 +229,7 @@ export default {
         this.isRefreshing = false
       }
     },
-    async loadPage(page) {
+    async loadPage(page: number): Promise<void> {
       // Load a specific page via REST API
       if (this.isLoadingHistoryPage) {
         return; // Prevent concurrent requests
@@ -208,37 +237,40 @@ export default {
       
       this.isLoadingHistoryPage = true;
       try {
-        const data = await getImportHistory(page, 10);
+        const data = (await getImportHistory(page, 10)) as {
+          items: ImportHistoryItem[];
+          pagination: BackendImportHistoryPagination;
+        };
 
         // Update store with paginated data
-        this.$store.dispatch('importQueue/setImportHistory', {
+        void this.$store.dispatch('importQueue/setImportHistory', {
           items: data.items,
           pagination: data.pagination
         });
-        this.$store.dispatch('importQueue/setImportHistoryPage', page);
+        void this.$store.dispatch('importQueue/setImportHistoryPage', page);
       } catch (error) {
         console.error('Error loading import history page:', error);
       } finally {
         this.isLoadingHistoryPage = false;
       }
     },
-    async nextPage() {
+    async nextPage(): Promise<void> {
       if (this.importHistoryPagination.hasNext) {
         await this.loadPage(this.importHistoryPagination.page + 1);
       }
     },
-    async previousPage() {
+    async previousPage(): Promise<void> {
       if (this.importHistoryPagination.hasPrevious) {
         await this.loadPage(this.importHistoryPagination.page - 1);
       }
     },
     formatDate,
   },
-  async created() {
+  created() {
     // If we already have data, mark as initially loaded
     // This prevents showing loading placeholders when navigating back with browser buttons
-    if (this.importHistory && this.importHistory.length > 0) {
-      this.$store.dispatch('importQueue/setImportHistoryLoaded', true);
+    if (this.importHistory.length > 0) {
+      void this.$store.dispatch('importQueue/setImportHistoryLoaded', true);
     }
 
     // Don't fetch data here - let the route guards handle it
@@ -252,35 +284,34 @@ export default {
     // Stop auto-refresh when component is about to be destroyed
     this.stopAutoRefresh()
   },
-  beforeRouteEnter(to, from, next) {
-    next(async vm => {
+  beforeRouteEnter(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
+    next(async (vm) => {
+      const instance = vm as unknown as ImportHomePageInstance
       // Always refresh data when entering the route
       // This handles both navigation from other routes and direct access
-      await vm.refreshTables()
+      await instance.refreshTables()
       // Start auto-refresh when entering the route
-      vm.startAutoRefresh()
+      instance.startAutoRefresh()
     })
   },
-  beforeRouteUpdate(to, from, next) {
+  async beforeRouteUpdate(_to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) {
     // Refresh data immediately when updating from a different route
     if (from.name && from.name !== 'Import') {
-      this.refreshTables().then(() => {
-        this.startAutoRefresh()
-        next()
-      })
+      await this.refreshTables()
+      this.startAutoRefresh()
+      next()
     } else {
       // Start auto-refresh when updating to the same route
       this.startAutoRefresh()
       next()
     }
   },
-  beforeRouteLeave(to, from, next) {
+  beforeRouteLeave(_to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) {
     // Stop auto-refresh when leaving the route
     this.stopAutoRefresh()
     next()
   },
-  watch: {},
-}
+})
 </script>
 
 <style scoped>

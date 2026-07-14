@@ -13,25 +13,32 @@
   </component>
 </template>
 
-<script>
-export default {
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
+
+type ButtonVariant = 'primary' | 'secondary' | 'white'
+type ButtonColor = 'blue' | 'red' | 'green' | 'yellow' | 'purple' | 'gray'
+type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
+type ButtonTag = 'button' | 'a' | 'router-link'
+
+export default defineComponent({
   name: 'BaseButton',
   emits: ['click'],
   props: {
     variant: {
-      type: String,
+      type: String as PropType<ButtonVariant>,
       default: 'primary',
-      validator: (value) => ['primary', 'secondary', 'white'].includes(value)
+      validator: (value: string) => ['primary', 'secondary', 'white'].includes(value)
     },
     color: {
-      type: String,
+      type: String as PropType<ButtonColor>,
       default: 'blue',
-      validator: (value) => ['blue', 'red', 'green', 'yellow', 'purple', 'gray'].includes(value)
+      validator: (value: string) => ['blue', 'red', 'green', 'yellow', 'purple', 'gray'].includes(value)
     },
     size: {
-      type: String,
+      type: String as PropType<ButtonSize>,
       default: 'md',
-      validator: (value) => ['xs', 'sm', 'md', 'lg'].includes(value)
+      validator: (value: string) => ['xs', 'sm', 'md', 'lg'].includes(value)
     },
     disabled: {
       type: Boolean,
@@ -46,9 +53,9 @@ export default {
       default: ''
     },
     tag: {
-      type: String,
+      type: String as PropType<ButtonTag>,
       default: 'button',
-      validator: (value) => ['button', 'a', 'router-link'].includes(value)
+      validator: (value: string) => ['button', 'a', 'router-link'].includes(value)
     },
     noWrap: {
       type: Boolean,
@@ -56,7 +63,7 @@ export default {
     }
   },
   computed: {
-    buttonClasses() {
+    buttonClasses(): string {
       const base = [
         'inline-flex',
         'items-center',
@@ -72,7 +79,7 @@ export default {
       ]
 
       // Size classes
-      const sizeClasses = {
+      const sizeClasses: Record<ButtonSize, string> = {
         xs: 'px-2 py-1 text-xs',
         sm: 'px-3 py-1.5 text-sm',
         md: 'px-4 py-2 text-sm',
@@ -81,7 +88,7 @@ export default {
       base.push(sizeClasses[this.size])
 
       // Color class mappings (Tailwind needs full class names)
-      const colorClasses = {
+      const colorClasses: Record<ButtonColor, { primary: { bg: string; hover: string; focus: string }; secondary: { bg: string; hover: string; border: string; focus: string } }> = {
         blue: {
           primary: {
             bg: 'bg-blue-500',
@@ -175,8 +182,8 @@ export default {
         base.push('disabled:hover:bg-gray-100')
         base.push('disabled:border-gray-300')
       } else {
-        const colorEntry = colorClasses[this.color] || colorClasses.blue
-        const colorConfig = colorEntry[this.variant] || colorEntry.primary
+        const colorEntry = colorClasses[this.color]
+        const colorConfig = colorEntry[this.variant]
 
         if (this.variant === 'primary') {
           // Primary: solid background with white text
@@ -191,11 +198,12 @@ export default {
           base.push('disabled:hover:bg-gray-400')
         } else {
           // Secondary: light background with colored border
-          base.push(colorConfig.bg)
-          base.push(colorConfig.hover)
-          base.push('border', colorConfig.border)
+          const secondaryConfig = colorEntry.secondary
+          base.push(secondaryConfig.bg)
+          base.push(secondaryConfig.hover)
+          base.push('border', secondaryConfig.border)
           base.push('text-gray-700')
-          base.push(colorConfig.focus)
+          base.push(secondaryConfig.focus)
           
           // Disabled state for secondary
           base.push('disabled:bg-gray-100')
@@ -216,12 +224,12 @@ export default {
     }
   },
   methods: {
-    handleClick(event) {
+    handleClick(event: MouseEvent) {
       if (!this.disabled) {
         this.$emit('click', event)
       }
     }
   }
-}
+})
 </script>
 

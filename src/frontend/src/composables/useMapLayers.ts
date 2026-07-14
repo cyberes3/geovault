@@ -251,7 +251,7 @@ export function useMapLayers(deps: UseMapLayersDeps) {
         if (!geojsonData?.features || geojsonData.features.length === 0) {
             let attempts = 0;
             while (!geojsonData && attempts < 3) {
-                const sourceData = getGeoJsonData(map.value) as GeoJsonFeatureCollection | null;
+                const sourceData = getGeoJsonData(map.value);
                 if (sourceData?.features && sourceData.features.length > 0) {
                     geojsonData = sourceData;
                     cachedGeoJsonData.value = sourceData;

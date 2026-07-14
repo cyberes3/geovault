@@ -12,7 +12,7 @@ import { extensionRegistry } from '@/utils/extensionRegistry';
 import { ExtensionApi } from '@/utils/extensionApi';
 import { resolveExtensionIcon } from './resolveExtensionIcon';
 import type { PlatformStateBridge } from './platformState';
-import type { ExtensionSetupUtils, ExtensionSetupContext } from './extensionContractTypes';
+import type { ExtensionSetupUtils, ExtensionSetupContext, ScopedExtensionRegistry } from './extensionContractTypes';
 
 interface DiscoveredExtension {
     name: string;
@@ -121,15 +121,15 @@ export function createScopedRouter(router: Router, prefix: string) {
     };
 }
 
-export function createScopedRegistry(registry: typeof extensionRegistry, prefix: string) {
+export function createScopedRegistry(registry: typeof extensionRegistry, prefix: string): ScopedExtensionRegistry {
     return {
-        registerNavLink: (link: { path: string; [key: string]: unknown }) => {
+        registerNavLink: (link) => {
             registry.registerNavLink({ ...link, fullPath: withPrefixedPath(prefix, link.path) });
         },
-        registerSettingsTab: (tab: { component: unknown; [key: string]: unknown }) => {
+        registerSettingsTab: (tab) => {
             registry.registerSettingsTab(tab);
         },
-        registerTool: (tool: { path: string; [key: string]: unknown }) => {
+        registerTool: (tool) => {
             registry.registerTool({ ...tool, fullPath: withPrefixedPath(prefix, tool.path) });
         }
     };

@@ -5,6 +5,7 @@
  */
 
 import type {MapConfig} from '@/types/geospatial';
+import type {UserLocation} from '@/api/services/locationApi';
 import {WORLD_VIEW_CENTER_LONLAT, WORLD_VIEW_ZOOM} from '@/utils/map/worldViewDefault';
 import store from '@/assets/js/store';
 
@@ -13,7 +14,7 @@ import store from '@/assets/js/store';
  * @param location - Location data
  * @returns Zoom level
  */
-function calculateZoomLevel(location: any): number {
+function calculateZoomLevel(location: UserLocation): number {
     // Base zoom levels for different administrative levels
     const baseZooms = {
         'city': 10,      // City level - close up
@@ -45,7 +46,7 @@ function calculateZoomLevel(location: any): number {
  * @param location - Location data
  * @returns Map configuration
  */
-function getStateExtentConfig(location: any): MapConfig {
+function getStateExtentConfig(location: UserLocation): MapConfig {
     const zoomLevel = calculateZoomLevel(location);
 
     return {
@@ -60,7 +61,7 @@ function getStateExtentConfig(location: any): MapConfig {
  * camera (geolocation recenter, feature-extent fit, etc.) upfront and pass it straight into map
  * construction, so this is not the guaranteed first-paint state - just the last resort.
  */
-export function getInitialMapConfig(_userLocation?: unknown): MapConfig {
+export function getInitialMapConfig(): MapConfig {
     return {
         center: WORLD_VIEW_CENTER_LONLAT,
         zoom: WORLD_VIEW_ZOOM
@@ -70,11 +71,9 @@ export function getInitialMapConfig(_userLocation?: unknown): MapConfig {
 /**
  * After IP / geolocation resolves, center and zoom for the authenticated main map (not used on mapshare).
  */
-export function getMapRecenterFromUserLocation(userLocation: any): MapConfig | null {
+export function getMapRecenterFromUserLocation(userLocation: UserLocation | null | undefined): MapConfig | null {
     if (
-        userLocation == null ||
-        userLocation.longitude == null ||
-        userLocation.latitude == null ||
+        userLocation?.longitude == null ||
         !Number.isFinite(Number(userLocation.longitude)) ||
         !Number.isFinite(Number(userLocation.latitude))
     ) {
@@ -89,7 +88,8 @@ export function getMapRecenterFromUserLocation(userLocation: any): MapConfig | n
  * OpenLayers preview dialogs' `useOpenLayersPreviewMap()` factory calls).
  */
 export function getDefaultBasemapFromStore(): string | undefined {
-    const settings = store.getters['userSettings/userSettings'] as { map?: { default_basemap?: string } } | null;
+    const getters = store.getters as Record<string, unknown>;
+    const settings = getters['userSettings/userSettings'] as { map?: { default_basemap?: string } } | null;
     return settings?.map?.default_basemap;
 }
 
@@ -98,14 +98,14 @@ export function getDefaultBasemapFromStore(): string | undefined {
  * @param userLocation - User location data
  * @returns Formatted location string
  */
-export function getLocationDisplayName(userLocation: any): string {
+export function getLocationDisplayName(userLocation: UserLocation | null | undefined): string {
     if (!userLocation) return 'Unknown Location';
 
-    const parts = [];
+    const parts: string[] = [];
     if (userLocation.city) parts.push(userLocation.city);
     if (userLocation.state) parts.push(userLocation.state);
     if (userLocation.country) parts.push(userLocation.country);
 
-    return parts.length > 0 ? parts.join(', ') : userLocation.country || 'Unknown Location';
+    return parts.length > 0 ? parts.join(', ') : userLocation.country ?? 'Unknown Location';
 }
 

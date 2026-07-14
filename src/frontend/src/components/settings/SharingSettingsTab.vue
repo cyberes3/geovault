@@ -119,7 +119,7 @@
 
           <!-- Delete Button -->
           <button
-            @click="deleteShare(share.share_id, share.share_type)"
+            @click="deleteShare(share.share_id)"
             :disabled="deletingShareId === share.share_id"
             class="ml-4 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
             title="Delete Share"
@@ -134,15 +134,15 @@
   </div>
 </template>
 
-<script>
-import { listShares, deleteShare as deleteShareApi } from "@/api/services/sharingApi";
+<script lang="ts">
+import { defineComponent } from 'vue'
+import { listShares, deleteShare as deleteShareApi, type ShareRecord } from "@/api/services/sharingApi";
 import { getApiErrorMessage, toastApiError } from "@/utils/apiError";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
 import { formatDate } from "@/utils/dateUtils.js";
-import { toast } from '@/utils/toast'
 
-export default {
+export default defineComponent({
   name: 'SharingSettingsTab',
   components: {
     Loader,
@@ -152,15 +152,15 @@ export default {
     return {
       // Sharing tab data
       dataLoaded: false,
-      shares: [],
+      shares: [] as ShareRecord[],
       sharesLoading: false,
-      sharesError: null,
-      copiedShareId: null,
-      deletingShareId: null
+      sharesError: null as string | null,
+      copiedShareId: null as string | null,
+      deletingShareId: null as string | null
     }
   },
   methods: {
-    async loadShares() {
+    async loadShares(): Promise<void> {
       this.sharesLoading = true;
       this.sharesError = null;
 
@@ -173,7 +173,7 @@ export default {
         this.sharesLoading = false;
       }
     },
-    async deleteShare(shareId, shareType) {
+    async deleteShare(shareId: string): Promise<void> {
       if (!confirm('Are you sure you want to delete this share link?')) {
         return;
       }
@@ -192,29 +192,30 @@ export default {
         this.deletingShareId = null;
       }
     },
-    getFullUrl(path) {
-      return `${window.location.origin}${path || ''}`
+    getFullUrl(path: string): string {
+      return `${window.location.origin}${path}`
     },
-    async copyToClipboard(text) {
+    markShareCopied(shareId: string): void {
+      this.copiedShareId = shareId;
+      setTimeout(() => {
+        this.copiedShareId = null;
+      }, 2000);
+    },
+    async copyToClipboard(text: string): Promise<void> {
+      // Construct full URL from path
+      const urlToCopy = this.getFullUrl(text)
+
       try {
-        // Construct full URL from path
-        const urlToCopy = this.getFullUrl(text)
-        
         await navigator.clipboard.writeText(urlToCopy);
         // Find the share by URL to set copiedShareId
-        const share = this.shares.find(s => s.url === text);
+        const share = this.shares.find((s) => s.url === text);
         if (share) {
-          this.copiedShareId = share.share_id;
-          setTimeout(() => {
-            this.copiedShareId = null;
-          }, 2000);
+          this.markShareCopied(share.share_id);
         }
       } catch (error) {
         console.error('Error copying to clipboard:', error);
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
-        // Construct full URL from path
-        const urlToCopy = this.getFullUrl(text)
         textArea.value = urlToCopy;
         textArea.style.position = 'fixed';
         textArea.style.opacity = '0';
@@ -222,12 +223,9 @@ export default {
         textArea.select();
         try {
           document.execCommand('copy');
-          const share = this.shares.find(s => s.url === text);
+          const share = this.shares.find((s) => s.url === text);
           if (share) {
-            this.copiedShareId = share.share_id;
-            setTimeout(() => {
-              this.copiedShareId = null;
-            }, 2000);
+            this.markShareCopied(share.share_id);
           }
         } catch (err) {
           console.error('Fallback copy failed:', err);
@@ -243,6 +241,6 @@ export default {
       this.dataLoaded = true;
     }
   }
-}
+})
 </script>
 

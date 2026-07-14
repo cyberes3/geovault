@@ -154,13 +154,35 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { getIconRegistry, uploadIcon } from '@/api/services/iconsApi'
 import { getApiErrorMessage } from '@/utils/apiError'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import { resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
 
-export default {
+/** A single icon entry as served by `GET /api/icons/registry/`. */
+interface IconRegistryEntry {
+  url: string;
+  filename: string;
+  style: string;
+  base_name?: string;
+}
+
+interface IconRegistry {
+  points: IconRegistryEntry[];
+  letters: IconRegistryEntry[];
+  recreation: IconRegistryEntry[];
+}
+
+/** Response shape of `GET /api/icons/registry/`. */
+interface IconRegistryResponse {
+  points?: IconRegistryEntry[];
+  letters?: IconRegistryEntry[];
+  recreation?: IconRegistryEntry[];
+}
+
+export default defineComponent({
   name: 'IconPickerDialog',
   props: {
     isOpen: {
@@ -178,49 +200,48 @@ export default {
         points: [],
         letters: [],
         recreation: []
-      },
+      } as IconRegistry,
       selectedStyle: 'standard',
-      selectedIconUrl: null,
-      customIconFile: null,
-      customIconPreview: null,
+      selectedIconUrl: null as string | null,
+      customIconFile: null as File | null,
+      customIconPreview: null as string | null,
       customIconError: '',
       isLoading: false
     }
   },
   computed: {
-    pointsIcons() {
-      return (this.iconRegistry && this.iconRegistry.points) || []
+    pointsIcons(): IconRegistryEntry[] {
+      return this.iconRegistry.points
     },
-    lettersIcons() {
-      return (this.iconRegistry && this.iconRegistry.letters) || []
+    lettersIcons(): IconRegistryEntry[] {
+      return this.iconRegistry.letters
     },
-    recreationIcons() {
-      return (this.iconRegistry && this.iconRegistry.recreation) || []
+    recreationIcons(): IconRegistryEntry[] {
+      return this.iconRegistry.recreation
     },
-    filteredRecreationIcons() {
-      if (!this.iconRegistry || !this.iconRegistry.recreation) return []
+    filteredRecreationIcons(): IconRegistryEntry[] {
       return this.iconRegistry.recreation.filter(icon => icon.style === this.selectedStyle)
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
-        this.loadIconRegistry()
+        void this.loadIconRegistry()
       } else {
         this.resetDialog()
       }
     }
   },
   methods: {
-    async loadIconRegistry() {
+    async loadIconRegistry(): Promise<void> {
       this.isLoading = true
       try {
-        const data = await getIconRegistry()
+        const data = (await getIconRegistry()) as IconRegistryResponse
         // Ensure all required properties exist
         this.iconRegistry = {
-          points: data.points || [],
-          letters: data.letters || [],
-          recreation: data.recreation || []
+          points: data.points ?? [],
+          letters: data.letters ?? [],
+          recreation: data.recreation ?? []
         }
       } catch (error) {
         console.error('Error loading icon registry:', error)
@@ -238,29 +259,30 @@ export default {
     // Thin wrapper so the template (Options API, no direct module-scope access) can call the
     // shared `@/utils/map/iconUtils` helper via `this.resolveIconUrl`.
     resolveIconUrl,
-    selectIcon(iconUrl) {
+    selectIcon(iconUrl: string): void {
       this.selectedIconUrl = iconUrl
       this.customIconFile = null
       this.customIconPreview = null
       this.customIconError = ''
     },
-    handleCustomIconSelect(event) {
+    handleCustomIconSelect(event: Event): void {
       this.customIconError = ''
       this.customIconPreview = null
       this.customIconFile = null
       this.selectedIconUrl = null
 
-      const file = event.target.files[0]
+      const target = event.target as HTMLInputElement
+      const file = target.files?.[0]
       if (!file) {
         return
       }
 
       // Validate file extension
       const validExtensions = ['.png', '.jpg', '.jpeg', '.webp']
-      const fileExt = '.' + file.name.split('.').pop().toLowerCase()
+      const fileExt = '.' + (file.name.split('.').pop() ?? '').toLowerCase()
       if (!validExtensions.includes(fileExt)) {
         this.customIconError = `Invalid file type. Allowed: ${validExtensions.join(', ')}`
-        event.target.value = ''
+        target.value = ''
         return
       }
 
@@ -268,7 +290,7 @@ export default {
       const maxSize = 512000
       if (file.size > maxSize) {
         this.customIconError = `File size exceeds maximum allowed size of 500KB`
-        event.target.value = ''
+        target.value = ''
         return
       }
 
@@ -276,15 +298,15 @@ export default {
       this.customIconFile = file
       const reader = new FileReader()
       reader.onload = (e) => {
-        this.customIconPreview = e.target.result
+        this.customIconPreview = e.target?.result as string
       }
       reader.readAsDataURL(file)
     },
-    async handleOk() {
+    async handleOk(): Promise<void> {
       if (this.customIconFile) {
         // Upload custom icon
         try {
-          const data = await uploadIcon(this.customIconFile)
+          const data = (await uploadIcon(this.customIconFile)) as { icon_url: string }
           this.$emit('icon-selected', data.icon_url)
           this.closeDialog()
         } catch (error) {
@@ -297,30 +319,32 @@ export default {
         this.closeDialog()
       }
     },
-    closeDialog() {
+    closeDialog(): void {
       this.$emit('close')
     },
     // Thin wrapper so the template (Options API, no direct module-scope access) can call the
     // shared `@/utils/map/iconUtils` helper via `this.handleIconError`.
     handleIconError,
-    handleIconLoad(event) {
+    handleIconLoad(event: Event): void {
       // Hide placeholder when image loads
-      const placeholder = event.target.previousElementSibling
-      if (placeholder && placeholder.classList.contains('bg-gray-100')) {
+      const target = event.target as HTMLElement
+      const placeholder = target.previousElementSibling as HTMLElement | null
+      if (placeholder?.classList.contains('bg-gray-100')) {
         placeholder.style.display = 'none'
       }
     },
-    resetDialog() {
+    resetDialog(): void {
       this.selectedIconUrl = null
       this.customIconFile = null
       this.customIconPreview = null
       this.customIconError = ''
       this.selectedStyle = 'standard'
-      if (this.$refs.customIconInput) {
-        this.$refs.customIconInput.value = ''
+      const customIconInput = this.$refs.customIconInput as HTMLInputElement | undefined
+      if (customIconInput) {
+        customIconInput.value = ''
       }
     }
   }
-}
+})
 </script>
 

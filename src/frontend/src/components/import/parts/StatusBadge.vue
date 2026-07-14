@@ -1,10 +1,10 @@
 <template>
   <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 sm:bg-orange-200 sm:text-orange-900">
-    <Loader size="sm" layout="inline" :showMessage="false" color="#9a3412" />
+    <Loader size="sm" layout="inline" :show-message="false" color="#9a3412" />
     <span class="ml-1">Deleting</span>
   </span>
   <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
-    <Loader size="sm" layout="inline" :showMessage="false" />
+    <Loader size="sm" layout="inline" :show-message="false" />
     <span class="ml-1">Importing</span>
   </span>
   <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-200 text-green-900">
@@ -20,7 +20,7 @@
     Waiting
   </span>
   <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-200 text-yellow-900">
-    <Loader size="sm" layout="inline" :showMessage="false" color="#854d0e" />
+    <Loader size="sm" layout="inline" :show-message="false" color="#854d0e" />
     <span class="ml-1">Processing</span>
   </span>
   <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported' || item.file_duplicate?.status === 'all_features_duplicate'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
@@ -33,12 +33,14 @@
   </span>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import Loader from "@/components/parts/Loader.vue";
 import { CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon, ClockIcon } from '@heroicons/vue/24/outline';
 import { CheckCircleIcon } from '@heroicons/vue/24/solid';
+import type { DisplayImportTableItem } from '@/composables/useImportQueueTable';
 
-export default {
+export default defineComponent({
   name: 'StatusBadge',
   components: {
     Loader,
@@ -50,10 +52,10 @@ export default {
   },
   props: {
     item: {
-      type: Object,
+      type: Object as PropType<DisplayImportTableItem>,
       required: true
     }
   }
-}
+})
 </script>
 

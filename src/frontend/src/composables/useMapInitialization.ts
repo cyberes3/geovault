@@ -249,7 +249,7 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
                 glyphsUrl: DEFAULT_GLYPHS_URL,
                 antialias: deps.getEnableAntialias(),
                 style: mapConfig.style,
-            }) as MapLibreMap,
+            }),
         );
 
         map.value.addControl(

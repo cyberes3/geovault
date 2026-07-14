@@ -36,10 +36,11 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { ListBulletIcon, Cog6ToothIcon, ShareIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'MobileControlsBar',
   components: {
     ListBulletIcon,
@@ -65,6 +66,6 @@ export default {
     }
   },
   emits: ['toggle-features', 'toggle-controls']
-};
+});
 </script>
 

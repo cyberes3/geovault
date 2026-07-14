@@ -101,11 +101,12 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import { TrashIcon, TagIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'TagDeleteModal',
   props: {
     isOpen: {
@@ -136,11 +137,11 @@ export default {
     return {
       deleting: false,
       removing: false,
-      error: null
+      error: null as string | null
     }
   },
   watch: {
-    isOpen(newVal) {
+    isOpen(newVal: boolean) {
       if (newVal) {
         this.resetState();
       }
@@ -157,33 +158,33 @@ export default {
       this.removing = false;
       this.error = null;
     },
-    async handleDeleteAllFeatures() {
+    handleDeleteAllFeatures() {
       this.deleting = true;
       this.error = null;
       try {
-        await this.$emit('delete-all-features', this.tag);
+        this.$emit('delete-all-features', this.tag);
       } catch (error) {
         console.error('Error deleting features:', error);
-        this.error = error.message || 'Failed to delete features. Please try again.';
+        this.error = (error as Error).message || 'Failed to delete features. Please try again.';
         this.deleting = false;
       }
       // Note: deleting flag is reset by parent when operation completes
     },
-    async handleRemoveTagOnly() {
+    handleRemoveTagOnly() {
       if (this.isSystemTag) {
         return;
       }
       this.removing = true;
       this.error = null;
       try {
-        await this.$emit('remove-tag-only', this.tag);
+        this.$emit('remove-tag-only', this.tag);
       } catch (error) {
         console.error('Error removing tag:', error);
-        this.error = error.message || 'Failed to remove tag. Please try again.';
+        this.error = (error as Error).message || 'Failed to remove tag. Please try again.';
         this.removing = false;
       }
       // Note: removing flag is reset by parent when operation completes
     }
   },
-}
+})
 </script>

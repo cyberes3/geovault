@@ -7,10 +7,30 @@ import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils';
 /** A single setting's persisted value: whatever `SettingsInput` can render/emit. */
 export type SettingValue = string | number | boolean;
 
+/** One choice in a `radio`/`select` setting's `options` list. */
+export interface SettingOption {
+    value: string | number;
+    label: string;
+    description?: string;
+}
+
+/** Input widget `SettingsInput` renders for a given setting. */
+export type SettingInputType = 'radio' | 'toggle' | 'checkbox' | 'select' | 'text' | 'number' | 'textarea';
+
 export interface SettingDefinition {
     key: string;
     section: string;
+    title: string;
+    type: SettingInputType;
     defaultValue: SettingValue;
+    label?: string;
+    description?: string;
+    placeholder?: string;
+    options?: SettingOption[];
+    min?: number;
+    max?: number;
+    step?: number;
+    rows?: number;
     [extra: string]: unknown;
 }
 

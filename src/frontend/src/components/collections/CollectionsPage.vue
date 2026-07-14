@@ -165,24 +165,25 @@
         v-if="shareDialogOpen"
         :is-open="shareDialogOpen"
         share-type="collection"
-        :item="selectedCollectionForShare || {}"
+        :item="selectedCollectionForShare ?? {}"
         @close="closeShareDialog"
     />
 
     <!-- Bulk Operations Modal -->
     <BulkStylingModal
-        :isOpen="bulkOperationsModalOpen"
-        :currentBulkOps="currentBulkOperationsForSelectedCollection"
+        :is-open="bulkOperationsModalOpen"
+        :current-bulk-ops="currentBulkOperationsForSelectedCollection"
         :saving="bulkOperationsSaving"
-        :autoCloseOnApply="false"
+        :auto-close-on-apply="false"
         @close="closeBulkOperationsModal"
         @apply="handleApplyBulkOperations"
     />
   </div>
 </template>
 
-<script>
-import { listCollections, deleteCollection as deleteCollectionApi, applyBulkOperationsToCollection as applyBulkOperationsToCollectionApi } from "@/api/services/collectionsApi";
+<script lang="ts">
+import { defineComponent } from 'vue'
+import { listCollections, deleteCollection as deleteCollectionApi, applyBulkOperationsToCollection as applyBulkOperationsToCollectionApi, type Collection } from "@/api/services/collectionsApi";
 import { getApiErrorMessage } from "@/utils/apiError";
 import CollectionDialog from "./CollectionDialog.vue";
 import ShareDialog from "@/components/parts/ShareDialog.vue";
@@ -190,10 +191,10 @@ import Loader from "../parts/Loader.vue";
 import BaseButton from "../parts/BaseButton.vue";
 import ScrollNameWithTooltip from "../parts/ScrollNameWithTooltip.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
-import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
+import { createEmptyBulkOperations, cloneBulkOperations, type BulkOperations, type RawBulkOperations } from "@/utils/bulkOperations";
 import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'CollectionsPage',
   components: {
     CollectionDialog,
@@ -215,19 +216,27 @@ export default {
   },
   data() {
     return {
-      collections: [],
+      collections: [] as Collection[],
       loading: true,
-      error: null,
+      error: null as string | null,
       dialogOpen: false,
-      editingCollection: null,
+      editingCollection: null as Collection | null,
       shareDialogOpen: false,
-      selectedCollectionForShare: null,
+      selectedCollectionForShare: null as Collection | null,
 
       // Bulk operations state for collections page
       bulkOperationsModalOpen: false,
-      bulkOperationsSelectedCollectionId: null,
-      bulkOperationsByCollection: {}, // { collectionId: bulkOps }
+      bulkOperationsSelectedCollectionId: null as number | null,
+      bulkOperationsByCollection: {} as Record<number, BulkOperations>, // { collectionId: bulkOps }
       bulkOperationsSaving: false
+    }
+  },
+  computed: {
+    currentBulkOperationsForSelectedCollection(): BulkOperations {
+      if (!this.bulkOperationsSelectedCollectionId) {
+        return createEmptyBulkOperations();
+      }
+      return this.currentBulkOperationsForCollection(this.bulkOperationsSelectedCollectionId);
     }
   },
   methods: {
@@ -237,7 +246,7 @@ export default {
 
       try {
         const data = await listCollections();
-        this.collections = data.collections || [];
+        this.collections = data.collections;
       } catch (error) {
         console.error('Error fetching collections:', error);
         this.error = getApiErrorMessage(error, 'Failed to load collections. Please try again.');
@@ -249,7 +258,7 @@ export default {
       this.editingCollection = null;
       this.dialogOpen = true;
     },
-    openEditDialog(collection) {
+    openEditDialog(collection: Collection) {
       this.editingCollection = collection;
       this.dialogOpen = true;
     },
@@ -259,9 +268,9 @@ export default {
     },
     handleCollectionSaved() {
       this.closeDialog();
-      this.fetchCollections();
+      void this.fetchCollections();
     },
-    async deleteCollection(collection) {
+    async deleteCollection(collection: Collection) {
       // Show confirmation dialog
       const confirmMessage = `Are you sure you want to delete the collection "${collection.name}"?`;
       if (!confirm(confirmMessage)) {
@@ -271,16 +280,16 @@ export default {
       try {
         await deleteCollectionApi(collection.id);
         // Refresh the collections list
-        this.fetchCollections();
+        await this.fetchCollections();
       } catch (error) {
         console.error('Error deleting collection:', error);
         alert(getApiErrorMessage(error, 'Failed to delete collection. Please try again.'));
       }
     },
-    viewOnMap(collectionId) {
-      this.$router.push(`/map?collection=${collectionId}`);
+    viewOnMap(collectionId: number) {
+      void this.$router.push(`/map?collection=${collectionId}`);
     },
-    openShareDialog(collection) {
+    openShareDialog(collection: Collection) {
       this.selectedCollectionForShare = collection;
       this.shareDialogOpen = true;
     },
@@ -288,18 +297,18 @@ export default {
       this.shareDialogOpen = false;
       this.selectedCollectionForShare = null;
     },
-    downloadCollectionKmz(collection) {
+    downloadCollectionKmz(collection: Collection) {
       const url = `/api/export-kmz?collection=${collection.id}`;
       window.open(url, '_blank');
     },
-    openBulkOperationsModal(collection) {
+    openBulkOperationsModal(collection: Collection) {
       this.bulkOperationsSelectedCollectionId = collection.id;
       this.bulkOperationsModalOpen = true;
     },
     closeBulkOperationsModal() {
       this.bulkOperationsModalOpen = false;
     },
-    async handleApplyBulkOperations(bulkData) {
+    async handleApplyBulkOperations(bulkData: RawBulkOperations) {
       if (!this.bulkOperationsSelectedCollectionId) {
         this.bulkOperationsModalOpen = false;
         return;
@@ -320,7 +329,7 @@ export default {
         this.bulkOperationsSaving = false;
       }
     },
-    async applyBulkOperationsToCollection(collectionId, bulkData) {
+    async applyBulkOperationsToCollection(collectionId: number, bulkData: RawBulkOperations) {
       try {
         await applyBulkOperationsToCollectionApi(collectionId, bulkData);
 
@@ -331,19 +340,13 @@ export default {
         alert(getApiErrorMessage(error, 'Failed to apply bulk operations'));
       }
     },
-    currentBulkOperationsForCollection(collectionId) {
-      return this.bulkOperationsByCollection[collectionId] || createEmptyBulkOperations();
-    },
-    currentBulkOperationsForSelectedCollection() {
-      if (!this.bulkOperationsSelectedCollectionId) {
-        return createEmptyBulkOperations();
-      }
-      return this.currentBulkOperationsForCollection(this.bulkOperationsSelectedCollectionId);
+    currentBulkOperationsForCollection(collectionId: number): BulkOperations {
+      return this.bulkOperationsByCollection[collectionId] ?? createEmptyBulkOperations();
     }
   },
   mounted() {
-    this.fetchCollections();
+    void this.fetchCollections();
   }
-};
+});
 </script>
 

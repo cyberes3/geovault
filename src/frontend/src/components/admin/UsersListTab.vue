@@ -97,13 +97,14 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue'
 import { UserIcon, ArrowTopRightOnSquareIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
-import { listUsers } from '@/api/services/adminApi';
-import { getApiErrorMessage } from '@/utils/apiError';
+import { listUsers, type AdminUser } from '@/api/services/adminApi';
+import { ApiError, getApiErrorMessage } from '@/utils/apiError';
 import Loader from '@/components/parts/Loader.vue';
 
-export default {
+export default defineComponent({
   name: 'UsersListTab',
   components: {
     UserIcon,
@@ -113,13 +114,13 @@ export default {
   },
   data() {
     return {
-      users: [],
+      users: [] as AdminUser[],
       loading: false,
-      error: null
+      error: null as string | null
     }
   },
   methods: {
-    formatDate(dateString) {
+    formatDate(dateString: string | null): string {
       if (!dateString) {
         return 'Never'
       }
@@ -132,11 +133,11 @@ export default {
           hour: '2-digit',
           minute: '2-digit'
         })
-      } catch (e) {
+      } catch {
         return 'Invalid date'
       }
     },
-    formatStorage(bytes) {
+    formatStorage(bytes: number | null | undefined): string {
       if (bytes === null || bytes === undefined) {
         return '0 B'
       }
@@ -155,16 +156,15 @@ export default {
         return bytes + ' B'
       }
     },
-    async fetchUsers() {
+    async fetchUsers(): Promise<void> {
       this.loading = true
       this.error = null
       
       try {
-        const data = await listUsers()
-        this.users = data.users || []
+        this.users = await listUsers()
       } catch (error) {
         console.error('Failed to fetch users:', error)
-        this.error = error.status === 403
+        this.error = ApiError.from(error).status === 403
           ? 'You do not have permission to view users.'
           : getApiErrorMessage(error, 'Failed to load users. Please try again later.')
       } finally {
@@ -173,8 +173,8 @@ export default {
     }
   },
   mounted() {
-    this.fetchUsers()
+    void this.fetchUsers()
   }
-}
+})
 </script>
 

@@ -21,8 +21,10 @@
   </div>
 </template>
 
-<script>
-export default {
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
+
+export default defineComponent({
   name: 'ScrollNameWithTooltip',
   props: {
     name: {
@@ -30,7 +32,7 @@ export default {
       default: ''
     },
     rootClass: {
-      type: [String, Array, Object],
+      type: [String, Array, Object] as PropType<string | unknown[] | Record<string, unknown>>,
       default: ''
     }
   },
@@ -38,12 +40,12 @@ export default {
     return {
       isOverflowing: false,
       showTooltip: false,
-      tooltipStyle: {},
-      touchDismissListener: null
+      tooltipStyle: {} as Record<string, string>,
+      touchDismissListener: null as ((e: TouchEvent) => void) | null
     }
   },
   computed: {
-    displayText() {
+    displayText(): string {
       return this.name || 'Untitled'
     }
   },
@@ -58,10 +60,11 @@ export default {
   },
   methods: {
     checkOverflow() {
-      this.$nextTick(() => {
-        if (this.$refs.nameElement && this.$refs.nameContainer) {
-          const el = this.$refs.nameElement
-          this.isOverflowing = el.scrollWidth > el.clientWidth
+      void this.$nextTick(() => {
+        const nameElement = this.$refs.nameElement as HTMLElement | undefined
+        const nameContainer = this.$refs.nameContainer as HTMLElement | undefined
+        if (nameElement && nameContainer) {
+          this.isOverflowing = nameElement.scrollWidth > nameElement.clientWidth
         }
       })
     },
@@ -78,7 +81,7 @@ export default {
       if (this.isOverflowing) {
         this.showTooltip = true
         this.updateTooltipPosition()
-        this.$nextTick(() => {
+        void this.$nextTick(() => {
           this.addTouchDismissListener()
         })
       }
@@ -86,9 +89,9 @@ export default {
     handleNameTouchEnd() {},
     addTouchDismissListener() {
       this.removeTouchDismissListener()
-      this.touchDismissListener = (e) => {
-        const container = this.$refs.nameContainer
-        if (container && !container.contains(e.target)) {
+      this.touchDismissListener = (e: TouchEvent) => {
+        const container = this.$refs.nameContainer as HTMLElement | undefined
+        if (container && !container.contains(e.target as Node | null)) {
           this.showTooltip = false
           this.removeTouchDismissListener()
         }
@@ -102,7 +105,7 @@ export default {
       }
     },
     updateTooltipPosition() {
-      const container = this.$refs.nameContainer
+      const container = this.$refs.nameContainer as HTMLElement | undefined
       if (container) {
         const rect = container.getBoundingClientRect()
         this.tooltipStyle = {
@@ -114,7 +117,7 @@ export default {
       }
     }
   }
-}
+})
 </script>
 
 <style scoped>

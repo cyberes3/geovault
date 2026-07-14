@@ -29,9 +29,9 @@ export interface ExtensionSetupUtils {
     ): Record<string, unknown>;
     keyValueToNested(key: string, value: unknown): unknown;
     getNestedValue(obj: unknown, key: string): unknown;
-    parseCoordinates(input: string): { lat: number; lon: number } | null;
+    parseCoordinates(input: string): { lat: number; lng: number } | null;
     looksLikeCoordinates(input: string): boolean;
-    validateCoordinates(lat: number, lon: number): boolean;
+    validateCoordinates(coordinates: unknown, geometryType: string | null | undefined): { valid: boolean; error: string | null };
     searchGeocoding(query: string, options?: { signal?: AbortSignal }): Promise<{ ok: boolean; features: unknown[]; error?: string }>;
     getGeocodingResultCoordinates(result: unknown): { lon: number; lat: number } | null;
     getGeocodingResultLabel(result: unknown): string;

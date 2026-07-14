@@ -20,18 +20,20 @@
   </svg>
 </template>
 
-<script>
-export default {
+<script lang="ts">
+import { defineComponent } from 'vue'
+
+export default defineComponent({
   name: 'MeasurementIcon',
   props: {
     rotation: {
       type: [Number, String],
       default: 0,
-      validator: (value) => !isNaN(Number(value))
+      validator: (value: unknown) => !isNaN(Number(value))
     }
   },
   computed: {
-    rotationClass() {
+    rotationClass(): string {
       const deg = Number(this.rotation)
       if (deg === 90) return 'rotate-90'
       if (deg === 180) return 'rotate-180'
@@ -39,7 +41,7 @@ export default {
       // For non-standard angles, fall back to inline styles instead of dynamic Tailwind classes
       return ''
     },
-    rotationStyle() {
+    rotationStyle(): Record<string, string> {
       const deg = Number(this.rotation)
       if (!deg) return {}
 
@@ -52,6 +54,6 @@ export default {
       return { transform: `rotate(${deg}deg)` }
     }
   }
-}
+})
 </script>
 

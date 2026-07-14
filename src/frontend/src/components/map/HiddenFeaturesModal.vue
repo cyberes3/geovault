@@ -81,7 +81,7 @@
             v-if="isUnhidingAll"
             size="sm"
             layout="inline"
-            :showMessage="false"
+            :show-message="false"
             color="#ffffff"
           />
           {{ isUnhidingAll ? 'Un-hiding...' : 'Un-hide All' }}
@@ -91,12 +91,14 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import Loader from '@/components/parts/Loader.vue'
+import type { HiddenFeature } from '@/assets/js/store/modules/userSettings'
 
-export default {
+export default defineComponent({
   name: 'HiddenFeaturesModal',
   components: {
     XMarkIcon,
@@ -108,7 +110,7 @@ export default {
       default: false,
     },
     items: {
-      type: Array,
+      type: Array as PropType<HiddenFeature[]>,
       default: () => [],
     },
   },
@@ -117,11 +119,12 @@ export default {
     return {
       searchQuery: '',
       isUnhidingAll: false,
+      boundHandleKeydown: null as ((event: KeyboardEvent) => void) | null,
     }
   },
   computed: {
-    filteredItems() {
-      if (!Array.isArray(this.items) || !this.items.length) {
+    filteredItems(): HiddenFeature[] {
+      if (!this.items.length) {
         return []
       }
       const q = this.searchQuery.trim().toLowerCase()
@@ -129,20 +132,23 @@ export default {
         return this.items
       }
       return this.items.filter(item => {
-        const name = (item.name || '').toString().toLowerCase()
+        const name = (item.name ?? '').toString().toLowerCase()
         const id = (item.id || '').toString().toLowerCase()
         return name.includes(q) || id.includes(q)
       })
     },
   },
   mounted() {
-    window.addEventListener('keydown', this.handleKeydown)
+    this.boundHandleKeydown = (event: KeyboardEvent) => { this.handleKeydown(event) }
+    window.addEventListener('keydown', this.boundHandleKeydown)
   },
   beforeUnmount() {
-    window.removeEventListener('keydown', this.handleKeydown)
+    if (this.boundHandleKeydown) {
+      window.removeEventListener('keydown', this.boundHandleKeydown)
+    }
   },
   methods: {
-    handleKeydown(event) {
+    handleKeydown(event: KeyboardEvent) {
       if (!this.visible) return
       if (event.key === 'Escape' || event.key === 'Esc') {
         event.preventDefault()
@@ -158,7 +164,7 @@ export default {
     getGeometryTypeColor,
   },
   watch: {
-    visible(newVal) {
+    visible(newVal: boolean) {
       if (!newVal) {
         // Reset loading state when modal closes
         this.isUnhidingAll = false
@@ -171,7 +177,7 @@ export default {
       }
     }
   },
-}
+})
 </script>
 
 

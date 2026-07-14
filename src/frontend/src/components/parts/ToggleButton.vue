@@ -35,8 +35,10 @@
   </button>
 </template>
 
-<script setup>
-import { computed } from 'vue'
+<script setup lang="ts">
+import { computed, type PropType } from 'vue'
+
+type ToggleButtonSize = 'sm' | 'md' | 'lg'
 
 const props = defineProps({
   modelValue: {
@@ -52,9 +54,9 @@ const props = defineProps({
     default: false
   },
   size: {
-    type: String,
+    type: String as PropType<ToggleButtonSize>,
     default: 'md',
-    validator: (value) => ['sm', 'md', 'lg'].includes(value)
+    validator: (value: string) => ['sm', 'md', 'lg'].includes(value)
   }
 })
 
@@ -69,7 +71,7 @@ const handleToggle = () => {
 
 // Size configurations
 const sizeConfig = computed(() => {
-  const configs = {
+  const configs: Record<ToggleButtonSize, { track: string; knob: string; translate: string }> = {
     sm: {
       track: 'w-9 h-5',
       knob: 'w-4 h-4',
