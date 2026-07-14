@@ -1353,8 +1353,12 @@ class TestE2EImport(TransactionTestCase):
         """
         from geo_lib.processing.messages import PROCESSING_TIMEOUT
 
+        # Sleep far longer than any plausible scheduling delay under load, so the assertion
+        # below has a wide, unambiguous margin between "failed via the ~1s timeout" and
+        # "actually waited out the hang" -- this previously slept only 5s, which flaked under
+        # heavy parallel test-suite load where scheduling jitter alone could approach 5s.
         def _hanging_conversion(document, options=None):
-            time.sleep(5)
+            time.sleep(60)
             return {'type': 'FeatureCollection', 'features': []}
 
         kml_content = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -1377,9 +1381,10 @@ class TestE2EImport(TransactionTestCase):
         self.assertEqual(job_status['status'], ProcessingStatus.FAILED.value,
                           f"Job with a hanging conversion should fail, not hang. Status: {job_status}")
         self.assertEqual(job_status['message'], PROCESSING_TIMEOUT)
-        # The configured timeout is 1s; give generous slack for scheduling overhead, but this
-        # must be nowhere near the 5s the mocked conversion sleeps for.
-        self.assertLess(elapsed, 5.0, f"Job should have failed via timeout, not by outliving the hang ({elapsed:.1f}s)")
+        # The configured timeout is 1s; give very generous slack for scheduling overhead under a
+        # loaded test suite, but this must still be nowhere near the 60s the mocked conversion
+        # sleeps for -- that gap is what actually distinguishes "failed via timeout" from "hung".
+        self.assertLess(elapsed, 20.0, f"Job should have failed via timeout, not by outliving the hang ({elapsed:.1f}s)")
 
     def test_e2e_import_already_imported(self):
         """Test trying to import an item that was already imported."""

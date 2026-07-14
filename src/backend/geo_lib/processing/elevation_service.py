@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 import requests
 
+from geo_lib.http.outbound import USER_AGENT
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from website.settings_utils import get_required_setting
@@ -52,7 +53,7 @@ def _fetch_elevation_batch_with_retry(
             response = requests.post(
                 api_url,
                 json=batch_coords,
-                headers={'Content-Type': 'application/json'},
+                headers={'Content-Type': 'application/json', 'User-Agent': USER_AGENT},
                 timeout=api_timeout
             )
             

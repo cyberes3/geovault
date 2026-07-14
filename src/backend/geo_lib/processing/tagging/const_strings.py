@@ -63,6 +63,20 @@ def filter_protected_tags(tags: List[str], protected_prefixes: List[str]) -> Lis
     return [tag for tag in tags if not is_protected_tag(tag, protected_prefixes)]
 
 
+def strip_private_tags(properties: dict) -> None:
+    """
+    Remove `tags`/`system_tags` from a properties dict in place.
+
+    These can carry private information, so they must never reach a public-safe
+    (unauthenticated share) response -- GeoJSON view, KMZ download, or otherwise --
+    unless the sharer explicitly opted in via `include_tags`. This is the single
+    source of truth for that stripping so every share touchpoint (map view, single
+    feature share, bulk KMZ export) stays consistent.
+    """
+    properties.pop('tags', None)
+    properties.pop('system_tags', None)
+
+
 def prepare_user_tags(tags: List[str]) -> List[str]:
     """
     Prepare user tags by converting to lowercase and deduplicating.

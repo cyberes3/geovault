@@ -20,8 +20,8 @@ def _remove_namespaces(content: str) -> str:
     with *prefixed* namespaces like:
         <ns0:kml xmlns:ns0="http://www.opengis.net/kml/2.2">
     
-    However, modern @tmcw/togeojson handles the standard default namespace
-    (`xmlns="http://www.opengis.net/kml/2.2"`) correctly, so we avoid stripping
+    However, geo_lib.togeojson (our Python port of @tmcw/togeojson) handles the standard default
+    namespace (`xmlns="http://www.opengis.net/kml/2.2"`) correctly, so we avoid stripping
     that (or any generic xmlns declarations) to prevent breaking valid files
     like cdata.kml.
     
@@ -45,7 +45,7 @@ class KMLProcessor(BaseProcessor):
 
     def convert_to_geojson(self) -> Dict[str, Any]:
         """
-        Convert KML file to GeoJSON using JavaScript togeojson library.
+        Convert KML file to GeoJSON using geo_lib.togeojson (in-process Python port).
         Also processes remote icons if icon processing is enabled.
         
         Returns:

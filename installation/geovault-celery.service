@@ -11,7 +11,12 @@ WorkingDirectory=/srv/geovault/geovault/src/backend
 # `default` is a safety net for any future task that omits an explicit queue (Celery's
 # CELERY_TASK_DEFAULT_QUEUE) - no task targets it today, but a worker not listening on it would
 # mean such a task silently never runs instead of erroring.
-ExecStart=/srv/geovault/geovault/src/backend/venv/bin/celery -A website.celery_app worker --loglevel=INFO --queues=default,maintenance,extensions,live_track,imports
+# `--concurrency=4` is a sensible starting point for the prefork pool: imports are serialized
+# per-user via a Redis lock (see geo_lib.processing.jobs.process_job.dispatch), so this bounds how
+# many *different* users' imports (plus maintenance/extensions/live_track tasks) can run at once.
+# Tune up on beefier hardware or down on memory-constrained deployments; watch worker memory usage
+# and import-queue latency after changing it.
+ExecStart=/srv/geovault/geovault/src/backend/venv/bin/celery -A website.celery_app worker --loglevel=INFO --queues=default,maintenance,extensions,live_track,imports --concurrency=4
 Restart=always
 RestartSec=5s
 

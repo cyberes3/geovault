@@ -5,7 +5,12 @@ This module provides validation functions for GeoJSON geometry objects and featu
 ensuring they conform to the GeoJSON specification.
 """
 
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Any
+
+from geo_lib.validation.coordinate.coordinate_validation import (
+    CoordinateValidationError,
+    validate_coordinates_for_geometry_type,
+)
 
 
 class GeometryValidationError(Exception):
@@ -81,13 +86,15 @@ def validate_geometry(geometry: Dict[str, Any]) -> None:
 def validate_coordinates_values(geometry: Dict[str, Any]) -> None:
     """
     Validate coordinate values in a geometry object.
-    Checks for:
-    1. None values
-    2. Out of bounds (Lat: -90 to 90, Lon: -180 to 180)
-    
+
+    Delegates the actual bounds/structure/type checking to
+    `geo_lib.validation.coordinate.coordinate_validation.validate_coordinates_for_geometry_type`
+    (the coordinate-parser-backed implementation also used by the metadata-update and `places`
+    validation paths) rather than maintaining a second, independent bounds-check here.
+
     Args:
         geometry: GeoJSON geometry object
-        
+
     Raises:
         GeometryValidationError: If coordinates are invalid
     """
@@ -98,51 +105,21 @@ def validate_coordinates_values(geometry: Dict[str, Any]) -> None:
 
     if geom_type == 'GeometryCollection':
         geometries = geometry.get('geometries', [])
-        if not geometries:
-            return
         for sub_geom in geometries:
             validate_coordinates_values(sub_geom)
+        return
+
+    if geom_type not in VALID_GEOMETRY_TYPES:
         return
 
     coordinates = geometry.get('coordinates')
     if not coordinates:
         return
 
-    def check_coord(coord: Union[float, int, None], name: str) -> None:
-        if coord is None:
-            raise GeometryValidationError(f"Coordinate contains None values")
-        if not isinstance(coord, (int, float)):
-            raise GeometryValidationError(f"Coordinate values must be numbers, got {type(coord)}")
-
-    def validate_point(point_coords: List[Any]) -> None:
-        if not isinstance(point_coords, list) or len(point_coords) < 2:
-            raise GeometryValidationError(f"Invalid point coordinates: {point_coords}")
-
-        lon, lat = point_coords[0], point_coords[1]
-        check_coord(lon, "Longitude")
-        check_coord(lat, "Latitude")
-
-        if not (-180 <= lon <= 180):
-            raise GeometryValidationError(f"Longitude {lon} is out of bounds [-180, 180]")
-        if not (-90 <= lat <= 90):
-            raise GeometryValidationError(f"Latitude {lat} is out of bounds [-90, 90]")
-
-    def traverse_coords(coords: Any, depth: int) -> None:
-        if depth == 0:
-            validate_point(coords)
-        elif isinstance(coords, list):
-            for item in coords:
-                traverse_coords(item, depth - 1)
-
-    # Determine depth based on geometry type
-    if geom_type == 'Point':
-        traverse_coords(coordinates, 0)
-    elif geom_type in ['LineString', 'MultiPoint']:
-        traverse_coords(coordinates, 1)
-    elif geom_type in ['Polygon', 'MultiLineString']:
-        traverse_coords(coordinates, 2)
-    elif geom_type == 'MultiPolygon':
-        traverse_coords(coordinates, 3)
+    try:
+        validate_coordinates_for_geometry_type(coordinates, geom_type)
+    except CoordinateValidationError as e:
+        raise GeometryValidationError(str(e)) from e
 
 
 def validate_feature_geometry(feature_data: Dict[str, Any]) -> None:

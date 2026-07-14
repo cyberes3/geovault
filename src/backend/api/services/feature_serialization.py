@@ -6,20 +6,7 @@ optionally stripping private tags for public shares).
 from typing import Any, Iterable, Optional
 
 from api.models import FeatureStore
-
-
-def strip_private_tags(properties: dict) -> None:
-    """
-    Remove `tags`/`system_tags` from a properties dict in place.
-
-    These can carry private information, so they must never reach a public-safe
-    (unauthenticated share) response -- GeoJSON view, KMZ download, or otherwise --
-    unless the sharer explicitly opted in via `include_tags`. This is the single
-    source of truth for that stripping so every share touchpoint (map view, single
-    feature share, bulk KMZ export) stays consistent.
-    """
-    properties.pop('tags', None)
-    properties.pop('system_tags', None)
+from geo_lib.processing.tagging.const_strings import strip_private_tags
 
 
 def geojson_feature_from_parts(

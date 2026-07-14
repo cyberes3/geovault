@@ -20,7 +20,7 @@ class GPXProcessor(BaseProcessor):
 
     def convert_to_geojson(self) -> Dict[str, Any]:
         """
-        Convert GPX file to GeoJSON using JavaScript togeojson library.
+        Convert GPX file to GeoJSON using geo_lib.togeojson (in-process Python port).
         
         Returns:
             GeoJSON data as dictionary

@@ -6,10 +6,10 @@ from typing import Dict, List, NamedTuple, Tuple
 from django.db import connection
 
 from api.models import FeatureStore
-from api.services.feature_serialization import strip_private_tags
 from api.views.features.bbox.params import _detect_world_wide_extent
 from api.views.features.bbox.sql_builder import _build_bbox_sql_query
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.tagging.const_strings import strip_private_tags
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()

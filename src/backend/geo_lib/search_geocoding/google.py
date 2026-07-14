@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 import requests
 from django.conf import settings
 
+from geo_lib.http.outbound import USER_AGENT
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.search_geocoding.common import GeocodingBackendError
 
@@ -88,7 +89,7 @@ def _search_google(query: str) -> dict:
         'language': 'en',
     }
     request_url = _GOOGLE_GEOCODE_BASE_URL + "?" + urlencode(params)
-    api_response = requests.get(request_url, timeout=10)
+    api_response = requests.get(request_url, headers={'User-Agent': USER_AGENT}, timeout=10)
     if api_response.status_code != 200:
         _logger.error(
             f"Google Geocoding API error: status={api_response.status_code}, body={api_response.text}"

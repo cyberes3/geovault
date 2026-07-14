@@ -8,6 +8,7 @@ This module provides validation functions for coordinate arrays, ensuring they:
 4. Use coordinate-parser library for robust coordinate validation
 """
 
+import math
 from typing import List, Any, Tuple, Optional
 
 from geo_lib.coordinate_parser import parse_coordinate
@@ -58,7 +59,6 @@ def _validate_point_coordinate(point: List[Any]) -> Tuple[float, float]:
         raise CoordinateValidationError("Coordinate values must be valid numbers")
 
     # Check for NaN or Infinity
-    import math
     if math.isnan(lon) or math.isnan(lat):
         raise CoordinateValidationError("Coordinate values cannot be NaN")
     if math.isinf(lon) or math.isinf(lat):

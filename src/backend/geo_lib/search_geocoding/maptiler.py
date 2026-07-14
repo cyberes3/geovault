@@ -6,6 +6,7 @@ from urllib.parse import quote
 import requests
 from django.conf import settings
 
+from geo_lib.http.outbound import USER_AGENT
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.search_geocoding.common import GeocodingBackendError
 
@@ -139,7 +140,7 @@ def _search_maptiler(query: str) -> dict:
         raise GeocodingBackendError("MapTiler API key is not configured")
 
     site_domain = settings.SITE_DOMAIN
-    headers = {'Origin': site_domain}
+    headers = {'Origin': site_domain, 'User-Agent': USER_AGENT}
     api_url = f"https://api.maptiler.com/geocoding/{quote(query)}.json"
 
     params_admin = {

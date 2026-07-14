@@ -7,7 +7,6 @@ from django.utils.text import slugify
 
 from api.models import FeatureStore, Collection
 from api.services.feature_service import FeatureService
-from api.services.feature_serialization import strip_private_tags
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response
 from api.views.features.bbox.query_builder import _build_base_query, _build_collection_query
@@ -17,6 +16,7 @@ from geo_lib.export.geojson_preprocessor import prepare_geojson_for_kmz
 from geo_lib.export.geojson_to_kmz import geojson_to_kmz_bytes
 from geo_lib.export.share_export import build_share_feature_collection, prepare_kmz_options_for_share
 from geo_lib.export.single_feature_export import prepare_kmz_options_for_feature
+from geo_lib.processing.tagging.const_strings import strip_private_tags
 from website.settings_utils import get_required_setting
 
 

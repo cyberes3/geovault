@@ -4,7 +4,7 @@ Share-based export functionality.
 
 from typing import Callable, Dict
 
-from api.services.feature_serialization import strip_private_tags
+from geo_lib.processing.tagging.const_strings import strip_private_tags
 
 from .geojson_preprocessor import prepare_geojson_for_kmz
 from .geojson_to_kmz import KMZOptions

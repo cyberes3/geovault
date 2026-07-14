@@ -11,6 +11,7 @@ from typing import Optional
 import requests
 from django.conf import settings
 
+from geo_lib.http.outbound import USER_AGENT
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.base import TileSource
 
@@ -159,7 +160,8 @@ def _fetch_map_name(map_id, api_key, site_domain):
         style_url = build_maptiler_style_url(map_id, api_key)
         # MapTiler expects just the domain in Origin header to match their allowed origins list
         headers = {
-            'Origin': site_domain
+            'Origin': site_domain,
+            'User-Agent': USER_AGENT,
         }
         response = requests.get(style_url, headers=headers, timeout=_STYLE_FETCH_TIMEOUT_SECONDS)
 

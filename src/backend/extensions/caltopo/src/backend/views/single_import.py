@@ -20,6 +20,7 @@ from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limited
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.reverse_geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.duplicate_detection.find import _find_hash_duplicates, _find_geometry_duplicates
+from geo_lib.processing.logging import ImportLog
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.types.validation import match_geometry_class
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
@@ -177,7 +178,6 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
     normalized_feature['properties']['geojson_hash'] = geojson_hash
 
     # Generate system tags
-    from geo_lib.processing.logging import ImportLog
     geometry_type = match_geometry_class(normalized_feature['geometry']['type'])
     feature_instance = geometry_type(**normalized_feature)
     system_tags = generate_auto_tags(feature_instance, import_log=ImportLog(), filename='caltopo-import', skip_reverse_geocoding=True)
