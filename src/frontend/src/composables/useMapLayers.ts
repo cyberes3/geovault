@@ -23,7 +23,7 @@ export interface UseMapLayersDeps {
     map: ShallowRef<MapLibreMap | null>;
     labelMarkerManager: ShallowRef<LabelMarkerManager | null>;
     showAllLabels: Ref<boolean>;
-    createMapInstance: (mapConfig: { center: [number, number]; zoom: number; pitch?: number; bearing?: number; style?: StyleSpecification | string }) => void;
+    createMapInstance: (mapConfig: { center: [number, number]; zoom: number; pitch?: number; bearing?: number; style?: StyleSpecification | string }) => Promise<void>;
     destroyMap: () => void;
     ensureMapResize: () => void;
     waitForMapEvent: (eventName: string, timeout?: number) => Promise<void>;
@@ -323,7 +323,7 @@ export function useMapLayers(deps: UseMapLayersDeps) {
 
         await new Promise((resolve) => setTimeout(resolve, 0));
         try {
-            createMapInstance({
+            await createMapInstance({
                 center: [mapState.center.lng, mapState.center.lat],
                 zoom: mapState.zoom,
                 pitch: mapState.pitch,

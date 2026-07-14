@@ -3,7 +3,8 @@
  * Uses HTML markers instead of symbol layers for stable, non-shifting labels
  */
 
-import maplibregl, { type Map as MapLibreMap, type Marker, type PositionAnchor } from 'maplibre-gl'
+import type { Map as MapLibreMap, Marker, PositionAnchor } from 'maplibre-gl'
+import { getLoadedMaplibreGl } from './lazyMaplibreGl.js'
 import type { Position } from 'geojson'
 import { length as turfLength } from '@turf/length'
 import { point, lineString, multiLineString } from '@turf/helpers'
@@ -789,6 +790,7 @@ export class LabelMarkerManager {
     if (!text || text.trim() === '') return
 
     const map = this.map
+    const maplibregl = getLoadedMaplibreGl()
     const existingMarker = this.markers.get(featureId)
 
     if (existingMarker) {

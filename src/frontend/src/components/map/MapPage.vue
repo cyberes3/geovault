@@ -228,7 +228,6 @@
 import { computed, defineAsyncComponent, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoJSONSource } from 'maplibre-gl';
 import type { RootState } from '@/assets/js/store';
 import type { UserInfo } from '@/assets/js/types/store-types';
@@ -665,7 +664,7 @@ async function initializeMap(mapConfig: Parameters<typeof createMapInstance>[0])
     if (!mapContainer.value || !(mapContainer.value instanceof HTMLElement)) {
         throw new Error('Map container is not available or is not an HTMLElement');
     }
-    createMapInstance(mapConfig);
+    await createMapInstance(mapConfig);
     ensureMapResize();
 }
 
@@ -783,7 +782,7 @@ async function restoreMap(): Promise<void> {
         }
 
         const initialTileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
-        createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
+        await createMapInstance({ ...mapConfig, style: resolveMapStyle(initialTileSource) });
 
         await new Promise<void>((resolve) => {
             if (map.value?.loaded()) {

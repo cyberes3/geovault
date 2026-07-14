@@ -6,7 +6,8 @@
 import { computed, markRaw, ref, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { useRoute } from 'vue-router';
 import { useStore } from 'vuex';
-import maplibregl, { type Map as MapLibreMap, type GeoJSONSource } from 'maplibre-gl';
+import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
+import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { getCollection, getCollectionFeatures } from '@/api/services/collectionsApi';
 import { getFeature, filterFeaturesByTags } from '@/api/services/featuresApi';
 import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
@@ -159,6 +160,7 @@ export function useCollectionTagFilters(deps: UseCollectionTagFiltersDeps) {
             return;
         }
 
+        const maplibregl = getLoadedMaplibreGl();
         const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat]);
 
         await navigateAndRefresh(() => {

@@ -2,8 +2,9 @@
  * MapLibre map initialization utilities
  */
 
-import maplibregl, { type StyleSpecification, type Map as MapLibreMap, type RequestTransformFunction, type RequestParameters, type MapMouseEvent } from 'maplibre-gl'
+import type { StyleSpecification, Map as MapLibreMap, RequestTransformFunction, RequestParameters, MapMouseEvent } from 'maplibre-gl'
 import type { TileSource } from '@/api/services/tilesApi'
+import { loadMaplibreGl } from './lazyMaplibreGl.js'
 
 // Maximum allowed zoom level for the map
 export const MAX_ZOOM_LEVEL = 18
@@ -122,8 +123,8 @@ export interface InitializeMapConfig {
   style?: string | StyleSpecification
 }
 
-/** Initialize a MapLibre map instance. */
-export function initializeMap(container: HTMLElement, config: InitializeMapConfig): MapLibreMap {
+/** Initialize a MapLibre map instance. Loads maplibre-gl itself (lazily, cached after the first call). */
+export async function initializeMap(container: HTMLElement, config: InitializeMapConfig): Promise<MapLibreMap> {
   // Validate container before attempting to initialize
   if (!(container instanceof HTMLElement)) {
     throw new Error('Invalid container: must be an HTMLElement')
@@ -144,6 +145,8 @@ export function initializeMap(container: HTMLElement, config: InitializeMapConfi
       layers: []
     }
   } = config
+
+  const maplibregl = await loadMaplibreGl()
 
   const map = new maplibregl.Map({
     container: container,

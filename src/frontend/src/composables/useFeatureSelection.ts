@@ -6,7 +6,8 @@
  */
 import { markRaw, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { useStore } from 'vuex';
-import maplibregl, { type Map as MapLibreMap, type MapMouseEvent, type Marker, type GeoJSONSource } from 'maplibre-gl';
+import type { Map as MapLibreMap, MapMouseEvent, Marker, GeoJSONSource, PointLike } from 'maplibre-gl';
+import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
 import {
     getFeatureIconUrl,
@@ -126,7 +127,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines'].filter((layerId) => mapInstance.getLayer(layerId));
         if (layersToQuery.length === 0) return;
 
-        const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+        const bbox: [PointLike, PointLike] = [
             [e.point.x - 15, e.point.y - 15],
             [e.point.x + 15, e.point.y + 15],
         ];
@@ -193,7 +194,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         const layersToQuery = MOUSE_HOVER_LAYERS.filter((layerId) => mapInstance.getLayer(layerId));
         if (layersToQuery.length === 0) return;
 
-        const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+        const bbox: [PointLike, PointLike] = [
             [e.point.x - 5, e.point.y - 5],
             [e.point.x + 5, e.point.y + 5],
         ];
@@ -342,6 +343,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
             mapInstance.setMaxZoom(MAX_ZOOM_LEVEL);
         }
 
+        const maplibregl = getLoadedMaplibreGl();
         await navigateAndRefresh(() => {
             try {
                 const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat]);
@@ -660,6 +662,7 @@ export function useFeatureSelection(deps: UseFeatureSelectionDeps) {
         el.style.border = `1px solid ${borderColor}`;
         el.style.boxSizing = 'border-box';
 
+        const maplibregl = getLoadedMaplibreGl();
         hoverMarker.value = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([coordinates[0], coordinates[1]]).addTo(map.value);
     }
 

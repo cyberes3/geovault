@@ -35,3 +35,17 @@ export function loadMaplibreGl(): Promise<MaplibreGlModule> {
     });
     return maplibreGlPromise;
 }
+
+/**
+ * Synchronous access to the already-loaded maplibre-gl module, for code paths that only ever run
+ * after a map instance exists (map creation itself already awaited `loadMaplibreGl()`, so by the
+ * time click/hover/marker helpers run, it's guaranteed to be populated). Throws instead of
+ * silently producing `undefined.Whatever is not a constructor` if that invariant is ever broken.
+ */
+export function getLoadedMaplibreGl(): MaplibreGlModule {
+    const maplibregl = window.gv_core.maplibre as MaplibreGlModule | null;
+    if (!maplibregl) {
+        throw new Error('getLoadedMaplibreGl() called before loadMaplibreGl() resolved');
+    }
+    return maplibregl;
+}

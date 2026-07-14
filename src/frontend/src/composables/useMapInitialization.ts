@@ -6,7 +6,7 @@
  * center/zoom/pitch/bearing used to restore the map after `keep-alive` deactivation.
  */
 import { markRaw, ref, shallowRef, type Ref, type ShallowRef } from 'vue';
-import maplibregl, { type LngLat, type Map as MapLibreMap, type MapMouseEvent, type StyleSpecification } from 'maplibre-gl';
+import type { LngLat, Map as MapLibreMap, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import {
     initializeMap,
     setupGeoJsonSource,
@@ -16,6 +16,7 @@ import {
     loadIconImage,
     LabelMarkerManager,
 } from '@/utils/map/maplibre';
+import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { MAX_ZOOM_LEVEL, DEFAULT_GLYPHS_URL } from '@/utils/map/maplibre/mapInitialization.js';
 import { setupCopyMapCoordinatesOnContextMenu } from '@/utils/map/copyMapCoordinatesOnContextMenu.js';
 import { setupUserGestureTrackingUnlock } from '@/utils/map/maplibre/trackingLock.js';
@@ -235,13 +236,13 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
         };
     }
 
-    function createMapInstance(mapConfig: MapConfigInit): void {
+    async function createMapInstance(mapConfig: MapConfigInit): Promise<void> {
         if (!mapContainer.value || !(mapContainer.value instanceof HTMLElement)) {
             throw new Error('Map container is not available');
         }
 
         map.value = markRaw(
-            initializeMap(mapContainer.value, {
+            await initializeMap(mapContainer.value, {
                 center: mapConfig.center,
                 zoom: mapConfig.zoom,
                 pitch: mapConfig.pitch ?? 0,
@@ -252,6 +253,7 @@ export function useMapInitialization(deps: UseMapInitializationDeps) {
             }),
         );
 
+        const maplibregl = getLoadedMaplibreGl();
         map.value.addControl(
             new maplibregl.NavigationControl({
                 visualizePitch: true,

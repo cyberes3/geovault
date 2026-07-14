@@ -6,7 +6,8 @@
  * of features that have scrolled far outside the viewport.
  */
 import { markRaw, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
-import maplibregl, { type Map as MapLibreMap, type GeoJSONSource } from 'maplibre-gl';
+import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
+import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { addFeaturesToMap as addFeaturesToMapUtil, updateSmallFeatureFlags, getBoundingBoxKey, getBoundingBoxString } from '@/utils/map/maplibre';
 import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js';
 import { convertMapLibreFeature } from '@/utils/map/maplibre/featureConversion.js';
@@ -483,6 +484,7 @@ export function useFeatureData(deps: UseFeatureDataDeps) {
                 pendingExtentFitWithoutGeolocation.value = false;
                 return;
             }
+            const maplibregl = getLoadedMaplibreGl();
             await navigateAndRefresh(() => {
                 const bounds = new maplibregl.LngLatBounds([w, s], [e, n]);
                 map.value?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 2 });

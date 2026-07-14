@@ -4,7 +4,8 @@
  * actions used by `LocationControl`.
  */
 import { ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
-import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl';
+import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import { getLoadedMaplibreGl } from '@/utils/map/maplibre/lazyMaplibreGl.js';
 import { getUserLocation as fetchUserLocation, type UserLocation } from '@/api/services/locationApi';
 import { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker } from '@/utils/map/maplibre';
 import { geolocationManager } from '@/utils/map/geolocationManager';
@@ -218,6 +219,7 @@ export function useMapGeolocation(deps: MapGeolocationDeps) {
             clearGeocodingMarker();
         });
 
+        const maplibregl = getLoadedMaplibreGl();
         geocodingMarker.value = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([coordinates[0], coordinates[1]]).addTo(mapInstance);
 
         const [minLon, minLat, maxLon, maxLat] = bbox;
