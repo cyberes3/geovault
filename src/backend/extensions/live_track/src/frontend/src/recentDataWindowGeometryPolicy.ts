@@ -1,6 +1,7 @@
-import { normalizeTimestampMs } from './activeButDeadTrack.js';
+import { normalizeTimestampMs } from './activeButDeadTrack';
+import type { TrackCoordinate } from './types/track';
 
-const ROLLING_WINDOW_MS = {
+const ROLLING_WINDOW_MS: Record<string, number> = {
   '1min': 60 * 1000,
   '1h': 60 * 60 * 1000,
   '1d': 24 * 60 * 60 * 1000,
@@ -8,23 +9,23 @@ const ROLLING_WINDOW_MS = {
   '1m': 30 * 24 * 60 * 60 * 1000,
 };
 
-export function normalizeRecentDataWindowKey(value) {
-  const key = String(value || '').trim().toLowerCase();
+export function normalizeRecentDataWindowKey(value: string | null | undefined): string | null {
+  const key = String(value ?? '').trim().toLowerCase();
   return key || null;
 }
 
-export function isRollingRecentDataWindow(value) {
-  return Object.prototype.hasOwnProperty.call(ROLLING_WINDOW_MS, normalizeRecentDataWindowKey(value));
+export function isRollingRecentDataWindow(value: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(ROLLING_WINDOW_MS, normalizeRecentDataWindowKey(value) ?? '');
 }
 
-export function pruneCoordinatesForRecentDataWindow(coordinates, windowKey, nowMs = Date.now()) {
+export function pruneCoordinatesForRecentDataWindow(coordinates: TrackCoordinate[], windowKey: string | null | undefined, nowMs: number = Date.now()): TrackCoordinate[] {
   const normalized = normalizeRecentDataWindowKey(windowKey);
-  const windowMs = ROLLING_WINDOW_MS[normalized];
+  const windowMs = normalized != null ? ROLLING_WINDOW_MS[normalized] : undefined;
   if (!windowMs || !Array.isArray(coordinates)) return Array.isArray(coordinates) ? coordinates : [];
 
   const cutoffMs = nowMs - windowMs;
   const pruned = coordinates.filter((coord) => {
-    const timestampMs = normalizeTimestampMs(coord?.[2]);
+    const timestampMs = normalizeTimestampMs(coord[2]);
     return timestampMs == null || timestampMs >= cutoffMs;
   });
 
@@ -34,7 +35,7 @@ export function pruneCoordinatesForRecentDataWindow(coordinates, windowKey, nowM
   return pruned;
 }
 
-export function shouldReloadGeometryForSessionTransition(windowKey, activeSessionStartMs, incomingSessionStartMs) {
+export function shouldReloadGeometryForSessionTransition(windowKey: string | null | undefined, activeSessionStartMs: number | null | undefined, incomingSessionStartMs: number | null | undefined): boolean {
   const normalized = normalizeRecentDataWindowKey(windowKey);
   return normalized === 'session' &&
     activeSessionStartMs != null &&
@@ -42,7 +43,7 @@ export function shouldReloadGeometryForSessionTransition(windowKey, activeSessio
     incomingSessionStartMs > activeSessionStartMs;
 }
 
-export function shouldClearGeometryForSessionTransition(windowKey, activeSessionStartMs, incomingSessionStartMs) {
+export function shouldClearGeometryForSessionTransition(windowKey: string | null | undefined, activeSessionStartMs: number | null | undefined, incomingSessionStartMs: number | null | undefined): boolean {
   const normalized = normalizeRecentDataWindowKey(windowKey);
   return normalized === 'current_session' &&
     activeSessionStartMs != null &&

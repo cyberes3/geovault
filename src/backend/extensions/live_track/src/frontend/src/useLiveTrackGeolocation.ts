@@ -1,30 +1,33 @@
 import { ref } from 'vue';
+import type { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import type { LocationMarkerCoords } from './types/gv-core';
 
 const { createUserLocationMarker, updateUserLocationMarker, removeUserLocationMarker, geolocationManager } = window.gv_core;
+
+export interface UseLiveTrackGeolocationDeps {
+  getMap: () => MapLibreMap | null;
+  onError?: (message: string) => void;
+}
 
 /**
  * "Show my location" tracking + marker for LiveTrackView, built on core's shared
  * `geolocationManager` singleton (so no stale bundled copy of the geolocation logic).
- *
- * @param {object} deps
- * @param {() => import('maplibre-gl').Map | null} deps.getMap
- * @param {(message: string) => void} [deps.onError]
  */
-export function useLiveTrackGeolocation({ getMap, onError }) {
+export function useLiveTrackGeolocation({ getMap, onError }: UseLiveTrackGeolocationDeps) {
   const trackingEnabled = ref(false);
-  const userLocation = ref(null);
-  const locationMarker = ref(null);
+  const userLocation = ref<LocationMarkerCoords | null>(null);
+  const locationMarker = ref<Marker | null>(null);
 
-  function reportError(message) {
+  function reportError(message: string): void {
     if (typeof onError === 'function') {
       onError(message);
-    } else if (window.gv_core?.GeoVault?.toast) {
+    } else {
       window.gv_core.GeoVault.toast.error(message);
     }
   }
 
   /** Re-sync the marker onto the current map instance - call after a map style (re)load. */
-  async function syncUserLocationMarker() {
+  async function syncUserLocationMarker(): Promise<void> {
     const map = getMap();
     if (!trackingEnabled.value || !userLocation.value || !map) return;
     if (locationMarker.value) {
@@ -33,7 +36,7 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
     locationMarker.value = await createUserLocationMarker(map, userLocation.value);
   }
 
-  function stopLocationTracking() {
+  function stopLocationTracking(): void {
     geolocationManager.stopTracking();
     trackingEnabled.value = false;
     userLocation.value = null;
@@ -43,10 +46,10 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
     }
   }
 
-  async function handleLocationUpdate(coords) {
+  async function handleLocationUpdate(coords: LocationMarkerCoords): Promise<void> {
     userLocation.value = coords;
     const map = getMap();
-    if (!map || !coords) return;
+    if (!map) return;
     if (!locationMarker.value) {
       locationMarker.value = await createUserLocationMarker(map, coords);
       return;
@@ -54,13 +57,14 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
     updateUserLocationMarker(locationMarker.value, coords);
   }
 
-  function handleLocationError(error) {
+  function handleLocationError(error: unknown): void {
     console.error('Geolocation error:', error);
     stopLocationTracking();
-    reportError(error?.code === 1 ? 'Location permission denied.' : 'Failed to get your location.');
+    const code = (error as { code?: number } | null)?.code;
+    reportError(code === 1 ? 'Location permission denied.' : 'Failed to get your location.');
   }
 
-  function toggleLocationTracking() {
+  function toggleLocationTracking(): void {
     if (trackingEnabled.value) {
       stopLocationTracking();
       return;
@@ -68,10 +72,10 @@ export function useLiveTrackGeolocation({ getMap, onError }) {
     // Use getCurrentPosition first to trigger the browser's permission prompt (more reliable
     // on localhost and in some browsers). Then start watchPosition for ongoing updates.
     trackingEnabled.value = true;
-    geolocationManager.getCurrentPosition()
+    void geolocationManager.getCurrentPosition()
       .then((coords) => {
         void handleLocationUpdate(coords);
-        geolocationManager.startTracking(handleLocationUpdate, handleLocationError);
+        geolocationManager.startTracking((c) => void handleLocationUpdate(c), handleLocationError);
       })
       .catch(handleLocationError);
   }

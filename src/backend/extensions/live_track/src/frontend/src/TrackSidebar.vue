@@ -52,13 +52,13 @@
       :hauk-domain="haukDomain"
       @update:name="name = $event"
       @update:color="color = $event"
-      @update:recentDataWindow="recentDataWindow = $event"
+      @update:recent-data-window="recentDataWindow = $event"
       @update:visibility="visibility = $event"
-      @update:shareParamsWithRecipients="onShareParamsWithRecipientsUpdate($event)"
-      @update:shareParamsWithWorld="shareParamsWithWorld = $event"
-      @update:sharedWithEmails="sharedWithEmails = $event"
-      @update:worldShareEnabled="setWorldShareEnabled"
-      @update:allowGroupReshare="onAllowGroupReshareChange($event)"
+      @update:share-params-with-recipients="onShareParamsWithRecipientsUpdate($event)"
+      @update:share-params-with-world="shareParamsWithWorld = $event"
+      @update:shared-with-emails="sharedWithEmails = $event"
+      @update:world-share-enabled="setWorldShareEnabled"
+      @update:allow-group-reshare="onAllowGroupReshareChange($event)"
       @update:hidden="onTrackerHiddenChange($event)"
       @reset-color="resetColorToDeterministic"
       @open-instructions="showInstructions = true"
@@ -146,13 +146,13 @@
         :hauk-domain="haukDomain"
         @update:name="name = $event"
         @update:color="color = $event"
-        @update:recentDataWindow="recentDataWindow = $event"
+        @update:recent-data-window="recentDataWindow = $event"
         @update:visibility="visibility = $event"
-        @update:shareParamsWithRecipients="onShareParamsWithRecipientsUpdate($event)"
-        @update:shareParamsWithWorld="shareParamsWithWorld = $event"
-        @update:sharedWithEmails="sharedWithEmails = $event"
-        @update:worldShareEnabled="setWorldShareEnabled"
-        @update:allowGroupReshare="onAllowGroupReshareChange($event)"
+        @update:share-params-with-recipients="onShareParamsWithRecipientsUpdate($event)"
+        @update:share-params-with-world="shareParamsWithWorld = $event"
+        @update:shared-with-emails="sharedWithEmails = $event"
+        @update:world-share-enabled="setWorldShareEnabled"
+        @update:allow-group-reshare="onAllowGroupReshareChange($event)"
         @update:hidden="onTrackerHiddenChange($event)"
         @reset-color="resetColorToDeterministic"
         @open-instructions="showInstructions = true"
@@ -198,41 +198,58 @@
   </div>
 </template>
 
-<script>
-import { ref, watch, computed, inject, onMounted, onBeforeUnmount } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, watch, computed, inject, onMounted, onBeforeUnmount, type PropType } from 'vue';
 import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import Loader from 'platform/components/parts/Loader.vue';
-import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
+import { getIngressBodyTemplate } from './ingressBodyTemplateCache';
 import CreateTrackForm from './CreateTrackForm.vue';
 import CreateSuccessView from './CreateSuccessView.vue';
 import EditTrackForm from './EditTrackForm.vue';
 import GpsLoggerInstructionsModal from './GpsLoggerInstructionsModal.vue';
 import HaukInstructionsModal from './HaukInstructionsModal.vue';
-import { buildTrackerSettingsPayloadFromSnapshot } from './settingsPayloadBuilders.js';
-import { didRecentDataWindowChange } from './settingsChangePolicy.js';
+import { buildTrackerSettingsPayloadFromSnapshot, type TrackerSettingsSnapshot } from './settingsPayloadBuilders';
+import { didRecentDataWindowChange } from './settingsChangePolicy';
+import type { LiveTrack, TrackVisibility } from './types/track';
+import type { ExtensionApi } from './types/extension-api';
 
-export default {
+type ContainerRefLike = { value: HTMLElement | null } | HTMLElement | null;
+
+interface NormalizedSnapshot {
+  name: string;
+  color: string;
+  recentDataWindow: string;
+  visibility: string;
+  shareParamsWithRecipients: boolean;
+  shareParamsWithWorld: boolean;
+  sharedWithEmails: string[];
+  worldShareEnabled: boolean;
+  trackerHidden: boolean;
+  allowGroupReshare: boolean;
+}
+
+export default defineComponent({
   name: 'TrackSidebar',
   components: { LiveTrackSidebar, Loader, CreateTrackForm, CreateSuccessView, EditTrackForm, GpsLoggerInstructionsModal, HaukInstructionsModal },
   props: {
-    mode: { type: String, required: true },
-    track: { type: Object, default: null },
+    mode: { type: String as PropType<'create' | 'edit'>, required: true },
+    track: { type: Object as PropType<LiveTrack | null>, default: null },
     loading: { type: Boolean, default: false },
     userLogin: { type: String, default: '' },
-    containerRef: { type: Object, default: null },
+    containerRef: { type: Object as PropType<ContainerRefLike>, default: null },
     /** When true, render only content + footer (no sidebar shell); parent provides the shell. */
     embedded: { type: Boolean, default: false },
   },
   emits: ['close', 'saved', 'deleted', 'unsubscribed', 'settings-changed'],
   setup(props, { emit }) {
     const AUTOSAVE_DEBOUNCE_MS = 500;
-    const api = inject('extensionApi');
+    const api = inject('extensionApi') as ExtensionApi;
     const name = ref('');
     const color = ref('#6C93DE');
     const recentDataWindow = ref('');
-    const visibility = ref('private');
+    const visibility = ref<TrackVisibility>('private');
     const shareParamsWithRecipients = ref(false);
-    const sharedWithEmails = ref([]);
+    const sharedWithEmails = ref<string[]>([]);
     const userPickedColor = ref(false);
     const unsubscribing = ref(false);
     const error = ref('');
@@ -248,24 +265,24 @@ export default {
     const shareParamsWithWorld = ref(false);
     const trackerHidden = ref(false);
     const allowGroupReshare = ref(false);
-    const lastSavedSnapshot = ref(null);
+    const lastSavedSnapshot = ref<TrackerSettingsSnapshot | null>(null);
     const isInitializingDraft = ref(false);
-    const createdTrack = ref(null);
+    const createdTrack = ref<LiveTrack | null>(null);
     const showInstructions = ref(false);
     const showHaukInstructions = ref(false);
     const haukDomain = ref('');
     const trackerSecretOverride = ref('');
     const haukPasswordOverride = ref('');
-    let autosaveTimerId = null;
+    let autosaveTimerId: ReturnType<typeof setTimeout> | null = null;
     let autosaveInFlight = false;
     let autosaveQueued = false;
     let autosaveSeq = 0;
 
-    const sidebarTitle = computed(() => (props.mode === 'create' ? 'New Tracker' : 'Edit Tracker'));
-    const isOwner = computed(() => props.track?.is_owner !== false);
+    const sidebarTitle = computed((): string => (props.mode === 'create' ? 'New Tracker' : 'Edit Tracker'));
+    const isOwner = computed((): boolean => props.track?.is_owner !== false);
 
     /** Deterministic hex color from string (high S, high V so not too dark). */
-    function colorFromName(str) {
+    function colorFromName(str: string): string {
       let h = 0;
       for (let i = 0; i < str.length; i++) {
         h = ((h << 5) - h) + str.charCodeAt(i);
@@ -276,96 +293,96 @@ export default {
       const c = v * s;
       const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
       const m = v - c;
-      let r, g, b;
+      let r: number, g: number, b: number;
       if (hue < 60) { r = c; g = x; b = 0; }
       else if (hue < 120) { r = x; g = c; b = 0; }
       else if (hue < 180) { r = 0; g = c; b = x; }
       else if (hue < 240) { r = 0; g = x; b = c; }
       else if (hue < 300) { r = x; g = 0; b = c; }
       else { r = c; g = 0; b = x; }
-      const toHex = (n) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+      const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
       return '#' + toHex(r) + toHex(g) + toHex(b);
     }
 
-    const displayColor = computed(() => {
+    const displayColor = computed((): string => {
       if (props.mode !== 'create') return color.value;
       if (userPickedColor.value) return color.value;
       return name.value.trim() ? colorFromName(name.value.trim()) : '#6C93DE';
     });
 
-    function onColorPicked(value) {
+    function onColorPicked(value: string): void {
       color.value = value;
       userPickedColor.value = true;
     }
 
-    function resetColorToDeterministic() {
+    function resetColorToDeterministic(): void {
       color.value = name.value.trim() ? colorFromName(name.value.trim()) : '#6C93DE';
     }
 
     const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/extensions/live-track` : '';
     const bodyTemplate = ref('lat=%LAT&lon=%LON&timestamp=%TIMESTAMP');
-    const haukServerUrl = computed(() => {
-      const d = (haukDomain.value || '').trim();
+    const haukServerUrl = computed((): string => {
+      const d = haukDomain.value.trim();
       if (!d) return '';
       if (/^https?:\/\//i.test(d)) return d.replace(/\/+$/, '');
       return `https://${d}`;
     });
-    const effectiveTrackerSecret = computed(() => trackerSecretOverride.value || props.track?.tracker_secret || '');
-    const effectiveHaukPassword = computed(() => haukPasswordOverride.value || props.track?.hauk_password || createdTrack.value?.hauk_password || '');
-    const haukPassword = computed(() => effectiveHaukPassword.value);
-    onMounted(async () => {
-      const data = await getIngressBodyTemplate(api);
-      if (data?.body_template) bodyTemplate.value = data.body_template;
-      try {
-        const res = await api.get('hauk-config/');
-        const domain = (res?.data?.hauk_domain ?? '').trim();
+    const effectiveTrackerSecret = computed((): string => trackerSecretOverride.value || (props.track?.tracker_secret ?? ''));
+    const effectiveHaukPassword = computed((): string => haukPasswordOverride.value || (props.track?.hauk_password ?? createdTrack.value?.hauk_password ?? ''));
+    const haukPassword = computed((): string => effectiveHaukPassword.value);
+    onMounted(() => {
+      getIngressBodyTemplate(api).then((data) => {
+        if (data?.body_template) bodyTemplate.value = data.body_template;
+      }).catch(() => {});
+      api.get('hauk-config/').then((res) => {
+        const domain = ((res.data as { hauk_domain?: string } | null)?.hauk_domain ?? '').trim();
         if (domain) haukDomain.value = domain;
-      } catch {
+      }).catch(() => {
         // hauk_domain not configured or request failed; Hauk Setup button will be hidden
-      }
+      });
     });
-    const ingressUrl = computed(() => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
-    const instructionsIngressUrl = computed(() => `${baseUrl}/ingress/`);
-    const instructionsPassword = computed(() => createdTrack.value?.tracker_secret || effectiveTrackerSecret.value || '');
-    const trackIdForProfile = computed(() => createdTrack.value?.id ?? props.track?.id);
-    const profileDisplayName = computed(() => {
+    const ingressUrl = computed((): string => (createdTrack.value ? `${baseUrl}/ingress/` : ''));
+    const instructionsIngressUrl = computed((): string => `${baseUrl}/ingress/`);
+    const instructionsPassword = computed((): string => (createdTrack.value?.tracker_secret ?? effectiveTrackerSecret.value) || '');
+    const trackIdForProfile = computed((): string | number | undefined => createdTrack.value?.id ?? props.track?.id);
+    const profileDisplayName = computed((): string => {
       const raw = (createdTrack.value?.name ?? props.track?.name ?? 'track').replace(/[^a-zA-Z0-9 \-_]/g, '').trim().slice(0, 41);
       const name = raw ? `GeoVault ${raw}`.trim() : 'GeoVault';
       return name;
     });
-    const profileUrl = computed(() => {
+    const profileUrl = computed((): string => {
       const id = trackIdForProfile.value;
       const secret = instructionsPassword.value;
       const name = profileDisplayName.value;
       if (!id || !secret) return '';
       return `${baseUrl}/trackers/${id}/${encodeURIComponent(name)}.properties?secret=${encodeURIComponent(secret)}`;
     });
-    function makeSnapshotFromState() {
+    function makeSnapshotFromState(): TrackerSettingsSnapshot {
       return {
         name: name.value,
         color: color.value,
-        recentDataWindow: recentDataWindow.value || '',
-        visibility: visibility.value || 'private',
-        shareParamsWithRecipients: shareParamsWithRecipients.value === true,
-        shareParamsWithWorld: shareParamsWithWorld.value === true,
-        sharedWithEmails: [...(sharedWithEmails.value || [])].map((e) => String(e || '').toLowerCase()),
-        worldShareEnabled: worldShareEnabled.value === true,
-        trackerHidden: trackerHidden.value === true,
-        allowGroupReshare: allowGroupReshare.value === true
+        recentDataWindow: recentDataWindow.value,
+        visibility: visibility.value,
+        shareParamsWithRecipients: shareParamsWithRecipients.value,
+        shareParamsWithWorld: shareParamsWithWorld.value,
+        sharedWithEmails: sharedWithEmails.value.map((e) => e.toLowerCase()),
+        worldShareEnabled: worldShareEnabled.value,
+        trackerHidden: trackerHidden.value,
+        allowGroupReshare: allowGroupReshare.value
       };
     }
 
-    function normalizeSnapshot(snapshot) {
+    function normalizeSnapshot(snapshot: TrackerSettingsSnapshot | null | undefined): NormalizedSnapshot | null {
       if (!snapshot) return null;
       return {
-        name: String(snapshot.name || ''),
-        color: String(snapshot.color || '#6C93DE'),
-        recentDataWindow: String(snapshot.recentDataWindow || ''),
-        visibility: String(snapshot.visibility || 'private'),
+        name: String(snapshot.name ?? ''),
+        color: String(snapshot.color ?? '#6C93DE'),
+        recentDataWindow: String(snapshot.recentDataWindow ?? ''),
+        visibility: String(snapshot.visibility ?? 'private'),
         shareParamsWithRecipients: snapshot.shareParamsWithRecipients === true,
         shareParamsWithWorld: snapshot.shareParamsWithWorld === true,
-        sharedWithEmails: [...(snapshot.sharedWithEmails || [])]
-          .map((e) => String(e || '').trim().toLowerCase())
+        sharedWithEmails: [...(snapshot.sharedWithEmails ?? [])]
+          .map((e) => e.trim().toLowerCase())
           .filter(Boolean)
           .sort(),
         worldShareEnabled: snapshot.worldShareEnabled === true,
@@ -374,18 +391,18 @@ export default {
       };
     }
 
-    function snapshotsEqual(a, b) {
+    function snapshotsEqual(a: TrackerSettingsSnapshot | null | undefined, b: TrackerSettingsSnapshot | null | undefined): boolean {
       return JSON.stringify(normalizeSnapshot(a)) === JSON.stringify(normalizeSnapshot(b));
     }
 
-    function stopAutosaveTimer() {
+    function stopAutosaveTimer(): void {
       if (autosaveTimerId != null) {
         clearTimeout(autosaveTimerId);
         autosaveTimerId = null;
       }
     }
 
-    function queueAutosave() {
+    function queueAutosave(): void {
       if (props.mode !== 'edit' || !isOwner.value || !props.track?.id) return;
       if (isInitializingDraft.value) return;
       if (!lastSavedSnapshot.value) return;
@@ -398,7 +415,7 @@ export default {
       }, AUTOSAVE_DEBOUNCE_MS);
     }
 
-    async function flushAutosave() {
+    async function flushAutosave(): Promise<void> {
       if (props.mode !== 'edit' || !isOwner.value || !props.track?.id) return;
       if (!lastSavedSnapshot.value) return;
       const current = makeSnapshotFromState();
@@ -418,18 +435,19 @@ export default {
         const res = await api.post(`/trackers/${props.track.id}/settings/`, payload);
         if (seq !== autosaveSeq) return;
         lastSavedSnapshot.value = makeSnapshotFromState();
-        if (res?.data) {
-          worldShareEnabled.value = !!(res.data.world_share_id);
-          worldShareUrl.value = res.data.world_share_url || '';
-          internalShareUrl.value = res.data.internal_share_url || '';
+        const data = res.data as Partial<LiveTrack> | null;
+        if (data) {
+          worldShareEnabled.value = !!data.world_share_id;
+          worldShareUrl.value = data.world_share_url ?? '';
+          internalShareUrl.value = data.internal_share_url ?? '';
         }
         if (recentWindowChanged) {
           emit('settings-changed', { trackId: props.track.id, refresh_map: true });
         }
       } catch (e) {
         if (seq === autosaveSeq) {
-          const err = api.handleError?.(e);
-          error.value = err?.message || 'Failed to save';
+          const err = api.handleError(e);
+          error.value = err.message || 'Failed to save';
         }
       } finally {
         if (seq === autosaveSeq) saving.value = false;
@@ -441,24 +459,24 @@ export default {
       }
     }
 
-    async function create() {
-      if (!api || saving.value || !name.value.trim()) return;
+    async function create(): Promise<void> {
+      if (saving.value || !name.value.trim()) return;
       error.value = '';
       saving.value = true;
       try {
         const res = await api.post('/trackers/', { name: name.value.trim(), color: displayColor.value });
-        createdTrack.value = res.data;
-        emit('saved', { action: 'created', tracker: res?.data || null });
+        createdTrack.value = res.data as LiveTrack;
+        emit('saved', { action: 'created', tracker: res.data ?? null });
       } catch (e) {
-        const err = api.handleError?.(e);
-        error.value = err?.message || 'Failed to create tracker';
+        const err = api.handleError(e);
+        error.value = err.message || 'Failed to create tracker';
       } finally {
         saving.value = false;
       }
     }
 
-    async function downloadKml() {
-      if (!props.track || !api) return;
+    async function downloadKml(): Promise<void> {
+      if (!props.track) return;
       try {
         const url = api.url(`trackers/${props.track.id}/kml/`);
         const token = document.cookie.match(/csrftoken=([^;]+)/)?.[1];
@@ -468,65 +486,66 @@ export default {
           headers: token ? { 'X-CSRFToken': token } : {}
         });
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw { response: { status: res.status, data } };
+          const data: unknown = await res.json().catch(() => ({}));
+          throw new Error(JSON.stringify({ response: { status: res.status, data } }));
         }
         const blob = await res.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${(props.track.name || 'track').replace(/[^a-zA-Z0-9-_]/g, '_')}.kml`;
+        a.download = `${(props.track.name ?? 'track').replace(/[^a-zA-Z0-9-_]/g, '_')}.kml`;
         a.click();
         URL.revokeObjectURL(a.href);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Download started');
+        window.gv_core.GeoVault.toast.success('Download started');
       } catch (e) {
         api.toastError(e, 'Download failed');
       }
     }
 
-    function confirmClearHistory() {
+    function confirmClearHistory(): void {
       if (!props.track || clearing.value) return;
       if (!confirm('Clear all tracker history except the latest point? This cannot be undone.')) return;
       clearing.value = true;
       api.post(`/trackers/${props.track.id}/clear-history/`).then(() => {
         historyClearedThisSession.value = true;
         emit('saved', { action: 'history-cleared', trackId: props.track?.id ?? null });
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('History cleared');
-      }).catch((e) => {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Clear history failed');
+        window.gv_core.GeoVault.toast.success('History cleared');
+      }).catch((e: unknown) => {
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Clear history failed');
       }).finally(() => {
         clearing.value = false;
       });
     }
 
-    function confirmDelete() {
+    function confirmDelete(): void {
       if (!props.track || deleting.value) return;
       if (!confirm('Delete this tracker? This cannot be undone.')) return;
       deleting.value = true;
       api.delete(`/trackers/${props.track.id}/`).then(() => {
         emit('deleted', { trackId: props.track?.id ?? null });
-      }).catch((e) => {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Delete failed');
+      }).catch((e: unknown) => {
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Delete failed');
       }).finally(() => {
         deleting.value = false;
       });
     }
 
-    async function confirmRegenerateTokens() {
+    async function confirmRegenerateTokens(): Promise<void> {
       if (!props.track?.id || regeneratingTokens.value) return;
       if (!confirm('Regenerate all tracker tokens (API and Hauk)? Existing integrations using old tokens will stop working until updated.')) return;
       regeneratingTokens.value = true;
       try {
         const res = await api.post(`/trackers/${props.track.id}/regenerate-tokens/`);
-        const nextSecret = String(res?.data?.tracker_secret || '');
-        const nextHaukPassword = String(res?.data?.hauk_password || '');
+        const data = res.data as { tracker_secret?: string; hauk_password?: string } | null;
+        const nextSecret = String(data?.tracker_secret ?? '');
+        const nextHaukPassword = String(data?.hauk_password ?? '');
         if (nextSecret) trackerSecretOverride.value = nextSecret;
         if (nextHaukPassword) haukPasswordOverride.value = nextHaukPassword;
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker tokens regenerated');
+        window.gv_core.GeoVault.toast.success('Tracker tokens regenerated');
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to regenerate tokens');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to regenerate tokens');
       } finally {
         regeneratingTokens.value = false;
       }
@@ -537,18 +556,18 @@ export default {
       trackerSecretOverride.value = '';
       haukPasswordOverride.value = '';
       if (t) {
-        name.value = t.name || '';
-        color.value = t.color || '#6C93DE';
+        name.value = t.name ?? '';
+        color.value = t.color ?? '#6C93DE';
         recentDataWindow.value = t.settings?.recent_data_window ?? '';
-        visibility.value = t.visibility || 'private';
+        visibility.value = t.visibility ?? 'private';
         shareParamsWithRecipients.value = t.share_params_with_recipients === true;
         shareParamsWithWorld.value = t.share_params_with_world === true;
         sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
-        worldShareEnabled.value = !!(t.world_share_id);
-        worldShareUrl.value = t.world_share_url || '';
-        internalShareUrl.value = t.internal_share_url || '';
-        trackerHidden.value = (t.settings && t.settings.hidden) === true;
-        allowGroupReshare.value = (t.settings && t.settings.allow_group_reshare) === true;
+        worldShareEnabled.value = !!t.world_share_id;
+        worldShareUrl.value = t.world_share_url ?? '';
+        internalShareUrl.value = t.internal_share_url ?? '';
+        trackerHidden.value = t.settings?.hidden === true;
+        allowGroupReshare.value = t.settings?.allow_group_reshare === true;
         userPickedColor.value = true;
       } else {
         userPickedColor.value = false;
@@ -568,12 +587,12 @@ export default {
       isInitializingDraft.value = false;
     }, { immediate: true });
 
-    function setWorldShareEnabled(enabled) {
-      worldShareEnabled.value = enabled === true;
+    function setWorldShareEnabled(enabled: boolean): void {
+      worldShareEnabled.value = enabled;
       queueAutosave();
     }
 
-    function onTrackerHiddenChange(value) {
+    function onTrackerHiddenChange(value: boolean): void {
       trackerHidden.value = value;
       if (props.track?.id) {
         emit('settings-changed', { trackId: props.track.id, hidden: value });
@@ -581,12 +600,12 @@ export default {
       queueAutosave();
     }
 
-    function onAllowGroupReshareChange(value) {
+    function onAllowGroupReshareChange(value: boolean): void {
       allowGroupReshare.value = value;
       queueAutosave();
     }
 
-    function onShareParamsWithRecipientsUpdate(value) {
+    function onShareParamsWithRecipientsUpdate(value: boolean): void {
       shareParamsWithRecipients.value = value;
       queueAutosave();
     }
@@ -614,17 +633,17 @@ export default {
       stopAutosaveTimer();
     });
 
-    async function confirmUnsubscribe() {
+    async function confirmUnsubscribe(): Promise<void> {
       if (!props.track?.id || unsubscribing.value) return;
       if (!confirm('Remove this tracker from your list? You can add it again from Shared With Me.')) return;
       unsubscribing.value = true;
       try {
         await api.delete(`/trackers/${props.track.id}/subscribe/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Removed from list');
+        window.gv_core.GeoVault.toast.success('Removed from list');
         emit('unsubscribed', props.track.id);
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to remove');
       } finally {
         unsubscribing.value = false;
       }
@@ -679,5 +698,5 @@ export default {
       confirmUnsubscribe
     };
   }
-};
+});
 </script>

@@ -22,7 +22,7 @@
           :key="g.id"
           :class="[
             'flex items-center gap-2 p-3 rounded-lg border transition-colors',
-            view === 'edit' && selectedGroup && String(g.id) === String(selectedGroup.id)
+            selectedGroup && String(g.id) === String(selectedGroup.id)
               ? 'border-blue-500 bg-blue-50'
               : 'border-gray-200 bg-white hover:bg-gray-50'
           ]"
@@ -84,38 +84,42 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, watch, type PropType } from 'vue';
 import { ArrowPathIcon, PencilIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import GroupModal from './GroupModal.vue';
+import type { LiveTrack, LiveTrackGroup } from './types/track';
+import type { ExtensionApi } from './types/extension-api';
 
-export default {
+type SidebarView = 'list' | 'create' | 'edit';
+
+export default defineComponent({
   name: 'GroupsSidebarContent',
   components: { BaseButton, GroupModal, ArrowPathIcon, PencilIcon },
   props: {
     /** When true, show loading state on refresh button */
     refreshing: { type: Boolean, default: false },
-    groups: { type: Array, default: () => [] },
-    trackers: { type: Array, default: () => [] },
-    api: { type: Object, required: true },
+    groups: { type: Array as PropType<LiveTrackGroup[]>, default: () => [] },
+    trackers: { type: Array as PropType<LiveTrack[]>, default: () => [] },
+    api: { type: Object as PropType<ExtensionApi>, required: true },
     /** When set, open in edit view for this group id. */
-    initialGroupId: { type: [String, Number], default: null },
+    initialGroupId: { type: [String, Number] as PropType<string | number | null>, default: null },
   },
   emits: ['saved', 'refreshed', 'leave', 'group-hidden-changed'],
   setup(props, { emit }) {
-    const view = ref('list');
-    const selectedGroup = ref(null);
+    const view = ref<SidebarView>('list');
+    const selectedGroup = ref<LiveTrackGroup | null>(null);
 
-    const sortedGroups = computed(() =>
-      [...(props.groups || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    const sortedGroups = computed((): LiveTrackGroup[] =>
+      [...props.groups].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
     );
 
     watch(
       () => props.initialGroupId,
       (id) => {
         if (id != null && id !== '') {
-          const g = (props.groups || []).find((gr) => String(gr.id) === String(id));
+          const g = props.groups.find((gr) => String(gr.id) === String(id));
           if (g) {
             selectedGroup.value = g;
             view.value = 'edit';
@@ -128,35 +132,35 @@ export default {
     watch(
       () => props.groups,
       (groups) => {
-        if (view.value === 'edit' && selectedGroup.value?.id) {
-          const updated = (groups || []).find((g) => String(g.id) === String(selectedGroup.value.id));
+        if (view.value === 'edit' && selectedGroup.value?.id != null) {
+          const updated = groups.find((g) => String(g.id) === String(selectedGroup.value?.id));
           if (updated) selectedGroup.value = updated;
         }
       },
       { deep: true }
     );
 
-    function openEdit(group) {
+    function openEdit(group: LiveTrackGroup): void {
       selectedGroup.value = group;
       view.value = 'edit';
     }
 
-    function onCreateSaved(payload) {
+    function onCreateSaved(payload: unknown): void {
       emit('saved', payload);
       view.value = 'list';
     }
 
-    function onEditSaved(payload) {
+    function onEditSaved(payload: unknown): void {
       emit('saved', payload);
       view.value = 'list';
       selectedGroup.value = null;
     }
 
-    function onEditRefreshed() {
+    function onEditRefreshed(): void {
       emit('refreshed');
     }
 
-    function onLeaveGroup() {
+    function onLeaveGroup(): void {
       emit('leave', selectedGroup.value);
       view.value = 'list';
       selectedGroup.value = null;
@@ -173,5 +177,5 @@ export default {
       onLeaveGroup,
     };
   },
-};
+});
 </script>

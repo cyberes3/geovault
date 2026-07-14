@@ -1,33 +1,48 @@
-function putBaselineValue(payload, key, value) {
+import type { LiveTrack, LiveTrackGroup, TrackVisibility } from './types/track';
+
+function putBaselineValue(payload: Record<string, unknown>, key: string, value: unknown): void {
   if (value === undefined || value === null) return;
   payload[key] = value;
 }
 
-function applyOverride(payload, key, value) {
+function applyOverride(payload: Record<string, unknown>, key: string, value: unknown): void {
   if (value === undefined) return;
   payload[key] = value;
 }
 
-function normalizeEmailList(emails) {
-  return [...(emails || [])]
-    .map((email) => String(email || '').trim().toLowerCase())
+function normalizeEmailList(emails: readonly string[] | null | undefined): string[] {
+  return [...(emails ?? [])]
+    .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
 }
 
-export function isTrackerWorldShareEnabled(tracker) {
-  return Boolean(tracker?.world_share_id || tracker?.world_share_url);
+export function isTrackerWorldShareEnabled(tracker: LiveTrack | null | undefined): boolean {
+  return Boolean(tracker?.world_share_id ?? tracker?.world_share_url);
 }
 
-export function isGroupWorldShareEnabled(group) {
-  return Boolean(group?.world_share_id || group?.world_share_url);
+export function isGroupWorldShareEnabled(group: LiveTrackGroup | null | undefined): boolean {
+  return Boolean(group?.world_share_id ?? group?.world_share_url);
 }
 
-export function buildTrackerSettingsPayloadFromSnapshot(snapshot) {
-  const payload = {
-    name: String(snapshot?.name || '').trim(),
+export interface TrackerSettingsSnapshot {
+  name?: string;
+  color?: string;
+  recentDataWindow?: string | null;
+  visibility?: TrackVisibility;
+  shareParamsWithRecipients?: boolean;
+  shareParamsWithWorld?: boolean;
+  worldShareEnabled?: boolean;
+  trackerHidden?: boolean;
+  allowGroupReshare?: boolean;
+  sharedWithEmails?: string[];
+}
+
+export function buildTrackerSettingsPayloadFromSnapshot(snapshot: TrackerSettingsSnapshot | null | undefined): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    name: String(snapshot?.name ?? '').trim(),
     color: snapshot?.color,
-    recent_data_window: snapshot?.recentDataWindow || null,
-    visibility: snapshot?.visibility || 'private',
+    recent_data_window: snapshot?.recentDataWindow ?? null,
+    visibility: snapshot?.visibility ?? 'private',
     share_params_with_recipients: snapshot?.shareParamsWithRecipients === true,
     share_params_with_world: snapshot?.shareParamsWithWorld === true,
     world_share_enabled: snapshot?.worldShareEnabled === true,
@@ -40,12 +55,23 @@ export function buildTrackerSettingsPayloadFromSnapshot(snapshot) {
   return payload;
 }
 
-export function buildTrackerPreservingSettingsPayload(tracker, overrides = {}) {
-  const payload = {};
-  const settings = tracker?.settings || {};
-  const effectiveVisibility = (
-    overrides.visibility !== undefined ? overrides.visibility : tracker?.visibility
-  );
+export interface TrackerPreservingSettingsOverrides {
+  name?: string;
+  color?: string;
+  recent_data_window?: string | null;
+  visibility?: TrackVisibility;
+  share_params_with_recipients?: boolean;
+  share_params_with_world?: boolean;
+  shared_with_emails?: string[];
+  world_share_enabled?: boolean;
+  hidden?: boolean;
+  allow_group_reshare?: boolean;
+}
+
+export function buildTrackerPreservingSettingsPayload(tracker: LiveTrack | null | undefined, overrides: TrackerPreservingSettingsOverrides = {}): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  const settings = tracker?.settings ?? {};
+  const effectiveVisibility = overrides.visibility ?? tracker?.visibility;
 
   putBaselineValue(payload, 'name', tracker?.name);
   putBaselineValue(payload, 'color', tracker?.color);
@@ -79,7 +105,7 @@ export function buildTrackerPreservingSettingsPayload(tracker, overrides = {}) {
   return payload;
 }
 
-export function buildTrackerSharingPayload(tracker, visibility, sharedWithEmails) {
+export function buildTrackerSharingPayload(tracker: LiveTrack | null | undefined, visibility: TrackVisibility, sharedWithEmails: string[] | null | undefined): Record<string, unknown> {
   return buildTrackerPreservingSettingsPayload(tracker, {
     visibility,
     shared_with_emails: visibility === 'shared' ? normalizeEmailList(sharedWithEmails) : undefined,
@@ -87,17 +113,25 @@ export function buildTrackerSharingPayload(tracker, visibility, sharedWithEmails
   });
 }
 
-export function buildTrackerUnhidePayload(tracker) {
+export function buildTrackerUnhidePayload(tracker: LiveTrack | null | undefined): Record<string, unknown> {
   return buildTrackerPreservingSettingsPayload(tracker, {
     hidden: false,
   });
 }
 
-export function buildGroupPreservingPatchPayload(group, overrides = {}) {
-  const payload = {};
-  const effectiveVisibility = (
-    overrides.visibility !== undefined ? overrides.visibility : group?.visibility
-  );
+export interface GroupPreservingPatchOverrides {
+  name?: string;
+  hidden?: boolean;
+  visibility?: TrackVisibility;
+  shared_with_emails?: string[];
+  world_share_enabled?: boolean;
+  add_track_ids?: Array<string | number>;
+  remove_track_ids?: Array<string | number>;
+}
+
+export function buildGroupPreservingPatchPayload(group: LiveTrackGroup | null | undefined, overrides: GroupPreservingPatchOverrides = {}): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  const effectiveVisibility = overrides.visibility ?? group?.visibility;
   putBaselineValue(payload, 'name', group?.name);
   putBaselineValue(payload, 'hidden', group?.hidden);
   putBaselineValue(payload, 'visibility', group?.visibility);
@@ -122,19 +156,18 @@ export function buildGroupPreservingPatchPayload(group, overrides = {}) {
   return payload;
 }
 
-export function buildGroupUnhidePayload(group) {
+export function buildGroupUnhidePayload(group: LiveTrackGroup | null | undefined): Record<string, unknown> {
   return buildGroupPreservingPatchPayload(group, {
     hidden: false,
   });
 }
 
-export function buildHiddenItemsClearPayload(targetTypes) {
-  const normalized = [...(targetTypes || [])]
-    .map((value) => String(value || '').trim().toLowerCase())
+export function buildHiddenItemsClearPayload(targetTypes: readonly string[] | null | undefined): Record<string, unknown> {
+  const normalized = [...(targetTypes ?? [])]
+    .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
   if (!normalized.length) {
     return {};
   }
   return { target_types: normalized };
 }
-

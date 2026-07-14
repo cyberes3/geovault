@@ -9,7 +9,7 @@
         :readonly="!isOwner"
         class="w-full border border-gray-300 px-3 py-2 rounded-lg"
         :class="{ 'bg-gray-100': !isOwner }"
-        @input="$emit('update:name', ($event.target && $event.target.value) || '')"
+        @input="$emit('update:name', ($event.target as HTMLInputElement).value)"
       />
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     </div>
@@ -63,7 +63,7 @@
         :disabled="!isOwner"
         class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none"
         :class="{ 'bg-gray-100': !isOwner }"
-        @change="$emit('update:recentDataWindow', ($event.target && $event.target.value) || '')"
+        @change="$emit('update:recentDataWindow', ($event.target as HTMLSelectElement).value)"
       >
         <option value="">All History</option>
         <option value="1min">Last Minute</option>
@@ -118,24 +118,35 @@
   </div>
 </template>
 
-<script>
-import { ref, watch, computed } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, watch, computed, type PropType } from 'vue';
 import { ArrowPathIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import CopyTextButton from './CopyTextButton.vue';
 import SharingSection from './SharingSection.vue';
+import type { LiveTrack, TrackVisibility } from './types/track';
 
-export default {
+interface AvailableUser {
+  email?: string;
+  [key: string]: unknown;
+}
+
+interface SelectItem {
+  value: string;
+  label: string;
+}
+
+export default defineComponent({
   name: 'EditTrackForm',
   components: { ArrowPathIcon, BaseButton, CopyTextButton, SharingSection },
   props: {
-    track: { type: Object, default: null },
+    track: { type: Object as PropType<LiveTrack | null>, default: null },
     name: { type: String, default: '' },
     color: { type: String, default: '#6C93DE' },
     recentDataWindow: { type: String, default: '' },
-    visibility: { type: String, default: 'private' },
+    visibility: { type: String as PropType<TrackVisibility>, default: 'private' },
     shareParamsWithRecipients: { type: Boolean, default: false },
-    sharedWithEmails: { type: Array, default: () => [] },
+    sharedWithEmails: { type: Array as PropType<string[]>, default: () => [] },
     isOwner: { type: Boolean, default: true },
     error: { type: String, default: '' },
     deleting: { type: Boolean, default: false },
@@ -155,32 +166,32 @@ export default {
     haukDomain: { type: String, default: '' }
   },
   emits: ['update:name', 'update:color', 'update:recentDataWindow', 'update:visibility', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:allowGroupReshare', 'update:hidden', 'reset-color', 'open-instructions', 'open-hauk-instructions', 'download-kml', 'clear-history', 'regenerate-tokens', 'delete', 'unsubscribe'],
-  setup(props, { emit }) {
-    const fullWorldShareUrl = computed(() => {
-      const path = props.worldShareUrl || '';
+  setup(props) {
+    const fullWorldShareUrl = computed((): string => {
+      const path = props.worldShareUrl;
       if (!path) return '';
-      if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      if (typeof window !== 'undefined' && window.location.origin) {
         return `${window.location.origin}${path}`;
       }
       return path;
     });
-    const fullInternalShareUrl = computed(() => {
-      const path = props.internalShareUrl || '';
+    const fullInternalShareUrl = computed((): string => {
+      const path = props.internalShareUrl;
       if (!path) return '';
       if (/^https?:\/\//i.test(path)) return path;
-      if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      if (typeof window !== 'undefined' && window.location.origin) {
         return `${window.location.origin}${path}`;
       }
       return path;
     });
-    const availableUsers = ref([]);
+    const availableUsers = ref<AvailableUser[]>([]);
     const loadingUsers = ref(false);
 
-    async function fetchUsers() {
+    async function fetchUsers(): Promise<void> {
       loadingUsers.value = true;
       try {
         const res = await fetch('/api/users/', { credentials: 'include' });
-        const data = await res.json();
+        const data = (await res.json()) as { users?: AvailableUser[] } | null;
         availableUsers.value = Array.isArray(data?.users) ? data.users : [];
       } catch {
         availableUsers.value = [];
@@ -189,20 +200,20 @@ export default {
       }
     }
 
-    const availableUsersForSelect = computed(() =>
-      (availableUsers.value || []).map((u) => ({ value: (u.email || '').toLowerCase(), label: u.email || '' })).filter((u) => u.value)
+    const availableUsersForSelect = computed((): SelectItem[] =>
+      availableUsers.value.map((u) => ({ value: (u.email ?? '').toLowerCase(), label: u.email ?? '' })).filter((u) => u.value)
     );
-    const sharedWithEmailsForSelect = computed(() =>
-      (props.sharedWithEmails || []).map((e) => String(e || '').toLowerCase()).filter(Boolean)
+    const sharedWithEmailsForSelect = computed((): string[] =>
+      props.sharedWithEmails.map((e) => e.toLowerCase()).filter(Boolean)
     );
 
     watch(
       () => props.isOwner && props.visibility === 'shared',
-      (show) => { if (show) fetchUsers(); },
+      (show) => { if (show) void fetchUsers(); },
       { immediate: true }
     );
 
     return { availableUsersForSelect, sharedWithEmailsForSelect, loadingUsers, fullWorldShareUrl, fullInternalShareUrl };
   }
-};
+});
 </script>

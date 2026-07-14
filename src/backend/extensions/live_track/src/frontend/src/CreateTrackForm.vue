@@ -7,7 +7,7 @@
         type="text"
         placeholder="Tracker name"
         class="w-full border border-gray-300 px-3 py-2 rounded-lg"
-        @input="$emit('update:name', ($event.target && $event.target.value) || '')"
+        @input="$emit('update:name', ($event.target as HTMLInputElement).value)"
       />
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     </div>
@@ -21,8 +21,10 @@
   </div>
 </template>
 
-<script>
-export default {
+<script lang="ts">
+import { defineComponent } from 'vue';
+
+export default defineComponent({
   name: 'CreateTrackForm',
   props: {
     name: { type: String, default: '' },
@@ -30,5 +32,5 @@ export default {
     error: { type: String, default: '' }
   },
   emits: ['update:name', 'color-picked']
-};
+});
 </script>

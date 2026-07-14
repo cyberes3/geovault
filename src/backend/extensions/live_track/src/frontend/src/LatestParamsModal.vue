@@ -86,25 +86,28 @@
   </div>
 </template>
 
-<script>
-import { computed } from 'vue';
+<script lang="ts">
+import { defineComponent, computed, type PropType } from 'vue';
 import LiveTrackSidebar from './LiveTrackSidebar.vue';
-import { formatParamDisplay, formatTimestampLocal } from './paramFormatters.js';
+import { formatParamDisplay, formatTimestampLocal } from './paramFormatters';
+import type { LiveTrack, PointParams, TrackPosition } from './types/track';
 
-export default {
+type ContainerRefLike = { value: HTMLElement | null } | HTMLElement | null;
+
+export default defineComponent({
   name: 'LatestParamsModal',
   components: { LiveTrackSidebar },
   props: {
     track: {
-      type: Object,
+      type: Object as PropType<LiveTrack | null>,
       default: null
     },
     paramLabels: {
-      type: Object,
+      type: Object as PropType<Record<string, string>>,
       default: () => ({})
     },
     containerRef: {
-      type: Object,
+      type: Object as PropType<ContainerRefLike>,
       default: null,
     },
     /** When true, render only content + footer (no sidebar shell); parent provides the shell. */
@@ -120,36 +123,36 @@ export default {
   emits: ['close'],
   setup(props) {
     /** True when we have real params from the backend (GPSLogger, etc.); false when only geometry (no point_params). */
-    const hasStoredParams = computed(() => {
+    const hasStoredParams = computed((): boolean => {
       const t = props.track;
       if (!t?.latestPointParams || typeof t.latestPointParams !== 'object') return false;
       return Object.keys(t.latestPointParams).length > 0;
     });
 
     /** Params to show: only stored latestPointParams when present; no fallback so we don't show lat/lon/timestamp as cards. */
-    const displayParams = computed(() => {
+    const displayParams = computed((): PointParams | null => {
       const t = props.track;
       if (!t || !hasStoredParams.value) return null;
-      return t.latestPointParams;
+      return t.latestPointParams ?? null;
     });
 
-    const sortedParamEntries = computed(() => {
+    const sortedParamEntries = computed((): [string, unknown][] => {
       const params = displayParams.value;
       if (!params || !Object.keys(params).length) return [];
       return Object.entries(params).sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     });
 
-    function formatLatLon(pos) {
-      if (!pos || pos.lat == null || pos.lon == null) return '';
+    function formatLatLon(pos: TrackPosition | null | undefined): string {
+      if (pos?.lat == null) return '';
       return `${Number(pos.lat).toFixed(6)}, ${Number(pos.lon).toFixed(6)}`;
     }
 
-    function getParamLabel(key) {
-      return props.paramLabels?.[key] || key;
+    function getParamLabel(key: string): string {
+      return props.paramLabels[key] ?? key;
     }
 
     /** Tooltip for start timestamp: "Running for X days, Y hours, Z minutes". */
-    function formatDurationRunning(timestamp) {
+    function formatDurationRunning(timestamp: unknown): string {
       if (timestamp == null) return '';
       const ms = typeof timestamp === 'number' && timestamp < 1e12 ? timestamp * 1000 : Number(timestamp);
       if (!Number.isFinite(ms)) return '';
@@ -159,7 +162,7 @@ export default {
       const days = Math.floor(totalMinutes / 1440);
       const hours = Math.floor((totalMinutes % 1440) / 60);
       const minutes = totalMinutes % 60;
-      const parts = [];
+      const parts: string[] = [];
       if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
       if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
       parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`);
@@ -177,5 +180,5 @@ export default {
       formatParamDisplay
     };
   }
-};
+});
 </script>

@@ -49,35 +49,47 @@
   </BaseModal>
 </template>
 
-<script>
-import { ref, computed, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, watch, type PropType } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
-import { buildTrackerSharingPayload } from './settingsPayloadBuilders.js';
+import { buildTrackerSharingPayload } from './settingsPayloadBuilders';
+import type { LiveTrack, TrackVisibility } from './types/track';
+import type { ExtensionApi } from './types/extension-api';
 
-export default {
+interface AvailableUser {
+  email?: string;
+  [key: string]: unknown;
+}
+
+interface SelectItem {
+  value: string;
+  label: string;
+}
+
+export default defineComponent({
   name: 'ShareSettingsModal',
   components: { BaseModal, BaseButton, Loader, ScrollingSelect },
   props: {
-    track: { type: Object, default: null },
-    api: { type: Object, default: null },
+    track: { type: Object as PropType<LiveTrack | null>, default: null },
+    api: { type: Object as PropType<ExtensionApi | null>, default: null },
   },
   emits: ['close', 'saved'],
   setup(props, { emit }) {
-    const visibility = ref('private');
-    const sharedWithEmails = ref([]);
+    const visibility = ref<TrackVisibility>('private');
+    const sharedWithEmails = ref<string[]>([]);
     const error = ref('');
     const saving = ref(false);
-    const availableUsers = ref([]);
+    const availableUsers = ref<AvailableUser[]>([]);
     const loadingUsers = ref(false);
 
-    async function fetchUsers() {
+    async function fetchUsers(): Promise<void> {
       loadingUsers.value = true;
       try {
         const res = await fetch('/api/users/', { credentials: 'include' });
-        const data = await res.json();
+        const data = (await res.json()) as { users?: AvailableUser[] } | null;
         availableUsers.value = Array.isArray(data?.users) ? data.users : [];
       } catch {
         availableUsers.value = [];
@@ -86,9 +98,9 @@ export default {
       }
     }
 
-    const availableUsersForSelect = computed(() =>
-      (availableUsers.value || [])
-        .map((u) => ({ value: (u.email || '').toLowerCase(), label: u.email || '' }))
+    const availableUsersForSelect = computed((): SelectItem[] =>
+      availableUsers.value
+        .map((u) => ({ value: (u.email ?? '').toLowerCase(), label: u.email ?? '' }))
         .filter((u) => u.value)
     );
 
@@ -96,28 +108,28 @@ export default {
       () => props.track,
       (t) => {
         if (!t) return;
-        visibility.value = t.visibility || 'private';
+        visibility.value = t.visibility ?? 'private';
         sharedWithEmails.value = Array.isArray(t.shared_with_emails) ? [...t.shared_with_emails] : [];
         error.value = '';
-        if (visibility.value === 'shared') fetchUsers();
+        if (visibility.value === 'shared') void fetchUsers();
       },
       { immediate: true }
     );
 
     watch(visibility, (v) => {
-      if (v === 'shared') fetchUsers();
+      if (v === 'shared') void fetchUsers();
     });
 
-    function toggleUserEmail(item) {
-      const email = (item && (item.label ?? item.value)) ? String(item.label || item.value).trim().toLowerCase() : '';
+    function toggleUserEmail(item: SelectItem): void {
+      const email = (item.label || item.value) ? String(item.label || item.value).trim().toLowerCase() : '';
       if (!email) return;
-      const current = sharedWithEmails.value || [];
-      const has = current.some((e) => (e || '').toLowerCase() === email);
-      if (has) sharedWithEmails.value = current.filter((e) => (e || '').toLowerCase() !== email);
+      const current = sharedWithEmails.value;
+      const has = current.some((e) => e.toLowerCase() === email);
+      if (has) sharedWithEmails.value = current.filter((e) => e.toLowerCase() !== email);
       else sharedWithEmails.value = [...current, email];
     }
 
-    async function onSave() {
+    async function onSave(): Promise<void> {
       if (!props.track?.id || !props.api) return;
       error.value = '';
       saving.value = true;
@@ -128,11 +140,11 @@ export default {
           sharedWithEmails.value,
         );
         const res = await props.api.post(`/trackers/${props.track.id}/settings/`, payload);
-        emit('saved', res?.data);
+        emit('saved', res.data);
         emit('close');
       } catch (e) {
-        const err = props.api?.handleError?.(e);
-        error.value = err?.message || 'Failed to save';
+        const err = props.api.handleError(e);
+        error.value = err.message || 'Failed to save';
       } finally {
         saving.value = false;
       }
@@ -149,5 +161,5 @@ export default {
       onSave,
     };
   },
-};
+});
 </script>

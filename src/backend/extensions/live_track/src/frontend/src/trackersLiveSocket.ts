@@ -2,22 +2,27 @@
  * WebSocket client for trackers-live endpoint (ws/extensions/live-track/trackers-live/).
  * Used by LiveTrackView for live track_updated events only. Same-origin; cookie/session auth.
  */
+import type { WebSocketHeartbeatInstance } from './types/gv-core';
 
 const WebSocketHeartbeat = window.gv_core.WebSocketHeartbeat;
 
+export type TrackersLiveSocketHandler = (data: unknown) => void;
+
 class TrackersLiveSocket {
+  private socket: WebSocket | null = null;
+  private readonly handlers = new Map<string, Set<TrackersLiveSocketHandler>>();
+  private reconnectAttempts = 0;
+  private readonly reconnectBaseDelayMs = 2000;
+  private readonly reconnectMaxDelayMs = 30000;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private shouldConnect = false;
+  onReconnect: (() => void) | null = null;
+  private readonly heartbeat: WebSocketHeartbeatInstance;
+
   constructor() {
-    this.socket = null;
-    this.handlers = new Map(); // type -> Set(handler)
-    this.reconnectAttempts = 0;
-    this.reconnectBaseDelayMs = 2000;
-    this.reconnectMaxDelayMs = 30000;
-    this.reconnectTimeoutId = null;
-    this.shouldConnect = false;
-    this.onReconnect = null;
     this.heartbeat = new WebSocketHeartbeat({
       sendPing: () => {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({ module: 'live_track', type: 'ping' }));
         }
       },
@@ -30,14 +35,14 @@ class TrackersLiveSocket {
     });
   }
 
-  getWsUrl() {
+  getWsUrl(): string {
     if (typeof window === 'undefined') return '';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     return `${protocol}//${host}/ws/extensions/live-track/trackers-live/`;
   }
 
-  connect() {
+  connect(): void {
     this.shouldConnect = true;
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
       return;
@@ -58,17 +63,17 @@ class TrackersLiveSocket {
           }
         }
       };
-      this.socket.onmessage = (event) => {
+      this.socket.onmessage = (event: MessageEvent<string>) => {
         try {
-          const msg = JSON.parse(event.data);
-          const type = msg && msg.type;
-          const data = msg && msg.data;
+          const msg = JSON.parse(event.data) as { type?: string; data?: unknown } | null;
+          const type = msg?.type;
+          const data = msg?.data;
           if (type === 'pong') {
             this.heartbeat.onPong();
             return;
           }
           if (type && this.handlers.has(type)) {
-            this.handlers.get(type).forEach((fn) => {
+            this.handlers.get(type)?.forEach((fn) => {
               try {
                 fn(data);
               } catch (err) {
@@ -102,7 +107,7 @@ class TrackersLiveSocket {
     }
   }
 
-  disconnect() {
+  disconnect(): void {
     this.shouldConnect = false;
     this.onReconnect = null;
     this.heartbeat.stop();
@@ -111,20 +116,20 @@ class TrackersLiveSocket {
       this.reconnectTimeoutId = null;
     }
     if (this.socket) {
-      this.socket.close(1000, null);
+      this.socket.close(1000);
       this.socket = null;
     }
     this.reconnectAttempts = 0;
   }
 
-  subscribe(type, handler) {
+  subscribe(type: string, handler: TrackersLiveSocketHandler): void {
     if (!this.handlers.has(type)) this.handlers.set(type, new Set());
-    this.handlers.get(type).add(handler);
+    this.handlers.get(type)?.add(handler);
   }
 
-  unsubscribe(type, handler) {
+  unsubscribe(type: string, handler: TrackersLiveSocketHandler): void {
     if (this.handlers.has(type)) {
-      this.handlers.get(type).delete(handler);
+      this.handlers.get(type)?.delete(handler);
     }
   }
 }

@@ -1,14 +1,20 @@
-import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry.js';
-import { getArrowImageId, ensureArrowImage } from './trackArrowMap.js';
+import type { Ref, ComputedRef } from 'vue';
+import type { Map as MapLibreMap, PaddingOptions } from 'maplibre-gl';
+import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry';
+import { getArrowImageId, ensureArrowImage } from './trackArrowMap';
 import {
   buildAccuracyCircleLayerSpec,
   DEFAULT_ACCURACY_CIRCLE_LAYER_ID,
   resolveSelectedTrackAccuracyMeters
-} from './mapAccuracyCircle.js';
-import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
-import { setupMapFollowListeners } from './mapFollowLock.js';
-import { isHiddenOwnedTracker } from './sharingSelectors.js';
-import { createCoalescedTask } from './asyncTaskCoalescer.js';
+} from './mapAccuracyCircle';
+import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils';
+import { setupMapFollowListeners } from './mapFollowLock';
+import { isHiddenOwnedTracker } from './sharingSelectors';
+import { createCoalescedTask } from './asyncTaskCoalescer';
+import type { LiveTrack, LiveTrackGroup } from './types/track';
+import type { TileSource } from './types/gv-core';
+
+type LonLat = [number, number];
 
 const { isValidMapLngLatPair, setupCopyMapCoordinatesOnContextMenu } = window.gv_core;
 
@@ -19,8 +25,8 @@ const { isValidMapLngLatPair, setupCopyMapCoordinatesOnContextMenu } = window.gv
  * link without ever visiting the main map). Await the shared loader (idempotent/cached after the
  * first call) instead of assuming it's already populated.
  */
-async function getMaplibreGl() {
-  return window.gv_core?.maplibre ?? window.maplibregl ?? (await window.gv_core?.loadMaplibreGl?.()) ?? null;
+async function getMaplibreGl(): Promise<typeof import('maplibre-gl') | null> {
+  return window.gv_core.maplibre ?? window.maplibregl ?? (await window.gv_core.loadMaplibreGl());
 }
 
 const LINES_SOURCE_ID = 'live-track-lines';
@@ -34,12 +40,11 @@ const BASE_SOURCE_ID = 'base-raster';
 const BASE_LAYER_ID = 'base-raster-layer';
 const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
-const LAYER_MAX_ZOOM = MAX_ZOOM + 1;
 /** Duration (ms) for minimal map snap animations. Exported for the one direct `map.easeTo` fallback (empty-state "go home") the view still owns. */
 export const MAP_SNAP_DURATION = 200;
 const LAST_POINTS_FIT = 10;
 
-const lineWhiteOutlineLayerSpec = {
+const lineWhiteOutlineLayerSpec: Record<string, unknown> = {
   id: LINES_WHITE_OUTLINE_LAYER_ID,
   type: 'line',
   source: LINES_SOURCE_ID,
@@ -50,7 +55,7 @@ const lineWhiteOutlineLayerSpec = {
   },
   layout: { 'line-join': 'round', 'line-cap': 'round' }
 };
-const lineBlackOutlineLayerSpec = {
+const lineBlackOutlineLayerSpec: Record<string, unknown> = {
   id: LINES_BLACK_OUTLINE_LAYER_ID,
   type: 'line',
   source: LINES_SOURCE_ID,
@@ -61,7 +66,7 @@ const lineBlackOutlineLayerSpec = {
   },
   layout: { 'line-join': 'round', 'line-cap': 'round' }
 };
-const lineLayerSpec = {
+const lineLayerSpec: Record<string, unknown> = {
   id: LINES_LAYER_ID,
   type: 'line',
   source: LINES_SOURCE_ID,
@@ -76,7 +81,7 @@ const accuracyCircleLayerSpec = buildAccuracyCircleLayerSpec({
   layerId: ACCURACY_CIRCLE_LAYER_ID,
   sourceId: POINTS_SOURCE_ID
 });
-const pointsLayerSpec = {
+const pointsLayerSpec: Record<string, unknown> = {
   id: POINTS_LAYER_ID,
   type: 'symbol',
   source: POINTS_SOURCE_ID,
@@ -92,9 +97,54 @@ const pointsLayerSpec = {
   }
 };
 
-function hexToRgb(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#6C93DE');
+function hexToRgb(hex: string | null | undefined): [number, number, number] {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex ?? '#6C93DE');
   return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [51, 136, 255];
+}
+
+interface LineFeatureProps {
+  trackId: string | number;
+  color: string;
+  selected: boolean;
+}
+
+interface PointFeatureProps {
+  trackId: string | number;
+  color: string;
+  selected: boolean;
+  rotation: number;
+  iconImage: string;
+  accuracy: number;
+  colorRgb?: [number, number, number];
+  latitude?: number;
+}
+
+interface LiveTrackGeoJSON<P> {
+  type: 'FeatureCollection';
+  features: Array<{ type: 'Feature'; properties: P; geometry: { type: 'LineString' | 'Point'; coordinates: LonLat | LonLat[] } }>;
+}
+
+export interface UseLiveTrackMapDeps {
+  mapContainer: Ref<HTMLElement | null>;
+  tileSources: Ref<TileSource[]>;
+  selectedLayer: Ref<string>;
+  trackers: Ref<LiveTrack[]>;
+  selectedId: Ref<string | number | null>;
+  activeGroupId: Ref<string | number | null>;
+  activeGroup: ComputedRef<LiveTrackGroup | null | undefined>;
+  followLocked: Ref<boolean>;
+  isAutoMoving: Ref<boolean>;
+  getMapPadding: () => number | PaddingOptions;
+  onFeatureClick?: (trackId: string | number) => void;
+  onBackgroundClick?: () => void;
+}
+
+export interface FitMapToTracksOptions {
+  duration?: number;
+}
+
+export interface PanToPointOptions {
+  minZoom?: number;
 }
 
 /**
@@ -108,20 +158,6 @@ function hexToRgb(hex) {
  * View-specific reactions to map clicks (list tab switching, scrolling a row into view, etc.)
  * are intentionally NOT handled here - they're delegated to `onFeatureClick`/`onBackgroundClick`
  * so this composable only deals with map mechanics.
- *
- * @param {object} deps
- * @param {import('vue').Ref} deps.mapContainer
- * @param {import('vue').Ref} deps.tileSources
- * @param {import('vue').Ref<string>} deps.selectedLayer
- * @param {import('vue').Ref<Array>} deps.trackers
- * @param {import('vue').Ref} deps.selectedId
- * @param {import('vue').Ref} deps.activeGroupId
- * @param {import('vue').ComputedRef} deps.activeGroup
- * @param {import('vue').Ref<boolean>} deps.followLocked
- * @param {import('vue').Ref<boolean>} deps.isAutoMoving
- * @param {() => object} deps.getMapPadding
- * @param {(trackId: unknown) => void} [deps.onFeatureClick]
- * @param {() => void} [deps.onBackgroundClick]
  */
 export function useLiveTrackMap({
   mapContainer,
@@ -136,40 +172,40 @@ export function useLiveTrackMap({
   getMapPadding,
   onFeatureClick,
   onBackgroundClick
-}) {
-  let map = null;
-  const styleReadyListeners = [];
+}: UseLiveTrackMapDeps) {
+  let map: MapLibreMap | null = null;
+  const styleReadyListeners: Array<() => void> = [];
 
-  function getMap() {
+  function getMap(): MapLibreMap | null {
     return map;
   }
 
   /** Register a callback fired whenever the map's style (re)loads - e.g. to re-sync the user location marker. */
-  function onStyleReady(cb) {
+  function onStyleReady(cb: () => void): void {
     if (typeof cb === 'function') styleReadyListeners.push(cb);
   }
 
-  function notifyStyleReady() {
+  function notifyStyleReady(): void {
     for (const cb of styleReadyListeners) cb();
   }
 
-  function buildLinesGeoJSON() {
+  function buildLinesGeoJSON(): LiveTrackGeoJSON<LineFeatureProps> {
     const groupId = activeGroupId.value;
     const groupTrackIds =
       groupId != null && activeGroup.value
-        ? new Set((activeGroup.value.track_ids || []).map((id) => String(id)))
+        ? new Set((activeGroup.value.track_ids ?? []).map((id) => String(id)))
         : null;
-    const features = [];
+    const features: LiveTrackGeoJSON<LineFeatureProps>['features'] = [];
     for (const track of trackers.value) {
       if (isHiddenOwnedTracker(track)) continue;
       if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
       const coordsSorted = getCoordsSortedByTime(track);
-      const coords = coordsSorted.map((c) => [c[0], c[1]]);
+      const coords = coordsSorted.map((c): LonLat => [c[0], c[1]]);
       if (coords.length < 2) continue;
       const segments = splitTrackIntoSegments(coords);
-      const props = {
+      const props: LineFeatureProps = {
         trackId: track.id,
-        color: track.color || '#6C93DE',
+        color: track.color ?? '#6C93DE',
         selected: selectedId.value === track.id
       };
       for (const segment of segments) {
@@ -183,24 +219,24 @@ export function useLiveTrackMap({
     return { type: 'FeatureCollection', features };
   }
 
-  function buildPointsGeoJSON() {
+  function buildPointsGeoJSON(): LiveTrackGeoJSON<PointFeatureProps> {
     const groupId = activeGroupId.value;
     const groupTrackIds =
       groupId != null && activeGroup.value
-        ? new Set((activeGroup.value.track_ids || []).map((id) => String(id)))
+        ? new Set((activeGroup.value.track_ids ?? []).map((id) => String(id)))
         : null;
-    const features = [];
+    const features: LiveTrackGeoJSON<PointFeatureProps>['features'] = [];
     for (const track of trackers.value) {
       if (isHiddenOwnedTracker(track)) continue;
       if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
       const coordsSorted = getCoordsSortedByTime(track);
       const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
-      const pos = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
+      const pos: LonLat | null = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
       if (!pos) continue;
-      const color = track.color || '#6C93DE';
+      const color = track.color ?? '#6C93DE';
       const selected = selectedId.value === track.id;
       const accuracy = resolveSelectedTrackAccuracyMeters(track, selected);
-      const props = {
+      const props: PointFeatureProps = {
         trackId: track.id,
         color,
         selected,
@@ -219,7 +255,7 @@ export function useLiveTrackMap({
     return { type: 'FeatureCollection', features };
   }
 
-  async function runUpdateMapFeatures() {
+  async function runUpdateMapFeatures(): Promise<void> {
     if (!map) return;
     const lineSource = map.getSource(LINES_SOURCE_ID);
     const pointSource = map.getSource(POINTS_SOURCE_ID);
@@ -241,8 +277,8 @@ export function useLiveTrackMap({
   /** Coalesced so bursts of live-update events collapse into one rebuild+setData per frame. */
   const updateMapFeatures = createCoalescedTask(runUpdateMapFeatures);
 
-  async function addLiveTrackLayersAndData() {
-    if (!map || !map.getStyle()) return;
+  async function addLiveTrackLayersAndData(): Promise<void> {
+    if (!map?.getStyle()) return;
     if (!map.getSource(LINES_SOURCE_ID)) {
       map.addSource(LINES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
@@ -269,19 +305,19 @@ export function useLiveTrackMap({
   }
 
   /** Disable map rotation (drag, touch pinch, keyboard) so north stays up. See maplibre disable-map-rotation example. */
-  function disableMapRotation() {
+  function disableMapRotation(): void {
     if (!map) return;
-    if (map.dragRotate && map.dragRotate.disable) map.dragRotate.disable();
-    if (map.touchZoomRotate && map.touchZoomRotate.disableRotation) map.touchZoomRotate.disableRotation();
-    if (map.keyboard && map.keyboard.disableRotation) map.keyboard.disableRotation();
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
   }
 
-  function getClickableTrackLayers() {
+  function getClickableTrackLayers(): string[] {
     const TRACK_LAYER_IDS = [POINTS_LAYER_ID, LINES_LAYER_ID, LINES_BLACK_OUTLINE_LAYER_ID, LINES_WHITE_OUTLINE_LAYER_ID];
-    return TRACK_LAYER_IDS.filter((id) => map.getLayer(id));
+    return TRACK_LAYER_IDS.filter((id) => map?.getLayer(id));
   }
 
-  function setupMapFollowListenersForView() {
+  function setupMapFollowListenersForView(): void {
     if (!map) return;
     setupMapFollowListeners(map, {
       getLocked: () => followLocked.value,
@@ -289,18 +325,19 @@ export function useLiveTrackMap({
     });
     map.on('click', (e) => {
       const layers = getClickableTrackLayers();
-      if (layers.length === 0) return;
+      if (layers.length === 0 || !map) return;
       const features = map.queryRenderedFeatures(e.point, { layers });
       const feature = features[0];
-      if (feature?.properties?.trackId) {
-        onFeatureClick?.(feature.properties.trackId);
+      const trackId = feature.properties?.trackId as string | number | undefined;
+      if (trackId != null) {
+        onFeatureClick?.(trackId);
       } else {
         onBackgroundClick?.();
       }
     });
     map.on('mousemove', (e) => {
-      const canvas = map.getCanvas();
-      if (!canvas) return;
+      const canvas = map?.getCanvas();
+      if (!canvas || !map) return;
       const layers = getClickableTrackLayers();
       if (layers.length === 0) {
         canvas.style.cursor = '';
@@ -312,13 +349,13 @@ export function useLiveTrackMap({
     setupCopyMapCoordinatesOnContextMenu(map);
   }
 
-  function getLastNCoords(track, n) {
+  function getLastNCoords(track: LiveTrack, n: number): LonLat[] {
     const coords = getCoordsSortedByTime(track);
     const slice = coords.length ? coords.slice(-n) : [];
-    return slice.map((c) => [c[0], c[1]]);
+    return slice.map((c): LonLat => [c[0], c[1]]);
   }
 
-  function fitBoundsFromCoords(coords, { duration = MAP_SNAP_DURATION } = {}) {
+  function fitBoundsFromCoords(coords: LonLat[], { duration = MAP_SNAP_DURATION }: FitMapToTracksOptions = {}): void {
     if (!map || !coords.length) return;
     let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
     for (const c of coords) {
@@ -341,10 +378,10 @@ export function useLiveTrackMap({
     });
   }
 
-  /** @param {{ duration?: number }} [options] - pass `{ duration: 0 }` for an instant fit (e.g. right after map construction, before first paint). */
-  function fitMapToTracks({ duration = MAP_SNAP_DURATION } = {}) {
+  /** Pass `{ duration: 0 }` for an instant fit (e.g. right after map construction, before first paint). */
+  function fitMapToTracks({ duration = MAP_SNAP_DURATION }: FitMapToTracksOptions = {}): void {
     if (!map || trackers.value.length === 0) return;
-    const allCoords = [];
+    const allCoords: LonLat[] = [];
     for (const track of trackers.value) {
       if (isHiddenOwnedTracker(track)) continue;
       allCoords.push(...getLastNCoords(track, LAST_POINTS_FIT));
@@ -352,7 +389,7 @@ export function useLiveTrackMap({
     fitBoundsFromCoords(allCoords, { duration });
   }
 
-  function fitMapToSelectedTrack() {
+  function fitMapToSelectedTrack(): void {
     if (!map || !selectedId.value) return;
     const track = trackers.value.find((t) => t.id === selectedId.value);
     if (!track) return;
@@ -361,10 +398,10 @@ export function useLiveTrackMap({
     fitBoundsFromCoords(coords);
   }
 
-  function fitMapToGroupTracks(group) {
+  function fitMapToGroupTracks(group: LiveTrackGroup | null | undefined): void {
     if (!map || !group?.track_ids?.length) return;
     const trackIds = new Set(group.track_ids.map((id) => String(id)));
-    const coords = [];
+    const coords: LonLat[] = [];
     for (const track of trackers.value) {
       if (!trackIds.has(String(track.id))) continue;
       if (isHiddenOwnedTracker(track)) continue;
@@ -375,8 +412,8 @@ export function useLiveTrackMap({
   }
 
   /** Ease the camera to a single [lon, lat] pair, optionally zooming in to at least `minZoom`. */
-  function panToPoint(coordPair, { minZoom } = {}) {
-    if (!map || !coordPair || coordPair.length < 2) return;
+  function panToPoint(coordPair: LonLat | null | undefined, { minZoom }: PanToPointOptions = {}): void {
+    if (!map || !coordPair) return;
     if (!isValidMapLngLatPair(coordPair[0], coordPair[1])) return;
     isAutoMoving.value = true;
     const zoom = minZoom != null ? Math.max(map.getZoom(), minZoom) : map.getZoom();
@@ -387,24 +424,24 @@ export function useLiveTrackMap({
   }
 
   /** Ease the camera to a track's last point (used by list/group click handlers). */
-  function panToTrackLastPoint(track, { minZoom } = {}) {
+  function panToTrackLastPoint(track: LiveTrack, { minZoom }: PanToPointOptions = {}): void {
     const coords = getLastNCoords(track, 1);
     if (coords.length === 0) return;
     panToPoint(coords[0], { minZoom });
   }
 
-  function centerOnSelectedTrackLastPoint() {
+  function centerOnSelectedTrackLastPoint(): void {
     if (!map || !selectedId.value) return;
     const track = trackers.value.find((t) => t.id === selectedId.value);
     if (!track) return;
     panToPoint(getLastNCoords(track, 1)[0]);
   }
 
-  let centerDebounceId = null;
+  let centerDebounceId: ReturnType<typeof setTimeout> | null = null;
   const CENTER_DEBOUNCE_MS = 220;
 
   /** Debounced camera re-center on the selected track's last point, for high-frequency live updates. */
-  function scheduleCenterOnSelectedTrack() {
+  function scheduleCenterOnSelectedTrack(): void {
     if (centerDebounceId) clearTimeout(centerDebounceId);
     centerDebounceId = setTimeout(() => {
       centerDebounceId = null;
@@ -412,13 +449,13 @@ export function useLiveTrackMap({
     }, CENTER_DEBOUNCE_MS);
   }
 
-  async function switchMapLayer(layerValue) {
+  async function switchMapLayer(layerValue: string): Promise<void> {
     const maplibregl = await getMaplibreGl();
     if (!map || !maplibregl) return;
     const tileSource = tileSources.value.find((s) => s.id === layerValue);
     if (!tileSource) return;
-    const clientConfig = tileSource.client_config || {};
-    const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
+    const clientConfig = tileSource.client_config ?? {};
+    const isStyleBased = clientConfig.style_url != null || clientConfig.type === 'maptiler';
 
     if (isStyleBased) {
       const styleUrl = clientConfig.style_url;
@@ -427,17 +464,25 @@ export function useLiveTrackMap({
       const zoom = map.getZoom();
       const bearing = map.getBearing();
       map.setStyle(styleUrl);
-      map.once('styledata', async () => {
+      map.once('styledata', () => {
         if (!map) return;
         map.resize();
-        await addLiveTrackLayersAndData();
-        notifyStyleReady();
-        setTimeout(() => {
-          if (map) {
-            map.resize();
-            map.jumpTo({ center, zoom, bearing, duration: 0 });
-          }
-        }, 0);
+        addLiveTrackLayersAndData().then(() => {
+          notifyStyleReady();
+          setTimeout(() => {
+            if (map) {
+              map.resize();
+              map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
+            }
+          }, 0);
+        }).catch(() => {
+          setTimeout(() => {
+            if (map) {
+              map.resize();
+              map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
+            }
+          }, 0);
+        });
       });
     } else {
       const wasStyleBased = !map.getSource(BASE_SOURCE_ID);
@@ -449,7 +494,7 @@ export function useLiveTrackMap({
         map = null;
         const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
         const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-        const style = {
+        const style: Record<string, unknown> = {
           version: 8,
           sources: {
             [BASE_SOURCE_ID]: rasterSpec,
@@ -465,7 +510,7 @@ export function useLiveTrackMap({
           ]
         };
         map = new maplibregl.Map({
-          container: mapContainer.value,
+          container: mapContainer.value ?? '',
           style,
           center: [center.lng, center.lat],
           zoom,
@@ -482,7 +527,7 @@ export function useLiveTrackMap({
           if (!map) return;
           map.resize();
           ensureArrowImage(map, '#6C93DE', false).then(() => {
-            if (!map || !map.getStyle()) return;
+            if (!map?.getStyle()) return;
             if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
             runUpdateMapFeatures().then(() => {
               notifyStyleReady();
@@ -500,7 +545,7 @@ export function useLiveTrackMap({
                 }
               }, 0);
             });
-          });
+          }).catch(() => {});
         });
       } else {
         const spec = getRasterSourceSpec(layerValue, tileSource);
@@ -522,14 +567,14 @@ export function useLiveTrackMap({
     }
   }
 
-  async function initMap() {
+  async function initMap(): Promise<void> {
     const maplibregl = await getMaplibreGl();
     if (!mapContainer.value || !maplibregl) return;
 
     const layerValue = selectedLayer.value;
-    const tileSource = tileSources.value.find((s) => s.id === layerValue) || tileSources.value[0];
-    const clientConfig = tileSource?.client_config || {};
-    const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
+    const tileSource = tileSources.value.find((s) => s.id === layerValue) ?? tileSources.value[0];
+    const clientConfig = tileSource.client_config ?? {};
+    const isStyleBased = clientConfig.style_url != null || clientConfig.type === 'maptiler';
 
     if (isStyleBased && clientConfig.style_url) {
       map = new maplibregl.Map({
@@ -573,7 +618,7 @@ export function useLiveTrackMap({
 
     const rasterSpec = getRasterSourceSpec(layerValue, tileSource);
     const layerMaxZoom = getRasterLayerMaxZoom(clientConfig);
-    const style = {
+    const style: Record<string, unknown> = {
       version: 8,
       sources: {
         [BASE_SOURCE_ID]: rasterSpec,
@@ -612,7 +657,7 @@ export function useLiveTrackMap({
       if (!map) return;
       map.resize();
       ensureArrowImage(map, '#6C93DE', false).then(() => {
-        if (!map || !map.getStyle()) return;
+        if (!map?.getStyle()) return;
         if (!map.getLayer(POINTS_LAYER_ID)) map.addLayer(pointsLayerSpec);
         runUpdateMapFeatures().then(() => {
           notifyStyleReady();
@@ -630,11 +675,11 @@ export function useLiveTrackMap({
             }
           }, 0);
         });
-      });
+      }).catch(() => {});
     });
   }
 
-  function destroyMap() {
+  function destroyMap(): void {
     if (centerDebounceId) {
       clearTimeout(centerDebounceId);
       centerDebounceId = null;

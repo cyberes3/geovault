@@ -138,7 +138,7 @@
               <div class="text-xs text-gray-500 truncate" :title="track.owner_email">{{ track.owner_email }}</div>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
-              <template v-if="(track.visibility || '') === 'public'">
+              <template v-if="track.visibility === 'public'">
                 <button
                   type="button"
                   title="Remove from my trackers (you can add again from Public Trackers)"
@@ -214,85 +214,87 @@
   </div>
 </template>
 
-<script>
-import { ref, computed } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, type PropType } from 'vue';
 import { ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, UserGroupIcon, UserMinusIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackListChevronIcon from './TrackListChevronIcon.vue';
-import { filterByQuery, isSharedOrPublicTracker } from './sharingSelectors.js';
+import { filterByQuery, isSharedOrPublicTracker } from './sharingSelectors';
+import type { LiveTrack, LiveTrackGroup } from './types/track';
+import type { ExtensionApi } from './types/extension-api';
 
-export default {
+export default defineComponent({
   name: 'SharedWithMeSidebarContent',
   components: { BaseButton, Loader, TrackListChevronIcon, ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, UserGroupIcon, UserMinusIcon, XMarkIcon },
   props: {
     /** When true, show loading state on refresh button */
     refreshing: { type: Boolean, default: false },
-    trackers: { type: Array, default: () => [] },
+    trackers: { type: Array as PropType<LiveTrack[]>, default: () => [] },
     /** Trackers shared with you that you haven't added yet (from available-to-add shared_with_me) */
-    incomingTrackers: { type: Array, default: () => [] },
+    incomingTrackers: { type: Array as PropType<LiveTrack[]>, default: () => [] },
     /** Groups shared with you that are pending acceptance (from available-to-add shared_with_me_groups). */
-    incomingGroups: { type: Array, default: () => [] },
+    incomingGroups: { type: Array as PropType<LiveTrackGroup[]>, default: () => [] },
     /** Groups shared with you that are on your map (accepted; at least one track subscribed) */
-    sharedGroupsOnMap: { type: Array, default: () => [] },
+    sharedGroupsOnMap: { type: Array as PropType<LiveTrackGroup[]>, default: () => [] },
     /** Track ID currently being added (show spinner) */
-    addingIncomingId: { type: [String, Number], default: null },
+    addingIncomingId: { type: [String, Number] as PropType<string | number | null>, default: null },
     /** Group ID currently being added (show spinner) */
-    addingIncomingGroupId: { type: [String, Number], default: null },
+    addingIncomingGroupId: { type: [String, Number] as PropType<string | number | null>, default: null },
     /** Track ID currently being removed from share (leave share in progress) */
-    leavingShareId: { type: [String, Number], default: null },
-    unsubscribingId: { type: [String, Number], default: null },
+    leavingShareId: { type: [String, Number] as PropType<string | number | null>, default: null },
+    unsubscribingId: { type: [String, Number] as PropType<string | number | null>, default: null },
     /** Group ID currently being unsubscribed (show spinner on group row) */
-    unsubscribingGroupId: { type: [String, Number], default: null },
+    unsubscribingGroupId: { type: [String, Number] as PropType<string | number | null>, default: null },
     /** API client for leave-group call */
-    api: { type: Object, default: null },
+    api: { type: Object as PropType<ExtensionApi | null>, default: null },
   },
   emits: ['unsubscribe', 'leaveShare', 'addIncoming', 'addIncomingGroup', 'leaveGroup', 'unsubscribeGroup', 'selectTrack', 'selectGroup', 'openDiscover', 'open-shared-list', 'refresh'],
   setup(props, { emit }) {
     const searchQuery = ref('');
 
-    const sharedTrackers = computed(() => props.trackers.filter((t) => isSharedOrPublicTracker(t)));
+    const sharedTrackers = computed((): LiveTrack[] => props.trackers.filter((t) => isSharedOrPublicTracker(t)));
 
-    const filteredIncoming = computed(() => filterByQuery(props.incomingTrackers || [], searchQuery.value));
-    const filteredIncomingGroups = computed(() => filterByQuery(props.incomingGroups || [], searchQuery.value, 'name', 'owner_email'));
-    const filteredShared = computed(() => filterByQuery(sharedTrackers.value, searchQuery.value));
-    const filteredSharedGroupsOnMap = computed(() =>
-      filterByQuery(props.sharedGroupsOnMap || [], searchQuery.value, 'name', 'owner_email')
+    const filteredIncoming = computed((): LiveTrack[] => filterByQuery(props.incomingTrackers, searchQuery.value));
+    const filteredIncomingGroups = computed((): LiveTrackGroup[] => filterByQuery(props.incomingGroups, searchQuery.value, 'name', 'owner_email'));
+    const filteredShared = computed((): LiveTrack[] => filterByQuery(sharedTrackers.value, searchQuery.value));
+    const filteredSharedGroupsOnMap = computed((): LiveTrackGroup[] =>
+      filterByQuery(props.sharedGroupsOnMap, searchQuery.value, 'name', 'owner_email')
     );
 
-    function isAddingGroup(groupId) {
+    function isAddingGroup(groupId: string | number): boolean {
       const id = props.addingIncomingGroupId;
       return id != null && String(id) === String(groupId);
     }
 
-    async function onLeaveGroup(group) {
-      if (!props.api?.delete || !group?.id) return;
+    async function onLeaveGroup(group: LiveTrackGroup): Promise<void> {
+      if (!props.api) return;
       try {
         await props.api.delete(`/groups/${group.id}/leave/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
+        window.gv_core.GeoVault.toast.success('Left shared group');
         emit('leaveGroup', group);
       } catch (e) {
-        const err = props.api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
+        const err = props.api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to leave shared group');
       }
     }
 
-    function isUnsubscribingGroup(groupId) {
+    function isUnsubscribingGroup(groupId: string | number): boolean {
       const id = props.unsubscribingGroupId;
       return id != null && String(id) === String(groupId);
     }
 
-    function isAdding(trackId) {
+    function isAdding(trackId: string | number): boolean {
       const id = props.addingIncomingId;
       return id != null && String(id) === String(trackId);
     }
 
-    function isUnsubscribing(trackId) {
+    function isUnsubscribing(trackId: string | number): boolean {
       const id = props.unsubscribingId;
       return id != null && String(id) === String(trackId);
     }
 
-    function isLeavingShare(trackId) {
+    function isLeavingShare(trackId: string | number): boolean {
       const id = props.leavingShareId;
       return id != null && String(id) === String(trackId);
     }
@@ -311,5 +313,5 @@ export default {
       onLeaveGroup,
     };
   },
-};
+});
 </script>

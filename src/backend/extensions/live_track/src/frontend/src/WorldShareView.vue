@@ -182,8 +182,8 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import LatestParamsModal from './LatestParamsModal.vue';
@@ -191,14 +191,18 @@ import LiveTrackSidebar from './LiveTrackSidebar.vue';
 import MapLayerSidebar from './MapLayerSidebar.vue';
 import MapTrackList from './MapTrackList.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
-import { buildLineFeatures, buildPointFeature, fitMapToTracks, fitMapToSingleTrack, centerMapOnTrackLastPoint } from './trackGeometry.js';
-import { buildAccuracyCircleLayerSpec } from './mapAccuracyCircle.js';
-import { setupMapFollowListeners } from './mapFollowLock.js';
-import { ensureArrowImage } from './trackArrowMap.js';
-import { trackToParamsModalShape } from './trackParamsShape.js';
-import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils.js';
-import { useTileSources } from './useTileSources.js';
-import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls.js';
+import { buildLineFeatures, buildPointFeature, fitMapToTracks, fitMapToSingleTrack, centerMapOnTrackLastPoint, type TrackPointFeature } from './trackGeometry';
+import { buildAccuracyCircleLayerSpec } from './mapAccuracyCircle';
+import { setupMapFollowListeners } from './mapFollowLock';
+import { ensureArrowImage } from './trackArrowMap';
+import { trackToParamsModalShape } from './trackParamsShape';
+import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils';
+import { useTileSources } from './useTileSources';
+import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls';
+import type { LiveTrack } from './types/track';
+import type { MobileMapDrawerExposed } from './types/mobile-drawer';
+import type { TileSource } from './types/gv-core';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 
 const { setupCopyMapCoordinatesOnContextMenu, useDocumentTitle } = window.gv_core;
 const LIVE_TRACK_API_BASE_URL = '/api/extensions/live-track';
@@ -213,7 +217,6 @@ const BASE_SOURCE_ID = 'world-share-base';
 const BASE_LAYER_ID = 'world-share-base-layer';
 const MIN_ZOOM = 0;
 const MAX_ZOOM = 18;
-const LAYER_MAX_ZOOM = 19;
 const POLL_INTERVAL_MS = 5000;
 const MAP_SNAP_DURATION = 200;
 const MAP_EDGE_PADDING_PX = 40;
@@ -221,7 +224,34 @@ const SIDEBAR_ACTION_BUTTON_CLASS =
   'p-1.5 sm:p-2 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white [-webkit-tap-highlight-color:transparent]';
 const SIDEBAR_ACTION_ICON_CLASS = 'h-5 w-5 sm:h-6 sm:w-6';
 
-function getShareIdFromUrl() {
+interface WorldShareInfo {
+  share_type?: string;
+  share_access?: string;
+  group_name?: string;
+  track_name?: string;
+  [key: string]: unknown;
+}
+
+type WorldSharePayload = LiveTrack & {
+  share_type?: string;
+  tracks?: LiveTrack[];
+  group_name?: string;
+};
+
+interface ShareFetchResult {
+  ok: boolean;
+  status: number;
+  data: unknown;
+}
+
+interface ResolvedShareSource {
+  sourceMode: string;
+  dataUrl: string;
+  info: WorldShareInfo;
+  data: unknown;
+}
+
+function getShareIdFromUrl(): string | null {
   const hash = typeof window !== 'undefined' ? window.location.hash : '';
   const q = hash.indexOf('?');
   if (q === -1) return null;
@@ -229,7 +259,7 @@ function getShareIdFromUrl() {
   return params.get('id');
 }
 
-async function fetchShareJson(url) {
+async function fetchShareJson(url: string): Promise<ShareFetchResult> {
   const response = await fetch(url);
   if (!response.ok) {
     return { ok: false, status: response.status, data: null };
@@ -237,24 +267,25 @@ async function fetchShareJson(url) {
   return { ok: true, status: response.status, data: await response.json() };
 }
 
-async function fetchParamLabels() {
+async function fetchParamLabels(): Promise<Record<string, string>> {
   const url = `${LIVE_TRACK_API_BASE_URL}/ingress-body-template/`;
   const response = await fetch(url);
   if (!response.ok) {
     return {};
   }
-  const data = await response.json();
-  return data?.param_labels && typeof data.param_labels === 'object' ? data.param_labels : {};
+  const data = (await response.json()) as { param_labels?: unknown };
+  return data.param_labels && typeof data.param_labels === 'object' ? (data.param_labels as Record<string, string>) : {};
 }
 
-async function resolveShareSource(shareId) {
+async function resolveShareSource(shareId: string): Promise<ResolvedShareSource | null> {
   const infoResult = await fetchShareJson(shareInfoUrl(shareId));
   if (!infoResult.ok) {
     if (isShareNotAvailableStatus(infoResult.status)) return null;
     throw new Error('Failed to load share');
   }
 
-  const dataUrl = shareDataUrlForInfo(shareId, infoResult.data);
+  const info = infoResult.data as WorldShareInfo;
+  const dataUrl = shareDataUrlForInfo(shareId, info);
   const dataResult = await fetchShareJson(dataUrl);
   if (!dataResult.ok) {
     if (isShareNotAvailableStatus(dataResult.status)) throw new Error('Invalid share link');
@@ -262,14 +293,14 @@ async function resolveShareSource(shareId) {
   }
 
   return {
-    sourceMode: infoResult.data?.share_access || SHARE_SOURCE_MODES.WORLD,
+    sourceMode: info.share_access ?? SHARE_SOURCE_MODES.WORLD,
     dataUrl,
-    info: infoResult.data,
+    info,
     data: dataResult.data
   };
 }
 
-export default {
+export default defineComponent({
   name: 'WorldShareView',
   components: { ShareIcon, Square3Stack3DIcon, XMarkIcon, HomeIcon, Bars3Icon, Loader, LatestParamsModal, LiveTrackSidebar, MapLayerSidebar, MapTrackList, MobileMapDrawer },
   setup() {
@@ -279,37 +310,37 @@ export default {
     const error = ref('');
     const trackName = ref('');
     const groupName = ref('');
-    const trackData = ref(null);
-    const groupTracks = ref([]);
-    const displayTitle = computed(() => trackName.value || groupName.value || 'Shared');
+    const trackData = ref<LiveTrack | null>(null);
+    const groupTracks = ref<LiveTrack[]>([]);
+    const displayTitle = computed((): string => trackName.value || groupName.value || 'Shared');
     useDocumentTitle(displayTitle);
-    const mapContainer = ref(null);
-    const mapWrapperRef = ref(null);
-    const mobileDrawerRef = ref(null);
+    const mapContainer = ref<HTMLElement | null>(null);
+    const mapWrapperRef = ref<HTMLElement | null>(null);
+    const mobileDrawerRef = ref<MobileMapDrawerExposed | null>(null);
     const { tileSources, selectedLayer, fetchTileSources } = useTileSources();
     const showLayerSidebar = ref(false);
     const showParamsSidebar = ref(false);
-    const paramsModalTrack = ref(null);
-    const selectedId = ref(null);
+    const paramsModalTrack = ref<LiveTrack | null>(null);
+    const selectedId = ref<string | number | null>(null);
     const followLocked = ref(false);
-    const shareIdRef = ref(null);
-    const sourceMode = ref(null);
+    const shareIdRef = ref<string | null>(null);
+    const sourceMode = ref<string | null>(null);
     const shareDataUrl = ref('');
-    const paramLabels = ref({});
-    let map = null;
-    let pollTimerId = null;
+    const paramLabels = ref<Record<string, string>>({});
+    let map: MapLibreMap | null = null;
+    let pollTimerId: ReturnType<typeof setInterval> | null = null;
 
     const isMobileView = ref(
       typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
     );
-    let mobileQueryListener = null;
+    let mobileQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
 
     const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800);
-    function updateWindowHeight() {
+    function updateWindowHeight(): void {
       if (typeof window === 'undefined') return;
       windowHeight.value = window.innerHeight;
     }
-    const worldShareDrawerMaxHeight = computed(() => {
+    const worldShareDrawerMaxHeight = computed((): number => {
       // Same as main tracker: app nav = 64px, header bar = 64px, buffer = 4px.
       // Max drawer height = viewport minus those so sheet stops at bottom of header.
       const APP_NAV_PX = 64;
@@ -319,14 +350,14 @@ export default {
     });
 
     const mobileActionsMenuOpen = ref(false);
-    const mobileActionsMenuRootRef = ref(null);
-    let mobileActionsOutsideStop = null;
+    const mobileActionsMenuRootRef = ref<HTMLElement | null>(null);
+    let mobileActionsOutsideStop: (() => void) | null = null;
 
-    function closeMobileActionsMenu() {
+    function closeMobileActionsMenu(): void {
       mobileActionsMenuOpen.value = false;
     }
 
-    const isShareMapSidebarOpen = computed(() => showLayerSidebar.value || showParamsSidebar.value);
+    const isShareMapSidebarOpen = computed((): boolean => showLayerSidebar.value || showParamsSidebar.value);
 
     watch(isMobileView, (mobile) => {
       if (!mobile) closeMobileActionsMenu();
@@ -338,9 +369,9 @@ export default {
         mobileActionsOutsideStop = null;
       }
       if (!open || typeof document === 'undefined') return;
-      const handler = (e) => {
+      const handler = (e: PointerEvent): void => {
         const root = mobileActionsMenuRootRef.value;
-        if (root && !root.contains(e.target)) {
+        if (root && !root.contains(e.target as Node)) {
           mobileActionsMenuOpen.value = false;
         }
       };
@@ -355,68 +386,69 @@ export default {
       if (open) closeMobileActionsMenu();
     });
 
-    const visibleTracks = computed(() => {
-      if (groupTracks.value?.length) return groupTracks.value;
+    const visibleTracks = computed((): LiveTrack[] => {
+      if (groupTracks.value.length) return groupTracks.value;
       if (trackData.value) return [trackData.value];
       return [];
     });
 
-    const selectedTrack = computed(() => {
+    const selectedTrack = computed((): LiveTrack | null => {
       const id = selectedId.value;
       if (id == null) return null;
       return visibleTracks.value.find((t) => String(t.id) === String(id)) ?? null;
     });
 
-    const selectedItemLabel = computed(() => selectedTrack.value?.name ?? null);
+    const selectedItemLabel = computed((): string | null => selectedTrack.value?.name ?? null);
 
-    const paramsTrack = computed(() => trackToParamsModalShape(paramsModalTrack.value));
+    const paramsTrack = computed((): LiveTrack | null => trackToParamsModalShape(paramsModalTrack.value) as LiveTrack | null);
 
-    function getParamsAllowedForTrack(track) {
-      const allow = track?.share_params_with_world === true ||
-        (track?.share_params_with_world === undefined && track?.share_params_with_recipients === true);
+    function getParamsAllowedForTrack(track: LiveTrack): boolean {
+      const allow = track.share_params_with_world === true ||
+        (track.share_params_with_world === undefined && track.share_params_with_recipients === true);
       if (!allow) return false;
-      const hasPoints = (track?.point_params?.length || track?.geometry?.coordinates?.length || 0) > 0;
+      const hasPoints = (track.point_params?.length ?? track.geometry?.coordinates.length ?? 0) > 0;
       return hasPoints;
     }
 
-    function normalizeTrackForWorld(track) {
-      const geom = track?.geometry || { type: 'LineString', coordinates: [] };
-      const coords = geom.coordinates || [];
-      const last = coords[coords.length - 1] ?? track?.last_point;
-      const pointParams = Array.isArray(track?.point_params) ? track.point_params : [];
+    function normalizeTrackForWorld(track: LiveTrack): LiveTrack {
+      const geom = track.geometry ?? { type: 'LineString', coordinates: [] };
+      const coords = geom.coordinates;
+      const last = coords[coords.length - 1] ?? track.last_point;
+      const hasLast = coords.length || track.last_point;
+      const pointParams = Array.isArray(track.point_params) ? track.point_params : [];
       const latestPointParams = pointParams.length ? pointParams[pointParams.length - 1] : {};
       return {
         ...track,
         geometry: geom,
         point_params: pointParams,
-        last_position: last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null,
-        last_timestamp_ms: last && last.length >= 3 ? last[2] : null,
+        last_position: hasLast && last.length >= 2 ? { lon: last[0], lat: last[1] } : null,
+        last_timestamp_ms: hasLast && last.length >= 3 ? last[2] ?? null : null,
         latestPointParams
       };
     }
 
-    function openLayerSidebar() {
+    function openLayerSidebar(): void {
       showParamsSidebar.value = false;
       showLayerSidebar.value = true;
     }
 
-    function onLayerSidebarChange(layerId) {
+    function onLayerSidebarChange(layerId: string): void {
       selectedLayer.value = layerId || selectedLayer.value;
       onLayerChange();
     }
 
-    function openParamsForTrack(track) {
+    function openParamsForTrack(track: LiveTrack): void {
       paramsModalTrack.value = track;
       showParamsSidebar.value = true;
     }
 
-    function getDrawerPeekHeight() {
-      const snap = mobileDrawerRef.value?.snapPx?.[0];
-      if (Number.isFinite(snap) && snap > 0) return snap;
+    function getDrawerPeekHeight(): number {
+      const snap = mobileDrawerRef.value?.snapPx[0];
+      if (snap != null && Number.isFinite(snap) && snap > 0) return snap;
       return Math.round(worldShareDrawerMaxHeight.value * 0.25);
     }
 
-    function getMapPadding() {
+    function getMapPadding(): { top: number; left: number; right: number; bottom: number } {
       const bottomInset = isMobileView.value && !showLayerSidebar.value && !showParamsSidebar.value
         ? getDrawerPeekHeight()
         : 0;
@@ -428,23 +460,23 @@ export default {
       };
     }
 
-    function centerOnSelectedTrack() {
+    function centerOnSelectedTrack(): void {
       const track = selectedTrack.value;
       if (track && map) centerMapOnTrackLastPoint(map, track, { duration: MAP_SNAP_DURATION, padding: getMapPadding() });
     }
 
-    function deselectSelection() {
+    function deselectSelection(): void {
       selectedId.value = null;
       followLocked.value = false;
-      updateMapData();
+      void updateMapData();
     }
 
-    async function goHome() {
+    async function goHome(): Promise<void> {
       selectedId.value = null;
       followLocked.value = false;
       await updateMapData();
       if (visibleTracks.value.length > 0 && map) {
-        if (groupTracks.value?.length) {
+        if (groupTracks.value.length) {
           fitMapToTracks(map, groupTracks.value, { padding: getMapPadding() });
         } else {
           fitMapToSingleTrack(map, trackData.value, { padding: getMapPadding() });
@@ -454,30 +486,30 @@ export default {
       }
     }
 
-    function onTrackListClick(track) {
+    function onTrackListClick(track: LiveTrack): void {
       if (selectedId.value != null && String(selectedId.value) === String(track.id)) {
         selectedId.value = null;
         followLocked.value = false;
-        updateMapData();
+        void updateMapData();
         return;
       }
       selectedId.value = track.id;
       followLocked.value = true;
-      updateMapData();
+      void updateMapData();
       if (map) {
-        const coords = (track.geometry?.coordinates || []).slice(-1).map((c) => [c[0], c[1]]);
+        const coords = (track.geometry?.coordinates ?? []).slice(-1).map((c): [number, number] => [c[0], c[1]]);
         const last = coords.length ? coords[0] : null;
         if (last) {
           const zoom = Math.max(map.getZoom(), 14);
           map.easeTo({ center: last, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
         }
       }
-      if (isMobileView.value && mobileDrawerRef.value?.collapseToPeek) {
-        mobileDrawerRef.value.collapseToPeek();
+      if (isMobileView.value) {
+        mobileDrawerRef.value?.collapseToPeek();
       }
     }
 
-    async function updateMapData() {
+    async function updateMapData(): Promise<void> {
       const tracks = visibleTracks.value;
       if (!map || !tracks.length) return;
       if (!map.getStyle()) return;
@@ -490,7 +522,7 @@ export default {
         lineSource.setData({ type: 'FeatureCollection', features: lineFeatures });
       }
       if (pointSource) {
-        const colors = [...new Set(tracks.map((t) => t.color || '#6C93DE'))];
+        const colors = [...new Set(tracks.map((t) => t.color ?? '#6C93DE'))];
         for (const color of colors) {
           await ensureArrowImage(map, color, false);
           await ensureArrowImage(map, color, true);
@@ -503,7 +535,7 @@ export default {
               { includeAccuracy: true }
             )
           )
-          .filter(Boolean);
+          .filter((f): f is TrackPointFeature => f !== null);
         pointSource.setData({ type: 'FeatureCollection', features: pointFeatures });
       }
     }
@@ -513,8 +545,8 @@ export default {
       sourceId: POINTS_SOURCE_ID
     });
 
-    async function addWorldShareTrackLayers() {
-      if (!map || !map.getStyle()) return;
+    async function addWorldShareTrackLayers(): Promise<void> {
+      if (!map?.getStyle()) return;
       if (!map.getSource(LINES_SOURCE_ID)) {
         map.addSource(LINES_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       }
@@ -566,12 +598,12 @@ export default {
       }
       if (!map.getLayer(POINTS_LAYER_ID)) {
         const tracks = visibleTracks.value;
-        const colors = [...new Set(tracks.map((t) => t?.color || '#6C93DE'))];
+        const colors = [...new Set(tracks.map((t) => t.color ?? '#6C93DE'))];
         for (const color of colors) {
           await ensureArrowImage(map, color, false);
           await ensureArrowImage(map, color, true);
         }
-        if (map && map.getStyle() && !map.getLayer(POINTS_LAYER_ID)) {
+        if (map.getStyle() && !map.getLayer(POINTS_LAYER_ID)) {
           map.addLayer({
             id: POINTS_LAYER_ID,
             type: 'symbol',
@@ -592,18 +624,18 @@ export default {
       if (!map.getLayer(ACCURACY_CIRCLE_LAYER_ID)) {
         map.addLayer(accuracyCircleLayerSpec, LINES_WHITE_OUTLINE_LAYER_ID);
       }
-      updateMapData();
+      await updateMapData();
     }
 
-    function fitMapToTrack() {
-      if (groupTracks.value?.length) {
+    function fitMapToTrack(): void {
+      if (groupTracks.value.length) {
         fitMapToTracks(map, groupTracks.value, { padding: getMapPadding() });
       } else {
         fitMapToSingleTrack(map, trackData.value, { padding: getMapPadding() });
       }
     }
 
-    function setupMapFollowListenersForView() {
+    function setupMapFollowListenersForView(): void {
       if (!map) return;
       setupMapFollowListeners(map, {
         getLocked: () => followLocked.value,
@@ -611,20 +643,21 @@ export default {
           followLocked.value = v;
           if (!v) selectedId.value = null;
         },
-        onUnlock: () => updateMapData().catch(() => {})
+        onUnlock: () => { updateMapData().catch(() => {}); }
       });
       setupCopyMapCoordinatesOnContextMenu(map);
     }
 
     const TRACK_CLICK_HIT_RADIUS_PX = 15;
-    function setupMapClickHandler() {
+    function setupMapClickHandler(): void {
       if (!map) return;
       const trackLayers = [POINTS_LAYER_ID, LINES_LAYER_ID, LINES_BLACK_OUTLINE_LAYER_ID, LINES_WHITE_OUTLINE_LAYER_ID];
-      const getLayers = () => trackLayers.filter((id) => map.getLayer(id));
-      const isOverTrack = (point) => {
+      const getLayers = (): string[] => trackLayers.filter((id) => map?.getLayer(id));
+      const isOverTrack = (point: { x: number; y: number }): boolean => {
+        if (!map) return false;
         const layers = getLayers();
         if (layers.length === 0) return false;
-        const bbox = [
+        const bbox: [[number, number], [number, number]] = [
           [point.x - TRACK_CLICK_HIT_RADIUS_PX, point.y - TRACK_CLICK_HIT_RADIUS_PX],
           [point.x + TRACK_CLICK_HIT_RADIUS_PX, point.y + TRACK_CLICK_HIT_RADIUS_PX]
         ];
@@ -632,24 +665,27 @@ export default {
         return features.some((f) => f.properties?.trackId != null);
       };
       map.on('mousemove', (e) => {
+        if (!map) return;
         map.getCanvas().style.cursor = isOverTrack(e.point) ? 'pointer' : '';
       });
       map.on('mouseout', () => {
+        if (!map) return;
         map.getCanvas().style.cursor = '';
       });
       map.on('click', (e) => {
+        if (!map) return;
         const layers = getLayers();
         if (layers.length === 0) return;
-        const bbox = [
+        const bbox: [[number, number], [number, number]] = [
           [e.point.x - TRACK_CLICK_HIT_RADIUS_PX, e.point.y - TRACK_CLICK_HIT_RADIUS_PX],
           [e.point.x + TRACK_CLICK_HIT_RADIUS_PX, e.point.y + TRACK_CLICK_HIT_RADIUS_PX]
         ];
         const features = map.queryRenderedFeatures(bbox, { layers });
         const feature = features.find((f) => f.properties?.trackId != null);
         if (feature) {
-          const trackId = feature.properties.trackId;
+          const trackId = feature.properties?.trackId;
           const track = visibleTracks.value.find(
-            (t) => t.id != null && String(t.id) === String(trackId)
+            (t) => String(t.id) === String(trackId)
           );
           if (track) onTrackListClick(track);
         } else {
@@ -658,13 +694,13 @@ export default {
       });
     }
 
-    function onLayerChange() {
+    function onLayerChange(): void {
       if (!map) return;
-      const maplibregl = window.gv_core?.maplibre || window.maplibregl;
+      const maplibregl = window.gv_core.maplibre ?? window.maplibregl;
       const tileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
       if (!tileSource || !maplibregl) return;
-      const clientConfig = tileSource.client_config || {};
-      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
+      const clientConfig = tileSource.client_config ?? {};
+      const isStyleBased = !!(clientConfig.style_url ?? clientConfig.type === 'maptiler');
 
       if (isStyleBased && clientConfig.style_url) {
         const center = map.getCenter();
@@ -673,14 +709,15 @@ export default {
         map.once('error', () => {
           if (!map) return;
           console.warn('WorldShareView: style failed to load, switching to OSM');
-          const fallbackId = tileSources.value.find((s) => {
-            const cc = s.client_config || {};
+          const fallbackTileSource: TileSource | undefined = tileSources.value.find((s) => {
+            const cc = s.client_config ?? {};
             return !cc.style_url && cc.type !== 'maptiler';
-          })?.id || tileSources.value[0]?.id || 'osm';
+          });
+          const fallbackId = fallbackTileSource?.id ?? (tileSources.value[0]?.id || 'osm');
           selectedLayer.value = fallbackId;
           map.remove();
           map = null;
-          initMap().then(() => {
+          void initMap().then(() => {
             if (map) {
               requestAnimationFrame(() => {
                 if (map) map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
@@ -689,15 +726,16 @@ export default {
           });
         });
         map.setStyle(clientConfig.style_url);
-        map.once('styledata', async () => {
+        map.once('styledata', () => {
           if (!map) return;
           map.resize();
-          await addWorldShareTrackLayers();
-          requestAnimationFrame(() => {
-            if (!map) return;
-            map.resize();
-            map.jumpTo({ center, zoom, bearing, duration: 0 });
-          });
+          addWorldShareTrackLayers().then(() => {
+            requestAnimationFrame(() => {
+              if (!map) return;
+              map.resize();
+              map.jumpTo({ center: [center.lng, center.lat], zoom, bearing, duration: 0 });
+            });
+          }).catch(() => {});
         });
         return;
       }
@@ -709,7 +747,7 @@ export default {
         const bearing = map.getBearing();
         map.remove();
         map = null;
-        initMap().then(() => {
+        void initMap().then(() => {
           if (map) {
             requestAnimationFrame(() => {
               if (map) {
@@ -739,6 +777,24 @@ export default {
       });
     }
 
+    async function pollShareData(): Promise<void> {
+      if (!shareIdRef.value || !shareDataUrl.value) return;
+      try {
+        const result = await fetchShareJson(shareDataUrl.value);
+        if (!result.ok) return;
+        const data = result.data as WorldSharePayload;
+        if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
+          groupTracks.value = data.tracks.map((t) => normalizeTrackForWorld(t));
+        } else {
+          trackData.value = normalizeTrackForWorld(data);
+        }
+        await updateMapData();
+        if (followLocked.value && map && selectedTrack.value) centerOnSelectedTrack();
+      } catch {
+        // ignore poll errors
+      }
+    }
+
     onMounted(async () => {
       if (typeof window !== 'undefined') {
         window.addEventListener('resize', updateWindowHeight);
@@ -766,14 +822,14 @@ export default {
         sourceMode.value = resolved.sourceMode;
         shareDataUrl.value = resolved.dataUrl;
         const info = resolved.info;
-        const data = resolved.data;
+        const data = resolved.data as WorldSharePayload;
         if (info.share_type === 'live_track_group') {
-          groupName.value = info.group_name || data.group_name || 'Shared group';
+          groupName.value = info.group_name ?? data.group_name ?? 'Shared group';
           const tracks = Array.isArray(data.tracks) ? data.tracks : [];
           groupTracks.value = tracks.map((t) => normalizeTrackForWorld(t));
           trackData.value = null;
         } else {
-          trackName.value = info.track_name || 'Shared tracker';
+          trackName.value = info.track_name ?? 'Shared tracker';
           trackData.value = normalizeTrackForWorld(data);
           groupTracks.value = [];
         }
@@ -787,48 +843,31 @@ export default {
         }
 
         await nextTick();
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
         await initMap();
         mapInitializing.value = false;
 
         if (!error.value && shareIdRef.value) {
-          pollTimerId = setInterval(async () => {
-            if (!shareIdRef.value || !shareDataUrl.value) return;
-            try {
-              const result = await fetchShareJson(shareDataUrl.value);
-              if (!result.ok) return;
-              const data = result.data;
-              if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
-                groupTracks.value = data.tracks.map((t) => normalizeTrackForWorld(t));
-              } else {
-                trackData.value = normalizeTrackForWorld(data);
-              }
-              await updateMapData();
-              if (followLocked.value && map && selectedTrack.value) centerOnSelectedTrack();
-            } catch (_) {
-              // ignore poll errors
-            }
-          }, POLL_INTERVAL_MS);
+          pollTimerId = setInterval(() => { void pollShareData(); }, POLL_INTERVAL_MS);
         }
       } catch (e) {
-        error.value = e?.message === 'Invalid share link' ? 'Invalid share link' : 'Failed to load share';
+        error.value = e instanceof Error && e.message === 'Invalid share link' ? 'Invalid share link' : 'Failed to load share';
         loading.value = false;
       }
     });
 
-    async function initMap() {
-      const maplibregl = window.gv_core?.maplibre ?? window.maplibregl ?? (await window.gv_core?.loadMaplibreGl?.()) ?? null;
-      const hasData = trackData.value || (groupTracks.value?.length > 0);
-      if (!mapContainer.value || !maplibregl || !hasData) {
-        if (!maplibregl) console.warn('WorldShareView: MapLibre not available');
+    async function initMap(): Promise<void> {
+      const maplibregl = window.gv_core.maplibre ?? window.maplibregl ?? (await window.gv_core.loadMaplibreGl());
+      const hasData = trackData.value ?? (groupTracks.value.length > 0);
+      if (!mapContainer.value || !hasData) {
         return;
       }
 
       const layerValue = selectedLayer.value;
-      const tileSource = tileSources.value.find((s) => s.id === layerValue) || tileSources.value[0];
-      const clientConfig = tileSource?.client_config || {};
-      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
-      const tracksForInit = groupTracks.value?.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
+      const tileSource = tileSources.value.find((s) => s.id === layerValue) ?? tileSources.value[0];
+      const clientConfig = tileSource.client_config ?? {};
+      const isStyleBased = !!(clientConfig.style_url ?? clientConfig.type === 'maptiler');
+      const tracksForInit = groupTracks.value.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
 
       if (isStyleBased && clientConfig.style_url) {
         map = new maplibregl.Map({
@@ -843,30 +882,32 @@ export default {
         });
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
         map.on('error', (e) => {
-          console.warn('WorldShareView: map error', e.error?.message || e);
+          console.warn('WorldShareView: map error', e.error?.message ?? e);
         });
         // Fit to the already-loaded track/group data now (duration 0), before the browser paints
         // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.
         fitMapToTrack();
-        return new Promise((resolve) => {
-          map.once('load', async () => {
+        const currentMap = map;
+        return new Promise<void>((resolve) => {
+          currentMap.once('load', () => {
             if (!map) {
               resolve();
               return;
             }
             map.resize();
-            await addWorldShareTrackLayers();
-            setupMapFollowListenersForView();
-            setupMapClickHandler();
-            requestAnimationFrame(() => {
-              if (!map) {
+            addWorldShareTrackLayers().then(() => {
+              setupMapFollowListenersForView();
+              setupMapClickHandler();
+              requestAnimationFrame(() => {
+                if (!map) {
+                  resolve();
+                  return;
+                }
+                map.resize();
+                fitMapToTrack();
                 resolve();
-                return;
-              }
-              map.resize();
-              fitMapToTrack();
-              resolve();
-            });
+              });
+            }).catch(() => { resolve(); });
           });
         });
       }
@@ -879,7 +920,7 @@ export default {
           const isSelected = selectedId.value != null && String(t.id) === String(selectedId.value);
           return buildPointFeature(t, isSelected, { includeAccuracy: true });
         })
-        .filter(Boolean);
+        .filter((f): f is TrackPointFeature => f !== null);
       const lineGeoJSON = { type: 'FeatureCollection', features: lineFeatures };
       const pointGeoJSON = { type: 'FeatureCollection', features: pointFeatures };
 
@@ -944,24 +985,26 @@ export default {
       // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.
       fitMapToTrack();
 
-      return new Promise((resolve) => {
-        map.once('load', async () => {
+      const currentMap = map;
+      return new Promise<void>((resolve) => {
+        currentMap.once('load', () => {
           if (!map) {
             resolve();
             return;
           }
-          await addWorldShareTrackLayers();
-          setupMapFollowListenersForView();
-          setupMapClickHandler();
-          requestAnimationFrame(() => {
-            if (!map) {
+          addWorldShareTrackLayers().then(() => {
+            setupMapFollowListenersForView();
+            setupMapClickHandler();
+            requestAnimationFrame(() => {
+              if (!map) {
+                resolve();
+                return;
+              }
+              map.resize();
+              fitMapToTrack();
               resolve();
-              return;
-            }
-            map.resize();
-            fitMapToTrack();
-            resolve();
-          });
+            });
+          }).catch(() => { resolve(); });
         });
       });
     }
@@ -1025,7 +1068,7 @@ export default {
       SIDEBAR_ACTION_ICON_CLASS
     };
   }
-};
+});
 </script>
 
 <style scoped>

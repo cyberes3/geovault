@@ -49,10 +49,11 @@
   </svg>
 </template>
 
-<script>
-import { ARROW_PATH_D } from './trackArrowMap.js';
+<script lang="ts">
+import { defineComponent } from 'vue';
+import { ARROW_PATH_D } from './trackArrowMap';
 
-export default {
+export default defineComponent({
   name: 'TrackDirectionIcon',
   props: {
     /** Hex or CSS color for the icon fill. */
@@ -84,5 +85,5 @@ export default {
   setup() {
     return { ARROW_PATH_D };
   }
-};
+});
 </script>

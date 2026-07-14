@@ -9,31 +9,27 @@
  * `await requestUpdate()` from any caller resolves once the single coalesced execution
  * completes - not once per call.
  *
- * @param {() => (Promise<void> | void)} taskFn
- * @param {(cb: () => void) => void} [schedule] - defaults to `requestAnimationFrame` (falls
- *   back to a macrotask when unavailable, e.g. in tests/SSR). Tests can inject a synchronous
- *   or manually-flushed scheduler to make coalescing behavior deterministic.
- * @returns {() => Promise<void>} requestRun
+ * `schedule` defaults to `requestAnimationFrame` (falls back to a macrotask when unavailable,
+ * e.g. in tests/SSR). Tests can inject a synchronous or manually-flushed scheduler to make
+ * coalescing behavior deterministic.
  */
-export function createCoalescedTask(taskFn, schedule = defaultSchedule) {
-  let pending = null;
+export function createCoalescedTask(taskFn: () => Promise<void> | void, schedule: (cb: () => void) => void = defaultSchedule): () => Promise<void> {
+  let pending: Promise<void> | null = null;
 
-  return function requestRun() {
-    if (!pending) {
-      pending = new Promise((resolve, reject) => {
-        schedule(() => {
-          pending = null;
-          Promise.resolve()
-            .then(() => taskFn())
-            .then(resolve, reject);
-        });
+  return function requestRun(): Promise<void> {
+    pending ??= new Promise((resolve, reject) => {
+      schedule(() => {
+        pending = null;
+        Promise.resolve()
+          .then(() => taskFn())
+          .then(resolve, reject);
       });
-    }
+    });
     return pending;
   };
 }
 
-function defaultSchedule(cb) {
+function defaultSchedule(cb: () => void): void {
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(cb);
   } else {

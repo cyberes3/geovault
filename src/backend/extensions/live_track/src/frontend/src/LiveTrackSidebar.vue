@@ -82,11 +82,13 @@
   </Teleport>
 </template>
 
-<script>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, onMounted, onBeforeUnmount, nextTick, type PropType } from 'vue';
 import { XMarkIcon } from '@heroicons/vue/24/outline';
 
-export default {
+type ContainerRefLike = { value: HTMLElement | null } | HTMLElement | null;
+
+export default defineComponent({
   name: 'LiveTrackSidebar',
   components: { XMarkIcon },
   props: {
@@ -96,7 +98,7 @@ export default {
     },
     /** When set, sidebar is teleported into this element and positioned absolute (locked to container height). Otherwise teleported to body and fixed (full viewport). */
     containerRef: {
-      type: Object,
+      type: Object as PropType<ContainerRefLike>,
       default: null,
     },
     /** When true, disable all CSS transitions/animations inside sidebar subtree. */
@@ -107,14 +109,18 @@ export default {
   },
   emits: ['close'],
   setup(props, { emit }) {
-    const contentScroll = ref(null);
-    const panel = ref(null);
+    const contentScroll = ref<HTMLElement | null>(null);
+    const panel = ref<HTMLElement | null>(null);
 
     // Accept either a Vue ref object ({ value: HTMLElement }) or a direct HTMLElement.
-    const resolvedContainer = computed(() => props.containerRef?.value ?? props.containerRef ?? null);
-    const teleportTarget = computed(() => resolvedContainer.value ?? 'body');
-    const isContainerMode = computed(() => resolvedContainer.value != null && teleportTarget.value !== 'body');
-    const panelClasses = computed(() => {
+    const resolvedContainer = computed((): HTMLElement | null => {
+      const c = props.containerRef;
+      if (c == null) return null;
+      return 'value' in c ? c.value : c;
+    });
+    const teleportTarget = computed((): HTMLElement | string => resolvedContainer.value ?? 'body');
+    const isContainerMode = computed((): boolean => resolvedContainer.value != null && teleportTarget.value !== 'body');
+    const panelClasses = computed((): string => {
       const base = 'live-track-sidebar-panel z-50 flex flex-col bg-white border-l border-gray-200 overflow-hidden pointer-events-auto';
       const animationClass = props.disableAnimations ? 'live-track-sidebar--no-animations' : '';
       if (isContainerMode.value) {
@@ -123,11 +129,11 @@ export default {
       return `${base} fixed inset-x-0 top-16 bottom-0 w-full sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:w-[28rem] sm:h-full ${animationClass}`.trim();
     });
 
-    function requestClose() {
+    function requestClose(): void {
       emit('close');
     }
 
-    function handleEscapeKey(e) {
+    function handleEscapeKey(e: KeyboardEvent): void {
       if (e.key !== 'Escape') return;
       const dialogs = document.querySelectorAll('[data-live-track-sidebar]');
       const topmost = dialogs.length ? dialogs[dialogs.length - 1] : null;
@@ -135,14 +141,14 @@ export default {
       requestClose();
     }
 
-    let boundEscape = null;
+    let boundEscape: ((e: KeyboardEvent) => void) | null = null;
 
-    function addEscapeListener() {
-      boundEscape = (e) => handleEscapeKey(e);
+    function addEscapeListener(): void {
+      boundEscape = (e: KeyboardEvent) => { handleEscapeKey(e); };
       document.addEventListener('keydown', boundEscape);
     }
 
-    function removeEscapeListener() {
+    function removeEscapeListener(): void {
       if (boundEscape) {
         document.removeEventListener('keydown', boundEscape);
         boundEscape = null;
@@ -152,7 +158,7 @@ export default {
     onMounted(() => {
       if (!props.containerRef) document.body.classList.add('overflow-hidden');
       addEscapeListener();
-      nextTick(() => {
+      void nextTick(() => {
         if (contentScroll.value) contentScroll.value.scrollTop = 0;
         if (panel.value) panel.value.focus();
       });
@@ -173,7 +179,7 @@ export default {
       handleEscapeKey,
     };
   },
-};
+});
 </script>
 
 <style scoped>

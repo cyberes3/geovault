@@ -56,11 +56,12 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import CopyTextButton from './CopyTextButton.vue';
 
-export default {
+export default defineComponent({
   name: 'CreateSuccessView',
   components: { BaseButton, CopyTextButton },
   props: {
@@ -72,5 +73,5 @@ export default {
     haukDomain: { type: String, default: '' }
   },
   emits: ['open-instructions', 'open-hauk-instructions']
-};
+});
 </script>

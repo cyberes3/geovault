@@ -2,25 +2,24 @@
  * Shared track geometry helpers: coordinate sorting, segment splitting, GeoJSON feature builders.
  * Used by LiveTrackView and WorldShareView for map drawing.
  */
+import type { Map as MapLibreMap, PaddingOptions } from 'maplibre-gl';
+import { getArrowImageId } from './trackArrowMap';
+import { resolveSelectedTrackAccuracyMeters } from './mapAccuracyCircle';
+import type { LiveTrack, TrackCoordinate } from './types/track';
 
-import { getArrowImageId } from './trackArrowMap.js';
-import { resolveSelectedTrackAccuracyMeters } from './mapAccuracyCircle.js';
+type LonLat = [number, number];
 
-const isValidMapLngLatPair = window.gv_core.isValidMapLngLatPair;
-
-export { isValidMapLngLatPair };
+export const isValidMapLngLatPair = window.gv_core.isValidMapLngLatPair;
 
 /** Do not draw track across jumps larger than this (meters). 5 miles. Same as Android tracker. */
 export const MAX_JUMP_METERS = 5 * 1609.344;
 
-function filterValidLngLats(coordList) {
+function filterValidLngLats(coordList: LonLat[] | null | undefined): LonLat[] {
   if (!Array.isArray(coordList)) return [];
-  return coordList.filter(
-    (c) => c != null && c.length >= 2 && isValidMapLngLatPair(c[0], c[1])
-  );
+  return coordList.filter((c) => isValidMapLngLatPair(c[0], c[1]));
 }
 
-export function distanceMeters(lon1, lat1, lon2, lat2) {
+export function distanceMeters(lon1: number, lat1: number, lon2: number, lat2: number): number {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -31,9 +30,9 @@ export function distanceMeters(lon1, lat1, lon2, lat2) {
   return R * c;
 }
 
-export function getCoordsSortedByTime(track) {
-  const geom = track.geometry || {};
-  const coords = geom.coordinates || [];
+export function getCoordsSortedByTime(track: LiveTrack): TrackCoordinate[] {
+  const geom = track.geometry ?? { type: 'LineString', coordinates: [] };
+  const coords = geom.coordinates;
   if (coords.length <= 1) return [...coords];
   return [...coords].sort((a, b) => {
     const ta = typeof a[2] === 'number' ? a[2] : 0;
@@ -43,9 +42,9 @@ export function getCoordsSortedByTime(track) {
 }
 
 /** Degrees from north (0 = up), clockwise. Uses two most recent points by time. */
-export function getTrackDirectionAngle(track) {
+export function getTrackDirectionAngle(track: LiveTrack): number {
   const sorted = getCoordsSortedByTime(track);
-  const valid = filterValidLngLats(sorted.map((c) => [c[0], c[1]]));
+  const valid = filterValidLngLats(sorted.map((c): LonLat => [c[0], c[1]]));
   if (valid.length < 2) return 0;
   const prev = valid[valid.length - 2];
   const last = valid[valid.length - 1];
@@ -55,11 +54,11 @@ export function getTrackDirectionAngle(track) {
   return (Math.atan2(dLon, dLat) * 180) / Math.PI;
 }
 
-export function splitTrackIntoSegments(coords) {
+export function splitTrackIntoSegments(coords: LonLat[]): LonLat[][] {
   const valid = filterValidLngLats(coords);
   if (valid.length < 2) return [];
-  const segments = [];
-  let current = [valid[0]];
+  const segments: LonLat[][] = [];
+  let current: LonLat[] = [valid[0]];
   for (let i = 1; i < valid.length; i++) {
     const prev = valid[i - 1];
     const curr = valid[i];
@@ -75,14 +74,20 @@ export function splitTrackIntoSegments(coords) {
   return segments;
 }
 
-export function buildLineFeatures(track, selected = false) {
+export interface TrackLineFeature {
+  type: 'Feature';
+  properties: { color: string; selected: boolean; trackId: string | number | undefined };
+  geometry: { type: 'LineString'; coordinates: LonLat[] };
+}
+
+export function buildLineFeatures(track: LiveTrack, selected: boolean = false): TrackLineFeature[] {
   const coordsSorted = getCoordsSortedByTime(track);
-  const coords = filterValidLngLats(coordsSorted.map((c) => [c[0], c[1]]));
+  const coords = filterValidLngLats(coordsSorted.map((c): LonLat => [c[0], c[1]]));
   if (coords.length < 2) return [];
   const segments = splitTrackIntoSegments(coords);
-  const color = track.color || '#6C93DE';
-  const features = [];
-  const trackId = track.id != null ? track.id : undefined;
+  const color = track.color ?? '#6C93DE';
+  const features: TrackLineFeature[] = [];
+  const trackId = track.id;
   for (const segment of segments) {
     features.push({
       type: 'Feature',
@@ -93,21 +98,39 @@ export function buildLineFeatures(track, selected = false) {
   return features;
 }
 
-export function buildPointFeature(track, selected = false, options = {}) {
+export interface TrackPointFeature {
+  type: 'Feature';
+  properties: {
+    color: string;
+    iconImage: string;
+    rotation: number;
+    selected: boolean;
+    trackId: string | number | undefined;
+    accuracy?: number;
+    latitude?: number;
+  };
+  geometry: { type: 'Point'; coordinates: LonLat };
+}
+
+export interface BuildPointFeatureOptions {
+  includeAccuracy?: boolean;
+}
+
+export function buildPointFeature(track: LiveTrack, selected: boolean = false, options: BuildPointFeatureOptions = {}): TrackPointFeature | null {
   const coordsSorted = getCoordsSortedByTime(track);
-  let pos = null;
+  let pos: LonLat | null = null;
   for (let i = coordsSorted.length - 1; i >= 0; i--) {
     const c = coordsSorted[i];
-    if (c != null && c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
+    if (c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
       pos = [c[0], c[1]];
       break;
     }
   }
   if (!pos) return null;
-  const color = track.color || '#6C93DE';
+  const color = track.color ?? '#6C93DE';
   const iconImage = getArrowImageId(color, selected);
   const rotation = getTrackDirectionAngle(track);
-  const trackId = track.id != null ? track.id : undefined;
+  const trackId = track.id;
   const includeAccuracy = options.includeAccuracy === true;
   const accuracy = includeAccuracy ? resolveSelectedTrackAccuracyMeters(track, selected) : 0;
   return {
@@ -124,16 +147,19 @@ export function buildPointFeature(track, selected = false, options = {}) {
   };
 }
 
-/**
- * Fit map bounds to multiple tracks' geometries. Uses getCoordsSortedByTime for ordering.
- * @param {import('maplibre-gl').Map} map - MapLibre map instance
- * @param {Object[]} tracks - Array of tracks with geometry.coordinates
- */
-export function fitMapToTracks(map, tracks, options = {}) {
+export interface FitMapOptions {
+  padding?: number | PaddingOptions;
+  maxZoom?: number;
+  duration?: number;
+  singlePointZoom?: number;
+}
+
+/** Fit map bounds to multiple tracks' geometries. Uses getCoordsSortedByTime for ordering. */
+export function fitMapToTracks(map: MapLibreMap | null | undefined, tracks: LiveTrack[] | null | undefined, options: FitMapOptions = {}): void {
   if (!map || !tracks?.length) return;
-  const allCoords = [];
+  const allCoords: LonLat[] = [];
   for (const track of tracks) {
-    const raw = getCoordsSortedByTime(track).map((c) => [c[0], c[1]]);
+    const raw = getCoordsSortedByTime(track).map((c): LonLat => [c[0], c[1]]);
     allCoords.push(...filterValidLngLats(raw));
   }
   const padding = options.padding ?? 40;
@@ -155,14 +181,10 @@ export function fitMapToTracks(map, tracks, options = {}) {
   }
 }
 
-/**
- * Fit map bounds to a single track's geometry. Uses getCoordsSortedByTime for ordering.
- * @param {import('maplibre-gl').Map} map - MapLibre map instance
- * @param {Object} track - Track with geometry.coordinates
- */
-export function fitMapToSingleTrack(map, track, options = {}) {
+/** Fit map bounds to a single track's geometry. Uses getCoordsSortedByTime for ordering. */
+export function fitMapToSingleTrack(map: MapLibreMap | null | undefined, track: LiveTrack | null | undefined, options: FitMapOptions = {}): void {
   if (!map || !track) return;
-  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c) => [c[0], c[1]]));
+  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c): LonLat => [c[0], c[1]]));
   const padding = options.padding ?? 40;
   const maxZoom = options.maxZoom ?? 16;
   const duration = options.duration ?? 0;
@@ -182,14 +204,15 @@ export function fitMapToSingleTrack(map, track, options = {}) {
   }
 }
 
-/**
- * Pan map to the last point of a single track.
- * @param {import('maplibre-gl').Map} map - MapLibre map instance
- * @param {Object} track - Track with geometry.coordinates
- */
-export function centerMapOnTrackLastPoint(map, track, options = {}) {
+export interface CenterMapOptions {
+  duration?: number;
+  padding?: number | PaddingOptions;
+}
+
+/** Pan map to the last point of a single track. */
+export function centerMapOnTrackLastPoint(map: MapLibreMap | null | undefined, track: LiveTrack | null | undefined, options: CenterMapOptions = {}): void {
   if (!map || !track) return;
-  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c) => [c[0], c[1]]));
+  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c): LonLat => [c[0], c[1]]));
   const last = coords.length ? coords[coords.length - 1] : null;
   if (!last) return;
   const duration = options.duration ?? 200;

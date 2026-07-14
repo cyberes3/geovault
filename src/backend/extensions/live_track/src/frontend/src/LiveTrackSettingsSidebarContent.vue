@@ -12,7 +12,7 @@
           type="checkbox"
           class="mt-1 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           :checked="highlightStaleData"
-          @change="$emit('update:highlightStaleData', $event.target.checked)"
+          @change="$emit('update:highlightStaleData', ($event.target as HTMLInputElement).checked)"
         />
       </div>
     </div>
@@ -89,17 +89,19 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue';
 import { CloudIcon } from '@heroicons/vue/24/outline';
+import type { LiveTrack, LiveTrackGroup } from './types/track';
 
-export default {
+export default defineComponent({
   name: 'LiveTrackSettingsSidebarContent',
   components: { CloudIcon },
   props: {
     /** Each item: { id, name, is_owner } — trackers with owner Hidden on. */
-    hiddenTrackers: { type: Array, default: () => [] },
+    hiddenTrackers: { type: Array as PropType<LiveTrack[]>, default: () => [] },
     /** Each item: { id, name, is_owner } — owned groups with Hidden on. */
-    hiddenGroups: { type: Array, default: () => [] },
+    hiddenGroups: { type: Array as PropType<LiveTrackGroup[]>, default: () => [] },
     isUnhideAllTrackersLoading: { type: Boolean, default: false },
     isUnhideAllGroupsLoading: { type: Boolean, default: false },
     highlightStaleData: { type: Boolean, default: false }
@@ -111,5 +113,5 @@ export default {
     'unhide-all-groups',
     'update:highlightStaleData'
   ],
-};
+});
 </script>

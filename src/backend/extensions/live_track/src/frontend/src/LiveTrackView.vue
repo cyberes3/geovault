@@ -289,7 +289,9 @@
                       'text-xs',
                       highlightStaleData && isActiveButDeadTrack(track) ? 'text-red-600' : 'text-gray-500'
                     ]"
-                  >{{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}</div>
+                  >
+{{ track.last_timestamp_ms ? formatTime(track.last_timestamp_ms) : 'No points' }}
+</div>
                 </div>
                 <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
                   <button
@@ -529,10 +531,10 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, onMounted, onActivated, onBeforeUnmount, inject, watch, nextTick, type Ref } from 'vue';
 import { PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon } from '@heroicons/vue/24/outline';
-import { getIngressBodyTemplate } from './ingressBodyTemplateCache.js';
+import { getIngressBodyTemplate } from './ingressBodyTemplateCache';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import LocationIcon from 'platform/components/parts/LocationIcon.vue';
 import Loader from 'platform/components/parts/Loader.vue';
@@ -550,19 +552,19 @@ import SharedWithMeSidebarContent from './SharedWithMeSidebarContent.vue';
 import LiveTrackSettingsSidebarContent from './LiveTrackSettingsSidebarContent.vue';
 import TrackerListContent from './TrackerListContent.vue';
 import MobileMapDrawer from './MobileMapDrawer.vue';
-import { shouldReloadGeometryForSettingsChange } from './settingsChangePolicy.js';
-import { useTileSources } from './useTileSources.js';
-import { useMobileView } from './useMobileView.js';
-import { useLiveTrackMap, MAP_SNAP_DURATION } from './useLiveTrackMap.js';
-import { useLiveTrackGeolocation } from './useLiveTrackGeolocation.js';
-import { useLiveTrackSocket } from './useLiveTrackSocket.js';
-import { normalizeTrackForMemory } from './trackNormalization.js';
-import { formatTimestampLocal } from './paramFormatters.js';
+import { shouldReloadGeometryForSettingsChange } from './settingsChangePolicy';
+import { useTileSources } from './useTileSources';
+import { useMobileView } from './useMobileView';
+import { useLiveTrackMap, MAP_SNAP_DURATION } from './useLiveTrackMap';
+import { useLiveTrackGeolocation } from './useLiveTrackGeolocation';
+import { useLiveTrackSocket } from './useLiveTrackSocket';
+import { normalizeTrackForMemory } from './trackNormalization';
+import { formatTimestampLocal } from './paramFormatters';
 import {
   buildGroupUnhidePayload,
   buildHiddenItemsClearPayload,
   buildTrackerUnhidePayload,
-} from './settingsPayloadBuilders.js';
+} from './settingsPayloadBuilders';
 import {
   computeVisibleSharedGroups,
   computeVisibleSharedTrackers,
@@ -574,8 +576,102 @@ import {
   isSharedOrPublicOwned,
   isVisibleOwnedGroup,
   isVisibleOwnedTracker
-} from './sharingSelectors.js';
-import { isActiveButDeadTrack } from './activeButDeadTrack.js';
+} from './sharingSelectors';
+import { isActiveButDeadTrack } from './activeButDeadTrack';
+import type { PaddingOptions } from 'maplibre-gl';
+import type { ExtensionApi } from './types/extension-api';
+import type { PlatformStateBridge } from './types/platform-state';
+import type { TileSource } from './types/gv-core';
+import type { LiveTrack, LiveTrackGroup, TrackVisibility } from './types/track';
+
+type SortBy = 'alphabetical' | 'last_updated' | 'num_points' | 'newest';
+type ListTabId = 'trackers' | 'groups' | 'shared';
+type SidebarType = 'track' | 'params' | 'groups' | 'groupQuickView' | 'sharedWithMe' | 'layer' | 'settings';
+
+interface ListTab {
+  id: ListTabId;
+  label: string;
+}
+
+interface UpsertOptions {
+  updateMap?: boolean;
+}
+
+interface RemoveTrackerOptions {
+  updateMap?: boolean;
+  moveToIncoming?: boolean;
+  removeFromIncoming?: boolean;
+}
+
+interface RemoveGroupOptions {
+  removeIncoming?: boolean;
+  removeTrackers?: boolean;
+}
+
+interface UpsertGroupOptions extends UpsertOptions {
+  removeIncoming?: boolean;
+}
+
+interface FetchTrackersOptions {
+  skipGlobalLoading?: boolean;
+}
+
+interface AvailableToAddResponse {
+  shared_with_me?: LiveTrack[];
+  shared_with_me_groups?: LiveTrackGroup[];
+}
+
+interface GroupSavedPayload {
+  action: 'created' | 'updated';
+  group?: LiveTrackGroup | null;
+}
+
+interface GroupHiddenChangedPayload {
+  groupId: string | number;
+  hidden?: boolean;
+}
+
+interface TrackSidebarSavedPayload {
+  action: 'created' | 'history-cleared';
+  tracker?: LiveTrack | null;
+  trackId?: string | number | null;
+}
+
+interface TrackSettingsChangedPayload {
+  trackId: string | number;
+  hidden?: boolean;
+  refresh_map?: boolean;
+}
+
+interface TrackDeletedPayload {
+  trackId?: string | number | null;
+}
+
+interface DiscoverSavedItem {
+  id: string | number;
+  name?: string;
+  owner_email?: string;
+  visibility?: TrackVisibility;
+  track_ids?: Array<string | number>;
+  [key: string]: unknown;
+}
+
+interface DiscoverSavedPayload {
+  action: 'added' | 'removed';
+  kind: 'tracker' | 'group';
+  item?: DiscoverSavedItem | null;
+}
+
+interface IncomingTrackerStub {
+  id: string | number;
+  name?: string;
+  owner_email?: string;
+  [key: string]: unknown;
+}
+
+interface TrackerListContentExposed {
+  scrollContainerRef: HTMLElement | null;
+}
 
 /** Shared button class for all right-sidebar action icons. Ring only on focus-visible so tap on mobile doesn't show thick border; no tap highlight. */
 const SIDEBAR_ACTION_BUTTON_CLASS =
@@ -583,39 +679,38 @@ const SIDEBAR_ACTION_BUTTON_CLASS =
 const SIDEBAR_ACTION_ICON_CLASS = 'h-5 w-5 sm:h-6 sm:w-6';
 const DEFAULT_MAP_KEY = 'extensions.live_track.default_map';
 const DEFAULT_SORT_KEY = 'extensions.live_track.default_sort';
-const VALID_SORT_VALUES = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
+const VALID_SORT_VALUES: Set<string> = new Set(['alphabetical', 'last_updated', 'num_points', 'newest']);
 const MAP_EDGE_PADDING_PX = 80;
-const LIST_TABS = [
+const LIST_TABS: ListTab[] = [
   { id: 'trackers', label: 'Trackers' },
   { id: 'groups', label: 'Groups' },
   { id: 'shared', label: 'Shared' }
 ];
 
-export default {
+export default defineComponent({
   name: 'LiveTrackView',
   components: { BaseButton, LocationIcon, Loader, TrackSidebar, TrackDirectionIcon, LatestParamsModal, GroupsSidebarContent, DiscoverTrackersModal, SharedItemsModal, ShareSettingsModal, PublicSharePopup, MapLayerSidebar, MapSidebarPanel, SharedWithMeSidebarContent, LiveTrackSettingsSidebarContent, TrackerListContent, MobileMapDrawer, PlusIcon, PencilIcon, HomeIcon, Square3Stack3DIcon, TableCellsIcon, XMarkIcon, Bars3Icon, UserGroupIcon, ShareIcon, CloudIcon, EyeIcon, ArrowPathIcon, Cog6ToothIcon, ListBulletIcon },
   setup() {
-    const api = inject('extensionApi');
-    /** @type {import('platform/extensions/platformState').PlatformStateBridge} */
-    const platformState = inject('platformState');
-    const trackers = ref([]);
-    const groups = ref([]);
+    const api = inject('extensionApi') as ExtensionApi;
+    const platformState = inject('platformState') as PlatformStateBridge;
+    const trackers = ref<LiveTrack[]>([]);
+    const groups = ref<LiveTrackGroup[]>([]);
     const highlightStaleData = ref(false);
-    const sortBy = ref('alphabetical');
+    const sortBy = ref<SortBy>('alphabetical');
     const showDiscoverModal = ref(false);
     const showSharedListModal = ref(false);
-    const shareSettingsModalTrack = ref(null);
-    const publicSharePopupTrack = ref(null);
-    const unsubscribingId = ref(null);
-    const unsubscribingGroupId = ref(null);
+    const shareSettingsModalTrack = ref<LiveTrack | null>(null);
+    const publicSharePopupTrack = ref<LiveTrack | null>(null);
+    const unsubscribingId = ref<string | number | null>(null);
+    const unsubscribingGroupId = ref<string | number | null>(null);
     const loading = ref(true);
     /** Cleared once the map's style/data first finish loading (via `trackMap.onStyleReady`), so a loading overlay can mask the gap between mount and the map settling into its correct basemap/camera. */
     const mapInitializing = ref(true);
-    const selectedId = ref(null);
-    const activeGroupId = ref(null);
+    const selectedId = ref<string | number | null>(null);
+    const activeGroupId = ref<string | number | null>(null);
     const followLocked = ref(false);
     const isAutoMoving = ref(false);
-    const rootContainer = ref(null);
+    const rootContainer = ref<HTMLElement | null>(null);
 
     const {
       isMobileView,
@@ -629,64 +724,54 @@ export default {
       getDrawerPeekHeight
     } = useMobileView();
 
-    function isRecentlyUpdated(track) {
+    function isRecentlyUpdated(track: LiveTrack): boolean {
       if (!track.last_timestamp_ms) return false;
       const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
       return track.last_timestamp_ms > fiveMinutesAgo;
     }
 
-    const trackerIdsOnMap = computed(() => new Set(trackers.value.map((t) => String(t.id))));
-
-    const sortedGroups = computed(() => {
+    const sortedGroups = computed((): LiveTrackGroup[] => {
       return [...groups.value]
         .filter((group) => isAcceptedOrOwnedGroup(group))
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
     });
 
-    const sortedTrackers = computed(() => {
+    const sortedTrackers = computed((): LiveTrack[] => {
       const list = [...trackers.value];
       switch (sortBy.value) {
         case 'alphabetical':
-          return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+          return list.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' }));
         case 'last_updated':
           return list.sort((a, b) => (b.last_timestamp_ms ?? 0) - (a.last_timestamp_ms ?? 0));
         case 'num_points': {
-          const len = (t) => (t.geometry?.coordinates?.length ?? 0);
+          const len = (t: LiveTrack): number => (t.geometry?.coordinates.length ?? 0);
           return list.sort((a, b) => len(b) - len(a));
         }
         case 'newest': {
-          const ts = (t) => (t.created_at ? new Date(t.created_at).getTime() : 0);
+          const ts = (t: LiveTrack): number => (t.created_at ? new Date(t.created_at).getTime() : 0);
           return list.sort((a, b) => ts(b) - ts(a));
         }
         default:
-          return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+          return list.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' }));
       }
     });
 
-    const listTab = ref('trackers');
-    const visibleTrackersTab = computed(() => sortedTrackers.value.filter((t) => isVisibleOwnedTracker(t)));
-    const visibleSharedTab = computed(() =>
+    const listTab = ref<ListTabId>('trackers');
+    const visibleTrackersTab = computed((): LiveTrack[] => sortedTrackers.value.filter((t) => isVisibleOwnedTracker(t)));
+    const visibleSharedTab = computed((): LiveTrack[] =>
       computeVisibleSharedTrackers(sortedTrackers.value, sortedGroups.value)
     );
-    const visibleGroupsTab = computed(() => sortedGroups.value.filter((g) => isVisibleOwnedGroup(g)));
-    const visibleSharedGroupsTab = computed(() => computeVisibleSharedGroups(groups.value));
-    const hiddenTrackersForSettings = computed(() =>
-      trackers.value
-        .filter((t) => isHiddenOwnedTracker(t))
-        .map((t) => ({ id: t.id, name: t.name, is_owner: t.is_owner }))
-    );
-    const hiddenGroupsForSettings = computed(() =>
-      groups.value
-        .filter((g) => isHiddenOwnedGroup(g))
-        .map((g) => ({ id: g.id, name: g.name, is_owner: g.is_owner }))
-    );
-    const sharedByYouTrackers = computed(() => trackers.value.filter((t) => isSharedOrPublicOwned(t)));
-    const activeGroup = computed(() => {
+    const visibleGroupsTab = computed((): LiveTrackGroup[] => sortedGroups.value.filter((g) => isVisibleOwnedGroup(g)));
+    const visibleSharedGroupsTab = computed((): LiveTrackGroup[] => computeVisibleSharedGroups(groups.value));
+    const hiddenTrackersForSettings = computed((): LiveTrack[] => trackers.value.filter((t) => isHiddenOwnedTracker(t)));
+    const hiddenGroupsForSettings = computed((): LiveTrackGroup[] => groups.value.filter((g) => isHiddenOwnedGroup(g)));
+    const sharedByYouTrackers = computed((): LiveTrack[] => trackers.value.filter((t) => isSharedOrPublicOwned(t)));
+    const activeGroup = computed((): LiveTrackGroup | null => {
       const id = activeGroupId.value;
       if (id == null) return null;
       return sortedGroups.value.find((g) => String(g.id) === String(id)) ?? null;
     });
-    const selectedItemLabel = computed(() => {
+    const selectedItemLabel = computed((): string | null => {
       if (activeGroup.value) return activeGroup.value.name ?? '';
       const id = selectedId.value;
       if (id == null) return null;
@@ -694,55 +779,53 @@ export default {
       return track?.name ?? null;
     });
     /** When locked to a tracker that belongs to a shared group (not yours), the first such group for opening the group sidebar. */
-    const selectedTrackSharedGroup = computed(() => {
+    const selectedTrackSharedGroup = computed((): LiveTrackGroup | null => {
       const id = selectedId.value;
       if (id == null) return null;
       const idStr = String(id);
       return sortedGroups.value.find(
-        (g) => isSharedGroupNotOwned(g) && (g.track_ids || []).some((tid) => String(tid) === idStr)
+        (g) => isSharedGroupNotOwned(g) && (g.track_ids ?? []).some((tid) => String(tid) === idStr)
       ) ?? null;
     });
-    const listEmptyForTab = computed(() => {
+    const listEmptyForTab = computed((): boolean => {
       if (listTab.value === 'trackers') return visibleTrackersTab.value.length === 0;
       if (listTab.value === 'groups') return visibleGroupsTab.value.length === 0;
-      if (listTab.value === 'shared') return visibleSharedTab.value.length === 0 && visibleSharedGroupsTab.value.length === 0;
-      return true;
+      return visibleSharedTab.value.length === 0 && visibleSharedGroupsTab.value.length === 0;
     });
     const showTrackSidebar = ref(false);
-    const paramsModalTrackId = ref(null);
-    const paramsModalTrack = computed(() => {
+    const paramsModalTrackId = ref<string | number | null>(null);
+    const paramsModalTrack = computed((): LiveTrack | null => {
       const id = paramsModalTrackId.value;
       if (id == null) return null;
       const t = trackers.value.find((tr) => tr.id === id);
       return t ?? null;
     });
-    const paramLabels = ref({});
-    const trackSidebarMode = ref('create');
-    const trackSidebarTrack = ref(null);
+    const paramLabels = ref<Record<string, string>>({});
+    const trackSidebarMode = ref<'create' | 'edit'>('create');
+    const trackSidebarTrack = ref<LiveTrack | null>(null);
     const trackSidebarLoading = ref(false);
-    const mapContainer = ref(null);
-    const mapColumnRef = ref(null);
-    const mapSidebarRef = ref(null);
-    const listContentDesktopRef = ref(null);
-    const listContentMobileRef = ref(null);
-    const listScrollContainer = computed(() => {
+    const mapContainer = ref<HTMLElement | null>(null);
+    const mapColumnRef = ref<HTMLElement | null>(null);
+    const mapSidebarRef = ref<HTMLElement | null>(null);
+    const listContentDesktopRef = ref<TrackerListContentExposed | null>(null);
+    const listContentMobileRef = ref<TrackerListContentExposed | null>(null);
+    const listScrollContainer = computed((): HTMLElement | null => {
       const c = isMobileView.value ? listContentMobileRef.value : listContentDesktopRef.value;
-      // Vue component refs can expose child refs either wrapped (.value) or already unwrapped.
-      return c?.scrollContainerRef?.value ?? c?.scrollContainerRef ?? null;
+      return c?.scrollContainerRef ?? null;
     });
     const showGroupsSidebar = ref(false);
-    const groupsSidebarInitialGroupId = ref(null);
+    const groupsSidebarInitialGroupId = ref<string | number | null>(null);
     const groupsSidebarRefreshing = ref(false);
     const showGroupQuickViewSidebar = ref(false);
-    const groupQuickViewGroup = ref(null);
+    const groupQuickViewGroup = ref<LiveTrackGroup | null>(null);
     /** When set, closing the params sidebar should return to this group quick view instead of closing the sidebar. */
-    const groupQuickViewReturnAfterParams = ref(null);
+    const groupQuickViewReturnAfterParams = ref<LiveTrackGroup | null>(null);
     const showSharedWithMeSidebar = ref(false);
-    const incomingSharedTrackers = ref([]);
-    const incomingSharedGroups = ref([]);
-    const addingIncomingId = ref(null);
-    const addingIncomingGroupId = ref(null);
-    const leavingShareId = ref(null);
+    const incomingSharedTrackers = ref<LiveTrack[]>([]);
+    const incomingSharedGroups = ref<LiveTrackGroup[]>([]);
+    const addingIncomingId = ref<string | number | null>(null);
+    const addingIncomingGroupId = ref<string | number | null>(null);
+    const leavingShareId = ref<string | number | null>(null);
     const sharedWithMeRefreshing = ref(false);
     const actionStripRefreshing = ref(false);
     const showLayerSidebar = ref(false);
@@ -751,7 +834,7 @@ export default {
     const isUnhideAllGroupsLoading = ref(false);
 
     const isMapSidebarOpen = computed(
-      () =>
+      (): boolean =>
         showTrackSidebar.value ||
         paramsModalTrackId.value != null ||
         showGroupsSidebar.value ||
@@ -761,11 +844,11 @@ export default {
         showSettingsSidebar.value
     );
 
-    const mapSidebarTitle = computed(() => {
+    const mapSidebarTitle = computed((): string => {
       if (showTrackSidebar.value) return trackSidebarMode.value === 'create' ? 'New Tracker' : 'Edit Tracker';
       if (paramsModalTrackId.value != null) return 'Latest Parameters';
       if (showGroupsSidebar.value) return 'Groups';
-      if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name || 'Group';
+      if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name ?? 'Group';
       if (showSharedWithMeSidebar.value) return 'Shared With Me';
       if (showLayerSidebar.value) return 'Map Settings';
       if (showSettingsSidebar.value) return 'Settings';
@@ -774,15 +857,15 @@ export default {
 
     /** When true, panel header X emits close-overlay so we pop back to group quick view instead of closing the sidebar. */
     const sidebarCloseEmitsOverlayFirst = computed(
-      () => paramsModalTrackId.value != null && groupQuickViewReturnAfterParams.value != null
+      (): boolean => paramsModalTrackId.value != null && groupQuickViewReturnAfterParams.value != null
     );
 
-    const groupQuickViewTracks = computed(() => {
+    const groupQuickViewTracks = computed((): LiveTrack[] => {
       const g = groupQuickViewGroup.value;
       if (!g?.track_ids?.length) return [];
-      return (g.track_ids || [])
+      return g.track_ids
         .map((id) => trackers.value.find((t) => String(t.id) === String(id)))
-        .filter(Boolean);
+        .filter((t): t is LiveTrack => t != null);
     });
 
     watch(
@@ -790,45 +873,42 @@ export default {
       (open) => {
         if (open) {
           closeMobileActionsMenu();
-          nextTick(() => mapSidebarRef.value?.focus());
+          void nextTick(() => mapSidebarRef.value?.focus());
         }
       }
     );
 
-    const highlightedId = ref(null);
+    const highlightedId = ref<string | number | null>(null);
     const userLogin = ref('');
     const { tileSources, selectedLayer, fetchTileSources } = useTileSources({
-      afterFetch: (tileSourcesRef, selectedLayerRef) => applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef)
+      afterFetch: (tileSourcesRef, selectedLayerRef) => { applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef); }
     });
-    const formatTime = (ms) => formatTimestampLocal(ms);
+    const formatTime = (ms: number | string | null | undefined): string => formatTimestampLocal(ms);
 
-    async function fetchGroups() {
+    async function fetchGroups(): Promise<void> {
       try {
         const res = await api.get('/groups/');
-        groups.value = Array.isArray(res.data) ? res.data : [];
+        groups.value = Array.isArray(res.data) ? (res.data as LiveTrackGroup[]) : [];
       } catch (e) {
-        const err = api.handleError && api.handleError(e);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load groups');
-        }
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to load groups');
       }
     }
 
-    async function fetchTrackers(options) {
+    async function fetchTrackers(options?: FetchTrackersOptions): Promise<void> {
       const skipGlobalLoading = options?.skipGlobalLoading === true;
       if (!skipGlobalLoading) loading.value = true;
       try {
         const res = await api.get('/trackers/');
-        const raw = Array.isArray(res.data) ? res.data : [];
-        let withGeometry = [];
-        const ids = raw.map((t) => t.id).filter((id) => id != null && id !== '');
+        const raw = Array.isArray(res.data) ? (res.data as LiveTrack[]) : [];
+        const ids = raw.map((t) => t.id).filter((id) => id !== '');
 
         const bulkRes = await api.post('/trackers/geometry/', {
           tracker_ids: ids
         });
-        const bulkList = Array.isArray(bulkRes.data) ? bulkRes.data : [];
+        const bulkList = Array.isArray(bulkRes.data) ? (bulkRes.data as LiveTrack[]) : [];
         const bulkById = new Map(bulkList.map((t) => [String(t.id), t]));
-        withGeometry = raw.map((t) => {
+        const withGeometry: LiveTrack[] = raw.map((t) => {
           const merged = bulkById.get(String(t.id));
           if (!merged) return normalizeTrackForMemory({ ...t, geometry: { type: 'LineString', coordinates: [] } });
           return normalizeTrackForMemory({
@@ -846,37 +926,33 @@ export default {
 
         trackers.value = withGeometry;
         trackSocket.refreshSessionCache(withGeometry);
-        trackMap.updateMapFeatures();
+        void trackMap.updateMapFeatures();
       } catch (e) {
-        const err = api.handleError && api.handleError(e);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load trackers');
-        }
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to load trackers');
       } finally {
         if (!skipGlobalLoading) loading.value = false;
       }
     }
 
-    async function fetchIncomingShared() {
+    async function fetchIncomingShared(): Promise<void> {
       try {
         const res = await api.get('/trackers/available-to-add/');
-        const data = res.data || {};
+        const data = (res.data ?? {}) as AvailableToAddResponse;
         incomingSharedTrackers.value = Array.isArray(data.shared_with_me) ? data.shared_with_me : [];
         // Defensive: pending shared groups should not expose per-track items pre-acceptance.
         incomingSharedGroups.value = Array.isArray(data.shared_with_me_groups)
           ? data.shared_with_me_groups.map((g) => ({ ...g, track_ids: [] }))
           : [];
       } catch (e) {
-        const err = api.handleError && api.handleError(e);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load incoming shares');
-        }
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to load incoming shares');
         incomingSharedTrackers.value = [];
         incomingSharedGroups.value = [];
       }
     }
 
-    async function onSharedWithMeRefresh() {
+    async function onSharedWithMeRefresh(): Promise<void> {
       sharedWithMeRefreshing.value = true;
       try {
         await fetchIncomingShared();
@@ -885,22 +961,22 @@ export default {
       }
     }
 
-    function onSharedWithMeLeaveGroup(group) {
+    function onSharedWithMeLeaveGroup(group: LiveTrackGroup | null | undefined): void {
       if (!group?.id) return;
       removeGroupFromLocalState(group, { removeTrackers: true });
     }
 
-    function onSharedSidebarSelectTrack(track) {
+    function onSharedSidebarSelectTrack(track: LiveTrack): void {
       listTab.value = 'shared';
       onTrackListClick(track);
     }
 
-    function onSharedSidebarSelectGroup(group) {
+    function onSharedSidebarSelectGroup(group: LiveTrackGroup): void {
       listTab.value = 'shared';
       onGroupListClick(group);
     }
 
-    async function onFullRefresh() {
+    async function onFullRefresh(): Promise<void> {
       actionStripRefreshing.value = true;
       try {
         await fetchGroups();
@@ -911,7 +987,7 @@ export default {
       }
     }
 
-    function getMapPadding() {
+    function getMapPadding(): PaddingOptions {
       const bottomInset = isMobileView.value && isSheetOpen.value && !isMapSidebarOpen.value
         ? getDrawerPeekHeight()
         : 0;
@@ -924,7 +1000,7 @@ export default {
     }
 
     /** A track feature on the map was clicked: switch to its tab, highlight it, and scroll it into view in the list. */
-    function onMapFeatureClick(trackId) {
+    function onMapFeatureClick(trackId: string | number): void {
       const track = trackers.value.find((t) => String(t.id) === String(trackId));
       if (track) {
         if (visibleTrackersTab.value.some((t) => String(t.id) === String(trackId))) {
@@ -935,22 +1011,21 @@ export default {
       }
       highlightedId.value = trackId;
       if (isMobileView.value) {
-        const snap = mobileDrawerRef.value?.snapPx?.value ?? mobileDrawerRef.value?.snapPx;
-        const maxH = Array.isArray(snap) ? snap[1] : undefined;
-        if (maxH != null) {
-          const hp = mobileDrawerRef.value?.heightPx;
-          if (hp && typeof hp === 'object' && 'value' in hp) hp.value = maxH;
+        const snap = mobileDrawerRef.value?.snapPx;
+        const maxH = snap ? snap[1] : undefined;
+        if (maxH != null && mobileDrawerRef.value) {
+          mobileDrawerRef.value.heightPx = maxH;
         }
       }
-      function scrollListToTrack() {
+      function scrollListToTrack(): void {
         const container = listScrollContainer.value;
         if (!container) {
           // Last-resort fallback if list container ref is not resolved yet.
-          const rowOnly = document.querySelector(`[data-track-id="${trackId}"]`);
-          rowOnly?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+          const rowOnly = document.querySelector<HTMLElement>(`[data-track-id="${String(trackId)}"]`);
+          rowOnly?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
           return;
         }
-        const row = container.querySelector(`[data-track-id="${trackId}"]`);
+        const row = container.querySelector<HTMLElement>(`[data-track-id="${String(trackId)}"]`);
         if (!row) return;
         const padding = 8;
         const rowTop = row.offsetTop;
@@ -966,17 +1041,17 @@ export default {
           });
         }
       }
-      nextTick(() => {
+      void nextTick(() => {
         scrollListToTrack();
-        nextTick(() => {
-          if (!listScrollContainer.value?.querySelector(`[data-track-id="${trackId}"]`)) {
+        void nextTick(() => {
+          if (!listScrollContainer.value?.querySelector(`[data-track-id="${String(trackId)}"]`)) {
             setTimeout(scrollListToTrack, 80);
           }
         });
       });
     }
 
-    function onMapBackgroundClick() {
+    function onMapBackgroundClick(): void {
       highlightedId.value = null;
     }
 
@@ -996,15 +1071,15 @@ export default {
     });
 
     const geo = useLiveTrackGeolocation({ getMap: trackMap.getMap });
-    trackMap.onStyleReady(() => geo.syncUserLocationMarker());
+    trackMap.onStyleReady(() => { void geo.syncUserLocationMarker(); });
     trackMap.onStyleReady(() => { mapInitializing.value = false; });
     const { trackingEnabled, toggleLocationTracking } = geo;
 
-    function onLayerChange() {
-      trackMap.switchMapLayer(selectedLayer.value);
+    function onLayerChange(): void {
+      void trackMap.switchMapLayer(selectedLayer.value);
     }
 
-    function onTrackListClick(track) {
+    function onTrackListClick(track: LiveTrack): void {
       highlightedId.value = null;
       activeGroupId.value = null;
       if (selectedId.value === track.id) {
@@ -1015,12 +1090,12 @@ export default {
       }
       selectedId.value = track.id;
       followLocked.value = true;
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
       trackMap.panToTrackLastPoint(track, { minZoom: 14 });
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
-    async function goHome() {
+    async function goHome(): Promise<void> {
       selectedId.value = null;
       followLocked.value = false;
       await trackMap.updateMapFeatures();
@@ -1032,23 +1107,23 @@ export default {
       }
     }
 
-    function openCreateTrackSidebar() {
+    function openCreateTrackSidebar(): void {
       if (showTrackSidebar.value && trackSidebarMode.value === 'create') { closeMapSidebar(); return; }
       trackSidebarMode.value = 'create';
       trackSidebarTrack.value = null;
       openSidebar('track');
     }
 
-    function openCreateGroupModal() {
+    function openCreateGroupModal(): void {
       groupsSidebarInitialGroupId.value = null;
       openSidebar('groups');
     }
 
-    function openEditGroupModal(group) {
+    function openEditGroupModal(group: LiveTrackGroup | null | undefined): void {
       openSidebar('groups', group?.id ?? null);
     }
 
-    function closeMapSidebar() {
+    function closeMapSidebar(): void {
       showTrackSidebar.value = false;
       paramsModalTrackId.value = null;
       groupQuickViewReturnAfterParams.value = null;
@@ -1061,7 +1136,7 @@ export default {
       showSettingsSidebar.value = false;
     }
 
-    function onParamsClose() {
+    function onParamsClose(): void {
       if (groupQuickViewReturnAfterParams.value) {
         paramsModalTrackId.value = null;
         const group = groupQuickViewReturnAfterParams.value;
@@ -1073,7 +1148,7 @@ export default {
       }
     }
 
-    function openParamsFromGroupQuickView(track) {
+    function openParamsFromGroupQuickView(track: LiveTrack | null | undefined): void {
       if (!track?.id || !groupQuickViewGroup.value) return;
       groupQuickViewReturnAfterParams.value = groupQuickViewGroup.value;
       paramsModalTrackId.value = track.id;
@@ -1081,7 +1156,7 @@ export default {
     }
 
     /** Open one sidebar and close the others. type: 'track' | 'params' | 'groups' | 'groupQuickView' | 'sharedWithMe' | 'layer'. payload: for 'params' the track id; for 'groups' optional group id; for 'groupQuickView' the group object. Clicking the same menubar icon again closes the sidebar. */
-    function openSidebar(type, payload) {
+    function openSidebar(type: SidebarType, payload?: string | number | LiveTrackGroup | null): void {
       if (type === 'groups' && showGroupsSidebar.value) { closeMapSidebar(); return; }
       if (type === 'sharedWithMe' && showSharedWithMeSidebar.value) { closeMapSidebar(); return; }
       if (type === 'layer' && showLayerSidebar.value) { closeMapSidebar(); return; }
@@ -1097,52 +1172,53 @@ export default {
       showLayerSidebar.value = false;
       showSettingsSidebar.value = false;
       if (type === 'track') showTrackSidebar.value = true;
-      else if (type === 'params') paramsModalTrackId.value = payload ?? null;
+      else if (type === 'params') paramsModalTrackId.value = (payload as string | number | null | undefined) ?? null;
       else if (type === 'groups') {
         showGroupsSidebar.value = true;
-        if (payload != null && payload !== '') groupsSidebarInitialGroupId.value = payload;
+        if (payload != null && payload !== '') groupsSidebarInitialGroupId.value = payload as string | number;
       } else if (type === 'groupQuickView' && payload) {
         showGroupQuickViewSidebar.value = true;
-        groupQuickViewGroup.value = payload;
+        groupQuickViewGroup.value = payload as LiveTrackGroup;
       } else if (type === 'sharedWithMe') {
         showSharedWithMeSidebar.value = true;
-        fetchIncomingShared();
+        void fetchIncomingShared();
       } else if (type === 'layer') showLayerSidebar.value = true;
       else if (type === 'settings') showSettingsSidebar.value = true;
     }
 
-    function onLayerSidebarChange(layerValue) {
+    function onLayerSidebarChange(layerValue: string): void {
       selectedLayer.value = layerValue;
       onLayerChange();
     }
 
-    async function onUnhideTracker(trackerId) {
-      if (!trackerId || !api) return;
+    async function onUnhideTracker(trackerId: string | number | null | undefined): Promise<void> {
+      if (!trackerId) return;
       const idStr = String(trackerId);
       try {
         const tracker = trackers.value.find((t) => String(t.id) === idStr);
         if (!tracker) return;
         const payload = buildTrackerUnhidePayload(tracker);
         const response = await api.post(`/trackers/${trackerId}/settings/`, payload);
-        if (response?.data?.id) {
-          upsertTrackerInLocalState(response.data, { updateMap: false });
+        const data = response.data as LiveTrack | null | undefined;
+        if (data?.id) {
+          upsertTrackerInLocalState(data, { updateMap: false });
         }
         const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
         if (idx >= 0) {
           const t = trackers.value[idx];
-          const settings = { ...(t.settings || {}), hidden: false };
+          const settings = { ...(t.settings ?? {}), hidden: false };
           trackers.value = trackers.value.slice(0, idx).concat({ ...t, settings }).concat(trackers.value.slice(idx + 1));
         }
-        trackMap.updateMapFeatures();
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker shown on map and in list');
+        void trackMap.updateMapFeatures();
+        window.gv_core.GeoVault.toast.success('Tracker shown on map and in list');
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to show tracker');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to show tracker');
       }
     }
 
-    async function onUnhideAllTrackers() {
-      if (!api || isUnhideAllTrackersLoading.value) return;
+    async function onUnhideAllTrackers(): Promise<void> {
+      if (isUnhideAllTrackersLoading.value) return;
       isUnhideAllTrackersLoading.value = true;
       try {
         const payload = buildHiddenItemsClearPayload(['trackers']);
@@ -1151,45 +1227,42 @@ export default {
           fetchTrackers({ skipGlobalLoading: true }),
           fetchGroups(),
         ]);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.success('All hidden trackers shown');
-        }
+        window.gv_core.GeoVault.toast.success('All hidden trackers shown');
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to show all trackers');
-        }
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to show all trackers');
       } finally {
         isUnhideAllTrackersLoading.value = false;
       }
     }
 
-    async function onUnhideGroup(groupId) {
-      if (!groupId || !api) return;
+    async function onUnhideGroup(groupId: string | number | null | undefined): Promise<void> {
+      if (!groupId) return;
       const idStr = String(groupId);
       try {
         const group = groups.value.find((g) => String(g.id) === idStr);
         if (!group) return;
         const payload = buildGroupUnhidePayload(group);
         const response = await api.patch(`/groups/${groupId}/`, payload);
-        if (response?.data?.id) {
-          upsertGroupInLocalState(response.data, { updateMap: false });
+        const data = response.data as LiveTrackGroup | null | undefined;
+        if (data?.id) {
+          upsertGroupInLocalState(data, { updateMap: false });
         }
         const idx = groups.value.findIndex((g) => String(g.id) === idStr);
         if (idx >= 0) {
           const g = groups.value[idx];
           groups.value = groups.value.slice(0, idx).concat({ ...g, hidden: false }).concat(groups.value.slice(idx + 1));
         }
-        trackMap.updateMapFeatures();
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group shown on map and in list');
+        void trackMap.updateMapFeatures();
+        window.gv_core.GeoVault.toast.success('Group shown on map and in list');
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to show group');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to show group');
       }
     }
 
-    async function onUnhideAllGroups() {
-      if (!api || isUnhideAllGroupsLoading.value) return;
+    async function onUnhideAllGroups(): Promise<void> {
+      if (isUnhideAllGroupsLoading.value) return;
       isUnhideAllGroupsLoading.value = true;
       try {
         const payload = buildHiddenItemsClearPayload(['groups']);
@@ -1198,65 +1271,61 @@ export default {
           fetchTrackers({ skipGlobalLoading: true }),
           fetchGroups(),
         ]);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.success('All hidden groups shown');
-        }
+        window.gv_core.GeoVault.toast.success('All hidden groups shown');
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) {
-          window.gv_core.GeoVault.toast.error(err?.message || 'Failed to show all groups');
-        }
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to show all groups');
       } finally {
         isUnhideAllGroupsLoading.value = false;
       }
     }
 
-    function upsertTrackerInLocalState(tracker, options = {}) {
+    function upsertTrackerInLocalState(tracker: LiveTrack | null | undefined, options: UpsertOptions = {}): boolean {
       if (!tracker?.id) return false;
       const idStr = String(tracker.id);
       const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
       const existing = idx >= 0 ? trackers.value[idx] : null;
       const normalized = normalizeTrackForMemory({
-        ...(existing || {}),
-        ...(tracker || {}),
-        geometry: tracker?.geometry ?? existing?.geometry ?? { type: 'LineString', coordinates: [] },
+        ...(existing ?? {}),
+        ...tracker,
+        geometry: tracker.geometry ?? existing?.geometry ?? { type: 'LineString', coordinates: [] },
       });
       if (idx >= 0) {
         trackers.value = trackers.value.slice(0, idx).concat(normalized).concat(trackers.value.slice(idx + 1));
       } else {
         trackers.value = [...trackers.value, normalized];
       }
-      if (options.updateMap !== false) trackMap.updateMapFeatures();
+      if (options.updateMap !== false) void trackMap.updateMapFeatures();
       return true;
     }
 
-    function removeTrackerFromLocalState(trackId, options = {}) {
+    function removeTrackerFromLocalState(trackId: string | number | null | undefined, options: RemoveTrackerOptions = {}): void {
       if (trackId == null) return;
       const idStr = String(trackId);
       if (options.moveToIncoming === true) moveTrackToIncoming(trackId);
       trackers.value = trackers.value.filter((t) => String(t.id) !== idStr);
       groups.value = groups.value.map((g) => ({
         ...g,
-        track_ids: (g.track_ids || []).filter((id) => String(id) !== idStr),
+        track_ids: (g.track_ids ?? []).filter((id) => String(id) !== idStr),
       }));
       if (options.removeFromIncoming === true) {
         incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== idStr);
       }
       if (String(selectedId.value) === idStr) selectedId.value = null;
-      if (options.updateMap !== false) trackMap.updateMapFeatures();
+      if (options.updateMap !== false) void trackMap.updateMapFeatures();
     }
 
-    function upsertGroupInLocalState(group, options = {}) {
+    function upsertGroupInLocalState(group: LiveTrackGroup | null | undefined, options: UpsertGroupOptions = {}): boolean {
       if (!group?.id) return false;
       const idStr = String(group.id);
       const idx = groups.value.findIndex((g) => String(g.id) === idStr);
       const existing = idx >= 0 ? groups.value[idx] : null;
-      const merged = {
-        ...(existing || {}),
-        ...(group || {}),
+      const merged: LiveTrackGroup = {
+        ...(existing ?? {}),
+        ...group,
         track_ids: Array.isArray(group.track_ids)
           ? [...group.track_ids]
-          : [...(existing?.track_ids || [])],
+          : [...(existing?.track_ids ?? [])],
       };
       if (idx >= 0) {
         groups.value = groups.value.slice(0, idx).concat(merged).concat(groups.value.slice(idx + 1));
@@ -1266,34 +1335,34 @@ export default {
       if (options.removeIncoming !== false) {
         incomingSharedGroups.value = incomingSharedGroups.value.filter((g) => String(g.id) !== idStr);
       }
-      if (options.updateMap !== false) trackMap.updateMapFeatures();
+      if (options.updateMap !== false) void trackMap.updateMapFeatures();
       return true;
     }
 
-    function onShareSettingsSaved(updated) {
+    function onShareSettingsSaved(updated: LiveTrack | null | undefined): void {
       if (updated?.id) upsertTrackerInLocalState(updated, { updateMap: false });
       shareSettingsModalTrack.value = null;
     }
 
-    function onPublicShareDeleted(updated) {
+    function onPublicShareDeleted(updated: LiveTrack | null | undefined): void {
       if (updated?.id) upsertTrackerInLocalState(updated, { updateMap: false });
       publicSharePopupTrack.value = null;
     }
 
-    async function fetchAndMergeGroup(groupId) {
+    async function fetchAndMergeGroup(groupId: string | number | null | undefined): Promise<void> {
       if (!groupId) return;
       try {
         const res = await api.get(`/groups/${groupId}/`);
-        upsertGroupInLocalState(res?.data || null, { updateMap: false });
+        upsertGroupInLocalState((res.data as LiveTrackGroup | null) ?? null, { updateMap: false });
       } catch {
         // Keep optimistic group payload when targeted fetch fails.
       }
     }
 
-    function onGroupsSidebarSaved(payload) {
+    function onGroupsSidebarSaved(payload: GroupSavedPayload | null | undefined): void {
       const group = payload?.group;
       if (!group?.id) {
-        fetchGroups();
+        void fetchGroups();
         return;
       }
       upsertGroupInLocalState(group, { updateMap: false });
@@ -1301,15 +1370,15 @@ export default {
       for (const trackId of trackIds) {
         const idStr = String(trackId);
         const hasTrack = trackers.value.some((t) => String(t.id) === idStr);
-        if (!hasTrack) fetchAndMergeTracker(trackId);
+        if (!hasTrack) void fetchAndMergeTracker(trackId);
       }
       if (trackIds.length === 0 && payload?.action === 'created') {
-        fetchAndMergeGroup(group.id);
+        void fetchAndMergeGroup(group.id);
       }
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
     }
 
-    async function onGroupsSidebarRefreshed() {
+    async function onGroupsSidebarRefreshed(): Promise<void> {
       groupsSidebarRefreshing.value = true;
       try {
         await fetchGroups();
@@ -1318,12 +1387,12 @@ export default {
       }
     }
 
-    function removeGroupFromLocalState(group, options = {}) {
-      const groupId = group?.id;
-      if (groupId == null) return;
+    function removeGroupFromLocalState(group: LiveTrackGroup | null | undefined, options: RemoveGroupOptions = {}): void {
+      if (!group?.id) return;
+      const groupId = group.id;
       const existingGroup = groups.value.find((g) => String(g.id) === String(groupId));
-      const sourceGroup = existingGroup || group;
-      const trackIdsInGroup = new Set((sourceGroup?.track_ids || []).map((id) => String(id)));
+      const sourceGroup = existingGroup ?? group;
+      const trackIdsInGroup = new Set((sourceGroup.track_ids ?? []).map((id) => String(id)));
       groups.value = groups.value.filter((g) => String(g.id) !== String(groupId));
       if (options.removeIncoming !== false) {
         incomingSharedGroups.value = incomingSharedGroups.value.filter((g) => String(g.id) !== String(groupId));
@@ -1339,108 +1408,108 @@ export default {
       if (options.removeTrackers === true && selectedId.value != null && trackIdsInGroup.has(String(selectedId.value))) {
         selectedId.value = null;
       }
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
     }
 
-    async function onGroupsSidebarLeave(group) {
+    async function onGroupsSidebarLeave(group: LiveTrackGroup | null | undefined): Promise<void> {
       if (!group?.id) return;
       if (!confirm('Leave this shared group? You will no longer see its trackers on the map or in Shared.')) return;
       try {
         await api.delete(`/groups/${group.id}/leave/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
+        window.gv_core.GeoVault.toast.success('Left shared group');
         removeGroupFromLocalState(group, { removeTrackers: true });
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to leave shared group');
       }
     }
 
-    function onGroupListClick(group) {
+    function onGroupListClick(group: LiveTrackGroup | null | undefined): void {
       activeGroupId.value = group?.id ?? null;
       selectedId.value = null;
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
       trackMap.fitMapToGroupTracks(group);
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
-    function openGroupQuickView(group) {
+    function openGroupQuickView(group: LiveTrackGroup): void {
       openSidebar('groupQuickView', group);
     }
 
-    function onGroupQuickViewFitMap() {
+    function onGroupQuickViewFitMap(): void {
       const g = groupQuickViewGroup.value;
       if (!g) return;
-      activeGroupId.value = g.id ?? null;
-      trackMap.updateMapFeatures();
+      activeGroupId.value = g.id;
+      void trackMap.updateMapFeatures();
       trackMap.fitMapToGroupTracks(g);
     }
 
-    function zoomToTrackInGroup(track) {
+    function zoomToTrackInGroup(track: LiveTrack): void {
       highlightedId.value = null;
       activeGroupId.value = null;
       selectedId.value = track.id;
       followLocked.value = true;
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
       trackMap.panToTrackLastPoint(track, { minZoom: 14 });
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
-    function openTrackerInList(track) {
+    function openTrackerInList(track: LiveTrack | null | undefined): void {
       if (!track?.id) return;
       highlightedId.value = null;
       activeGroupId.value = null;
       listTab.value = 'trackers';
       selectedId.value = track.id;
       followLocked.value = true;
-      trackMap.updateMapFeatures();
-      nextTick(() => {
+      void trackMap.updateMapFeatures();
+      void nextTick(() => {
         const scrollEl = listScrollContainer.value;
         if (scrollEl) {
-          const row = scrollEl.querySelector(`[data-track-id="${track.id}"]`);
-          if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          const row = scrollEl.querySelector<HTMLElement>(`[data-track-id="${String(track.id)}"]`);
+          row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
       });
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
-    function deselectGroup() {
+    function deselectGroup(): void {
       activeGroupId.value = null;
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
     }
 
-    function deselectSelection() {
+    function deselectSelection(): void {
       activeGroupId.value = null;
       selectedId.value = null;
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
       if (isMobileView.value) collapseDrawerToPeek();
     }
 
-    async function leaveGroup(group) {
+    async function leaveGroup(group: LiveTrackGroup | null | undefined): Promise<void> {
       if (!group?.id) return;
       if (!confirm('Leave this shared group? You will no longer see its trackers on the map or in Shared.')) return;
       try {
         await api.delete(`/groups/${group.id}/leave/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Left shared group');
+        window.gv_core.GeoVault.toast.success('Left shared group');
         removeGroupFromLocalState(group, { removeTrackers: true });
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave shared group');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to leave shared group');
       }
     }
 
-    function openEditTrackSidebar(track) {
+    function openEditTrackSidebar(track: LiveTrack): void {
       trackSidebarMode.value = 'edit';
       trackSidebarTrack.value = null;
       trackSidebarLoading.value = true;
       openSidebar('track');
-      nextTick(() => {
+      void nextTick(() => {
         api.get(`/trackers/${track.id}/`)
           .then((res) => {
-            trackSidebarTrack.value = res.data;
+            trackSidebarTrack.value = res.data as LiveTrack;
           })
-          .catch((e) => {
-            const err = api.handleError?.(e);
-            if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to load tracker');
+          .catch((e: unknown) => {
+            const err = api.handleError(e);
+            window.gv_core.GeoVault.toast.error(err.message || 'Failed to load tracker');
             showTrackSidebar.value = false;
           })
           .finally(() => {
@@ -1449,84 +1518,73 @@ export default {
       });
     }
 
-    function onTrackSidebarSaved(payload) {
-      const action = payload?.action;
-      if (action === 'created') {
-        if (payload?.tracker?.id) {
+    function onTrackSidebarSaved(payload: TrackSidebarSavedPayload | null | undefined): void {
+      if (payload?.action === 'created') {
+        if (payload.tracker?.id) {
           upsertTrackerInLocalState(payload.tracker);
           return;
         }
-        fetchTrackers();
+        void fetchTrackers();
       }
       showTrackSidebar.value = false;
-      if (action === 'history-cleared' && payload?.trackId) {
-        fetchAndMergeTracker(payload.trackId);
+      if (payload?.action === 'history-cleared' && payload.trackId) {
+        void fetchAndMergeTracker(payload.trackId);
       }
     }
 
-    function onTrackSettingsChanged(payload) {
-      const { trackId, hidden, refresh_map } = payload || {};
-      if (trackId == null) return;
+    function onTrackSettingsChanged(payload: TrackSettingsChangedPayload | null | undefined): void {
+      if (payload?.trackId == null) return;
+      const trackId = payload.trackId;
       const idStr = String(trackId);
       const idx = trackers.value.findIndex((t) => String(t.id) === idStr);
       if (idx < 0) return;
       const t = trackers.value[idx];
-      const hasHiddenUpdate = Object.prototype.hasOwnProperty.call(payload || {}, 'hidden');
-      const settings = { ...(t.settings || {}) };
+      const hasHiddenUpdate = Object.prototype.hasOwnProperty.call(payload, 'hidden');
+      const settings = { ...(t.settings ?? {}) };
       if (hasHiddenUpdate) {
-        settings.hidden = hidden;
+        settings.hidden = payload.hidden;
       }
       trackers.value = trackers.value.slice(0, idx).concat([{ ...t, settings }]).concat(trackers.value.slice(idx + 1));
       // Avoid a transient redraw when we're only waiting for refreshed geometry.
       if (hasHiddenUpdate) {
-        trackMap.updateMapFeatures();
+        void trackMap.updateMapFeatures();
       }
       const selectedSidebarTrackId = trackSidebarTrack.value?.id ?? null;
-      if (shouldReloadGeometryForSettingsChange(refresh_map, trackId, selectedSidebarTrackId)) {
-        fetchAndMergeTracker(trackId);
+      if (shouldReloadGeometryForSettingsChange(payload.refresh_map ?? false, trackId, selectedSidebarTrackId)) {
+        void fetchAndMergeTracker(trackId);
       }
     }
 
-    function onTrackSidebarUnsubscribed(trackId) {
+    function onTrackSidebarUnsubscribed(trackId: string | number | null | undefined): void {
       showTrackSidebar.value = false;
       if (!trackId) return;
       removeTrackerFromLocalState(trackId, { moveToIncoming: true });
     }
 
-    function onTrackDeleted(payload) {
+    function onTrackDeleted(payload: TrackDeletedPayload | null | undefined): void {
       showTrackSidebar.value = false;
       const trackId = payload?.trackId ?? trackSidebarTrack.value?.id ?? null;
       if (trackId) {
         removeTrackerFromLocalState(trackId);
       } else {
-        fetchTrackers();
+        void fetchTrackers();
       }
     }
 
-    function onCreateGroupSaved(payload) {
-      closeMapSidebar();
-      const group = payload?.group;
-      if (group?.id) {
-        upsertGroupInLocalState(group, { updateMap: false });
-      } else {
-        fetchGroups();
-      }
-    }
-
-    function onGroupHiddenChanged(payload) {
-      const { groupId, hidden: value } = payload || {};
-      if (groupId == null) return;
+    function onGroupHiddenChanged(payload: GroupHiddenChangedPayload | null | undefined): void {
+      if (payload?.groupId == null) return;
+      const groupId = payload.groupId;
       const idStr = String(groupId);
       const idx = groups.value.findIndex((g) => String(g.id) === idStr);
       if (idx < 0) return;
       const g = groups.value[idx];
-      groups.value = groups.value.slice(0, idx).concat([{ ...g, hidden: !!value }]).concat(groups.value.slice(idx + 1));
-      trackMap.updateMapFeatures();
+      groups.value = groups.value.slice(0, idx).concat([{ ...g, hidden: !!payload.hidden }]).concat(groups.value.slice(idx + 1));
+      void trackMap.updateMapFeatures();
     }
 
-    async function onSharedUnsubscribeGroup(group) {
+    async function onSharedUnsubscribeGroup(group: LiveTrackGroup | null | undefined): Promise<void> {
       if (!group?.id) return;
-      const trackIds = (group.track_ids || []).map((id) => String(id));
+      const trackIds = (group.track_ids ?? []).map((id) => String(id));
       if (trackIds.length === 0) return;
       if (!confirm('Remove all trackers in this group from your map? You can add the group again from Shared With Me.')) return;
       unsubscribingGroupId.value = group.id;
@@ -1534,17 +1592,17 @@ export default {
         for (const trackId of trackIds) {
           await api.delete(`/trackers/${trackId}/subscribe/`);
         }
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group removed from map');
+        window.gv_core.GeoVault.toast.success('Group removed from map');
         removeGroupFromLocalState(group, { removeTrackers: true });
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove group');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to remove group');
       } finally {
         unsubscribingGroupId.value = null;
       }
     }
 
-    function stubForIncoming(track) {
+    function stubForIncoming(track: LiveTrack | null | undefined): IncomingTrackerStub | null {
       if (!track) return null;
       return {
         id: track.id,
@@ -1553,7 +1611,7 @@ export default {
       };
     }
 
-    function moveTrackToIncoming(trackId) {
+    function moveTrackToIncoming(trackId: string | number): void {
       const idStr = String(trackId);
       const track = trackers.value.find((t) => String(t.id) === idStr);
       const stub = stubForIncoming(track);
@@ -1563,44 +1621,44 @@ export default {
       }
     }
 
-    async function onLeaveShare(trackId) {
+    async function onLeaveShare(trackId: string | number | null | undefined): Promise<void> {
       if (!trackId) return;
       if (!confirm('Remove yourself from this share? The owner will no longer have you as a recipient, and you won\'t see this tracker in Incoming again.')) return;
       leavingShareId.value = trackId;
       try {
         await api.delete(`/trackers/${trackId}/share-with-me/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Removed from share');
+        window.gv_core.GeoVault.toast.success('Removed from share');
         removeTrackerFromLocalState(trackId, { removeFromIncoming: true });
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to leave share');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to leave share');
       } finally {
         leavingShareId.value = null;
       }
     }
 
-    async function onSharedUnsubscribe(trackId) {
+    async function onSharedUnsubscribe(trackId: string | number | null | undefined): Promise<void> {
       if (!trackId) return;
       if (!confirm('Remove this tracker from your list? You can add it again from Shared With Me.')) return;
       const track = trackers.value.find((t) => String(t.id) === String(trackId));
-      const isPublic = (track?.visibility || '') === 'public';
+      const isPublic = (track?.visibility ?? '') === 'public';
       unsubscribingId.value = trackId;
       try {
         await api.delete(`/trackers/${trackId}/subscribe/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker removed');
+        window.gv_core.GeoVault.toast.success('Tracker removed');
         removeTrackerFromLocalState(trackId, { moveToIncoming: !isPublic });
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to remove');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to remove');
       } finally {
         unsubscribingId.value = null;
       }
     }
 
-    function onDiscoverSaved(payload) {
+    function onDiscoverSaved(payload: DiscoverSavedPayload | null | undefined): void {
       const item = payload?.item;
-      if (!item?.id || !payload?.action || !payload?.kind) {
-        fetchTrackers();
+      if (!payload || !item?.id) {
+        void fetchTrackers();
         return;
       }
       if (payload.kind === 'tracker') {
@@ -1608,37 +1666,36 @@ export default {
           upsertTrackerInLocalState({
             ...item,
             is_owner: false,
-            visibility: item.visibility || 'public',
-            owner_email: item.owner_email || '',
+            visibility: item.visibility ?? 'public',
+            owner_email: item.owner_email ?? '',
           });
-          fetchAndMergeTracker(item.id);
-        } else if (payload.action === 'removed') {
+          void fetchAndMergeTracker(item.id);
+        } else {
           removeTrackerFromLocalState(item.id);
         }
         return;
       }
-      if (payload.kind === 'group') {
-        if (payload.action === 'added') {
-          upsertGroupInLocalState({
-            ...item,
-            is_owner: false,
-            is_accepted: true,
-            visibility: item.visibility || 'public',
-            track_ids: Array.isArray(item.track_ids) ? item.track_ids : [],
-          }, { updateMap: false, removeIncoming: false });
-          for (const trackId of item.track_ids || []) {
-            if (!trackers.value.some((t) => String(t.id) === String(trackId))) {
-              fetchAndMergeTracker(trackId);
-            }
+      // payload.kind === 'group'
+      if (payload.action === 'added') {
+        upsertGroupInLocalState({
+          ...item,
+          is_owner: false,
+          is_accepted: true,
+          visibility: item.visibility ?? 'public',
+          track_ids: Array.isArray(item.track_ids) ? item.track_ids : [],
+        }, { updateMap: false, removeIncoming: false });
+        for (const trackId of item.track_ids ?? []) {
+          if (!trackers.value.some((t) => String(t.id) === String(trackId))) {
+            void fetchAndMergeTracker(trackId);
           }
-          trackMap.updateMapFeatures();
-        } else if (payload.action === 'removed') {
-          removeGroupFromLocalState(item, { removeTrackers: true, removeIncoming: false });
         }
+        void trackMap.updateMapFeatures();
+      } else {
+        removeGroupFromLocalState(item, { removeTrackers: true, removeIncoming: false });
       }
     }
 
-    function addOptimisticTracker(incoming) {
+    function addOptimisticTracker(incoming: { id: string | number; name?: string; owner_email?: string }): void {
       const idStr = String(incoming.id);
       if (trackers.value.some((t) => String(t.id) === idStr)) return;
       const stub = normalizeTrackForMemory({
@@ -1652,15 +1709,15 @@ export default {
       trackers.value = [...trackers.value, stub];
     }
 
-    async function fetchAndMergeTracker(trackerId) {
+    async function fetchAndMergeTracker(trackerId: string | number): Promise<void> {
       try {
         const [metaRes, geomRes] = await Promise.all([
           api.get(`/trackers/${trackerId}/`),
           api.get(`/trackers/${trackerId}/geometry/`),
         ]);
-        const t = metaRes.data;
+        const t = metaRes.data as LiveTrack;
         const normalized = normalizeTrackForMemory({
-          ...geomRes.data,
+          ...(geomRes.data as LiveTrack),
           is_owner: t.is_owner,
           owner_email: t.owner_email,
           visibility: t.visibility,
@@ -1672,44 +1729,44 @@ export default {
         } else {
           trackers.value = [...trackers.value, normalized];
         }
-        trackMap.updateMapFeatures();
+        void trackMap.updateMapFeatures();
       } catch {
         // Keep optimistic stub; map may have no geometry for this track
       }
     }
 
-    async function onAddIncomingTracker(tracker) {
+    async function onAddIncomingTracker(tracker: LiveTrack | null | undefined): Promise<void> {
       if (!tracker?.id || addingIncomingId.value != null) return;
       const preservedListTab = listTab.value;
       addingIncomingId.value = tracker.id;
       try {
         await api.post(`/trackers/${tracker.id}/subscribe/`);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Tracker added');
+        window.gv_core.GeoVault.toast.success('Tracker added');
         incomingSharedTrackers.value = incomingSharedTrackers.value.filter((t) => String(t.id) !== String(tracker.id));
         addOptimisticTracker(tracker);
-        trackMap.updateMapFeatures();
-        fetchAndMergeTracker(tracker.id);
+        void trackMap.updateMapFeatures();
+        void fetchAndMergeTracker(tracker.id);
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add tracker');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to add tracker');
       } finally {
         addingIncomingId.value = null;
         listTab.value = preservedListTab;
       }
     }
 
-    async function onAddIncomingGroup(group) {
+    async function onAddIncomingGroup(group: LiveTrackGroup | null | undefined): Promise<void> {
       if (!group?.id || addingIncomingGroupId.value != null) return;
       const preservedListTab = listTab.value;
       addingIncomingGroupId.value = group.id;
       const isSharedIncoming = incomingSharedGroups.value.some((g) => String(g.id) === String(group.id));
-      const subscribedTrackIds = [];
+      const subscribedTrackIds: Array<string | number> = [];
       let alsoAcceptedCount = 0;
       let success = true;
       try {
         if (isSharedIncoming) {
           const res = await api.post(`/groups/${group.id}/accept-share/`);
-          const acceptedGroup = res?.data || {
+          const acceptedGroup: LiveTrackGroup = (res.data as LiveTrackGroup | null) ?? {
             ...group,
             visibility: 'shared',
             is_owner: false,
@@ -1720,17 +1777,17 @@ export default {
             incomingSharedTrackers.value,
             acceptedGroup.track_ids
           );
-          for (const trackId of acceptedGroup.track_ids || []) {
+          for (const trackId of acceptedGroup.track_ids ?? []) {
             subscribedTrackIds.push(trackId);
           }
         } else {
-          for (const trackId of group.track_ids || []) {
+          for (const trackId of group.track_ids ?? []) {
             try {
               await api.post(`/trackers/${trackId}/subscribe/`);
               subscribedTrackIds.push(trackId);
             } catch (e) {
-              const err = api.handleError?.(e);
-              if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
+              const err = api.handleError(e);
+              window.gv_core.GeoVault.toast.error(err.message || 'Failed to add group');
               success = false;
               break;
             }
@@ -1738,14 +1795,14 @@ export default {
           if (success) {
             upsertGroupInLocalState({
               ...group,
-              visibility: group.visibility || 'public',
+              visibility: group.visibility ?? 'public',
               is_owner: false,
               is_accepted: true,
-              track_ids: [...(group.track_ids || [])],
+              track_ids: [...(group.track_ids ?? [])],
             }, { updateMap: false, removeIncoming: false });
           }
         }
-        if (success && window.gv_core?.GeoVault?.toast) {
+        if (success) {
           window.gv_core.GeoVault.toast.success(isSharedIncoming ? 'Group accepted' : 'Group added');
           if (isSharedIncoming && alsoAcceptedCount > 0) {
             window.gv_core.GeoVault.toast.success(
@@ -1756,8 +1813,8 @@ export default {
           }
         }
       } catch (e) {
-        const err = api.handleError?.(e);
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.error(err?.message || 'Failed to add group');
+        const err = api.handleError(e);
+        window.gv_core.GeoVault.toast.error(err.message || 'Failed to add group');
       } finally {
         addingIncomingGroupId.value = null;
         if (success) {
@@ -1770,34 +1827,31 @@ export default {
             } else if (!trackers.value.some((t) => String(t.id) === String(trackId))) {
               addOptimisticTracker({ id: trackId, name: '', owner_email: '' });
             }
-            fetchAndMergeTracker(trackId);
+            void fetchAndMergeTracker(trackId);
           }
-          trackMap.updateMapFeatures();
+          void trackMap.updateMapFeatures();
         }
         listTab.value = preservedListTab;
       }
     }
 
     watch(selectedId, () => {
-      trackMap.updateMapFeatures();
+      void trackMap.updateMapFeatures();
       if (selectedId.value && !followLocked.value) {
         trackMap.fitMapToSelectedTrack();
       }
       // When unselecting we only unlock; do not reset zoom (no fitMapToTracks)
     });
 
-    function applyDefaultSortFromStore() {
-      const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-      if (!getNestedValue) return;
-      const saved = getNestedValue(platformState.userSettings.value, DEFAULT_SORT_KEY);
-      if (saved && VALID_SORT_VALUES.has(saved)) sortBy.value = saved;
+    function applyDefaultSortFromStore(): void {
+      const saved = window.gv_core.GeoVault.utils.getNestedValue(platformState.userSettings.value, DEFAULT_SORT_KEY);
+      if (typeof saved === 'string' && VALID_SORT_VALUES.has(saved)) sortBy.value = saved as SortBy;
     }
 
-    function applyDefaultMapFromStore(tileSourcesRef, selectedLayerRef) {
-      const getNestedValue = window.gv_core?.GeoVault?.utils?.getNestedValue;
-      if (!getNestedValue || !tileSourcesRef?.value?.length) return;
-      const defaultMap = getNestedValue(platformState.userSettings.value, DEFAULT_MAP_KEY);
-      if (defaultMap && tileSourcesRef.value.some((s) => s.id === defaultMap)) {
+    function applyDefaultMapFromStore(tileSourcesRef: Ref<TileSource[]>, selectedLayerRef: Ref<string>): void {
+      if (!tileSourcesRef.value.length) return;
+      const defaultMap = window.gv_core.GeoVault.utils.getNestedValue(platformState.userSettings.value, DEFAULT_MAP_KEY);
+      if (typeof defaultMap === 'string' && tileSourcesRef.value.some((s) => s.id === defaultMap)) {
         selectedLayerRef.value = defaultMap;
       }
     }
@@ -1808,13 +1862,14 @@ export default {
      * first paint instead of racing it and being corrected later by the `platformState.userSettings`
      * watcher (visible as a style swap). Mirrors the Places extension's `ensureUserSettingsLoaded`.
      */
-    async function ensureUserSettingsLoaded(waitMs = 3000, pollMs = 50) {
-      if (platformState.userSettings.value != null) return;
+    async function ensureUserSettingsLoaded(waitMs = 3000, pollMs = 50): Promise<void> {
+      const hasUserSettings = (): boolean => platformState.userSettings.value != null;
+      if (hasUserSettings()) return;
       const deadline = Date.now() + waitMs;
-      while (platformState.userSettings.value == null && Date.now() < deadline) {
+      while (!hasUserSettings() && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }
-      if (platformState.userSettings.value != null) return;
+      if (hasUserSettings()) return;
       await platformState.fetchUserSettings();
     }
 
@@ -1823,7 +1878,9 @@ export default {
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('liveTrack.highlightStaleData', v ? '1' : '0');
         }
-      } catch (_) { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     });
 
     const trackSocket = useLiveTrackSocket({
@@ -1833,9 +1890,9 @@ export default {
       followLocked,
       updateMapFeatures: trackMap.updateMapFeatures,
       scheduleCenterOnSelectedTrack: trackMap.scheduleCenterOnSelectedTrack,
-      fetchAndMergeTracker,
+      fetchAndMergeTracker: (trackId) => { void fetchAndMergeTracker(trackId); },
       onReconnect: () => {
-        fetchTrackers().then(() => {
+        void fetchTrackers().then(() => {
           if (followLocked.value && selectedId.value) trackMap.centerOnSelectedTrackLastPoint();
         });
       }
@@ -1846,7 +1903,9 @@ export default {
         if (typeof localStorage !== 'undefined' && localStorage.getItem('liveTrack.highlightStaleData') === '1') {
           highlightStaleData.value = true;
         }
-      } catch (_) { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       const userInfo = platformState.currentUser.value;
       if (userInfo?.email) userLogin.value = userInfo.email;
       await ensureUserSettingsLoaded();
@@ -1856,7 +1915,7 @@ export default {
       if (ingressData?.param_labels && typeof ingressData.param_labels === 'object') {
         paramLabels.value = ingressData.param_labels;
       }
-      fetchIncomingShared();
+      void fetchIncomingShared();
       await fetchGroups();
       await fetchTrackers();
       requestAnimationFrame(() => { void trackMap.initMap(); });
@@ -1867,7 +1926,7 @@ export default {
       applyDefaultSortFromStore();
       applyDefaultMapFromStore(tileSources, selectedLayer);
       if (trackMap.getMap() && tileSources.value.some((s) => s.id === selectedLayer.value)) {
-        trackMap.switchMapLayer(selectedLayer.value);
+        void trackMap.switchMapLayer(selectedLayer.value);
       }
     });
 
@@ -1878,7 +1937,7 @@ export default {
         applyDefaultSortFromStore();
         applyDefaultMapFromStore(tileSources, selectedLayer);
         if (trackMap.getMap() && tileSources.value.length && tileSources.value.some((s) => s.id === selectedLayer.value)) {
-          trackMap.switchMapLayer(selectedLayer.value);
+          void trackMap.switchMapLayer(selectedLayer.value);
         }
       },
       { deep: true, immediate: true }
@@ -2018,7 +2077,7 @@ export default {
       trackerMaxHeight
     };
   }
-};
+});
 </script>
 
 <style scoped>

@@ -140,13 +140,13 @@
   </BaseModal>
 </template>
 
-<script>
-import { ref, watch, computed } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, watch, computed } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import CopyTextButton from './CopyTextButton.vue';
 import fdroidBadgeUrl from '@/assets/get-it-on-fdroid.svg';
 
-export default {
+export default defineComponent({
   name: 'GpsLoggerInstructionsModal',
   components: { BaseModal, CopyTextButton },
   props: {
@@ -161,33 +161,31 @@ export default {
     const qrDataUrl = ref('');
     let qrLoadNonce = 0;
     // gpslogger:// link is exactly profileUrl with scheme prefix so it always matches "Profile URL (paste in GPSLogger: From URL)"
-    const gpsloggerOpenUrl = computed(() =>
+    const gpsloggerOpenUrl = computed((): string =>
       props.profileUrl ? `gpslogger://properties/${props.profileUrl}` : ''
     );
-    watch(() => gpsloggerOpenUrl.value, async (url) => {
+    watch(() => gpsloggerOpenUrl.value, (url) => {
       qrLoadNonce += 1;
       const currentNonce = qrLoadNonce;
       if (!url) {
         qrDataUrl.value = '';
         return;
       }
-      try {
-        const { default: QRCode } = await import('qrcode');
-        const dataUrl = await QRCode.toDataURL(url, { width: 256, margin: 1 });
+      import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(url, { width: 256, margin: 1 })).then((dataUrl) => {
         if (currentNonce !== qrLoadNonce) return;
         qrDataUrl.value = dataUrl;
-      } catch {
+      }).catch(() => {
         if (currentNonce !== qrLoadNonce) return;
         qrDataUrl.value = '';
-      }
+      });
     }, { immediate: true });
     const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    function openInGpsLogger() {
+    function openInGpsLogger(): void {
       if (gpsloggerOpenUrl.value) {
         window.location.href = gpsloggerOpenUrl.value;
       }
     }
     return { qrDataUrl, fdroidBadgeUrl, isMobile, openInGpsLogger, gpsloggerOpenUrl };
   }
-};
+});
 </script>

@@ -39,37 +39,45 @@
   </BaseModal>
 </template>
 
-<script>
-import { ref, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, watch, type PropType } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
-import { buildTrackerSharingPayload } from './settingsPayloadBuilders.js';
+import { buildTrackerSharingPayload } from './settingsPayloadBuilders';
+import type { LiveTrack } from './types/track';
+import type { ExtensionApi } from './types/extension-api';
 
-export default {
+interface Subscriber {
+  id: string | number;
+  email?: string;
+}
+
+export default defineComponent({
   name: 'PublicSharePopup',
   components: { BaseModal, BaseButton, Loader },
   props: {
-    track: { type: Object, default: null },
-    api: { type: Object, default: null },
+    track: { type: Object as PropType<LiveTrack | null>, default: null },
+    api: { type: Object as PropType<ExtensionApi | null>, default: null },
   },
   emits: ['close', 'deleted'],
   setup(props, { emit }) {
-    const subscribers = ref([]);
+    const subscribers = ref<Subscriber[]>([]);
     const loadingSubscribers = ref(false);
     const error = ref('');
     const deleting = ref(false);
 
-    async function fetchSubscribers() {
+    async function fetchSubscribers(): Promise<void> {
       if (!props.track?.id || !props.api) return;
       loadingSubscribers.value = true;
       error.value = '';
       try {
         const res = await props.api.get(`/trackers/${props.track.id}/subscribers/`);
-        subscribers.value = Array.isArray(res?.data?.subscribers) ? res.data.subscribers : [];
+        const data = res.data as { subscribers?: Subscriber[] } | null;
+        subscribers.value = Array.isArray(data?.subscribers) ? data.subscribers : [];
       } catch (e) {
-        const err = props.api?.handleError?.(e);
-        error.value = err?.message || 'Failed to load subscribers';
+        const err = props.api.handleError(e);
+        error.value = err.message || 'Failed to load subscribers';
         subscribers.value = [];
       } finally {
         loadingSubscribers.value = false;
@@ -83,23 +91,23 @@ export default {
           subscribers.value = [];
           return;
         }
-        fetchSubscribers();
+        void fetchSubscribers();
       },
       { immediate: true }
     );
 
-    async function onDeletePublicShare() {
+    async function onDeletePublicShare(): Promise<void> {
       if (!props.track?.id || !props.api) return;
       error.value = '';
       deleting.value = true;
       try {
         const payload = buildTrackerSharingPayload(props.track, 'private', []);
         const res = await props.api.post(`/trackers/${props.track.id}/settings/`, payload);
-        emit('deleted', res?.data);
+        emit('deleted', res.data);
         emit('close');
       } catch (e) {
-        const err = props.api?.handleError?.(e);
-        error.value = err?.message || 'Failed to remove public share';
+        const err = props.api.handleError(e);
+        error.value = err.message || 'Failed to remove public share';
       } finally {
         deleting.value = false;
       }
@@ -113,5 +121,5 @@ export default {
       onDeletePublicShare,
     };
   },
-};
+});
 </script>

@@ -77,7 +77,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="font-bold text-gray-900 truncate">{{ group.name }}</div>
-              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} {{ (group.track_ids || []).length === 1 ? 'tracker' : 'trackers' }}</div>
+              <div class="text-xs text-gray-500">{{ (group.track_ids ?? []).length }} {{ (group.track_ids ?? []).length === 1 ? 'tracker' : 'trackers' }}</div>
             </div>
             <div
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -147,7 +147,7 @@
               >
                 Shared by {{ group.owner_email }}
               </div>
-              <div class="text-xs text-gray-500">{{ (group.track_ids || []).length }} {{ (group.track_ids || []).length === 1 ? 'tracker' : 'trackers' }}</div>
+              <div class="text-xs text-gray-500">{{ (group.track_ids ?? []).length }} {{ (group.track_ids ?? []).length === 1 ? 'tracker' : 'trackers' }}</div>
             </div>
             <div
               class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -172,10 +172,10 @@
           >
             <div
               class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
+              :style="{ borderLeftColor: track.color ?? '#6C93DE', borderLeftWidth: '4px' }"
             >
               <TrackDirectionIcon
-                :color="track.color || '#6C93DE'"
+                :color="track.color ?? '#6C93DE'"
                 :angle="getTrackDirectionAngle(track)"
                 :size="26"
                 :selected="selectedId === track.id"
@@ -244,10 +244,10 @@
           >
             <div
               class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-white border border-gray-100 transition-colors"
-              :style="{ borderLeftColor: track.color || '#6C93DE', borderLeftWidth: '4px' }"
+              :style="{ borderLeftColor: track.color ?? '#6C93DE', borderLeftWidth: '4px' }"
             >
               <TrackDirectionIcon
-                :color="track.color || '#6C93DE'"
+                :color="track.color ?? '#6C93DE'"
                 :angle="getTrackDirectionAngle(track)"
                 :size="26"
                 :selected="selectedId === track.id"
@@ -303,23 +303,29 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, watch, type PropType } from 'vue';
 import { Square3Stack3DIcon, PencilIcon, TableCellsIcon, CloudIcon, ListBulletIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import TrackDirectionIcon from './TrackDirectionIcon.vue';
-import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry.js';
-import { formatTimestampLocal } from './paramFormatters.js';
-import { filterByQuery } from './sharingSelectors.js';
-import { isActiveButDeadTrack } from './activeButDeadTrack.js';
+import { getTrackDirectionAngle as getTrackDirectionAngleUtil } from './trackGeometry';
+import { formatTimestampLocal } from './paramFormatters';
+import { filterByQuery } from './sharingSelectors';
+import { isActiveButDeadTrack } from './activeButDeadTrack';
+import type { LiveTrack, LiveTrackGroup } from './types/track';
 
-const LIST_TABS = [
+interface ListTab {
+  id: 'trackers' | 'groups' | 'shared';
+  label: string;
+}
+
+const LIST_TABS: ListTab[] = [
   { id: 'trackers', label: 'Trackers' },
   { id: 'groups', label: 'Groups' },
   { id: 'shared', label: 'Shared' }
 ];
 
-export default {
+export default defineComponent({
   name: 'TrackerListContent',
   components: {
     Loader,
@@ -332,15 +338,15 @@ export default {
     TrackDirectionIcon
   },
   props: {
-    listTab: { type: String, required: true },
-    listTabs: { type: Array, default: () => LIST_TABS },
-    visibleTrackersTab: { type: Array, default: () => [] },
-    visibleSharedTab: { type: Array, default: () => [] },
-    visibleGroupsTab: { type: Array, default: () => [] },
-    visibleSharedGroupsTab: { type: Array, default: () => [] },
-    selectedId: { type: [Number, String], default: null },
-    activeGroupId: { type: [Number, String], default: null },
-    highlightedId: { type: [Number, String], default: null },
+    listTab: { type: String as PropType<ListTab['id']>, required: true },
+    listTabs: { type: Array as PropType<ListTab[]>, default: () => LIST_TABS },
+    visibleTrackersTab: { type: Array as PropType<LiveTrack[]>, default: () => [] },
+    visibleSharedTab: { type: Array as PropType<LiveTrack[]>, default: () => [] },
+    visibleGroupsTab: { type: Array as PropType<LiveTrackGroup[]>, default: () => [] },
+    visibleSharedGroupsTab: { type: Array as PropType<LiveTrackGroup[]>, default: () => [] },
+    selectedId: { type: [Number, String] as PropType<string | number | null>, default: null },
+    activeGroupId: { type: [Number, String] as PropType<string | number | null>, default: null },
+    highlightedId: { type: [Number, String] as PropType<string | number | null>, default: null },
     loading: { type: Boolean, default: false },
     listEmptyForTab: { type: Boolean, default: true },
     scrollContainerClass: {
@@ -363,45 +369,45 @@ export default {
     'clearHighlight'
   ],
   setup(props) {
-    const scrollContainerRef = ref(null);
+    const scrollContainerRef = ref<HTMLElement | null>(null);
     const searchQuery = ref('');
 
     watch(() => props.listTab, () => {
       searchQuery.value = '';
     });
 
-    const formatTime = (ms) => formatTimestampLocal(ms);
+    const formatTime = (ms: number | string | null | undefined): string => formatTimestampLocal(ms);
     const getTrackDirectionAngle = getTrackDirectionAngleUtil;
 
-    function listTimeClass(track) {
+    function listTimeClass(track: LiveTrack): string {
       if (!props.highlightStaleData) return 'text-gray-500';
       return isActiveButDeadTrack(track) ? 'text-red-600' : 'text-gray-500';
     }
 
-    const filteredTrackersTab = computed(() => filterByQuery(props.visibleTrackersTab || [], searchQuery.value, 'name'));
-    const filteredGroupsTab = computed(() => filterByQuery(props.visibleGroupsTab || [], searchQuery.value, 'name'));
-    const filteredSharedTab = computed(() => filterByQuery(props.visibleSharedTab || [], searchQuery.value, 'name', 'owner_email'));
-    const filteredSharedGroupsTab = computed(() => filterByQuery(props.visibleSharedGroupsTab || [], searchQuery.value, 'name', 'owner_email'));
+    const filteredTrackersTab = computed((): LiveTrack[] => filterByQuery(props.visibleTrackersTab, searchQuery.value, 'name'));
+    const filteredGroupsTab = computed((): LiveTrackGroup[] => filterByQuery(props.visibleGroupsTab, searchQuery.value, 'name'));
+    const filteredSharedTab = computed((): LiveTrack[] => filterByQuery(props.visibleSharedTab, searchQuery.value, 'name', 'owner_email'));
+    const filteredSharedGroupsTab = computed((): LiveTrackGroup[] => filterByQuery(props.visibleSharedGroupsTab, searchQuery.value, 'name', 'owner_email'));
 
-    const filteredListEmptyForTab = computed(() => {
+    const filteredListEmptyForTab = computed((): boolean => {
       if (props.listTab === 'trackers') return filteredTrackersTab.value.length === 0;
       if (props.listTab === 'groups') return filteredGroupsTab.value.length === 0;
       return filteredSharedTab.value.length === 0 && filteredSharedGroupsTab.value.length === 0;
     });
 
-    const searchPlaceholder = computed(() => {
+    const searchPlaceholder = computed((): string => {
       if (props.listTab === 'trackers') return 'Search trackers...';
       if (props.listTab === 'groups') return 'Search groups...';
       return 'Search by name or owner...';
     });
 
-    const emptyTitle = computed(() => {
+    const emptyTitle = computed((): string => {
       if (props.listTab === 'trackers') return 'No Trackers Yet';
       if (props.listTab === 'groups') return 'No Groups Yet';
       return 'No Shared Trackers or Groups';
     });
 
-    const emptyMessage = computed(() => {
+    const emptyMessage = computed((): string => {
       if (props.listTab === 'trackers')
         return 'Start by creating your first tracker to begin recording data.';
       if (props.listTab === 'groups')
@@ -409,7 +415,7 @@ export default {
       return 'Trackers and groups shared with you will appear here.';
     });
 
-    function trackRowClass(track) {
+    function trackRowClass(track: LiveTrack): string[] {
       const selected = props.selectedId === track.id;
       const highlighted =
         props.highlightedId != null &&
@@ -441,5 +447,5 @@ export default {
       listTimeClass
     };
   }
-};
+});
 </script>

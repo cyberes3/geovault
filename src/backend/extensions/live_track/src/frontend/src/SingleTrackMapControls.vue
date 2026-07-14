@@ -29,10 +29,11 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import { LockClosedIcon, LockOpenIcon, Square3Stack3DIcon, TableCellsIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'SingleTrackMapControls',
   components: { LockClosedIcon, LockOpenIcon, Square3Stack3DIcon, TableCellsIcon },
   props: {
@@ -40,5 +41,5 @@ export default {
     showParamsButton: { type: Boolean, default: false }
   },
   emits: ['toggle-follow', 'open-params', 'open-layer']
-};
+});
 </script>

@@ -58,22 +58,24 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
-import { isPublic } from './sharingSelectors.js';
+import { isPublic } from './sharingSelectors';
+import type { LiveTrack } from './types/track';
 
-export default {
+export default defineComponent({
   name: 'SharedItemsModal',
   components: { BaseModal, BaseButton },
   props: {
     isOpen: { type: Boolean, default: false },
     /** Owned trackers where visibility is 'shared' or 'public' */
-    items: { type: Array, default: () => [] },
+    items: { type: Array as PropType<LiveTrack[]>, default: () => [] },
   },
   emits: ['close', 'open-modify-sharing', 'open-public-popup'],
-  setup(props, { emit }) {
-    function onManage(track) {
+  setup(_props, { emit }) {
+    function onManage(track: LiveTrack): void {
       if (isPublic(track)) {
         emit('open-public-popup', track);
       } else {
@@ -82,5 +84,5 @@ export default {
     }
     return { onManage, isPublic };
   },
-};
+});
 </script>

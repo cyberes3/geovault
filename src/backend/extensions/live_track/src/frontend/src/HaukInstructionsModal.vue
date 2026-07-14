@@ -80,13 +80,14 @@
   </BaseModal>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import CopyTextButton from './CopyTextButton.vue';
 import appStoreBadgeUrl from '@/assets/download-on-app-store.svg';
 import googlePlayBadgeUrl from '@/assets/get-it-on-google-play.svg';
 
-export default {
+export default defineComponent({
   name: 'HaukInstructionsModal',
   components: { BaseModal, CopyTextButton },
   props: {
@@ -98,5 +99,5 @@ export default {
   setup() {
     return { appStoreBadgeUrl, googlePlayBadgeUrl };
   }
-};
+});
 </script>

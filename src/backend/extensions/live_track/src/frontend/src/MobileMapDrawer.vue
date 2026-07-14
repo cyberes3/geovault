@@ -8,7 +8,7 @@
         'mobile-tracker-drawer--hidden': hidden
       }
     ]"
-    :style="{ height: (heightPx || snapPx[0] || 200) + 'px', maxHeight: maxHeight + 'px' }"
+    :style="{ height: (heightPx || snapPx[0]) + 'px', maxHeight: maxHeight + 'px' }"
     class="flex flex-col min-h-0"
   >
     <div
@@ -29,10 +29,16 @@
   </div>
 </template>
 
-<script>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 
-export default {
+interface DrawerDragState {
+  active: boolean;
+  startY: number;
+  startHeight: number;
+}
+
+export default defineComponent({
   name: 'MobileMapDrawer',
   props: {
     /** Max height in px (e.g. viewport minus header). */
@@ -53,70 +59,65 @@ export default {
   },
   emits: [],
   setup(props, { expose }) {
-    const snapPx = computed(() => {
+    const snapPx = computed((): [number, number] => {
       const max = props.maxHeight;
       return [Math.round(max * 0.25), max];
     });
 
     const heightPx = ref(0);
     const isDrawerDragging = ref(false);
-    const drawerDrag = ref({ active: false, startY: 0, startHeight: 0 });
-    let mouseMoveListener = null;
-    let mouseUpListener = null;
-    let rafId = null;
-    let pendingDragY = null;
+    const drawerDrag = ref<DrawerDragState>({ active: false, startY: 0, startHeight: 0 });
+    let mouseMoveListener: ((e: MouseEvent) => void) | null = null;
+    let mouseUpListener: (() => void) | null = null;
+    let rafId: number | null = null;
+    let pendingDragY: number | null = null;
 
-    const isDrawerAtPeek = computed(() => {
+    const isDrawerAtPeek = computed((): boolean => {
       const current = heightPx.value || snapPx.value[0];
       const peek = snapPx.value[0];
       return current <= peek + 2;
     });
 
-    function collapseToPeek() {
-      const snaps = snapPx.value;
-      if (snaps[0] != null) heightPx.value = snaps[0];
+    function collapseToPeek(): void {
+      heightPx.value = snapPx.value[0];
     }
 
-    function applyHeightFromDrag(y) {
+    function applyHeightFromDrag(y: number): void {
       const drag = drawerDrag.value;
       if (!drag.active) return;
       const deltaY = drag.startY - y;
-      const snaps = snapPx.value;
-      const minH = snaps[0];
-      const maxH = snaps[1];
+      const [minH, maxH] = snapPx.value;
       let h = Math.round(drag.startHeight + deltaY);
       h = Math.max(minH, Math.min(maxH, h));
       heightPx.value = h;
     }
 
-    function onDrawerDragStart(e) {
-      const y = e.touches ? e.touches[0].clientY : e.clientY;
+    function onDrawerDragStart(e: TouchEvent | MouseEvent): void {
+      const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
       drawerDrag.value = { active: true, startY: y, startHeight: heightPx.value };
       isDrawerDragging.value = true;
-      if (!e.touches) {
-        mouseMoveListener = (e2) => onDrawerDragMove(e2);
-        mouseUpListener = () => onDrawerDragEnd();
+      if (!('touches' in e)) {
+        mouseMoveListener = (e2: MouseEvent) => { onDrawerDragMove(e2); };
+        mouseUpListener = () => { onDrawerDragEnd(); };
         document.addEventListener('mousemove', mouseMoveListener);
         document.addEventListener('mouseup', mouseUpListener);
       }
     }
 
-    function onDrawerDragMove(e) {
+    function onDrawerDragMove(e: TouchEvent | MouseEvent): void {
       if (!drawerDrag.value.active) return;
-      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
       pendingDragY = y;
-      if (rafId == null) {
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-          if (pendingDragY != null) {
-            applyHeightFromDrag(pendingDragY);
-            pendingDragY = null;
-          }
-        });
-      }
+      rafId ??= requestAnimationFrame(() => {
+        rafId = null;
+        if (pendingDragY != null) {
+          applyHeightFromDrag(pendingDragY);
+          pendingDragY = null;
+        }
+      });
     }
 
-    function onDrawerDragEnd() {
+    function onDrawerDragEnd(): void {
       if (!drawerDrag.value.active) return;
       if (rafId != null) {
         cancelAnimationFrame(rafId);
@@ -128,20 +129,20 @@ export default {
       isDrawerDragging.value = false;
       if (mouseMoveListener) {
         document.removeEventListener('mousemove', mouseMoveListener);
-        document.removeEventListener('mouseup', mouseUpListener);
+        if (mouseUpListener) document.removeEventListener('mouseup', mouseUpListener);
         mouseUpListener = null;
         mouseMoveListener = null;
       }
-      const snaps = snapPx.value;
+      const [minSnap, maxSnap] = snapPx.value;
       const current = heightPx.value;
-      const mid = (snaps[0] + snaps[1]) / 2;
-      heightPx.value = current >= mid ? snaps[1] : snaps[0];
+      const mid = (minSnap + maxSnap) / 2;
+      heightPx.value = current >= mid ? maxSnap : minSnap;
     }
 
     watch(
       () => props.maxHeight,
       (max) => {
-        const snaps = [Math.round(max * 0.25), max];
+        const snaps: [number, number] = [Math.round(max * 0.25), max];
         if (heightPx.value === 0) heightPx.value = snaps[props.initialSnapIndex] ?? snaps[0];
       },
       { immediate: true }
@@ -156,7 +157,7 @@ export default {
       if (rafId != null) cancelAnimationFrame(rafId);
       if (mouseMoveListener) {
         document.removeEventListener('mousemove', mouseMoveListener);
-        document.removeEventListener('mouseup', mouseUpListener);
+        if (mouseUpListener) document.removeEventListener('mouseup', mouseUpListener);
       }
     });
 
@@ -178,7 +179,7 @@ export default {
       collapseToPeek
     };
   }
-};
+});
 </script>
 
 <style scoped>

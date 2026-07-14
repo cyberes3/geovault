@@ -1,13 +1,12 @@
+import type { LiveTrack } from './types/track';
+
 const RECENT_METADATA_WINDOW_MS = 3 * 60 * 60 * 1000;
 const STALE_DATA_THRESHOLD_MS = 10 * 60 * 1000;
 /** Row must be this much newer than last point time (same write is within a few seconds; settings-only saves are minutes+). */
 const MIN_METADATA_AHEAD_OF_LAST_DATA_MS = 60 * 1000;
 
-/**
- * @param {unknown} value
- * @returns {number | null} Epoch milliseconds
- */
-export function normalizeTimestampMs(value) {
+/** @returns Epoch milliseconds */
+export function normalizeTimestampMs(value: unknown): number | null {
   if (value == null) return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
@@ -20,11 +19,8 @@ export function normalizeTimestampMs(value) {
  * Row was updated recently and more than a minute after the last point time, but the last
  * point is over 10 minutes old (e.g. settings/visibility change without new GPS). Idle devices
  * where the row and last point aged together are not flagged.
- * @param {object} track
- * @param {number} [nowMs=Date.now()]
- * @returns {boolean}
  */
-export function isActiveButDeadTrack(track, nowMs = Date.now()) {
+export function isActiveButDeadTrack(track: LiveTrack | null | undefined, nowMs: number = Date.now()): boolean {
   if (!track) return false;
   const lastData = track.last_timestamp_ms;
   if (lastData == null) return false;

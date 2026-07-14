@@ -3,18 +3,21 @@
  * Used by LiveTrackView and WorldShareView. Loads from core's shared `tileSourceCatalog`
  * singleton (via `window.gv_core`) instead of a raw fetch, so live_track shares the same
  * cache/in-flight request and error handling as the rest of the app.
- *
- * @param {{ defaultSource?: Object, afterFetch?: (tileSourcesRef: import('vue').Ref, selectedLayerRef: import('vue').Ref) => void }} options
- * @returns {{ tileSources: import('vue').Ref<Object[]>, selectedLayer: import('vue').Ref<string>, fetchTileSources: () => Promise<void> }}
  */
-import { ref } from 'vue';
-import { defaultOsmSource } from './mapTileUtils.js';
+import { ref, type Ref } from 'vue';
+import { defaultOsmSource } from './mapTileUtils';
+import type { TileSource } from './types/gv-core';
 
-export function useTileSources({ defaultSource = defaultOsmSource, afterFetch } = {}) {
-  const tileSources = ref([defaultSource]);
-  const selectedLayer = ref(defaultSource.id);
+export interface UseTileSourcesOptions {
+  defaultSource?: TileSource;
+  afterFetch?: (tileSourcesRef: Ref<TileSource[]>, selectedLayerRef: Ref<string>) => void;
+}
 
-  async function fetchTileSources() {
+export function useTileSources({ defaultSource = defaultOsmSource, afterFetch }: UseTileSourcesOptions = {}) {
+  const tileSources = ref<TileSource[]>([defaultSource]);
+  const selectedLayer = ref<string>(defaultSource.id);
+
+  async function fetchTileSources(): Promise<void> {
     try {
       const sources = await window.gv_core.tileSourceCatalog.load();
       tileSources.value = sources.length > 0 ? sources : [defaultSource];

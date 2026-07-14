@@ -1,28 +1,48 @@
-import { trackersLiveSocket } from './trackersLiveSocket.js';
-import { normalizeTrackForMemory } from './trackNormalization.js';
-import { createSessionStartCache } from './sessionStartCache.js';
-import { normalizeTimestampMs } from './activeButDeadTrack.js';
+import type { Ref } from 'vue';
+import { trackersLiveSocket } from './trackersLiveSocket';
+import type { TrackersLiveSocketHandler } from './trackersLiveSocket';
+import { normalizeTrackForMemory } from './trackNormalization';
+import { createSessionStartCache } from './sessionStartCache';
+import { normalizeTimestampMs } from './activeButDeadTrack';
 import {
   isRollingRecentDataWindow,
   pruneCoordinatesForRecentDataWindow,
   shouldClearGeometryForSessionTransition,
   shouldReloadGeometryForSessionTransition
-} from './recentDataWindowGeometryPolicy.js';
+} from './recentDataWindowGeometryPolicy';
+import type { ExtensionApi } from './types/extension-api';
+import type { LiveTrack, PointParams, TrackCoordinate, TrackGeometry } from './types/track';
+
+interface TrackUpdatedPointUpdate {
+  point: TrackCoordinate;
+  props?: PointParams;
+  index?: number;
+}
+
+interface TrackUpdatedEventData {
+  track_id: string | number;
+  updates?: TrackUpdatedPointUpdate[];
+  point?: TrackCoordinate;
+  props?: PointParams;
+  index?: number;
+}
+
+export interface UseLiveTrackSocketDeps {
+  api: ExtensionApi;
+  trackers: Ref<LiveTrack[]>;
+  selectedId: Ref<string | number | null>;
+  followLocked: Ref<boolean>;
+  updateMapFeatures: () => Promise<void>;
+  scheduleCenterOnSelectedTrack: () => void;
+  fetchAndMergeTracker?: (trackId: string | number) => void;
+  onReconnect?: () => void;
+}
 
 /**
  * Wires the `trackers-live` websocket (`trackersLiveSocket`) into `trackers.value`, applying
  * incremental `track_updated` events in place instead of a full refetch, and coalescing map
- * redraws via the caller-supplied `updateMapFeatures` (see {@link import('./asyncTaskCoalescer.js').createCoalescedTask}).
- *
- * @param {object} deps
- * @param {import('./extensionApi').ExtensionApi} deps.api
- * @param {import('vue').Ref<Array>} deps.trackers
- * @param {import('vue').Ref} deps.selectedId
- * @param {import('vue').Ref<boolean>} deps.followLocked
- * @param {() => Promise<void>} deps.updateMapFeatures
- * @param {() => void} deps.scheduleCenterOnSelectedTrack
- * @param {(trackId: unknown) => void} deps.fetchAndMergeTracker - full meta+geometry refetch, used when a session transition requires reloading a track's geometry.
- * @param {() => void} deps.onReconnect - called after the socket reconnects (e.g. to refetch trackers/groups).
+ * redraws via the caller-supplied `updateMapFeatures` (see {@link createCoalescedTask} in
+ * `asyncTaskCoalescer.ts`).
  */
 export function useLiveTrackSocket({
   api,
@@ -33,30 +53,30 @@ export function useLiveTrackSocket({
   scheduleCenterOnSelectedTrack,
   fetchAndMergeTracker,
   onReconnect
-}) {
+}: UseLiveTrackSocketDeps) {
   const sessionCache = createSessionStartCache();
-  let trackUpdatedHandler = null;
+  let trackUpdatedHandler: TrackersLiveSocketHandler | null = null;
 
   /** Rebuild the session-start cache from a freshly-fetched track list, e.g. after `fetchTrackers()`. */
-  function refreshSessionCache(trackList) {
+  function refreshSessionCache(trackList: LiveTrack[] | null | undefined): void {
     sessionCache.refreshFromTrackers(trackList);
   }
 
   /** A point arrived with an index outside the currently-known geometry; re-fetch just the geometry to reconcile. */
-  async function reconcileOutOfBoundsPoint(trackId) {
+  async function reconcileOutOfBoundsPoint(trackId: string | number): Promise<void> {
     try {
       const geomRes = await api.get(`/trackers/${trackId}/geometry/`);
       const trackIdx = trackers.value.findIndex((t) => t.id === trackId);
       if (trackIdx < 0) return;
       const existing = trackers.value[trackIdx];
       const normalized = normalizeTrackForMemory({
-        ...geomRes.data,
+        ...(geomRes.data as Partial<LiveTrack>),
         is_owner: existing.is_owner,
         owner_email: existing.owner_email,
         visibility: existing.visibility
-      });
+      } as LiveTrack);
       trackers.value = trackers.value.slice(0, trackIdx).concat(normalized).concat(trackers.value.slice(trackIdx + 1));
-      updateMapFeatures();
+      void updateMapFeatures();
       if (trackId === selectedId.value && followLocked.value) {
         scheduleCenterOnSelectedTrack();
       }
@@ -65,20 +85,20 @@ export function useLiveTrackSocket({
     }
   }
 
-  function handleTrackUpdated(data) {
-    if (!data || !data.track_id) return;
-    const updates = Array.isArray(data.updates)
+  function handleTrackUpdated(rawData: unknown): void {
+    const data = rawData as TrackUpdatedEventData | null | undefined;
+    if (!data?.track_id) return;
+    const updates: TrackUpdatedPointUpdate[] | null = Array.isArray(data.updates)
       ? data.updates
       : (data.point != null ? [{ point: data.point, props: data.props, index: data.index }] : null);
     if (!updates?.length) return;
     const idx = trackers.value.findIndex((t) => t.id === data.track_id);
     if (idx < 0) return;
     const track = trackers.value[idx];
-    const geom = track.geometry
-      ? { ...track.geometry, coordinates: [...(track.geometry.coordinates || [])] }
+    const geom: TrackGeometry = track.geometry
+      ? { ...track.geometry, coordinates: [...track.geometry.coordinates] }
       : { type: 'LineString', coordinates: [] };
-    if (!geom.coordinates) geom.coordinates = [];
-    let latestPointParams = {};
+    let latestPointParams: PointParams = {};
     const windowKey = sessionCache.getRecentDataWindow(track);
     const isSessionWindow = sessionCache.isSessionWindowTrack(track);
     let reloadAfterApply = false;
@@ -86,9 +106,9 @@ export function useLiveTrackSocket({
     let appliedUpdateCount = 0;
 
     for (const u of updates) {
-      const point = u?.point;
+      const point = u.point;
       if (!Array.isArray(point)) continue;
-      const incomingSessionStartMs = sessionCache.getStartTimestampMsFromProps(u?.props);
+      const incomingSessionStartMs = sessionCache.getStartTimestampMsFromProps(u.props);
       if (isSessionWindow && incomingSessionStartMs != null) {
         if (activeSessionStartMs != null && incomingSessionStartMs < activeSessionStartMs) {
           continue;
@@ -106,7 +126,7 @@ export function useLiveTrackSocket({
         Number.isInteger(u.index) &&
         (u.index < 0 || u.index > geom.coordinates.length);
       if (indexOutOfBounds) {
-        reconcileOutOfBoundsPoint(data.track_id);
+        void reconcileOutOfBoundsPoint(data.track_id);
         return;
       }
       if (typeof u.index === 'number' && Number.isInteger(u.index)) {
@@ -124,14 +144,11 @@ export function useLiveTrackSocket({
     }
     sessionCache.setKnownStartMs(track.id, isSessionWindow ? activeSessionStartMs : null);
 
-    const last = geom.coordinates[geom.coordinates.length - 1];
-    const newPoint = updates[updates.length - 1]?.point;
-    const last_position = newPoint && newPoint.length >= 2
-      ? { lon: newPoint[0], lat: newPoint[1] }
-      : (last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null);
-    const rawLastTs = newPoint && newPoint.length >= 3 ? newPoint[2] : (last && last.length >= 3 ? last[2] : null);
+    const newPoint = updates[updates.length - 1].point;
+    const last_position = { lon: newPoint[0], lat: newPoint[1] };
+    const rawLastTs = newPoint.length >= 3 ? newPoint[2] : null;
     const last_timestamp_ms = rawLastTs != null ? normalizeTimestampMs(rawLastTs) : null;
-    const updated = {
+    const updated: LiveTrack = {
       ...track,
       geometry: geom,
       last_position,
@@ -140,7 +157,7 @@ export function useLiveTrackSocket({
       latestPointParams
     };
     trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
-    updateMapFeatures();
+    void updateMapFeatures();
     if (data.track_id === selectedId.value && followLocked.value) {
       scheduleCenterOnSelectedTrack();
     }
@@ -149,7 +166,7 @@ export function useLiveTrackSocket({
     }
   }
 
-  function connect() {
+  function connect(): void {
     trackUpdatedHandler = handleTrackUpdated;
     trackersLiveSocket.onReconnect = () => onReconnect?.();
     trackersLiveSocket.connect();
@@ -157,7 +174,7 @@ export function useLiveTrackSocket({
     trackersLiveSocket.subscribe('track_updated', trackUpdatedHandler);
   }
 
-  function disconnect() {
+  function disconnect(): void {
     trackersLiveSocket.onReconnect = null;
     if (trackUpdatedHandler) {
       trackersLiveSocket.unsubscribe('track_updated', trackUpdatedHandler);

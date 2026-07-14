@@ -38,8 +38,8 @@
         description="Check the trackers that belong to this group"
         :items="allTrackers"
         v-model="groupTrackIdsSafe"
-        :get-item-id="(t) => t.id"
-        :get-item-label="(t) => t.name"
+        :get-item-id="getItemId"
+        :get-item-label="getItemLabel"
         :get-item-add-blocked-reason="trackerAddBlockedReason"
         search-placeholder="Search trackers..."
         empty-message="No trackers available"
@@ -115,8 +115,8 @@
             description="Check the trackers that belong to this group"
             :items="allTrackers"
             v-model="groupTrackIdsSafe"
-            :get-item-id="(t) => t.id"
-            :get-item-label="(t) => t.name"
+            :get-item-id="getItemId"
+            :get-item-label="getItemLabel"
             :get-item-add-blocked-reason="trackerAddBlockedReason"
             search-placeholder="Search trackers..."
             empty-message="No trackers available"
@@ -180,8 +180,8 @@
   </BaseModal>
 </template>
 
-<script>
-import { ref, computed, watch } from 'vue';
+<script lang="ts">
+import { defineComponent, ref, computed, watch, type PropType } from 'vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
@@ -189,44 +189,56 @@ import SearchableCheckboxList from 'platform/components/parts/SearchableCheckbox
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import ToggleButton from 'platform/components/parts/ToggleButton.vue';
 import SharingSection from './SharingSection.vue';
-import { buildGroupPreservingPatchPayload } from './settingsPayloadBuilders.js';
-import { getTrackerAddToGroupBlockedReason, isTrackerAddableToGroup } from './groupReshareAddability.js';
+import { buildGroupPreservingPatchPayload } from './settingsPayloadBuilders';
+import { getTrackerAddToGroupBlockedReason, isTrackerAddableToGroup } from './groupReshareAddability';
+import type { LiveTrack, LiveTrackGroup, TrackVisibility } from './types/track';
+import type { ExtensionApi } from './types/extension-api';
 
-export default {
+interface AvailableUser {
+  email?: string;
+  [key: string]: unknown;
+}
+
+interface SelectItem {
+  value: string;
+  label: string;
+}
+
+export default defineComponent({
   name: 'GroupModal',
   components: { BaseModal, BaseButton, Loader, SearchableCheckboxList, ScrollingSelect, ToggleButton, SharingSection },
   props: {
-    group: { type: Object, default: null },
-    trackers: { type: Array, default: () => [] },
-    api: { type: Object, required: true },
+    group: { type: Object as PropType<LiveTrackGroup | null>, default: null },
+    trackers: { type: Array as PropType<LiveTrack[]>, default: () => [] },
+    api: { type: Object as PropType<ExtensionApi>, required: true },
     /** When true and group is null, render only the create form (no modal wrapper) for use inside a sidebar. */
     embedded: { type: Boolean, default: false },
   },
   emits: ['close', 'saved', 'refreshed', 'leave', 'group-hidden-changed'],
   setup(props, { emit }) {
-    const name = ref(props.group?.name || '');
+    const name = ref(props.group?.name ?? '');
     const nameError = ref('');
     const saving = ref(false);
     const groupHidden = ref(props.group?.hidden === true);
-    const groupTrackIds = ref([]);
-    const groupTrackIdsSafe = computed({
-      get: () => groupTrackIds.value ?? [],
+    const groupTrackIds = ref<Array<string | number>>([]);
+    const groupTrackIdsSafe = computed<Array<string | number>>({
+      get: () => groupTrackIds.value,
       set: (v) => { groupTrackIds.value = Array.isArray(v) ? v : []; },
     });
-    const allUsers = ref([]);
+    const allUsers = ref<AvailableUser[]>([]);
     const loadingUsers = ref(false);
 
-    const sharedWithSelectItems = computed(() =>
-      (allUsers.value || [])
-        .map((u) => ({ value: (u.email || '').toLowerCase(), label: u.email || '' }))
+    const sharedWithSelectItems = computed((): SelectItem[] =>
+      allUsers.value
+        .map((u) => ({ value: (u.email ?? '').toLowerCase(), label: u.email ?? '' }))
         .filter((u) => u.value)
     );
 
-    async function fetchUsers() {
+    async function fetchUsers(): Promise<void> {
       loadingUsers.value = true;
       try {
         const res = await fetch('/api/users/', { credentials: 'include' });
-        const data = await res.json();
+        const data = (await res.json()) as { users?: AvailableUser[] } | null;
         allUsers.value = Array.isArray(data?.users) ? data.users : [];
       } catch {
         allUsers.value = [];
@@ -235,62 +247,70 @@ export default {
       }
     }
 
-    const visibility = ref(props.group?.visibility || 'private');
-    const sharedWithEmails = ref([]);
-    const worldShareEnabled = ref(!!(props.group?.world_share_id));
-    const worldShareUrl = ref(props.group?.world_share_url || '');
-    const internalShareUrl = ref(props.group?.internal_share_url || '');
-    const fullWorldShareUrl = computed(() => {
+    const visibility = ref<TrackVisibility>(props.group?.visibility ?? 'private');
+    const sharedWithEmails = ref<string[]>([]);
+    const worldShareEnabled = ref(!!props.group?.world_share_id);
+    const worldShareUrl = ref(props.group?.world_share_url ?? '');
+    const internalShareUrl = ref(props.group?.internal_share_url ?? '');
+    const fullWorldShareUrl = computed((): string => {
       if (!worldShareUrl.value) return '';
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       return origin ? `${origin}${worldShareUrl.value}` : worldShareUrl.value;
     });
-    const fullInternalShareUrl = computed(() => {
+    const fullInternalShareUrl = computed((): string => {
       if (!internalShareUrl.value) return '';
       if (/^https?:\/\//i.test(internalShareUrl.value)) return internalShareUrl.value;
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       return origin ? `${origin}${internalShareUrl.value}` : internalShareUrl.value;
     });
-    const sharedWithEmailsForSelect = computed(() =>
-      (sharedWithEmails.value || []).map((e) => String(e || '').toLowerCase()).filter(Boolean)
+    const sharedWithEmailsForSelect = computed((): string[] =>
+      sharedWithEmails.value.map((e) => e.toLowerCase()).filter(Boolean)
     );
 
     watch(() => props.group, (g) => {
-      name.value = g?.name || '';
+      name.value = g?.name ?? '';
       nameError.value = '';
       groupHidden.value = g?.hidden === true;
-      visibility.value = g?.visibility || 'private';
+      visibility.value = g?.visibility ?? 'private';
       sharedWithEmails.value = Array.isArray(g?.shared_with_emails) ? [...g.shared_with_emails] : [];
-      worldShareEnabled.value = !!(g?.world_share_id);
-      worldShareUrl.value = g?.world_share_url || '';
-      internalShareUrl.value = g?.internal_share_url || '';
-      groupTrackIds.value = [...(g?.track_ids || [])];
-      if (g?.id) fetchUsers();
+      worldShareEnabled.value = !!g?.world_share_id;
+      worldShareUrl.value = g?.world_share_url ?? '';
+      internalShareUrl.value = g?.internal_share_url ?? '';
+      groupTrackIds.value = [...(g?.track_ids ?? [])];
+      if (g?.id) void fetchUsers();
     }, { immediate: true });
 
-    const allTrackers = computed(() => props.trackers ?? []);
+    const allTrackers = computed((): LiveTrack[] => props.trackers);
 
-    function trackerAddBlockedReason(track) {
+    function trackerAddBlockedReason(track: LiveTrack): string {
       return getTrackerAddToGroupBlockedReason(track);
     }
 
-    async function create() {
+    function getItemId(track: LiveTrack): string | number {
+      return track.id;
+    }
+
+    function getItemLabel(track: LiveTrack): string {
+      return track.name ?? '';
+    }
+
+    async function create(): Promise<void> {
       nameError.value = '';
       if (!name.value.trim()) return;
       saving.value = true;
       try {
         const res = await props.api.post('/groups/', { name: name.value.trim() });
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group created');
-        emit('saved', { action: 'created', group: res?.data || null });
+        window.gv_core.GeoVault.toast.success('Group created');
+        emit('saved', { action: 'created', group: res.data ?? null });
       } catch (e) {
-        const err = props.api.handleError?.(e);
-        nameError.value = err?.message || 'Failed to create group';
+        const err = props.api.handleError(e);
+        nameError.value = err.message || 'Failed to create group';
       } finally {
         saving.value = false;
       }
     }
 
-    async function save() {
+    async function save(): Promise<void> {
       nameError.value = '';
       if (!props.group?.id || !name.value.trim()) return;
       saving.value = true;
@@ -303,40 +323,40 @@ export default {
           shared_with_emails: visibility.value === 'shared' ? [...sharedWithEmails.value] : undefined,
         });
         const patchRes = await props.api.patch(`/groups/${props.group.id}/`, payload);
-        const patchData = patchRes?.data;
+        const patchData = patchRes.data as Partial<LiveTrackGroup> | null;
         if (patchData) {
-          worldShareEnabled.value = !!(patchData.world_share_id);
-          worldShareUrl.value = patchData.world_share_url || '';
-          internalShareUrl.value = patchData.internal_share_url || '';
+          worldShareEnabled.value = !!patchData.world_share_id;
+          worldShareUrl.value = patchData.world_share_url ?? '';
+          internalShareUrl.value = patchData.internal_share_url ?? '';
         }
-        const currentIds = new Set((groupTrackIds.value ?? []).map((id) => String(id)));
-        const previousIds = new Set((props.group?.track_ids || []).map((id) => String(id)));
-        const toRemove = (props.group?.track_ids || []).filter((id) => !currentIds.has(String(id)));
+        const currentIds = new Set(groupTrackIds.value.map((id) => String(id)));
+        const previousIds = new Set((props.group.track_ids ?? []).map((id) => String(id)));
+        const toRemove = (props.group.track_ids ?? []).filter((id) => !currentIds.has(String(id)));
         const toAdd = groupTrackIds.value.filter((id) => !previousIds.has(String(id)));
         for (const trackId of toRemove) {
           await props.api.delete(`/groups/${props.group.id}/tracks/${trackId}/`);
         }
         for (const trackId of toAdd) {
-          const tr = (props.trackers || []).find((t) => String(t.id) === String(trackId));
+          const tr = props.trackers.find((t) => String(t.id) === String(trackId));
           if (!tr || !isTrackerAddableToGroup(tr)) continue;
           await props.api.post(`/groups/${props.group.id}/tracks/`, { track_id: trackId });
         }
-        if (window.gv_core?.GeoVault?.toast) window.gv_core.GeoVault.toast.success('Group updated');
-        const groupData = {
-          ...(props.group || {}),
-          ...(patchData || {}),
-          track_ids: [...(groupTrackIds.value || [])],
+        window.gv_core.GeoVault.toast.success('Group updated');
+        const groupData: LiveTrackGroup = {
+          ...props.group,
+          ...(patchData ?? {}),
+          track_ids: [...groupTrackIds.value],
         };
         emit('saved', { action: 'updated', group: groupData });
       } catch (e) {
-        const err = props.api.handleError?.(e);
-        nameError.value = err?.message || 'Failed to save';
+        const err = props.api.handleError(e);
+        nameError.value = err.message || 'Failed to save';
       } finally {
         saving.value = false;
       }
     }
 
-    function onGroupHiddenChange(value) {
+    function onGroupHiddenChange(value: boolean): void {
       groupHidden.value = value;
       if (props.group?.id) {
         emit('group-hidden-changed', { groupId: props.group.id, hidden: value });
@@ -360,6 +380,8 @@ export default {
       groupTrackIdsSafe,
       allTrackers,
       trackerAddBlockedReason,
+      getItemId,
+      getItemLabel,
       create,
       save,
       allUsers,
@@ -367,5 +389,5 @@ export default {
       onGroupHiddenChange,
     };
   },
-};
+});
 </script>

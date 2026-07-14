@@ -17,11 +17,12 @@
   </BaseButton>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 
-export default {
+export default defineComponent({
   name: 'CopyTextButton',
   components: { BaseButton, CheckIcon, ClipboardDocumentIcon },
   props: {
@@ -30,37 +31,37 @@ export default {
     size: {
       type: String,
       default: 'md',
-      validator: (v) => ['sm', 'md', 'wide'].includes(v),
+      validator: (v: string) => ['sm', 'md', 'wide'].includes(v),
     },
     appearance: {
       type: String,
       default: 'default',
-      validator: (v) => ['default', 'secondary'].includes(v),
+      validator: (v: string) => ['default', 'secondary'].includes(v),
     },
     fullWidth: { type: Boolean, default: false },
   },
   data() {
     return {
       copied: false,
-      resetTimerId: null,
+      resetTimerId: null as ReturnType<typeof setTimeout> | null,
     };
   },
   computed: {
-    disabled() {
-      return !String(this.text || '').trim();
+    disabled(): boolean {
+      return !this.text.trim();
     },
-    baseVariant() {
+    baseVariant(): string {
       return this.appearance === 'secondary' ? 'white' : 'secondary';
     },
-    baseColor() {
+    baseColor(): string {
       return 'gray';
     },
-    baseSize() {
+    baseSize(): string {
       if (this.size === 'sm') return 'xs';
       if (this.size === 'wide') return 'md';
       return 'sm';
     },
-    buttonClass() {
+    buttonClass(): string {
       return this.fullWidth ? 'w-full' : '';
     },
   },
@@ -68,15 +69,15 @@ export default {
     this.clearResetTimer();
   },
   methods: {
-    clearResetTimer() {
+    clearResetTimer(): void {
       if (this.resetTimerId != null) {
         clearTimeout(this.resetTimerId);
         this.resetTimerId = null;
       }
     },
-    onClick() {
+    onClick(): void {
       if (this.disabled) return;
-      const value = String(this.text || '');
+      const value = this.text;
       const onSuccess = () => {
         this.copied = true;
         this.clearResetTimer();
@@ -85,13 +86,9 @@ export default {
           this.resetTimerId = null;
         }, 2000);
       };
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(value).then(onSuccess).catch(() => this.copyFallback(value, onSuccess));
-      } else {
-        this.copyFallback(value, onSuccess);
-      }
+      navigator.clipboard.writeText(value).then(onSuccess).catch(() => { this.copyFallback(value, onSuccess); });
     },
-    copyFallback(text, onSuccess) {
+    copyFallback(text: string, onSuccess?: () => void): void {
       const el = document.createElement('textarea');
       el.value = text;
       el.setAttribute('readonly', '');
@@ -109,5 +106,5 @@ export default {
       document.body.removeChild(el);
     },
   },
-};
+});
 </script>

@@ -22,10 +22,11 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import { XMarkIcon } from '@heroicons/vue/24/outline';
 
-export default {
+export default defineComponent({
   name: 'MapSidebarPanel',
   components: { XMarkIcon },
   props: {
@@ -35,7 +36,7 @@ export default {
   },
   emits: ['close', 'close-overlay'],
   methods: {
-    onCloseClick() {
+    onCloseClick(): void {
       if (this.closeEmitsOverlayFirst) {
         this.$emit('close-overlay');
       } else {
@@ -43,5 +44,5 @@ export default {
       }
     },
   },
-};
+});
 </script>

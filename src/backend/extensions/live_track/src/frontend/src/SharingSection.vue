@@ -8,7 +8,7 @@
         :value="visibility"
         :disabled="disabled"
         class="select-custom w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none"
-        @change="$emit('update:visibility', ($event.target && $event.target.value) || 'private')"
+        @change="$emit('update:visibility', ($event.target as HTMLSelectElement).value)"
       >
         <option value="private">{{ privateLabel }}</option>
         <option value="shared">Shared with specific users</option>
@@ -104,20 +104,26 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent, type PropType } from 'vue';
 import ScrollingSelect from 'platform/components/parts/ScrollingSelect.vue';
 import ToggleButton from 'platform/components/parts/ToggleButton.vue';
 import CopyTextButton from './CopyTextButton.vue';
 
-export default {
+interface SharedWithSelectItem {
+  value: string;
+  label?: string;
+}
+
+export default defineComponent({
   name: 'SharingSection',
   components: { CopyTextButton, ScrollingSelect, ToggleButton },
   props: {
     /** 'track' | 'group' – controls labels and track-only options */
     variant: { type: String, default: 'track' },
     visibility: { type: String, default: 'private' },
-    sharedWithSelectItems: { type: Array, default: () => [] },
-    sharedWithSelectValues: { type: Array, default: () => [] },
+    sharedWithSelectItems: { type: Array as PropType<SharedWithSelectItem[]>, default: () => [] },
+    sharedWithSelectValues: { type: Array as PropType<string[]>, default: () => [] },
     loadingUsers: { type: Boolean, default: false },
     worldShareEnabled: { type: Boolean, default: false },
     worldShareUrl: { type: String, default: '' },
@@ -133,38 +139,38 @@ export default {
   },
   emits: ['update:visibility', 'update:sharedWithEmails', 'update:worldShareEnabled', 'update:shareParamsWithRecipients', 'update:shareParamsWithWorld', 'update:allowGroupReshare'],
   computed: {
-    visibilityLabel() {
+    visibilityLabel(): string {
       return this.variant === 'group' ? 'Who can see this group' : 'Who can see and add this tracker';
     },
-    privateLabel() {
+    privateLabel(): string {
       return 'Private (only me)';
     },
-    worldShareLabel() {
+    worldShareLabel(): string {
       return 'World share link';
     },
-    worldShareDescription() {
+    worldShareDescription(): string {
       return this.variant === 'group'
         ? "When on, anyone with the link can view this group's tracks on a read-only map (no login required)."
         : 'When on, anyone with the link can view this tracker on a read-only map (no login required).';
     },
-    internalShareDescription() {
+    internalShareDescription(): string {
       return this.variant === 'group'
         ? 'This internal link can be used by GeoVault users who already have access to this group through sharing or public visibility.'
         : 'This internal link can be used by GeoVault users who already have access to this tracker through sharing or public visibility.';
     },
   },
   methods: {
-    onSharedWithSelect(item) {
-      const email = (item && (item.label ?? item.value)) ? String(item.label || item.value).trim().toLowerCase() : '';
+    onSharedWithSelect(item: SharedWithSelectItem): void {
+      const email = (item.label ?? item.value) ? String(item.label ?? item.value).trim().toLowerCase() : '';
       if (!email) return;
-      const current = this.sharedWithSelectValues || [];
-      const has = current.some((e) => String(e || '').toLowerCase() === email);
+      const current = this.sharedWithSelectValues;
+      const has = current.some((e) => e.toLowerCase() === email);
       if (has) {
-        this.$emit('update:sharedWithEmails', current.filter((e) => String(e || '').toLowerCase() !== email));
+        this.$emit('update:sharedWithEmails', current.filter((e) => e.toLowerCase() !== email));
       } else {
         this.$emit('update:sharedWithEmails', [...current, email]);
       }
     },
   },
-};
+});
 </script>
