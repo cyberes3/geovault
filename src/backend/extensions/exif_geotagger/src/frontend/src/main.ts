@@ -1,6 +1,7 @@
+import type { ExtensionSetupContext } from './types/extension-setup';
 import Geotagger from './Geotagger.vue';
 
-async function setup({ router, registry, api }) {
+async function setup({ router, registry, api }: ExtensionSetupContext): Promise<void> {
     registry.registerTool({
         label: 'Geotagger',
         path: '/'

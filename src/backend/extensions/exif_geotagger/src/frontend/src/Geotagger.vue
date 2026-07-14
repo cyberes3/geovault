@@ -20,7 +20,7 @@
         @drop.prevent="handleDrop"
         class="border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 h-[140px] flex items-center justify-center overflow-hidden bg-white"
         :class="isDragging ? 'border-blue-500 bg-blue-50 scale-[1.01]' : 'border-gray-300 hover:border-gray-400'"
-        @click="$refs.fileInput.click()"
+        @click="triggerFileInput"
       >
         <input ref="fileInput" type="file" class="hidden" accept="image/jpeg,image/jpg" @change="handleFileSelect" />
         <div v-if="!imageFile" class="text-gray-500 flex flex-col items-center gap-3">
@@ -31,7 +31,7 @@
           </div>
         </div>
         <div v-else class="flex items-center justify-center gap-5">
-            <img :src="previewUrl" class="h-20 w-20 object-cover rounded-lg shadow-sm border border-gray-200" />
+            <img :src="previewUrl ?? undefined" class="h-20 w-20 object-cover rounded-lg shadow-sm border border-gray-200" />
             <div class="text-left space-y-1">
                 <p class="font-semibold text-gray-900 text-base leading-tight">{{ imageFile.name }}</p>
                 <p class="text-xs text-gray-500">{{ formatSize(imageFile.size) }}</p>
@@ -54,8 +54,7 @@
 
       <!-- Map & Search -->
       <div class="relative bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        
-        <!-- Search Bar -->
+<!-- Search Bar -->
          <div class="absolute top-4 left-4 right-4 z-10 max-w-md">
            <div class="bg-white ring-1 ring-black/5 flex items-center p-1" :class="searchResults.length ? 'rounded-t-lg' : 'rounded-lg'">
               <input 
@@ -126,25 +125,29 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { defineComponent } from 'vue';
 import 'ol/ol.css';
 import { Map, View } from 'ol';
+import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import { Vector as VectorSource } from 'ol/source';
 import { Vector as VectorLayer } from 'ol/layer';
 import { fromLonLat, toLonLat } from 'ol/proj.js';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style.js';
-import piexif from 'piexifjs';
-import { 
-  CloudArrowUpIcon, 
-  TrashIcon, 
-  MagnifyingGlassIcon, 
+import piexif, { type ExifObject, type Rational } from 'piexifjs';
+import {
+  CloudArrowUpIcon,
+  TrashIcon,
+  MagnifyingGlassIcon,
   ArrowDownTrayIcon,
   InformationCircleIcon
 } from '@heroicons/vue/24/outline';
+import type { ExtensionApi } from './types/extension-api';
+import type { GeocodingResult } from './types/gv-core';
 
-export default {
+export default defineComponent({
     name: 'Geotagger',
     components: {
       CloudArrowUpIcon,
@@ -156,41 +159,45 @@ export default {
     inject: ['extensionApi'],
     data() {
         return {
-            imageFile: null,
-            previewUrl: null,
+            imageFile: null as File | null,
+            previewUrl: null as string | null,
             isDragging: false,
             // Map
-            map: null,
-            markerSource: null,
+            map: null as Map | null,
+            markerSource: null as VectorSource | null,
             // Coords
-            lat: null,
-            lon: null,
+            lat: null as number | null,
+            lon: null as number | null,
             coordinatesInput: '',
             coordinateError: '',
             // Search
             searchQuery: '',
-            searchResults: [],
-            searchTimeout: null,
+            searchResults: [] as GeocodingResult[],
+            searchTimeout: null as ReturnType<typeof setTimeout> | null,
             isSearching: false,
             currentSearchQuery: '',
             showResults: false
         };
     },
     mounted() {
-        this.initMap().catch((error) => {
+        this.initMap().catch((error: unknown) => {
             console.error('Error initializing EXIF geotagger map:', error);
         });
     },
     watch: {
-        imageFile(newVal) {
+        imageFile(newVal: File | null) {
             this.toggleMapInteractions(!!newVal);
         }
     },
     methods: {
-        async initMap() {
-            this.markerSource = new VectorSource();
+        triggerFileInput(): void {
+            (this.$refs.fileInput as HTMLInputElement | undefined)?.click();
+        },
+        async initMap(): Promise<void> {
+            const markerSource = new VectorSource();
+            this.markerSource = markerSource;
             const markerLayer = new VectorLayer({
-                source: this.markerSource,
+                source: markerSource,
                 style: new Style({
                     image: new CircleStyle({
                         radius: 7,
@@ -203,7 +210,7 @@ export default {
             const basemapLayer = await window.gv_core.openLayersBasemap.createTileLayer();
 
             this.map = new Map({
-                target: this.$refs.mapContainer,
+                target: this.$refs.mapContainer as HTMLElement,
                 layers: [
                     basemapLayer,
                     markerLayer
@@ -215,7 +222,7 @@ export default {
                 })
             });
 
-            this.map.on('click', (e) => {
+            this.map.on('click', (e: MapBrowserEvent) => {
                 if (!this.imageFile) return;
                 const coords = toLonLat(e.coordinate);
                 this.updateCoords(coords[1], coords[0]);
@@ -224,66 +231,63 @@ export default {
             // Set initial interaction state
             this.toggleMapInteractions(!!this.imageFile);
         },
-        toggleMapInteractions(enabled) {
+        toggleMapInteractions(enabled: boolean): void {
             if (!this.map) return;
             this.map.getInteractions().forEach(interaction => {
                 interaction.setActive(enabled);
             });
         },
-        updateCoords(lat, lon) {
+        updateCoords(lat: number, lon: number): void {
             this.lat = parseFloat(Number(lat).toFixed(6));
             this.lon = parseFloat(Number(lon).toFixed(6));
             this.coordinatesInput = `${this.lat}, ${this.lon}`;
             this.coordinateError = '';
-            this.markerSource.clear();
+            this.markerSource?.clear();
             const feature = new Feature({
                 geometry: new Point(fromLonLat([this.lon, this.lat]))
             });
-            this.markerSource.addFeature(feature);
+            this.markerSource?.addFeature(feature);
         },
-        validateCoordinates() {
+        validateCoordinates(): void {
             this.coordinateError = '';
             this.lat = null;
             this.lon = null;
-            const input = (this.coordinatesInput || '').trim();
+            const input = this.coordinatesInput.trim();
             if (!input) {
-                if (this.markerSource) this.markerSource.clear();
+                this.markerSource?.clear();
                 return;
             }
-            const parseCoordinates = window.gv_core?.GeoVault?.utils?.parseCoordinates;
-            if (!parseCoordinates) return;
+            const parseCoordinates = window.gv_core.GeoVault.utils.parseCoordinates;
             const coordinates = parseCoordinates(input);
             if (coordinates) {
                 this.lat = coordinates.lat;
                 this.lon = coordinates.lng;
-                if (this.markerSource) {
-                    this.markerSource.clear();
-                    const feature = new Feature({
-                        geometry: new Point(fromLonLat([this.lon, this.lat]))
-                    });
-                    this.markerSource.addFeature(feature);
-                }
+                this.markerSource?.clear();
+                const feature = new Feature({
+                    geometry: new Point(fromLonLat([this.lon, this.lat]))
+                });
+                this.markerSource?.addFeature(feature);
             } else {
                 this.coordinateError = 'Invalid coordinate format';
             }
         },
-        formatSize(bytes) {
+        formatSize(bytes: number): string {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         },
-        handleDrop(e) {
+        handleDrop(e: DragEvent): void {
             this.isDragging = false;
-            const file = e.dataTransfer.files[0];
+            const file = e.dataTransfer?.files[0];
             if (file) this.processFile(file);
         },
-        handleFileSelect(e) {
-            const file = e.target.files[0];
+        handleFileSelect(e: Event): void {
+            const file = (e.target as HTMLInputElement).files?.[0];
             if (file) this.processFile(file);
         },
-        processFile(file) {
+        processFile(file: File): void {
             if (!file.type.match('image/jpeg')) {
                 alert('Only JPEG images are supported');
                 return;
@@ -295,13 +299,13 @@ export default {
             this.coordinateError = '';
             this.searchQuery = '';
             this.searchResults = [];
-            if (this.markerSource) this.markerSource.clear();
+            this.markerSource?.clear();
 
             this.imageFile = file;
             this.previewUrl = URL.createObjectURL(file);
             this.extractExifData(file);
         },
-        clearFile() {
+        clearFile(): void {
             this.imageFile = null;
             this.previewUrl = null;
             this.lat = null;
@@ -310,10 +314,11 @@ export default {
             this.coordinateError = '';
             this.searchQuery = '';
             this.searchResults = [];
-            if (this.markerSource) this.markerSource.clear();
-            if (this.$refs.fileInput) this.$refs.fileInput.value = '';
+            this.markerSource?.clear();
+            const fileInput = this.$refs.fileInput as HTMLInputElement | undefined;
+            if (fileInput) fileInput.value = '';
         },
-        handleSearchInput() {
+        handleSearchInput(): void {
             if (this.searchTimeout) {
                 clearTimeout(this.searchTimeout);
             }
@@ -324,10 +329,10 @@ export default {
             }
             this.showResults = true;
             this.searchTimeout = setTimeout(() => {
-                this.performSearch();
+                void this.performSearch();
             }, 300);
         },
-        async performSearch() {
+        async performSearch(): Promise<void> {
             const query = this.searchQuery.trim();
             if (!query) return;
             this.showResults = true;
@@ -345,12 +350,12 @@ export default {
                 }
 
                 if (!result.ok) {
-                    throw new Error(result.error || 'Location search failed');
+                    throw new Error(result.error ?? 'Location search failed');
                 }
                 this.searchResults = result.features;
             } catch (e) {
                 console.error("Search failed", e);
-                this.extensionApi.toastError(e, 'Location search failed');
+                (this.extensionApi as ExtensionApi).toastError(e, 'Location search failed');
                 if (this.currentSearchQuery === query) {
                     this.searchResults = [];
                 }
@@ -361,7 +366,7 @@ export default {
                 }
             }
         },
-        selectResult(result) {
+        selectResult(result: GeocodingResult): void {
             this.showResults = false;
             this.searchResults = [];
             this.searchQuery = '';
@@ -369,68 +374,66 @@ export default {
             const coords = getGeocodingResultCoordinates(result);
             if (coords) {
                 this.updateCoords(coords.lat, coords.lon);
-                this.map.getView().animate({
+                this.map?.getView().animate({
                     center: fromLonLat([coords.lon, coords.lat]),
                     zoom: 12,
                     duration: 500
                 });
             }
         },
-        degToDms(deg) {
+        degToDms(deg: number): Rational[] {
             const d = Math.floor(deg);
             const minFloat = (deg - d) * 60;
             const m = Math.floor(minFloat);
             const s = Math.round((minFloat - m) * 60 * 100) / 100;
             return [[d, 1], [m, 1], [Math.round(s * 100), 100]];
         },
-        dmsToDeg(dms, ref) {
+        dmsToDeg(dms: Rational[] | undefined, ref: string | undefined): number | null {
             if (!dms || dms.length < 3) return null;
             try {
                 // Validate denominators to avoid NaN from 0/0
                 const d_den = dms[0][1] || 0;
                 const m_den = dms[1][1] || 0;
                 const s_den = dms[2][1] || 0;
-                
+
                 if (d_den === 0 || m_den === 0 || s_den === 0) return null;
 
                 const d = dms[0][0] / d_den;
                 const m = dms[1][0] / m_den;
                 const s = dms[2][0] / s_den;
-                
+
                 let deg = d + (m / 60) + (s / 3600);
-                
+
                 // Handle ref (piexif might return strings with null bytes)
-                const r = String(ref || '').trim().replace(/\0/g, '').toUpperCase().charAt(0);
+                const r = (ref ?? '').trim().replace(/\0/g, '').toUpperCase().charAt(0);
                 if (r === 'S' || r === 'W') deg = -deg;
-                
+
                 return deg;
-            } catch (e) {
+            } catch {
                 return null;
             }
         },
-        extractExifData(file) {
+        extractExifData(file: File): void {
             const reader = new FileReader();
             reader.onload = (e) => {
-                const dataURL = e.target.result;
+                const dataURL = e.target?.result as string;
                 try {
                     const exifObj = piexif.load(dataURL);
                     const gps = exifObj.GPS;
-                    if (gps && gps[piexif.GPSIFD.GPSLatitude] && gps[piexif.GPSIFD.GPSLongitude]) {
-                        const lat = this.dmsToDeg(gps[piexif.GPSIFD.GPSLatitude], gps[piexif.GPSIFD.GPSLatitudeRef]);
-                        const lon = this.dmsToDeg(gps[piexif.GPSIFD.GPSLongitude], gps[piexif.GPSIFD.GPSLongitudeRef]);
-                        
+                    if (gps[piexif.GPSIFD.GPSLatitude] && gps[piexif.GPSIFD.GPSLongitude]) {
+                        const lat = this.dmsToDeg(gps[piexif.GPSIFD.GPSLatitude] as Rational[], gps[piexif.GPSIFD.GPSLatitudeRef] as string | undefined);
+                        const lon = this.dmsToDeg(gps[piexif.GPSIFD.GPSLongitude] as Rational[], gps[piexif.GPSIFD.GPSLongitudeRef] as string | undefined);
+
                         if (lat !== null && lon !== null && isFinite(lat) && isFinite(lon)) {
                             // Skip dummy 0,0 coordinates commonly found in uninitialized EXIF
                             if (lat === 0 && lon === 0) return;
-                            
+
                             this.updateCoords(lat, lon);
-                            if (this.map) {
-                                this.map.getView().animate({
-                                    center: fromLonLat([lon, lat]),
-                                    zoom: 16,
-                                    duration: 1000
-                                });
-                            }
+                            this.map?.getView().animate({
+                                center: fromLonLat([lon, lat]),
+                                zoom: 16,
+                                duration: 1000
+                            });
                         }
                     }
                 } catch (err) {
@@ -439,37 +442,41 @@ export default {
             };
             reader.readAsDataURL(file);
         },
-        downloadGeotagged() {
+        downloadGeotagged(): void {
+            if (!this.imageFile || this.lat === null || this.lon === null) return;
+            const imageFile = this.imageFile;
+            const lat = this.lat;
+            const lon = this.lon;
             const reader = new FileReader();
             reader.onload = (e) => {
-                const dataStr = e.target.result;
-                let exifObj;
+                const dataStr = e.target?.result as string;
+                let exifObj: ExifObject;
                 try {
                     exifObj = piexif.load(dataStr);
-                } catch (err) {
+                } catch {
                     // Create empty exif if none exists
                     exifObj = { "0th": {}, "Exif": {}, "GPS": {}, "Interop": {}, "1st": {}, "thumbnail": null };
                 }
-                
+
                 // Update GPS
-                const latDms = this.degToDms(Math.abs(this.lat));
-                const lonDms = this.degToDms(Math.abs(this.lon));
-                
-                const gps = {};
-                gps[piexif.GPSIFD.GPSLatitudeRef] = this.lat < 0 ? 'S' : 'N';
+                const latDms = this.degToDms(Math.abs(lat));
+                const lonDms = this.degToDms(Math.abs(lon));
+
+                const gps: Record<number, unknown> = {};
+                gps[piexif.GPSIFD.GPSLatitudeRef] = lat < 0 ? 'S' : 'N';
                 gps[piexif.GPSIFD.GPSLatitude] = latDms;
-                gps[piexif.GPSIFD.GPSLongitudeRef] = this.lon < 0 ? 'W' : 'E';
+                gps[piexif.GPSIFD.GPSLongitudeRef] = lon < 0 ? 'W' : 'E';
                 gps[piexif.GPSIFD.GPSLongitude] = lonDms;
-                
+
                 exifObj.GPS = gps;
-                
+
                 const exifBytes = piexif.dump(exifObj);
                 const newJpeg = piexif.insert(exifBytes, dataStr);
-                
+
                 const link = document.createElement('a');
                 link.href = newJpeg;
                 // Add " -- geotagged" before extension
-                const nameParts = this.imageFile.name.split('.');
+                const nameParts = imageFile.name.split('.');
                 const ext = nameParts.pop();
                 const basename = nameParts.join('.');
                 link.download = `${basename} -- geotagged.${ext}`;
@@ -478,5 +485,5 @@ export default {
             reader.readAsDataURL(this.imageFile);
         }
     }
-}
+})
 </script>
