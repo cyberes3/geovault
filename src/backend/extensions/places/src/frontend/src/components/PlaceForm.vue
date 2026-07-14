@@ -11,7 +11,7 @@
             placeholder="Place name"
             class="w-full border border-gray-300 px-4 py-2 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
             :disabled="loading"
-            @input="$emit('update:name', $event.target.value)"
+            @input="$emit('update:name', ($event.target as HTMLInputElement).value)"
         />
       </div>
       <div>
@@ -22,7 +22,7 @@
             placeholder="Optional description"
             class="w-full border border-gray-300 px-4 py-2 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all sm:text-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed"
             :disabled="loading"
-            @input="$emit('update:description', $event.target.value)"
+            @input="$emit('update:description', ($event.target as HTMLTextAreaElement).value)"
         />
       </div>
     </div>
@@ -43,7 +43,7 @@
               placeholder="37.7749, -122.4194"
               class="flex-1 min-w-0 h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               :disabled="loading"
-              @input="$emit('coordinates-input', $event.target.value)"
+              @input="$emit('coordinates-input', ($event.target as HTMLInputElement).value)"
           />
           <button
               type="button"
@@ -90,30 +90,40 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ArrowPathIcon, MapPinIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import Loader from 'platform/components/parts/Loader.vue';
 
-defineProps({
-  name: { type: String, default: '' },
-  description: { type: String, default: '' },
-  coordinatesInput: { type: String, default: '' },
-  coordinateError: { type: String, default: '' },
-  isGeocoding: { type: Boolean, default: false },
-  isGettingLocation: { type: Boolean, default: false },
-  saving: { type: Boolean, default: false },
-  loading: { type: Boolean, default: false },
-  isEdit: { type: Boolean, default: false },
+withDefaults(defineProps<{
+  name?: string;
+  description?: string;
+  coordinatesInput?: string;
+  coordinateError?: string;
+  isGeocoding?: boolean;
+  isGettingLocation?: boolean;
+  saving?: boolean;
+  loading?: boolean;
+  isEdit?: boolean;
+}>(), {
+  name: '',
+  description: '',
+  coordinatesInput: '',
+  coordinateError: '',
+  isGeocoding: false,
+  isGettingLocation: false,
+  saving: false,
+  loading: false,
+  isEdit: false,
 });
 
-defineEmits([
-  'update:name',
-  'update:description',
-  'coordinates-input',
-  'validate-coordinates',
-  'use-location',
-  'save',
-  'cancel',
-]);
+defineEmits<{
+  'update:name': [value: string];
+  'update:description': [value: string];
+  'coordinates-input': [value: string];
+  'validate-coordinates': [];
+  'use-location': [];
+  save: [];
+  cancel: [];
+}>();
 </script>

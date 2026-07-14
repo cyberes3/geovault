@@ -16,10 +16,14 @@
   </div>
 </template>
 
-<script setup>
-defineProps({
-  place: { type: Object, default: null },
-});
+<script setup lang="ts">
+import type { PlaceFeature } from '@/types/places';
 
-defineEmits(['scroll-to-place']);
+defineProps<{
+  place?: PlaceFeature | null;
+}>();
+
+defineEmits<{
+  'scroll-to-place': [];
+}>();
 </script>

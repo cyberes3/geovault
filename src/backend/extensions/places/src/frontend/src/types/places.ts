@@ -1,23 +1,51 @@
-/**
- * @typedef {object} PlaceProperties
- * @property {number} database_id
- * @property {string} [name]
- * @property {string} [description]
- * @property {string} [address]
- * @property {string} [created_at]
- */
+export interface PlaceProperties {
+    database_id: number;
+    name?: string;
+    description?: string | null;
+    address?: string | null;
+    created_at?: string;
+}
 
-/**
- * @typedef {object} PlaceFeature
- * @property {'Feature'} type
- * @property {{ type: 'Point', coordinates: number[] }} geometry
- * @property {PlaceProperties} properties
- */
+export interface PlaceGeometry {
+    type: 'Point';
+    coordinates: number[];
+}
 
-/**
- * @typedef {object} PlaceFeatureCollection
- * @property {'FeatureCollection'} type
- * @property {PlaceFeature[]} features
- */
+export interface PlaceFeature {
+    type: 'Feature';
+    geometry: PlaceGeometry;
+    properties: PlaceProperties;
+}
 
-export {};
+export interface PlaceFeatureCollection {
+    type: 'FeatureCollection';
+    features: PlaceFeature[];
+}
+
+export interface PlacePayloadOverrides {
+    name?: string;
+    description?: string | null;
+    address?: string | null;
+}
+
+export interface PlacePayload {
+    type: 'Feature';
+    geometry: PlaceGeometry;
+    properties: {
+        name: string;
+        description: string | null;
+        address?: string;
+    };
+}
+
+export interface PlaceMapFeatureProperties {
+    database_id?: number;
+    is_highlighted: 0 | 1;
+    [key: string]: unknown;
+}
+
+export interface PlaceMapFeature {
+    type: 'Feature';
+    geometry: { type: 'Point'; coordinates: [number, number] };
+    properties: PlaceMapFeatureProperties;
+}

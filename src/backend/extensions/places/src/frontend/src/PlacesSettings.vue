@@ -19,25 +19,25 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
 import SettingsInput from 'platform/components/settings/components/SettingsInput.vue';
-import { useTileSources } from '@/composables/useTileSources.js';
-import { PLACES_DEFAULT_MAP_SOURCE_KEY } from '@/utils/placesMapSettings.js';
+import { useTileSources } from '@/composables/useTileSources';
+import { PLACES_DEFAULT_MAP_SOURCE_KEY } from '@/utils/placesMapSettings';
+import type { PlatformStateBridge } from '@/types/platform-state';
 
 const defaultMapSettingKey = PLACES_DEFAULT_MAP_SOURCE_KEY;
 
 const { loadSettingsFromValues, keyValueToNested } = window.gv_core.GeoVault.utils;
-/** @type {import('platform/extensions/platformState').PlatformStateBridge} */
-const platformState = inject('platformState');
+const platformState = inject('platformState') as PlatformStateBridge;
 
 const config = [
   { key: PLACES_DEFAULT_MAP_SOURCE_KEY, defaultValue: 'osm' }
 ];
 
-const settingsValues = reactive({});
-const successCheckmarks = reactive({});
-const saveTimers = {};
+const settingsValues = reactive<Record<string, unknown>>({});
+const successCheckmarks = reactive<Record<string, boolean>>({});
+const saveTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 const { baseSourceOptions, loadTileSources } = useTileSources();
 
 const defaultMapOptions = computed(() => baseSourceOptions.value.map((row) => ({
@@ -45,37 +45,41 @@ const defaultMapOptions = computed(() => baseSourceOptions.value.map((row) => ({
   label: row.name,
 })));
 
-function load() {
+function load(): void {
   const values = loadSettingsFromValues(config, platformState.userSettings.value);
   Object.assign(settingsValues, values);
 }
 
-function handleSettingChange(key, value) {
+function handleSettingChange(key: string, value: unknown): void {
   settingsValues[key] = value;
   if (saveTimers[key]) clearTimeout(saveTimers[key]);
-  saveTimers[key] = setTimeout(async () => {
-    try {
-      const update = keyValueToNested(key, value);
-      await platformState.saveUserSetting(update);
-      successCheckmarks[key] = true;
-      setTimeout(() => {
-        successCheckmarks[key] = false;
-      }, 3000);
-    } catch (err) {
-      window.gv_core?.GeoVault?.toast?.error(err.message || 'Failed to save setting');
-      load();
-    }
+  saveTimers[key] = setTimeout(() => {
+    void (async () => {
+      try {
+        const update = keyValueToNested(key, value) as Record<string, unknown>;
+        await platformState.saveUserSetting(update);
+        successCheckmarks[key] = true;
+        setTimeout(() => {
+          successCheckmarks[key] = false;
+        }, 3000);
+      } catch (err) {
+        window.gv_core.GeoVault.toast.error(err instanceof Error ? err.message : 'Failed to save setting');
+        load();
+      }
+    })();
   }, 500);
 }
 
-onMounted(async () => {
-  await loadTileSources();
-  load();
+onMounted(() => {
+  void (async () => {
+    await loadTileSources();
+    load();
+  })();
 });
 
-watch(() => platformState.userSettings.value, () => load(), { deep: true });
+watch(() => platformState.userSettings.value, () => { load(); }, { deep: true });
 
 onBeforeUnmount(() => {
-  Object.values(saveTimers).forEach((timer) => clearTimeout(timer));
+  Object.values(saveTimers).forEach((timer) => { clearTimeout(timer); });
 });
 </script>

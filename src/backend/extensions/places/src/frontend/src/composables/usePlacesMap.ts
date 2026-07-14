@@ -1,50 +1,78 @@
-import { shallowRef } from 'vue';
-import { createPlacesMap } from '@/utils/placesMaplibre.js';
-import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings.js';
+import { shallowRef, type ShallowRef } from 'vue';
+import { createPlacesMap, type FitOptions, type PlacesMapController } from '@/utils/placesMaplibre';
+import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings';
+import type { MaplibreMap } from '@/types/maplibre';
+import type { PlaceFeature, PlaceMapFeature, PlaceMapFeatureProperties } from '@/types/places';
 
-const INITIAL_CENTER = [0, 0];
+const INITIAL_CENTER: [number, number] = [0, 0];
 const INITIAL_ZOOM = 2;
 const FOCUS_ZOOM = 12;
-const MAP_FEATURE_FIT_OPTIONS = {
+const MAP_FEATURE_FIT_OPTIONS: FitOptions = {
   focusZoom: FOCUS_ZOOM,
   fitPadding: { top: 100, right: 100, bottom: 140, left: 140 },
   fitMaxZoom: 15,
 };
 
+export interface UsePlacesMapOptions {
+  sourceId: string;
+  layerId: string;
+  mode?: 'list' | 'edit';
+}
+
+interface UpdateMapFeaturesOptions {
+  fit?: boolean;
+}
+
+export interface UsePlacesMapReturn {
+  map: ShallowRef<MaplibreMap | null>;
+  mapController: ShallowRef<PlacesMapController | null>;
+  programmaticMapMove: ShallowRef<boolean>;
+  MAP_FEATURE_FIT_OPTIONS: FitOptions;
+  getMapFeatureCollection: (places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null) => { type: 'FeatureCollection'; features: PlaceMapFeature[] };
+  updateMapFeatures: (places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null, options?: UpdateMapFeaturesOptions) => void;
+  initMap: (container: HTMLElement | null | undefined, places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null) => Promise<PlacesMapController | null>;
+  applyDefaultBasemapFromUserSettings: (places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null) => Promise<string | null>;
+  setBaseSource: (sourceId: string, places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null) => Promise<string>;
+  resetMapToDefaultExtent: (places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null) => void;
+  focusPlace: (place: PlaceFeature | null, zoom?: boolean) => void;
+  destroyMap: () => void;
+}
+
 export function usePlacesMap({
   sourceId,
   layerId,
   mode = 'list',
-}) {
-  const map = shallowRef(null);
-  const mapController = shallowRef(null);
+}: UsePlacesMapOptions): UsePlacesMapReturn {
+  const map: ShallowRef<MaplibreMap | null> = shallowRef(null);
+  const mapController: ShallowRef<PlacesMapController | null> = shallowRef(null);
   const programmaticMapMove = shallowRef(false);
 
-  function getMapFeatureCollection(places, selectedPlaceId, hoveredPlaceId) {
+  function getMapFeatureCollection(places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null): { type: 'FeatureCollection'; features: PlaceMapFeature[] } {
     return {
       type: 'FeatureCollection',
       features: places
-        .filter((place) => Array.isArray(place?.geometry?.coordinates) && place.geometry.coordinates.length >= 2)
+        .filter((place) => place.geometry.coordinates.length >= 2)
         .map((place) => {
           const placeId = place.properties.database_id;
           const isSelected = selectedPlaceId === placeId;
           const isHovered = hoveredPlaceId != null && placeId === hoveredPlaceId;
+          const properties: PlaceMapFeatureProperties = {
+            database_id: placeId,
+            is_highlighted: isSelected || isHovered ? 1 : 0,
+          };
           return {
             type: 'Feature',
             geometry: {
               type: 'Point',
               coordinates: [place.geometry.coordinates[0], place.geometry.coordinates[1]],
             },
-            properties: {
-              database_id: placeId,
-              is_highlighted: isSelected || isHovered ? 1 : 0,
-            },
+            properties,
           };
         }),
     };
   }
 
-  function updateMapFeatures(places, selectedPlaceId, hoveredPlaceId, options = { fit: false }) {
+  function updateMapFeatures(places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null, options: UpdateMapFeaturesOptions = { fit: false }): void {
     if (!mapController.value) {
       return;
     }
@@ -55,7 +83,7 @@ export function usePlacesMap({
     }
   }
 
-  async function initMap(container, places, selectedPlaceId, hoveredPlaceId) {
+  async function initMap(container: HTMLElement | null | undefined, places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null): Promise<PlacesMapController | null> {
     if (mapController.value) {
       mapController.value.destroy();
       mapController.value = null;
@@ -84,7 +112,7 @@ export function usePlacesMap({
     return controller;
   }
 
-  async function applyDefaultBasemapFromUserSettings(places, selectedPlaceId, hoveredPlaceId) {
+  async function applyDefaultBasemapFromUserSettings(places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null): Promise<string | null> {
     if (!mapController.value) {
       return null;
     }
@@ -98,7 +126,7 @@ export function usePlacesMap({
     }
   }
 
-  async function setBaseSource(sourceId, places, selectedPlaceId, hoveredPlaceId) {
+  async function setBaseSource(sourceId: string, places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null): Promise<string> {
     if (!mapController.value) {
       return sourceId;
     }
@@ -111,7 +139,7 @@ export function usePlacesMap({
     }
   }
 
-  function resetMapToDefaultExtent(places, selectedPlaceId, hoveredPlaceId) {
+  function resetMapToDefaultExtent(places: PlaceFeature[], selectedPlaceId: number | null, hoveredPlaceId: number | null): void {
     if (!map.value || !mapController.value) {
       return;
     }
@@ -130,8 +158,8 @@ export function usePlacesMap({
     updateMapFeatures(places, selectedPlaceId, hoveredPlaceId);
   }
 
-  function focusPlace(place, zoom = true) {
-    if (!map.value || !place?.geometry?.coordinates || !zoom) {
+  function focusPlace(place: PlaceFeature | null, zoom = true): void {
+    if (!map.value || !place || place.geometry.coordinates.length < 2 || !zoom) {
       return;
     }
     programmaticMapMove.value = true;
@@ -142,7 +170,7 @@ export function usePlacesMap({
     });
   }
 
-  function destroyMap() {
+  function destroyMap(): void {
     if (mapController.value) {
       mapController.value.destroy();
       mapController.value = null;

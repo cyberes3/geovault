@@ -14,7 +14,7 @@
           :value="selectedBaseSourceId"
           class="select-custom w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none"
           :disabled="baseSourceOptions.length === 0"
-          @change="$emit('update:selectedBaseSourceId', $event.target.value)"
+          @change="$emit('update:selectedBaseSourceId', ($event.target as HTMLSelectElement).value)"
       >
         <option v-for="option in baseSourceOptions" :key="option.id" :value="option.id">
           {{ option.name }}
@@ -29,16 +29,20 @@
   </BaseModal>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import type { TileSourceSelectOption } from '@/utils/placesBasemap';
 
-defineProps({
-  isOpen: { type: Boolean, required: true },
-  selectId: { type: String, required: true },
-  selectedBaseSourceId: { type: String, required: true },
-  baseSourceOptions: { type: Array, required: true },
-});
+defineProps<{
+  isOpen: boolean;
+  selectId: string;
+  selectedBaseSourceId: string;
+  baseSourceOptions: TileSourceSelectOption[];
+}>();
 
-defineEmits(['close', 'update:selectedBaseSourceId']);
+defineEmits<{
+  close: [];
+  'update:selectedBaseSourceId': [value: string];
+}>();
 </script>

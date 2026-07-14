@@ -4,15 +4,25 @@ import {
   applyListTouchInteractionPolicy,
   getInitialCooperativeGestures,
   isTouchPointer
-} from '@/utils/placesCooperativeGestures.js';
+} from '@/utils/placesCooperativeGestures';
 import {
   buildRasterSourceSpec,
   buildRasterStyle,
   getTileSourceSelectOptions,
-  isStyleBasedSource
-} from '@/utils/placesBasemap.js';
+  isStyleBasedSource,
+  type TileSourceSelectOption
+} from '@/utils/placesBasemap';
+import type { TileSource } from '@/types/gv-core';
+import type {
+  MaplibreGeoJSONFeature,
+  MaplibreGlNamespace,
+  MaplibreMap,
+  MaplibreMapMouseEvent,
+  MaplibrePoint
+} from '@/types/maplibre';
+import type { PlaceMapFeature } from '@/types/places';
 
-const DEFAULT_CENTER = [0, 0];
+const DEFAULT_CENTER: [number, number] = [0, 0];
 const DEFAULT_ZOOM = 2;
 /** Reuse core's singleton catalog instance so places shares its cache/in-flight fetch with the rest of the app. */
 const tileSourceCatalog = window.gv_core.tileSourceCatalog;
@@ -30,12 +40,17 @@ const BLANK_MAP_STYLE = {
   layers: []
 };
 
-function getCssColor(variableName, fallback) {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+function getCssColor(variableName: string, fallback: string): string {
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
   return value || fallback;
 }
 
-function getMarkerColors() {
+interface MarkerColors {
+  default: string;
+  highlighted: string;
+}
+
+function getMarkerColors(): MarkerColors {
   return {
     default: getCssColor('--color-blue-500', '#163D8A'),
     highlighted: getCssColor('--color-yellow-500', '#F4AC45'),
@@ -48,11 +63,11 @@ function getMarkerColors() {
  * it already (e.g. navigating straight to Places without ever visiting the main map). Await the
  * shared loader (idempotent/cached after the first call) instead of assuming it's already there.
  */
-async function getMaplibre() {
-  return window.gv_core?.maplibre ?? window.maplibregl ?? (await window.gv_core?.loadMaplibreGl?.()) ?? null;
+async function getMaplibre(): Promise<MaplibreGlNamespace | null> {
+  return window.gv_core.maplibre ?? window.maplibregl ?? (await window.gv_core.loadMaplibreGl());
 }
 
-function applyInteractionPolicy(map, mode) {
+function applyInteractionPolicy(map: MaplibreMap, mode: string): void {
   if (mode === 'edit') {
     applyEditInteractionPolicy(map);
     return;
@@ -64,9 +79,9 @@ function applyInteractionPolicy(map, mode) {
   }
 }
 
-function waitForMapEvent(map, eventName, timeoutMs = 15000) {
+function waitForMapEvent(map: MaplibreMap, eventName: string, timeoutMs = 15000): Promise<boolean> {
   return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => resolve(false), timeoutMs);
+    const timeoutId = setTimeout(() => { resolve(false); }, timeoutMs);
     map.once(eventName, () => {
       clearTimeout(timeoutId);
       resolve(true);
@@ -74,31 +89,27 @@ function waitForMapEvent(map, eventName, timeoutMs = 15000) {
   });
 }
 
-function getValidPointFeatures(features) {
-  if (!Array.isArray(features) || features.length === 0) {
-    return [];
-  }
-  return features.filter((feature) => {
-    const coordinates = feature?.geometry?.coordinates;
-    return (
-      Array.isArray(coordinates) &&
-      coordinates.length >= 2 &&
-      isValidMapLngLatPair(coordinates[0], coordinates[1])
-    );
-  });
+function getValidPointFeatures(features: PlaceMapFeature[]): PlaceMapFeature[] {
+  return features.filter((feature) => isValidMapLngLatPair(feature.geometry.coordinates[0], feature.geometry.coordinates[1]));
 }
 
-function applyViewToPointFeatures(map, maplibre, features, {
+export interface FitOptions {
+  focusZoom?: number;
+  fitPadding?: { top: number; right: number; bottom: number; left: number };
+  fitMaxZoom?: number;
+}
+
+function applyViewToPointFeatures(map: MaplibreMap, maplibre: MaplibreGlNamespace, features: PlaceMapFeature[], {
   focusZoom = 12,
-  fitPadding = {top: 100, right: 100, bottom: 140, left: 140},
+  fitPadding = { top: 100, right: 100, bottom: 140, left: 140 },
   fitMaxZoom = 15
-} = {}) {
+}: FitOptions = {}): void {
   const valid = getValidPointFeatures(features);
   if (valid.length === 0) {
     return;
   }
   if (valid.length === 1) {
-    map.jumpTo({center: valid[0].geometry.coordinates, zoom: focusZoom});
+    map.jumpTo({ center: valid[0].geometry.coordinates, zoom: focusZoom });
     return;
   }
   const first = valid[0].geometry.coordinates;
@@ -106,14 +117,38 @@ function applyViewToPointFeatures(map, maplibre, features, {
   for (let i = 1; i < valid.length; i += 1) {
     bounds.extend(valid[i].geometry.coordinates);
   }
-  const camera = map.cameraForBounds(bounds, {padding: fitPadding, maxZoom: fitMaxZoom});
+  const camera = map.cameraForBounds(bounds, { padding: fitPadding, maxZoom: fitMaxZoom });
   if (camera) {
     map.jumpTo(camera);
   }
 }
 
-function resolveInitialBaseSource(tileSources, preferredId = OSM_TILE_SOURCE_ID) {
+function resolveInitialBaseSource(tileSources: TileSource[], preferredId: string = OSM_TILE_SOURCE_ID): TileSource {
   return tileSourceCatalog.resolveSource(tileSources, preferredId);
+}
+
+export interface CreatePlacesMapOptions {
+  container: HTMLElement;
+  mode?: 'list' | 'edit';
+  sourceId: string;
+  layerId: string;
+  preferredSourceId?: string;
+  minZoom?: number;
+  maxZoom?: number;
+  initialPointFeatures?: PlaceMapFeature[] | null;
+  initialFitOptions?: FitOptions;
+}
+
+export interface PlacesMapController {
+  map: MaplibreMap;
+  setPointFeatures(features: PlaceMapFeature[]): void;
+  fitToPointFeatures(features: PlaceMapFeature[], options?: FitOptions): void;
+  queryFirstPointAt(point: MaplibrePoint): MaplibreGeoJSONFeature | null;
+  getBaseSourceOptions(): TileSourceSelectOption[];
+  getCurrentBaseSourceId(): string;
+  setBaseSource(nextSourceId: string): Promise<string>;
+  resizeNow(): void;
+  destroy(): void;
 }
 
 export async function createPlacesMap({
@@ -126,22 +161,19 @@ export async function createPlacesMap({
   maxZoom = 18,
   initialPointFeatures = null,
   initialFitOptions = {}
-}) {
+}: CreatePlacesMapOptions): Promise<PlacesMapController> {
   const maplibre = await getMaplibre();
   if (!maplibre) {
     throw new Error('MapLibre is not available on window.gv_core.maplibre or window.maplibregl');
-  }
-  if (!container) {
-    throw new Error('Map container is required');
   }
 
   const markerColors = getMarkerColors();
   const initialCoop = getInitialCooperativeGestures(mode);
   const tileSources = await tileSourceCatalog.load();
 
-  const resolveInitialStyle = (baseSource) => {
-    const useStyleUrl = isStyleBasedSource(baseSource) && !!baseSource?.client_config?.style_url;
-    return useStyleUrl
+  const resolveInitialStyle = (baseSource: TileSource): string | Record<string, unknown> => {
+    const useStyleUrl = isStyleBasedSource(baseSource) && !!baseSource.client_config.style_url;
+    return useStyleUrl && baseSource.client_config.style_url
       ? baseSource.client_config.style_url
       : buildRasterStyle(baseSource, {
         sourceId: GV_PLACES_BASE_RASTER_SOURCE_ID,
@@ -150,7 +182,7 @@ export async function createPlacesMap({
   };
 
   let activeBaseSource = resolveInitialBaseSource(tileSources, preferredSourceId);
-  let currentFeatures = Array.isArray(initialPointFeatures) ? initialPointFeatures : [];
+  let currentFeatures = initialPointFeatures ?? [];
   const style = resolveInitialStyle(activeBaseSource);
 
   const map = new maplibre.Map({
@@ -170,11 +202,11 @@ export async function createPlacesMap({
     applyViewToPointFeatures(map, maplibre, currentFeatures, initialFitOptions);
   }
 
-  const applyPlacesBasemap = async (baseSource) => {
-    const clientConfig = baseSource?.client_config || {};
+  const applyPlacesBasemap = async (baseSource: TileSource): Promise<void> => {
+    const clientConfig = baseSource.client_config;
     const useStyleUrl = isStyleBasedSource(baseSource) && !!clientConfig.style_url;
 
-    if (useStyleUrl) {
+    if (useStyleUrl && clientConfig.style_url) {
       map.setStyle(clientConfig.style_url);
       const ok = await waitForMapEvent(map, 'styledata', 30000);
       if (!ok) {
@@ -195,14 +227,14 @@ export async function createPlacesMap({
       if (map.getLayer(GV_PLACES_BASE_RASTER_LAYER_ID)) {
         map.removeLayer(GV_PLACES_BASE_RASTER_LAYER_ID);
       }
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     try {
       if (map.getSource(GV_PLACES_BASE_RASTER_SOURCE_ID)) {
         map.removeSource(GV_PLACES_BASE_RASTER_SOURCE_ID);
       }
-    } catch (_) {
+    } catch {
       /* ignore */
     }
 
@@ -220,50 +252,53 @@ export async function createPlacesMap({
     });
   };
 
-  const listeners = [];
-  const on = (event, handler) => {
+  const listeners: Array<{ event: string; handler: (event: MaplibreMapMouseEvent) => void }> = [];
+  const on = (event: string, handler: (event: MaplibreMapMouseEvent) => void): void => {
     map.on(event, handler);
-    listeners.push({event, handler});
+    listeners.push({ event, handler });
   };
 
-  const resizeNow = () => {
+  const resizeNow = (): void => {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => map.resize());
+      requestAnimationFrame(() => {
+        map.resize();
+      });
     });
   };
 
-  let resizeObserver = null;
-  const resizeHandler = () => resizeNow();
+  const resizeHandler = (): void => {
+    resizeNow();
+  };
   window.addEventListener('resize', resizeHandler);
-  const mapHostEl = container.parentElement || container;
-  if (typeof ResizeObserver !== 'undefined' && mapHostEl) {
-    resizeObserver = new ResizeObserver(() => resizeNow());
-    resizeObserver.observe(mapHostEl);
-  }
+  const mapHostEl = container.parentElement ?? container;
+  const resizeObserver = new ResizeObserver(() => {
+    resizeNow();
+  });
+  resizeObserver.observe(mapHostEl);
 
   on('load', () => {
     applyInteractionPolicy(map, mode);
     resizeNow();
   });
 
-  const reinstallPlacesOverlay = () => {
+  const reinstallPlacesOverlay = (): void => {
     try {
       if (map.getLayer(layerId)) {
         map.removeLayer(layerId);
       }
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     try {
       if (map.getSource(sourceId)) {
         map.removeSource(sourceId);
       }
-    } catch (_) {
+    } catch {
       /* ignore */
     }
     map.addSource(sourceId, {
       type: 'geojson',
-      data: {type: 'FeatureCollection', features: currentFeatures}
+      data: { type: 'FeatureCollection', features: currentFeatures }
     });
     map.addLayer({
       id: layerId,
@@ -278,16 +313,18 @@ export async function createPlacesMap({
     });
     try {
       map.moveLayer(layerId);
-    } catch (_) {
+    } catch {
       /* ignore */
     }
   };
 
-  await new Promise((resolve) => map.once('load', resolve));
+  await new Promise<void>((resolve) => {
+    map.once('load', () => { resolve(); });
+  });
   reinstallPlacesOverlay();
 
-  const setPointFeatures = (features) => {
-    currentFeatures = Array.isArray(features) ? features : [];
+  const setPointFeatures = (features: PlaceMapFeature[]): void => {
+    currentFeatures = features;
     const source = map.getSource(sourceId);
     if (!source) return;
     source.setData({
@@ -296,21 +333,21 @@ export async function createPlacesMap({
     });
   };
 
-  const fitToPointFeatures = (features, options = {}) => {
+  const fitToPointFeatures = (features: PlaceMapFeature[], options: FitOptions = {}): void => {
     applyViewToPointFeatures(map, maplibre, features, options);
   };
 
-  const queryFirstPointAt = (point) => {
-    const features = map.queryRenderedFeatures(point, {layers: [layerId]});
-    return features[0] || null;
+  const queryFirstPointAt = (point: MaplibrePoint): MaplibreGeoJSONFeature | null => {
+    const features = map.queryRenderedFeatures(point, { layers: [layerId] });
+    return features[0] ?? null;
   };
 
-  const getBaseSourceOptions = () => getTileSourceSelectOptions(tileSources);
-  const getCurrentBaseSourceId = () => activeBaseSource?.id || OSM_TILE_SOURCE_ID;
+  const getBaseSourceOptions = (): TileSourceSelectOption[] => getTileSourceSelectOptions(tileSources);
+  const getCurrentBaseSourceId = (): string => activeBaseSource.id || OSM_TILE_SOURCE_ID;
 
-  const setBaseSource = async (nextSourceId) => {
+  const setBaseSource = async (nextSourceId: string): Promise<string> => {
     const nextBaseSource = resolveInitialBaseSource(tileSources, nextSourceId);
-    const nextId = nextBaseSource?.id || OSM_TILE_SOURCE_ID;
+    const nextId = nextBaseSource.id || OSM_TILE_SOURCE_ID;
     if (nextId === getCurrentBaseSourceId()) {
       return nextId;
     }
@@ -336,7 +373,7 @@ export async function createPlacesMap({
         await applyPlacesBasemap(activeBaseSource);
         await waitForMapEvent(map, 'idle', 8000);
         reinstallPlacesOverlay();
-      } catch (_) {
+      } catch {
         /* best-effort recovery */
       }
       applyInteractionPolicy(map, mode);
@@ -346,14 +383,11 @@ export async function createPlacesMap({
     }
   };
 
-  const destroy = () => {
-    listeners.forEach(({event, handler}) => map.off(event, handler));
+  const destroy = (): void => {
+    listeners.forEach(({ event, handler }) => { map.off(event, handler); });
     listeners.length = 0;
     window.removeEventListener('resize', resizeHandler);
-    if (resizeObserver) {
-      resizeObserver.disconnect();
-      resizeObserver = null;
-    }
+    resizeObserver.disconnect();
     map.remove();
   };
 

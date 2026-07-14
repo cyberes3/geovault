@@ -9,7 +9,7 @@
           placeholder="Search locations..."
           class="flex-1 outline-none text-sm px-3 py-2 bg-transparent w-full disabled:opacity-60 disabled:cursor-not-allowed"
           :disabled="disabled"
-          @input="$emit('update:searchQuery', $event.target.value); $emit('input')"
+          @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value); $emit('input')"
           @keyup.enter="$emit('search')"
       />
       <button
@@ -50,26 +50,39 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
+import type { GeocodingResult } from '@/types/gv-core';
 
-const props = defineProps({
-  searchQuery: { type: String, default: '' },
-  searchResults: { type: Array, default: () => [] },
-  isSearching: { type: Boolean, default: false },
-  showResults: { type: Boolean, default: false },
-  searchTimeout: { type: [Number, null], default: null },
-  disabled: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  searchQuery?: string;
+  searchResults?: GeocodingResult[];
+  isSearching?: boolean;
+  showResults?: boolean;
+  searchTimeout?: ReturnType<typeof setTimeout> | null;
+  disabled?: boolean;
+}>(), {
+  searchQuery: '',
+  searchResults: () => [],
+  isSearching: false,
+  showResults: false,
+  searchTimeout: null,
+  disabled: false,
 });
 
-defineEmits(['update:searchQuery', 'input', 'search', 'select-result']);
+defineEmits<{
+  'update:searchQuery': [value: string];
+  input: [];
+  search: [];
+  'select-result': [result: GeocodingResult];
+}>();
 
-const showDropdown = computed(() => {
+const showDropdown = computed((): boolean => {
   return props.showResults && (
     props.searchResults.length > 0
-    || (props.searchQuery && !props.isSearching && props.searchTimeout === null)
+    || Boolean(props.searchQuery && !props.isSearching && props.searchTimeout === null)
   );
 });
 </script>

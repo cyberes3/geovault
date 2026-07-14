@@ -1,26 +1,71 @@
-import { computed, ref } from 'vue';
-import { useGeocodingSearch } from '@/composables/useGeocodingSearch.js';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import { useGeocodingSearch } from '@/composables/useGeocodingSearch';
+import type { PlaceFeature, PlacePayload } from '@/types/places';
 
-function hasAddressLikeLetters(str) {
+function hasAddressLikeLetters(str: string): boolean {
   return /[a-zA-Z]/.test(str.replace(/[nsewd]/gi, ''));
 }
 
-export function usePlaceForm() {
-  const utils = window.gv_core?.GeoVault?.utils ?? null;
+interface FormSnapshot {
+  name: string;
+  description: string;
+  lat: number | null;
+  lon: number | null;
+  address: string | null;
+}
+
+export interface ValidateCoordinatesOptions {
+  reformatInput?: boolean;
+}
+
+export interface ValidateCoordinatesResult {
+  valid: boolean;
+  changed: boolean;
+  panMap?: boolean;
+}
+
+export interface MarkerCoordinates {
+  lat: number;
+  lon: number;
+}
+
+export interface UsePlaceFormReturn {
+  name: Ref<string>;
+  description: Ref<string>;
+  latitude: Ref<number | null>;
+  longitude: Ref<number | null>;
+  coordinatesInput: Ref<string>;
+  coordinateError: Ref<string>;
+  storedAddress: Ref<string | null>;
+  isGeocoding: Ref<boolean>;
+  isDirty: ComputedRef<boolean>;
+  setCoords: (lat: number | null, lon: number | null, displayText?: string | null) => void;
+  validateCoordinates: (options?: ValidateCoordinatesOptions) => Promise<ValidateCoordinatesResult>;
+  onCoordinatesInput: () => void;
+  resetForm: () => void;
+  loadFromFeature: (feature: PlaceFeature) => void;
+  buildPayload: () => PlacePayload | null;
+  captureSnapshot: () => void;
+  getMarkerCoordinates: () => MarkerCoordinates | null;
+  validateParsedCoordinatePair: (lng: number, lat: number) => boolean;
+}
+
+export function usePlaceForm(): UsePlaceFormReturn {
+  const utils = window.gv_core.GeoVault.utils;
   const { geocodeAddress } = useGeocodingSearch();
 
   const name = ref('');
   const description = ref('');
-  const latitude = ref(null);
-  const longitude = ref(null);
+  const latitude: Ref<number | null> = ref(null);
+  const longitude: Ref<number | null> = ref(null);
   const coordinatesInput = ref('');
   const coordinateError = ref('');
-  const storedAddress = ref(null);
+  const storedAddress: Ref<string | null> = ref(null);
   const isGeocoding = ref(false);
-  const coordinatesValidationTimeout = ref(null);
-  const initialFormSnapshot = ref(null);
+  const coordinatesValidationTimeout: Ref<ReturnType<typeof setTimeout> | null> = ref(null);
+  const initialFormSnapshot: Ref<FormSnapshot | null> = ref(null);
 
-  const isDirty = computed(() => {
+  const isDirty = computed((): boolean => {
     const snapshot = initialFormSnapshot.value;
     if (snapshot == null) {
       return false;
@@ -29,20 +74,20 @@ export function usePlaceForm() {
       || description.value !== snapshot.description
       || latitude.value !== snapshot.lat
       || longitude.value !== snapshot.lon
-      || (storedAddress.value || '') !== (snapshot.address || '');
+      || (storedAddress.value ?? '') !== (snapshot.address ?? '');
   });
 
-  function captureSnapshot() {
+  function captureSnapshot(): void {
     initialFormSnapshot.value = {
       name: name.value,
       description: description.value,
       lat: latitude.value,
       lon: longitude.value,
-      address: storedAddress.value || null,
+      address: storedAddress.value ?? null,
     };
   }
 
-  function setCoords(lat, lon, displayText = null) {
+  function setCoords(lat: number | null, lon: number | null, displayText: string | null = null): void {
     latitude.value = lat == null ? null : parseFloat(Number(lat).toFixed(6));
     longitude.value = lon == null ? null : parseFloat(Number(lon).toFixed(6));
     if (displayText != null && displayText !== '') {
@@ -57,28 +102,23 @@ export function usePlaceForm() {
     coordinateError.value = '';
   }
 
-  function validateParsedCoordinatePair(lng, lat) {
-    const validateCoordinatesUtil = utils?.validateCoordinates;
-    if (!validateCoordinatesUtil) {
-      return true;
-    }
-    const validation = validateCoordinatesUtil([lng, lat], 'Point');
+  function validateParsedCoordinatePair(lng: number, lat: number): boolean {
+    const validation = utils.validateCoordinates([lng, lat], 'Point');
     if (!validation.valid) {
       if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) {
-        const swapped = validateCoordinatesUtil([lat, lng], 'Point');
+        const swapped = utils.validateCoordinates([lat, lng], 'Point');
         if (swapped.valid) {
           coordinateError.value = 'Coordinates appear to be swapped. Enter latitude, longitude.';
           return false;
         }
       }
-      coordinateError.value = validation.error || 'Invalid coordinates';
+      coordinateError.value = validation.error ?? 'Invalid coordinates';
       return false;
     }
     return true;
   }
 
-  async function validateCoordinates(options = {}) {
-    const { reformatInput = true } = options;
+  async function validateCoordinates({ reformatInput = true }: ValidateCoordinatesOptions = {}): Promise<ValidateCoordinatesResult> {
     coordinateError.value = '';
     latitude.value = null;
     longitude.value = null;
@@ -88,12 +128,7 @@ export function usePlaceForm() {
       return { valid: false, changed: true };
     }
 
-    const parseCoordinates = utils?.parseCoordinates;
-    if (!parseCoordinates) {
-      return { valid: false, changed: false };
-    }
-
-    const coordinates = parseCoordinates(input);
+    const coordinates = utils.parseCoordinates(input);
     if (coordinates) {
       if (!validateParsedCoordinatePair(coordinates.lng, coordinates.lat)) {
         latitude.value = null;
@@ -114,18 +149,17 @@ export function usePlaceForm() {
       try {
         const result = await geocodeAddress(input);
         if (!result.ok) {
-          coordinateError.value = result.error || 'Address not found';
+          coordinateError.value = result.error ?? 'Address not found';
           return { valid: false, changed: true };
         }
-        setCoords(result.lat, result.lon, result.label);
+        setCoords(result.lat ?? null, result.lon ?? null, result.label);
         return { valid: true, changed: true, panMap: true };
       } finally {
         isGeocoding.value = false;
       }
     }
 
-    const looksLikeCoordinates = utils?.looksLikeCoordinates;
-    if (looksLikeCoordinates?.(input)) {
+    if (utils.looksLikeCoordinates(input)) {
       coordinateError.value = 'Invalid coordinate format';
       return { valid: false, changed: true };
     }
@@ -133,7 +167,7 @@ export function usePlaceForm() {
     return { valid: false, changed: true };
   }
 
-  function onCoordinatesInput() {
+  function onCoordinatesInput(): void {
     const input = coordinatesInput.value.trim();
     if (!input) {
       coordinateError.value = '';
@@ -147,7 +181,7 @@ export function usePlaceForm() {
     }, 300);
   }
 
-  function resetForm() {
+  function resetForm(): void {
     name.value = '';
     description.value = '';
     latitude.value = null;
@@ -168,12 +202,12 @@ export function usePlaceForm() {
     }
   }
 
-  function loadFromFeature(feature) {
-    name.value = feature.properties?.name ? String(feature.properties.name) : '';
-    description.value = feature.properties?.description ? String(feature.properties.description) : '';
-    const coords = feature.geometry?.coordinates;
-    if (coords && coords.length >= 2) {
-      const addressProp = feature.properties?.address;
+  function loadFromFeature(feature: PlaceFeature): void {
+    name.value = feature.properties.name ? String(feature.properties.name) : '';
+    description.value = feature.properties.description ? String(feature.properties.description) : '';
+    const coords = feature.geometry.coordinates;
+    if (coords.length >= 2) {
+      const addressProp = feature.properties.address;
       if (addressProp) {
         setCoords(coords[1], coords[0], String(addressProp));
       } else {
@@ -183,27 +217,24 @@ export function usePlaceForm() {
     captureSnapshot();
   }
 
-  function buildPayload() {
+  function buildPayload(): PlacePayload | null {
     let lat = latitude.value;
     let lng = longitude.value;
     if (lat == null || lng == null) {
       const input = coordinatesInput.value.trim();
-      const parseCoordinates = utils?.parseCoordinates;
-      if (parseCoordinates) {
-        const coordinates = parseCoordinates(input);
-        if (coordinates) {
-          lat = coordinates.lat;
-          lng = coordinates.lng;
-        }
+      const coordinates = utils.parseCoordinates(input);
+      if (coordinates) {
+        lat = coordinates.lat;
+        lng = coordinates.lng;
       }
     }
     if (lat == null || lng == null || !validateParsedCoordinatePair(lng, lat)) {
       return null;
     }
 
-    const properties = {
+    const properties: PlacePayload['properties'] = {
       name: name.value.trim(),
-      description: (description.value || '').trim() || null,
+      description: description.value.trim() || null,
     };
     if (storedAddress.value) {
       properties.address = storedAddress.value;
@@ -218,7 +249,7 @@ export function usePlaceForm() {
     };
   }
 
-  function getMarkerCoordinates() {
+  function getMarkerCoordinates(): MarkerCoordinates | null {
     const lat = latitude.value;
     const lon = longitude.value;
     if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) {

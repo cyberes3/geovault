@@ -16,7 +16,7 @@
             class="block w-full min-h-[200px] px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
             placeholder="Add a description..."
             aria-label="Description"
-            @input="$emit('update:draft', $event.target.value)"
+            @input="$emit('update:draft', ($event.target as HTMLTextAreaElement).value)"
         />
         <div v-else class="prose prose-sm max-w-none text-gray-700">
           <p class="whitespace-pre-wrap">
@@ -53,21 +53,33 @@
   </BaseModal>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { PencilSquareIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 import BaseModal from 'platform/components/parts/BaseModal.vue';
+import type { PlaceFeature } from '@/types/places';
 
-defineProps({
-  place: { type: Object, default: null },
-  editing: { type: Boolean, default: false },
-  draft: { type: String, default: '' },
-  saving: { type: Boolean, default: false },
+withDefaults(defineProps<{
+  place?: PlaceFeature | null;
+  editing?: boolean;
+  draft?: string;
+  saving?: boolean;
+}>(), {
+  place: null,
+  editing: false,
+  draft: '',
+  saving: false,
 });
 
-defineEmits(['close', 'start-edit', 'cancel-edit', 'save', 'update:draft']);
+defineEmits<{
+  close: [];
+  'start-edit': [];
+  'cancel-edit': [];
+  save: [];
+  'update:draft': [value: string];
+}>();
 
-const descriptionTextarea = ref(null);
+const descriptionTextarea = ref<HTMLTextAreaElement | null>(null);
 defineExpose({ descriptionTextarea });
 </script>

@@ -90,7 +90,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import {
   CheckIcon,
@@ -101,25 +101,29 @@ import {
 } from '@heroicons/vue/24/outline';
 import googleMapsIconUrl from '@/assets/google-maps-icon.svg';
 import googleMapsIconBwUrl from '@/assets/google-maps-icon-bw.svg';
-import { formatCreatedDate, placeLocationLabel } from '@/utils/placeFormatters.js';
+import { formatCreatedDate, placeLocationLabel } from '@/utils/placeFormatters';
+import type { PlaceFeature } from '@/types/places';
 
-const props = defineProps({
-  place: { type: Object, required: true },
-  isSelected: { type: Boolean, default: false },
-  copied: { type: Boolean, default: false },
+const props = withDefaults(defineProps<{
+  place: PlaceFeature;
+  isSelected?: boolean;
+  copied?: boolean;
+}>(), {
+  isSelected: false,
+  copied: false,
 });
 
-defineEmits([
-  'select',
-  'touch-select',
-  'hover',
-  'edit',
-  'delete',
-  'open-description',
-  'open-maps',
-  'copy-coordinates',
-]);
+defineEmits<{
+  select: [place: PlaceFeature];
+  'touch-select': [place: PlaceFeature, event: TouchEvent];
+  hover: [placeId: number | null];
+  edit: [place: PlaceFeature];
+  delete: [place: PlaceFeature];
+  'open-description': [place: PlaceFeature];
+  'open-maps': [place: PlaceFeature];
+  'copy-coordinates': [place: PlaceFeature];
+}>();
 
-const locationLabel = computed(() => placeLocationLabel(props.place));
-const createdDate = computed(() => formatCreatedDate(props.place.properties.created_at));
+const locationLabel = computed((): string => placeLocationLabel(props.place));
+const createdDate = computed((): string => formatCreatedDate(props.place.properties.created_at));
 </script>

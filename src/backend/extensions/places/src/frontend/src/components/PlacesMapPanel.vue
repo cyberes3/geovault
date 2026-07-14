@@ -8,12 +8,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import PlacesMapControls from '@/components/PlacesMapControls.vue';
 
-defineEmits(['open-layer-picker', 'reset-viewport']);
+defineEmits<{
+  'open-layer-picker': [];
+  'reset-viewport': [];
+}>();
 
-const mapContainer = ref(null);
+const mapContainer = ref<HTMLElement | null>(null);
 defineExpose({ mapContainer });
 </script>

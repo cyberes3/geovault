@@ -21,8 +21,11 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { HomeIcon, Square3Stack3DIcon } from '@heroicons/vue/24/outline';
 
-defineEmits(['open-layer-picker', 'reset-viewport']);
+defineEmits<{
+  'open-layer-picker': [];
+  'reset-viewport': [];
+}>();
 </script>

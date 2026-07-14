@@ -24,9 +24,11 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { PlusIcon } from '@heroicons/vue/24/outline';
 import BaseButton from 'platform/components/parts/BaseButton.vue';
 
-defineEmits(['add-place']);
+defineEmits<{
+  'add-place': [];
+}>();
 </script>

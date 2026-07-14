@@ -1,12 +1,17 @@
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, type ComputedRef, type Ref } from 'vue';
 
 const MOBILE_MEDIA_QUERY = '(max-width: 1023px)';
 
-export function useBreakpoint(query = MOBILE_MEDIA_QUERY) {
+export interface UseBreakpointReturn {
+  isMobile: Ref<boolean>;
+  isDesktop: ComputedRef<boolean>;
+}
+
+export function useBreakpoint(query: string = MOBILE_MEDIA_QUERY): UseBreakpointReturn {
   const mediaQuery = window.matchMedia(query);
   const isMobile = ref(mediaQuery.matches);
 
-  const onChange = (event) => {
+  const onChange = (event: MediaQueryListEvent): void => {
     isMobile.value = event.matches;
   };
 

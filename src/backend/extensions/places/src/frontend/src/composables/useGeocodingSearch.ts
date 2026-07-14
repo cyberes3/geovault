@@ -1,20 +1,44 @@
-import { ref } from 'vue';
+import { ref, type Ref } from 'vue';
+import type { GeocodingResult } from '@/types/gv-core';
 
 const { getGeocodingResultCoordinates, getGeocodingResultLabel, searchGeocoding } = window.gv_core.GeoVault.utils;
+
+export interface GeocodeAddressResult {
+  ok: boolean;
+  lon?: number;
+  lat?: number;
+  label?: string;
+  error?: string;
+}
+
+export interface UseGeocodingSearchReturn {
+  searchQuery: Ref<string>;
+  searchResults: Ref<GeocodingResult[]>;
+  showResults: Ref<boolean>;
+  isSearching: Ref<boolean>;
+  searchTimeout: Ref<ReturnType<typeof setTimeout> | null>;
+  currentSearchQuery: Ref<string>;
+  handleSearchInput: (debounceMs?: number) => void;
+  performSearch: (query?: string) => Promise<void>;
+  clearSearch: () => void;
+  geocodeAddress: (query: string) => Promise<GeocodeAddressResult>;
+  getGeocodingResultCoordinates: (result: GeocodingResult) => { lon: number; lat: number } | null;
+  getGeocodingResultLabel: (result: GeocodingResult) => string;
+}
 
 /**
  * Shared geocoding search with debounce, abort, and stale-request protection.
  */
-export function useGeocodingSearch() {
+export function useGeocodingSearch(): UseGeocodingSearchReturn {
   const searchQuery = ref('');
-  const searchResults = ref([]);
+  const searchResults: Ref<GeocodingResult[]> = ref([]);
   const showResults = ref(false);
   const isSearching = ref(false);
-  const searchTimeout = ref(null);
+  const searchTimeout: Ref<ReturnType<typeof setTimeout> | null> = ref(null);
   const currentSearchQuery = ref('');
-  const abortController = ref(null);
+  const abortController: Ref<AbortController | null> = ref(null);
 
-  function clearSearch() {
+  function clearSearch(): void {
     searchQuery.value = '';
     searchResults.value = [];
     showResults.value = false;
@@ -30,7 +54,7 @@ export function useGeocodingSearch() {
     }
   }
 
-  function handleSearchInput(debounceMs = 300) {
+  function handleSearchInput(debounceMs = 300): void {
     if (searchTimeout.value) {
       clearTimeout(searchTimeout.value);
     }
@@ -46,7 +70,7 @@ export function useGeocodingSearch() {
     }, debounceMs);
   }
 
-  async function performSearch(query = searchQuery.value.trim()) {
+  async function performSearch(query: string = searchQuery.value.trim()): Promise<void> {
     if (!query) {
       clearSearch();
       return;
@@ -67,7 +91,7 @@ export function useGeocodingSearch() {
       }
       searchResults.value = result.ok ? result.features : [];
     } catch (error) {
-      if (error?.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
       if (currentSearchQuery.value === query) {
@@ -82,10 +106,9 @@ export function useGeocodingSearch() {
 
   /**
    * Geocode a single address string (no dropdown UI).
-   * @returns {Promise<{ ok: boolean, lon?: number, lat?: number, label?: string, error?: string }>}
    */
-  async function geocodeAddress(query) {
-    const trimmed = String(query || '').trim();
+  async function geocodeAddress(query: string): Promise<GeocodeAddressResult> {
+    const trimmed = query.trim();
     if (!trimmed) {
       return { ok: false, error: 'Address is required' };
     }
@@ -98,10 +121,13 @@ export function useGeocodingSearch() {
     try {
       const result = await searchGeocoding(trimmed, { signal: abortController.value.signal });
       if (!result.ok) {
-        return { ok: false, error: result.error || 'Geocoding failed' };
+        return { ok: false, error: result.error ?? 'Geocoding failed' };
+      }
+      if (result.features.length === 0) {
+        return { ok: false, error: 'Address not found' };
       }
       const first = result.features[0];
-      const coords = first ? getGeocodingResultCoordinates(first) : null;
+      const coords = getGeocodingResultCoordinates(first);
       if (!coords) {
         return { ok: false, error: 'Address not found' };
       }
@@ -112,10 +138,10 @@ export function useGeocodingSearch() {
         label: getGeocodingResultLabel(first),
       };
     } catch (error) {
-      if (error?.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         return { ok: false, error: 'Geocoding cancelled' };
       }
-      return { ok: false, error: error?.message || 'Geocoding failed' };
+      return { ok: false, error: error instanceof Error ? error.message : 'Geocoding failed' };
     }
   }
 

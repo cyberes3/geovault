@@ -21,7 +21,7 @@
             :value="searchQuery"
             class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all sm:text-sm"
             placeholder="Search places..."
-            @input="$emit('update:searchQuery', $event.target.value)"
+            @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
         />
       </div>
       <select
@@ -29,7 +29,7 @@
           :value="sortBy"
           class="select-custom w-full sm:w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none flex-shrink-0"
           aria-label="Sort Places"
-          @change="$emit('update:sortBy', $event.target.value)"
+          @change="$emit('update:sortBy', ($event.target as HTMLSelectElement).value)"
       >
         <option value="composite">Default Sort</option>
         <option value="created">Last Created</option>
@@ -67,34 +67,41 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { MagnifyingGlassIcon, MapPinIcon } from '@heroicons/vue/24/outline';
 import Loader from 'platform/components/parts/Loader.vue';
 import PlaceListItem from '@/components/PlaceListItem.vue';
+import type { PlaceFeature } from '@/types/places';
 
-defineProps({
-  places: { type: Array, required: true },
-  loading: { type: Boolean, default: false },
-  searchQuery: { type: String, default: '' },
-  sortBy: { type: String, default: 'composite' },
-  selectedPlaceId: { type: Number, default: null },
-  copiedPlaceId: { type: Number, default: null },
+withDefaults(defineProps<{
+  places: PlaceFeature[];
+  loading?: boolean;
+  searchQuery?: string;
+  sortBy?: string;
+  selectedPlaceId?: number | null;
+  copiedPlaceId?: number | null;
+}>(), {
+  loading: false,
+  searchQuery: '',
+  sortBy: 'composite',
+  selectedPlaceId: null,
+  copiedPlaceId: null,
 });
 
-defineEmits([
-  'update:searchQuery',
-  'update:sortBy',
-  'select',
-  'touch-select',
-  'hover',
-  'edit',
-  'delete',
-  'open-description',
-  'open-maps',
-  'copy-coordinates',
-]);
+defineEmits<{
+  'update:searchQuery': [value: string];
+  'update:sortBy': [value: string];
+  select: [place: PlaceFeature];
+  'touch-select': [place: PlaceFeature, event: TouchEvent];
+  hover: [placeId: number | null];
+  edit: [place: PlaceFeature];
+  delete: [place: PlaceFeature];
+  'open-description': [place: PlaceFeature];
+  'open-maps': [place: PlaceFeature];
+  'copy-coordinates': [place: PlaceFeature];
+}>();
 
-const listScrollContainer = ref(null);
+const listScrollContainer = ref<HTMLElement | null>(null);
 defineExpose({ listScrollContainer });
 </script>

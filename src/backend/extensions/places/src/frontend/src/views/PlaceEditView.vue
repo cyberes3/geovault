@@ -67,11 +67,10 @@
         @close="showLayerPickerModal = false"
         @update:selected-base-source-id="applyBaseSourceSelection"
     />
-
-  </div>
+</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, inject, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute } from 'vue-router';
 import Loader from 'platform/components/parts/Loader.vue';
@@ -79,20 +78,26 @@ import PlaceForm from '@/components/PlaceForm.vue';
 import PlaceLocationSearch from '@/components/PlaceLocationSearch.vue';
 import PlacesLayerPickerModal from '@/components/PlacesLayerPickerModal.vue';
 import PlacesMapControls from '@/components/PlacesMapControls.vue';
-import { useGeocodingSearch } from '@/composables/useGeocodingSearch.js';
-import { usePlaceForm } from '@/composables/usePlaceForm.js';
-import { usePlacesApi } from '@/composables/usePlacesApi.js';
-import { createPlacesMap } from '@/utils/placesMaplibre.js';
-import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings.js';
+import { useGeocodingSearch } from '@/composables/useGeocodingSearch';
+import { usePlaceForm } from '@/composables/usePlaceForm';
+import { usePlacesApi } from '@/composables/usePlacesApi';
+import { createPlacesMap, type PlacesMapController } from '@/utils/placesMaplibre';
+import { ensureUserSettingsLoaded, getDefaultMapSourceId } from '@/utils/placesMapSettings';
+import type { TileSourceSelectOption } from '@/utils/placesBasemap';
+import type { RouterLike } from '@/types/extension-setup';
+import type { PlatformStateBridge } from '@/types/platform-state';
+import type { GeocodingResult } from '@/types/gv-core';
+import type { MaplibreMap } from '@/types/maplibre';
 
 const PLACE_EDIT_SOURCE_ID = 'gv_places_overlay_edit_source';
 const PLACE_EDIT_LAYER_ID = 'gv_places_overlay_edit_layer';
-const INITIAL_CENTER = [0, 0];
+const INITIAL_CENTER: [number, number] = [0, 0];
 const INITIAL_ZOOM = 2;
 
 const route = useRoute();
-const router = inject('extensionRouter');
-const toast = window.gv_core?.GeoVault?.toast ?? { success: () => {}, error: () => {} };
+const router = inject('extensionRouter') as RouterLike;
+const platformState = inject('platformState') as PlatformStateBridge;
+const toast = window.gv_core.GeoVault.toast;
 const useDocumentTitle = window.gv_core.useDocumentTitle;
 
 const { getPlace, createPlace, updatePlace } = usePlacesApi();
@@ -125,17 +130,17 @@ const {
   getGeocodingResultCoordinates,
 } = useGeocodingSearch();
 
-const mapContainer = ref(null);
-const map = ref(null);
-const mapController = ref(null);
+const mapContainer = ref<HTMLElement | null>(null);
+const map = ref<MaplibreMap | null>(null);
+const mapController = ref<PlacesMapController | null>(null);
 const showLayerPickerModal = ref(false);
-const baseSourceOptions = ref([]);
+const baseSourceOptions = ref<TileSourceSelectOption[]>([]);
 const selectedBaseSourceId = ref('osm');
 const saving = ref(false);
 const loadingEdit = ref(false);
 const isGettingLocation = ref(false);
 
-const editId = computed(() => {
+const editId = computed((): number | null => {
   const raw = route.params.id;
   if (raw == null || raw === '') {
     return null;
@@ -144,10 +149,10 @@ const editId = computed(() => {
   return Number.isNaN(parsed) ? null : parsed;
 });
 
-const pageTitle = computed(() => (editId.value ? 'Edit Place' : 'New Place'));
+const pageTitle = computed((): string => (editId.value ? 'Edit Place' : 'New Place'));
 useDocumentTitle(pageTitle);
 
-function updateMarkerFromCoords(panMap = false) {
+function updateMarkerFromCoords(panMap = false): void {
   if (!map.value || !mapController.value) {
     return;
   }
@@ -166,14 +171,14 @@ function updateMarkerFromCoords(panMap = false) {
   }
 }
 
-async function validateCoordinatesField() {
+async function validateCoordinatesField(): Promise<void> {
   const result = await validateCoordinates();
   if (result.changed) {
     updateMarkerFromCoords(result.panMap);
   }
 }
 
-function onCoordinatesInput(value) {
+function onCoordinatesInput(value: string): void {
   coordinatesInput.value = value;
   handleCoordinatesInput();
   void validateCoordinates({ reformatInput: false }).then((result) => {
@@ -183,7 +188,7 @@ function onCoordinatesInput(value) {
   });
 }
 
-async function initMap() {
+async function initMap(): Promise<void> {
   if (mapController.value) {
     mapController.value.destroy();
     mapController.value = null;
@@ -211,13 +216,13 @@ async function initMap() {
   await applyDefaultBasemapFromUserSettings();
   updateMarkerFromCoords();
 
-  map.value.on('click', (event) => {
+  controller.map.on('click', (event) => {
     setCoords(event.lngLat.lat, event.lngLat.lng);
     updateMarkerFromCoords(true);
   });
 }
 
-async function applyDefaultBasemapFromUserSettings() {
+async function applyDefaultBasemapFromUserSettings(): Promise<void> {
   if (!mapController.value) {
     return;
   }
@@ -230,13 +235,13 @@ async function applyDefaultBasemapFromUserSettings() {
   }
 }
 
-async function loadPlaceForEdit(id) {
+async function loadPlaceForEdit(id: number): Promise<void> {
   loadingEdit.value = true;
   try {
     const feature = await getPlace(id);
     loadFromFeature(feature);
     updateMarkerFromCoords(true);
-    if (map.value && feature.geometry?.coordinates?.length >= 2) {
+    if (map.value && feature.geometry.coordinates.length >= 2) {
       map.value.easeTo({
         center: [feature.geometry.coordinates[0], feature.geometry.coordinates[1]],
         zoom: 12,
@@ -245,14 +250,14 @@ async function loadPlaceForEdit(id) {
     }
   } catch (error) {
     console.error('Failed to load place', error);
-    toast.error?.('Failed to load place.');
-    router?.navigate('');
+    toast.error('Failed to load place.');
+    void router.navigate('');
   } finally {
     loadingEdit.value = false;
   }
 }
 
-function selectSearchResult(result) {
+function selectSearchResult(result: GeocodingResult): void {
   clearSearch();
   const coords = getGeocodingResultCoordinates(result);
   if (!coords) {
@@ -265,7 +270,7 @@ function selectSearchResult(result) {
   }
 }
 
-async function useCurrentLocation() {
+async function useCurrentLocation(): Promise<void> {
   if (isGettingLocation.value) {
     return;
   }
@@ -289,7 +294,7 @@ async function useCurrentLocation() {
     }
   } catch (error) {
     console.error('Geolocation error:', error);
-    if (error.code === 1) {
+    if (error instanceof GeolocationPositionError && error.code === 1) {
       toast.error('Location permission denied.');
     } else {
       toast.error('Failed to get your location.');
@@ -299,7 +304,7 @@ async function useCurrentLocation() {
   }
 }
 
-async function savePlace() {
+async function savePlace(): Promise<void> {
   if (saving.value || !name.value.trim() || !coordinatesInput.value.trim()) {
     return;
   }
@@ -318,20 +323,20 @@ async function savePlace() {
       toast.success('Place created.');
     }
     captureSnapshot();
-    router?.navigate('');
+    void router.navigate('');
   } catch (error) {
     console.error('Failed to save place', error);
-    toast.error?.('Failed to save place.');
+    toast.error('Failed to save place.');
   } finally {
     saving.value = false;
   }
 }
 
-function goToList() {
-  router?.navigate('');
+function goToList(): void {
+  void router.navigate('');
 }
 
-function resetMapViewport() {
+function resetMapViewport(): void {
   if (!map.value) {
     return;
   }
@@ -343,7 +348,7 @@ function resetMapViewport() {
   map.value.easeTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, bearing: 0, duration: 0 });
 }
 
-async function applyBaseSourceSelection(nextSourceId) {
+async function applyBaseSourceSelection(nextSourceId: string): Promise<void> {
   if (!mapController.value) {
     return;
   }
@@ -355,7 +360,7 @@ async function applyBaseSourceSelection(nextSourceId) {
   }
 }
 
-function resetFormAndMap() {
+function resetFormAndMap(): void {
   resetForm();
   clearSearch();
   updateMarkerFromCoords();
@@ -364,7 +369,7 @@ function resetFormAndMap() {
   }
 }
 
-function handleBeforeUnload(event) {
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
   if (isDirty.value) {
     event.preventDefault();
     event.returnValue = '';
@@ -384,7 +389,7 @@ onBeforeRouteLeave((_to, _from, next) => {
 });
 
 watch(
-  () => window.gv_core?.store?.getters?.['userSettings/userSettings'],
+  () => platformState.userSettings.value,
   (userSettings) => {
     if (!userSettings) {
       return;
@@ -405,27 +410,29 @@ watch(editId, (newId) => {
   }
 });
 
-onMounted(async () => {
-  window.addEventListener('beforeunload', handleBeforeUnload);
-  const editing = editId.value != null;
-  if (editing) {
-    loadingEdit.value = true;
-  }
-  try {
-    await initMap();
-    if (editing) {
-      await loadPlaceForEdit(editId.value);
-    } else {
-      resetFormAndMap();
+onMounted(() => {
+  void (async () => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    const editingId = editId.value;
+    if (editingId != null) {
+      loadingEdit.value = true;
     }
-  } catch (error) {
-    console.error('Failed to initialize place edit page', error);
-    loadingEdit.value = false;
-    if (editing) {
-      toast.error?.('Failed to load place.');
-      router?.navigate('');
+    try {
+      await initMap();
+      if (editingId != null) {
+        await loadPlaceForEdit(editingId);
+      } else {
+        resetFormAndMap();
+      }
+    } catch (error) {
+      console.error('Failed to initialize place edit page', error);
+      loadingEdit.value = false;
+      if (editingId != null) {
+        toast.error('Failed to load place.');
+        void router.navigate('');
+      }
     }
-  }
+  })();
 });
 
 onActivated(() => {
