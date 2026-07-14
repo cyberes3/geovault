@@ -53,8 +53,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { inject, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
+import type { PlatformStateBridge } from './types/platform-state';
 
 /**
  * ==============================================================================
@@ -66,15 +67,15 @@ import { inject, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
  *
  * Key concepts:
  * - `platformState` (injected by `createRouteWrapper`) is a narrow, read-mostly view of the
- *   current user's settings - not the raw Vuex store. See `main.js`'s `wrap()` helper.
+ *   current user's settings - not the raw Vuex store. See `main.ts`'s `wrap()` helper.
  * - Settings keys use dot notation: 'extensions.<your_ext_name>.<setting_key>'
  * - Changes are debounced and saved to the API automatically
  * - Visual feedback (checkmarks) confirm successful saves
  */
 
-// `platformState` is provided per-route by `createRouteWrapper` (see main.js). It's the only way
+// `platformState` is provided per-route by `createRouteWrapper` (see main.ts). It's the only way
 // extensions read/write user settings - there is no raw store access.
-const platformState = inject('platformState');
+const platformState = inject('platformState') as PlatformStateBridge;
 
 // Shared utilities that don't need a live store reference still come from window.gv_core.
 const { loadSettingsFromValues, keyValueToNested } = window.gv_core.GeoVault.utils;
@@ -93,9 +94,9 @@ const config = [
 // ==============================================================================
 // Reactive State
 // ==============================================================================
-const settingsValues = reactive({});      // Current setting values (for v-model binding)
-const successCheckmarks = reactive({});   // Track which settings just saved successfully
-const saveTimers = {};                     // Debounce timers for each setting
+const settingsValues = reactive<Record<string, unknown>>({});      // Current setting values (for v-model binding)
+const successCheckmarks = reactive<Record<string, boolean>>({});   // Track which settings just saved successfully
+const saveTimers: Record<string, ReturnType<typeof setTimeout>> = {}; // Debounce timers for each setting
 
 // ==============================================================================
 // Load Settings from platformState
@@ -104,7 +105,7 @@ const saveTimers = {};                     // Debounce timers for each setting
  * Loads settings from the shared `platformState.userSettings` snapshot into local reactive
  * state, filling in defaults for anything not yet set.
  */
-const load = () => {
+const load = (): void => {
   const values = loadSettingsFromValues(config, platformState.userSettings.value);
   Object.assign(settingsValues, values);
 };
@@ -115,37 +116,39 @@ const load = () => {
 /**
  * Handles setting changes: updates UI immediately, then saves to API (debounced).
  *
- * @param {string} key   - Setting key in dot notation (e.g., 'extensions.example_extension.verbose_logs')
- * @param {any}    value - New value for the setting
+ * @param key   - Setting key in dot notation (e.g., 'extensions.example_extension.verbose_logs')
+ * @param value - New value for the setting
  */
-const handleSettingChange = (key, value) => {
+const handleSettingChange = (key: string, value: unknown): void => {
   // 1. Update UI immediately for instant feedback
   settingsValues[key] = value;
 
   // 2. Debounce API call (500ms) to avoid hammering the server
   if (saveTimers[key]) clearTimeout(saveTimers[key]);
 
-  saveTimers[key] = setTimeout(async () => {
-    try {
-      // 3. Convert dot notation to nested object for API
-      // 'extensions.example_extension.verbose_logs' ->
-      //   { extensions: { example_extension: { verbose_logs: value } } }
-      const update = keyValueToNested(key, value);
+  saveTimers[key] = setTimeout(() => {
+    void (async () => {
+      try {
+        // 3. Convert dot notation to nested object for API
+        // 'extensions.example_extension.verbose_logs' ->
+        //   { extensions: { example_extension: { verbose_logs: value } } }
+        const update = keyValueToNested(key, value) as Record<string, unknown>;
 
-      // 4. Save to API and sync the shared settings cache in one call
-      await platformState.saveUserSetting(update);
+        // 4. Save to API and sync the shared settings cache in one call
+        await platformState.saveUserSetting(update);
 
-      // 5. Show success checkmark for 3 seconds
-      successCheckmarks[key] = true;
-      setTimeout(() => {
-        successCheckmarks[key] = false;
-      }, 3000);
-    } catch (error) {
-      // 6. Handle errors with toast notification
-      if (toast) toast.error(error.message || 'Failed to save setting');
-      // Revert to stored value on error
-      load();
-    }
+        // 5. Show success checkmark for 3 seconds
+        successCheckmarks[key] = true;
+        setTimeout(() => {
+          successCheckmarks[key] = false;
+        }, 3000);
+      } catch (error) {
+        // 6. Handle errors with toast notification
+        toast.error(error instanceof Error ? error.message : 'Failed to save setting');
+        // Revert to stored value on error
+        load();
+      }
+    })();
   }, 500);
 };
 
@@ -170,7 +173,7 @@ watch(
 
 onBeforeUnmount(() => {
   // Cleanup: cancel any pending save timers
-  Object.values(saveTimers).forEach(timer => clearTimeout(timer));
+  Object.values(saveTimers).forEach(timer => { clearTimeout(timer); });
 });
 </script>
 

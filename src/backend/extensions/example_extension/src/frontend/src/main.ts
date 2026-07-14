@@ -1,3 +1,5 @@
+import type { Component } from 'vue';
+import type { ExtensionSetupContext } from './types/extension-setup';
 import ExamplePage from './ExamplePage.vue';
 import ExampleSettings from './ExampleSettings.vue';
 import './assets/main.css';
@@ -7,16 +9,14 @@ import './assets/main.css';
  * Extension Frontend Setup
  * ==============================================================================
  * This 'setup' function is the main entry point for your frontend extension.
- * 
+ *
  * IMPORTANT: This function MUST be exported as the default export:
  *   async function setup({ ... }) { ... }
  *   export default setup
- * 
- * The platform calls this function and injects several core services:
- * 
- * @type {import('platform/types/geovault').ExtensionSetup}
+ *
+ * The platform calls this function and injects several core services.
  */
-async function setup({ router, registry, api, platformState, metadata }) {
+async function setup({ router, registry, api, platformState, metadata }: ExtensionSetupContext): Promise<void> {
     // 1. Wrap Components
     // `createRouteWrapper` gives every route/settings-tab component its own scoped `inject`
     // (api via 'extensionApi', router via 'extensionRouter', platformState via 'platformState'),
@@ -24,7 +24,7 @@ async function setup({ router, registry, api, platformState, metadata }) {
     // app, and a `.gv-ext-<name>` CSS scoping class. Always wrap route and settings-tab
     // components with it.
     const createRouteWrapper = window.gv_core.createRouteWrapper;
-    const wrap = (component) => createRouteWrapper(component, { api, router, platformState });
+    const wrap = (component: Component): Component => createRouteWrapper(component, { api, router, platformState });
 
     // 2. Register Navigation Link
     // Adds a link to the main top-level navigation bar.
@@ -41,7 +41,7 @@ async function setup({ router, registry, api, platformState, metadata }) {
         id: 'example-extension',
         label: 'Example Extension',
         component: wrap(ExampleSettings),
-        icon: metadata.icon  // Icon from manifest (heroicon, SVG file, or inline SVG)
+        icon: metadata.icon // Icon from manifest (heroicon, SVG file, or inline SVG)
     });
 
     // 4. Register Routes
@@ -60,4 +60,4 @@ async function setup({ router, registry, api, platformState, metadata }) {
     // On error: api.toastError(error, 'Failed to save item')
 }
 
-export default setup
+export default setup;

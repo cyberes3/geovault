@@ -26,7 +26,7 @@
       />
       <!-- Loader is a globally registered platform component -->
       <BaseButton @click="addItem" :disabled="!newItem.name.trim() || adding">
-        <Loader v-if="adding" size="sm" layout="inline" :showMessage="false" color="white" class="mr-2" />
+        <Loader v-if="adding" size="sm" layout="inline" :show-message="false" color="white" class="mr-2" />
         Add Item
       </BaseButton>
     </div>
@@ -128,7 +128,7 @@
             :disabled="!canCreateFeature || creatingFeature"
             class="w-full"
           >
-            <Loader v-if="creatingFeature" size="sm" layout="inline" :showMessage="false" color="white" class="mr-2" />
+            <Loader v-if="creatingFeature" size="sm" layout="inline" :show-message="false" color="white" class="mr-2" />
             Create Feature
           </BaseButton>
         </div>
@@ -139,7 +139,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 class="text-lg font-semibold text-gray-900">Your Features</h3>
           <BaseButton variant="primary" size="sm" @click="fetchFeatures" :disabled="loadingFeatures">
-            <Loader v-if="loadingFeatures" size="sm" layout="inline" :showMessage="false" class="mr-2" />
+            <Loader v-if="loadingFeatures" size="sm" layout="inline" :show-message="false" class="mr-2" />
             Refresh
           </BaseButton>
         </div>
@@ -215,7 +215,7 @@
                       v-if="modifyingFeatureId === feature.properties.database_id" 
                       size="sm" 
                       layout="inline" 
-                      :showMessage="false" 
+                      :show-message="false" 
                       class="mr-1" 
                     />
                     Add Special Tag
@@ -232,7 +232,7 @@
                       v-if="deletingFeatureId === feature.properties.database_id" 
                       size="sm" 
                       layout="inline" 
-                      :showMessage="false" 
+                      :show-message="false" 
                       class="mr-1" 
                     />
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -261,18 +261,35 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, inject, computed } from 'vue';
+import type { ExtensionApi } from './types/extension-api';
+
+interface ExampleItem {
+  id: string | number;
+  name: string;
+  description?: string;
+}
+
+interface ExampleFeature {
+  properties: {
+    database_id?: string | number;
+    name?: string;
+    description?: string;
+    tags?: string[];
+  };
+  geometry?: { type?: string };
+}
 
 /*
   API INJECTION
-  The 'api' object is an ExtensionApi instance injected from main.js.
+  The 'api' object is an ExtensionApi instance injected from main.ts.
   It provides convenience methods (get, post, put, delete) with automatic:
   - CSRF token handling
   - URL scoping (/api/extensions/<kebab-name>/)
   - Error handling and toast notifications
 */
-const api = inject('extensionApi');
+const api = inject('extensionApi') as ExtensionApi;
 
 /*
   TOAST UTILITY
@@ -283,39 +300,39 @@ const api = inject('extensionApi');
 const toast = window.gv_core.GeoVault.toast;
 
 // Local component state for items
-const items = ref([]);
+const items = ref<ExampleItem[]>([]);
 const newItem = ref({ name: '', description: '' });
 const loading = ref(true);
 const adding = ref(false);
 
 // Local component state for features
-const features = ref([]);
+const features = ref<ExampleFeature[]>([]);
 const newFeature = ref({
-  latitude: null,
-  longitude: null,
+  latitude: null as number | null,
+  longitude: null as number | null,
   name: '',
   description: '',
   tagsInput: ''
 });
 const loadingFeatures = ref(false);
 const creatingFeature = ref(false);
-const modifyingFeatureId = ref(null);
-const deletingFeatureId = ref(null);
+const modifyingFeatureId = ref<string | number | null>(null);
+const deletingFeatureId = ref<string | number | null>(null);
 
 /**
  * Fetch items from the extension's backend.
  * Uses ExtensionApi.get() which handles CSRF tokens automatically.
  */
-const fetchItems = async () => {
+const fetchItems = async (): Promise<void> => {
   loading.value = true;
   try {
     // api.get() automatically handles CSRF token
     const response = await api.get('/items/');
-    items.value = response.data;
+    items.value = response.data as ExampleItem[];
   } catch (e) {
     // Handle errors explicitly
     const errorInfo = api.handleError(e);
-    if (toast) toast.error(errorInfo.message);
+    toast.error(errorInfo.message);
     console.error('Failed to fetch items:', e);
   } finally {
     loading.value = false;
@@ -326,21 +343,21 @@ const fetchItems = async () => {
  * Create a new item.
  * Uses ExtensionApi.post() which handles CSRF tokens automatically.
  */
-const addItem = async () => {
+const addItem = async (): Promise<void> => {
   const name = newItem.value.name.trim();
   if (!name || adding.value) return;
-  
+
   adding.value = true;
   try {
     // api.post() automatically handles CSRF token and JSON serialization
     await api.post('/items/', { name, description: '' });
     newItem.value.name = ''; // Clear input
     await fetchItems();      // Refresh list
-    if (toast) toast.success('Item added successfully');
+    toast.success('Item added successfully');
   } catch (e) {
     // Handle errors explicitly
     const errorInfo = api.handleError(e);
-    if (toast) toast.error(errorInfo.message || 'Failed to add item');
+    toast.error(errorInfo.message);
     console.error('Failed to add item:', e);
   } finally {
     adding.value = false;
@@ -351,17 +368,17 @@ const addItem = async () => {
  * Delete an item by ID.
  * Uses ExtensionApi.delete() which handles CSRF tokens automatically.
  */
-const deleteItem = async (id) => {
+const deleteItem = async (id: string | number): Promise<void> => {
   if (confirm('Are you sure you want to delete this item?')) {
     try {
       // api.delete() automatically handles CSRF token
       await api.delete(`/items/${id}/`);
       await fetchItems(); // Refresh list
-      if (toast) toast.success('Item deleted');
+      toast.success('Item deleted');
     } catch (e) {
       // Handle errors explicitly
       const errorInfo = api.handleError(e);
-      if (toast) toast.error(errorInfo.message || 'Failed to delete item');
+      toast.error(errorInfo.message);
       console.error('Failed to delete item:', e);
     }
   }
@@ -370,15 +387,15 @@ const deleteItem = async (id) => {
 /**
  * Check if a feature has the special tag
  */
-const hasSpecialTag = (feature) => {
-  const tags = feature.properties?.tags || [];
+const hasSpecialTag = (feature: ExampleFeature): boolean => {
+  const tags = feature.properties.tags ?? [];
   return tags.includes('example-extension:special');
 };
 
 /**
  * Computed property to check if we can create a feature
  */
-const canCreateFeature = computed(() => {
+const canCreateFeature = computed((): boolean => {
   return newFeature.value.latitude !== null &&
          newFeature.value.longitude !== null &&
          newFeature.value.name.trim() !== '' &&
@@ -388,27 +405,23 @@ const canCreateFeature = computed(() => {
 /**
  * Fetch all features from the main platform API
  */
-const fetchFeatures = async () => {
+const fetchFeatures = async (): Promise<void> => {
   loadingFeatures.value = true;
   try {
     // Use fetch directly for main platform API (not extension API)
     const response = await fetch('/api/features/all/', {
       credentials: 'include',
       headers: {
-        'X-CSRFToken': getCookie('csrftoken') || ''
+        'X-CSRFToken': getCookie('csrftoken') ?? ''
       }
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    
-    const data = await response.json();
-    if (data.data && data.data.features) {
-      features.value = data.data.features;
-    } else {
-      features.value = [];
-    }
+
+    const data = await response.json() as { data?: { features?: ExampleFeature[] } };
+    features.value = data.data?.features ?? [];
   } catch (e) {
     console.error('Failed to fetch features:', e);
     api.toastError(e, 'Failed to load features');
@@ -421,9 +434,9 @@ const fetchFeatures = async () => {
 /**
  * Create a new feature
  */
-const createFeature = async () => {
+const createFeature = async (): Promise<void> => {
   if (!canCreateFeature.value || creatingFeature.value) return;
-  
+
   creatingFeature.value = true;
   try {
     // Parse tags from comma-separated string
@@ -431,18 +444,18 @@ const createFeature = async () => {
       .split(',')
       .map(t => t.trim())
       .filter(t => t.length > 0);
-    
+
     const payload = {
-      latitude: parseFloat(newFeature.value.latitude),
-      longitude: parseFloat(newFeature.value.longitude),
+      latitude: newFeature.value.latitude,
+      longitude: newFeature.value.longitude,
       name: newFeature.value.name.trim(),
       description: newFeature.value.description.trim(),
       tags: tags
     };
-    
+
     // Use extension API to create feature
-    const response = await api.post('/features/create/', payload);
-    
+    await api.post('/features/create/', payload);
+
     // Clear form
     newFeature.value = {
       latitude: null,
@@ -451,14 +464,14 @@ const createFeature = async () => {
       description: '',
       tagsInput: ''
     };
-    
+
     // Refresh feature list
     await fetchFeatures();
-    
-    if (toast) toast.success('Feature created successfully');
+
+    toast.success('Feature created successfully');
   } catch (e) {
     const errorInfo = api.handleError(e);
-    if (toast) toast.error(errorInfo.message || 'Failed to create feature');
+    toast.error(errorInfo.message);
     console.error('Failed to create feature:', e);
   } finally {
     creatingFeature.value = false;
@@ -468,21 +481,21 @@ const createFeature = async () => {
 /**
  * Modify a feature by adding the special tag
  */
-const modifyFeature = async (featureId) => {
-  if (modifyingFeatureId.value === featureId) return;
-  
+const modifyFeature = async (featureId: string | number | undefined): Promise<void> => {
+  if (featureId === undefined || modifyingFeatureId.value === featureId) return;
+
   modifyingFeatureId.value = featureId;
   try {
     // Use extension API to modify feature
-    const response = await api.post(`/features/${featureId}/modify/`);
-    
+    await api.post(`/features/${featureId}/modify/`);
+
     // Refresh feature list
     await fetchFeatures();
-    
-    if (toast) toast.success('Feature modified: special tag added');
+
+    toast.success('Feature modified: special tag added');
   } catch (e) {
     const errorInfo = api.handleError(e);
-    if (toast) toast.error(errorInfo.message || 'Failed to modify feature');
+    toast.error(errorInfo.message);
     console.error('Failed to modify feature:', e);
   } finally {
     modifyingFeatureId.value = null;
@@ -492,23 +505,24 @@ const modifyFeature = async (featureId) => {
 /**
  * Delete a feature
  */
-const deleteFeature = async (featureId) => {
+const deleteFeature = async (featureId: string | number | undefined): Promise<void> => {
+  if (featureId === undefined) return;
   if (!confirm('Are you sure you want to delete this feature? This action cannot be undone.')) {
     return;
   }
-  
+
   deletingFeatureId.value = featureId;
   try {
     // Use extension API to delete feature
     await api.delete(`/features/${featureId}/delete/`);
-    
+
     // Refresh feature list
     await fetchFeatures();
-    
-    if (toast) toast.success('Feature deleted successfully');
+
+    toast.success('Feature deleted successfully');
   } catch (e) {
     const errorInfo = api.handleError(e);
-    if (toast) toast.error(errorInfo.message || 'Failed to delete feature');
+    toast.error(errorInfo.message);
     console.error('Failed to delete feature:', e);
   } finally {
     deletingFeatureId.value = null;
@@ -518,17 +532,17 @@ const deleteFeature = async (featureId) => {
 /**
  * Helper function to get CSRF cookie
  */
-const getCookie = (name) => {
+const getCookie = (name: string): string | null => {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
+  if (parts.length === 2) return parts.pop()?.split(';').shift() ?? null;
   return null;
 };
 
 // Fetch initial data on mount
 onMounted(() => {
-  fetchItems();
-  fetchFeatures();
+  void fetchItems();
+  void fetchFeatures();
 });
 </script>
 
