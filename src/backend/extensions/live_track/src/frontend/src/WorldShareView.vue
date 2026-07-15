@@ -293,7 +293,7 @@ async function resolveShareSource(shareId: string): Promise<ResolvedShareSource 
   }
 
   return {
-    sourceMode: info.share_access ?? SHARE_SOURCE_MODES.WORLD,
+    sourceMode: info.share_access || SHARE_SOURCE_MODES.WORLD,
     dataUrl,
     info,
     data: dataResult.data
@@ -406,7 +406,10 @@ export default defineComponent({
       const allow = track.share_params_with_world === true ||
         (track.share_params_with_world === undefined && track.share_params_with_recipients === true);
       if (!allow) return false;
-      const hasPoints = (track.point_params?.length ?? track.geometry?.coordinates.length ?? 0) > 0;
+      // Intentionally `||`, not `??`: an empty point_params array (length 0) should fall through to
+      // checking geometry.coordinates instead of short-circuiting on that valid-but-zero length.
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      const hasPoints = (track.point_params?.length || track.geometry?.coordinates.length || 0) > 0;
       return hasPoints;
     }
 
@@ -700,7 +703,7 @@ export default defineComponent({
       const tileSource = tileSources.value.find((s) => s.id === selectedLayer.value);
       if (!tileSource || !maplibregl) return;
       const clientConfig = tileSource.client_config ?? {};
-      const isStyleBased = !!(clientConfig.style_url ?? clientConfig.type === 'maptiler');
+      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
 
       if (isStyleBased && clientConfig.style_url) {
         const center = map.getCenter();
@@ -824,12 +827,12 @@ export default defineComponent({
         const info = resolved.info;
         const data = resolved.data as WorldSharePayload;
         if (info.share_type === 'live_track_group') {
-          groupName.value = info.group_name ?? data.group_name ?? 'Shared group';
+          groupName.value = info.group_name || data.group_name || 'Shared group';
           const tracks = Array.isArray(data.tracks) ? data.tracks : [];
           groupTracks.value = tracks.map((t) => normalizeTrackForWorld(t));
           trackData.value = null;
         } else {
-          trackName.value = info.track_name ?? 'Shared tracker';
+          trackName.value = info.track_name || 'Shared tracker';
           trackData.value = normalizeTrackForWorld(data);
           groupTracks.value = [];
         }
@@ -866,7 +869,7 @@ export default defineComponent({
       const layerValue = selectedLayer.value;
       const tileSource = tileSources.value.find((s) => s.id === layerValue) ?? tileSources.value[0];
       const clientConfig = tileSource.client_config ?? {};
-      const isStyleBased = !!(clientConfig.style_url ?? clientConfig.type === 'maptiler');
+      const isStyleBased = !!(clientConfig.style_url || clientConfig.type === 'maptiler');
       const tracksForInit = groupTracks.value.length ? groupTracks.value : (trackData.value ? [trackData.value] : []);
 
       if (isStyleBased && clientConfig.style_url) {
@@ -882,7 +885,7 @@ export default defineComponent({
         });
         map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true }), 'top-right');
         map.on('error', (e) => {
-          console.warn('WorldShareView: map error', e.error?.message ?? e);
+          console.warn('WorldShareView: map error', e.error?.message || e);
         });
         // Fit to the already-loaded track/group data now (duration 0), before the browser paints
         // the [0,0]/zoom 2 construction default, instead of waiting for 'load'.

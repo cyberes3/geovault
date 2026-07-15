@@ -848,7 +848,7 @@ export default defineComponent({
       if (showTrackSidebar.value) return trackSidebarMode.value === 'create' ? 'New Tracker' : 'Edit Tracker';
       if (paramsModalTrackId.value != null) return 'Latest Parameters';
       if (showGroupsSidebar.value) return 'Groups';
-      if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name ?? 'Group';
+      if (showGroupQuickViewSidebar.value && groupQuickViewGroup.value) return groupQuickViewGroup.value.name || 'Group';
       if (showSharedWithMeSidebar.value) return 'Shared With Me';
       if (showLayerSidebar.value) return 'Map Settings';
       if (showSettingsSidebar.value) return 'Settings';

@@ -492,7 +492,7 @@ export default defineComponent({
         const blob = await res.blob();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `${(props.track.name ?? 'track').replace(/[^a-zA-Z0-9-_]/g, '_')}.kml`;
+        a.download = `${(props.track.name || 'track').replace(/[^a-zA-Z0-9-_]/g, '_')}.kml`;
         a.click();
         URL.revokeObjectURL(a.href);
         window.gv_core.GeoVault.toast.success('Download started');

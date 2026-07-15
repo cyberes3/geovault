@@ -71,7 +71,10 @@ function defaultGetParamsAllowed(track: LiveTrack): boolean {
   const allow = track.share_params_with_world === true ||
     (track.share_params_with_world === undefined && track.share_params_with_recipients === true);
   if (!allow) return false;
-  const hasPoints = ((track.point_params?.length ?? track.geometry?.coordinates.length) ?? 0) > 0;
+  // Intentionally `||`, not `??`: an empty point_params array (length 0) should fall through to
+  // checking geometry.coordinates instead of short-circuiting on that valid-but-zero length.
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+  const hasPoints = (track.point_params?.length || track.geometry?.coordinates.length || 0) > 0;
   return hasPoints;
 }
 
