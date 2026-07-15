@@ -496,7 +496,7 @@ export default defineComponent({
       }
 
       const map = this.maps.find(m => m.id === this.selectedMapId)
-      this.selectedMapTitle = map?.title ?? this.selectedMapId
+      this.selectedMapTitle = map?.title || this.selectedMapId
 
       await this.loadFeatures()
     },
@@ -538,7 +538,7 @@ export default defineComponent({
     },
     async handleImportFeature(feature: CaltopoFeature): Promise<void> {
       if (feature.is_valid === false) {
-        const featureClass = feature.properties?.class ?? 'Unknown'
+        const featureClass = feature.properties?.class || 'Unknown'
         this.toast?.error(`Feature type '${featureClass}' is not supported for import`)
         return
       }
@@ -550,7 +550,7 @@ export default defineComponent({
         const response = await this.api.post('/import/feature/', {
           map_id: this.selectedMapId,
           feature_id: feature.id,
-          feature_class: feature.properties?.class ?? 'Marker'
+          feature_class: feature.properties?.class || 'Marker'
         })
         const data = response.data as {
           feature?: { properties?: { database_id?: string | number } };
@@ -573,7 +573,7 @@ export default defineComponent({
             } else if (w.type === 'geometry') {
               return `Geometry duplicate: Feature with similar geometry already exists`
             }
-            return w.message ?? 'Unknown warning'
+            return w.message || 'Unknown warning'
           })
         }
 
@@ -608,7 +608,7 @@ export default defineComponent({
     },
     getFeatureButtonTooltip(feature: CaltopoFeature): string {
       if (feature.is_valid === false) {
-        const featureClass = feature.properties?.class ?? 'Unknown'
+        const featureClass = feature.properties?.class || 'Unknown'
         return `Feature type '${featureClass}' is not supported for import`
       }
       if (this.mapInQueue || this.importingMap) {
