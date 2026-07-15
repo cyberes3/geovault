@@ -350,7 +350,7 @@ export default defineComponent({
                 }
 
                 if (!result.ok) {
-                    throw new Error(result.error ?? 'Location search failed');
+                    throw new Error(result.error || 'Location search failed');
                 }
                 this.searchResults = result.features;
             } catch (e) {
