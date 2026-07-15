@@ -38,7 +38,7 @@ export function useMapShare(deps: UseMapShareDeps) {
     });
 
     function handlePublicShareError(errorMessage: string | null): void {
-        publicShareError.value = errorMessage ?? 'Invalid share link';
+        publicShareError.value = errorMessage || 'Invalid share link';
     }
 
     /**

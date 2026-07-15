@@ -181,8 +181,8 @@ export function useFeatureEditForm(options: UseFeatureEditFormOptions) {
         formData.description = (properties.description as string | undefined) ?? '';
         formData.tags = Array.isArray(properties.tags) ? (properties.tags as string[]) : [];
         formData.created = formatDateForInput(properties.created as string | undefined);
-        formData.markerColor = (properties['marker-color'] as string | undefined) ?? '#ff0000';
-        formData.strokeColor = (properties.stroke as string | undefined) ?? '#ff0000';
+        formData.markerColor = (properties['marker-color'] as string | undefined) || '#ff0000';
+        formData.strokeColor = (properties.stroke as string | undefined) || '#ff0000';
         formData.strokeWidth = (properties['stroke-width'] as number | undefined) ?? 2;
 
         if (isPolygon.value) {
@@ -286,7 +286,7 @@ export function useFeatureEditForm(options: UseFeatureEditFormOptions) {
             if (geometryType.value) {
                 const validation = validateCoordinates(coordinatesData, geometryType.value);
                 if (!validation.valid) {
-                    errorMessage.value = validation.error ?? 'Invalid coordinates';
+                    errorMessage.value = validation.error || 'Invalid coordinates';
                     return null;
                 }
             }
@@ -387,7 +387,7 @@ export function useFeatureEditForm(options: UseFeatureEditFormOptions) {
             return;
         }
 
-        const featureName = (originalProperties.name as string | undefined) ?? 'this feature';
+        const featureName = (originalProperties.name as string | undefined) || 'this feature';
         const confirmed = window.confirm(`Are you sure you want to delete "${featureName}"? This feature will be permanently removed from your library.`);
         if (!confirmed) return;
 

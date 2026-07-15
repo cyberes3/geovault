@@ -1156,7 +1156,7 @@ function handleInitialState(data: InitialStatePayload): void {
   statusDetail.value = null;
 
   if (data.job_details) {
-    processing.message = data.job_details.message ?? 'Processing file...';
+    processing.message = data.job_details.message || 'Processing file...';
     processing.progress = data.job_details.progress ?? 0;
   }
 
@@ -1185,7 +1185,7 @@ function handleInitialState(data: InitialStatePayload): void {
 }
 
 function handleStatusUpdate(data: StatusUpdatePayload): void {
-  processing.message = data.message ?? 'Processing file...';
+  processing.message = data.message || 'Processing file...';
   processing.progress = data.progress ?? 0;
 }
 
@@ -1239,7 +1239,7 @@ function handleItemCompleted(data: ItemCompletedPayload): void {
     loading.importing = false;
     removeBeforeUnloadHandler();
     loading.redirecting = true;
-    window.alert(`Import successful: ${data.message ?? 'Import completed successfully'}`);
+    window.alert(`Import successful: ${data.message || 'Import completed successfully'}`);
     void router.replace('/import');
     return;
   }
@@ -1284,12 +1284,12 @@ function handleWebSocketError(data: WsErrorPayload): void {
     loading.redirecting = true;
     void router.replace('/import');
   } else if (data.code === 409 && data.file_duplicate?.status === 'duplicate_in_queue') {
-    window.alert(data.message ?? 'This upload is a duplicate and cannot be loaded.');
+    window.alert(data.message || 'This upload is a duplicate and cannot be loaded.');
     loading.redirecting = true;
     void router.replace('/import');
   } else {
     console.error('WebSocket error:', data.message);
-    msg.value = data.message ?? 'An error occurred';
+    msg.value = data.message || 'An error occurred';
   }
 }
 

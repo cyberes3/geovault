@@ -240,9 +240,10 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import { getStorageUsage } from "@/api/services/userApi";
-import { getAppReleases, listExtensions, type ExtensionMetadata } from "@/api/services/extensionsApi";
+import { getAppReleases, listExtensions, type ExtensionMetadata, type AppReleasesResponse } from "@/api/services/extensionsApi";
 import BaseButton from "../parts/BaseButton.vue";
 import type { UserInfo } from "@/assets/js/types/store-types";
+import type { BeforeInstallPromptEvent } from "@/assets/js/store/modules/extensionsRuntime";
 import {
   ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
@@ -251,24 +252,6 @@ import {
   SignalIcon,
   ArrowDownOnSquareIcon,
 } from "@heroicons/vue/24/outline";
-
-interface StorageUsageResponse {
-  by_type: Record<string, number>;
-  total_storage_bytes: number;
-}
-
-interface AppReleasesResponse {
-  uploader_url: string | null;
-  places_url: string | null;
-  tracker_url: string | null;
-  releases_page_url: string;
-}
-
-/** Chrome's `beforeinstallprompt` event, captured by `extensionsRuntime` and replayed on demand. */
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-}
 
 /** Narrow view of root getters this component reads by namespaced key. */
 interface RootGetters {
@@ -354,7 +337,7 @@ export default defineComponent({
       const timeoutId = setTimeout(() => { controller.abort() }, 10000) // 10 second timeout
 
       try {
-        const data = (await getStorageUsage(controller.signal)) as StorageUsageResponse
+        const data = await getStorageUsage(controller.signal)
 
         clearTimeout(timeoutId)
 
@@ -374,7 +357,7 @@ export default defineComponent({
     },
     async fetchAppReleases(): Promise<void> {
       try {
-        this.appReleases = (await getAppReleases()) as AppReleasesResponse;
+        this.appReleases = await getAppReleases();
       } catch {
         // Keep appReleases null; computed URLs fall back to releases page
       }

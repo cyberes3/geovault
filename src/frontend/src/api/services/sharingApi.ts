@@ -29,13 +29,13 @@ export interface CreateSharePayload {
 
 /** GET /api/sharing/list/ - every tag/collection share owned by the current user. */
 export async function listShares(): Promise<ShareRecord[]> {
-    const response = await httpClient.get('/api/sharing/list/');
-    return response.data.shares || [];
+    const response = await httpClient.get<{ shares?: ShareRecord[] }>('/api/sharing/list/');
+    return response.data.shares ?? [];
 }
 
 /** GET /api/sharing/features/:featureId/ - the single share for a feature, if any. */
 export async function getFeatureShare(featureId: string | number): Promise<ShareRecord> {
-    const response = await httpClient.get(`/api/sharing/features/${featureId}/`);
+    const response = await httpClient.get<ShareRecord>(`/api/sharing/features/${featureId}/`);
     return response.data;
 }
 
@@ -81,13 +81,13 @@ export async function getPublicShareCollectionFeatures(shareId: string, bboxStri
 
 /** GET /api/sharing/public/feature/:shareId/ - single shared feature (loaded once, no bbox semantics). */
 export async function getPublicShareFeature(shareId: string, signal?: AbortSignal): Promise<{ features: GeoJsonFeatureCollection['features'] }> {
-    const response = await httpClient.get(`/api/sharing/public/feature/${shareId}/`, { signal });
+    const response = await httpClient.get<{ features: GeoJsonFeatureCollection['features'] }>(`/api/sharing/public/feature/${shareId}/`, { signal });
     return response.data;
 }
 
 /** POST /api/sharing/create/ */
 export async function createShare(payload: CreateSharePayload): Promise<ShareRecord> {
-    const response = await httpClient.post('/api/sharing/create/', payload);
+    const response = await httpClient.post<ShareRecord>('/api/sharing/create/', payload);
     return response.data;
 }
 

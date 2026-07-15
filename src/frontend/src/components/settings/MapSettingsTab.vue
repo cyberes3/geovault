@@ -117,7 +117,7 @@ const tileSourcesWithAttribution = computed(() => {
         .map((source) => ({
             id: source.id,
             name: source.name || source.id,
-            attribution: processAttributionLinks(source.client_config?.attribution ?? 'No attribution available'),
+            attribution: processAttributionLinks(source.client_config?.attribution || 'No attribution available'),
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
 });

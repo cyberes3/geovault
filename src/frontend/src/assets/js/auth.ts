@@ -26,6 +26,15 @@ export class UserStatus {
     }
 }
 
+interface UserStatusResponse {
+    authorized: boolean;
+    email: string | null;
+    id: number | null;
+    featureCount: number;
+    tags?: Array<{ tag: string; count: number }>;
+    is_superuser?: boolean;
+}
+
 // Cache for in-flight getUserInfo requests to prevent duplicate concurrent calls.
 let getUserInfoPromise: Promise<UserStatus | null> | null = null;
 
@@ -36,11 +45,11 @@ export async function getUserInfo(): Promise<UserStatus | null> {
 
     getUserInfoPromise = (async () => {
         try {
-            const response = await httpClient.get('/api/user/status/');
+            const response = await httpClient.get<UserStatusResponse>('/api/user/status/');
             const userStatusData = response.data;
 
             const processedTags = Array.isArray(userStatusData.tags)
-                ? userStatusData.tags.map((tagObj: { tag: string; count: number }) => ({
+                ? userStatusData.tags.map((tagObj) => ({
                     tag: tagObj.tag,
                     count: tagObj.count,
                 }))
@@ -52,7 +61,7 @@ export async function getUserInfo(): Promise<UserStatus | null> {
                 userStatusData.id,
                 userStatusData.featureCount,
                 processedTags,
-                userStatusData.is_superuser || false,
+                userStatusData.is_superuser ?? false,
             );
         } catch (error) {
             const apiError = ApiError.from(error);

@@ -582,7 +582,7 @@ const viewContext = computed((): MapViewContext | null => {
             return { type: 'collection', name: publicShareCollectionName.value, isPublicShare: true };
         }
         if (publicShareInfo.value?.share_type === 'feature') {
-            return { type: 'feature', name: publicShareInfo.value.feature_name ?? 'Shared Feature', isPublicShare: true };
+            return { type: 'feature', name: publicShareInfo.value.feature_name || 'Shared Feature', isPublicShare: true };
         }
         return null;
     }
@@ -604,7 +604,7 @@ useDocumentTitle(() => {
     if (path !== '/map' && path !== '/mapshare') return 'Map';
     if (!isPublicShareMode.value) return 'Map';
     if (publicShareError.value) return 'Share';
-    return viewContext.value?.name ?? 'Share';
+    return viewContext.value?.name || 'Share';
 });
 
 // --- Wrapper handlers threading one composable's reload/clear callbacks into another's event handlers. ---

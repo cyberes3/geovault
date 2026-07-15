@@ -74,7 +74,7 @@ async function handlePasswordChange(): Promise<void> {
         passwordForm.newPassword,
         passwordForm.confirmPassword,
     );
-    passwordMessage.value = data.message ?? 'Password changed successfully.';
+    passwordMessage.value = data.message || 'Password changed successfully.';
     passwordForm.currentPassword = '';
     passwordForm.newPassword = '';
     passwordForm.confirmPassword = '';

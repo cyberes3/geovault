@@ -107,7 +107,7 @@ async function loadCurrentEmail(): Promise<void> {
   emailStatusLoading.value = true;
   try {
     const data = await getEmailStatus();
-    currentEmail.value = data.primary_email ?? 'Not set';
+    currentEmail.value = data.primary_email || 'Not set';
 
     if (data.emails.length > 0) {
       const primaryEmail = data.emails.find((e) => e.primary) ?? data.emails[0];
@@ -143,7 +143,7 @@ async function handleResendVerification(): Promise<void> {
 
   try {
     const data = await resendEmailVerification(currentEmail.value);
-    resendMessage.value = data.message ?? 'Verification email sent. Please check your inbox.';
+    resendMessage.value = data.message || 'Verification email sent. Please check your inbox.';
 
     if (data.cooldown_remaining) {
       resendCooldown.value = data.cooldown_remaining;

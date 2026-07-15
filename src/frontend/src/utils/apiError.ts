@@ -85,7 +85,10 @@ export class ApiError extends Error {
             return apiError;
         }
 
-        const axiosLike = error as AxiosLikeError;
+        // `error` is `unknown` at the call site, so despite the cast this could still be a
+        // primitive/null/undefined at runtime - keep the guards even though the cast type itself
+        // is never nullish.
+        const axiosLike = error as AxiosLikeError | null | undefined;
 
         if (axiosLike && typeof axiosLike === 'object' && axiosLike.response) {
             const { status, data } = axiosLike.response;

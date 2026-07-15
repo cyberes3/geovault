@@ -106,19 +106,21 @@ export function markDuplicateFeatures(items: ImportFeatureItem[], duplicates: Du
 
 /** Check if an item is a duplicate (any type). */
 export function isItemDuplicate(item: ImportFeatureItem | null | undefined): boolean {
+  // Genuine boolean OR ("is any flag true"), not a nullish fallback: `??` would stop at the
+  // first flag that's explicitly `false` instead of checking the rest.
   return !!(item && (
-    item.isFeatureStoreHashDup ||
-    item.isCrossQueueHashDup ||
-    item.isFeatureStoreGeometryDup ||
-    item.isCrossQueueGeometryDup
+    item.isFeatureStoreHashDup === true ||
+    item.isCrossQueueHashDup === true ||
+    item.isFeatureStoreGeometryDup === true ||
+    item.isCrossQueueGeometryDup === true
   ));
 }
 
 /** Check if an item is a hash duplicate (always blocked, cannot be restored). */
 export function isItemHashDuplicate(item: ImportFeatureItem | null | undefined): boolean {
   return !!(item && (
-    item.isFeatureStoreHashDup ||
-    item.isCrossQueueHashDup
+    item.isFeatureStoreHashDup === true ||
+    item.isCrossQueueHashDup === true
   ));
 }
 

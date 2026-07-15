@@ -24,10 +24,10 @@ export async function fetchConfig(): Promise<ServerConfig> {
     }
 
     configPromise = httpClient
-        .get('/api/config/')
+        .get<ServerConfig>('/api/config/')
         .then((response) => {
             cachedConfig = response.data;
-            return cachedConfig as ServerConfig;
+            return cachedConfig;
         })
         .catch((error) => {
             console.error('Error fetching config:', getApiErrorMessage(error));

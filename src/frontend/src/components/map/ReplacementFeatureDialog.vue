@@ -700,7 +700,7 @@ function startPolling(): void {
         const jobStatus = data.job_status
         if (jobStatus) {
           processingProgress.value = jobStatus.progress ?? 0
-          processingMessage.value = jobStatus.message ?? 'Processing...'
+          processingMessage.value = jobStatus.message || 'Processing...'
 
           if (jobStatus.status === 'completed') {
             importQueueId.value = jobStatus.import_queue_id ?? null
@@ -734,7 +734,7 @@ async function fetchFeatures(): Promise<void> {
       features.value = data.geofeatures
       processing.value = false
     } else {
-      errorMessage.value = data.error ?? 'Failed to load features'
+      errorMessage.value = data.error || 'Failed to load features'
       processing.value = false
     }
   } catch (error) {

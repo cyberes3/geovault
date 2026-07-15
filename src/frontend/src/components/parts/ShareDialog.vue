@@ -376,13 +376,13 @@ export default defineComponent({
     },
     displayName(): string {
       if (this.shareType === 'tag') {
-        return this.item.tag ?? 'Unknown Tag'
+        return this.item.tag || 'Unknown Tag'
       } else if (this.shareType === 'collection') {
-        return this.item.name ?? 'Unknown Collection'
+        return this.item.name || 'Unknown Collection'
       } else {
         // Feature name can be in properties.name or accessed via .get() for MapLibre features
         const props = this.item.properties ?? this.item.get?.('properties') ?? {}
-        return props.name ?? 'Unnamed Feature'
+        return props.name || 'Unnamed Feature'
       }
     },
     itemId(): string | number | null {

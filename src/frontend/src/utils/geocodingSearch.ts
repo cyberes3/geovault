@@ -40,7 +40,7 @@ export async function searchGeocoding(query: string, options: GeocodingSearchOpt
     return {
       ok: false,
       features: [],
-      error: errorPayload?.error ?? errorPayload?.message ?? 'Place search failed',
+      error: errorPayload?.error || errorPayload?.message || 'Place search failed',
     };
   }
   return {
@@ -65,5 +65,5 @@ export function getGeocodingResultCoordinates(result: unknown): { lon: number; l
 
 export function getGeocodingResultLabel(result: unknown): string {
   const r = result as { text?: string; place_name?: string } | null;
-  return r?.text ?? r?.place_name ?? 'Unknown place';
+  return r?.text || r?.place_name || 'Unknown place';
 }

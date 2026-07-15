@@ -37,7 +37,7 @@ class HiddenFeaturesManager {
             clearTimeout(this.debounceTimer);
         }
         this.debounceTimer = setTimeout(() => {
-            this.flushPendingUpdates();
+            void this.flushPendingUpdates();
         }, this.debounceDelay);
     }
 

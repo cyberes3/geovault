@@ -156,30 +156,15 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { getIconRegistry, uploadIcon } from '@/api/services/iconsApi'
+import { getIconRegistry, uploadIcon, type IconRegistryEntry } from '@/api/services/iconsApi'
 import { getApiErrorMessage } from '@/utils/apiError'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import { resolveIconUrl, handleIconError } from '@/utils/map/iconUtils'
-
-/** A single icon entry as served by `GET /api/icons/registry/`. */
-interface IconRegistryEntry {
-  url: string;
-  filename: string;
-  style: string;
-  base_name?: string;
-}
 
 interface IconRegistry {
   points: IconRegistryEntry[];
   letters: IconRegistryEntry[];
   recreation: IconRegistryEntry[];
-}
-
-/** Response shape of `GET /api/icons/registry/`. */
-interface IconRegistryResponse {
-  points?: IconRegistryEntry[];
-  letters?: IconRegistryEntry[];
-  recreation?: IconRegistryEntry[];
 }
 
 export default defineComponent({
@@ -236,7 +221,7 @@ export default defineComponent({
     async loadIconRegistry(): Promise<void> {
       this.isLoading = true
       try {
-        const data = (await getIconRegistry()) as IconRegistryResponse
+        const data = await getIconRegistry()
         // Ensure all required properties exist
         this.iconRegistry = {
           points: data.points ?? [],
@@ -306,7 +291,7 @@ export default defineComponent({
       if (this.customIconFile) {
         // Upload custom icon
         try {
-          const data = (await uploadIcon(this.customIconFile)) as { icon_url: string }
+          const data = await uploadIcon(this.customIconFile)
           this.$emit('icon-selected', data.icon_url)
           this.closeDialog()
         } catch (error) {

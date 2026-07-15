@@ -1,6 +1,7 @@
 import type { Module } from 'vuex';
 import type { ImportTableItem } from '../../types/import-types';
 import { realtimeSocket } from '../../websocket/realtimeSocket';
+import type { RootState } from '../rootState';
 
 export interface ImportHistoryItem {
     id: number;
@@ -65,7 +66,7 @@ function removeIds(ids: number[], toRemove: number[]): number[] {
 }
 
 /** Live import queue + import history, kept up to date by REST fetches and the import WebSocket modules. */
-export const importQueueModule: Module<ImportQueueState, any> = {
+export const importQueueModule: Module<ImportQueueState, RootState> = {
     namespaced: true,
     state: (): ImportQueueState => ({
         importTable: [],
@@ -286,7 +287,7 @@ export const importQueueModule: Module<ImportQueueState, any> = {
             commit('REMOVE_BULK_IMPORTING_ITEMS', data.item_ids ?? []);
             commit('SET_LAST_BULK_IMPORT_OUTCOME', {
                 type: 'error',
-                message: data.error_message ?? 'An error occurred while importing items. Some items may not have been imported.',
+                message: data.error_message || 'An error occurred while importing items. Some items may not have been imported.',
             });
         },
         clearLastBulkImportOutcome({ commit }) {
@@ -322,7 +323,7 @@ export const importQueueModule: Module<ImportQueueState, any> = {
             commit('REMOVE_BULK_DELETING_ITEMS', data.item_ids ?? []);
             commit('SET_LAST_BULK_DELETE_OUTCOME', {
                 type: 'error',
-                message: data.error_message ?? 'An error occurred while deleting items. Some items may not have been deleted.',
+                message: data.error_message || 'An error occurred while deleting items. Some items may not have been deleted.',
             });
         },
         clearLastBulkDeleteOutcome({ commit }) {

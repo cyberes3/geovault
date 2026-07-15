@@ -1,6 +1,7 @@
 import type { Module } from 'vuex';
 import { getUserInfo } from '../../auth';
 import { UserInfo } from '../../types/store-types';
+import type { RootState } from '../rootState';
 
 export interface AuthState {
     userInfo: UserInfo | null;
@@ -10,7 +11,7 @@ export interface AuthState {
  * Session/identity state. The only module allowed to know about `getUserInfo()`;
  * everything else reads `auth/userInfo` via a getter.
  */
-export const authModule: Module<AuthState, any> = {
+export const authModule: Module<AuthState, RootState> = {
     namespaced: true,
     state: (): AuthState => ({
         userInfo: null,
@@ -27,7 +28,7 @@ export const authModule: Module<AuthState, any> = {
         async fetchUserInfo({ commit, dispatch }) {
             try {
                 const userStatus = await getUserInfo();
-                if (userStatus && userStatus.authorized) {
+                if (userStatus?.authorized) {
                     const userInfo = new UserInfo(
                         userStatus.email,
                         userStatus.id,

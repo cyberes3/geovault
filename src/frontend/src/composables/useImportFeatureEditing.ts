@@ -182,7 +182,7 @@ export function useImportFeatureEditing(options: UseImportFeatureEditingOptions)
     const originalColor = originalItem?.properties['marker-color'];
     if (!originalIconUrl || isSystemIcon(originalIconUrl)) {
       // Default marker or system icon: reset color to original or default.
-      item.properties['marker-color'] = originalColor ?? '#ff0000';
+      item.properties['marker-color'] = originalColor || '#ff0000';
     } else {
       // External/user icon: not recolorable, shown in black.
       item.properties['marker-color'] = '#000000';
@@ -191,7 +191,7 @@ export function useImportFeatureEditing(options: UseImportFeatureEditingOptions)
 
   function handleIconColorReset(index: number, item: ImportFeatureItem): void {
     const originalItem = arrayAt(originalItems.value, index);
-    item.properties['marker-color'] = originalItem?.properties['marker-color'] ?? '#ff0000';
+    item.properties['marker-color'] = originalItem?.properties['marker-color'] || '#ff0000';
   }
 
   function handleStrokeColorChangeForItem(item: ImportFeatureItem): void {

@@ -171,14 +171,14 @@ export function updateSmallFeatureFlags(map: MapLibreMap, zoom: number | null): 
             if (widthPixels < MIN_PIXEL_SIZE || heightPixels < MIN_PIXEL_SIZE) {
                 isSmallFeature = true;
                 replacementCenter = calculatePolygonCentroid(geometry);
-                replacementColor = feature.properties.stroke ?? '#ff0000';
+                replacementColor = feature.properties.stroke || '#ff0000';
             }
         } else {
             const lengthPixels = calculateLineScreenSize(geometry, zoom);
             if (lengthPixels < MIN_PIXEL_SIZE) {
                 isSmallFeature = true;
                 replacementCenter = calculateLineCenter(geometry);
-                replacementColor = feature.properties.stroke ?? '#ff0000';
+                replacementColor = feature.properties.stroke || '#ff0000';
             }
         }
 
@@ -349,14 +349,14 @@ async function processFeaturesForIcons(
             if (widthPixels < MIN_PIXEL_SIZE || heightPixels < MIN_PIXEL_SIZE) {
                 isSmallFeature = true;
                 replacementCenter = calculatePolygonCentroid(geometry);
-                replacementColor = feature.properties.stroke ?? '#ff0000';
+                replacementColor = feature.properties.stroke || '#ff0000';
             }
         } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
             const lengthPixels = calculateLineScreenSize(geometry, zoom);
             if (lengthPixels < MIN_PIXEL_SIZE) {
                 isSmallFeature = true;
                 replacementCenter = calculateLineCenter(geometry);
-                replacementColor = feature.properties.stroke ?? '#ff0000';
+                replacementColor = feature.properties.stroke || '#ff0000';
             }
         }
 
@@ -431,7 +431,7 @@ async function processFeaturesForIcons(
                             return feature;
                         })
                         .catch(() => {
-                            feature.properties['_detectedIconColor'] = feature.properties['marker-color'] ?? '#ff0000';
+                            feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000';
                             feature.properties['_colorDetectionInProgress'] = false;
                             return feature;
                         });
@@ -450,7 +450,7 @@ async function processFeaturesForIcons(
                         setTimeout(() => {
                             clearInterval(checkInterval);
                             if (!feature.properties['_detectedIconColor']) {
-                                feature.properties['_detectedIconColor'] = feature.properties['marker-color'] ?? '#ff0000';
+                                feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000';
                                 feature.properties['_colorDetectionInProgress'] = false;
                             }
                             resolve(feature);

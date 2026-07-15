@@ -195,8 +195,8 @@ async function performGeocodingSearch(query: string) {
     if (response.ok && data.data?.features) {
       geocodingResults.value = data.data.features;
     } else {
-      console.error('Forward reverse_geocoding search failed:', data.error ?? 'Unknown error');
-      toast.error(data.error ?? 'Place search failed');
+      console.error('Forward reverse_geocoding search failed:', data.error || 'Unknown error');
+      toast.error(data.error || 'Place search failed');
       if (currentSearchQuery === query) {
         geocodingResults.value = [];
       }
@@ -227,7 +227,7 @@ function clearGeocodingSearch() {
 }
 
 function getGeocodingResultName(result: GeocodingResult): string {
-  return result.text ?? result.place_name ?? 'Unknown place';
+  return result.text || result.place_name || 'Unknown place';
 }
 
 function getGeocodingResultDescription(result: GeocodingResult): string | null {

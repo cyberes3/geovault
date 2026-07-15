@@ -336,7 +336,7 @@ export function useTagsData() {
             return;
         }
 
-        const featureName = String(feature.properties.name ?? 'Unnamed Feature');
+        const featureName = String(feature.properties.name || 'Unnamed Feature');
         if (!confirm(buildRemoveTagMessage(tag, featureName))) {
             return;
         }

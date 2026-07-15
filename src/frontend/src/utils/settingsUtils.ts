@@ -22,7 +22,7 @@ export function keyToPath(key: string): string[] {
  * Useful for partial updates (e.g., "map.zoom" -> { map: { zoom: 10 } })
  * Rejects keys that could cause prototype pollution (e.g. __proto__, constructor, prototype).
  */
-export function keyValueToNested(key: string, value: unknown): Record<string, unknown> | unknown {
+export function keyValueToNested(key: string, value: unknown): unknown {
     const path = keyToPath(key);
     if (path.length === 0) return value;
 
@@ -32,12 +32,13 @@ export function keyValueToNested(key: string, value: unknown): Record<string, un
         }
     }
 
-    const result: Record<string, any> = {};
+    const result: Record<string, unknown> = {};
     let current = result;
 
     for (let i = 0; i < path.length - 1; i++) {
-        current[path[i]] = {};
-        current = current[path[i]];
+        const next: Record<string, unknown> = {};
+        current[path[i]] = next;
+        current = next;
     }
 
     current[path[path.length - 1]] = value;
@@ -50,7 +51,7 @@ export function keyValueToNested(key: string, value: unknown): Record<string, un
  */
 export function getNestedValue(obj: unknown, key: string): unknown {
     const path = keyToPath(key);
-    let current: any = obj;
+    let current: unknown = obj;
 
     for (const segment of path) {
         if (current === null || current === undefined) {
@@ -59,7 +60,7 @@ export function getNestedValue(obj: unknown, key: string): unknown {
         if (!Object.prototype.hasOwnProperty.call(current, segment)) {
             return undefined;
         }
-        current = current[segment];
+        current = (current as Record<string, unknown>)[segment];
     }
 
     return current;

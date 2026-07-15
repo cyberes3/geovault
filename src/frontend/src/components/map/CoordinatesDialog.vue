@@ -313,7 +313,7 @@ export default defineComponent({
     },
     handleSave() {
       if (!this.isValid) {
-        this.errorMessage = this.validationError ?? 'Invalid coordinates'
+        this.errorMessage = this.validationError || 'Invalid coordinates'
         return
       }
 
@@ -328,7 +328,7 @@ export default defineComponent({
         if (this.geometryType) {
           const validation = validateCoordinates(parsed, this.geometryType)
           if (!validation.valid) {
-            this.errorMessage = validation.error ?? 'Invalid coordinates'
+            this.errorMessage = validation.error || 'Invalid coordinates'
             return
           }
         }

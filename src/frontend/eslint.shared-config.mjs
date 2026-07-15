@@ -46,7 +46,12 @@ const sharedRules = {
   '@typescript-eslint/no-misused-promises': 'error',
   '@typescript-eslint/no-unnecessary-condition': 'error',
   '@typescript-eslint/no-unnecessary-type-assertion': 'error',
-  '@typescript-eslint/prefer-nullish-coalescing': 'error',
+  // `ignorePrimitives.string` because for `string | null | undefined` values (API responses,
+  // free-text fields), `||` is usually what's actually wanted: treat an empty string the same
+  // as missing, e.g. `track.color || DEFAULT_COLOR` should ALSO fall back for `color: ''`, not
+  // just `null`/`undefined`. Bare `??` is still preferred for non-string types (0 and false are
+  // often meaningfully different from "unset").
+  '@typescript-eslint/prefer-nullish-coalescing': ['error', { ignorePrimitives: { string: true } }],
   '@typescript-eslint/prefer-optional-chain': 'error',
   '@typescript-eslint/no-non-null-assertion': 'error',
   '@typescript-eslint/no-unsafe-assignment': 'error',

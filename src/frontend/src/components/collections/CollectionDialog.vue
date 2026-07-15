@@ -251,7 +251,7 @@ export default defineComponent({
       return String((feature as GeoJsonFeature).properties.database_id);
     },
     getFeatureLabel(feature: unknown): string {
-      return ((feature as GeoJsonFeature).properties.name as string | undefined) ?? 'Unnamed Feature';
+      return ((feature as GeoJsonFeature).properties.name as string | undefined) || 'Unnamed Feature';
     },
     onTagCheckboxChange(tag: string, checked: boolean) {
       const index = this.formData.tags.indexOf(tag);

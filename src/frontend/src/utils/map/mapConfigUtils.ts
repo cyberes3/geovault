@@ -106,6 +106,8 @@ export function getLocationDisplayName(userLocation: UserLocation | null | undef
     if (userLocation.state) parts.push(userLocation.state);
     if (userLocation.country) parts.push(userLocation.country);
 
-    return parts.length > 0 ? parts.join(', ') : userLocation.country ?? 'Unknown Location';
+    // If we get here with no parts, city/state/country were all falsy (including possibly an
+    // empty string), so there's nothing usable to fall back to but the placeholder.
+    return parts.length > 0 ? parts.join(', ') : 'Unknown Location';
 }
 

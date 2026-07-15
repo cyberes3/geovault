@@ -1,4 +1,5 @@
 import type { Module } from 'vuex';
+import type { RootState } from '../rootState';
 
 export interface WebSocketState {
     connected: boolean;
@@ -6,7 +7,7 @@ export interface WebSocketState {
 }
 
 /** Connection status for the app-lifetime realtime socket (see `assets/js/websocket`). */
-export const websocketModule: Module<WebSocketState, any> = {
+export const websocketModule: Module<WebSocketState, RootState> = {
     namespaced: true,
     state: (): WebSocketState => ({
         connected: false,

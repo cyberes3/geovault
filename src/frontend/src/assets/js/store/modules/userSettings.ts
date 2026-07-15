@@ -1,5 +1,6 @@
 import type { Module } from 'vuex';
 import { getUserSettings } from '@/api/services/userApi';
+import type { RootState } from '../rootState';
 
 export interface HiddenFeature {
     id: string;
@@ -36,7 +37,7 @@ function normalizeHiddenFeatures(payload: unknown): HiddenFeature[] {
  * User settings + the locally-cached hidden-feature list. Depends on `auth/userInfo`
  * being present before fetching (settings are per-account).
  */
-export const userSettingsModule: Module<UserSettingsState, any> = {
+export const userSettingsModule: Module<UserSettingsState, RootState> = {
     namespaced: true,
     state: (): UserSettingsState => ({
         userSettings: null,
@@ -70,16 +71,17 @@ export const userSettingsModule: Module<UserSettingsState, any> = {
     },
     actions: {
         async fetchUserSettings({ commit, rootGetters }) {
-            if (!rootGetters['auth/userInfo']) {
+            const getters = rootGetters as Record<string, unknown>;
+            if (!getters['auth/userInfo']) {
                 commit('SET_USER_SETTINGS', null);
                 return null;
             }
 
             try {
                 const data = await getUserSettings();
-                commit('SET_USER_SETTINGS', data.settings || {});
-                commit('SET_HIDDEN_FEATURES', data.hidden_features || []);
-                return data.settings || {};
+                commit('SET_USER_SETTINGS', data.settings ?? {});
+                commit('SET_HIDDEN_FEATURES', data.hidden_features ?? []);
+                return data.settings ?? {};
             } catch (error) {
                 console.error('Error fetching user settings:', error);
                 commit('SET_USER_SETTINGS', {});

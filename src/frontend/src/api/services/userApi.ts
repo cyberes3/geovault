@@ -47,7 +47,7 @@ export async function bulkUpdateHiddenFeatures(add: string[], remove: string[]):
 
 /** GET /api/user/email/status/ */
 export async function getEmailStatus(): Promise<EmailStatusResponse> {
-    const response = await httpClient.get('/api/user/email/status/');
+    const response = await httpClient.get<EmailStatusResponse>('/api/user/email/status/');
     return response.data;
 }
 
@@ -69,13 +69,13 @@ export async function resendEmailVerification(email: string) {
 
 /** GET /api/user/api-keys/ */
 export async function listApiKeys(): Promise<ApiKey[]> {
-    const response = await httpClient.get('/api/user/api-keys/');
-    return response.data.api_keys || [];
+    const response = await httpClient.get<{ api_keys?: ApiKey[] }>('/api/user/api-keys/');
+    return response.data.api_keys ?? [];
 }
 
 /** POST /api/user/api-keys/create/ */
 export async function createApiKey(name: string): Promise<{ raw_key: string }> {
-    const response = await httpClient.post('/api/user/api-keys/create/', { name });
+    const response = await httpClient.post<{ raw_key: string }>('/api/user/api-keys/create/', { name });
     return response.data;
 }
 
@@ -86,8 +86,8 @@ export async function deleteApiKey(keyId: number): Promise<void> {
 
 /** GET /api/user/oauth-authorized-tokens/ */
 export async function listOAuthTokens(): Promise<OAuthAuthorizedToken[]> {
-    const response = await httpClient.get('/api/user/oauth-authorized-tokens/');
-    return response.data.authorized_tokens || [];
+    const response = await httpClient.get<{ authorized_tokens?: OAuthAuthorizedToken[] }>('/api/user/oauth-authorized-tokens/');
+    return response.data.authorized_tokens ?? [];
 }
 
 /** DELETE /api/user/oauth-authorized-tokens/:id/ */
@@ -95,9 +95,14 @@ export async function revokeOAuthToken(tokenId: number): Promise<void> {
     await httpClient.delete(`/api/user/oauth-authorized-tokens/${tokenId}/`);
 }
 
+export interface StorageUsageResponse {
+    by_type: Record<string, number>;
+    total_storage_bytes: number;
+}
+
 /** GET /api/user/storage/usage/ - supports an AbortSignal for the dashboard's fetch timeout. */
-export async function getStorageUsage(signal?: AbortSignal) {
-    const response = await httpClient.get('/api/user/storage/usage/', { signal });
+export async function getStorageUsage(signal?: AbortSignal): Promise<StorageUsageResponse> {
+    const response = await httpClient.get<StorageUsageResponse>('/api/user/storage/usage/', { signal });
     return response.data;
 }
 

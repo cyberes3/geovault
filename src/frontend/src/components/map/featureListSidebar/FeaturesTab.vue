@@ -259,15 +259,15 @@ async function performSearch(query: string) {
       const features = data.data.features;
 
       features.sort((a, b) => {
-        const nameA = ((a.properties.name as string | undefined) ?? 'Unnamed Feature').toLowerCase();
-        const nameB = ((b.properties.name as string | undefined) ?? 'Unnamed Feature').toLowerCase();
+        const nameA = ((a.properties.name as string | undefined) || 'Unnamed Feature').toLowerCase();
+        const nameB = ((b.properties.name as string | undefined) || 'Unnamed Feature').toLowerCase();
         return nameA.localeCompare(nameB);
       });
 
       searchResults.value = features;
     } else {
-      console.error('Search failed:', data.error ?? 'Unknown error');
-      toast.error(data.error ?? 'Search failed');
+      console.error('Search failed:', data.error || 'Unknown error');
+      toast.error(data.error || 'Search failed');
       searchResults.value = [];
     }
   } catch (error) {

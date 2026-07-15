@@ -1,17 +1,12 @@
 import { createStore } from 'vuex';
-import { authModule, type AuthState } from './modules/auth';
-import { userSettingsModule, type UserSettingsState } from './modules/userSettings';
-import { importQueueModule, type ImportQueueState } from './modules/importQueue';
-import { websocketModule, type WebSocketState } from './modules/websocket';
-import { extensionsRuntimeModule, type ExtensionsRuntimeState } from './modules/extensionsRuntime';
+import { authModule } from './modules/auth';
+import { userSettingsModule } from './modules/userSettings';
+import { importQueueModule } from './modules/importQueue';
+import { websocketModule } from './modules/websocket';
+import { extensionsRuntimeModule } from './modules/extensionsRuntime';
+import type { RootState } from './rootState';
 
-export interface RootState {
-    auth: AuthState;
-    userSettings: UserSettingsState;
-    importQueue: ImportQueueState;
-    websocket: WebSocketState;
-    extensionsRuntime: ExtensionsRuntimeState;
-}
+export type { RootState };
 
 /**
  * Root store: a thin composition of domain modules. Components must only interact with

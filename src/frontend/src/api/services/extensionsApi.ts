@@ -48,8 +48,15 @@ export function clearExtensionsCache(): void {
     extensionsPromise = null;
 }
 
+export interface AppReleasesResponse {
+    uploader_url: string | null;
+    places_url: string | null;
+    tracker_url: string | null;
+    releases_page_url: string;
+}
+
 /** GET /api/apps/releases/ - release/download info for the companion mobile apps. */
-export async function getAppReleases() {
-    const response = await httpClient.get('/api/apps/releases/');
+export async function getAppReleases(): Promise<AppReleasesResponse> {
+    const response = await httpClient.get<AppReleasesResponse>('/api/apps/releases/');
     return response.data;
 }

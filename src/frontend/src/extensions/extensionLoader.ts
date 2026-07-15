@@ -205,7 +205,7 @@ export async function loadExtensions(deps: LoadExtensionsDeps): Promise<void> {
                     toast,
                     metadata: {
                         name: ext.name,
-                        version: ext.version ?? 'unknown',
+                        version: ext.version || 'unknown',
                         kebabName,
                         icon: resolvedIcon ? markRaw(resolvedIcon) : null
                     }
