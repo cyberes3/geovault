@@ -112,7 +112,7 @@ export function usePlaceForm(): UsePlaceFormReturn {
           return false;
         }
       }
-      coordinateError.value = validation.error ?? 'Invalid coordinates';
+      coordinateError.value = validation.error || 'Invalid coordinates';
       return false;
     }
     return true;
@@ -149,7 +149,7 @@ export function usePlaceForm(): UsePlaceFormReturn {
       try {
         const result = await geocodeAddress(input);
         if (!result.ok) {
-          coordinateError.value = result.error ?? 'Address not found';
+          coordinateError.value = result.error || 'Address not found';
           return { valid: false, changed: true };
         }
         setCoords(result.lat ?? null, result.lon ?? null, result.label);

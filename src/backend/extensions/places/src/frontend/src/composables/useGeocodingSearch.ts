@@ -121,7 +121,7 @@ export function useGeocodingSearch(): UseGeocodingSearchReturn {
     try {
       const result = await searchGeocoding(trimmed, { signal: abortController.value.signal });
       if (!result.ok) {
-        return { ok: false, error: result.error ?? 'Geocoding failed' };
+        return { ok: false, error: result.error || 'Geocoding failed' };
       }
       if (result.features.length === 0) {
         return { ok: false, error: 'Address not found' };
