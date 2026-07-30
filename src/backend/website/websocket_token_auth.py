@@ -9,7 +9,7 @@ so that AuthMiddlewareStack can still attach a session user.
 """
 import logging
 
-from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 
 from website.middleware.auth import _resolve_oauth2_access_token
@@ -62,7 +62,7 @@ class WebSocketTokenAuthMiddleware:
             if user is None or isinstance(user, AnonymousUser):
                 token = get_bearer_token_from_scope(scope)
                 if token:
-                    resolved = await sync_to_async(_resolve_token_to_user_sync)(token)
+                    resolved = await database_sync_to_async(_resolve_token_to_user_sync)(token)
                     if resolved is not None:
                         scope = dict(scope)
                         scope["user"] = resolved

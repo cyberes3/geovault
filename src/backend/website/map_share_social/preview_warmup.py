@@ -11,6 +11,7 @@ from django.core.cache import cache
 from django.test import RequestFactory
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.utils.db_connection import ensure_db_connection_cleanup
 from website.map_share_social.views import map_share_social_preview_image
 
 _logger = get_tagged_logger("sharing")
@@ -36,6 +37,7 @@ def trigger_social_preview_warmup_async(share_id: str) -> None:
         _logger.debug("Skipping social preview warmup for share_id=%s: already in flight", share_id)
         return
 
+    @ensure_db_connection_cleanup
     def _warmup():
         try:
             request = RequestFactory().get(f"/share/map/{share_id}/preview.png")

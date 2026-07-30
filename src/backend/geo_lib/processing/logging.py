@@ -8,7 +8,8 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import List, Optional
 
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from django.utils import timezone
 from pydantic import BaseModel, Field
@@ -134,7 +135,7 @@ class RealTimeImportLog:
 
     async def add_async(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Async version of add() for use in async contexts."""
-        await sync_to_async(self.add)(msg, source, level, duration)
+        await database_sync_to_async(self.add)(msg, source, level, duration)
 
     def extend(self, msgs: 'ImportLog'):
         """Extend with messages from another ImportLog and write them to DB efficiently."""
@@ -179,7 +180,7 @@ class RealTimeImportLog:
 
     async def extend_async(self, msgs: 'ImportLog'):
         """Async version of extend() for use in async contexts."""
-        await sync_to_async(self.extend)(msgs)
+        await database_sync_to_async(self.extend)(msgs)
 
     def get(self) -> List[DatabaseLogMsg]:
         """Get all messages (for compatibility with ImportLog)."""

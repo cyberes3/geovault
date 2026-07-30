@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.utils.db_connection import ensure_db_connection_cleanup
 from website.auth_decorators import api_or_login_required_401
 from website.settings_utils import get_required_setting, get_setting
 from website.startup_checks.celery import check_celery_beat, check_celery_worker
@@ -248,10 +249,11 @@ def check_google_geocoding_api() -> bool:
         return False
 
 
+@ensure_db_connection_cleanup
 def _run_check_safely(name, check_func):
     """
     Safely run a health check function and return the result.
-    
+
     Args:
         name: Name of the check component
         check_func: Function to run for the check

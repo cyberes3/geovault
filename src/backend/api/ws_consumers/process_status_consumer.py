@@ -4,7 +4,7 @@ Process status WebSocket consumer for specific import item updates.
 
 import json
 
-from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 from django.http import Http404
 
 from api.models import ImportQueue
@@ -40,8 +40,7 @@ class ProcessStatusConsumer(AuthenticatedJsonConsumer):
         self.item_id = self.scope['url_route']['kwargs']['item_id']
 
         try:
-            # Use sync_to_async to make the database query async-safe
-            get_item = sync_to_async(get_object_or_404_for_user)
+            get_item = database_sync_to_async(get_object_or_404_for_user)
             item = await get_item(ImportQueue, self.user, id=self.item_id)
         except Http404:
             # Accept connection briefly to send error message, then close

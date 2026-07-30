@@ -17,6 +17,7 @@ from geo_lib.processing.duplicate_detection.models import SkippedDuplicates, Ski
 from geo_lib.processing.import_operations.feature_processing import process_single_feature_for_import
 from geo_lib.processing.import_operations.styling import apply_bulk_operations
 from geo_lib.processing.import_operations.websocket import broadcast_item_imported
+from geo_lib.utils.db_connection import ensure_db_connection_cleanup
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
@@ -100,16 +101,16 @@ def process_features_for_import(
 
     duplicate_check_lock = threading.Lock()
 
+    @ensure_db_connection_cleanup
     def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
         """Wrapper to unpack index and feature for executor.map()"""
         feature_index, feature = args
-        result = process_single_feature_for_import(
+        return process_single_feature_for_import(
             feature, feature_index, import_item, user_id, import_custom_icons,
             existing_hashes, current_batch_hashes, duplicate_check_lock,
             queue_hash_to_item, skipped_hash_duplicates,
             skipped_feature_ids, geometry_duplicate_hashes, skipped_geometry_duplicates
         )
-        return result
 
     # Apply bulk operations
     bulk_ops = import_item.bulk_operations or {}

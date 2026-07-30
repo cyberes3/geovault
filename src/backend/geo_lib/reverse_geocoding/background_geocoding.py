@@ -16,6 +16,7 @@ from geo_lib.processing.tagging.modules.reverse_geocoding import ReverseGeocodin
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
+from geo_lib.utils.db_connection import ensure_db_connection_cleanup
 
 _logger = get_tagged_logger('BackgroundReverseGeocoding')
 
@@ -60,6 +61,7 @@ def reverse_geocode_feature_async(feature_id: int):
         feature_id: The ID of the FeatureStore record to reverse geocode
     """
 
+    @ensure_db_connection_cleanup
     def _reverse_geocode_worker():
         try:
             # Use a database transaction to ensure atomicity

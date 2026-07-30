@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional
 
-from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 
 from api.models import DatabaseLogging, FeatureStore, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
@@ -58,7 +58,7 @@ class ProcessStatusModule(BaseWebSocketModule):
     async def send_initial_state(self) -> None:
         """Send initial state with item status, features, and logs."""
         # Refresh the import item from database to get latest data
-        get_item = sync_to_async(ImportQueue.objects.get)
+        get_item = database_sync_to_async(ImportQueue.objects.get)
         self.import_item = await get_item(id=self.import_item.id)
 
         # Check for file-level duplicates using raw file content hash
@@ -71,7 +71,7 @@ class ProcessStatusModule(BaseWebSocketModule):
 
         if self.import_item.file_hash:
             # Check for earlier files with same raw file hash still in queue (not imported)
-            duplicate_in_queue_query = sync_to_async(ImportQueue.objects.filter(
+            duplicate_in_queue_query = database_sync_to_async(ImportQueue.objects.filter(
                 user_id=self.user.id,
                 file_hash=self.import_item.file_hash,
                 imported=False,
@@ -84,7 +84,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                 file_duplicate['original_filename'] = duplicate_in_queue.original_filename
             else:
                 # Check for already-imported files with same raw file hash
-                duplicate_imported_query = sync_to_async(ImportQueue.objects.filter(
+                duplicate_imported_query = database_sync_to_async(ImportQueue.objects.filter(
                     user_id=self.user.id,
                     file_hash=self.import_item.file_hash,
                     imported=True
@@ -200,7 +200,7 @@ class ProcessStatusModule(BaseWebSocketModule):
         """Handle duplicates updated event - refresh page data to show updated duplicate markers."""
         # Refresh the import item from database to get the latest duplicate_features
 
-        get_item = sync_to_async(ImportQueue.objects.get)
+        get_item = database_sync_to_async(ImportQueue.objects.get)
         self.import_item = await get_item(id=self.import_item.id)
 
         # Send updated page data with new duplicates (current page, default page 1)
@@ -210,7 +210,7 @@ class ProcessStatusModule(BaseWebSocketModule):
     async def _get_other_queue_items(self):
         """Get other unimported ImportQueue items for the same user that are older (by timestamp)."""
 
-        @sync_to_async
+        @database_sync_to_async
         def get_items():
             return list(ImportQueue.objects.filter(
                 user_id=self.import_item.user_id,
@@ -223,7 +223,7 @@ class ProcessStatusModule(BaseWebSocketModule):
     async def _get_existing_hashes_and_ids(self):
         """Get the set of existing FeatureStore geojson_hash values for this user, and a hash -> id mapping for linking."""
 
-        @sync_to_async
+        @database_sync_to_async
         def get_existing_hashes_and_ids():
             hash_to_id = {}
             hashes = set()
@@ -325,7 +325,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                 query = query.filter(id__gt=after_id)
             return list(query.order_by('id'))
 
-        get_logs_async = sync_to_async(get_logs)
+        get_logs_async = database_sync_to_async(get_logs)
         db_logs = await get_logs_async()
 
         return [{

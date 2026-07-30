@@ -13,6 +13,7 @@ from channels.layers import get_channel_layer
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.messages import JOB_FAILED_GENERIC
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
+from geo_lib.utils.db_connection import ensure_db_connection_cleanup
 
 _logger = get_tagged_logger('BaseJob')
 
@@ -65,6 +66,7 @@ class BaseJob(ABC):
         self._active_threads[job_id] = thread
         return True
 
+    @ensure_db_connection_cleanup
     def _job_worker(self, job_id: str, kwargs: Dict[str, Any]):
         """
         Worker function that runs in a background thread to process the job.
