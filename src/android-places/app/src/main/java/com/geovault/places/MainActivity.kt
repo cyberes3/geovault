@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
                     GeoVaultBottomNavScaffold(
                         destinations = bottomDestinations,
                         selectedDestinationId = selectedTab,
-                        suppressBottomTabs = isSettingsOpen,
+                        overlayNavBarChrome = isSettingsOpen,
                         onDestinationSelected = {
                             selectedTab = it.id
                             if (it.id == PlacesTab.MAP.name) {

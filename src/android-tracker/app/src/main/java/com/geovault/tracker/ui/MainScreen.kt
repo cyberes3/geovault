@@ -300,7 +300,7 @@ fun MainScreen(
             GeoVaultBottomNavScaffold(
                 destinations = bottomDestinations,
                 selectedDestinationId = selectedTab,
-                suppressBottomTabs = isSettingsOpen,
+                overlayNavBarChrome = isSettingsOpen,
                 onDestinationSelected = { destination ->
                     if (destination.id != selectedTab) {
                         if (!isHandlingTabBack && selectedTab.isNotBlank()) {

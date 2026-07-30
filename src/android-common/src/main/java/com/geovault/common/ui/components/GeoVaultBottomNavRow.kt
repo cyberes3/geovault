@@ -117,10 +117,15 @@ fun GeoVaultBottomNavScaffold(
     onDestinationSelected: (GeoVaultBottomNavDestination) -> Unit,
     modifier: Modifier = Modifier,
     /**
-     * When `true`, hides the in-app tab row and applies standard theme navigation-bar chrome
-     * (e.g. shell filter/settings overlays composed outside [GeoVaultRequestBottomTabsHidden]).
+     * When `true`, switches system navigation-bar chrome to the standard overlay style
+     * (e.g. shell filter/settings composed *outside* this scaffold and covering the tab row).
+     *
+     * Does **not** remove the tab row from layout. Removing it would remeasure any persistent
+     * MapLibre `TextureView` hosted in [content] and briefly stretch the last frame ("squish")
+     * when the overlay dismisses. In-content screens that truly need the vertical space should
+     * use [GeoVaultRequestBottomTabsHidden] instead.
      */
-    suppressBottomTabs: Boolean = false,
+    overlayNavBarChrome: Boolean = false,
     content: @Composable (activeDestination: GeoVaultBottomNavDestination) -> Unit,
 ) {
     require(destinations.isNotEmpty()) { "GeoVaultBottomNavScaffold requires at least one destination." }
@@ -151,7 +156,10 @@ fun GeoVaultBottomNavScaffold(
             },
         )
     }
-    val areTabsHidden = hiddenRequests > 0 || suppressBottomTabs
+    // Layout hide only from in-content requests. [overlayNavBarChrome] is chrome-only so
+    // shell overlays do not resize a persistent map under them.
+    val areTabsHidden = hiddenRequests > 0
+    val useOverlayNavBarChrome = areTabsHidden || overlayNavBarChrome
     val areTabsDisabled = disableRequests > 0
     val isLightTheme = MaterialTheme.colors.isLight
     val standardNavBarArgb = geoVaultNavigationBarBackgroundColor().toArgb()
@@ -199,7 +207,7 @@ fun GeoVaultBottomNavScaffold(
     val activity = LocalContext.current as? ComponentActivity
     SideEffect {
         if (activity == null) return@SideEffect
-        if (areTabsHidden) {
+        if (useOverlayNavBarChrome) {
             // Full-screen overlays (import, filter editor, sign-in, etc.): use the standard
             // nav-bar chrome (slightly darker than app background) instead of blended blue.
             GeoVaultSystemBars.setNavigationBarBackground(

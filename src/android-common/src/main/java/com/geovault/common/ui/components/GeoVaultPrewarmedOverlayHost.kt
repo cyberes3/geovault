@@ -27,6 +27,9 @@ object GeoVaultPrewarmedOverlayDefaults {
  * Settings, filters, and similar shell-level surfaces are often expensive enough that composing
  * them for the first time on tap can hitch. This host centralizes the "compose hidden, then reveal"
  * pattern so app shells only provide their overlay content and visible state.
+ *
+ * [content] stays in a single composition slot across hide/show so ViewModels and UI state are
+ * not torn down and recreated (which would flash toggles / reload drafts on every reopen).
  */
 @Composable
 fun GeoVaultPrewarmedOverlayHost(
@@ -46,36 +49,37 @@ fun GeoVaultPrewarmedOverlayHost(
         prewarmed = true
     }
 
-    if (visible) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .zIndex(visibleZIndex),
-        ) {
-            content()
-        }
-    } else if (prewarmed) {
-        // Hidden prewarm content may be composed, but must never be interactable: descendants can
-        // open platform Dialog windows outside this invisible parent.
-        Box(
-            modifier = modifier
-                .alpha(0f)
-                .zIndex(hiddenZIndex)
-                .clearAndSetSemantics { },
-        ) {
-            HiddenPrewarmLayout(content = content)
-        }
-    }
-}
+    if (!visible && !prewarmed) return
 
-@Composable
-private fun HiddenPrewarmLayout(content: @Composable () -> Unit) {
-    Layout(
-        content = content,
-    ) { measurables, constraints ->
-        val placeables = measurables.map { it.measure(constraints) }
-        layout(0, 0) {
-            placeables.forEach { it.place(0, 0) }
+    Box(
+        modifier = modifier
+            .then(if (visible) Modifier.fillMaxSize() else Modifier)
+            .zIndex(if (visible) visibleZIndex else hiddenZIndex)
+            .then(
+                if (visible) {
+                    Modifier
+                } else {
+                    Modifier
+                        .alpha(0f)
+                        .clearAndSetSemantics { }
+                },
+            ),
+    ) {
+        // One Layout + content slot for both modes. Branching only in measure/place keeps
+        // descendants (and their ViewModelStoreOwners) alive across visibility toggles.
+        Layout(content = content) { measurables, constraints ->
+            val placeables = measurables.map { measurable ->
+                measurable.measure(constraints)
+            }
+            if (visible) {
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    placeables.forEach { it.place(0, 0) }
+                }
+            } else {
+                layout(0, 0) {
+                    placeables.forEach { it.place(0, 0) }
+                }
+            }
         }
     }
 }
