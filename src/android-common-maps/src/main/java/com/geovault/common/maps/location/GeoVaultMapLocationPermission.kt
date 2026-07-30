@@ -20,3 +20,9 @@ fun Context.geoVaultMapHasFineOrCoarseLocation(): Boolean {
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
         PackageManager.PERMISSION_GRANTED
 }
+
+/** Required so the map GPS location foreground-service notification is visible. */
+fun Context.geoVaultMapHasPostNotifications(): Boolean {
+    return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+}

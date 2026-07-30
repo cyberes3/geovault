@@ -1,6 +1,8 @@
 package com.geovault.common.maps.ui.location
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeoVaultMapLocationSessionPolicyTest {
@@ -77,18 +79,27 @@ class GeoVaultMapLocationSessionPolicyTest {
     }
 
     @Test
-    fun decide_requiresActivePermissionAndReadyMap() {
-        assertEquals(
-            GeoVaultMapLocationSessionDecision.Disabled,
-            policy.decide(baseInput(isActive = false, userLocationRequested = true)),
+    fun decide_whenInactiveWithLocationIntent_streamsWithoutPuck() {
+        val decision = policy.decide(
+            baseInput(isActive = false, userLocationRequested = true),
         )
-        assertEquals(
-            GeoVaultMapLocationSessionDecision.Disabled,
-            policy.decide(baseInput(hasLocationPermission = false, userLocationRequested = true)),
-        )
+        assertTrue(decision.shouldStreamGps)
+        assertFalse(decision.shouldEnablePuck)
+    }
+
+    @Test
+    fun decide_whenActiveButMapNotReady_disablesLocation() {
         assertEquals(
             GeoVaultMapLocationSessionDecision.Disabled,
             policy.decide(baseInput(isMapReady = false, userLocationRequested = true)),
+        )
+    }
+
+    @Test
+    fun decide_whenMissingPermission_disablesLocation() {
+        assertEquals(
+            GeoVaultMapLocationSessionDecision.Disabled,
+            policy.decide(baseInput(hasLocationPermission = false, userLocationRequested = true)),
         )
     }
 

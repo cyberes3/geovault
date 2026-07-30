@@ -20,7 +20,7 @@ class MapLocationRendererPlugin(
 ) : GeoVaultMapPlugin, GeoVaultUserLocationCapability {
     private val appContext = context.applicationContext
     private var map: MapLibreMap? = null
-    private var updatesSession: LocationUpdates.LocationUpdatesSession? = null
+    private var updatesSession: GeoVaultMapGpsLocationSession? = null
     private var accuracyCircleVisible: Boolean = config.accuracyAlpha > 0f
     private var lastLocation: Location? = null
     private var puckBackgroundTranslucent: Boolean = false
@@ -165,16 +165,21 @@ class MapLocationRendererPlugin(
     }
 
     /**
-     * Starts GPS updates and feeds them directly into the MapLibre location renderer.
-     * Caller must ensure location permissions are granted before calling.
+     * Starts continuous GPS via the shared [GeoVaultMapGpsLocationEngine] (location FGS) and
+     * feeds fixes into the MapLibre location renderer.
+     *
+     * While this session is active, updates continue when the host activity is backgrounded or
+     * the screen is off. Caller must ensure location permissions are granted before calling.
+     *
+     * Common hosts should drive this through [com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionPolicy]
+     * + [com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle]. Tracker
+     * uses its own overlay policy and does not follow the common background-stream rule.
      */
     @SuppressLint("MissingPermission")
     fun startRenderingGpsLocation(intervalMs: Long = 2000L) {
         stopRenderingGpsLocation()
-        updatesSession = LocationUpdates.startLocationUpdates(appContext, intervalMs) { _, location ->
-            if (location != null) {
-                renderLocation(location)
-            }
+        updatesSession = GeoVaultMapGpsLocationEngine.get(appContext).acquire(intervalMs) { location ->
+            renderLocation(location)
         }
     }
 

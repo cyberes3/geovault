@@ -35,9 +35,13 @@ data class GeoVaultMapLocationSessionDecision(
 /**
  * Shared policy for map hosts that need the user's current location.
  *
- * This deliberately separates location intent from camera follow:
- * - location intent controls GPS streaming and the visible user-location puck/chevron;
- * - camera follow state only controls MapLibre camera mode.
+ * Separates location intent from camera follow, and streaming from puck visibility:
+ * - location intent controls whether GPS should stream;
+ * - [GeoVaultMapLocationSessionInput.isActive] / map-ready gate the visible puck;
+ * - when intent is on, [shouldStreamGps] stays true even if the host activity is stopped
+ *   (background / screen off) so the shared location FGS can keep fixes fresh.
+ *
+ * Tracker uses its own overlay policy and does not follow this background-stream rule.
  */
 class GeoVaultMapLocationSessionPolicy {
     fun decide(input: GeoVaultMapLocationSessionInput): GeoVaultMapLocationSessionDecision {
@@ -45,16 +49,17 @@ class GeoVaultMapLocationSessionPolicy {
             input.positionFollowDesired ||
             input.headingFollowDesired ||
             input.navigationActive
-        if (!input.isActive ||
-            !input.hasLocationPermission ||
-            !input.isMapReady ||
-            !locationIntentActive
-        ) {
+        if (!input.hasLocationPermission || !locationIntentActive) {
+            return GeoVaultMapLocationSessionDecision.Disabled
+        }
+        val shouldStreamGps = !input.isActive || input.isMapReady
+        val shouldEnablePuck = input.isActive && input.isMapReady
+        if (!shouldStreamGps && !shouldEnablePuck) {
             return GeoVaultMapLocationSessionDecision.Disabled
         }
         return GeoVaultMapLocationSessionDecision(
-            shouldStreamGps = true,
-            shouldEnablePuck = true,
+            shouldStreamGps = shouldStreamGps,
+            shouldEnablePuck = shouldEnablePuck,
         )
     }
 }

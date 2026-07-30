@@ -3,16 +3,12 @@ package com.geovault.common.maps.location
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.geovault.common.maps.core.latLngOrNull
 import com.google.android.gms.location.CurrentLocationRequest
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -21,8 +17,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.android.geometry.LatLng
 import kotlin.coroutines.resume
 
+/**
+ * One-shot / last-known location helpers.
+ *
+ * Continuous map GPS must go through [GeoVaultMapGpsLocationEngine] (or
+ * [MapLocationRendererPlugin.startRenderingGpsLocation]) so a single fused session and location
+ * foreground service own the stream.
+ */
 object LocationUpdates {
-    private const val DEFAULT_MIN_DISTANCE_METERS = 0f
 
     /**
      * Coroutine-friendly wrapper around [getCurrentLocation] with a hard timeout. Returns the
@@ -187,79 +189,6 @@ object LocationUpdates {
         }
     }
 
-    @SuppressLint("MissingPermission")
-    fun startLocationUpdates(
-        context: Context,
-        intervalMs: Long,
-        callback: (LatLng, Location?) -> Unit,
-    ): LocationUpdatesSession {
-        val appContext = context.applicationContext
-        val fusedClient = LocationServices.getFusedLocationProviderClient(appContext)
-        val request = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            intervalMs.coerceAtLeast(500L)
-        )
-            .setMinUpdateDistanceMeters(DEFAULT_MIN_DISTANCE_METERS)
-            .setMinUpdateIntervalMillis((intervalMs / 2L).coerceAtLeast(250L))
-            .build()
-        val locationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.locations.forEach { location ->
-                    val latLng = latLngOrNull(location.latitude, location.longitude) ?: return@forEach
-                    callback(latLng, location)
-                }
-            }
-        }
-        return try {
-            fusedClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
-            object : LocationUpdatesSession {
-                override fun stop() {
-                    fusedClient.removeLocationUpdates(locationCallback)
-                }
-            }
-        } catch (_: Throwable) {
-            startLocationUpdatesWithLocationManager(
-                context = appContext,
-                intervalMs = intervalMs,
-                callback = callback
-            )
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun startLocationUpdatesWithLocationManager(
-        context: Context,
-        intervalMs: Long,
-        callback: (LatLng, Location?) -> Unit
-    ): LocationUpdatesSession {
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val provider = pickBestProvider(manager)
-        if (provider == null) {
-            return object : LocationUpdatesSession {
-                override fun stop() = Unit
-            }
-        }
-        val mainHandler = Handler(Looper.getMainLooper())
-        val locationListener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                val latLng = latLngOrNull(location.latitude, location.longitude) ?: return
-                mainHandler.post { callback(latLng, location) }
-            }
-        }
-        manager.requestLocationUpdates(
-            provider,
-            intervalMs.coerceAtLeast(500L),
-            DEFAULT_MIN_DISTANCE_METERS,
-            locationListener,
-            Looper.getMainLooper(),
-        )
-        return object : LocationUpdatesSession {
-            override fun stop() {
-                manager.removeUpdates(locationListener)
-            }
-        }
-    }
-
     private fun pickBestProvider(manager: LocationManager): String? {
         return when {
             manager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
@@ -289,9 +218,5 @@ object LocationUpdates {
 
     internal fun Location.toValidLatLngOrNull(): LatLng? {
         return latLngOrNull(latitude, longitude)
-    }
-
-    interface LocationUpdatesSession {
-        fun stop()
     }
 }

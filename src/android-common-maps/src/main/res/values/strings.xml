@@ -11,4 +11,8 @@
     <string name="gv_common_map_heading_follow_tooltip">Rotate the map to match the direction you are facing.</string>
     <string name="gv_common_map_gps_one_shot_tooltip">Jump the map to your current GPS location once.</string>
     <string name="gv_common_map_coordinates_copied_toast">Copied coordinates</string>
+    <string name="gv_common_map_gps_notification_channel_name">Map location</string>
+    <string name="gv_common_map_gps_notification_channel_description">Keeps GPS updates running while map location is on.</string>
+    <string name="gv_common_map_gps_notification_title">Location is on</string>
+    <string name="gv_common_map_gps_notification_text">Keeping your GPS position updated</string>
 </resources>

@@ -23,7 +23,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
@@ -33,6 +35,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
@@ -54,6 +59,7 @@ import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle
 import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
+import com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle
 import com.geovault.common.maps.ui.location.rememberGeoVaultMapLocationSession
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
@@ -104,6 +110,17 @@ fun PlacesMapScreen(
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val phase by map.phase.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isActive by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            isActive = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val hasLocationPermissionState = rememberGeoVaultMapLocationPermissionState()
     val hasLocationPermission by hasLocationPermissionState
     val headingFollowFabs = rememberGeoVaultMapHeadingFollowFabBundle(
@@ -115,19 +132,19 @@ fun PlacesMapScreen(
         headingFollowFabs = headingFollowFabs,
         hasLocationPermission = hasLocationPermission,
         isMapReady = phase == GeoVaultMapPhase.Ready,
+        isActive = isActive,
     )
     val gpsFabAction = locationSession.gpsFabAction
     val orientationFabAction = locationSession.headingFabAction
-    val shouldStreamGps = locationSession.decision.shouldStreamGps
-    DisposableEffect(locationPlugin, shouldStreamGps) {
-        if (shouldStreamGps) {
-            locationPlugin.startRenderingGpsLocation(intervalMs = PLACES_GPS_STREAM_INTERVAL_MS)
-        }
-        onDispose { locationPlugin.stopRenderingGpsLocation() }
-    }
-    LaunchedEffect(locationPlugin, shouldStreamGps) {
-        locationPlugin.setEnabled(shouldStreamGps)
-        if (!shouldStreamGps) return@LaunchedEffect
+    GeoVaultMapUserLocationNavigationLifecycle(
+        userLocation = locationPlugin,
+        shouldStreamGps = locationSession.decision.shouldStreamGps,
+        shouldEnablePuck = locationSession.decision.shouldEnablePuck,
+        showAccuracyCircle = remember(locationPlugin) { locationPlugin.isAccuracyCircleVisible() },
+        gpsIntervalMs = PLACES_GPS_STREAM_INTERVAL_MS,
+    )
+    LaunchedEffect(locationPlugin, locationSession.decision.shouldStreamGps) {
+        if (!locationSession.decision.shouldStreamGps) return@LaunchedEffect
         val latLng = LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L) ?: return@LaunchedEffect
         val synthetic = Location("places-map-prime").apply {
             latitude = latLng.latitude
