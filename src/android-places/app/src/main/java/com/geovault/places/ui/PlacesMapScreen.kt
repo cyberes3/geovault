@@ -69,6 +69,7 @@ import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.TopBarMenuEntry
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.places.R
 import com.geovault.places.model.Feature
 import com.geovault.places.presentation.PlacesMapViewModel
@@ -87,6 +88,7 @@ fun PlacesMapScreen(
     map: GeoVaultMainMap,
     viewModel: PlacesMapViewModel,
     launchArgs: PlacesMapLaunchArgs,
+    isTabVisible: Boolean = true,
     onOpenSettings: () -> Unit,
     onOpenShare: () -> Unit,
     onOpenEdit: (Feature) -> Unit,
@@ -111,22 +113,23 @@ fun PlacesMapScreen(
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val phase by map.phase.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
-    var isActive by remember {
+    var isLifecycleStarted by remember {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, _ ->
-            isActive = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            isLifecycleStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    val isActive = isLifecycleStarted && isTabVisible
     val hasLocationPermissionState = rememberGeoVaultMapLocationPermissionState()
     val hasLocationPermission by hasLocationPermissionState
     val headingFollowFabs = rememberGeoVaultMapHeadingFollowFabBundle(
         map = map,
         userLocation = locationPlugin,
-        allowFollowCamera = phase == GeoVaultMapPhase.Ready,
+        allowFollowCamera = phase == GeoVaultMapPhase.Ready && isTabVisible,
     )
     val locationSession = rememberGeoVaultMapLocationSession(
         headingFollowFabs = headingFollowFabs,
@@ -157,10 +160,6 @@ fun PlacesMapScreen(
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
     val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadFromCache()
-    }
 
     renderPlugin.renderedMapTapHitKinds = setOf(GeoVaultRenderedMapHitKind.Point)
     renderPlugin.onRenderedMapHitSelected = { hit ->
@@ -351,7 +350,7 @@ fun PlacesMapScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(GeoVaultColorTokens.BorderLight),
+                    .background(geoVaultHairlineDividerColor()),
             )
 
             val selectedFeature = state.selectedFeature
@@ -366,7 +365,7 @@ fun PlacesMapScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .background(GeoVaultColorTokens.BorderLight),
+                            .background(geoVaultHairlineDividerColor()),
                     )
                     Column(modifier = Modifier.padding(12.dp)) {
                     Text(
@@ -397,7 +396,7 @@ fun PlacesMapScreen(
                         GeoVaultPrimaryButton(
                             text = "View in List",
                             onClick = { selectedFeature?.let(onViewInList) },
-                            enabled = selectedFeature?.properties?.database_id != null,
+                            enabled = selectedFeature != null,
                             tooltip = stringResource(R.string.tooltip_map_view_in_list),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -408,14 +407,14 @@ fun PlacesMapScreen(
                             GeoVaultSecondaryButton(
                                 text = "Edit",
                                 onClick = { selectedFeature?.let(onOpenEdit) },
-                                enabled = selectedFeature?.properties?.database_id != null,
+                                enabled = selectedFeature != null,
                                 tooltip = stringResource(R.string.tooltip_place_edit),
                                 modifier = Modifier.weight(1f),
                             )
                             GeoVaultSecondaryButton(
                                 text = "Navigate",
                                 onClick = { selectedFeature?.let(onNavigate) },
-                                enabled = selectedFeature?.properties?.database_id != null,
+                                enabled = selectedFeature != null,
                                 tooltip = stringResource(R.string.tooltip_place_navigate),
                                 modifier = Modifier.weight(1f),
                             )

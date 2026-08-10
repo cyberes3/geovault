@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.GeoVaultAccountUiState
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.sync.GeoVaultQueuedSyncMessageFormatter
 import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
 import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
@@ -27,8 +28,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 data class MainScreenState(
     val isAuthenticated: Boolean = false,
@@ -38,7 +39,6 @@ data class MainScreenState(
     val isRefreshing: Boolean = false,
     val searchQuery: String = "",
     val saved: List<Feature> = emptyList(),
-    val offline: List<Feature> = emptyList(),
     val offlineItems: List<OfflineFeature> = emptyList(),
     val selectedPlaceId: Int? = null,
     val lastSyncMillis: Long = 0L,
@@ -54,8 +54,7 @@ class MainScreenViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
     private val services = PlacesAppServices.from(application)
-    private val cache = services.cacheStore()
-    private val repository = services.placesRepository()
+    private val placesStore = services.placesStore()
     private val offlineSyncCoordinator = services.offlineSyncCoordinator()
     private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Places.versionCheckSession(
         application = application,
@@ -65,16 +64,27 @@ class MainScreenViewModel(
     private var refreshCancelMessage: String? = null
     private var refreshPhase: RefreshPhase = RefreshPhase.IDLE
     private var initialRefreshTriggered: Boolean = false
+    private var snapshotCollectStarted: Boolean = false
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
 
     fun initialize() {
-        publishFromCache()
+        if (!snapshotCollectStarted) {
+            snapshotCollectStarted = true
+            viewModelScope.launch {
+                placesStore.snapshot.collect { publishFromSnapshot(it.cached, it.offline, it.lastSyncMillis) }
+            }
+        }
+        publishFromSnapshot(
+            placesStore.getCachedFeatures(),
+            placesStore.getOfflineFeatures(),
+            placesStore.getLastSyncTime(),
+        )
     }
 
     fun onHostResumed() {
-        publishFromCache()
+        // Snapshot Flow already keeps UI current; no separate reload needed.
     }
 
     fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
@@ -83,22 +93,31 @@ class MainScreenViewModel(
 
     fun onSearchChanged(query: String) {
         _state.update { it.copy(searchQuery = query) }
-        publishFromCache()
+        val snap = placesStore.snapshot.value
+        publishFromSnapshot(snap.cached, snap.offline, snap.lastSyncMillis)
     }
 
     fun refreshNow(
         statusText: String = "Syncing...",
-        tapHintText: String = "Tap to cancel"
+        tapHintText: String = "Tap to cancel",
     ) {
-        if (refreshJob?.isActive == true || _state.value.isRefreshing) return
+        if (refreshJob?.isActive == true || _state.value.isRefreshing) {
+            GeoVaultCaptureLog.i(TAG, "refreshNow ignored: already refreshing")
+            return
+        }
         refreshCancelMessage = null
+        GeoVaultCaptureLog.i(
+            TAG,
+            "refreshNow start offlineQueued=${placesStore.getOfflineFeatures().size} " +
+                "cached=${placesStore.getCachedFeatures().size}",
+        )
         refreshJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     isRefreshing = true,
                     showSyncOverlay = true,
                     syncOverlayTitle = statusText,
-                    syncOverlaySubtext = tapHintText
+                    syncOverlaySubtext = tapHintText,
                 )
             }
             try {
@@ -110,6 +129,7 @@ class MainScreenViewModel(
                 }
                 when (fetchResult) {
                     is SnapshotFetchResult.Failed -> {
+                        GeoVaultCaptureLog.e(TAG, "refreshNow snapshot failed: ${fetchResult.message}")
                         showSnackbar(fetchResult.message, "main_error")
                     }
                     SnapshotFetchResult.Success -> {
@@ -122,21 +142,27 @@ class MainScreenViewModel(
                     }
                 }
             } catch (_: TimeoutCancellationException) {
+                GeoVaultCaptureLog.e(TAG, "refreshNow timed out")
                 showSnackbar("Refresh timed out (10s)", "refresh_timeout")
             } catch (_: CancellationException) {
                 val message = refreshCancelMessage ?: "Syncing cancelled"
+                GeoVaultCaptureLog.w(TAG, "refreshNow cancelled: $message")
                 showSnackbar(message, "refresh_cancelled")
             } finally {
                 refreshPhase = RefreshPhase.IDLE
-                publishFromCache()
                 _state.update {
                     it.copy(
                         isRefreshing = false,
                         showSyncOverlay = false,
                         syncOverlayTitle = statusText,
-                        syncOverlaySubtext = tapHintText
+                        syncOverlaySubtext = tapHintText,
                     )
                 }
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "refreshNow finished offlineQueued=${placesStore.getOfflineFeatures().size} " +
+                        "cached=${placesStore.getCachedFeatures().size}",
+                )
             }
         }
     }
@@ -151,74 +177,56 @@ class MainScreenViewModel(
         }
     }
 
-    fun deleteSavedPlace(feature: Feature) {
-        val dbId = feature.properties.database_id ?: return
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { repository.deletePlace(dbId) }
-            result.onSuccess {
-                val offlineItem = cache.getOfflineFeatures().find { it.feature.properties.database_id == dbId }
-                if (offlineItem != null) {
-                    cache.removeOffline(offlineItem)
-                }
-                refreshNow()
-            }.onFailure { err ->
-                val message = PlacesOfflineBehaviorPolicy.deleteFailureMessage(err.message)
-                _state.update {
-                    it.copy(
-                        snackbar = GeoVaultSnackbarModel(
-                            id = "delete_error_${System.currentTimeMillis()}",
-                            message = message
-                        )
-                    )
-                }
-            }
-        }
-    }
-
     fun revertOfflineChanges(item: OfflineFeature) {
-        cache.removeOffline(item)
-        publishFromCache()
+        placesStore.removeOffline(item.clientLocalId)
         _state.update {
             it.copy(
                 snackbar = GeoVaultSnackbarModel(
                     id = "offline_revert_${System.currentTimeMillis()}",
-                    message = PlacesOfflineBehaviorPolicy.offlineRemovalMessage(item)
-                )
+                    message = PlacesOfflineBehaviorPolicy.offlineRemovalMessage(item),
+                ),
             )
         }
     }
 
-    fun discardOfflineDraft(item: OfflineFeature) {
-        revertOfflineChanges(item)
-    }
-
-    fun saveOffline(feature: Feature, original: Feature? = null, offlineIndex: Int = -1) {
-        cache.addOrUpdateOffline(feature, original, offlineIndex)
-        publishFromCache()
+    fun saveOffline(
+        feature: Feature,
+        original: Feature? = null,
+        clientLocalId: String,
+        snackbarMessage: String = PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE,
+    ) {
+        GeoVaultCaptureLog.w(
+            TAG,
+            "saveOffline clientLocalId=$clientLocalId name=${feature.properties.name} " +
+                "databaseId=${feature.properties.database_id} " +
+                "hasOriginal=${original != null} " +
+                "hasCreatedAt=${!feature.properties.created_at.isNullOrBlank()}",
+        )
+        placesStore.upsertOffline(
+            clientLocalId = clientLocalId,
+            feature = feature,
+            original = original,
+        )
         _state.update {
             it.copy(
                 snackbar = GeoVaultSnackbarModel(
                     id = "offline_saved_${System.currentTimeMillis()}",
-                    message = PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE
-                )
+                    message = snackbarMessage,
+                ),
             )
         }
     }
 
     fun applyUpdatedFeature(updated: Feature) {
-        cache.updateCachedFeature(updated)
-        // A successful online edit supersedes any stale pending offline edit for this place,
-        // otherwise it would keep showing under "WAITING TO SYNC" alongside the fresh copy.
-        cache.removeOfflineByFeature(updated)
+        placesStore.updateCachedFeature(updated)
+        placesStore.removeOfflineByFeature(updated)
         _state.update { it.copy(searchQuery = "") }
-        publishFromCache()
     }
 
     fun applyDeletedFeature(deleted: Feature) {
-        cache.removeCachedFeature(deleted)
-        cache.removeOfflineByFeature(deleted)
+        placesStore.removeCachedFeature(deleted)
+        placesStore.removeOfflineByFeature(deleted)
         _state.update { it.copy(searchQuery = "") }
-        publishFromCache()
     }
 
     fun clearSnackbar() {
@@ -246,11 +254,10 @@ class MainScreenViewModel(
                 isAuthenticated = loggedIn,
                 isConnecting = accountState.isConnecting,
                 oauthUrl = null,
-                lastSyncMillis = cache.getLastSyncTime(),
-                lastSyncLabel = formatLastSyncLabel(cache.getLastSyncTime()),
+                lastSyncMillis = placesStore.getLastSyncTime(),
+                lastSyncLabel = formatLastSyncLabel(placesStore.getLastSyncTime()),
             )
         }
-        publishFromCache()
         if (wasAuthenticated && !loggedIn) {
             initialRefreshTriggered = false
             versionCheckSession.reset()
@@ -285,18 +292,25 @@ class MainScreenViewModel(
                 }
             }
         }
-        val message = GeoVaultQueuedSyncMessageFormatter.format(
+        val summary = GeoVaultQueuedSyncMessageFormatter.format(
             outcome = GeoVaultQueuedSyncOutcome(
                 successCount = syncResult.successCount,
                 failedCount = syncResult.failedCount,
                 conflictCount = syncResult.conflictCount,
             ),
-            itemLabelSingular = "offline item",
-            itemLabelPlural = "offline items",
+            itemLabelSingular = "item",
+            itemLabelPlural = "items",
         )
-        if (message.isNotBlank()) {
-            showSnackbar(message, "sync_result")
+        val soleFailureDetail = syncResult.events
+            .filterIsInstance<SyncEvent.ItemFailed>()
+            .singleOrNull()
+            ?.let { formatItemFailureMessage(it) }
+        val message = when {
+            syncResult.successCount == 0 && soleFailureDetail != null -> soleFailureDetail
+            summary.isNotBlank() -> summary
+            else -> return
         }
+        showSnackbar(message, "sync_result")
     }
 
     private fun formatItemFailureMessage(event: SyncEvent.ItemFailed): String {
@@ -314,17 +328,18 @@ class MainScreenViewModel(
             it.copy(
                 snackbar = GeoVaultSnackbarModel(
                     id = "${prefix}_${System.currentTimeMillis()}",
-                    message = message
-                )
+                    message = message,
+                ),
             )
         }
     }
 
-    private fun publishFromCache() {
+    private fun publishFromSnapshot(
+        cached: List<Feature>,
+        offline: List<OfflineFeature>,
+        lastSyncMillis: Long,
+    ) {
         val q = _state.value.searchQuery.trim()
-        val cached = cache.getCachedFeatures()
-        val offline = cache.getOfflineFeatures()
-
         val filteredOffline = if (q.isBlank()) {
             offline
         } else {
@@ -341,10 +356,9 @@ class MainScreenViewModel(
         _state.update {
             it.copy(
                 saved = saved,
-                offline = filteredOffline.map { item -> item.feature },
                 offlineItems = filteredOffline,
-                lastSyncMillis = cache.getLastSyncTime(),
-                lastSyncLabel = formatLastSyncLabel(cache.getLastSyncTime()),
+                lastSyncMillis = lastSyncMillis,
+                lastSyncLabel = formatLastSyncLabel(lastSyncMillis),
             )
         }
     }
@@ -367,3 +381,5 @@ private enum class RefreshPhase {
     FETCHING,
     SYNCING,
 }
+
+private const val TAG = "PlacesMainVm"

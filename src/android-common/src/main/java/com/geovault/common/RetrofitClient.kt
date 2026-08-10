@@ -129,4 +129,37 @@ object RetrofitClient {
             .addConverterFactory(GsonConverterFactory.create(networkGsonOmitNulls))
             .build()
     }
+
+    /**
+     * Cached omit-nulls Retrofit API for a given [baseUrl]. Invalidates when the URL changes.
+     */
+    fun <T> createCachedApiOmitNulls(
+        context: Context,
+        baseUrl: String,
+        apiClass: Class<T>,
+        cache: CachedApiHolder<T>,
+    ): T {
+        val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        synchronized(cache.lock) {
+            val hit = cache.api
+            if (hit != null && cache.baseUrl == normalized) return hit
+            val created = getClientOmitNulls(context, normalized).create(apiClass)
+            cache.baseUrl = normalized
+            cache.api = created
+            return created
+        }
+    }
+
+    class CachedApiHolder<T> {
+        internal val lock = Any()
+        @Volatile internal var baseUrl: String? = null
+        @Volatile internal var api: T? = null
+
+        fun clear() {
+            synchronized(lock) {
+                baseUrl = null
+                api = null
+            }
+        }
+    }
 }

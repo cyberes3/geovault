@@ -254,11 +254,12 @@ private class SequenceRepo(
 private class CoordinatorStore : PlacesOfflineStore {
     val cachedSnapshots = mutableListOf<FeatureCollection>()
     override fun getOfflineFeatures() = emptyList<com.geovault.places.model.OfflineFeature>()
-    override fun removeOffline(item: com.geovault.places.model.OfflineFeature) = Unit
+    override fun removeOffline(clientLocalId: String) = Unit
     override fun getCachedFeatures() = cachedSnapshots.lastOrNull()?.features ?: emptyList()
     override fun setCached(collection: FeatureCollection, lastSyncTime: Long) {
         cachedSnapshots.add(collection)
     }
+    override fun applyServerFeature(feature: Feature) = Unit
 }
 
 private class FakeSyncUseCase(private val result: SyncResult) : OfflineSyncExecutor {

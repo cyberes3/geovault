@@ -1,5 +1,6 @@
 package com.geovault.places.domain
 
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.places.model.FeatureCollection
 import java.io.IOException
 import java.net.ConnectException
@@ -16,15 +17,23 @@ class OfflineSyncCoordinator(
     private val serverUrlProvider: () -> String,
 ) {
     suspend fun fetchAndCacheServerSnapshot(): SnapshotFetchResult {
+        GeoVaultCaptureLog.i(TAG, "fetchAndCacheServerSnapshot start")
         val firstFetch = fetchPlacesResilient()
         val firstCollection = firstFetch.getOrElse { error ->
-            return SnapshotFetchResult.Failed(snapshotFailureMessage(error))
+            val message = snapshotFailureMessage(error)
+            GeoVaultCaptureLog.e(TAG, "fetchAndCacheServerSnapshot failed: $message", error)
+            return SnapshotFetchResult.Failed(message)
         }
         cacheStore.setCached(firstCollection, System.currentTimeMillis())
+        GeoVaultCaptureLog.i(
+            TAG,
+            "fetchAndCacheServerSnapshot ok count=${firstCollection.features.size}",
+        )
         return SnapshotFetchResult.Success
     }
 
     suspend fun runPendingReplayAndCanonicalRefresh(): ReplayExecutionResult {
+        GeoVaultCaptureLog.i(TAG, "runPendingReplayAndCanonicalRefresh start")
         flushPendingNavigations()
         val syncResult = syncExecutor.runSync()
 
@@ -33,12 +42,25 @@ class OfflineSyncCoordinator(
             val secondFetch = fetchPlacesResilient()
             secondFetch.onSuccess { canonical ->
                 cacheStore.setCached(canonical, System.currentTimeMillis())
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "canonical refresh ok count=${canonical.features.size}",
+                )
             }.onFailure { error ->
-                warning = "Synced changes, but failed to refresh latest server data: ${error.message ?: "Unknown error"}"
+                val warningMessage =
+                    "Synced changes, but failed to refresh latest server data: ${error.message ?: "Unknown error"}"
+                warning = warningMessage
+                GeoVaultCaptureLog.w(TAG, warningMessage, error)
             }
         }
         flushPendingNavigations()
 
+        GeoVaultCaptureLog.i(
+            TAG,
+            "runPendingReplayAndCanonicalRefresh done hadQueued=${syncResult.hadQueuedItems} " +
+                "success=${syncResult.successCount} failed=${syncResult.failedCount} " +
+                "warning=${warning != null}",
+        )
         return ReplayExecutionResult(
             syncResult = syncResult,
             warningMessage = warning,
@@ -104,6 +126,7 @@ class OfflineSyncCoordinator(
     }
 
     companion object {
+        private const val TAG = "PlacesSyncCoordinator"
         private const val GAI_EXCEPTION_CLASS_NAME = "android.system.GaiException"
         private const val SNAPSHOT_FETCH_MAX_ATTEMPTS = 3
         private val SNAPSHOT_FETCH_RETRY_DELAYS_MS = longArrayOf(200L, 450L)

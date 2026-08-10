@@ -19,10 +19,10 @@ interface PlacesApi {
     fun getPlace(@Path("id") id: Int): Call<Feature>
 
     @POST("api/extensions/places/features/")
-    fun createPlace(@Body feature: Feature): Call<Feature>
+    fun createPlace(@Body body: PlaceWriteBody): Call<Feature>
 
     @PUT("api/extensions/places/features/{id}/")
-    fun updatePlace(@Path("id") id: Int, @Body feature: Feature): Call<Feature>
+    fun updatePlace(@Path("id") id: Int, @Body body: PlaceWriteBody): Call<Feature>
 
     @DELETE("api/extensions/places/features/{id}/")
     fun deletePlace(@Path("id") id: Int): Call<Void>

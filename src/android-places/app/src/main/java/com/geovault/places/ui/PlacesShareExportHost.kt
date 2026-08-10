@@ -17,7 +17,7 @@ import com.geovault.common.ui.components.GeoVaultActionSheetDialog
 import com.geovault.common.ui.components.GeoVaultActionSheetOption
 import com.geovault.common.ui.components.GeoVaultMultiSelectDialog
 import com.geovault.common.ui.files.ExportedFileToast
-import com.geovault.places.data.PlacesCacheStore
+import com.geovault.places.data.PlacesStore
 import com.geovault.places.export.PlacesKmzExporter
 import java.io.File
 import java.text.SimpleDateFormat
@@ -38,7 +38,7 @@ private const val KMZ_MIME_TYPE = "application/vnd.google-earth.kmz"
 fun PlacesShareExportHost(
     visible: Boolean,
     onDismissRequest: () -> Unit,
-    cacheStore: PlacesCacheStore,
+    placesStore: PlacesStore,
 ) {
     val context = LocalContext.current
     var pendingKmzBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -66,7 +66,7 @@ fun PlacesShareExportHost(
     }
 
     if (visible) {
-        val features = remember(visible) { cacheStore.getDisplayFeatures() }
+        val features = remember(visible) { placesStore.getDisplayFeatures() }
         GeoVaultMultiSelectDialog(
             title = "Select points to export",
             items = features,

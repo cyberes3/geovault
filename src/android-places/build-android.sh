@@ -48,6 +48,7 @@ BUILD_TYPE="debug"
 SKIP_MINIFY=false
 INSTALL=false
 OLD_VERSION=false
+ADD_LOGGING=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -63,9 +64,13 @@ for arg in "$@"; do
         --old-version)
             OLD_VERSION=true
             ;;
+        --add-logging)
+            ADD_LOGGING=true
+            ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version]"
+            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version] [--add-logging]"
+            echo "  --add-logging compiles capture logging into both debug and release APKs (sets -PGEOVAULT_ADD_LOGGING=true)."
             exit 1
             ;;
     esac
@@ -87,6 +92,9 @@ fi
 GRADLE_ARGS=()
 if [ "$SKIP_MINIFY" = true ]; then
     GRADLE_ARGS+=("-PSKIP_MINIFY=true")
+fi
+if [ "$ADD_LOGGING" = true ]; then
+    GRADLE_ARGS+=("-PGEOVAULT_ADD_LOGGING=true")
 fi
 
 if [ "$BUILD_TYPE" = "release" ]; then
@@ -185,6 +193,10 @@ INSTALL_APK_PATH="$APK_PATH"
 echo ""
 echo "Build successful!"
 echo "APK location: $SCRIPT_DIR/$APK_PATH"
+if [ "$ADD_LOGGING" = true ]; then
+    echo "Capture logging: ENABLED (-PGEOVAULT_ADD_LOGGING=true)"
+    echo "Export later with: ./download-capture-log.sh"
+fi
 
 if [ "$BUILD_TYPE" = "release" ]; then
     if [ "$OLD_VERSION" = true ] && [ -n "$OLD_VERSION_SHA" ]; then

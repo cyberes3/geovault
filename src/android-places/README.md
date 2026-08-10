@@ -2,16 +2,25 @@
 
 A native android app for the Places extension to make it easy to quickly reference your places bookmarks. Works offline and caches changes to upload to the server when you get back online.
 
-
-
-
 ## Setup
 
 1. Install the APK on your Android device
 2. On first launch it will ask for your GeoVault server URL
 
-
-
 ## Building the APK
 
 See the `android-uploader/` app instructions.
+
+```bash
+./build-android.sh debug --install
+# Persist sync/save breadcrumbs to the capture-log DB (and logcat):
+./build-android.sh debug --install --add-logging
+```
+
+## Capture Logs
+
+With `--add-logging`, sync/save/API failures are written to logcat tags `PlacesApi`, `PlacesOfflineSync`, `PlacesSyncCoordinator`, `PlacesMainVm`, and `PlacesEdit`, and persisted for export:
+
+```bash
+./download-capture-log.sh
+```

@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.core.content.IntentCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +53,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.geovault.common.intent.getSerializableExtraCompat
+import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.maps.core.GeoVaultStandardMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.MapLibreManager
@@ -72,6 +73,10 @@ import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.geocoding.GeoVaultMapGeocodeSearchDialog
 import com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationController
+import com.geovault.common.sync.GeoVaultHttpFailureClassifier
+import com.geovault.common.sync.GeoVaultHttpFailureKind
+import com.geovault.common.sync.GeoVaultQueuedSyncFailurePolicy
+import com.geovault.common.sync.GeoVaultQueuedSyncItemDisposition
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -85,11 +90,13 @@ import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.presentation.PlaceEditScreenState
 import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -98,12 +105,28 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 
 class PlaceEditActivity : ComponentActivity() {
+    companion object {
+        private const val TAG = "PlacesEdit"
+        const val EXTRA_CLIENT_LOCAL_ID = "client_local_id"
+        const val EXTRA_IS_OFFLINE_EDIT = "is_offline_edit"
+        const val EXTRA_FEATURE = "feature"
+        const val EXTRA_ORIGINAL_FEATURE = "original_feature"
+        const val EXTRA_OFFLINE_FEATURE = "offline_feature"
+        const val EXTRA_UPDATED_FEATURE = "updated_feature"
+        const val EXTRA_DELETED_FEATURE = "deleted_feature"
+        const val EXTRA_REVERT_OFFLINE = "revert_offline_feature"
+        const val EXTRA_OFFLINE_SNACKBAR = "offline_snackbar_message"
+    }
+
+    private val saveInFlight = AtomicBoolean(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val editFeature = intent.serializableExtraCompat<Feature>("feature")
-        val originalFeature = intent.serializableExtraCompat<Feature>("original_feature")
-        val isOfflineEdit = intent.getBooleanExtra("is_offline_edit", false)
-        val offlineEditIndex = intent.getIntExtra("offline_edit_index", -1)
+        val editFeature = intent.getSerializableExtraCompat<Feature>(EXTRA_FEATURE)
+        val originalFeature = intent.getSerializableExtraCompat<Feature>(EXTRA_ORIGINAL_FEATURE)
+        val isOfflineEdit = intent.getBooleanExtra(EXTRA_IS_OFFLINE_EDIT, false)
+        val clientLocalId = intent.getStringExtra(EXTRA_CLIENT_LOCAL_ID)
+            ?: OfflineFeature.newId()
 
         setContent {
             GeoVaultTheme {
@@ -116,10 +139,14 @@ class PlaceEditActivity : ComponentActivity() {
                             if (isOfflineEdit) {
                                 val featureToRevert = editFeature ?: return@launch
                                 val offline = OfflineFeature(
+                                    clientLocalId = clientLocalId,
                                     feature = featureToRevert,
                                     original = originalFeature,
                                 )
-                                setResult(RESULT_OK, Intent().putExtra("revert_offline_feature", offline))
+                                setResult(
+                                    RESULT_OK,
+                                    Intent().putExtra(EXTRA_REVERT_OFFLINE, offline),
+                                )
                                 finish()
                                 return@launch
                             }
@@ -127,55 +154,139 @@ class PlaceEditActivity : ComponentActivity() {
                             val repo = PlacesAppServices.from(application).placesRepository()
                             val deleted = withContext(Dispatchers.IO) { repo.deletePlace(dbId).isSuccess }
                             if (deleted) {
-                                setResult(RESULT_OK, Intent().putExtra("deleted_feature", editFeature))
+                                setResult(
+                                    RESULT_OK,
+                                    Intent().putExtra(EXTRA_DELETED_FEATURE, editFeature),
+                                )
                                 finish()
                             } else {
                                 Toast.makeText(
                                     this@PlaceEditActivity,
                                     PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE,
-                                    Toast.LENGTH_SHORT
+                                    Toast.LENGTH_SHORT,
                                 ).show()
                             }
                         }
                     },
                     onSave = { updated ->
-                        lifecycleScope.launch {
-                            if (isOfflineEdit) {
-                                val data = Intent().apply {
-                                    putExtra("offline_feature", updated)
-                                    putExtra("original_feature", originalFeature ?: editFeature)
-                                    putExtra("offline_edit_index", offlineEditIndex)
-                                }
-                                setResult(RESULT_OK, data)
-                                finish()
-                                return@launch
-                            }
-
-                            val repo = PlacesAppServices.from(application).placesRepository()
-                            val result = withContext(Dispatchers.IO) {
-                                val dbId = editFeature?.properties?.database_id
-                                if (dbId != null) repo.updatePlace(dbId, updated) else repo.createPlace(updated)
-                            }
-                            if (result.isSuccess) {
-                                setResult(RESULT_OK, Intent().putExtra("updated_feature", result.getOrNull()))
-                            } else {
-                                val data = Intent().apply {
-                                    putExtra("offline_feature", updated)
-                                    putExtra("original_feature", editFeature)
-                                    putExtra("offline_edit_index", offlineEditIndex)
-                                }
-                                setResult(RESULT_OK, data)
-                            }
-                            finish()
+                        if (!saveInFlight.compareAndSet(false, true)) {
+                            GeoVaultCaptureLog.w(TAG, "save ignored: already in flight")
+                            return@PlaceEditScreen
                         }
-                    }
+                        lifecycleScope.launch {
+                            try {
+                                if (isOfflineEdit) {
+                                    GeoVaultCaptureLog.i(
+                                        TAG,
+                                        "save offline-edit clientLocalId=$clientLocalId " +
+                                            "name=${updated.properties.name} " +
+                                            "databaseId=${updated.properties.database_id}",
+                                    )
+                                    setResult(
+                                        RESULT_OK,
+                                        Intent().apply {
+                                            putExtra(EXTRA_OFFLINE_FEATURE, updated)
+                                            putExtra(
+                                                EXTRA_ORIGINAL_FEATURE,
+                                                originalFeature ?: editFeature,
+                                            )
+                                            putExtra(EXTRA_CLIENT_LOCAL_ID, clientLocalId)
+                                            putExtra(
+                                                EXTRA_OFFLINE_SNACKBAR,
+                                                PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE,
+                                            )
+                                        },
+                                    )
+                                    finish()
+                                    return@launch
+                                }
+
+                                val repo = PlacesAppServices.from(application).placesRepository()
+                                val dbId = editFeature?.properties?.database_id
+                                GeoVaultCaptureLog.i(
+                                    TAG,
+                                    "save online-attempt name=${updated.properties.name} databaseId=$dbId " +
+                                        "hasCreatedAt=${!updated.properties.created_at.isNullOrBlank()}",
+                                )
+                                val result = withContext(Dispatchers.IO) {
+                                    if (dbId != null) {
+                                        repo.updatePlace(dbId, updated)
+                                    } else {
+                                        repo.createPlace(updated)
+                                    }
+                                }
+                                if (result.isSuccess) {
+                                    GeoVaultCaptureLog.i(
+                                        TAG,
+                                        "save online-ok name=${updated.properties.name} " +
+                                            "serverId=${result.getOrNull()?.properties?.database_id}",
+                                    )
+                                    setResult(
+                                        RESULT_OK,
+                                        Intent().putExtra(EXTRA_UPDATED_FEATURE, result.getOrNull()),
+                                    )
+                                    finish()
+                                    return@launch
+                                }
+
+                                val error = result.exceptionOrNull()!!
+                                val kind = GeoVaultHttpFailureClassifier.classifyThrowable(error)
+                                val disposition = GeoVaultQueuedSyncFailurePolicy.dispositionFor(kind)
+                                GeoVaultCaptureLog.e(
+                                    TAG,
+                                    "save online-failed name=${updated.properties.name} " +
+                                        "kind=$kind disposition=$disposition " +
+                                        "error=${error.message}",
+                                )
+                                when (disposition) {
+                                    GeoVaultQueuedSyncItemDisposition.RequireAuth -> {
+                                        Toast.makeText(
+                                            this@PlaceEditActivity,
+                                            PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE,
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                        saveInFlight.set(false)
+                                    }
+                                    GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
+                                        Toast.makeText(
+                                            this@PlaceEditActivity,
+                                            error.message?.takeIf { it.isNotBlank() }
+                                                ?: PlacesOfflineBehaviorPolicy.VALIDATION_FAILED_MESSAGE,
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                        saveInFlight.set(false)
+                                    }
+                                    GeoVaultQueuedSyncItemDisposition.KeepRetrying,
+                                    GeoVaultQueuedSyncItemDisposition.ResolveConflict,
+                                    GeoVaultQueuedSyncItemDisposition.RecreateOrDiscard -> {
+                                        val snackbar = when (kind) {
+                                            GeoVaultHttpFailureKind.RetryableNetwork,
+                                            GeoVaultHttpFailureKind.RetryableServer,
+                                            GeoVaultHttpFailureKind.Unknown ->
+                                                PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_NETWORK_MESSAGE
+                                            else -> PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE
+                                        }
+                                        setResult(
+                                            RESULT_OK,
+                                            Intent().apply {
+                                                putExtra(EXTRA_OFFLINE_FEATURE, updated)
+                                                putExtra(EXTRA_ORIGINAL_FEATURE, editFeature)
+                                                putExtra(EXTRA_CLIENT_LOCAL_ID, clientLocalId)
+                                                putExtra(EXTRA_OFFLINE_SNACKBAR, snackbar)
+                                            },
+                                        )
+                                        finish()
+                                    }
+                                }
+                            } catch (t: Throwable) {
+                                saveInFlight.set(false)
+                                throw t
+                            }
+                        }
+                    },
                 )
             }
         }
-    }
-
-    private inline fun <reified T : java.io.Serializable> Intent.serializableExtraCompat(key: String): T? {
-        return IntentCompat.getSerializableExtra(this, key, T::class.java)
     }
 }
 
@@ -267,7 +378,7 @@ private fun PlaceEditScreen(
                     longitude = lon,
                     iconImageId = CommonMapIconIds.MARKER_DEFAULT,
                     iconSize = 1f,
-                )
+                ),
             )
         } else {
             emptyList()
@@ -284,7 +395,7 @@ private fun PlaceEditScreen(
                 CameraUpdateFactory.newLatLngZoom(
                     LatLng(lat, lon),
                     MapLibreManager.DEFAULT_POINT_ZOOM,
-                )
+                ),
             )
         }
         state.markSelectionCameraFocusHandled()
@@ -383,7 +494,7 @@ private fun PlaceEditScreen(
                     Column(modifier = Modifier.fillMaxSize()) {
                         Divider(
                             modifier = Modifier.fillMaxWidth(),
-                            color = GeoVaultColorTokens.BorderLight,
+                            color = geoVaultHairlineDividerColor(),
                             thickness = 1.dp,
                         )
                         Column(
@@ -433,6 +544,7 @@ private fun PlaceEditScreen(
                                     Text(it, color = GeoVaultColorTokens.Error, fontSize = 12.sp)
                                 }
                             }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

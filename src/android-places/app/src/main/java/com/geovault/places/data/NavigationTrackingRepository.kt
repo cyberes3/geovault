@@ -4,6 +4,8 @@ import android.content.Context
 import com.geovault.common.maps.external.GeoVaultExternalMapLauncher
 import com.geovault.common.settings.GeoVaultPrefsStore
 import com.geovault.common.settings.PrefKey
+import com.geovault.common.sync.GeoVaultHttpFailureClassifier
+import com.geovault.common.sync.GeoVaultHttpFailureKind
 import com.geovault.places.domain.NavigationRetryFlusher
 import com.geovault.places.model.Feature
 import com.google.gson.Gson
@@ -17,7 +19,7 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         context = context,
         prefsName = PREFS_NAME,
         schemaVersion = SCHEMA_VERSION,
-        registeredKeys = ALL_KEYS
+        registeredKeys = ALL_KEYS,
     )
     private val gson = Gson()
     private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
@@ -50,8 +52,14 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         flushPending(serverUrl)
         api.trackNavigation(dbId).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response: Response<Void>) {
-                if (!response.isSuccessful) addPending(dbId)
+                if (response.isSuccessful) return
+                if (shouldDropPending(response.code())) {
+                    removePending(dbId)
+                    return
+                }
+                addPending(dbId)
             }
+
             override fun onFailure(call: Call<Void>, t: Throwable) {
                 addPending(dbId)
             }
@@ -64,8 +72,15 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         getPending().forEach { id ->
             api.trackNavigation(id).enqueue(object : Callback<Void> {
                 override fun onResponse(call: Call<Void>, response: Response<Void>) {
-                    if (response.isSuccessful) removePending(id)
+                    if (response.isSuccessful) {
+                        removePending(id)
+                        return
+                    }
+                    if (shouldDropPending(response.code())) {
+                        removePending(id)
+                    }
                 }
+
                 override fun onFailure(call: Call<Void>, t: Throwable) = Unit
             })
         }
@@ -74,6 +89,15 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
     fun clearPending() {
         synchronized(pendingLock) {
             store.removeBlocking(KEY_PENDING_NAVIGATION_IDS)
+        }
+    }
+
+    private fun shouldDropPending(httpCode: Int): Boolean {
+        return when (GeoVaultHttpFailureClassifier.classify(httpCode, null, null)) {
+            GeoVaultHttpFailureKind.NotFound,
+            GeoVaultHttpFailureKind.Auth,
+            GeoVaultHttpFailureKind.PermanentClient -> true
+            else -> false
         }
     }
 

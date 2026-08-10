@@ -81,7 +81,6 @@ private sealed interface PlaceListItem {
         val feature: Feature,
         val isOffline: Boolean,
         val offlineFeature: OfflineFeature? = null,
-        val offlineIndex: Int = -1,
     ) : PlaceListItem
 }
 
@@ -96,7 +95,7 @@ fun MainScreen(
     onRefresh: () -> Unit,
     onAddPlace: () -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
-    onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
+    onEditOfflinePlace: (OfflineFeature) -> Unit,
     onNavigatePlace: (Feature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
@@ -229,7 +228,7 @@ private fun PlacesBody(
     onRefresh: () -> Unit,
     onNavigatePlace: (Feature) -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
-    onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
+    onEditOfflinePlace: (OfflineFeature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
     onCopyCoordinates: (String) -> Unit,
@@ -243,13 +242,12 @@ private fun PlacesBody(
                         placement = ListSectionHeaderPlacement.First,
                     )
                 )
-                state.offlineItems.forEachIndexed { index, offline ->
+                state.offlineItems.forEach { offline ->
                     add(
                         PlaceListItem.Row(
                             feature = offline.feature,
                             isOffline = true,
                             offlineFeature = offline,
-                            offlineIndex = index
                         )
                     )
                 }
@@ -345,7 +343,7 @@ private fun PlaceRow(
     actionsEnabled: Boolean,
     onNavigatePlace: (Feature) -> Unit,
     onEditSavedPlace: (Feature) -> Unit,
-    onEditOfflinePlace: (OfflineFeature, Int) -> Unit,
+    onEditOfflinePlace: (OfflineFeature) -> Unit,
     onViewDescription: (Feature) -> Unit,
     onOpenMapToPlace: (Feature) -> Unit,
     onCopyCoordinates: (String) -> Unit,
@@ -485,7 +483,7 @@ private fun PlaceRow(
                     tooltip = stringResource(R.string.tooltip_place_edit),
                     onClick = {
                         if (item.isOffline && item.offlineFeature != null) {
-                            onEditOfflinePlace(item.offlineFeature, item.offlineIndex)
+                            onEditOfflinePlace(item.offlineFeature)
                         } else {
                             onEditSavedPlace(feature)
                         }

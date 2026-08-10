@@ -13,9 +13,10 @@ interface PlacesRemoteDataSource {
 
 interface PlacesOfflineStore {
     fun getOfflineFeatures(): List<OfflineFeature>
-    fun removeOffline(item: OfflineFeature)
+    fun removeOffline(clientLocalId: String)
     fun getCachedFeatures(): List<Feature>
     fun setCached(collection: FeatureCollection, lastSyncTime: Long)
+    fun applyServerFeature(feature: Feature)
 }
 
 interface NavigationRetryFlusher {

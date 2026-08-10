@@ -2,9 +2,14 @@ package com.geovault.places.presentation
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
 import com.geovault.places.model.Properties
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLngBounds
 
 data class PlacesMapState(
@@ -13,20 +18,24 @@ data class PlacesMapState(
 )
 
 class PlacesMapViewModel(application: Application) : AndroidViewModel(application) {
-    private val cache = PlacesAppServices.from(application).cacheStore()
-    private val _state = kotlinx.coroutines.flow.MutableStateFlow(PlacesMapState())
-    val state: kotlinx.coroutines.flow.StateFlow<PlacesMapState> = _state
+    private val placesStore = PlacesAppServices.from(application).placesStore()
+    private val _state = MutableStateFlow(PlacesMapState())
+    val state: StateFlow<PlacesMapState> = _state.asStateFlow()
 
-    fun loadFromCache() {
-        val nextFeatures = cache.getDisplayFeatures()
-        val nextSelected = PlacesMapStateTransforms.reconcileSelectedFeature(
-            features = nextFeatures,
-            selectedFeature = _state.value.selectedFeature,
-        )
-        _state.value = _state.value.copy(
-            features = nextFeatures,
-            selectedFeature = nextSelected,
-        )
+    init {
+        viewModelScope.launch {
+            placesStore.snapshot.collect { snap ->
+                val nextFeatures = snap.displayFeatures
+                val nextSelected = PlacesMapStateTransforms.reconcileSelectedFeature(
+                    features = nextFeatures,
+                    selectedFeature = _state.value.selectedFeature,
+                )
+                _state.value = _state.value.copy(
+                    features = nextFeatures,
+                    selectedFeature = nextSelected,
+                )
+            }
+        }
     }
 
     fun selectByDatabaseId(id: Int?) {
@@ -58,6 +67,7 @@ class PlacesMapViewModel(application: Application) : AndroidViewModel(applicatio
         return PlacesMapStateTransforms.buildRenderState(
             features = _state.value.features,
             selectedId = _state.value.selectedFeature?.properties?.database_id,
+            selectedFeature = _state.value.selectedFeature,
         )
     }
 

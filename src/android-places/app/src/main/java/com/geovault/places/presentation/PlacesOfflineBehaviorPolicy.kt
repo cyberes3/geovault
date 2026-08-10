@@ -10,8 +10,11 @@ enum class PlacesOfflineDestructiveAction {
 
 object PlacesOfflineBehaviorPolicy {
     const val SAVED_OFFLINE_MESSAGE: String = "Saved offline. Pull to sync."
+    const val SAVED_OFFLINE_NETWORK_MESSAGE: String =
+        "Couldn't reach the server. Saved locally — pull to sync."
+    const val AUTH_REQUIRED_MESSAGE: String = "Sign in again to save this place."
+    const val VALIDATION_FAILED_MESSAGE: String = "Server rejected this place. Fix the fields and try again."
     const val REFRESH_CANCELLED_USING_CACHE_MESSAGE: String = "Cancelled - using cached data"
-    const val REFRESH_CANCELLED_MESSAGE: String = "Syncing cancelled"
     const val DELETE_WHILE_OFFLINE_MESSAGE: String =
         "Cannot delete while offline. Please try again when connected."
     const val DELETE_SERVER_ERROR_MESSAGE: String = "Failed to delete: Server error"

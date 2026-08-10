@@ -16,12 +16,15 @@ class SyncOfflinePlacesUseCaseTest {
         val serverChanged = place(id = 10, name = "HQ", desc = "server-new")
         val localOffline = place(id = 10, name = "HQ", desc = "local-new")
         val store = FakeStore(
-            offline = mutableListOf(OfflineFeature(feature = localOffline, original = existing)),
+            offline = mutableListOf(
+                OfflineFeature(clientLocalId = "c1", feature = localOffline, original = existing),
+            ),
             cached = mutableListOf(),
         )
+        val created = localOffline.copy(properties = localOffline.properties.copy(database_id = 99, name = "HQ - Conflicted"))
         val repo = FakeRepo(
             fetchPlaceResult = Result.success(serverChanged),
-            createResult = Result.success(localOffline.copy(properties = localOffline.properties.copy(database_id = 99))),
+            createResult = Result.success(created),
         )
         val useCase = SyncOfflinePlacesUseCase(
             repository = repo,
@@ -37,7 +40,7 @@ class SyncOfflinePlacesUseCaseTest {
         assertTrue(result.queueBecameEmpty)
         assertEquals(1, repo.createCalls.size)
         assertEquals("HQ - Conflicted", repo.createCalls.first().properties.name)
-        assertEquals(1, result.events.size)
+        assertEquals(listOf(99), store.getCachedFeatures().map { it.properties.database_id })
         assertTrue(result.events.first() is SyncEvent.ConflictSavedAsNew)
     }
 
@@ -46,7 +49,9 @@ class SyncOfflinePlacesUseCaseTest {
         val existing = place(id = 10, name = "HQ", desc = "orig")
         val localOffline = place(id = 10, name = "HQ", desc = "local-new")
         val store = FakeStore(
-            offline = mutableListOf(OfflineFeature(feature = localOffline, original = existing)),
+            offline = mutableListOf(
+                OfflineFeature(clientLocalId = "c1", feature = localOffline, original = existing),
+            ),
             cached = mutableListOf(),
         )
         val repo = FakeRepo(
@@ -64,8 +69,83 @@ class SyncOfflinePlacesUseCaseTest {
         assertEquals(1, result.failedCount)
         assertEquals(1, store.getOfflineFeatures().size)
         assertEquals(SyncFailureReason.FetchFailed, result.failures.first().reason)
-        assertEquals(1, result.events.size)
         assertTrue(result.events.first() is SyncEvent.ItemFailed)
+    }
+
+    @Test
+    fun writeSuccessAppliesCacheEvenWithoutCanonicalRefresh() {
+        val draft = place(id = null, name = "Draft", desc = "new")
+        val store = FakeStore(
+            offline = mutableListOf(OfflineFeature(clientLocalId = "draft-1", feature = draft)),
+            cached = mutableListOf(),
+        )
+        val server = draft.copy(properties = draft.properties.copy(database_id = 501))
+        val repo = FakeRepo(createResult = Result.success(server))
+        val useCase = SyncOfflinePlacesUseCase(
+            repository = repo,
+            cacheStore = store,
+            conflictResolutionPolicy = ConflictResolutionPolicy(),
+        )
+
+        val result = kotlinx.coroutines.runBlocking { useCase.runSync() }
+
+        assertEquals(1, result.successCount)
+        assertTrue(result.queueBecameEmpty)
+        assertEquals(501, store.getCachedFeatures().single().properties.database_id)
+    }
+
+    @Test
+    fun permanentClientErrorDropsQueueItem() {
+        val draft = place(id = null, name = "Bad", desc = "x")
+        val store = FakeStore(
+            offline = mutableListOf(OfflineFeature(clientLocalId = "bad-1", feature = draft)),
+            cached = mutableListOf(),
+        )
+        val repo = FakeRepo(
+            createResult = Result.failure(IllegalStateException("Validation failed (HTTP 400)")),
+        )
+        val useCase = SyncOfflinePlacesUseCase(
+            repository = repo,
+            cacheStore = store,
+            conflictResolutionPolicy = ConflictResolutionPolicy(),
+        )
+
+        val result = kotlinx.coroutines.runBlocking { useCase.runSync() }
+
+        assertEquals(0, result.successCount)
+        assertEquals(1, result.failedCount)
+        assertTrue(store.getOfflineFeatures().isEmpty())
+    }
+
+    @Test
+    fun updateNotFoundRecreatesAsCreate() {
+        val existing = place(id = 44, name = "Gone", desc = "old")
+        val edited = place(id = 44, name = "Gone", desc = "changed")
+        val store = FakeStore(
+            offline = mutableListOf(
+                OfflineFeature(clientLocalId = "u1", feature = edited, original = null),
+            ),
+            cached = mutableListOf(),
+        )
+        val recreated = edited.copy(properties = edited.properties.copy(database_id = 900))
+        val repo = SequencedRepo(
+            createResults = mutableListOf(Result.success(recreated)),
+            fetchPlaceResults = mutableListOf(),
+            updateResults = mutableListOf(
+                Result.failure(IllegalStateException("Resource not found (HTTP 404)")),
+            ),
+        )
+        val useCase = SyncOfflinePlacesUseCase(
+            repository = repo,
+            cacheStore = store,
+            conflictResolutionPolicy = ConflictResolutionPolicy(),
+        )
+
+        val result = kotlinx.coroutines.runBlocking { useCase.runSync() }
+
+        assertEquals(1, result.successCount)
+        assertTrue(result.queueBecameEmpty)
+        assertEquals(900, store.getCachedFeatures().single().properties.database_id)
     }
 
     @Test
@@ -75,17 +155,17 @@ class SyncOfflinePlacesUseCaseTest {
         val edited = place(id = 44, name = "Saved", desc = "changed")
         val store = FakeStore(
             offline = mutableListOf(
-                OfflineFeature(feature = newDraft, original = null),
-                OfflineFeature(feature = edited, original = existing),
+                OfflineFeature(clientLocalId = "a", feature = newDraft, original = null),
+                OfflineFeature(clientLocalId = "b", feature = edited, original = existing),
             ),
             cached = mutableListOf(),
         )
         val repo = SequencedRepo(
             createResults = mutableListOf(
-                Result.success(newDraft.copy(properties = newDraft.properties.copy(database_id = 500)))
+                Result.success(newDraft.copy(properties = newDraft.properties.copy(database_id = 500))),
             ),
             fetchPlaceResults = mutableListOf(Result.success(existing)),
-            updateResults = mutableListOf(Result.failure(IllegalStateException("network")))
+            updateResults = mutableListOf(Result.failure(IllegalStateException("network"))),
         )
         val useCase = SyncOfflinePlacesUseCase(
             repository = repo,
@@ -100,6 +180,7 @@ class SyncOfflinePlacesUseCaseTest {
         assertEquals(SyncFailureReason.UpdateFailed, result.failures.first().reason)
         assertEquals(1, store.getOfflineFeatures().size)
         assertEquals(44, store.getOfflineFeatures().first().feature.properties.database_id)
+        assertEquals("b", store.getOfflineFeatures().first().clientLocalId)
     }
 
     private fun place(id: Int?, name: String, desc: String): Feature {
@@ -121,13 +202,20 @@ private class FakeStore(
     private val cached: MutableList<Feature>,
 ) : PlacesOfflineStore {
     override fun getOfflineFeatures(): List<OfflineFeature> = offline.toList()
-    override fun removeOffline(item: OfflineFeature) {
-        offline.remove(item)
+    override fun removeOffline(clientLocalId: String) {
+        offline.removeAll { it.clientLocalId == clientLocalId }
     }
     override fun getCachedFeatures(): List<Feature> = cached.toList()
     override fun setCached(collection: FeatureCollection, lastSyncTime: Long) {
         cached.clear()
         cached.addAll(collection.features)
+    }
+    override fun applyServerFeature(feature: Feature) {
+        val id = feature.properties.database_id
+        if (id != null) {
+            cached.removeAll { it.properties.database_id == id }
+        }
+        cached.add(0, feature)
     }
 }
 
@@ -135,10 +223,10 @@ private class FakeRepo(
     private val fetchPlacesResult: Result<FeatureCollection> = Result.success(FeatureCollection(features = emptyList())),
     private val fetchPlaceResult: Result<Feature> = Result.failure(IllegalStateException("missing")),
     private val createResult: Result<Feature> = Result.success(
-        Feature(geometry = Geometry(coordinates = listOf(0.0, 0.0)), properties = Properties(name = "x"))
+        Feature(geometry = Geometry(coordinates = listOf(0.0, 0.0)), properties = Properties(name = "x")),
     ),
     private val updateResult: Result<Feature> = Result.success(
-        Feature(geometry = Geometry(coordinates = listOf(0.0, 0.0)), properties = Properties(name = "x"))
+        Feature(geometry = Geometry(coordinates = listOf(0.0, 0.0)), properties = Properties(name = "x")),
     ),
 ) : PlacesRemoteDataSource {
     val createCalls = mutableListOf<Feature>()

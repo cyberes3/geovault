@@ -22,12 +22,7 @@ class PlaceEditScreenState(
 
     var name by mutableStateOf(initial?.properties?.name.orEmpty())
     var description by mutableStateOf(initial?.properties?.description.orEmpty())
-    var coordinatesInput by mutableStateOf(
-        initial?.properties?.address
-            ?: initial?.geometry?.coordinates?.takeIf { it.size >= 2 }?.let {
-                String.format("%.6f, %.6f", it[1], it[0])
-            }.orEmpty(),
-    )
+    var coordinatesInput by mutableStateOf(coordinatesFromGeometry(initial))
     var selectedLat by mutableStateOf(initial?.geometry?.coordinates?.getOrNull(1))
     var selectedLon by mutableStateOf(initial?.geometry?.coordinates?.getOrNull(0))
     var selectedAddress by mutableStateOf(initial?.properties?.address)
@@ -42,12 +37,8 @@ class PlaceEditScreenState(
 
     private val initialName = initial?.properties?.name.orEmpty().trim()
     private val initialDescription = initial?.properties?.description.orEmpty().trim()
-    private val initialCoordinates = (
-        initial?.properties?.address
-            ?: initial?.geometry?.coordinates?.takeIf { it.size >= 2 }?.let {
-                String.format("%.6f, %.6f", it[1], it[0])
-            }.orEmpty()
-        ).trim()
+    private val initialCoordinates = coordinatesFromGeometry(initial).trim()
+    private val initialAddress = initial?.properties?.address.orEmpty().trim()
 
     val title: String
         get() = when {
@@ -59,7 +50,8 @@ class PlaceEditScreenState(
     val hasUnsavedChanges: Boolean
         get() = name.trim() != initialName ||
             description.trim() != initialDescription ||
-            coordinatesInput.trim() != initialCoordinates
+            coordinatesInput.trim() != initialCoordinates ||
+            selectedAddress.orEmpty().trim() != initialAddress
 
     fun setFromMapPoint(latitude: Double, longitude: Double): Boolean {
         if (shouldSuppressInitialMapTap()) return false
@@ -175,5 +167,10 @@ class PlaceEditScreenState(
     companion object {
         private const val INITIAL_MAP_TAP_SUPPRESSION_MILLIS = 350L
         private const val NANOSECONDS_PER_MILLISECOND = 1_000_000L
+
+        private fun coordinatesFromGeometry(feature: Feature?): String {
+            val coords = feature?.geometry?.coordinates?.takeIf { it.size >= 2 } ?: return ""
+            return String.format("%.6f, %.6f", coords[1], coords[0])
+        }
     }
 }

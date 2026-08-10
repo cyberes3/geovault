@@ -42,13 +42,13 @@ object PlacesMapStateTransforms {
     fun buildRenderState(
         features: List<Feature>,
         selectedId: Int?,
+        selectedFeature: Feature? = null,
     ): MapRenderState {
         val points = features.mapIndexed { index, feature ->
             val coordinates = feature.geometry.coordinates
             val lat = coordinates.getOrNull(1) ?: 0.0
             val lon = coordinates.getOrNull(0) ?: 0.0
-            val dbId = feature.properties.database_id
-            val isSelected = selectedId != null && dbId == selectedId
+            val isSelected = isSameDisplayFeature(feature, selectedId, selectedFeature)
             MapRenderPoint(
                 id = renderIdForFeature(index, feature),
                 latitude = lat,
@@ -61,9 +61,29 @@ object PlacesMapStateTransforms {
         return MapRenderState(points = points)
     }
 
+    private fun isSameDisplayFeature(
+        feature: Feature,
+        selectedId: Int?,
+        selectedFeature: Feature?,
+    ): Boolean {
+        val dbId = feature.properties.database_id
+        if (selectedId != null && dbId == selectedId) return true
+        val selected = selectedFeature ?: return false
+        if (dbId != null && selected.properties.database_id == dbId) return true
+        if (dbId != null || selected.properties.database_id != null) return false
+        val coords = feature.geometry.coordinates
+        val selectedCoords = selected.geometry.coordinates
+        return coords.size >= 2 &&
+            selectedCoords.size >= 2 &&
+            coords[0] == selectedCoords[0] &&
+            coords[1] == selectedCoords[1] &&
+            feature.properties.name == selected.properties.name
+    }
+
     private fun markerIconId(isSelected: Boolean): String =
         if (isSelected) CommonMapIconIds.MARKER_SELECTED else CommonMapIconIds.MARKER_DEFAULT
 
     fun renderIdForFeature(index: Int, feature: Feature): String =
-        feature.properties.database_id?.toString() ?: "temp-$index-${feature.properties.name.orEmpty()}"
+        feature.properties.database_id?.toString()
+            ?: "temp-$index-${feature.properties.name.orEmpty()}-${feature.geometry.coordinates.take(2)}"
 }

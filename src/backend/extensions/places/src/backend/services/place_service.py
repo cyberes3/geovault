@@ -64,12 +64,11 @@ class PlaceService:
                 geojson_hash=geojson_hash,
             )
         except IntegrityError as exc:
-            if DUPLICATE_HASH_CONSTRAINT in str(exc):
-                raise PlaceServiceError(
-                    'A place with the same name and coordinates already exists.',
-                    status_code=409,
-                ) from exc
-            raise
+            # Places create only hits unique_user_geojson_hash for IntegrityError.
+            raise PlaceServiceError(
+                'A place with the same name and coordinates already exists.',
+                status_code=409,
+            ) from exc
         PlaceMetadata.objects.create(feature=feature, updated_at=timezone.now())
         return self._to_response(feature)
 
@@ -82,7 +81,7 @@ class PlaceService:
         try:
             feature.save()
         except IntegrityError as exc:
-            if DUPLICATE_HASH_CONSTRAINT in str(exc):
+            if _is_duplicate_hash_integrity_error(exc):
                 raise PlaceServiceError(
                     'A place with the same name and coordinates already exists.',
                     status_code=409,
@@ -149,6 +148,22 @@ class PlaceService:
 
 
 place_service = PlaceService()
+
+
+def _is_duplicate_hash_integrity_error(exc: IntegrityError) -> bool:
+    parts = [str(exc)]
+    cause = getattr(exc, '__cause__', None)
+    if cause is not None:
+        parts.append(str(cause))
+    context = getattr(exc, '__context__', None)
+    if context is not None:
+        parts.append(str(context))
+    combined = ' '.join(parts).lower()
+    return (
+        DUPLICATE_HASH_CONSTRAINT.lower() in combined
+        or 'geojson_hash' in combined
+        or 'feature with this hash already exists' in combined
+    )
 
 
 def place_service_error_response(exc: PlaceServiceError):

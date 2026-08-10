@@ -58,11 +58,12 @@ class PlacesOfflineBehaviorPolicyTest {
 
     private fun offlineFeature(databaseId: Int?): OfflineFeature {
         return OfflineFeature(
+            clientLocalId = "sample-${databaseId ?: "new"}",
             feature = Feature(
                 geometry = Geometry(coordinates = listOf(1.0, 2.0)),
-                properties = Properties(database_id = databaseId, name = "Sample")
+                properties = Properties(database_id = databaseId, name = "Sample"),
             ),
-            original = null
+            original = null,
         )
     }
 }

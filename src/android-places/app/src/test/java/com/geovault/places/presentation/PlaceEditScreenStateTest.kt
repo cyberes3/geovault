@@ -175,14 +175,30 @@ class PlaceEditScreenStateTest {
         assertEquals("Discard", offlineNew.deleteActionLabel())
     }
 
-    private fun sampleFeature(): Feature {
-        return Feature(
-            geometry = Geometry(coordinates = listOf(-122.0, 37.0)),
+    @Test
+    fun coordinatesSeedFromGeometry_notAddress() {
+        val initial = Feature(
+            geometry = Geometry(coordinates = listOf(2.0, 1.0)),
             properties = Properties(
                 database_id = 9,
                 name = "Initial Place",
                 description = "Initial Description",
-                address = "37.000000, -122.000000",
+                address = "Some Street Address",
+            ),
+        )
+        val state = PlaceEditScreenState(initial = initial, isOfflineEdit = false)
+        assertEquals("1.000000, 2.000000", state.coordinatesInput)
+        assertEquals("Some Street Address", state.selectedAddress)
+    }
+
+    private fun sampleFeature(): Feature {
+        return Feature(
+            geometry = Geometry(coordinates = listOf(2.0, 1.0)),
+            properties = Properties(
+                database_id = 9,
+                name = "Initial Place",
+                description = "Initial Description",
+                address = "Some Street Address",
             ),
         )
     }

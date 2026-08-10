@@ -67,10 +67,10 @@ class MainActivity : ComponentActivity() {
 
     private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val data = it.data
-        val offlineFeature = data?.getSerializableExtraCompat<Feature>("offline_feature")
-        val updatedFeature = data?.getSerializableExtraCompat<Feature>("updated_feature")
-        val deletedFeature = data?.getSerializableExtraCompat<Feature>("deleted_feature")
-        val revertOffline = data?.getSerializableExtraCompat<OfflineFeature>("revert_offline_feature")
+        val offlineFeature = data?.getSerializableExtraCompat<Feature>(PlaceEditActivity.EXTRA_OFFLINE_FEATURE)
+        val updatedFeature = data?.getSerializableExtraCompat<Feature>(PlaceEditActivity.EXTRA_UPDATED_FEATURE)
+        val deletedFeature = data?.getSerializableExtraCompat<Feature>(PlaceEditActivity.EXTRA_DELETED_FEATURE)
+        val revertOffline = data?.getSerializableExtraCompat<OfflineFeature>(PlaceEditActivity.EXTRA_REVERT_OFFLINE)
         when {
             deletedFeature != null -> {
                 viewModel.applyDeletedFeature(deletedFeature)
@@ -79,16 +79,23 @@ class MainActivity : ComponentActivity() {
                 viewModel.revertOfflineChanges(revertOffline)
             }
             offlineFeature != null -> {
-                val original = data.getSerializableExtraCompat<Feature>("original_feature")
-                val offlineEditIndex = data.getIntExtra("offline_edit_index", -1)
-                viewModel.saveOffline(offlineFeature, original, offlineEditIndex)
+                val original = data.getSerializableExtraCompat<Feature>(PlaceEditActivity.EXTRA_ORIGINAL_FEATURE)
+                val clientLocalId = data.getStringExtra(PlaceEditActivity.EXTRA_CLIENT_LOCAL_ID)
+                    ?: OfflineFeature.newId()
+                val snackbar = data.getStringExtra(PlaceEditActivity.EXTRA_OFFLINE_SNACKBAR)
+                    ?: PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE
+                viewModel.saveOffline(
+                    feature = offlineFeature,
+                    original = original,
+                    clientLocalId = clientLocalId,
+                    snackbarMessage = snackbar,
+                )
             }
             updatedFeature != null -> {
                 viewModel.applyUpdatedFeature(updatedFeature)
             }
             else -> viewModel.onHostResumed()
         }
-        mapViewModel.loadFromCache()
     }
 
     private enum class PlacesTab {
@@ -235,19 +242,21 @@ class MainActivity : ComponentActivity() {
                                         onOpenShare = { isShareExportOpen = true },
                                         onRefresh = viewModel::refreshNow,
                                         onAddPlace = {
-                                            editLauncher.launch(Intent(this@MainActivity, PlaceEditActivity::class.java))
+                                            editLauncher.launch(
+                                                Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
+                                                    putExtra(PlaceEditActivity.EXTRA_CLIENT_LOCAL_ID, OfflineFeature.newId())
+                                                },
+                                            )
                                         },
                                         onEditSavedPlace = { feature ->
-                                            val i = Intent(this@MainActivity, PlaceEditActivity::class.java)
-                                            i.putExtra("feature", feature)
-                                            editLauncher.launch(i)
+                                            editLauncher.launch(buildEditIntent(feature))
                                         },
-                                        onEditOfflinePlace = { offlineFeature, offlineIndex ->
+                                        onEditOfflinePlace = { offlineFeature ->
                                             val i = Intent(this@MainActivity, PlaceEditActivity::class.java).apply {
-                                                putExtra("feature", offlineFeature.feature)
-                                                putExtra("original_feature", offlineFeature.original)
-                                                putExtra("is_offline_edit", true)
-                                                putExtra("offline_edit_index", offlineIndex)
+                                                putExtra(PlaceEditActivity.EXTRA_FEATURE, offlineFeature.feature)
+                                                putExtra(PlaceEditActivity.EXTRA_ORIGINAL_FEATURE, offlineFeature.original)
+                                                putExtra(PlaceEditActivity.EXTRA_IS_OFFLINE_EDIT, true)
+                                                putExtra(PlaceEditActivity.EXTRA_CLIENT_LOCAL_ID, offlineFeature.clientLocalId)
                                             }
                                             editLauncher.launch(i)
                                         },
@@ -310,6 +319,7 @@ class MainActivity : ComponentActivity() {
                                         map = mainMap,
                                         viewModel = mapViewModel,
                                         launchArgs = mapLaunchArgs,
+                                        isTabVisible = active,
                                         onOpenSettings = { isSettingsOpen = true },
                                         onOpenShare = { isShareExportOpen = true },
                                         onOpenEdit = { feature ->
@@ -362,7 +372,7 @@ class MainActivity : ComponentActivity() {
                     PlacesShareExportHost(
                         visible = isShareExportOpen,
                         onDismissRequest = { isShareExportOpen = false },
-                        cacheStore = PlacesAppServices.from(application).cacheStore(),
+                        placesStore = PlacesAppServices.from(application).placesStore(),
                     )
                 }
             }
@@ -380,14 +390,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true) {
+        val showExportToast = intent?.getBooleanExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE, false) == true ||
+            PlacesApplication.consumePendingExportSavedToast()
+        if (showExportToast) {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
             Toast.makeText(this, "Offline data saved to Files -> Downloads", Toast.LENGTH_SHORT).show()
         }
         accountViewModel.onHostResumed()
         viewModel.onHostResumed()
         settingsViewModel.onHostResumed()
-        mapViewModel.loadFromCache()
     }
 
     override fun onStop() {
@@ -410,17 +421,17 @@ class MainActivity : ComponentActivity() {
      * instead of attempting an online PUT (or creating a duplicate offline entry).
      */
     private fun buildEditIntent(feature: Feature): Intent {
-        val offlineMatch = PlacesAppServices.from(application).cacheStore()
-            .findOfflineEdit(feature.properties.database_id)
+        val offlineMatch = PlacesAppServices.from(application).placesStore()
+            .findOfflineForFeature(feature)
         return Intent(this, PlaceEditActivity::class.java).apply {
             if (offlineMatch != null) {
-                val (offlineFeature, offlineIndex) = offlineMatch
-                putExtra("feature", offlineFeature.feature)
-                putExtra("original_feature", offlineFeature.original)
-                putExtra("is_offline_edit", true)
-                putExtra("offline_edit_index", offlineIndex)
+                putExtra(PlaceEditActivity.EXTRA_FEATURE, offlineMatch.feature)
+                putExtra(PlaceEditActivity.EXTRA_ORIGINAL_FEATURE, offlineMatch.original)
+                putExtra(PlaceEditActivity.EXTRA_IS_OFFLINE_EDIT, true)
+                putExtra(PlaceEditActivity.EXTRA_CLIENT_LOCAL_ID, offlineMatch.clientLocalId)
             } else {
-                putExtra("feature", feature)
+                putExtra(PlaceEditActivity.EXTRA_FEATURE, feature)
+                putExtra(PlaceEditActivity.EXTRA_CLIENT_LOCAL_ID, OfflineFeature.newId())
             }
         }
     }
