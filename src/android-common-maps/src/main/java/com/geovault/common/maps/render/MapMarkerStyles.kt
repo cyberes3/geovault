@@ -54,7 +54,27 @@ object CommonMapPointIcons {
             }
         }
     }
+
+    /**
+     * Inverse of [iconImageId]. Returns null for built-in ids such as
+     * [CommonMapIconIds.MARKER_DEFAULT] and for malformed strings.
+     */
+    fun styleOrNull(imageId: String): MapMarkerStyle? {
+        val prefix = "$ID_PREFIX-"
+        if (!imageId.startsWith(prefix)) return null
+        val rest = imageId.removePrefix(prefix)
+        val borderStyle = when {
+            rest.startsWith("light-") -> MapMarkerBorderStyle.LIGHT
+            rest.startsWith("dark-") -> MapMarkerBorderStyle.DARK
+            else -> return null
+        }
+        val hex = rest.substringAfter('-')
+        if (hex.length != 6 || hex.any { it !in HEX_ALPHABET }) return null
+        return CommonMapMarkerStyles.fromCenterColorHex("#$hex", borderStyle)
+    }
 }
+
+private val HEX_ALPHABET = ('0'..'9').toSet() + ('a'..'f').toSet()
 
 object CommonMapMarkerStyles {
     fun frame(borderStyle: MapMarkerBorderStyle): MapMarkerFrameStyle {

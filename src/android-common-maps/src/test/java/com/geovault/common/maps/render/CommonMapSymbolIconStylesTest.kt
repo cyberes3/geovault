@@ -46,6 +46,23 @@ class CommonMapSymbolIconStylesTest {
     }
 
     @Test
+    fun styleOrNull_roundTripsGeneratedId() {
+        val imageId = CommonMapPointIcons.iconImageId("#FF3E41", MapMarkerBorderStyle.LIGHT)
+        val style = CommonMapPointIcons.styleOrNull(imageId)
+        assertEquals(GeoVaultColorTokens.MainRed.toArgb(), style!!.centerColorInt)
+        assertEquals(
+            CommonMapMarkerStyles.frame(MapMarkerBorderStyle.LIGHT).outerBorderColorInt,
+            style.outerBorderColorInt,
+        )
+    }
+
+    @Test
+    fun styleOrNull_rejectsBuiltInDefaultId() {
+        assertEquals(null, CommonMapPointIcons.styleOrNull(CommonMapIconIds.MARKER_DEFAULT))
+        assertEquals(null, CommonMapPointIcons.styleOrNull("not-a-marker"))
+    }
+
+    @Test
     fun generatedPointMarkerStyles_registersEveryFillAndFrameCombination() {
         val styles = CommonMapPointIcons.styles(
             centerColorsByHex = mapOf(

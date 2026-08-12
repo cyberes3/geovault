@@ -38,4 +38,21 @@ class KmlCoordinateTuplesTest {
         assertEquals(0, KmlCoordinateTuples.parsePositions(null).size)
         assertEquals(0, KmlCoordinateTuples.parsePositions("   ").size)
     }
+
+    @Test
+    fun parsePosition_stripsInternalWhitespace() {
+        val pos = KmlCoordinateTuples.parsePosition(" -71.06, 42.36, 0 ")
+        assertEquals(-71.06, pos!!.longitude, 0.0)
+        assertEquals(42.36, pos.latitude, 0.0)
+        assertEquals(0.0, pos.altitudeMeters!!, 0.0)
+    }
+
+    @Test
+    fun closeRing_appendsFirstWhenOpen() {
+        val a = KmlPosition(0.0, 0.0)
+        val b = KmlPosition(1.0, 0.0)
+        val closed = KmlCoordinateTuples.closeRing(listOf(a, b, KmlPosition(0.0, 1.0)))
+        assertEquals(4, closed.size)
+        assertEquals(a, closed.last())
+    }
 }

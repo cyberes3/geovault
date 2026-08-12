@@ -58,6 +58,7 @@ private data class PreparedGeoJsonRenderState(
     val overlayPointsJson: String,
     val linesJson: String,
     val polygonsJson: String,
+    val markerImageIds: Set<String>,
 )
 
 private const val PROPERTY_ID: String = "id"
@@ -765,11 +766,13 @@ class GeoJsonRenderPlugin(
                 polygons = state.polygons,
                 emitLineColorProperty = !config.showPolygonOutline,
             ),
+            markerImageIds = state.points.mapNotNull { it.iconImageId }.toSet(),
         )
     }
 
     private fun applyPreparedState(prepared: PreparedGeoJsonRenderState) {
         val style = map?.style ?: return
+        ensureRenderStateMarkerImages(style, prepared.markerImageIds)
         updateSource(style, pointsSourceId, prepared.pointsJson)
         if (usePointOverlay) {
             updateSource(style, pointsOverlaySourceId, prepared.overlayPointsJson)
@@ -810,6 +813,16 @@ class GeoJsonRenderPlugin(
                 withClusterRadius(pointClustering.radius)
                 withClusterMinPoints(pointClustering.minPoints)
             }
+        }
+    }
+
+    private fun ensureRenderStateMarkerImages(style: Style, imageIds: Set<String>) {
+        val appContext = context?.applicationContext ?: return
+        for (imageId in imageIds) {
+            if (style.getImage(imageId) != null) continue
+            val markerStyle = CommonMapPointIcons.styleOrNull(imageId) ?: continue
+            val bitmap = MapMarkerUtils.buildMarkerBitmap(appContext, markerStyle)
+            style.addImage(imageId, bitmap, false)
         }
     }
 

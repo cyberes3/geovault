@@ -4,10 +4,12 @@ import org.xmlpull.v1.XmlPullParser
 
 /**
  * Reads KML 2.2 geometry elements from an [XmlPullParser] positioned at the **start tag**
- * of `Point`, `LineString`, `Polygon`, or `MultiGeometry`.
+ * of a geometry element.
  *
- * Uses element **local names** so default KML namespaces work with
- * [XmlPullParser.FEATURE_PROCESS_NAMESPACES].
+ * Local names match backend `get_geometry()`: `Point`, `LineString`, `LinearRing`,
+ * `Polygon`, `MultiGeometry`, `MultiTrack` / `gx:MultiTrack`, `Track` / `gx:Track`.
+ * Nested multi-geometries are flattened iteratively (same output order as a recursive
+ * walk, without a call-stack ceiling).
  */
 class KmlGeometryPullParser {
 
@@ -21,9 +23,10 @@ class KmlGeometryPullParser {
         }
         return when (parser.name) {
             "Point" -> parsePoint(parser)?.let { listOf(it) } ?: emptyList()
-            "LineString" -> parseLineString(parser)?.let { listOf(it) } ?: emptyList()
+            "LineString", "LinearRing" -> parseLineString(parser)?.let { listOf(it) } ?: emptyList()
             "Polygon" -> parsePolygon(parser)?.let { listOf(it) } ?: emptyList()
-            "MultiGeometry" -> parseMultiGeometry(parser)
+            "Track" -> parseTrack(parser)
+            "MultiGeometry", "MultiTrack" -> parseMultiGeometry(parser)
             else -> {
                 consumeCurrentSubtree(parser)
                 emptyList()
@@ -43,15 +46,16 @@ class KmlGeometryPullParser {
             }
             event = parser.next()
         }
-        val pos = KmlCoordinateTuples.parsePositions(coordText).firstOrNull() ?: return null
+        val pos = KmlCoordinateTuples.parsePosition(coordText) ?: return null
         return ParsedKmlGeometry.Point(pos)
     }
 
     private fun parseLineString(parser: XmlPullParser): ParsedKmlGeometry.LineString? {
+        val tag = parser.name
         val outerDepth = parser.depth
         var event = parser.next()
         var coordText: String? = null
-        while (!(event == XmlPullParser.END_TAG && parser.depth == outerDepth && parser.name == "LineString")) {
+        while (!(event == XmlPullParser.END_TAG && parser.depth == outerDepth && parser.name == tag)) {
             if (event == XmlPullParser.START_TAG && parser.name == "coordinates") {
                 coordText = parser.nextText()
             } else if (event == XmlPullParser.START_TAG) {
@@ -136,17 +140,46 @@ class KmlGeometryPullParser {
         return ring.ifEmpty { null }
     }
 
-    private fun ringFromCoordinateText(text: String?): List<KmlPosition> =
-        KmlCoordinateTuples.parsePositions(text)
+    private fun ringFromCoordinateText(text: String?): List<KmlPosition> {
+        val ring = KmlCoordinateTuples.closeRing(KmlCoordinateTuples.parsePositions(text))
+        return if (ring.size >= 4) ring else emptyList()
+    }
+
+    /**
+     * gx:Track / Track: `<gx:coord>lon lat alt</gx:coord>`. Backend emits a LineString
+     * when there are more than two coords, otherwise a Point of the first coord.
+     */
+    private fun parseTrack(parser: XmlPullParser): List<ParsedKmlGeometry> {
+        val positions = mutableListOf<KmlPosition>()
+        val outerDepth = parser.depth
+        var event = parser.next()
+        while (!(event == XmlPullParser.END_TAG && parser.depth == outerDepth && parser.name == "Track")) {
+            if (event == XmlPullParser.START_TAG && parser.name == "coord") {
+                KmlCoordinateTuples.parseGxCoord(parser.nextText())?.let { positions += it }
+            } else if (event == XmlPullParser.START_TAG) {
+                consumeCurrentSubtree(parser)
+            }
+            event = parser.next()
+        }
+        if (positions.isEmpty()) return emptyList()
+        return if (positions.size > 2) {
+            listOf(ParsedKmlGeometry.LineString(positions))
+        } else {
+            listOf(ParsedKmlGeometry.Point(positions.first()))
+        }
+    }
 
     private fun parseMultiGeometry(parser: XmlPullParser): List<ParsedKmlGeometry> {
+        val tag = parser.name
         val out = mutableListOf<ParsedKmlGeometry>()
         val outerDepth = parser.depth
         var event = parser.next()
-        while (!(event == XmlPullParser.END_TAG && parser.depth == outerDepth && parser.name == "MultiGeometry")) {
+        while (!(event == XmlPullParser.END_TAG && parser.depth == outerDepth && parser.name == tag)) {
             if (event == XmlPullParser.START_TAG) {
                 when (parser.name) {
-                    "Point", "LineString", "Polygon" -> out.addAll(parseGeometrySubtree(parser))
+                    "Point", "LineString", "LinearRing", "Polygon",
+                    "Track", "MultiGeometry", "MultiTrack",
+                    -> out.addAll(parseGeometrySubtree(parser))
                     else -> consumeCurrentSubtree(parser)
                 }
             }

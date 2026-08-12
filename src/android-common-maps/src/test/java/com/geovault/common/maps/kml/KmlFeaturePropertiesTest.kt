@@ -21,4 +21,13 @@ class KmlFeaturePropertiesTest {
         assertNull(KmlFeatureProperties.code(""))
         assertNull(KmlFeatureProperties.code("not-json"))
     }
+
+    @Test
+    fun iconHrefAndColor_readImportedFields() {
+        val json = """{"imported_icon_href":"files/pin.png","imported_icon_color":"#f00000"}"""
+        assertEquals("files/pin.png", KmlFeatureProperties.iconHref(json))
+        assertEquals("#f00000", KmlFeatureProperties.iconColor(json))
+        assertNull(KmlFeatureProperties.iconColor("""{"imported_marker_color":"#FF0000"}"""))
+        assertNull(KmlFeatureProperties.iconHref("""{"name":"x"}"""))
+    }
 }

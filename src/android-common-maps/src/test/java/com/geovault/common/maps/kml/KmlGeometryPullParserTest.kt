@@ -148,4 +148,79 @@ class KmlGeometryPullParserTest {
         val line = parser.parseGeometrySubtree(p).single() as ParsedKmlGeometry.LineString
         assertEquals(3, line.positions.size)
     }
+
+    @Test
+    fun nestedMultiGeometry_flattens() {
+        val kml = """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <MultiGeometry>
+                <MultiGeometry>
+                  <Point><coordinates>1,2</coordinates></Point>
+                </MultiGeometry>
+                <LineString><coordinates>0,0 1,1</coordinates></LineString>
+              </MultiGeometry>
+            </kml>
+        """.trimIndent()
+        val p = newParser(kml)
+        advanceToStart(p, "MultiGeometry")
+        val out = parser.parseGeometrySubtree(p)
+        assertEquals(2, out.size)
+        assertTrue(out[0] is ParsedKmlGeometry.Point)
+        assertTrue(out[1] is ParsedKmlGeometry.LineString)
+    }
+
+    @Test
+    fun gxTrack_threeCoords_isLineString() {
+        val kml = """
+            <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+              <gx:Track>
+                <when>2010-01-01T00:00:00Z</when>
+                <gx:coord>0 0 10</gx:coord>
+                <gx:coord>1 1 10</gx:coord>
+                <gx:coord>2 2 10</gx:coord>
+              </gx:Track>
+            </kml>
+        """.trimIndent()
+        val p = newParser(kml)
+        advanceToStart(p, "Track")
+        val line = parser.parseGeometrySubtree(p).single() as ParsedKmlGeometry.LineString
+        assertEquals(3, line.positions.size)
+        assertEquals(0.0, line.positions[0].longitude, 0.0)
+        assertEquals(10.0, line.positions[0].altitudeMeters!!, 0.0)
+    }
+
+    @Test
+    fun linearRing_asLineString() {
+        val kml = """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <LinearRing>
+                <coordinates>0,0 1,0 1,1 0,0</coordinates>
+              </LinearRing>
+            </kml>
+        """.trimIndent()
+        val p = newParser(kml)
+        advanceToStart(p, "LinearRing")
+        val line = parser.parseGeometrySubtree(p).single() as ParsedKmlGeometry.LineString
+        assertEquals(4, line.positions.size)
+    }
+
+    @Test
+    fun polygon_unclosedRing_isClosed() {
+        val kml = """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Polygon>
+                <outerBoundaryIs>
+                  <LinearRing>
+                    <coordinates>0,0 1,0 0,1</coordinates>
+                  </LinearRing>
+                </outerBoundaryIs>
+              </Polygon>
+            </kml>
+        """.trimIndent()
+        val p = newParser(kml)
+        advanceToStart(p, "Polygon")
+        val poly = parser.parseGeometrySubtree(p).single() as ParsedKmlGeometry.Polygon
+        assertEquals(4, poly.rings[0].size)
+        assertEquals(poly.rings[0].first(), poly.rings[0].last())
+    }
 }
