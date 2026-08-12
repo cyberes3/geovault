@@ -6,13 +6,14 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.NaturalSort
+import com.geovault.common.files.GeoVaultOpenableUriMetadata
 import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.domain.ImportUploadQueue
 import com.geovault.uploader.domain.QueueUploadStateMachine
-import com.geovault.uploader.domain.ShareIntentParser
 import com.geovault.uploader.model.FileQueueItem
 import com.geovault.uploader.model.FileStatus
+import com.geovault.uploader.navigation.UploadNavigation
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -41,7 +42,7 @@ class UploadViewModel(
         UploaderAppServices.from(application)
     )
 
-    private val metadata = services.fileMetadataRepository
+    private val metadata: GeoVaultOpenableUriMetadata = services.openableUriMetadata
     private val prefs = services.uploaderPreferences
     private val importUploadQueue: ImportUploadQueue = services.importUploadQueue
 
@@ -53,8 +54,8 @@ class UploadViewModel(
     fun initialize(intent: Intent?) {
         uploadJob?.cancel()
         uploadJob = null
-        val payload = ShareIntentParser.parse(intent)
-        val items = payload.uris.map(::buildItem).sortedWith(
+        val payloadUris = UploadNavigation.urisFrom(intent)
+        val items = payloadUris.map(::buildItem).sortedWith(
             NaturalSort.naturalOrderBy { it.filename.lowercase(Locale.getDefault()) }
         )
         _state.value = QueueUploadState(
@@ -114,9 +115,9 @@ class UploadViewModel(
     }
 
     private fun buildItem(uri: Uri): FileQueueItem {
-        val filename = metadata.filenameFromUri(uri)
-        val size = metadata.fileSizeFromUri(uri)
-        val modifiedAt = metadata.fileModifiedAtFromUri(uri)
+        val filename = metadata.displayName(uri)
+        val size = metadata.sizeBytes(uri)
+        val modifiedAt = metadata.lastModifiedMillis(uri)
         if (!FilenamePolicy.isSupportedImportType(filename)) {
             return FileQueueItem(
                 uri = uri,

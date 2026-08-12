@@ -5,12 +5,11 @@ import android.content.Context
 import com.geovault.common.ServerUrlContract
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.common.files.GeoVaultOpenableUriMetadata
 import com.geovault.uploader.data.AuthRepository
-import com.geovault.uploader.data.FileMetadataRepository
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
 import com.geovault.uploader.data.ValidationRepository
-import com.geovault.uploader.domain.ImportFilenameResolver
 import com.geovault.uploader.domain.ImportUploadQueue
 import com.geovault.uploader.domain.PickerSelectionRouter
 
@@ -28,8 +27,8 @@ class UploaderAppServices private constructor(
         UploaderPreferences.getInstance(appContext)
     }
 
-    val fileMetadataRepository: FileMetadataRepository by lazy {
-        FileMetadataRepository(appContext.contentResolver)
+    val openableUriMetadata: GeoVaultOpenableUriMetadata by lazy {
+        GeoVaultOpenableUriMetadata(appContext.contentResolver)
     }
 
     val uploadRepository: UploadRepository by lazy {
@@ -61,7 +60,7 @@ class UploaderAppServices private constructor(
     }
 
     val pickerSelectionRouter: PickerSelectionRouter by lazy {
-        PickerSelectionRouter(fileMetadataRepository)
+        PickerSelectionRouter(openableUriMetadata::displayName)
     }
 
     val importUploadQueue: ImportUploadQueue by lazy {

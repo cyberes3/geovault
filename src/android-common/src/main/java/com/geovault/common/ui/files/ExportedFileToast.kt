@@ -3,8 +3,8 @@ package com.geovault.common.ui.files
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import android.widget.Toast
+import com.geovault.common.files.GeoVaultOpenableUriMetadata
 import java.io.File
 
 /**
@@ -203,15 +203,5 @@ object ExportedFileToast {
     }
 
     private fun queryDisplayName(context: Context, uri: Uri): String? =
-        context.contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME),
-            null,
-            null,
-            null,
-        )?.use { c ->
-            if (!c.moveToFirst()) return@use null
-            val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx < 0) null else c.getString(idx)
-        }
+        GeoVaultOpenableUriMetadata(context.contentResolver).displayNameOrNull(uri)
 }

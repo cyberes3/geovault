@@ -1,7 +1,6 @@
 package com.geovault.tracker.ui
 
 import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.drawBehind
@@ -52,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.files.GeoVaultOutgoingShare
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultSelectField
@@ -927,11 +927,7 @@ private fun resolveShareUrl(context: Context, shareUrl: String): String {
 
 private fun shareWorldShareLink(context: Context, worldShareUrl: String?) {
     if (worldShareUrl.isNullOrBlank()) return
-    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, worldShareUrl)
-    }
-    context.startActivity(Intent.createChooser(shareIntent, null))
+    GeoVaultOutgoingShare.shareText(context, worldShareUrl)
 }
 
 private data class TrackerColorPreviewState(

@@ -1,6 +1,8 @@
 package com.geovault.uploader.domain
 
 import android.net.Uri
+import com.geovault.common.files.GeoVaultUploadFileTypes
+
 sealed interface PickerRouteDecision {
     data object NoSelection : PickerRouteDecision
     data class RejectedOnly(val rejectedFileNames: List<String>) : PickerRouteDecision
@@ -11,33 +13,24 @@ sealed interface PickerRouteDecision {
 }
 
 class PickerSelectionRouter(
-    private val filenameResolver: ImportFilenameResolver,
+    private val displayNameOf: (Uri) -> String,
 ) {
     fun decide(uris: List<Uri>, applyExtensionFilter: Boolean): PickerRouteDecision {
         if (uris.isEmpty()) return PickerRouteDecision.NoSelection
-
-        val (supportedUris, rejectedUris) = if (applyExtensionFilter) {
-            uris.partition(::isSupportedUri)
-        } else {
-            uris to emptyList()
+        if (!applyExtensionFilter) {
+            return PickerRouteDecision.SupportedSelection(uris, emptyList())
         }
-        val rejectedNames = rejectedUris.map(filenameResolver::filenameFromUri)
-
-        if (supportedUris.isEmpty()) {
-            return if (rejectedNames.isNotEmpty()) {
-                PickerRouteDecision.RejectedOnly(rejectedNames)
+        val classification = GeoVaultUploadFileTypes.catalog.classify(uris, displayNameOf)
+        if (classification.supported.isEmpty()) {
+            return if (classification.rejectedFileNames.isNotEmpty()) {
+                PickerRouteDecision.RejectedOnly(classification.rejectedFileNames)
             } else {
                 PickerRouteDecision.NoSelection
             }
         }
         return PickerRouteDecision.SupportedSelection(
-            uris = supportedUris,
-            rejectedFileNames = rejectedNames,
+            uris = classification.supported,
+            rejectedFileNames = classification.rejectedFileNames,
         )
-    }
-
-    private fun isSupportedUri(uri: Uri): Boolean {
-        val filename = filenameResolver.filenameFromUri(uri)
-        return FilenamePolicy.isSupportedImportType(filename)
     }
 }

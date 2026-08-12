@@ -1,7 +1,5 @@
 package com.geovault.places.ui
 
-import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,14 +10,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.FileProvider
+import com.geovault.common.files.GeoVaultOutgoingShare
 import com.geovault.common.ui.components.GeoVaultActionSheetDialog
 import com.geovault.common.ui.components.GeoVaultActionSheetOption
 import com.geovault.common.ui.components.GeoVaultMultiSelectDialog
 import com.geovault.common.ui.files.ExportedFileToast
 import com.geovault.places.data.PlacesStore
 import com.geovault.places.export.PlacesKmzExporter
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -100,7 +97,13 @@ fun PlacesShareExportHost(
                         val bytes = pendingKmzBytes
                         pendingKmzBytes = null
                         if (bytes != null) {
-                            shareKmzBytes(context, bytes)
+                            GeoVaultOutgoingShare.shareBytes(
+                                context = context,
+                                bytes = bytes,
+                                fileName = "${exportFileBaseName()}.kmz",
+                                mimeType = KMZ_MIME_TYPE,
+                                chooserTitle = "Share places",
+                            )
                         }
                     },
                 ),
@@ -122,20 +125,3 @@ fun PlacesShareExportHost(
 
 private fun exportFileBaseName(): String =
     "places_export_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}"
-
-private fun shareKmzBytes(context: Context, bytes: ByteArray) {
-    runCatching {
-        val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
-        val file = File(exportsDir, "${exportFileBaseName()}.kmz")
-        file.writeBytes(bytes)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = KMZ_MIME_TYPE
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(shareIntent, "Share places"))
-    }.onFailure {
-        Toast.makeText(context, "Share failed", Toast.LENGTH_SHORT).show()
-    }
-}

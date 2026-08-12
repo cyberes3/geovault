@@ -3,10 +3,12 @@ package com.geovault.uploader.navigation
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.geovault.common.intent.GeoVaultIncomingFileIntents
 import com.geovault.uploader.MultiUploadActivity
-import com.geovault.uploader.domain.ShareIntentParser
 
 object UploadNavigation {
+    const val EXTRA_REJECTED_FILE_NAMES = "rejected_file_names"
+
     fun createIntent(
         context: Context,
         supportedUris: List<Uri>,
@@ -25,7 +27,7 @@ object UploadNavigation {
             }
             if (rejectedFileNames.isNotEmpty()) {
                 putStringArrayListExtra(
-                    ShareIntentParser.EXTRA_REJECTED_FILE_NAMES,
+                    EXTRA_REJECTED_FILE_NAMES,
                     ArrayList(rejectedFileNames),
                 )
             }
@@ -34,6 +36,8 @@ object UploadNavigation {
     }
 
     fun readRejectedFileNames(intent: Intent?): List<String> {
-        return ShareIntentParser.parse(intent).rejectedFileNames
+        return intent?.getStringArrayListExtra(EXTRA_REJECTED_FILE_NAMES).orEmpty()
     }
+
+    fun urisFrom(intent: Intent?): List<Uri> = GeoVaultIncomingFileIntents.urisFrom(intent)
 }

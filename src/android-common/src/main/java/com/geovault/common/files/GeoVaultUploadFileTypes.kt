@@ -1,18 +1,30 @@
 package com.geovault.common.files
 
 object GeoVaultUploadFileTypes {
-    val supportedExtensions: Set<String> = setOf("kml", "kmz", "gpx")
-
-    val supportedMimeTypes: Array<String> = arrayOf(
-        "application/vnd.google-earth.kml+xml",
-        "application/vnd.google-earth.kmz",
-        "application/gpx+xml",
-        "application/xml",
-        "text/xml"
+    val catalog: GeoVaultFileTypeCatalog = GeoVaultFileTypeCatalog(
+        listOf(
+            GeoVaultFileType(
+                extension = "kml",
+                mimeTypes = setOf("application/vnd.google-earth.kml+xml"),
+            ),
+            GeoVaultFileType(
+                extension = "kmz",
+                mimeTypes = setOf("application/vnd.google-earth.kmz"),
+            ),
+            GeoVaultFileType(
+                extension = "gpx",
+                mimeTypes = setOf(
+                    "application/gpx+xml",
+                    "application/xml",
+                    "text/xml",
+                ),
+            ),
+        ),
     )
 
-    fun isSupportedFilename(filename: String): Boolean {
-        val extension = filename.substringAfterLast('.', "").lowercase()
-        return extension in supportedExtensions
-    }
+    val supportedExtensions: Set<String> get() = catalog.extensions
+
+    val supportedMimeTypes: Array<String> get() = catalog.mimeTypes
+
+    fun isSupportedFilename(filename: String): Boolean = catalog.isSupportedFilename(filename)
 }
