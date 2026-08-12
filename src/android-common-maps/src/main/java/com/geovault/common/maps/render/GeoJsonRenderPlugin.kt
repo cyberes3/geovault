@@ -63,6 +63,8 @@ private data class PreparedGeoJsonRenderState(
 private const val PROPERTY_ID: String = "id"
 private const val PROPERTY_TITLE: String = "title"
 private const val PROPERTY_OVERLAP_LIST_LABEL: String = "overlapListLabel"
+private const val PROPERTY_DRAW_OUTLINE: String = "drawOutline"
+private const val PROPERTY_LINE_WIDTH: String = "lineWidth"
 private const val POINT_HIT_HALF_DP: Float = 24f
 private const val OVERLAY_HIT_HALF_DP: Float = 36f
 
@@ -317,6 +319,7 @@ class GeoJsonRenderPlugin(
         lineOuterLayerId,
         lineBorderLayerId,
         lineFillLayerId,
+        lineThinLayerId,
         polygonsFillLayerId,
         polygonsOutlineLayerId,
     )
@@ -629,7 +632,7 @@ class GeoJsonRenderPlugin(
                 OutlinedGeoJsonLineLayers.createOuterLayer(
                     layerId = lineOuterLayerId,
                     sourceId = linesSourceId,
-                )
+                ).withFilter(outlinedLineFilter()),
             )
         }
         if (style.getLayer(lineBorderLayerId) == null) {
@@ -638,11 +641,31 @@ class GeoJsonRenderPlugin(
                 OutlinedGeoJsonLineLayers.createBorderLayer(
                     layerId = lineBorderLayerId,
                     sourceId = linesSourceId,
-                )
+                ).withFilter(outlinedLineFilter()),
             )
         }
         if (style.getLayer(lineFillLayerId) == null) {
-            addLayerWithPlacement(style, OutlinedGeoJsonLineLayers.createFillLayer(lineFillLayerId, linesSourceId))
+            addLayerWithPlacement(
+                style,
+                OutlinedGeoJsonLineLayers.createFillLayer(lineFillLayerId, linesSourceId)
+                    .withFilter(outlinedLineFilter()),
+            )
+        }
+        if (style.getLayer(lineThinLayerId) == null) {
+            addLayerWithPlacement(
+                style,
+                LineLayer(lineThinLayerId, linesSourceId).withProperties(
+                    PropertyFactory.lineColor(Expression.get(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR)),
+                    PropertyFactory.lineWidth(
+                        Expression.coalesce(
+                            Expression.get(PROPERTY_LINE_WIDTH),
+                            Expression.literal(1.5f),
+                        ),
+                    ),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ).withFilter(thinLineFilter()),
+            )
         }
         if (config.showPolygonFill && style.getLayer(polygonsFillLayerId) == null) {
             addLayerWithPlacement(
@@ -864,6 +887,22 @@ class GeoJsonRenderPlugin(
             withFilter(Expression.neq(Expression.get(PROPERTY_CLUSTER), true))
         }
 
+    private fun outlinedLineFilter(): Expression = Expression.eq(
+        Expression.coalesce(
+            Expression.toNumber(Expression.get(PROPERTY_DRAW_OUTLINE)),
+            Expression.literal(1),
+        ),
+        Expression.literal(1),
+    )
+
+    private fun thinLineFilter(): Expression = Expression.eq(
+        Expression.coalesce(
+            Expression.toNumber(Expression.get(PROPERTY_DRAW_OUTLINE)),
+            Expression.literal(1),
+        ),
+        Expression.literal(0),
+    )
+
     private val pointsSourceId = pointsSourceId(sourceIdPrefix)
     private val linesSourceId = "$sourceIdPrefix-lines-source"
     private val polygonsSourceId = "$sourceIdPrefix-polygons-source"
@@ -880,6 +919,7 @@ class GeoJsonRenderPlugin(
     private val lineOuterLayerId = "$sourceIdPrefix-lines-outer-layer"
     private val lineBorderLayerId = "$sourceIdPrefix-lines-border-layer"
     private val lineFillLayerId = "$sourceIdPrefix-lines-fill-layer"
+    private val lineThinLayerId = "$sourceIdPrefix-lines-thin-layer"
     private val polygonsFillLayerId = "$sourceIdPrefix-polygons-fill-layer"
     private val polygonsOutlineLayerId = "$sourceIdPrefix-polygons-outline-layer"
 
@@ -918,6 +958,8 @@ class GeoJsonRenderPlugin(
 
         fun lineFillLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-lines-fill-layer"
 
+        fun lineThinLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-lines-thin-layer"
+
         fun polygonsFillLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-polygons-fill-layer"
 
         fun polygonsOutlineLayerId(sourceIdPrefix: String): String = "$sourceIdPrefix-polygons-outline-layer"
@@ -935,6 +977,7 @@ class GeoJsonRenderPlugin(
             lineOuterLayerId(sourceIdPrefix),
             lineBorderLayerId(sourceIdPrefix),
             lineFillLayerId(sourceIdPrefix),
+            lineThinLayerId(sourceIdPrefix),
             polygonsFillLayerId(sourceIdPrefix),
             polygonsOutlineLayerId(sourceIdPrefix),
         )
@@ -1165,6 +1208,8 @@ private fun buildLinesFeatureCollectionJson(lines: List<MapRenderLine>): String 
             string(PROPERTY_ID, line.id)
             line.title?.let { string(PROPERTY_TITLE, it) }
             string(OutlinedGeoJsonLineLayers.PROPERTY_LINE_COLOR, line.lineColorHex)
+            number(PROPERTY_DRAW_OUTLINE, if (line.drawOutline) 1f else 0f)
+            number(PROPERTY_LINE_WIDTH, line.lineWidthPx)
         }
     }
     if (!hasAny) return GeoJsonFeatureCollectionEncoder.EMPTY_FEATURE_COLLECTION_JSON

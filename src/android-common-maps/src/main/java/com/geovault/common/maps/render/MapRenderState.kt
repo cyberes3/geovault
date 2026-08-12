@@ -30,6 +30,10 @@ data class MapRenderLine(
     val coordinates: List<Pair<Double, Double>>,
     val lineColorHex: String,
     val title: String? = null,
+    /** When true, paint the outlined 6/5/3px stack. When false, a single thin stroke. */
+    val drawOutline: Boolean = true,
+    /** Stroke width in pixels for borderless lines. Ignored when [drawOutline] is true. */
+    val lineWidthPx: Float = 3f,
 )
 
 data class MapRenderPolygon(
