@@ -75,6 +75,33 @@ class PlaceWriteBodyTest {
         assertTrue(properties.get("name").asString == "Camp")
     }
 
+    @Test
+    fun gsonWire_newPlace_stripsStampedCreatedAtAndKeepsOnlyWriteKeys() {
+        val body = PlaceWriteBody.fromFeature(
+            Feature(
+                geometry = Geometry(coordinates = listOf(2.0, 1.0)),
+                properties = Properties(
+                    database_id = null,
+                    name = "Test",
+                    description = "",
+                    created_at = "2026-08-13",
+                    address = null,
+                ),
+            ),
+        )
+
+        val json = omitNullsGson.toJsonTree(body).asJsonObject
+        assertEquals(setOf("type", "geometry", "properties"), json.keySet())
+        val geometry = json.getAsJsonObject("geometry")
+        assertEquals(setOf("type", "coordinates"), geometry.keySet())
+        assertEquals(2, geometry.getAsJsonArray("coordinates").size())
+        val properties = json.getAsJsonObject("properties")
+        assertEquals(setOf("name"), properties.keySet())
+        assertEquals("Test", properties.get("name").asString)
+        assertFalse(properties.has("database_id"))
+        assertFalse(properties.has("created_at"))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun fromFeature_rejectsBlankName() {
         PlaceWriteBody.fromFeature(

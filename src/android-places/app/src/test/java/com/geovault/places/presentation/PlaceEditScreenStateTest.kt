@@ -144,6 +144,42 @@ class PlaceEditScreenStateTest {
     }
 
     @Test
+    fun buildFeatureOrNull_usesTypedCoordinatesOverSeededSelection() {
+        val initial = sampleFeature()
+        val state = PlaceEditScreenState(initial = initial, isOfflineEdit = false)
+        state.name = "Initial Place"
+        state.onCoordinatesEdited("40.000000, -70.000000")
+
+        val built = state.buildFeatureOrNull()
+
+        assertNotNull(built)
+        assertEquals(listOf(-70.0, 40.0), built?.geometry?.coordinates)
+        assertEquals(40.0, state.selectedLat!!, 0.0)
+        assertEquals(-70.0, state.selectedLon!!, 0.0)
+    }
+
+    @Test
+    fun buildFeatureOrNull_buildsNewPlaceWithoutDatabaseIdOrCreatedAt() {
+        val state = PlaceEditScreenState(
+            initial = null,
+            isOfflineEdit = false,
+            initialMapTapSuppressionMillis = 0L,
+        )
+        state.name = "New Camp"
+        state.description = "Notes"
+        state.setFromMapPoint(latitude = 20.0, longitude = -10.0)
+
+        val built = state.buildFeatureOrNull()
+
+        assertNotNull(built)
+        assertNull(built?.properties?.database_id)
+        assertNull(built?.properties?.created_at)
+        assertEquals("New Camp", built?.properties?.name)
+        assertEquals("Notes", built?.properties?.description)
+        assertEquals(listOf(-10.0, 20.0), built?.geometry?.coordinates)
+    }
+
+    @Test
     fun buildFeatureOrNull_buildsFeature_withExistingDatabaseId() {
         val initial = sampleFeature()
         val state = PlaceEditScreenState(initial = initial, isOfflineEdit = false)

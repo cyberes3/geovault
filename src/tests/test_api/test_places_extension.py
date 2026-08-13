@@ -23,6 +23,8 @@ TEST_LON_C = -10.2
 TEST_LAT_C = 20.2
 TEST_LON_D = -10.3
 TEST_LAT_D = 20.3
+TEST_LON_E = -10.4
+TEST_LAT_E = 20.4
 TEST_BBOX = '-11,19,-9,21'
 
 
@@ -385,6 +387,27 @@ class TestPlacesAPI(TestCase):
         data = json.loads(response.content)
         error_text = data['error'].lower()
         self.assertTrue('latitude' in error_text or 'swapped' in error_text)
+
+    def test_create_place_accepts_android_two_coordinate_payload(self):
+        """Android PlaceWriteBody sends [lon, lat] with name only."""
+        payload = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [TEST_LON_E, TEST_LAT_E],
+            },
+            'properties': {'name': 'Android New Place'},
+        }
+        with _patch_places_enabled():
+            response = self.client.post(
+                '/api/extensions/places/features/',
+                data=json.dumps(payload),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        self.assertEqual(data['properties']['name'], 'Android New Place')
+        self.assertEqual(data['geometry']['coordinates'][:2], [TEST_LON_E, TEST_LAT_E])
 
     def test_create_place_requires_name(self):
         """POST without name returns 400."""

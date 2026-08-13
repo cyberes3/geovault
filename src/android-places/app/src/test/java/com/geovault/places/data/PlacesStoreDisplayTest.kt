@@ -42,6 +42,20 @@ class PlacesStoreDisplayTest {
         assertEquals(listOf("Draft", "Cached"), display.map { it.properties.name })
     }
 
+    @Test
+    fun retainValidOfflineEntries_keepsValidRowsAndDropsBlankIds() {
+        val parsed = listOf(
+            OfflineFeature(clientLocalId = "keep-me", feature = place(databaseId = null, name = "Draft")),
+            OfflineFeature(clientLocalId = "", feature = place(databaseId = 7, name = "Legacy")),
+            OfflineFeature(clientLocalId = "   ", feature = place(databaseId = 8, name = "Also Legacy")),
+        )
+
+        val retained = PlacesStore.retainValidOfflineEntries(parsed)
+
+        assertEquals(listOf("keep-me"), retained.map { it.clientLocalId })
+        assertEquals(listOf("Draft"), retained.map { it.feature.properties.name })
+    }
+
     private fun place(databaseId: Int?, name: String): Feature {
         return Feature(
             geometry = Geometry(coordinates = listOf(2.0, 1.0)),

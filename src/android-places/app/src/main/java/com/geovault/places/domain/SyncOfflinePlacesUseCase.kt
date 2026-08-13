@@ -264,8 +264,13 @@ class SyncOfflinePlacesUseCase(
     ): SyncItemOutcome {
         val dropped = when (disposition) {
             GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
-                cacheStore.removeOffline(item.clientLocalId)
-                true
+                val unsyncedCreate = item.feature.properties.database_id == null
+                if (unsyncedCreate) {
+                    false
+                } else {
+                    cacheStore.removeOffline(item.clientLocalId)
+                    true
+                }
             }
             GeoVaultQueuedSyncItemDisposition.RequireAuth,
             GeoVaultQueuedSyncItemDisposition.KeepRetrying,

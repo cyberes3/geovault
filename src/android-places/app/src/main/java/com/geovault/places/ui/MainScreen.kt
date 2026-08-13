@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.CoordinateParser
 import com.geovault.common.ui.components.GeoVaultAuthGate
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
@@ -352,7 +353,7 @@ private fun PlaceRow(
     val addressOrCoordinates = feature.properties.address?.takeIf { it.isNotBlank() } ?: run {
         val coords = feature.geometry.coordinates
         if (coords.size >= 2) {
-            String.format("%.6f, %.6f", coords[1], coords[0])
+            CoordinateParser.formatLatLon(coords[1], coords[0])
         } else {
             ""
         }

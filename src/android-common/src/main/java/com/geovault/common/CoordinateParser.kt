@@ -1,10 +1,14 @@
 package com.geovault.common
 
+import java.util.Locale
 import java.util.regex.Pattern
 import kotlin.math.abs
 import kotlin.math.floor
 
 object CoordinateParser {
+    fun formatLatLon(latitude: Double, longitude: Double): String =
+        String.format(Locale.US, "%.6f, %.6f", latitude, longitude)
+
     fun parse(input: String): Pair<Double, Double>? {
         return try {
             val preprocessed = input.replace(Regex("(\\d),(\\d)"), "$1.$2")

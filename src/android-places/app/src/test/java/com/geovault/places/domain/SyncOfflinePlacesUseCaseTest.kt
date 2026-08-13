@@ -95,7 +95,7 @@ class SyncOfflinePlacesUseCaseTest {
     }
 
     @Test
-    fun permanentClientErrorDropsQueueItem() {
+    fun permanentClientErrorKeepsUnsyncedCreate() {
         val draft = place(id = null, name = "Bad", desc = "x")
         val store = FakeStore(
             offline = mutableListOf(OfflineFeature(clientLocalId = "bad-1", feature = draft)),
@@ -103,6 +103,30 @@ class SyncOfflinePlacesUseCaseTest {
         )
         val repo = FakeRepo(
             createResult = Result.failure(IllegalStateException("Validation failed (HTTP 400)")),
+        )
+        val useCase = SyncOfflinePlacesUseCase(
+            repository = repo,
+            cacheStore = store,
+            conflictResolutionPolicy = ConflictResolutionPolicy(),
+        )
+
+        val result = kotlinx.coroutines.runBlocking { useCase.runSync() }
+
+        assertEquals(0, result.successCount)
+        assertEquals(1, result.failedCount)
+        assertEquals(1, store.getOfflineFeatures().size)
+        assertEquals("bad-1", store.getOfflineFeatures().single().clientLocalId)
+    }
+
+    @Test
+    fun permanentClientErrorDropsOfflineEdit() {
+        val edited = place(id = 44, name = "HQ", desc = "bad")
+        val store = FakeStore(
+            offline = mutableListOf(OfflineFeature(clientLocalId = "edit-1", feature = edited)),
+            cached = mutableListOf(),
+        )
+        val repo = FakeRepo(
+            updateResult = Result.failure(IllegalStateException("Validation failed (HTTP 400)")),
         )
         val useCase = SyncOfflinePlacesUseCase(
             repository = repo,

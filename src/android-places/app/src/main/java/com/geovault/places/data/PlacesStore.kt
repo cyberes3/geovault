@@ -232,13 +232,9 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
         }.getOrElse { emptyList() }
         // Schema v2: drop incompatible pre-clientLocalId queue entries.
         // Gson leaves clientLocalId null for v1 JSON; that null must not call Kotlin isBlank().
-        val valid = parsed.filter { entry ->
-            val id = entry.clientLocalId as String?
-            !id.isNullOrBlank()
-        }
+        val valid = retainValidOfflineEntries(parsed)
         if (valid.size != parsed.size) {
-            writeQueueLocked(emptyList())
-            return emptyList()
+            writeQueueLocked(valid)
         }
         return valid
     }
@@ -255,6 +251,13 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
             val offlineDatabaseIds = offline.mapNotNull { it.feature.properties.database_id }.toSet()
             addAll(offline.map { it.feature })
             addAll(cached.filterNot { it.properties.database_id in offlineDatabaseIds })
+        }
+
+        fun retainValidOfflineEntries(parsed: List<OfflineFeature>): List<OfflineFeature> {
+            return parsed.filter { entry ->
+                val id = entry.clientLocalId as String?
+                !id.isNullOrBlank()
+            }
         }
 
         private const val PREFS_NAME = "geovault_places_cache"

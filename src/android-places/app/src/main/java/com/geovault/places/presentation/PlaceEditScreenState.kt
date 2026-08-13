@@ -58,7 +58,7 @@ class PlaceEditScreenState(
         selectedLat = latitude
         selectedLon = longitude
         selectedAddress = null
-        coordinatesInput = String.format("%.6f, %.6f", latitude, longitude)
+        coordinatesInput = CoordinateParser.formatLatLon(latitude, longitude)
         coordinatesError = null
         showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.None
@@ -70,7 +70,7 @@ class PlaceEditScreenState(
         selectedLat = latitude
         selectedLon = longitude
         selectedAddress = null
-        coordinatesInput = String.format("%.6f, %.6f", latitude, longitude)
+        coordinatesInput = CoordinateParser.formatLatLon(latitude, longitude)
         coordinatesError = null
         showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.FocusSelection
@@ -82,7 +82,7 @@ class PlaceEditScreenState(
         selectedLon = coords[0]
         selectedLat = coords[1]
         selectedAddress = result.place_name ?: result.text
-        coordinatesInput = String.format("%.6f, %.6f", coords[1], coords[0])
+        coordinatesInput = CoordinateParser.formatLatLon(coords[1], coords[0])
         coordinatesError = null
         showSelectedPointMarker = true
         pendingCameraMotion = CameraMotionRequest.FocusSelection
@@ -104,7 +104,7 @@ class PlaceEditScreenState(
             selectedLat = parsed.first
             selectedLon = parsed.second
             selectedAddress = null
-            coordinatesInput = String.format("%.6f, %.6f", parsed.first, parsed.second)
+            coordinatesInput = CoordinateParser.formatLatLon(parsed.first, parsed.second)
             coordinatesError = null
             showSelectedPointMarker = true
             pendingCameraMotion = CameraMotionRequest.FocusSelection
@@ -117,15 +117,15 @@ class PlaceEditScreenState(
     fun buildFeatureOrNull(): Feature? {
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) return null
-        val parsed = if (selectedLat != null && selectedLon != null) null else CoordinateParser.parse(coordinatesInput.trim())
-        val finalLat = selectedLat ?: parsed?.first
-        val finalLon = selectedLon ?: parsed?.second
-        if (finalLat == null || finalLon == null) {
+        val parsed = CoordinateParser.parse(coordinatesInput.trim())
+        if (parsed == null) {
             coordinatesError = "Invalid coordinates"
             return null
         }
+        selectedLat = parsed.first
+        selectedLon = parsed.second
         return Feature(
-            geometry = Geometry(coordinates = listOf(finalLon, finalLat)),
+            geometry = Geometry(coordinates = listOf(parsed.second, parsed.first)),
             properties = Properties(
                 database_id = initial?.properties?.database_id,
                 name = normalizedName,
@@ -170,7 +170,7 @@ class PlaceEditScreenState(
 
         private fun coordinatesFromGeometry(feature: Feature?): String {
             val coords = feature?.geometry?.coordinates?.takeIf { it.size >= 2 } ?: return ""
-            return String.format("%.6f, %.6f", coords[1], coords[0])
+            return CoordinateParser.formatLatLon(coords[1], coords[0])
         }
     }
 }
