@@ -139,12 +139,13 @@ object TrackerHistoryAssembler {
             complete = input.trunk?.complete ?: false,
             renderWindowFilterSkipped = input.sessionContext.skipRenderWindowFilter,
         )
-        val wasForcedEmptyCommit = points.isEmpty() && input.forceCommitEmpty && input.previousSnapshot != null
+        val previousSnapshot = input.previousSnapshot
+        val wasForcedEmptyCommit = points.isEmpty() && input.forceCommitEmpty && previousSnapshot != null
         if (wasForcedEmptyCommit) {
             GeoVaultCaptureLog.w(
                 TAG,
                 "map_update history_compose_forced_empty_commit tracker=$trackerId " +
-                    "window=${input.key.window.normalizedKey} previous_pts=${input.previousSnapshot?.points?.size ?: 0}",
+                    "window=${input.key.window.normalizedKey} previous_pts=${previousSnapshot.points.size}",
             )
         } else {
             GeoVaultCaptureLog.i(
