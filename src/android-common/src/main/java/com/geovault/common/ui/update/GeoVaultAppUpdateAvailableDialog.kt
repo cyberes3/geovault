@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.GetApp
@@ -38,7 +37,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.geovault.common.R
 import com.geovault.common.ui.components.GeoVaultInfoDialog
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
-import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
 import com.geovault.common.update.ApkDownloadProgress
 import com.geovault.common.update.ApkReleaseDownloader
 import com.geovault.common.update.GeoVaultApkInstallLauncher
@@ -61,7 +59,7 @@ private sealed interface DownloadPhase {
     data object Connecting : DownloadPhase
     data class Downloading(val progress: ApkDownloadProgress) : DownloadPhase
     data object OpeningInstaller : DownloadPhase
-    data class Failed(val message: String, val canRetry: Boolean) : DownloadPhase
+    data class Failed(val message: String) : DownloadPhase
 }
 
 private fun showDownloadProgressDialog(phase: DownloadPhase): Boolean =
@@ -123,13 +121,13 @@ fun GeoVaultAppUpdateAvailableDialog(
         onDismissUpdated()
     }
 
-    fun classifyFailure(t: Throwable): Pair<String, Boolean> {
+    fun classifyFailure(t: Throwable): String {
         val msg = t.message.orEmpty()
         val disk = msg.contains("ENOSPC", ignoreCase = true) ||
             msg.contains("No space", ignoreCase = true)
         val net = t is IOException && !disk
         val res = context.resources
-        val text = when {
+        return when {
             disk -> res.getString(R.string.gv_update_error_disk)
             net -> res.getString(R.string.gv_update_error_network)
             t is IllegalStateException && t.message == "no_install_handler" ->
@@ -142,9 +140,6 @@ fun GeoVaultAppUpdateAvailableDialog(
                 res.getString(R.string.gv_update_error_apk_parse)
             else -> res.getString(R.string.gv_update_error_generic)
         }
-        val canRetry = net ||
-            (t is IllegalStateException && t.message == "apk_parse_failed")
-        return text to canRetry
     }
 
     fun startDownloadThenInstall() {
@@ -165,27 +160,25 @@ fun GeoVaultAppUpdateAvailableDialog(
                 }
                 val msg = err.message.orEmpty()
                 val httpMatch = Regex("HTTP (\\d+)").find(msg)?.groupValues?.getOrNull(1)
-                val (text, canRetry) = if (httpMatch != null) {
-                    context.getString(R.string.gv_update_error_http, httpMatch.toInt()) to true
+                val text = if (httpMatch != null) {
+                    context.getString(R.string.gv_update_error_http, httpMatch.toInt())
                 } else {
                     classifyFailure(err)
                 }
-                phase = DownloadPhase.Failed(text, canRetry)
+                phase = DownloadPhase.Failed(text)
                 return@launch
             }
             phase = DownloadPhase.OpeningInstaller
             val verifyResult = GeoVaultApkInstallLauncher.verifyDownloadedApkCanReplaceCurrentInstall(context, destFile)
             if (verifyResult.isFailure) {
                 val e = verifyResult.exceptionOrNull()!!
-                val (text, canRetry) = classifyFailure(e)
-                phase = DownloadPhase.Failed(text, canRetry)
+                phase = DownloadPhase.Failed(classifyFailure(e))
                 return@launch
             }
             val installResult = GeoVaultApkInstallLauncher.launchInstall(context, destFile)
             if (installResult.isFailure) {
                 val e = installResult.exceptionOrNull()!!
-                val (text, canRetry) = classifyFailure(e)
-                phase = DownloadPhase.Failed(text, canRetry)
+                phase = DownloadPhase.Failed(classifyFailure(e))
             } else {
                 onDismissUpdated()
             }
@@ -298,17 +291,6 @@ fun GeoVaultAppUpdateAvailableDialog(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colors.error,
                     )
-                    if (p.canRetry) {
-                        TextButton(onClick = {
-                            phase = DownloadPhase.Idle
-                            startDownloadThenInstall()
-                        }) {
-                            Text(
-                                text = stringResource(R.string.gv_update_retry),
-                                color = geoVaultDialogAccentButtonColor(),
-                            )
-                        }
-                    }
                 }
                 else -> Unit
             }
@@ -338,9 +320,9 @@ private fun installEnabled(phase: DownloadPhase): Boolean {
         is DownloadPhase.Downloading,
         is DownloadPhase.Connecting,
         is DownloadPhase.OpeningInstaller,
-        is DownloadPhase.Failed,
         -> false
         is DownloadPhase.Idle,
+        is DownloadPhase.Failed,
         -> true
     }
 }

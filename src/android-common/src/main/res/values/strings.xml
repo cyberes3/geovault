@@ -10,8 +10,7 @@
     <string name="gv_update_install">Install</string>
     <string name="gv_update_view">View</string>
     <string name="gv_update_close">Close</string>
-    <string name="gv_update_cancel_download">Cancel download</string>
-    <string name="gv_update_retry">Retry</string>
+    <string name="gv_update_cancel_download">Cancel Download</string>
     <string name="gv_update_install_permission_still_denied">Install from this source is still turned off for this app. Tap Install to open Settings again.</string>
     <string name="gv_update_size_about">About %1$s</string>
     <string name="gv_update_size_unknown_hint">Size will appear once the download starts.</string>
