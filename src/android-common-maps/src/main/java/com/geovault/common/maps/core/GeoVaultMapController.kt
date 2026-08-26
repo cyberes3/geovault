@@ -55,6 +55,7 @@ sealed class GeoVaultBaseMap(
     private var styleLoadGeneration: Long = 0L
     private var styleDeliveredForGeneration = false
     private var currentLoadHadDegradedFallback = false
+    private var mapLibreForcedCacheOnly = false
     private var defaultCameraPadding: DoubleArray? = null
     private val pluginRegistry = GeoVaultMapPluginRegistry()
     private val mapClickListeners = linkedSetOf<MapLibreMap.OnMapClickListener>()
@@ -124,6 +125,14 @@ sealed class GeoVaultBaseMap(
                     reportMapDegraded(message)
                 }
             }
+            manager.onForcedCacheOnly = { cacheOnly ->
+                if (_mapManager === manager && mapView === view) {
+                    mapLibreForcedCacheOnly = cacheOnly
+                    if (cacheOnly) {
+                        updateNetworkRecoveryWatcher()
+                    }
+                }
+            }
             manager.onStyleLoaded = { map, style ->
                 // Ignore late style callbacks from stale attach cycles.
                 if (_mapManager === manager && mapView === view) {
@@ -156,11 +165,13 @@ sealed class GeoVaultBaseMap(
             beginNetworkSensitiveMapLoad()
             attachedManager.fetchMapSources { canRenderMap ->
                 if (_mapManager !== attachedManager || mapView !== view) return@fetchMapSources
+                val map = maplibreMap ?: return@fetchMapSources
                 val currentSourceApplied = attachedManager.isCurrentSourceApplied(map)
+                val alreadyReady = _phase.value == GeoVaultMapPhase.Ready
                 GeoVaultCaptureLog.i(
                     TAG,
                     "map_sources_fetched canRenderMap=$canRenderMap currentSourceApplied=$currentSourceApplied " +
-                        "mapClass=${this::class.simpleName}",
+                        "alreadyReady=$alreadyReady mapClass=${this::class.simpleName}",
                 )
                 if (!canRenderMap) {
                     clearStyleLoadWatchdog()
@@ -168,11 +179,15 @@ sealed class GeoVaultBaseMap(
                     return@fetchMapSources
                 }
                 if (!currentSourceApplied) {
+                    if (alreadyReady) {
+                        pluginRegistry.onStyleWillChange(map, map.style)
+                        currentLoadHadDegradedFallback = false
+                    }
                     beginStyleLoad()
                     if (!attachedManager.applySelectedSource(map)) {
                         completeReadyWithoutStyleCallback()
                     }
-                } else {
+                } else if (!alreadyReady) {
                     completeReadyWithoutStyleCallback()
                 }
             }
@@ -231,6 +246,8 @@ sealed class GeoVaultBaseMap(
 
     fun retryMapSourceLoad() {
         _errorNotice.value = null
+        mapLibreForcedCacheOnly = false
+        MapLibreEngineConnectivity.apply(appContext, MapLibreConnectivityMode.FollowSystem)
         TileSourceCache.invalidate()
         MapStyleCache.invalidate()
         val map = maplibreMap ?: return
@@ -258,7 +275,8 @@ sealed class GeoVaultBaseMap(
             stopNetworkRecovery()
             return
         }
-        if (!networkRecoveryGate.shouldRetry(_phase.value, _errorNotice.value)) {
+        val shortCooldown = mapLibreForcedCacheOnly
+        if (!networkRecoveryGate.shouldRetry(_phase.value, _errorNotice.value, preferShortCooldown = shortCooldown)) {
             Log.d(TAG, "Skipping map network recovery retry; phase=${_phase.value}")
             return
         }
@@ -266,8 +284,27 @@ sealed class GeoVaultBaseMap(
         GeoVaultCaptureLog.i(
             TAG,
             "map_retry_triggered reason=network_recovery phase=${_phase.value} " +
-                "mapClass=${this::class.simpleName}",
+                "cacheOnly=$mapLibreForcedCacheOnly mapClass=${this::class.simpleName}",
         )
+        MapLibreEngineConnectivity.apply(appContext, MapLibreConnectivityMode.FollowSystem)
+        if (mapLibreForcedCacheOnly && _phase.value == GeoVaultMapPhase.Ready) {
+            mapLibreForcedCacheOnly = false
+            val map = maplibreMap ?: return
+            val manager = _mapManager ?: return
+            manager.fetchMapSources { canRenderMap ->
+                if (_mapManager !== manager || maplibreMap !== map) return@fetchMapSources
+                if (!canRenderMap) return@fetchMapSources
+                if (!manager.isCurrentSourceApplied(map)) {
+                    pluginRegistry.onStyleWillChange(map, map.style)
+                    beginStyleLoad()
+                    if (!manager.applySelectedSource(map)) {
+                        completeReadyWithoutStyleCallback()
+                    }
+                }
+            }
+            return
+        }
+        mapLibreForcedCacheOnly = false
         retryMapSourceLoad()
     }
 
@@ -451,6 +488,7 @@ sealed class GeoVaultBaseMap(
 
     private fun beginNetworkSensitiveMapLoad() {
         currentLoadHadDegradedFallback = false
+        mapLibreForcedCacheOnly = false
     }
 
     private fun beginStyleLoad(): Long {
@@ -525,7 +563,7 @@ sealed class GeoVaultBaseMap(
     }
 
     private fun completeMapLoad() {
-        if (!currentLoadHadDegradedFallback) {
+        if (!currentLoadHadDegradedFallback && !mapLibreForcedCacheOnly) {
             _degradedNotice.value = null
             stopNetworkRecovery()
         } else {
@@ -553,7 +591,9 @@ sealed class GeoVaultBaseMap(
     private fun shouldWatchNetworkForRecovery(): Boolean {
         if (_phase.value == GeoVaultMapPhase.StyleLoading) return false
         val error = _errorNotice.value
-        return _degradedNotice.value != null || error?.type == GeoVaultMapErrorNoticeType.StyleLoad
+        return mapLibreForcedCacheOnly ||
+            _degradedNotice.value != null ||
+            error?.type == GeoVaultMapErrorNoticeType.StyleLoad
     }
 
     private fun stopNetworkRecovery() {

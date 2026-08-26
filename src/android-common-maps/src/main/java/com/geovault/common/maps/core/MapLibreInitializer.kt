@@ -34,7 +34,8 @@ object MapLibreInitializer {
 
     private const val TAG = "MapLibreInitializer"
     private const val HOOK_INVALIDATE_STYLE_CACHE = "geovault_maps_style_cache_invalidate"
-    private const val MAPLIBRE_CLIENT_TIMEOUT_SECONDS = 30L
+    private const val MAPLIBRE_CLIENT_CONNECT_TIMEOUT_SECONDS = 10L
+    private const val MAPLIBRE_CLIENT_TIMEOUT_SECONDS = 15L
     private const val AMBIENT_CACHE_SIZE_BYTES = 350L * 1024L * 1024L
 
     private var initialized = false
@@ -63,9 +64,10 @@ object MapLibreInitializer {
             .addInterceptor(GeoVaultAuthInterceptor(appContext))
             .addInterceptor(GeoVaultAuthFailureInterceptor(appContext))
             .authenticator(GeoVaultTokenAuthenticator(appContext))
-            .connectTimeout(MAPLIBRE_CLIENT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .connectTimeout(MAPLIBRE_CLIENT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(MAPLIBRE_CLIENT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(MAPLIBRE_CLIENT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .callTimeout(MAPLIBRE_CLIENT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .build()
         HttpRequestUtil.setOkHttpClient(client)
         HttpRequestUtil.setLogEnabled(true)

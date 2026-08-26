@@ -53,6 +53,9 @@ class MapLibreManager(
     /** Invoked for deterministic server-side map setup problems, not transient network failures. */
     var onMapConfigurationFailed: ((String) -> Unit)? = null
 
+    /** Invoked when MapLibre is forced onto ambient-cache tiles (offline or missed network deadline). */
+    var onForcedCacheOnly: ((Boolean) -> Unit)? = null
+
     var defaultPadding: DoubleArray? = null
         set(value) {
             if (field.contentEqualsOrBothNull(value)) return
@@ -84,6 +87,10 @@ class MapLibreManager(
 
     fun fetchMapSources(onFetched: (Boolean) -> Unit = {}) {
         TileSourceCache.getTileSources(context) { result ->
+            val cacheOnly = MapLibreEngineConnectivity.currentMode() == MapLibreConnectivityMode.CacheOnly
+            onForcedCacheOnly?.invoke(
+                cacheOnly && result is TileSourceFetchResult.Success,
+            )
             val canRenderMap = when (result) {
                 is TileSourceFetchResult.Success -> {
                     sourceManager.setSources(result.sources)

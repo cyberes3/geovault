@@ -64,4 +64,19 @@ class MapNetworkRecoveryGateTest {
         now += 45_000L
         assertTrue(gate.shouldRetry(GeoVaultMapPhase.Ready, null))
     }
+
+    @Test
+    fun shouldRetry_enforcesShortCooldownForCacheOnlyReconnect() {
+        var now = 1_000L
+        val gate = MapNetworkRecoveryGate(
+            cooldownMs = 45_000L,
+            cacheOnlyCooldownMs = 2_000L,
+        ) { now }
+
+        assertTrue(gate.shouldRetry(GeoVaultMapPhase.Ready, null, preferShortCooldown = true))
+        now += 1_000L
+        assertFalse(gate.shouldRetry(GeoVaultMapPhase.Ready, null, preferShortCooldown = true))
+        now += 2_000L
+        assertTrue(gate.shouldRetry(GeoVaultMapPhase.Ready, null, preferShortCooldown = true))
+    }
 }

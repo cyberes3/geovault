@@ -1,16 +1,20 @@
 package com.geovault.common.maps.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.RetrofitClient
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
+import com.geovault.common.net.GeoVaultValidatedInternet
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -42,11 +46,13 @@ internal object MapStyleCache {
     private const val TAG = "MapStyleCache"
     private const val BODY_PREVIEW_MAX = 400
     private const val EXTERNAL_TIMEOUT_SECONDS = 15L
+    private const val RETRY_DELAY_MS = 5_000L
 
     private val cache = ConcurrentHashMap<String, String>()
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineName("MapStyleCache"),
     )
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var externalClient: OkHttpClient? = null
@@ -57,18 +63,63 @@ internal object MapStyleCache {
         isOurServer: Boolean,
         onResult: (String?) -> Unit,
     ) {
-        val cached = cache[styleUrl]
-        if (cached != null) {
-            scope.launch { withContext(Dispatchers.Main) { onResult(cached) } }
+        val appContext = context.applicationContext
+        val memory = cache[styleUrl]
+        if (memory != null) {
+            scope.launch { withContext(Dispatchers.Main) { onResult(memory) } }
             return
         }
-        scope.launch {
-            val json = fetchAndValidate(context, styleUrl, isOurServer)
-                ?: MapMetadataTempCache.readStyleJson(context, styleUrl)?.also { cachedJson ->
-                    cache[styleUrl] = cachedJson
-                    Log.w(TAG, "Using cached map style JSON after fetch failure: styleUrl=$styleUrl")
+
+        val disk = MapMetadataTempCache.readStyleJson(appContext, styleUrl)
+        val plan = MapNetworkAccessPolicy.plan(
+            hasValidatedInternet = GeoVaultValidatedInternet.isAvailable(appContext),
+            hasCache = disk != null,
+        )
+        val gate = MapMetadataLoadGate(
+            plan = plan,
+            cached = disk,
+            timeoutPlaceholder = null,
+        )
+
+        gate.immediateDelivery()?.let { delivery ->
+            delivery.value?.let { cache[styleUrl] = it }
+            scope.launch { withContext(Dispatchers.Main) { onResult(delivery.value) } }
+            scope.launch { fetchAndValidate(appContext, styleUrl, isOurServer) }
+            return
+        }
+
+        val deadlineMs = MapNetworkAccessPolicy.firstPaintDeadlineMs(plan)
+        val deadlineRunnable = if (deadlineMs > 0L) {
+            Runnable {
+                val delivery = gate.onDeadline() ?: return@Runnable
+                if (plan == MapNetworkAccessPlan.NetworkWithCacheDeadline) {
+                    MapLibreEngineConnectivity.apply(appContext, MapLibreConnectivityMode.CacheOnly)
                 }
-            withContext(Dispatchers.Main) { onResult(json) }
+                onResult(delivery.value)
+            }.also { mainHandler.postDelayed(it, deadlineMs) }
+        } else {
+            null
+        }
+
+        scope.launch {
+            val json = if (plan == MapNetworkAccessPlan.WaitForNetwork) {
+                fetchUntilSuccess(appContext, styleUrl, isOurServer)
+            } else {
+                fetchAndValidate(appContext, styleUrl, isOurServer)
+            }
+            withContext(Dispatchers.Main) {
+                deadlineRunnable?.let { mainHandler.removeCallbacks(it) }
+                val usable = json != null
+                val applyLate = plan == MapNetworkAccessPlan.WaitForNetwork && usable
+                val delivery = gate.onNetworkResult(json, isUsable = usable, applyLate = applyLate)
+                    ?: return@withContext
+                if (usable && !delivery.isLate && plan == MapNetworkAccessPlan.NetworkWithCacheDeadline) {
+                    MapLibreEngineConnectivity.apply(appContext, MapLibreConnectivityMode.FollowSystem)
+                }
+                if (delivery.applyToMap) {
+                    onResult(delivery.value)
+                }
+            }
         }
     }
 
@@ -87,6 +138,14 @@ internal object MapStyleCache {
                 val isOurServer = resolved == serverUrl || resolved.startsWith("$serverUrl/")
                 getStyleJson(context, resolved, isOurServer) { }
             }
+        }
+    }
+
+    private suspend fun fetchUntilSuccess(context: Context, styleUrl: String, isOurServer: Boolean): String {
+        while (true) {
+            val json = fetchAndValidate(context, styleUrl, isOurServer)
+            if (json != null) return json
+            delay(RETRY_DELAY_MS)
         }
     }
 

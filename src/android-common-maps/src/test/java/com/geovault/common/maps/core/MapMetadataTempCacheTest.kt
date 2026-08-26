@@ -68,6 +68,24 @@ class MapMetadataTempCacheTest {
         assertEquals(sources, success.sources)
     }
 
+    @Test
+    fun usableCachedTileSources_returnsSuccessWhenDiskHasRequiredBasemaps() {
+        val serverUrl = "https://geovault.example.com"
+        val sources = allExpectedSources()
+        MapMetadataTempCache.writeTileSources(appContext, serverUrl, TileSourceResponse(sources = sources))
+
+        val cached = usableCachedTileSources(appContext, serverUrl)
+        assertTrue(cached is TileSourceFetchResult.Success)
+        assertEquals(sources, cached!!.sources)
+        assertFalse(cached.isStale)
+        assertFalse(cached.forcedCacheOnly)
+    }
+
+    @Test
+    fun usableCachedTileSources_returnsNullWhenDiskIsMissing() {
+        assertTrue(usableCachedTileSources(appContext, "https://missing.example.com") == null)
+    }
+
     private fun allExpectedSources(): List<TileSource> = listOf(
         source(SOURCE_MAPTILER_STREETS),
         source(SOURCE_MAPTILER_STREETS_DARK),
