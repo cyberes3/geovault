@@ -48,6 +48,7 @@ BUILD_TYPE="debug"
 SKIP_MINIFY=false
 INSTALL=false
 OLD_VERSION=false
+ADD_LOGGING=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -63,9 +64,13 @@ for arg in "$@"; do
         --old-version)
             OLD_VERSION=true
             ;;
+        --add-logging)
+            ADD_LOGGING=true
+            ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version]"
+            echo "Usage: ./build-android.sh [debug|release|clean] [--skip-minify] [--install] [--old-version] [--add-logging]"
+            echo "  --add-logging compiles capture logging into both debug and release APKs (sets -PGEOVAULT_ADD_LOGGING=true)."
             exit 1
             ;;
     esac
@@ -87,6 +92,9 @@ fi
 GRADLE_ARGS=()
 if [ "$SKIP_MINIFY" = true ]; then
     GRADLE_ARGS+=("-PSKIP_MINIFY=true")
+fi
+if [ "$ADD_LOGGING" = true ]; then
+    GRADLE_ARGS+=("-PGEOVAULT_ADD_LOGGING=true")
 fi
 
 if [ "$BUILD_TYPE" = "release" ]; then
@@ -163,6 +171,9 @@ restore_staged_apk() {
 }
 
 echo "Building Android app ($BUILD_TYPE)..."
+if [ "$ADD_LOGGING" = true ]; then
+    echo "Capture logging is enabled for this build"
+fi
 if ! ./gradlew "assemble${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"; then
     echo "Removing Gradle build outputs after failed build..."
     remove_android_build_outputs

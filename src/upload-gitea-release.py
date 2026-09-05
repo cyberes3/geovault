@@ -440,14 +440,19 @@ def resolve_app_dir(script_dir: Path, app_folder: str) -> tuple[str, Path]:
     return app_config_key, app_dir
 
 
-def build_release_apk(app_dir: Path) -> None:
+def build_release_apk(app_dir: Path, add_logging: bool) -> None:
     build_script = app_dir / BUILD_SCRIPT_NAME
     if not build_script.exists():
         die(f"Missing build script: {build_script}")
 
-    print("Building release APK...")
+    cmd = [str(build_script), "release"]
+    if add_logging:
+        cmd.append("--add-logging")
+        print("Building release APK with capture logging...")
+    else:
+        print("Building release APK...")
     run(["chmod", "+x", str(build_script)], cwd=app_dir)
-    run([str(build_script), "release"], cwd=app_dir, stream=True)
+    run(cmd, cwd=app_dir, stream=True)
 
 
 def generate_icons(app_dir: Path) -> None:
@@ -463,6 +468,14 @@ def generate_icons(app_dir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build and upload Android draft release to Gitea")
     parser.add_argument("app_folder", help="App folder path (e.g. android-tracker)")
+    parser.add_argument(
+        "--add-logging",
+        action="store_true",
+        help=(
+            "Compile capture logging into the release APK "
+            "(passes --add-logging to build-android.sh)."
+        ),
+    )
     args = parser.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -475,13 +488,16 @@ def main() -> None:
     source_repo_dir, target_commitish = assert_release_source_is_ready(app_dir, config.gitea_repo)
 
     generate_icons(app_dir)
-    build_release_apk(app_dir)
+    build_release_apk(app_dir, args.add_logging)
 
     apk_path = find_release_apk(app_dir, config)
     date_short, commit_fragment = parse_release_apk_name(apk_path, config)
     assert_apk_matches_source(source_repo_dir, date_short, commit_fragment)
     tag = f"{config.tag_prefix}-{date_short}-{commit_fragment}"
     title = f"{config.release_title} {date_short} {commit_fragment}"
+    if args.add_logging:
+        tag = f"{tag}-logging"
+        title = f"{title} (capture logging)"
 
     print(f"Creating draft release: {tag}")
     release_id = create_draft_release(config, tag, title, target_commitish)
