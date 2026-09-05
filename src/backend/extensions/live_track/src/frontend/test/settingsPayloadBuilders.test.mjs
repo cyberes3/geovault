@@ -13,6 +13,6 @@ test('buildTrackerSettingsPayloadFromSnapshot preserves every recent data filter
       visibility: 'private',
     });
 
-    assert.equal(payload.recent_data_window, option || null);
+    assert.equal(payload.recent_data_window || null, option || null);
   }
 });

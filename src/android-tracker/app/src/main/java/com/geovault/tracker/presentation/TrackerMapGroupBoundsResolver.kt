@@ -5,6 +5,7 @@ import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.TrackPointEvent
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 
@@ -17,10 +18,11 @@ data class TrackerMapGroupBoundsInput(
     val acceptedRemoteTrackerIds: Set<String>,
     val trackers: List<Tracker>,
     val nowMs: Long,
+    val runtime: TrackingRuntimeSnapshot = TrackingRuntimeSnapshot(),
 )
 
 sealed class TrackerMapGroupBoundsStrategy {
-    /** Lock off: union trails, remote heads, and every visible roster last_point. */
+    /** Lock off: union drawn trails and the one resolved head per visible tracker. */
     data object AllVisible : TrackerMapGroupBoundsStrategy()
 
     /** Lock on with "fit all trackers" setting: same composition as [AllVisible]. */
@@ -103,17 +105,7 @@ object TrackerMapGroupBoundsResolver {
     }
 
     private fun resolveAllVisible(input: TrackerMapGroupBoundsInput): LatLngBounds? {
-        val trailBounds = TrackerMapStateTransforms.multiTrailBounds(input.trailsByTracker)
-        val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(input.remoteLastPoints)
-        val rosterBounds = rosterLastPointBounds(
-            visibleTrackerIds = input.visibleTrackerIds,
-            trackerIds = input.visibleTrackerIds,
-            trackers = input.trackers,
-        )
-        return TrackerMapStateTransforms.mergeBounds(
-            TrackerMapStateTransforms.mergeBounds(trailBounds, remoteBounds),
-            rosterBounds,
-        )
+        return boundsForTrackerIds(input, input.visibleTrackerIds)
     }
 
     private fun resolveActiveOnly(input: TrackerMapGroupBoundsInput): LatLngBounds? {
@@ -135,41 +127,42 @@ object TrackerMapGroupBoundsResolver {
         }
         val boundsIds = activeIds + pinnedRemoteIds
         if (boundsIds.isEmpty()) return null
-        val activeTrails = input.trailsByTracker.filterKeys { it in boundsIds }
-        val activeRemoteHeads = filteredRemoteLastPoints.filterKeys { it in boundsIds }
-        val trailBounds = TrackerMapStateTransforms.multiTrailBounds(activeTrails)
-        val remoteBounds = TrackerMapStateTransforms.remoteLastPointBounds(activeRemoteHeads)
-        val rosterBounds = rosterLastPointBounds(
-            visibleTrackerIds = visibleIds,
-            trackerIds = boundsIds,
-            trackers = input.trackers,
-        )
-        return TrackerMapStateTransforms.mergeBounds(
-            TrackerMapStateTransforms.mergeBounds(trailBounds, remoteBounds),
-            rosterBounds,
-        )
+        return boundsForTrackerIds(input, boundsIds)
     }
 
-    private fun rosterLastPointBounds(
-        visibleTrackerIds: Set<String>,
+    private fun boundsForTrackerIds(
+        input: TrackerMapGroupBoundsInput,
         trackerIds: Set<String>,
-        trackers: List<Tracker>,
     ): LatLngBounds? {
-        if (visibleTrackerIds.isEmpty() || trackerIds.isEmpty()) return null
-        val latLngs = trackers
-            .asSequence()
-            .filter { it.id.trim() in visibleTrackerIds && it.id.trim() in trackerIds }
-            .mapNotNull { tracker -> tracker.lastPointLatLngOrNull() }
-            .toList()
-        return geoVaultLatLngBoundsForPoints(latLngs)
+        val trails = input.trailsByTracker.filterKeys { it.trim() in trackerIds }
+        val trailBounds = TrackerMapStateTransforms.multiTrailBounds(trails)
+        val headBounds = resolvedHeadBounds(input, trackerIds)
+        return TrackerMapStateTransforms.mergeBounds(trailBounds, headBounds)
     }
 
-    private fun Tracker.lastPointLatLngOrNull(): LatLng? {
-        val coord = last_point ?: return null
-        val lon = coord.getOrNull(0) ?: return null
-        val lat = coord.getOrNull(1) ?: return null
-        if (!isValidMapLibreGeographicLatLng(lat, lon)) return null
-        return LatLng(lat, lon)
+    private fun resolvedHeadBounds(
+        input: TrackerMapGroupBoundsInput,
+        trackerIds: Set<String>,
+    ): LatLngBounds? {
+        val points = trackerIds.mapNotNull { trackerId ->
+            val tracker = input.trackers.firstOrNull { it.id.trim() == trackerId.trim() }
+            val resolved = TrackerMapLastPointResolver.resolve(
+                state = TrackerMapUiState(
+                    allQueueTrailsByTracker = input.trailsByTracker,
+                    remoteLastPoints = input.remoteLastPoints,
+                    displayedTrackerId = trackerId,
+                    runtime = input.runtime,
+                ),
+                trackerId = trackerId,
+                tracker = tracker,
+                acceptedRemoteTrackerIds = input.acceptedRemoteTrackerIds,
+            ) ?: return@mapNotNull null
+            if (!isValidMapLibreGeographicLatLng(resolved.latitude, resolved.longitude)) {
+                return@mapNotNull null
+            }
+            LatLng(resolved.latitude, resolved.longitude)
+        }
+        return geoVaultLatLngBoundsForPoints(points)
     }
 
     private fun resolveActiveTrackerIds(
@@ -218,13 +211,18 @@ object TrackerMapGroupBoundsResolver {
         remoteLastPoints: Map<String, TrackPointEvent>,
         trackers: List<Tracker>,
     ): Long? {
-        val remoteMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(remoteLastPoints[trackerId]?.timestampMs)
-        val trailMs = TrackerMapSessionWindowPolicy.normalizeTimestampToMs(trailsByTracker[trackerId]?.lastOrNull()?.time)
         val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
-        val trackerDataMs = tracker?.lastDataTimestampMsOrNull()
-        return listOfNotNull(remoteMs, trailMs, trackerDataMs)
-            .filter { it > 0L }
-            .maxOrNull()
+        val resolved = TrackerMapLastPointResolver.resolve(
+            state = TrackerMapUiState(
+                allQueueTrailsByTracker = trailsByTracker,
+                remoteLastPoints = remoteLastPoints,
+                displayedTrackerId = trackerId,
+            ),
+            trackerId = trackerId,
+            tracker = tracker,
+            acceptedRemoteTrackerIds = remoteLastPoints.keys,
+        )
+        return resolved?.lastUpdatedMs
     }
 
     private fun TrackerMapGroupBoundsInput.normalizedToVisibleTrackers(): TrackerMapGroupBoundsInput {
@@ -247,19 +245,4 @@ object TrackerMapGroupBoundsResolver {
         )
     }
 
-    private fun Tracker.lastDataTimestampMsOrNull(): Long? {
-        val lastPointMs = last_point
-            ?.getOrNull(2)
-            ?.let(TrackerMapSessionWindowPolicy::normalizeTimestampToMs)
-        val paramsMs = point_params
-            ?.lastOrNull()
-            ?.entries
-            ?.asSequence()
-            ?.filter { it.key.contains("timestamp", ignoreCase = true) }
-            ?.mapNotNull { TrackerMapSessionWindowPolicy.normalizeTimestampToMs(it.value) }
-            ?.maxOrNull()
-        return listOfNotNull(lastPointMs, paramsMs)
-            .filter { it > 0L }
-            .maxOrNull()
-    }
 }

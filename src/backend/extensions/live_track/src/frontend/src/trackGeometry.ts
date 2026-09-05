@@ -5,6 +5,7 @@
 import type { Map as MapLibreMap, PaddingOptions } from 'maplibre-gl';
 import { getArrowImageId } from './trackArrowMap';
 import { resolveSelectedTrackAccuracyMeters } from './mapAccuracyCircle';
+import { resolveTrackLastCoordinate } from './trackLastPoint';
 import type { LiveTrack, TrackCoordinate } from './types/track';
 
 type LonLat = [number, number];
@@ -45,6 +46,14 @@ export function getCoordsSortedByTime(track: LiveTrack): TrackCoordinate[] {
 export function getTrackDirectionAngle(track: LiveTrack): number {
   const sorted = getCoordsSortedByTime(track);
   const valid = filterValidLngLats(sorted.map((c): LonLat => [c[0], c[1]]));
+  const resolved = resolveTrackLastCoordinate(track);
+  if (resolved && resolved.length >= 2 && isValidMapLngLatPair(resolved[0], resolved[1])) {
+    const head: LonLat = [resolved[0], resolved[1]];
+    const tail = valid[valid.length - 1];
+    if (!tail || tail[0] !== head[0] || tail[1] !== head[1]) {
+      valid.push(head);
+    }
+  }
   if (valid.length < 2) return 0;
   const prev = valid[valid.length - 2];
   const last = valid[valid.length - 1];
@@ -117,15 +126,9 @@ export interface BuildPointFeatureOptions {
 }
 
 export function buildPointFeature(track: LiveTrack, selected: boolean = false, options: BuildPointFeatureOptions = {}): TrackPointFeature | null {
-  const coordsSorted = getCoordsSortedByTime(track);
-  let pos: LonLat | null = null;
-  for (let i = coordsSorted.length - 1; i >= 0; i--) {
-    const c = coordsSorted[i];
-    if (c.length >= 2 && isValidMapLngLatPair(c[0], c[1])) {
-      pos = [c[0], c[1]];
-      break;
-    }
-  }
+  const last = resolveTrackLastCoordinate(track);
+  const pos: LonLat | null =
+    last && last.length >= 2 && isValidMapLngLatPair(last[0], last[1]) ? [last[0], last[1]] : null;
   if (!pos) return null;
   const color = track.color ?? '#6C93DE';
   const iconImage = getArrowImageId(color, selected);
@@ -207,16 +210,17 @@ export function fitMapToSingleTrack(map: MapLibreMap | null | undefined, track: 
 export interface CenterMapOptions {
   duration?: number;
   padding?: number | PaddingOptions;
+  minZoom?: number;
 }
 
-/** Pan map to the last point of a single track. */
+/** Pan map to the resolved last point of a single track. */
 export function centerMapOnTrackLastPoint(map: MapLibreMap | null | undefined, track: LiveTrack | null | undefined, options: CenterMapOptions = {}): void {
   if (!map || !track) return;
-  const coords = filterValidLngLats(getCoordsSortedByTime(track).map((c): LonLat => [c[0], c[1]]));
-  const last = coords.length ? coords[coords.length - 1] : null;
-  if (!last) return;
+  const resolved = resolveTrackLastCoordinate(track);
+  if (!resolved || resolved.length < 2 || !isValidMapLngLatPair(resolved[0], resolved[1])) return;
+  const last: LonLat = [resolved[0], resolved[1]];
   const duration = options.duration ?? 200;
-  const zoom = map.getZoom();
+  const zoom = options.minZoom != null ? Math.max(map.getZoom(), options.minZoom) : map.getZoom();
   if (options.padding != null) {
     map.easeTo({ center: last, zoom, duration, padding: options.padding });
     return;

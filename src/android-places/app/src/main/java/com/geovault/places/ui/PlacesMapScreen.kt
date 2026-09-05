@@ -199,23 +199,22 @@ fun PlacesMapScreen(
         if (requestedId != null) {
             viewModel.selectByDatabaseId(requestedId)
         }
-        if (launchArgs.zoomToLat != null && launchArgs.zoomToLon != null) {
-            val zoomTarget = latLngOrNull(launchArgs.zoomToLat, launchArgs.zoomToLon)
-            if (zoomTarget != null) {
-                val camera = CameraPosition.Builder()
-                    .target(zoomTarget)
-                    .zoom(com.geovault.common.maps.core.MapLibreManager.DEFAULT_POINT_ZOOM)
-                    .build()
-                map.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
-                if (launchArgs.requestToken != 0L) {
-                    onLaunchArgsConsumed()
+        headingFollowFabs.runProgrammaticCamera {
+            if (launchArgs.zoomToLat != null && launchArgs.zoomToLon != null) {
+                val zoomTarget = latLngOrNull(launchArgs.zoomToLat, launchArgs.zoomToLon)
+                if (zoomTarget != null) {
+                    val camera = CameraPosition.Builder()
+                        .target(zoomTarget)
+                        .zoom(com.geovault.common.maps.core.MapLibreManager.DEFAULT_POINT_ZOOM)
+                        .build()
+                    map.moveCameraWithPadding(CameraUpdateFactory.newCameraPosition(camera))
+                    return@runProgrammaticCamera
                 }
-                return@LaunchedEffect
             }
-        }
-        val bounds = viewModel.featureBounds()
-        if (bounds != null) {
-            map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
+            val bounds = viewModel.featureBounds()
+            if (bounds != null) {
+                map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
+            }
         }
         if (launchArgs.requestToken != 0L) {
             onLaunchArgsConsumed()
@@ -282,23 +281,25 @@ fun PlacesMapScreen(
                     contentDescription = fitContentTooltip,
                     tooltip = fitContentTooltip,
                     onTap = {
-                        val mapLibreMap = map.maplibreMap
-                        if (mapLibreMap != null) {
-                            mapLibreMap.setCameraPosition(
-                                CameraPosition.Builder(mapLibreMap.cameraPosition).bearing(0.0).tilt(0.0).build()
-                            )
-                        }
-                        val bounds = viewModel.featureBounds()
-                        val gpsAnchor = locationPlugin.getLastLocation()?.let { loc ->
-                            latLngOrNull(loc.latitude, loc.longitude)
-                        }
-                        val effectiveBounds = when {
-                            bounds != null && gpsAnchor != null ->
-                                geoVaultLatLngBoundsUnion(bounds, listOf(gpsAnchor))
-                            else -> bounds
-                        }
-                        if (effectiveBounds != null) {
-                            map.animateCameraToFitLatLngBounds(effectiveBounds, boundsFitPaddingPx)
+                        headingFollowFabs.runProgrammaticCamera {
+                            val mapLibreMap = map.maplibreMap
+                            if (mapLibreMap != null) {
+                                mapLibreMap.setCameraPosition(
+                                    CameraPosition.Builder(mapLibreMap.cameraPosition).bearing(0.0).tilt(0.0).build()
+                                )
+                            }
+                            val bounds = viewModel.featureBounds()
+                            val gpsAnchor = locationPlugin.getLastLocation()?.let { loc ->
+                                latLngOrNull(loc.latitude, loc.longitude)
+                            }
+                            val effectiveBounds = when {
+                                bounds != null && gpsAnchor != null ->
+                                    geoVaultLatLngBoundsUnion(bounds, listOf(gpsAnchor))
+                                else -> bounds
+                            }
+                            if (effectiveBounds != null) {
+                                map.animateCameraToFitLatLngBounds(effectiveBounds, boundsFitPaddingPx)
+                            }
                         }
                     },
                 )

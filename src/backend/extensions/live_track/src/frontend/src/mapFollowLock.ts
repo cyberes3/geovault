@@ -1,15 +1,21 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
+export type FollowLockInteraction = 'pan' | 'rotate' | 'pinch' | 'wheel' | 'dblclick';
+
 export interface MapFollowListenerOptions {
   getLocked: () => boolean;
   setLocked: (value: boolean) => void;
   onUnlock?: () => void;
 }
 
+/** Matches GeoVaultMapCameraInteractionGate: pan/rotate unlock; pinch, wheel, double-click keep lock. */
+export function followLockUnlocks(interaction: FollowLockInteraction): boolean {
+  return interaction === 'pan' || interaction === 'rotate';
+}
+
 /**
  * Shared follow-lock behavior for single-track map views.
- * When the user drags, zooms, or double-clicks, the lock is cleared.
- * Used by LiveTrackView and WorldShareView.
+ * LiveTrackView and WorldShareView both call this one function.
  */
 export function setupMapFollowListeners(map: MapLibreMap | null | undefined, { getLocked, setLocked, onUnlock }: MapFollowListenerOptions): void {
   if (!map) return;
@@ -24,13 +30,10 @@ export function setupMapFollowListeners(map: MapLibreMap | null | undefined, { g
       }
     }
   };
-  map.on('dragstart', breakLock);
-  map.on('wheel', breakLock);
-  map.on('dblclick', breakLock);
-  map.on('zoomstart', (e) => {
-    const type = e.originalEvent?.type;
-    if (type === 'touchstart' || type === 'touchmove' || type === 'wheel') {
-      breakLock();
-    }
-  });
+  const onUnlocking = (interaction: FollowLockInteraction) => {
+    if (!followLockUnlocks(interaction)) return;
+    breakLock();
+  };
+  map.on('dragstart', () => onUnlocking('pan'));
+  map.on('rotatestart', () => onUnlocking('rotate'));
 }

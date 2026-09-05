@@ -8,7 +8,8 @@ data class TrackerMapUserLocationInput(
     val hasLocationPermission: Boolean,
     val isMapReady: Boolean,
     val userLocationRequestedThisSession: Boolean,
-    val runtimeRunning: Boolean,
+    val displayedTrackerId: String = "",
+    val locallyRecordedTrackerId: String = "",
 )
 
 enum class TrackerMapUserLocationBlocker {
@@ -16,7 +17,7 @@ enum class TrackerMapUserLocationBlocker {
     MissingPermission,
     MapNotReady,
     LocationNotRequestedThisSession,
-    RuntimeTrackingActive,
+    OwnRecordedTrackerOnScreen,
 }
 
 data class TrackerMapUserLocationDecision(
@@ -26,15 +27,19 @@ data class TrackerMapUserLocationDecision(
 )
 
 /**
- * Central authority for map user-location behavior.
+ * Tracker overlay on [GeoVaultMapLocationSessionPolicy].
  *
- * Design goal: location streaming must be impossible unless the user has explicitly
- * requested the live GPS puck in this session. This prevents launch-time auto activation.
+ * Streaming follows the common background-stream rule. The puck is hidden only when the
+ * displayed tracker is the one being recorded, so the MapLibre chevron does not sit on top of
+ * the tracker marker.
  */
 class TrackerMapUserLocationPolicy(
     private val commonPolicy: GeoVaultMapLocationSessionPolicy = GeoVaultMapLocationSessionPolicy(),
 ) {
     fun evaluate(input: TrackerMapUserLocationInput): TrackerMapUserLocationDecision {
+        val displayedId = input.displayedTrackerId.trim()
+        val recordedId = input.locallyRecordedTrackerId.trim()
+        val ownRecordedTrackerOnScreen = recordedId.isNotEmpty() && displayedId == recordedId
         val blockers = linkedSetOf<TrackerMapUserLocationBlocker>()
         if (!input.isMapActive) blockers += TrackerMapUserLocationBlocker.MapInactive
         if (!input.hasLocationPermission) blockers += TrackerMapUserLocationBlocker.MissingPermission
@@ -42,8 +47,8 @@ class TrackerMapUserLocationPolicy(
         if (!input.userLocationRequestedThisSession) {
             blockers += TrackerMapUserLocationBlocker.LocationNotRequestedThisSession
         }
-        if (!TrackerMapCameraLockPolicy.shouldRenderUserLocation(input.runtimeRunning)) {
-            blockers += TrackerMapUserLocationBlocker.RuntimeTrackingActive
+        if (ownRecordedTrackerOnScreen) {
+            blockers += TrackerMapUserLocationBlocker.OwnRecordedTrackerOnScreen
         }
         val commonDecision = commonPolicy.decide(
             GeoVaultMapLocationSessionInput(
@@ -55,10 +60,9 @@ class TrackerMapUserLocationPolicy(
                 headingFollowDesired = false,
             ),
         )
-        val allowPuck = blockers.isEmpty() && commonDecision.shouldEnablePuck
         return TrackerMapUserLocationDecision(
-            shouldStreamGps = allowPuck,
-            shouldEnablePuck = allowPuck,
+            shouldStreamGps = commonDecision.shouldStreamGps && !ownRecordedTrackerOnScreen,
+            shouldEnablePuck = commonDecision.shouldEnablePuck && !ownRecordedTrackerOnScreen,
             blockers = blockers,
         )
     }

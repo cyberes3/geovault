@@ -12,7 +12,7 @@ import com.geovault.tracker.services.TrackingRuntimeSnapshot
  *
  * For every other tracker (remote, or local-but-not-currently-recording) we fall back to
  * [resolverLastUpdatedMs], which is normally
- * `TrackerMapLastPointResolver.resolveRenderedMarkerPoint(...).lastUpdatedMs` -- the
+ * `TrackerMapLastPointResolver.resolve(...).lastUpdatedMs` -- the
  * freshest known data point timestamp.
  *
  * Returning `null` signals "no reported timestamp known yet" and renderers should treat

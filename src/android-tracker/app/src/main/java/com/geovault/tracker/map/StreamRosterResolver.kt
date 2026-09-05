@@ -264,7 +264,7 @@ internal class StreamRosterResolver(private val rt: TrackerMapRuntime) {
     private fun recomposeHistoryForTracker(trackerId: String) {
         val normalized = trackerId.trim()
         if (normalized.isEmpty()) return
-        val sessionStart = rt.currentActiveSessionStartMs()
+        val sessionStart = rt.activeSessionStartMsForTracker(normalized)
         val keys = rt.dependencies.historyRepository.snapshots.value.keys.filter { it.normalizedTrackerId == normalized }
         if (keys.isEmpty()) {
             val tracker = rt.dependencies.trackerManagementStateStore.trackers.value.firstOrNull { it.id.trim() == normalized }

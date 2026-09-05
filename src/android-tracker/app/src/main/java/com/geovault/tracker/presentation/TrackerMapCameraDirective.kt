@@ -72,6 +72,7 @@ data class TrackerMapCameraDirectiveInput(
     val selectionLockLon: Double?,
     val liveActiveFitEnabled: Boolean,
     val bounds: LatLngBounds?,
+    val userOwnsZoom: Boolean = false,
 )
 
 /**
@@ -95,7 +96,7 @@ data class TrackerMapCameraDirectiveInput(
  *  3. Follow lock (GPS) -- center-on-point. Also holds (None) rather than falling through when
  *     GPS isn't actively collecting or hasn't resolved a fix yet, for the same reason as #2 --
  *     otherwise the FAB shows the lock armed while the camera silently snaps to a full-extent fit.
- *  4. Live active fit alone -- fit bounds.
+ *  4. Live active fit alone -- fit bounds, or center at the current zoom when the user owns zoom.
  *  5. No lock active -- one-shot InitialFit of whatever bounds are available.
  *  6. Nothing resolvable -- None.
  */
@@ -106,14 +107,7 @@ object TrackerMapCameraDirectivePolicy {
             return selectionLockCenterOrHold(input)
         }
         if (bothLocksEngaged) {
-            if (input.liveActiveFitEnabled && input.bounds != null) {
-                return Resolution(
-                    reason = TrackerMapCameraDirective.Reason.LiveActiveFit,
-                    centerLat = null,
-                    centerLon = null,
-                    bounds = input.bounds,
-                )
-            }
+            liveActiveFitOrHold(input)?.let { return it }
             // Live active fit's bounds haven't resolved yet -- fall back to the locked point
             // rather than dropping the camera lock entirely for that gap.
             return selectionLockCenterOrHold(input)
@@ -137,13 +131,8 @@ object TrackerMapCameraDirectivePolicy {
                 Resolution.None
             }
         }
-        if (input.liveActiveFitEnabled && input.bounds != null) {
-            return Resolution(
-                reason = TrackerMapCameraDirective.Reason.LiveActiveFit,
-                centerLat = null,
-                centerLon = null,
-                bounds = input.bounds,
-            )
+        if (input.liveActiveFitEnabled) {
+            liveActiveFitOrHold(input)?.let { return it }
         }
         if (input.bounds != null) {
             return Resolution(
@@ -154,6 +143,33 @@ object TrackerMapCameraDirectivePolicy {
             )
         }
         return Resolution.None
+    }
+
+    private fun liveActiveFitOrHold(input: TrackerMapCameraDirectiveInput): Resolution? {
+        if (input.userOwnsZoom) {
+            val lat = input.followTargetLat
+                ?: input.selectionLockLat
+                ?: input.bounds?.let { (it.latitudeNorth + it.latitudeSouth) / 2.0 }
+            val lon = input.followTargetLon
+                ?: input.selectionLockLon
+                ?: input.bounds?.let { (it.longitudeEast + it.longitudeWest) / 2.0 }
+            if (lat != null && lon != null) {
+                return Resolution(
+                    reason = TrackerMapCameraDirective.Reason.LiveActiveFit,
+                    centerLat = lat,
+                    centerLon = lon,
+                    bounds = null,
+                )
+            }
+            return null
+        }
+        val bounds = input.bounds ?: return null
+        return Resolution(
+            reason = TrackerMapCameraDirective.Reason.LiveActiveFit,
+            centerLat = null,
+            centerLon = null,
+            bounds = bounds,
+        )
     }
 
     private fun selectionLockCenterOrHold(input: TrackerMapCameraDirectiveInput): Resolution {

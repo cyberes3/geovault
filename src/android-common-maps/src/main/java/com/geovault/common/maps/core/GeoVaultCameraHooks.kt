@@ -3,15 +3,6 @@ package com.geovault.common.maps.core
 import kotlin.math.max
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
-
-fun geoVaultCreateGestureMoveStartedListener(onGestureMoveStarted: () -> Unit): MapLibreMap.OnCameraMoveStartedListener {
-    return MapLibreMap.OnCameraMoveStartedListener { reason ->
-        if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-            onGestureMoveStarted()
-        }
-    }
-}
 
 fun geoVaultResetCameraBearingAndTilt(map: GeoVaultBaseMap) {
     val mapLibreMap = map.maplibreMap ?: return

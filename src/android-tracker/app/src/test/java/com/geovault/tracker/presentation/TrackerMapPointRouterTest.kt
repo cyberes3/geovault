@@ -49,6 +49,25 @@ class TrackerMapPointRouterTest {
     }
 
     @Test
+    fun localGpsWhileViewingRemote_doesNotAppendToRemoteTrail() {
+        val plan = plan(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            selectedTrackerId = "self",
+            displayedTrackerId = "shared",
+            runtimeRunning = true,
+        )
+
+        val local = TrackerMapPointRouter.route(event(TrackPointSource.LOCAL_GPS, "self"), plan)
+        val remoteTrail = TrackerMapPointRouter.route(event(TrackPointSource.LOCAL_GPS, "shared"), plan)
+
+        assertTrue(local.accepted)
+        assertFalse(local.appendSingleTrail)
+        assertFalse(local.appendMultiTrail)
+        assertFalse(remoteTrail.accepted)
+        assertFalse(remoteTrail.appendSingleTrail)
+    }
+
+    @Test
     fun groupWhileTrackingMember_routesLocalOverlayAndRemoteMembers() {
         val plan = plan(
             mode = TrackerMapDisplayMode.GROUP_PLACEHOLDER,

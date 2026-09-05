@@ -33,6 +33,7 @@ object TrackerMapStateTransforms {
      * a trail point; use a wider gap so the live trail does not fragment into orphan segments.
      */
     const val MAX_TRACK_TIME_GAP_WHILE_RECORDING_MS: Long = 15L * 60L * 1_000L
+    private const val LIVE_DRAW_TRAIL_POINT_LIMIT: Int = 4000
     private val accuracyCircleResolver = TrackerAccuracyCircleResolver()
 
     fun buildRenderState(
@@ -96,27 +97,66 @@ object TrackerMapStateTransforms {
         )
         val singleLineColorHex = TrackerMapIconIds.parseSpec(singleIconId)?.colorHex
             ?: TrackerMapIconIds.DEFAULT_COLOR_HEX
-        val renderTrail = trail
+        val effectiveDisplayedTrackerId = displayedTrackerId.trim().ifEmpty { runtime.selectedTrackerId.trim() }
+        val renderTrail = if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
+            TrackerMapLiveDrawMerge.mergeSingle(
+                mappedTrail = trail,
+                unpublishedOverlay = emptyList(),
+                remoteLastPoint = remoteLastPoints[effectiveDisplayedTrackerId],
+                runtime = runtime,
+                displayedTrackerId = displayedTrackerId,
+                trailPointLimit = LIVE_DRAW_TRAIL_POINT_LIMIT,
+            )
+        } else {
+            trail
+        }
+        val renderMultiTrails = if (
+            mode == TrackerMapDisplayMode.ALL_QUEUE || mode == TrackerMapDisplayMode.GROUP_PLACEHOLDER
+        ) {
+            TrackerMapLiveDrawMerge.mergeMulti(
+                mappedTrails = allQueueTrailsByTracker,
+                unpublishedOverlaysByTracker = emptyMap(),
+                remoteLastPoints = remoteLastPoints.filterKeys { it in acceptedRemoteTrackerIds },
+                runtime = runtime,
+                mode = mode,
+                groupTrackerIds = allQueueTrailsByTracker.keys + acceptedRemoteTrackerIds,
+                trailPointLimit = LIVE_DRAW_TRAIL_POINT_LIMIT,
+            )
+        } else {
+            allQueueTrailsByTracker
+        }
+        val resolveState = TrackerMapUiState(
+            mode = mode,
+            displayedTrackerId = displayedTrackerId,
+            runtime = runtime,
+            trail = renderTrail,
+            allQueueTrailsByTracker = renderMultiTrails,
+            remoteLastPoints = remoteLastPoints,
+        )
         val lines = buildTrailLines(
             mode = mode,
             effectiveTrail = renderTrail,
-            allQueueTrailsByTracker = allQueueTrailsByTracker,
+            allQueueTrailsByTracker = renderMultiTrails,
             trackerColorById = trackerColorById,
             singleTrackerLineColorHex = singleLineColorHex,
             runtime = runtime,
         )
         val markerFeatures = mutableListOf<TrackerMarkerRenderFeature>()
         if (mode == TrackerMapDisplayMode.SINGLE_SESSION) {
-            val lastQueued = renderTrail.lastOrNull()
-            val effectiveDisplayedTrackerId = displayedTrackerId.trim().ifEmpty { runtime.selectedTrackerId.trim() }
-            val runtimePointVisible = effectiveDisplayedTrackerId.isNotEmpty() &&
-                effectiveDisplayedTrackerId == runtime.selectedTrackerId.trim() &&
-                runtime.lastTrackedLatitude != null &&
-                runtime.lastTrackedLongitude != null
-            val lastLat = lastQueued?.latitude ?: runtime.lastTrackedLatitude.takeIf { runtimePointVisible }
-            val lastLon = lastQueued?.longitude ?: runtime.lastTrackedLongitude.takeIf { runtimePointVisible }
-            val lastAccuracy = lastQueued?.accuracy ?: runtime.lastAccuracyMeters.takeIf { runtimePointVisible }
-            val lastRotation = trackDirectionDegrees(validLatLngsFromTrail(renderTrail))
+            val resolved = TrackerMapLastPointResolver.resolve(
+                state = resolveState,
+                trackerId = effectiveDisplayedTrackerId,
+                tracker = null,
+                acceptedRemoteTrackerIds = acceptedRemoteTrackerIds,
+            )
+            val lastLat = resolved?.latitude
+            val lastLon = resolved?.longitude
+            val lastAccuracy = resolved?.accuracyMeters
+            val lastRotation = if (lastLat != null && lastLon != null) {
+                markerDirectionDegrees(renderTrail, lastLat, lastLon)
+            } else {
+                0f
+            }
             if (lastLat != null && lastLon != null && isValidMapLibreGeographicLatLng(lastLat, lastLon)) {
                 markerFeatures.add(
                     TrackerMarkerRenderFeature(
@@ -136,17 +176,25 @@ object TrackerMapStateTransforms {
             val selectedMarkerTrackerId = selectedMapTrackerId?.trim().orEmpty()
             val orderedTrackerIds = buildList {
                 trackerRenderOrder.map { it.trim() }.filter { it.isNotEmpty() }.forEach { id ->
-                    if (id in allQueueTrailsByTracker) add(id)
+                    if (id in renderMultiTrails || id in acceptedRemoteTrackerIds) add(id)
                 }
-                allQueueTrailsByTracker.keys.sorted().forEach { id ->
+                renderMultiTrails.keys.sorted().forEach { id ->
+                    if (id !in this) add(id)
+                }
+                acceptedRemoteTrackerIds.sorted().forEach { id ->
                     if (id !in this) add(id)
                 }
             }
             orderedTrackerIds.forEach { trackerId ->
-                val trackerTrail = allQueueTrailsByTracker[trackerId] ?: return@forEach
-                val lastPoint = trackerTrail.lastOrNull() ?: return@forEach
-                if (!isValidMapLibreGeographicLatLng(lastPoint.latitude, lastPoint.longitude)) return@forEach
-                val rotation = trackDirectionDegrees(validLatLngsFromTrail(trackerTrail))
+                val trackerTrail = renderMultiTrails[trackerId].orEmpty()
+                val resolved = TrackerMapLastPointResolver.resolve(
+                    state = resolveState,
+                    trackerId = trackerId,
+                    tracker = null,
+                    acceptedRemoteTrackerIds = acceptedRemoteTrackerIds,
+                ) ?: return@forEach
+                if (!isValidMapLibreGeographicLatLng(resolved.latitude, resolved.longitude)) return@forEach
+                val rotation = markerDirectionDegrees(trackerTrail, resolved.latitude, resolved.longitude)
                 val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(
                     trackerId = trackerId,
                     trackerColorById = trackerColorById,
@@ -157,44 +205,16 @@ object TrackerMapStateTransforms {
                     TrackerMarkerRenderFeature(
                         marker = MapRenderPoint(
                             id = "remote-$trackerId",
-                            latitude = lastPoint.latitude,
-                            longitude = lastPoint.longitude,
+                            latitude = resolved.latitude,
+                            longitude = resolved.longitude,
                             title = trackerDisplayNameById[trackerId]?.trim()?.takeIf { it.isNotEmpty() } ?: trackerId,
                             iconImageId = iconId,
                             iconRotationDegrees = rotation,
                         ),
-                        sourceAccuracyMeters = lastPoint.accuracy,
+                        sourceAccuracyMeters = resolved.accuracyMeters,
                     )
                 )
             }
-            val markers = markerFeatures.map { it.marker }
-            val renderedTrackerIds = markers.map { it.id.removePrefix("remote-") }.toSet()
-            val remoteMarkerTrackerIds = acceptedRemoteTrackerIds
-            remoteLastPoints.values
-                .filter { remoteMarkerTrackerIds.isNotEmpty() && it.trackId in remoteMarkerTrackerIds }
-                .filter { it.trackId !in renderedTrackerIds }
-                .forEach { point ->
-                    if (!isValidMapLibreGeographicLatLng(point.lat, point.lon)) return@forEach
-                    val iconId = TrackerMapMarkerStylePolicy.multiTrackerIconId(
-                        trackerId = point.trackId,
-                        trackerColorById = trackerColorById,
-                        selectedMapTrackerId = selectedMarkerTrackerId,
-                        fallbackColorHex = defaultIconColorHex,
-                    )
-                    markerFeatures.add(
-                        TrackerMarkerRenderFeature(
-                            marker = MapRenderPoint(
-                                id = "remote-${point.trackId}",
-                                latitude = point.lat,
-                                longitude = point.lon,
-                                title = trackerDisplayNameById[point.trackId]?.trim()?.takeIf { it.isNotEmpty() }
-                                    ?: point.trackId,
-                                iconImageId = iconId,
-                            ),
-                            sourceAccuracyMeters = point.accuracyMeters,
-                        )
-                    )
-                }
         }
 
         val markers = markerFeatures.map { it.marker }
@@ -255,6 +275,20 @@ object TrackerMapStateTransforms {
                 null
             }
         }
+    }
+
+    private fun markerDirectionDegrees(
+        trail: List<QueuedLocation>,
+        headLatitude: Double,
+        headLongitude: Double,
+    ): Float {
+        val points = validLatLngsFromTrail(trail).toMutableList()
+        val head = LatLng(headLatitude, headLongitude)
+        val last = points.lastOrNull()
+        if (last == null || last.latitude != head.latitude || last.longitude != head.longitude) {
+            points.add(head)
+        }
+        return trackDirectionDegrees(points)
     }
 
     fun multiTrailBounds(trailsByTracker: Map<String, List<QueuedLocation>>): LatLngBounds? {

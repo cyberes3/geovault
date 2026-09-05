@@ -44,13 +44,37 @@ internal class TrackerMapCameraCoordinator {
     // (e.g. bounds haven't loaded yet for the tracker just switched to).
     private var lastResolution: TrackerMapCameraDirectivePolicy.Resolution? = null
     private var nextId: Long = 1L
+    private var userOwnsZoomFlag: Boolean = false
+    private var followPuckLatitude: Double? = null
+    private var followPuckLongitude: Double? = null
+
+    internal val userOwnsZoom: Boolean get() = userOwnsZoomFlag
+
+    internal fun setFollowPuck(latitude: Double, longitude: Double) {
+        followPuckLatitude = latitude
+        followPuckLongitude = longitude
+    }
+
+    internal fun followPuckLatitude(): Double? = followPuckLatitude
+
+    internal fun followPuckLongitude(): Double? = followPuckLongitude
 
     /**
-     * Invalidates any in-flight directive. Called unconditionally on every user gesture
-     * (regardless of whether a lock was active beforehand) so a directive minted just before the
-     * gesture can never land after it.
+     * Invalidates any in-flight directive. Called unconditionally on every camera takeover
+     * (pan / fling / rotate) so a directive minted just before the gesture can never land after
+     * it. Also clears [userOwnsZoom].
      */
     internal fun onUserGestureStarted() {
+        userOwnsZoomFlag = false
+        generationMutable.value += 1
+    }
+
+    /**
+     * User zoomed with the FABs or pinch. Bumps generation so an in-flight fit is discarded, but
+     * does not clear lock flags. The next live-active-fit resolve centers at the current zoom.
+     */
+    internal fun onUserOwnedZoom() {
+        userOwnsZoomFlag = true
         generationMutable.value += 1
     }
 
@@ -120,7 +144,32 @@ internal class TrackerMapCameraCoordinator {
                     TrackerMapCameraDirective.None(id = id, generation = generation)
                 }
             }
-            TrackerMapCameraDirective.Reason.LiveActiveFit,
+            TrackerMapCameraDirective.Reason.LiveActiveFit -> {
+                val lat = resolution.centerLat
+                val lon = resolution.centerLon
+                if (lat != null && lon != null && resolution.bounds == null) {
+                    TrackerMapCameraDirective.CenterOnPoint(
+                        latitude = lat,
+                        longitude = lon,
+                        reason = resolution.reason,
+                        id = id,
+                        generation = generation,
+                    )
+                } else {
+                    val bounds = resolution.bounds
+                    if (bounds != null) {
+                        TrackerMapCameraDirective.FitBounds(
+                            bounds = bounds,
+                            mode = TrackerMapFitTrailMode.Instant,
+                            reason = resolution.reason,
+                            id = id,
+                            generation = generation,
+                        )
+                    } else {
+                        TrackerMapCameraDirective.None(id = id, generation = generation)
+                    }
+                }
+            }
             TrackerMapCameraDirective.Reason.InitialFit -> {
                 val bounds = resolution.bounds
                 if (bounds != null) {

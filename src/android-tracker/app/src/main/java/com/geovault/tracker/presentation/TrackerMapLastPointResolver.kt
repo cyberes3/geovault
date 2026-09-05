@@ -14,6 +14,23 @@ data class TrackerMapResolvedPoint(
 
 object TrackerMapLastPointResolver {
     fun resolve(
+        snapshot: TrackerMapSessionSnapshot,
+        trackerId: String,
+        tracker: Tracker?,
+    ): TrackerMapResolvedPoint? {
+        return resolve(
+            state = snapshot.uiState.copy(
+                trail = snapshot.singleTrail,
+                allQueueTrailsByTracker = snapshot.renderTrailsByTracker,
+                remoteLastPoints = snapshot.acceptedRemoteLastPoints,
+            ),
+            trackerId = trackerId,
+            tracker = tracker,
+            acceptedRemoteTrackerIds = snapshot.plan.acceptedRemoteTrackerIds,
+        )
+    }
+
+    fun resolve(
         state: TrackerMapUiState,
         trackerId: String,
         tracker: Tracker?,
@@ -28,9 +45,16 @@ object TrackerMapLastPointResolver {
         val eff = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
         val runtimePoint = state.runtime.takeIf {
             it.localRecordingActive &&
-                normalizedId == it.selectedTrackerId.trim() &&
+                normalizedId == it.locallyRecordedTrackerId &&
                 it.lastTrackedLatitude != null &&
                 it.lastTrackedLongitude != null
+        }?.let {
+            PointCandidate(
+                latitude = it.lastTrackedLatitude ?: return null,
+                longitude = it.lastTrackedLongitude ?: return null,
+                lastUpdatedMs = positiveTimestampMs(it.lastTrackedTimestampMs),
+                accuracyMeters = it.lastAccuracyMeters,
+            )
         }
         val remotePoint = if (normalizedId in acceptedRemoteIds) {
             state.remoteLastPoints[normalizedId]
@@ -39,23 +63,16 @@ object TrackerMapLastPointResolver {
         }
         val singleTrailPoint = state.trail.lastOrNull()
             ?.takeIf {
-                normalizedId == eff || normalizedId == state.runtime.selectedTrackerId
+                normalizedId == eff || normalizedId == state.runtime.selectedTrackerId.trim()
             }
         val multiTrailPoint = state.allQueueTrailsByTracker[normalizedId]?.lastOrNull()
-        val trackerLastPoint = tracker?.last_point
-        val selectedPoint = runtimePoint?.let {
-            PointCandidate(
-                latitude = it.lastTrackedLatitude ?: return null,
-                longitude = it.lastTrackedLongitude ?: return null,
-                lastUpdatedMs = positiveTimestampMs(it.lastTrackedTimestampMs),
-                accuracyMeters = it.lastAccuracyMeters,
-            )
-        } ?: freshestNonRuntimePoint(
+        val selectedPoint = freshestPoint(
+            runtimePoint = runtimePoint,
             remotePoint = remotePoint,
             singleTrailPoint = singleTrailPoint,
             multiTrailPoint = multiTrailPoint,
             tracker = tracker,
-            trackerLastPoint = trackerLastPoint,
+            trackerLastPoint = tracker?.last_point,
         ) ?: return null
         return TrackerMapResolvedPoint(
             latitude = selectedPoint.latitude,
@@ -65,53 +82,8 @@ object TrackerMapLastPointResolver {
         )
     }
 
-    fun resolveRenderedMarkerPoint(
-        state: TrackerMapUiState,
-        trackerId: String,
-        tracker: Tracker?,
-        acceptedRemoteTrackerIds: Set<String>,
-    ): TrackerMapResolvedPoint? {
-        val normalizedId = trackerId.trim()
-        if (normalizedId.isEmpty()) return null
-        val acceptedRemoteIds = acceptedRemoteTrackerIds
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toSet()
-        val effectiveDisplayedId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
-        val selectedId = state.runtime.selectedTrackerId.trim()
-        val renderedPoint = when (state.mode) {
-            TrackerMapDisplayMode.SINGLE_SESSION -> {
-                state.trail.lastOrNull()
-                    ?.takeIf { normalizedId == effectiveDisplayedId || normalizedId == selectedId }
-                    ?.toPointCandidate()
-                    ?: state.runtime.takeIf {
-                        effectiveDisplayedId.isNotEmpty() &&
-                            normalizedId == effectiveDisplayedId &&
-                            effectiveDisplayedId == selectedId &&
-                            it.lastTrackedLatitude != null &&
-                            it.lastTrackedLongitude != null
-                    }?.toPointCandidate()
-            }
-            TrackerMapDisplayMode.ALL_QUEUE,
-            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> {
-                state.allQueueTrailsByTracker[normalizedId]
-                    ?.lastOrNull()
-                    ?.toPointCandidate()
-                    ?: state.remoteLastPoints[normalizedId]
-                        ?.takeIf { normalizedId in acceptedRemoteIds }
-                        ?.toPointCandidate()
-            }
-        } ?: tracker?.let { it.last_point?.toPointCandidate(it) }
-            ?: return null
-        return TrackerMapResolvedPoint(
-            latitude = renderedPoint.latitude,
-            longitude = renderedPoint.longitude,
-            lastUpdatedMs = renderedPoint.lastUpdatedMs,
-            accuracyMeters = renderedPoint.accuracyMeters,
-        )
-    }
-
-    private fun freshestNonRuntimePoint(
+    private fun freshestPoint(
+        runtimePoint: PointCandidate?,
         remotePoint: TrackPointEvent?,
         singleTrailPoint: QueuedLocation?,
         multiTrailPoint: QueuedLocation?,
@@ -119,6 +91,7 @@ object TrackerMapLastPointResolver {
         trackerLastPoint: List<Double>?,
     ): PointCandidate? {
         val candidates = listOfNotNull(
+            runtimePoint,
             remotePoint?.let {
                 PointCandidate(
                     latitude = it.lat,
@@ -127,33 +100,31 @@ object TrackerMapLastPointResolver {
                     accuracyMeters = it.accuracyMeters,
                 )
             },
-            singleTrailPoint?.let {
-                PointCandidate(
-                    latitude = it.latitude,
-                    longitude = it.longitude,
-                    lastUpdatedMs = positiveTimestampMs(it.time),
-                    accuracyMeters = it.accuracy,
-                )
-            },
-            multiTrailPoint?.let {
-                PointCandidate(
-                    latitude = it.latitude,
-                    longitude = it.longitude,
-                    lastUpdatedMs = positiveTimestampMs(it.time),
-                    accuracyMeters = it.accuracy,
-                )
-            },
+            singleTrailPoint?.toPointCandidate(),
+            multiTrailPoint?.toPointCandidate(),
             trackerLastPoint?.takeIf { it.size >= 2 }?.let {
                 PointCandidate(
                     latitude = it[1],
                     longitude = it[0],
-                    lastUpdatedMs = it.getOrNull(2)?.let(::normalizeExternalTimestampToMs)
-                        ?: normalizeExternalTimestampToMs(tracker?.updated_at),
+                    lastUpdatedMs = rosterLastUpdatedMs(tracker, it),
                     accuracyMeters = null,
                 )
-            }
+            },
         )
         return candidates.maxWithOrNull(compareBy<PointCandidate> { it.lastUpdatedMs ?: Long.MIN_VALUE })
+    }
+
+    private fun rosterLastUpdatedMs(tracker: Tracker?, lastPoint: List<Double>): Long? {
+        val lastPointTs = lastPoint.getOrNull(2)?.let(::normalizeExternalTimestampToMs)
+        val paramsTs = tracker?.point_params
+            ?.lastOrNull()
+            ?.entries
+            ?.asSequence()
+            ?.filter { it.key.contains("timestamp", ignoreCase = true) }
+            ?.mapNotNull { TrackerMapSessionWindowPolicy.normalizeTimestampToMs(it.value)?.takeIf { ts -> ts > 0L } }
+            ?.maxOrNull()
+        return listOfNotNull(lastPointTs, paramsTs).maxOrNull()
+            ?: normalizeExternalTimestampToMs(tracker?.updated_at)
     }
 
     private fun positiveTimestampMs(value: Number?): Long? {
@@ -166,43 +137,12 @@ object TrackerMapLastPointResolver {
         return TrackerMapSessionWindowPolicy.normalizeTimestampToMs(raw)?.takeIf { it > 0L }
     }
 
-    private fun TrackingRuntimeSnapshot.toPointCandidate(): PointCandidate? {
-        val latitude = lastTrackedLatitude ?: return null
-        val longitude = lastTrackedLongitude ?: return null
-        return PointCandidate(
-            latitude = latitude,
-            longitude = longitude,
-            lastUpdatedMs = positiveTimestampMs(lastTrackedTimestampMs),
-            accuracyMeters = lastAccuracyMeters,
-        )
-    }
-
     private fun QueuedLocation.toPointCandidate(): PointCandidate {
         return PointCandidate(
             latitude = latitude,
             longitude = longitude,
             lastUpdatedMs = positiveTimestampMs(time),
             accuracyMeters = accuracy,
-        )
-    }
-
-    private fun TrackPointEvent.toPointCandidate(): PointCandidate {
-        return PointCandidate(
-            latitude = lat,
-            longitude = lon,
-            lastUpdatedMs = positiveTimestampMs(timestampMs),
-            accuracyMeters = accuracyMeters,
-        )
-    }
-
-    private fun List<Double>.toPointCandidate(tracker: Tracker): PointCandidate? {
-        if (size < 2) return null
-        return PointCandidate(
-            latitude = this[1],
-            longitude = this[0],
-            lastUpdatedMs = getOrNull(2)?.let(::normalizeExternalTimestampToMs)
-                ?: normalizeExternalTimestampToMs(tracker.updated_at),
-            accuracyMeters = null,
         )
     }
 

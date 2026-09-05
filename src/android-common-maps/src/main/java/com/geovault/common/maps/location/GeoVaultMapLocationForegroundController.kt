@@ -9,12 +9,18 @@ import androidx.core.content.ContextCompat
  * [GeoVaultMapGpsLocationEngine] can be unit-tested with a fake controller.
  */
 interface GeoVaultMapLocationForegroundController {
+    fun canStart(context: Context): Boolean
     fun ensureStarted(context: Context)
     fun ensureStopped(context: Context)
 }
 
 object AndroidGeoVaultMapLocationForegroundController : GeoVaultMapLocationForegroundController {
+    override fun canStart(context: Context): Boolean {
+        return GeoVaultMapLocationForegroundEligibility.canStartFromCurrentProcess()
+    }
+
     override fun ensureStarted(context: Context) {
+        if (!canStart(context)) return
         val appContext = context.applicationContext
         val intent = Intent(appContext, GeoVaultMapLocationForegroundService::class.java)
         ContextCompat.startForegroundService(appContext, intent)

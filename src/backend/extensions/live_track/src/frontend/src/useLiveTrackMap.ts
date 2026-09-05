@@ -1,6 +1,7 @@
 import type { Ref, ComputedRef } from 'vue';
 import type { Map as MapLibreMap, PaddingOptions } from 'maplibre-gl';
 import { getCoordsSortedByTime, getTrackDirectionAngle, splitTrackIntoSegments } from './trackGeometry';
+import { resolveTrackLastCoordinate } from './trackLastPoint';
 import { getArrowImageId, ensureArrowImage } from './trackArrowMap';
 import {
   buildAccuracyCircleLayerSpec,
@@ -133,7 +134,6 @@ export interface UseLiveTrackMapDeps {
   activeGroupId: Ref<string | number | null>;
   activeGroup: ComputedRef<LiveTrackGroup | null | undefined>;
   followLocked: Ref<boolean>;
-  isAutoMoving: Ref<boolean>;
   getMapPadding: () => number | PaddingOptions;
   onFeatureClick?: (trackId: string | number) => void;
   onBackgroundClick?: () => void;
@@ -168,7 +168,6 @@ export function useLiveTrackMap({
   activeGroupId,
   activeGroup,
   followLocked,
-  isAutoMoving,
   getMapPadding,
   onFeatureClick,
   onBackgroundClick
@@ -229,9 +228,8 @@ export function useLiveTrackMap({
     for (const track of trackers.value) {
       if (isHiddenOwnedTracker(track)) continue;
       if (groupTrackIds != null && !groupTrackIds.has(String(track.id))) continue;
-      const coordsSorted = getCoordsSortedByTime(track);
-      const last = coordsSorted.length ? coordsSorted[coordsSorted.length - 1] : null;
-      const pos: LonLat | null = (last && last.length >= 2) ? [last[0], last[1]] : (track.last_position ? [track.last_position.lon, track.last_position.lat] : null);
+      const last = resolveTrackLastCoordinate(track);
+      const pos: LonLat | null = (last && last.length >= 2) ? [last[0], last[1]] : null;
       if (!pos) continue;
       const color = track.color ?? '#6C93DE';
       const selected = selectedId.value === track.id;
@@ -350,6 +348,11 @@ export function useLiveTrackMap({
   }
 
   function getLastNCoords(track: LiveTrack, n: number): LonLat[] {
+    if (n === 1) {
+      const last = resolveTrackLastCoordinate(track);
+      if (!last || last.length < 2) return [];
+      return [[last[0], last[1]]];
+    }
     const coords = getCoordsSortedByTime(track);
     const slice = coords.length ? coords.slice(-n) : [];
     return slice.map((c): LonLat => [c[0], c[1]]);
@@ -415,12 +418,8 @@ export function useLiveTrackMap({
   function panToPoint(coordPair: LonLat | null | undefined, { minZoom }: PanToPointOptions = {}): void {
     if (!map || !coordPair) return;
     if (!isValidMapLngLatPair(coordPair[0], coordPair[1])) return;
-    isAutoMoving.value = true;
     const zoom = minZoom != null ? Math.max(map.getZoom(), minZoom) : map.getZoom();
     map.easeTo({ center: coordPair, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-    setTimeout(() => {
-      isAutoMoving.value = false;
-    }, MAP_SNAP_DURATION + 50);
   }
 
   /** Ease the camera to a track's last point (used by list/group click handlers). */

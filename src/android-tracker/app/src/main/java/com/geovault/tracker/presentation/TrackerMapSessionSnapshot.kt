@@ -7,9 +7,8 @@ import com.geovault.tracker.services.TrackingRuntimeSnapshot
 data class TrackerTrackModel(
     val trackerId: String,
     /**
-     * Time-sorted render trail. This is the canonical, chronologically-ordered list of points
-     * for both line rendering and marker placement. Do NOT reorder by provenance — the marker
-     * reads `renderTrail.lastOrNull()` and lines connect points in this order.
+     * Time-sorted render trail for line drawing. Marker and camera heads use
+     * [TrackerMapLastPointResolver], not `renderTrail.lastOrNull()`.
      */
     val renderTrail: List<QueuedLocation> = emptyList(),
     val remoteHead: TrackPointEvent? = null,

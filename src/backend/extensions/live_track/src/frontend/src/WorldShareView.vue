@@ -196,6 +196,7 @@ import { buildAccuracyCircleLayerSpec } from './mapAccuracyCircle';
 import { setupMapFollowListeners } from './mapFollowLock';
 import { ensureArrowImage } from './trackArrowMap';
 import { trackToParamsModalShape } from './trackParamsShape';
+import { normalizeTrackForMemory } from './trackNormalization';
 import { getRasterSourceSpec, getRasterLayerMaxZoom, replaceRasterBaseLayer } from './mapTileUtils';
 import { useTileSources } from './useTileSources';
 import { SHARE_SOURCE_MODES, isShareNotAvailableStatus, shareDataUrlForInfo, shareInfoUrl } from './shareDiscoveryUrls';
@@ -413,23 +414,6 @@ export default defineComponent({
       return hasPoints;
     }
 
-    function normalizeTrackForWorld(track: LiveTrack): LiveTrack {
-      const geom = track.geometry ?? { type: 'LineString', coordinates: [] };
-      const coords = geom.coordinates;
-      const last = coords[coords.length - 1] ?? track.last_point;
-      const hasLast = coords.length || track.last_point;
-      const pointParams = Array.isArray(track.point_params) ? track.point_params : [];
-      const latestPointParams = pointParams.length ? pointParams[pointParams.length - 1] : {};
-      return {
-        ...track,
-        geometry: geom,
-        point_params: pointParams,
-        last_position: hasLast && last.length >= 2 ? { lon: last[0], lat: last[1] } : null,
-        last_timestamp_ms: hasLast && last.length >= 3 ? last[2] ?? null : null,
-        latestPointParams
-      };
-    }
-
     function openLayerSidebar(): void {
       showParamsSidebar.value = false;
       showLayerSidebar.value = true;
@@ -500,12 +484,11 @@ export default defineComponent({
       followLocked.value = true;
       void updateMapData();
       if (map) {
-        const coords = (track.geometry?.coordinates ?? []).slice(-1).map((c): [number, number] => [c[0], c[1]]);
-        const last = coords.length ? coords[0] : null;
-        if (last) {
-          const zoom = Math.max(map.getZoom(), 14);
-          map.easeTo({ center: last, zoom, duration: MAP_SNAP_DURATION, padding: getMapPadding() });
-        }
+        centerMapOnTrackLastPoint(map, track, {
+          duration: MAP_SNAP_DURATION,
+          padding: getMapPadding(),
+          minZoom: 14,
+        });
       }
       if (isMobileView.value) {
         mobileDrawerRef.value?.collapseToPeek();
@@ -787,9 +770,9 @@ export default defineComponent({
         if (!result.ok) return;
         const data = result.data as WorldSharePayload;
         if (data.share_type === 'live_track_group' && Array.isArray(data.tracks)) {
-          groupTracks.value = data.tracks.map((t) => normalizeTrackForWorld(t));
+          groupTracks.value = data.tracks.map((t) => normalizeTrackForMemory(t));
         } else {
-          trackData.value = normalizeTrackForWorld(data);
+          trackData.value = normalizeTrackForMemory(data);
         }
         await updateMapData();
         if (followLocked.value && map && selectedTrack.value) centerOnSelectedTrack();
@@ -829,11 +812,11 @@ export default defineComponent({
         if (info.share_type === 'live_track_group') {
           groupName.value = info.group_name || data.group_name || 'Shared group';
           const tracks = Array.isArray(data.tracks) ? data.tracks : [];
-          groupTracks.value = tracks.map((t) => normalizeTrackForWorld(t));
+          groupTracks.value = tracks.map((t) => normalizeTrackForMemory(t));
           trackData.value = null;
         } else {
           trackName.value = info.track_name || 'Shared tracker';
-          trackData.value = normalizeTrackForWorld(data);
+          trackData.value = normalizeTrackForMemory(data);
           groupTracks.value = [];
         }
         loading.value = false;

@@ -24,11 +24,29 @@ object TrackerMapEffectiveSessionProjector {
     fun project(input: TrackerMapEffectiveSessionInput): TrackerMapEffectiveSession {
         val state = input.state
         val plan = input.plan
+        val overlaidSingle = singleTrailWithLocalRuntimeOverlay(
+            mode = state.mode,
+            runtime = state.runtime,
+            displayedTrackerId = plan.displayedTrackerId,
+            trail = state.trail,
+            trailPointLimit = input.trailPointLimit,
+        )
+        val overlaidMulti = allQueueTrailsWithLocalRuntimeOverlay(
+            mode = state.mode,
+            runtime = state.runtime,
+            groupTrackerIds = plan.groupTrackerIds,
+            allQueueTrailsByTracker = state.allQueueTrailsByTracker,
+            trailPointLimit = input.trailPointLimit,
+        )
+        val drawState = state.copy(
+            trail = overlaidSingle,
+            allQueueTrailsByTracker = overlaidMulti,
+        )
         val snapshot = TrackerMapSessionEngine.build(
             TrackerMapSessionBuildInput(
-                state = state,
+                state = drawState,
                 plan = plan,
-                localRuntimeOverlayTrails = state.allQueueTrailsByTracker,
+                localRuntimeOverlayTrails = overlaidMulti,
                 visibleTrackerIds = input.visibleTrackerIds,
                 nowMs = input.nowMs,
             )
@@ -55,11 +73,29 @@ object TrackerMapEffectiveSessionProjector {
     }
 
     fun resolveLiveHead(snapshot: TrackerMapSessionSnapshot): Pair<Double, Double>? {
-        val state = snapshot.uiState
-        return when (state.mode) {
-            TrackerMapDisplayMode.SINGLE_SESSION -> resolveSingleLiveHead(snapshot)
+        val trackerId = liveHeadTrackerId(snapshot)
+        if (trackerId.isEmpty()) return null
+        val resolved = TrackerMapLastPointResolver.resolve(
+            snapshot = snapshot,
+            trackerId = trackerId,
+            tracker = null,
+        ) ?: return null
+        return resolved.latitude to resolved.longitude
+    }
+
+    private fun liveHeadTrackerId(snapshot: TrackerMapSessionSnapshot): String {
+        return when (snapshot.mode) {
+            TrackerMapDisplayMode.SINGLE_SESSION -> {
+                snapshot.plan.displayedTrackerId.trim().ifBlank {
+                    snapshot.plan.selectedTrackerId.trim()
+                }
+            }
             TrackerMapDisplayMode.ALL_QUEUE,
-            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> resolveMultiLiveHead(snapshot)
+            TrackerMapDisplayMode.GROUP_PLACEHOLDER -> {
+                snapshot.runtime.locallyRecordedTrackerId.trim().ifBlank {
+                    snapshot.plan.selectedTrackerId.trim()
+                }
+            }
         }
     }
 
@@ -137,48 +173,6 @@ object TrackerMapEffectiveSessionProjector {
             )
         }
         return nextTrail
-    }
-
-    private fun resolveSingleLiveHead(snapshot: TrackerMapSessionSnapshot): Pair<Double, Double>? {
-        snapshot.singleTrail.lastOrNull()?.let { return it.latitude to it.longitude }
-        val runtime = snapshot.runtime
-        val displayedId = snapshot.plan.displayedTrackerId.trim()
-        val selectedId = snapshot.plan.selectedTrackerId.trim()
-        if (displayedId.isNotEmpty() && selectedId.isNotEmpty() && displayedId != selectedId) {
-            return null
-        }
-        val lat = runtime.lastTrackedLatitude
-        val lon = runtime.lastTrackedLongitude
-        if (lat != null && lon != null && runtime.lastTrackedTimestampMs > 0L) {
-            return lat to lon
-        }
-        return null
-    }
-
-    private fun resolveMultiLiveHead(snapshot: TrackerMapSessionSnapshot): Pair<Double, Double>? {
-        val runtime = snapshot.runtime
-        val trackerId = runtime.locallyRecordedTrackerId.trim().ifBlank {
-            runtime.selectedTrackerId.trim()
-        }
-        if (trackerId.isNotEmpty()) {
-            snapshot.renderTrailsByTracker[trackerId]?.lastOrNull()?.let {
-                return it.latitude to it.longitude
-            }
-        }
-        if (trackerId !in snapshot.renderTrailsByTracker.keys) {
-            GeoVaultCaptureLog.d(
-                TAG,
-                "map_update effective_live_head_none reason=tracker_not_rendered mode=${snapshot.mode} tracker=$trackerId " +
-                    "rendered=${snapshot.renderTrailsByTracker.keys.sorted()}"
-            )
-            return null
-        }
-        val lat = runtime.lastTrackedLatitude
-        val lon = runtime.lastTrackedLongitude
-        if (lat != null && lon != null && runtime.lastTrackedTimestampMs > 0L) {
-            return lat to lon
-        }
-        return null
     }
 
     private fun trailWithLocalRuntimeOverlay(

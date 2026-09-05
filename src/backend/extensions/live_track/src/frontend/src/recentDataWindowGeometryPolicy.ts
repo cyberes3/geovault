@@ -1,4 +1,5 @@
 import { normalizeTimestampMs } from './activeButDeadTrack';
+import { latestCoordByTime } from './trackLastPoint';
 import type { TrackCoordinate } from './types/track';
 
 const ROLLING_WINDOW_MS: Record<string, number> = {
@@ -30,7 +31,8 @@ export function pruneCoordinatesForRecentDataWindow(coordinates: TrackCoordinate
   });
 
   if (pruned.length === 0 && coordinates.length > 0) {
-    return [coordinates[coordinates.length - 1]];
+    const latest = latestCoordByTime(coordinates);
+    return latest ? [latest] : [coordinates[coordinates.length - 1]];
   }
   return pruned;
 }

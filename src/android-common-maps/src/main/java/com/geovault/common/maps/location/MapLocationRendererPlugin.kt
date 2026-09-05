@@ -172,8 +172,7 @@ class MapLocationRendererPlugin(
      * the screen is off. Caller must ensure location permissions are granted before calling.
      *
      * Common hosts should drive this through [com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionPolicy]
-     * + [com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle]. Tracker
-     * uses its own overlay policy and does not follow the common background-stream rule.
+     * + [com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle].
      */
     @SuppressLint("MissingPermission")
     fun startRenderingGpsLocation(intervalMs: Long = 2000L) {
@@ -186,6 +185,10 @@ class MapLocationRendererPlugin(
     fun stopRenderingGpsLocation() {
         updatesSession?.stop()
         updatesSession = null
+    }
+
+    fun retryLocationForeground() {
+        GeoVaultMapGpsLocationEngine.get(appContext).retryForegroundIfNeeded()
     }
 
     override fun onPluginDestroyed() {
@@ -217,6 +220,13 @@ class MapLocationRendererPlugin(
         // engine instance is a no-op on MapLibre's side beyond a listener re-attach.
         locationComponent.compassEngine = headingCompassEngine
         renderState.applyTo(map)
+        lastLocation?.let { LocationComponentHelper.forceLocation(map, it) }
+        if (renderState.isEnabled && !style.hasLocationForegroundLayer()) {
+            LocationComponentHelper.activate(map, style, appContext, effectiveConfig())
+            map.locationComponent.compassEngine = headingCompassEngine
+            renderState.applyTo(map)
+            lastLocation?.let { LocationComponentHelper.forceLocation(map, it) }
+        }
         renderState.markStyleBindingCurrent()
         logStyleBindResult(map, style)
     }

@@ -32,17 +32,19 @@ test('defaults geometry to an empty LineString when absent', () => {
   assert.equal(normalized.last_timestamp_ms, null);
 });
 
-test('extracts the latest point_params entry and drops point_params/last_point from the result', () => {
+test('keeps point_params and last_point and prefers newer last_point over older geometry', () => {
   const track = {
     id: 1,
-    geometry: { type: 'LineString', coordinates: [[1, 2, 100]] },
-    point_params: [{ speed: 1 }, { speed: 2 }],
-    last_point: [9, 9, 999]
+    geometry: { type: 'LineString', coordinates: [[1, 2, 1_700_000_000_000]] },
+    point_params: [{ speed: 1 }],
+    last_point: [9, 9, 1_700_000_100_000]
   };
   const normalized = normalizeTrackForMemory(track);
-  assert.deepEqual(normalized.latestPointParams, { speed: 2 });
-  assert.equal('point_params' in normalized, false);
-  assert.equal('last_point' in normalized, false);
+  assert.deepEqual(normalized.last_position, { lon: 9, lat: 9 });
+  assert.equal(normalized.last_timestamp_ms, 1_700_000_100_000);
+  assert.deepEqual(normalized.point_params, [{ speed: 1 }]);
+  assert.deepEqual(normalized.last_point, [9, 9, 1_700_000_100_000]);
+  assert.deepEqual(normalized.latestPointParams, { speed: 1 });
 });
 
 test('latestPointParams is an empty object when point_params is absent or empty', () => {

@@ -82,14 +82,46 @@ def _timestamp_to_ms(ts) -> int | None:
         return None
 
 
+def latest_coord_index_by_time(coords) -> int | None:
+    """Index of the freshest coordinate. Missing timestamps lose. Ties use later array order."""
+    best_i = None
+    best_ts = None
+    for i, coord in enumerate(coords or []):
+        if not coord or len(coord) < 2:
+            continue
+        ts = _timestamp_to_ms(coord[2]) if len(coord) >= 3 else None
+        if best_i is None:
+            best_i = i
+            best_ts = ts
+            continue
+        if ts is None:
+            if best_ts is None:
+                best_i = i
+            continue
+        if best_ts is None or ts >= best_ts:
+            best_i = i
+            best_ts = ts
+    return best_i
+
+
+def latest_coord_by_time(coords):
+    """Freshest coordinate by timestamp. Array order only when timestamps are missing or tied."""
+    index = latest_coord_index_by_time(coords)
+    if index is None:
+        return None
+    return coords[index]
+
+
 def _filter_coords_by_recent_window(coords, point_params, window_key: str):
     """Keep only coords (and matching point_params) with timestamp >= (now - window)."""
     def _with_latest_point_fallback(filtered_coords, filtered_params):
-        # If filtering would hide all points, preserve the most recent point.
         if coords and not filtered_coords:
+            idx = latest_coord_index_by_time(coords)
+            if idx is None:
+                return filtered_coords, filtered_params
             if len(coords) == len(point_params):
-                return [coords[-1]], [point_params[-1]]
-            return [coords[-1]], filtered_params
+                return [coords[idx]], [point_params[idx]]
+            return [coords[idx]], filtered_params
         return filtered_coords, filtered_params
 
     if window_key == "current_session":
@@ -369,8 +401,8 @@ def track_to_response_metadata_only(
                 else:
                     p[k] = int(round(v))
     last_point = None
-    if coords:
-        lp = coords[-1]
+    lp = latest_coord_by_time(coords)
+    if lp:
         last_point = [round(lp[0], 5), round(lp[1], 5)]
         if len(lp) >= 3 and isinstance(lp[2], (int, float)):
             last_point.append(int(round(lp[2])))

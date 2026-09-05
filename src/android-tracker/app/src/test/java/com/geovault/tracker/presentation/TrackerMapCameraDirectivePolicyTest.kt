@@ -268,4 +268,58 @@ class TrackerMapCameraDirectivePolicyTest {
 
         assertEquals(TrackerMapCameraDirective.Reason.NoOp, resolution.reason)
     }
+
+    @Test
+    fun resolve_liveActiveFitAfterUserZoom_centersAtCurrentZoom() {
+        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = 3.0,
+                followTargetLon = 4.0,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+                userOwnsZoom = true,
+            )
+        )
+
+        assertEquals(TrackerMapCameraDirective.Reason.LiveActiveFit, resolution.reason)
+        assertEquals(3.0, resolution.centerLat!!, 0.0)
+        assertEquals(4.0, resolution.centerLon!!, 0.0)
+        assertNull(resolution.bounds)
+    }
+
+    @Test
+    fun resolve_liveActiveFitAfterUserZoom_usesBoundsCenterWhenNoFollowTarget() {
+        val resolution = TrackerMapCameraDirectivePolicy.resolve(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = null,
+                followTargetLon = null,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+                userOwnsZoom = true,
+            )
+        )
+
+        assertEquals(TrackerMapCameraDirective.Reason.LiveActiveFit, resolution.reason)
+        assertEquals(
+            (sampleBounds.latitudeNorth + sampleBounds.latitudeSouth) / 2.0,
+            resolution.centerLat!!,
+            0.0,
+        )
+        assertEquals(
+            (sampleBounds.longitudeEast + sampleBounds.longitudeWest) / 2.0,
+            resolution.centerLon!!,
+            0.0,
+        )
+        assertNull(resolution.bounds)
+    }
 }

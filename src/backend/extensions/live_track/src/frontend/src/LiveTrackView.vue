@@ -709,7 +709,6 @@ export default defineComponent({
     const selectedId = ref<string | number | null>(null);
     const activeGroupId = ref<string | number | null>(null);
     const followLocked = ref(false);
-    const isAutoMoving = ref(false);
     const rootContainer = ref<HTMLElement | null>(null);
 
     const {
@@ -1064,7 +1063,6 @@ export default defineComponent({
       activeGroupId,
       activeGroup,
       followLocked,
-      isAutoMoving,
       getMapPadding,
       onFeatureClick: onMapFeatureClick,
       onBackgroundClick: onMapBackgroundClick
@@ -1480,6 +1478,7 @@ export default defineComponent({
     function deselectSelection(): void {
       activeGroupId.value = null;
       selectedId.value = null;
+      followLocked.value = false;
       void trackMap.updateMapFeatures();
       if (isMobileView.value) collapseDrawerToPeek();
     }

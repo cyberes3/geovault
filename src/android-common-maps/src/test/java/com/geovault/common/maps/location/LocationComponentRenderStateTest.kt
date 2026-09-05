@@ -49,6 +49,15 @@ class LocationComponentRenderStateTest {
     }
 
     @Test
+    fun setEnabled_beforeActivate_isQueuedOnRenderState() {
+        val state = LocationComponentRenderState()
+
+        state.setEnabled(true)
+
+        assertTrue(state.isEnabled)
+    }
+
+    @Test
     fun shouldBindStyle_requiresBindWhenComponentIsNotActivated() {
         val state = LocationComponentRenderState()
 

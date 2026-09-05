@@ -30,8 +30,8 @@ import com.geovault.common.maps.ui.GeoVaultMapCameraFollowState
 import com.geovault.common.maps.R
 import com.geovault.common.maps.ui.GeoVaultMapFabAction
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
+import com.geovault.common.maps.ui.camera.GeoVaultMapCameraInteractionEffect
 import org.maplibre.android.location.modes.CameraMode
-import org.maplibre.android.maps.MapLibreMap
 
 /**
  * Heading/compass follow FAB, GPS position-follow FAB, and MapLibre location camera wiring.
@@ -47,11 +47,10 @@ data class GeoVaultMapHeadingFollowFabBundle(
      */
     val gpsPositionFollowFab: GeoVaultMapFabAction,
     /**
-     * Clears follow flags and camera tracking before host-driven camera moves (fit bounds,
-     * selection zoom, **navigation start / framing**) so MapLibre does not fight programmatic
-     * animations. Survey and NGS both call this when turn-by-turn navigation begins.
+     * Clears follow, then runs [block]. The only supported way to move the camera from a host
+     * while this bundle exists (Home, launch framing, fit bounds).
      */
-    val clearForProgrammaticCameraMove: () -> Unit,
+    val runProgrammaticCamera: (() -> Unit) -> Unit,
     /**
      * True while position / camera follow is active (manual camera follow in the heading-follow
      * bundle; no MapLibre [CameraMode.TRACKING]).
@@ -178,23 +177,20 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     val latestFollowState = rememberUpdatedState(
         GeoVaultMapCameraFollowState(positionFollowDesired, headingFollowDesired),
     )
-    val gestureListener = remember(map) {
-        MapLibreMap.OnCameraMoveStartedListener { reason ->
-            if (reason != MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) return@OnCameraMoveStartedListener
+    GeoVaultMapCameraInteractionEffect(
+        map = map,
+        onCameraTakeover = {
             val prev = latestFollowState.value
-            if (!prev.positionFollowDesired && !prev.headingFollowDesired) return@OnCameraMoveStartedListener
+            if (!prev.positionFollowDesired && !prev.headingFollowDesired) return@GeoVaultMapCameraInteractionEffect
             val next = GeoVaultMapCameraFollowMachine.afterUserGesture(prev)
             if (next != prev) {
                 positionFollowDesired = next.positionFollowDesired
                 headingFollowDesired = next.headingFollowDesired
                 waitingForInitialLock = false
             }
-        }
-    }
-    DisposableEffect(map, gestureListener) {
-        map.addOnCameraMoveStartedListener(gestureListener)
-        onDispose { map.removeOnCameraMoveStartedListener(gestureListener) }
-    }
+        },
+        onUserOwnedZoom = {},
+    )
 
     DisposableEffect(
         map,
@@ -244,11 +240,13 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
         onDispose { plugin.removeLocationListener(listener) }
     }
 
-    val clearForProgrammaticCameraMove: () -> Unit = {
-        positionFollowDesired = false
-        headingFollowDesired = false
+    val runProgrammaticCamera: (() -> Unit) -> Unit = { block ->
+        val next = GeoVaultMapCameraFollowMachine.afterProgrammaticCamera(followState())
+        positionFollowDesired = next.positionFollowDesired
+        headingFollowDesired = next.headingFollowDesired
         waitingForInitialLock = false
         followController.clearFollow()
+        block()
     }
 
     val onHeadingTap: () -> Unit = {
@@ -309,7 +307,7 @@ fun rememberGeoVaultMapHeadingFollowFabBundle(
     return GeoVaultMapHeadingFollowFabBundle(
         headingFollowFab = orientationFab,
         gpsPositionFollowFab = gpsPositionFab,
-        clearForProgrammaticCameraMove = clearForProgrammaticCameraMove,
+        runProgrammaticCamera = runProgrammaticCamera,
         positionFollowDesired = positionFollowDesired,
         headingFollowDesired = headingFollowDesired,
     )

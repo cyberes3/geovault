@@ -41,7 +41,8 @@ data class GeoVaultMapLocationSessionDecision(
  * - when intent is on, [shouldStreamGps] stays true even if the host activity is stopped
  *   (background / screen off) so the shared location FGS can keep fixes fresh.
  *
- * Tracker uses its own overlay policy and does not follow this background-stream rule.
+ * Tracker applies this same policy and hides the puck only when the displayed tracker is the
+ * one being recorded.
  */
 class GeoVaultMapLocationSessionPolicy {
     fun decide(input: GeoVaultMapLocationSessionInput): GeoVaultMapLocationSessionDecision {
@@ -62,6 +63,26 @@ class GeoVaultMapLocationSessionPolicy {
             shouldEnablePuck = shouldEnablePuck,
         )
     }
+}
+
+@Composable
+fun rememberGeoVaultMapLocationSessionDecision(
+    hasLocationPermission: Boolean,
+    isMapReady: Boolean,
+    isActive: Boolean,
+    userLocationRequested: Boolean,
+    policy: GeoVaultMapLocationSessionPolicy = remember { GeoVaultMapLocationSessionPolicy() },
+): GeoVaultMapLocationSessionDecision {
+    return policy.decide(
+        GeoVaultMapLocationSessionInput(
+            isActive = isActive,
+            hasLocationPermission = hasLocationPermission,
+            isMapReady = isMapReady,
+            userLocationRequested = userLocationRequested,
+            positionFollowDesired = false,
+            headingFollowDesired = false,
+        ),
+    )
 }
 
 data class GeoVaultMapLocationSession(

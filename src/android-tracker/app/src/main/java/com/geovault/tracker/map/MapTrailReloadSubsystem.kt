@@ -299,7 +299,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 queueOverlaysByTracker = loaded.queueOverlaysByTracker,
                 trackers = trackers,
                 dispatcher = rt.dependencies.historyIntentDispatcher,
-                activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                activeSessionStartMsFor = rt::activeSessionStartMsForTracker,
             )
             rt.stateHub.uiStateMutable.update { latest ->
                 if (trailSeedForState(latest) != seed) {
@@ -476,7 +476,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             queueOverlaysByTracker = loaded.queueOverlaysByTracker,
             trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
             dispatcher = rt.dependencies.historyIntentDispatcher,
-            activeSessionStartMs = rt.currentActiveSessionStartMs(),
+            activeSessionStartMsFor = rt::activeSessionStartMsForTracker,
         )
         // DEAD-LEAK-PATH REMOVED: this whole function only runs when `allowsSource` returned
         // false for `plan.source`, which is only possible for a non-server-fetching reason (see
@@ -553,7 +553,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                     TrackerHistoryIntent.CommitTrunk(
                         batch = batch,
-                        activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                        activeSessionStartMs = rt.activeSessionStartMsForTracker(normalizedId),
                     )
                 )
                 TrackerMapServerTrailResult(
@@ -578,7 +578,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                 val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                     TrackerHistoryIntent.CommitTrunk(
                         batch = batch,
-                        activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                        activeSessionStartMs = rt.activeSessionStartMsForTracker(normalizedId),
                     )
                 )
                 TrackerMapServerTrailResult(
@@ -630,7 +630,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                         val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                             TrackerHistoryIntent.CommitTrunk(
                                 batch = batch,
-                                activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                                activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                             )
                         )
                         TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
@@ -642,7 +642,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                         val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                             TrackerHistoryIntent.CommitTrunk(
                                 batch = batch,
-                                activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                                activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                             )
                         )
                         TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
@@ -667,7 +667,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
                         val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
                             TrackerHistoryIntent.CommitTrunk(
                                 batch = batch,
-                                activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                                activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                             )
                         )
                         TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
@@ -809,7 +809,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             .firstOrNull { it.id == trackerId }
         val cachedGeometry = cachedTracker?.geometry?.coordinates.orEmpty()
         if (cachedGeometry.isNotEmpty() && cachedTracker != null) {
-            val sessionStart = rt.currentActiveSessionStartMs()
+            val sessionStart = rt.activeSessionStartMsForTracker(trackerId)
             val batch = TrackerHistorySourceAdapters.filteredServerTrunk(cachedTracker)
             when (
                 val prepared = TrackerHistoryActiveSessionPolicy.prepareTrunkForCommit(
@@ -871,7 +871,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             rt.dependencies.historyIntentDispatcher.dispatch(
                 TrackerHistoryIntent.CommitTrunk(
                     batch = batch,
-                    activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                    activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                 ),
             )
             TrackerHistoryRenderMapper.toQueuedLocations(
@@ -941,7 +941,7 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         return TrackerHistoryTrailPreservePolicy.mergeActiveSessionCoverageIntoTrunkBatch(
             batch = batch,
             currentTrail = currentTrail,
-            activeSessionStartMs = rt.currentActiveSessionStartMs(),
+            activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
         )
     }

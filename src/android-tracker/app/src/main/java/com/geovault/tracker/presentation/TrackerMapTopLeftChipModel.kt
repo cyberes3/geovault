@@ -118,12 +118,16 @@ class TrackerMapTopLeftChipMapper {
             selectedTrackerId.isNotEmpty() &&
                 displayedTrackerId == selectedTrackerId -> null
             else -> {
-                val lastMs = TrackerMapLastPointResolver.resolve(
-                    state,
-                    effectiveDisplayedTrackerId,
-                    tracker,
-                    acceptedRemoteTrackerIds,
-                )?.lastUpdatedMs
+                val lastMs = TrackerLastReportedAtPolicy.resolve(
+                    trackerId = effectiveDisplayedTrackerId,
+                    runtime = state.runtime,
+                    resolverLastUpdatedMs = TrackerMapLastPointResolver.resolve(
+                        state,
+                        effectiveDisplayedTrackerId,
+                        tracker,
+                        acceptedRemoteTrackerIds,
+                    )?.lastUpdatedMs,
+                )
                 if (lastMs == null) {
                     TrackerMapTopLeftChipText.Resource(R.string.waiting_for_data)
                 } else {

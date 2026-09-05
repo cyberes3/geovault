@@ -97,6 +97,21 @@ class GeoVaultMapGpsLocationEngineTest {
         assertFalse(foreground.isStarted)
     }
 
+    @Test
+    fun acquire_skipsForegroundWhenProcessCannotStartThenRetries() {
+        foreground.allowed = false
+        engine.acquire(1000L) { }
+
+        assertEquals(0, foreground.startCount)
+        assertFalse(foreground.isStarted)
+
+        foreground.allowed = true
+        engine.retryForegroundIfNeeded()
+
+        assertEquals(1, foreground.startCount)
+        assertTrue(foreground.isStarted)
+    }
+
     private fun location(lat: Double, lon: Double): Location {
         return Location("test").apply {
             latitude = lat
@@ -109,6 +124,9 @@ class GeoVaultMapGpsLocationEngineTest {
         var startCount = 0
         var stopCount = 0
         var isStarted = false
+        var allowed = true
+
+        override fun canStart(context: Context): Boolean = allowed
 
         override fun ensureStarted(context: Context) {
             startCount += 1

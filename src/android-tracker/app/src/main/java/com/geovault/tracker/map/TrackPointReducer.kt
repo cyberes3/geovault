@@ -78,7 +78,7 @@ internal class TrackPointReducer(private val rt: TrackerMapRuntime) {
                     point = point,
                     trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
                     dispatcher = rt.dependencies.historyIntentDispatcher,
-                    activeSessionStartMs = rt.activeSessionStartMsForRuntime(latest.runtime),
+                    activeSessionStartMs = rt.activeSessionStartMsForTracker(point.trackId),
                 )
                 if (overlayCommitted) {
                     shouldUpdate = true

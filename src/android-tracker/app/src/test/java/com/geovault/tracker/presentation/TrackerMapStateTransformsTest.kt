@@ -137,7 +137,8 @@ class TrackerMapStateTransformsTest {
         val st = TrackerMapStateTransforms.buildRenderState(
             TrackerMapDisplayMode.SINGLE_SESSION,
             trail,
-            TrackingRuntimeSnapshot(selectedTrackerName = "T1"),
+            TrackingRuntimeSnapshot(selectedTrackerId = "t1", selectedTrackerName = "T1"),
+            displayedTrackerId = "t1",
         )
         assertEquals(1, st.lines.size)
         assertTrue(st.lines.first().id.startsWith("tracker-trail-"))
@@ -150,6 +151,18 @@ class TrackerMapStateTransformsTest {
         )
         assertEquals(45.0f, st.points.first().iconRotationDegrees)
         assertEquals("T1", st.points.first().title)
+    }
+
+    @Test
+    fun singleSession_noMarkerWhenResolverReturnsNull() {
+        val st = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = emptyList(),
+            runtime = TrackingRuntimeSnapshot(),
+            displayedTrackerId = "t1",
+        )
+        assertTrue(st.lines.isEmpty())
+        assertTrue(st.points.isEmpty())
     }
 
     @Test
@@ -174,6 +187,7 @@ class TrackerMapStateTransformsTest {
             runtime = TrackingRuntimeSnapshot(
                 selectedTrackerId = "local",
                 selectedTrackerName = "Local Tracker",
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
                 lastTrackedLatitude = -33.0,
                 lastTrackedLongitude = 151.0,
             ),
@@ -198,7 +212,8 @@ class TrackerMapStateTransformsTest {
         val render = TrackerMapStateTransforms.buildRenderState(
             mode = TrackerMapDisplayMode.SINGLE_SESSION,
             trail = trail,
-            runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L)
+            runtime = TrackingRuntimeSnapshot(sessionVisibleBoundaryId = 2L),
+            displayedTrackerId = "t1",
         )
 
         assertEquals(trail.map { it.latitude to it.longitude }, render.lines.flatMap { it.coordinates })
@@ -219,7 +234,8 @@ class TrackerMapStateTransformsTest {
             runtime = TrackingRuntimeSnapshot(
                 sessionVisibleBoundaryId = 10L,
                 sessionStartTimeMs = 250L,
-            )
+            ),
+            displayedTrackerId = "t1",
         )
 
         assertEquals(trail.map { it.latitude to it.longitude }, render.lines.flatMap { it.coordinates })
@@ -471,6 +487,7 @@ class TrackerMapStateTransformsTest {
             trail = emptyList(),
             runtime = TrackingRuntimeSnapshot(
                 selectedTrackerId = "t1",
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "t1"),
                 lastTrackedLatitude = 1.0,
                 lastTrackedLongitude = 2.0,
                 lastAccuracyMeters = 37f,
@@ -731,10 +748,45 @@ class TrackerMapStateTransformsTest {
     }
 
     @Test
+    fun buildRenderState_singleSession_markerUsesResolverNotStaleTrailTail() {
+        val render = TrackerMapStateTransforms.buildRenderState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            trail = listOf(
+                QueuedLocation(
+                    trackerId = "t1",
+                    time = 1_000L,
+                    latitude = 10.0,
+                    longitude = 20.0,
+                    altitude = null,
+                    speed = null,
+                    bearing = null,
+                    accuracy = null,
+                ),
+            ),
+            runtime = TrackingRuntimeSnapshot(),
+            remoteLastPoints = mapOf(
+                "t1" to com.geovault.tracker.policy.TrackPointEvent(
+                    source = com.geovault.tracker.policy.TrackPointSource.REMOTE_STREAM,
+                    trackId = "t1",
+                    lon = 11.0,
+                    lat = 21.0,
+                    timestampMs = 2_000L,
+                ),
+            ),
+            acceptedRemoteTrackerIds = setOf("t1"),
+            displayedTrackerId = "t1",
+        )
+
+        val marker = render.points.first { it.id == "last-fix" }
+        assertEquals(21.0, marker.latitude, 0.0)
+        assertEquals(11.0, marker.longitude, 0.0)
+    }
+
+    @Test
     fun buildRenderState_singleSession_markerLastFixMatchesLatestSessionTail() {
-        // CHEVRON COHERENCE: the single-session marker reads `state.trail.lastOrNull()`. The
-        // latest session's last vertex must equal the marker position; in particular, after
-        // a session change we must not paint the marker on the previous session's tail.
+        // CHEVRON COHERENCE: the single-session marker uses TrackerMapLastPointResolver, which
+        // picks the trail tail when it is the freshest candidate. After a session change the
+        // marker must sit on the latest session tail, not the previous session.
         val sessionA = 1_000L
         val sessionB = 2_000L
         val render = TrackerMapStateTransforms.buildRenderState(

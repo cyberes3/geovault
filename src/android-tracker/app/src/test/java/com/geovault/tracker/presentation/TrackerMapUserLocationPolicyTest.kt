@@ -16,7 +16,6 @@ class TrackerMapUserLocationPolicyTest {
                 hasLocationPermission = true,
                 isMapReady = true,
                 userLocationRequestedThisSession = false,
-                runtimeRunning = false
             )
         )
 
@@ -30,13 +29,7 @@ class TrackerMapUserLocationPolicyTest {
     @Test
     fun evaluate_allowsStreamingPuckOnlyWhenAllGuardsPass() {
         val decision = policy.evaluate(
-            TrackerMapUserLocationInput(
-                isMapActive = true,
-                hasLocationPermission = true,
-                isMapReady = true,
-                userLocationRequestedThisSession = true,
-                runtimeRunning = false
-            )
+            allowedInput()
         )
 
         assertTrue(decision.shouldStreamGps)
@@ -45,32 +38,51 @@ class TrackerMapUserLocationPolicyTest {
     }
 
     @Test
-    fun evaluate_blocksWhenTrackingRuntimeIsActive() {
+    fun evaluate_recordingWhileViewingAnotherTracker_allowsPuck() {
         val decision = policy.evaluate(
-            TrackerMapUserLocationInput(
-                isMapActive = true,
-                hasLocationPermission = true,
-                isMapReady = true,
-                userLocationRequestedThisSession = true,
-                runtimeRunning = true
+            allowedInput(
+                displayedTrackerId = "shared",
+                locallyRecordedTrackerId = "self",
+            )
+        )
+
+        assertTrue(decision.shouldStreamGps)
+        assertTrue(decision.shouldEnablePuck)
+        assertFalse(
+            decision.blockers.contains(TrackerMapUserLocationBlocker.OwnRecordedTrackerOnScreen)
+        )
+    }
+
+    @Test
+    fun evaluate_ownRecordedTrackerOnScreen_hidesPuck() {
+        val decision = policy.evaluate(
+            allowedInput(
+                displayedTrackerId = "self",
+                locallyRecordedTrackerId = "self",
             )
         )
 
         assertFalse(decision.shouldStreamGps)
-        assertTrue(decision.blockers.contains(TrackerMapUserLocationBlocker.RuntimeTrackingActive))
+        assertFalse(decision.shouldEnablePuck)
+        assertTrue(
+            decision.blockers.contains(TrackerMapUserLocationBlocker.OwnRecordedTrackerOnScreen)
+        )
+    }
+
+    @Test
+    fun evaluate_inactiveWithLocationIntent_streamsWithoutPuck() {
+        val decision = policy.evaluate(
+            allowedInput(isMapActive = false)
+        )
+
+        assertTrue(decision.shouldStreamGps)
+        assertFalse(decision.shouldEnablePuck)
+        assertTrue(decision.blockers.contains(TrackerMapUserLocationBlocker.MapInactive))
     }
 
     @Test
     fun evaluate_locationRequestDoesNotNeedFollowLock() {
-        val decision = policy.evaluate(
-            TrackerMapUserLocationInput(
-                isMapActive = true,
-                hasLocationPermission = true,
-                isMapReady = true,
-                userLocationRequestedThisSession = true,
-                runtimeRunning = false
-            )
-        )
+        val decision = policy.evaluate(allowedInput())
 
         assertTrue(decision.shouldStreamGps)
         assertTrue(decision.shouldEnablePuck)
@@ -85,7 +97,8 @@ class TrackerMapUserLocationPolicyTest {
                 hasLocationPermission = false,
                 isMapReady = false,
                 userLocationRequestedThisSession = false,
-                runtimeRunning = true
+                displayedTrackerId = "self",
+                locallyRecordedTrackerId = "self",
             )
         )
 
@@ -95,9 +108,24 @@ class TrackerMapUserLocationPolicyTest {
                 TrackerMapUserLocationBlocker.MissingPermission,
                 TrackerMapUserLocationBlocker.MapNotReady,
                 TrackerMapUserLocationBlocker.LocationNotRequestedThisSession,
-                TrackerMapUserLocationBlocker.RuntimeTrackingActive,
+                TrackerMapUserLocationBlocker.OwnRecordedTrackerOnScreen,
             ),
             decision.blockers
+        )
+    }
+
+    private fun allowedInput(
+        isMapActive: Boolean = true,
+        displayedTrackerId: String = "",
+        locallyRecordedTrackerId: String = "",
+    ): TrackerMapUserLocationInput {
+        return TrackerMapUserLocationInput(
+            isMapActive = isMapActive,
+            hasLocationPermission = true,
+            isMapReady = true,
+            userLocationRequestedThisSession = true,
+            displayedTrackerId = displayedTrackerId,
+            locallyRecordedTrackerId = locallyRecordedTrackerId,
         )
     }
 }

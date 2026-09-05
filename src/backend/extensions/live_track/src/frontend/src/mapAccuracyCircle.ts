@@ -1,3 +1,4 @@
+import { latestParamsForCoordinate, resolveTrackLastCoordinate } from './trackLastPoint';
 import type { LiveTrack } from './types/track';
 
 export const DEFAULT_ACCURACY_CIRCLE_LAYER_ID = 'live-track-accuracy-circle';
@@ -6,7 +7,8 @@ const METERS_TO_PIXELS_ZOOM_0_EQ = 256 / 40075016.686;
 const METERS_TO_PIXELS_ZOOM_24_EQ = (256 * Math.pow(2, 24)) / 40075016.686;
 
 export function getLatestTrackAccuracyMeters(track: LiveTrack | null | undefined): number {
-  const acc = track?.latestPointParams?.acc ?? track?.point_params?.[track.point_params.length - 1]?.acc;
+  const last = resolveTrackLastCoordinate(track);
+  const acc = latestParamsForCoordinate(track, last).acc;
   return typeof acc === 'number' && Number.isFinite(acc) && acc > 0 ? acc : 0;
 }
 

@@ -82,6 +82,9 @@ import com.geovault.tracker.presentation.HomeLayoutSizingInput
 import com.geovault.tracker.presentation.HomeLayoutSizingPolicy
 import com.geovault.tracker.presentation.HomeUiState
 import com.geovault.tracker.presentation.HomeViewModel
+import com.geovault.tracker.presentation.TrackerLastReportedAtPolicy
+import com.geovault.tracker.services.RecordingRuntime
+import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingUiStatus
 import com.geovault.tracker.ui.time.HomeElapsedTimeFormat
 
@@ -731,7 +734,19 @@ private fun formatDurationMs(isTracking: Boolean, sessionStartTimeMs: Long, nowM
 
 private fun formatHomeLastAgo(state: HomeUiState, nowMs: Long): String {
     if (!state.isTracking) return "\u2014"
-    return HomeElapsedTimeFormat.format(state.lastPointSentAtMs.takeIf { it > 0L }, nowMs)
+    val lastMs = TrackerLastReportedAtPolicy.resolve(
+        trackerId = state.selectedTrackerId,
+        runtime = TrackingRuntimeSnapshot(
+            selectedTrackerId = state.selectedTrackerId,
+            recordingRuntime = RecordingRuntime(
+                sessionActive = true,
+                selectedTrackerId = state.selectedTrackerId,
+            ),
+            lastPointSentAtMs = state.lastPointSentAtMs,
+        ),
+        resolverLastUpdatedMs = state.lastPointSentAtMs.takeIf { it > 0L },
+    )
+    return HomeElapsedTimeFormat.format(lastMs, nowMs)
 }
 
 private fun formatDistanceText(
@@ -785,11 +800,18 @@ private fun homeTrackerParamsRouteArgsOrNull(state: HomeUiState): TrackerParamsR
     val lon = state.lastTrackedLongitude
     val trackerName = state.selectedTrackerDisplayName.ifBlank { state.selectedTrackerId }
     if (trackerName.isBlank()) return null
-    val lastUpdateMs = when {
-        state.lastTrackedTimestampMs > 0L -> state.lastTrackedTimestampMs
-        state.lastPointSentAtMs > 0L -> state.lastPointSentAtMs
-        else -> null
-    }
+    val lastUpdateMs = TrackerLastReportedAtPolicy.resolve(
+        trackerId = trackerId,
+        runtime = TrackingRuntimeSnapshot(
+            selectedTrackerId = trackerId,
+            recordingRuntime = RecordingRuntime(
+                sessionActive = state.isTracking,
+                selectedTrackerId = trackerId,
+            ),
+            lastPointSentAtMs = state.lastPointSentAtMs,
+        ),
+        resolverLastUpdatedMs = state.lastPointSentAtMs.takeIf { it > 0L },
+    )
     return TrackerParamsRouteArgs(
         trackerId = trackerId,
         seed = TrackerParamsSeed(

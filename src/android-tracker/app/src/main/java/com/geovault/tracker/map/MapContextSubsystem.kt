@@ -284,12 +284,6 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         val state = snapshot.uiState
         val trackerId = state.selectionLockTrackerId.trim()
         if (trackerId.isEmpty()) return null
-        snapshot.tracks[trackerId]?.renderTrail?.lastOrNull()?.let { point ->
-            return point.latitude to point.longitude
-        }
-        snapshot.acceptedRemoteLastPoints[trackerId]?.let { point ->
-            return point.lat to point.lon
-        }
         val point = resolveTrackerPointData(snapshot, trackerId) ?: return null
         return point.latitude to point.longitude
     }
@@ -330,16 +324,10 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         val normalizedId = trackerId.trim()
         if (normalizedId.isEmpty()) return null
         val tracker = rt.dependencies.trackerManagementStateStore.trackers.value.firstOrNull { it.id == normalizedId }
-        val effectiveState = snapshot.uiState.copy(
-            trail = snapshot.singleTrail,
-            allQueueTrailsByTracker = snapshot.renderTrailsByTracker,
-            remoteLastPoints = snapshot.acceptedRemoteLastPoints,
-        )
-        return TrackerMapLastPointResolver.resolveRenderedMarkerPoint(
-            state = effectiveState,
+        return TrackerMapLastPointResolver.resolve(
+            snapshot = snapshot,
             trackerId = trackerId,
             tracker = tracker,
-            acceptedRemoteTrackerIds = snapshot.plan.acceptedRemoteTrackerIds,
         )
     }
 
@@ -700,7 +688,16 @@ internal class MapContextSubsystem(private val rt: TrackerMapRuntime) {
         }
     }
 
-    /** A manual pan/zoom gesture always releases every lock, regardless of which is active. */
+    /**
+     * User zoomed without taking over the camera. Lock flags stay; live-active-fit recenters at
+     * the current zoom.
+     */
+    internal fun onUserOwnedZoom() {
+        rt.cameraCoordinator.onUserOwnedZoom()
+        rt.ports.viewModelScope.launch { rt.display.publishRenderPackage() }
+    }
+
+    /** A manual pan / fling / rotate always releases every lock, regardless of which is active. */
     internal fun disableAllMapLocks() {
         // GESTURE-BUMP: bump the coordinator generation unconditionally, regardless of whether a
         // lock was actually active -- a directive minted a moment ago (e.g. a reload-landing fit

@@ -176,6 +176,48 @@ class TrackerMapGroupBoundsResolverTest {
     }
 
     @Test
+    fun resolve_allVisible_staleRosterLastPointFarFromNewerRemoteHead_isNotInsideBounds() {
+        val nowMs = System.currentTimeMillis()
+        val remotePoints = mapOf(
+            "t1" to TrackPointEvent(
+                trackId = "t1",
+                lat = 10.0,
+                lon = 20.0,
+                timestampMs = nowMs - 1_000L,
+                accuracyMeters = null,
+                propsJson = null,
+                source = TrackPointSource.REMOTE_STREAM,
+            ),
+        )
+        val trackers = listOf(
+            Tracker(
+                id = "t1",
+                name = "T1",
+                color = null,
+                updated_at = (nowMs - 20 * 60 * 1000L) / 1000L,
+                last_point = listOf(80.0, 80.0, (nowMs - 20 * 60 * 1000L).toDouble()),
+            ),
+        )
+
+        val bounds = TrackerMapGroupBoundsResolver.resolve(
+            baseInput(
+                liveActiveFitEnabled = false,
+                visibleTrackerIds = setOf("t1"),
+                remoteLastPoints = remotePoints,
+                acceptedRemoteTrackerIds = setOf("t1"),
+                trackers = trackers,
+                nowMs = nowMs,
+            ),
+        )
+
+        assertNotNull(bounds)
+        assertEquals(10.0, bounds!!.latitudeNorth, 0.0)
+        assertEquals(10.0, bounds.latitudeSouth, 0.0)
+        assertEquals(20.0, bounds.longitudeEast, 0.0)
+        assertEquals(20.0, bounds.longitudeWest, 0.0)
+    }
+
+    @Test
     fun resolve_allVisible_hiddenRemoteHeadDoesNotExpandBounds() {
         val nowMs = System.currentTimeMillis()
         val remotePoints = mapOf(

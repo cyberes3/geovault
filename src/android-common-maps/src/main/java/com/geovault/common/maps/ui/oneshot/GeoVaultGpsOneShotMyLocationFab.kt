@@ -31,6 +31,14 @@ import org.maplibre.android.geometry.LatLng
 private const val GPS_ONE_SHOT_MIN_ZOOM: Double = 12.0
 
 /**
+ * One-shot FAB puck enablement. [coordinateOverride] is a camera target only; it never hides
+ * the puck.
+ */
+object GeoVaultGpsOneShotMyLocationPolicy {
+    fun shouldEnablePuck(showUserLocationPuck: Boolean): Boolean = showUserLocationPuck
+}
+
+/**
  * Controller for a single map jump to the device location (spinner, icon). Does **not** enable
  * continuous MapLibre camera tracking — use
  * [com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle] for that.
@@ -59,9 +67,8 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
     positionFollowActive: Boolean = false,
     /**
      * Resolved at tap time. When non-null, the controller uses the supplied coordinate as the
-     * recenter target and skips the GPS one-shot lookup AND the MapLibre user-location puck.
-     * Hosts use this to recenter on their own authoritative position (e.g. an active recording
-     * tracker's last fix) without painting a duplicate puck on top of their marker.
+     * camera target and skips the GPS one-shot lookup. The puck is controlled only by
+     * [showUserLocationPuck]; an override never hides it.
      */
     coordinateOverride: (() -> LatLng?)? = null,
 ): GeoVaultGpsOneShotMyLocationController {
@@ -114,9 +121,6 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
         val requestId = activeRequestId
         map.ensureInteractiveGestures()
 
-        // OVERRIDE PATH: host has its own authoritative coordinate (e.g. the user's tracker
-        // marker while actively recording). Skip the GPS lookup and the MapLibre puck so we
-        // don't paint a duplicate chevron on top of the host's marker.
         val overrideTarget = coordinateOverride?.invoke()
         if (overrideTarget != null) {
             if (showSpinner) {
@@ -125,11 +129,16 @@ fun rememberGeoVaultGpsOneShotMyLocationController(
             if (map.phase.value != GeoVaultMapPhase.Ready) return
             hadSuccessfulJump = true
             onLocationResolved?.invoke(overrideTarget)
+            if (GeoVaultGpsOneShotMyLocationPolicy.shouldEnablePuck(showUserLocationPuck)) {
+                userLocation.setEnabled(true)
+                userLocation.setCameraTracking(false)
+                userLocation.setAccuracyCircleVisible(true)
+            }
             animateCameraToTarget(overrideTarget, requestId)
             return
         }
 
-        if (showUserLocationPuck) {
+        if (GeoVaultGpsOneShotMyLocationPolicy.shouldEnablePuck(showUserLocationPuck)) {
             userLocation.setEnabled(true)
             userLocation.setCameraTracking(false)
             userLocation.setAccuracyCircleVisible(true)

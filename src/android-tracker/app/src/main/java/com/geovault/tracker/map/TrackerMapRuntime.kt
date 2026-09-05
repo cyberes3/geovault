@@ -15,6 +15,7 @@ import com.geovault.tracker.presentation.TrackerMapUiState
 import com.geovault.tracker.presentation.HiddenMapItemsPolicy
 import com.geovault.tracker.presentation.TrackerMapDisplayIds
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
+import com.geovault.tracker.presentation.TrackerMapHistoryUiSync
 import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import kotlinx.coroutines.flow.StateFlow
 
@@ -158,7 +159,17 @@ internal class TrackerMapRuntime(
     }
 
     internal fun activeSessionStartMsForRuntime(runtime: TrackingRuntimeSnapshot): Long? {
-        return runtime.sessionStartTimeMs.takeIf { runtime.localRecordingActive && it > 0L }
+        return TrackerMapHistoryUiSync.activeSessionStartMsForTracker(
+            runtime = runtime,
+            trackerId = runtime.locallyRecordedTrackerId,
+        )
+    }
+
+    internal fun activeSessionStartMsForTracker(trackerId: String): Long? {
+        return TrackerMapHistoryUiSync.activeSessionStartMsForTracker(
+            runtime = stateHub.uiStateMutable.value.runtime,
+            trackerId = trackerId,
+        )
     }
 
     /**

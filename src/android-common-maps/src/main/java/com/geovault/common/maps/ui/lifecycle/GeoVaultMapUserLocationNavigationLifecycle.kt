@@ -5,6 +5,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.geovault.common.maps.location.GeoVaultMapGpsNotificationPermissionEffect
 import com.geovault.common.maps.location.MapLocationRendererPlugin
 import com.geovault.common.maps.navigation.GeoVaultNavigationToPointPlugin
@@ -32,8 +35,22 @@ fun GeoVaultMapUserLocationNavigationLifecycle(
     onEachLocationFix: ((Location) -> Unit)? = null,
 ) {
     val onEachFix = rememberUpdatedState(onEachLocationFix)
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     GeoVaultMapGpsNotificationPermissionEffect(requestWhen = shouldStreamGps)
+
+    DisposableEffect(userLocation, shouldStreamGps, lifecycleOwner) {
+        if (!shouldStreamGps) {
+            return@DisposableEffect onDispose { }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                userLocation.retryLocationForeground()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(userLocation, shouldEnablePuck) {
         userLocation.setEnabled(shouldEnablePuck)

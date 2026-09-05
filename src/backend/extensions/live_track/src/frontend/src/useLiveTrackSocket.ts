@@ -4,6 +4,7 @@ import type { TrackersLiveSocketHandler } from './trackersLiveSocket';
 import { normalizeTrackForMemory } from './trackNormalization';
 import { createSessionStartCache } from './sessionStartCache';
 import { normalizeTimestampMs } from './activeButDeadTrack';
+import { coordinatesEqual, latestParamsForCoordinate, resolveTrackLastCoordinate } from './trackLastPoint';
 import {
   isRollingRecentDataWindow,
   pruneCoordinatesForRecentDataWindow,
@@ -144,17 +145,25 @@ export function useLiveTrackSocket({
     }
     sessionCache.setKnownStartMs(track.id, isSessionWindow ? activeSessionStartMs : null);
 
-    const newPoint = updates[updates.length - 1].point;
-    const last_position = { lon: newPoint[0], lat: newPoint[1] };
-    const rawLastTs = newPoint.length >= 3 ? newPoint[2] : null;
-    const last_timestamp_ms = rawLastTs != null ? normalizeTimestampMs(rawLastTs) : null;
+    const updatedTrack: LiveTrack = { ...track, geometry: geom };
+    const last = resolveTrackLastCoordinate(updatedTrack);
+    let nextParams = latestPointParams;
+    for (const u of updates) {
+      if (u.props && typeof u.props === 'object' && last && coordinatesEqual(u.point, last)) {
+        nextParams = u.props;
+      }
+    }
+    const last_position = last && last.length >= 2 ? { lon: last[0], lat: last[1] } : null;
+    const last_timestamp_ms = last && last.length >= 3 ? normalizeTimestampMs(last[2]) : null;
     const updated: LiveTrack = {
       ...track,
       geometry: geom,
       last_position,
       last_timestamp_ms,
       updated_at_ms: normalizeTimestampMs(track.updated_at),
-      latestPointParams
+      latestPointParams: last
+        ? latestParamsForCoordinate({ ...updatedTrack, latestPointParams: nextParams }, last)
+        : nextParams
     };
     trackers.value = trackers.value.slice(0, idx).concat(updated).concat(trackers.value.slice(idx + 1));
     void updateMapFeatures();

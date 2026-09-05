@@ -195,4 +195,98 @@ class TrackerMapCameraCoordinatorTest {
         assertNotEquals(before, coordinator.generationFlow.value)
         assertEquals(coordinator.generation, coordinator.generationFlow.value)
     }
+
+    @Test
+    fun onUserOwnedZoom_bumpsGenerationWithoutClearingUserOwnsZoom() {
+        val coordinator = TrackerMapCameraCoordinator()
+        val before = coordinator.generation
+
+        coordinator.onUserOwnedZoom()
+
+        assertTrue(coordinator.userOwnsZoom)
+        assertNotEquals(before, coordinator.generation)
+    }
+
+    @Test
+    fun onUserOwnedZoom_afterLiveFit_remintsCenterOnPoint() {
+        val coordinator = TrackerMapCameraCoordinator()
+        coordinator.resolveFromLockState(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = 3.0,
+                followTargetLon = 4.0,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+                userOwnsZoom = false,
+            )
+        )
+        assertTrue(coordinator.directive.value is TrackerMapCameraDirective.FitBounds)
+
+        coordinator.onUserOwnedZoom()
+        coordinator.resolveFromLockState(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = false,
+                gpsCollecting = false,
+                followTargetLat = 3.0,
+                followTargetLon = 4.0,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = true,
+                bounds = sampleBounds,
+                userOwnsZoom = coordinator.userOwnsZoom,
+            )
+        )
+
+        val directive = coordinator.directive.value
+        assertTrue(directive is TrackerMapCameraDirective.CenterOnPoint)
+        val center = directive as TrackerMapCameraDirective.CenterOnPoint
+        assertEquals(TrackerMapCameraDirective.Reason.LiveActiveFit, center.reason)
+        assertEquals(3.0, center.latitude, 0.0)
+        assertEquals(4.0, center.longitude, 0.0)
+    }
+
+    @Test
+    fun followLock_withPuckTarget_mintsCenterOnPuck() {
+        val coordinator = TrackerMapCameraCoordinator()
+        coordinator.setFollowPuck(12.0, 34.0)
+        val followTarget = com.geovault.tracker.presentation.TrackerMapFollowLockTarget.resolve(
+            followLockEnabled = true,
+            puckLatitude = coordinator.followPuckLatitude(),
+            puckLongitude = coordinator.followPuckLongitude(),
+            liveHead = null,
+        )
+        coordinator.resolveFromLockState(
+            TrackerMapCameraDirectiveInput(
+                followLockEnabled = true,
+                gpsCollecting = true,
+                followTargetLat = followTarget?.first,
+                followTargetLon = followTarget?.second,
+                selectionLockEnabled = false,
+                selectionLockLat = null,
+                selectionLockLon = null,
+                liveActiveFitEnabled = false,
+                bounds = sampleBounds,
+            )
+        )
+
+        val directive = coordinator.directive.value
+        assertTrue(directive is TrackerMapCameraDirective.CenterOnPoint)
+        val center = directive as TrackerMapCameraDirective.CenterOnPoint
+        assertEquals(TrackerMapCameraDirective.Reason.FollowLock, center.reason)
+        assertEquals(12.0, center.latitude, 0.0)
+        assertEquals(34.0, center.longitude, 0.0)
+    }
+
+    @Test
+    fun onUserGestureStarted_clearsUserOwnsZoom() {
+        val coordinator = TrackerMapCameraCoordinator()
+        coordinator.onUserOwnedZoom()
+        coordinator.onUserGestureStarted()
+        assertEquals(false, coordinator.userOwnsZoom)
+    }
 }

@@ -512,7 +512,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                                 trackerId = clearedTrackerId,
                                 trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
                                 dispatcher = rt.dependencies.historyIntentDispatcher,
-                                activeSessionStartMs = rt.currentActiveSessionStartMs(),
+                                activeSessionStartMs = rt.activeSessionStartMsForTracker(clearedTrackerId),
                             )
                             // Serialize with `trailCommitLock`, matching the reproject/reload
                             // commit convention elsewhere: this reads-then-writes trail state

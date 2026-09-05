@@ -88,19 +88,15 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
         @JvmStatic
         internal fun resolveLiveHeadCoord(state: TrackerMapUiState): Pair<Double, Double>? {
             val displayedTrackerId = TrackerMapDisplayIds.effectiveDisplayedTrackerId(state)
-            val overlaidTrail = singleTrailWithLocalRuntimeOverlay(
-                mode = state.mode,
-                runtime = state.runtime,
-                displayedTrackerId = displayedTrackerId,
-                trail = state.trail,
-            )
-            overlaidTrail.lastOrNull()?.let { return it.latitude to it.longitude }
-            val runtimeLat = state.runtime.lastTrackedLatitude
-            val runtimeLon = state.runtime.lastTrackedLongitude
-            if (runtimeLat != null && runtimeLon != null && state.runtime.lastTrackedTimestampMs > 0L) {
-                return runtimeLat to runtimeLon
-            }
-            return null
+            val acceptedRemoteIds = StreamingTargetPolicy.normalizeTrackerIds(state.streamTargetIds)
+                .ifEmpty { state.remoteLastPoints.keys }
+            val resolved = TrackerMapLastPointResolver.resolve(
+                state = state,
+                trackerId = displayedTrackerId.ifBlank { state.runtime.locallyRecordedTrackerId },
+                tracker = null,
+                acceptedRemoteTrackerIds = acceptedRemoteIds,
+            ) ?: return null
+            return resolved.latitude to resolved.longitude
         }
 
         @JvmStatic
@@ -271,7 +267,16 @@ class TrackerMapViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setFollowLock(enabled: Boolean) = rt.context.setFollowLock(enabled)
 
+    fun setFollowPuck(latitude: Double, longitude: Double) {
+        rt.cameraCoordinator.setFollowPuck(latitude, longitude)
+        if (rt.stateHub.uiStateMutable.value.followLockEnabled) {
+            rt.display.refreshFollowLockCamera()
+        }
+    }
+
     fun disableAllMapLocks() = rt.context.disableAllMapLocks()
+
+    fun onUserOwnedZoom() = rt.context.onUserOwnedZoom()
 
     fun setLiveActiveFit(enabled: Boolean) = rt.context.setLiveActiveFit(enabled)
 

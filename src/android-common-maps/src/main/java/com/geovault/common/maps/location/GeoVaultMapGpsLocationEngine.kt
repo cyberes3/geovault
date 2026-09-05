@@ -103,8 +103,16 @@ class GeoVaultMapGpsLocationEngine(
         activeIntervalMs = desiredInterval
     }
 
+    fun retryForegroundIfNeeded() {
+        synchronized(lock) {
+            if (sessions.isEmpty()) return
+            ensureForegroundLocked()
+        }
+    }
+
     private fun ensureForegroundLocked() {
         if (foregroundStarted) return
+        if (!foreground.canStart(appContext)) return
         foreground.ensureStarted(appContext)
         foregroundStarted = true
     }

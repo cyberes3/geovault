@@ -30,16 +30,16 @@ test('pruneCoordinatesForRecentDataWindow removes stale rolling-window coordinat
   );
 });
 
-test('pruneCoordinatesForRecentDataWindow keeps latest point when every coordinate is stale', () => {
+test('pruneCoordinatesForRecentDataWindow keeps time-max point when every coordinate is stale', () => {
   const nowMs = 1_700_000_000_000;
   const coordinates = [
-    [-100.0, 40.0, nowMs - 120_000],
-    [-100.1, 40.1, nowMs - 90_000],
+    [-100.0, 40.0, nowMs - 90_000],
+    [-100.1, 40.1, nowMs - 120_000],
   ];
 
   assert.deepEqual(
     pruneCoordinatesForRecentDataWindow(coordinates, '1min', nowMs),
-    [coordinates[coordinates.length - 1]],
+    [coordinates[0]],
   );
 });
 

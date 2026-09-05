@@ -58,6 +58,7 @@ data class TrackerMapRenderPackage(
     val renderState: com.geovault.common.maps.render.MapRenderState = com.geovault.common.maps.render.MapRenderState(),
     val bounds: LatLngBounds? = null,
     val selectionLockPoint: Pair<Double, Double>? = null,
+    val liveHead: Pair<Double, Double>? = null,
     val revision: Long = 0L,
 )
 

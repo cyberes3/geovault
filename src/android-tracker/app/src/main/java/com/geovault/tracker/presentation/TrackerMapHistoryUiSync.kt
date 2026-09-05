@@ -120,6 +120,22 @@ object TrackerMapHistoryUiSync {
         )
     }
 
+    fun unpublishedOverlaysByTracker(
+        repository: TrackerHistoryRepository,
+        trackerIds: Collection<String>,
+        trackers: List<Tracker>,
+    ): Map<String, List<QueuedLocation>> {
+        return trackerIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .associateWith { trackerId ->
+                val window = historyWindowForTracker(trackerId, trackers)
+                repository.unpublishedOverlayQueuedLocations(TrackerHistoryKey(trackerId, window))
+            }
+            .filterValues { it.isNotEmpty() }
+    }
+
     fun trailsFromSnapshots(
         state: TrackerMapUiState,
         plan: TrackerMapStreamingPlan,
@@ -127,6 +143,7 @@ object TrackerMapHistoryUiSync {
         trackers: List<Tracker>,
         trailPointLimit: Int,
         visibleTrackerIds: Set<String>? = null,
+        unpublishedOverlaysByTracker: Map<String, List<QueuedLocation>> = emptyMap(),
     ): TrailsFromHistory {
         val incompleteTrunks = mutableSetOf<String>()
         val degradedTrunks = mutableSetOf<String>()
@@ -140,11 +157,23 @@ object TrackerMapHistoryUiSync {
                 val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
                 markSnapshotFlags(snapshot, tracker, trackerId, incompleteTrunks, degradedTrunks)
                 val mapped = TrackerHistoryRenderMapper.toQueuedLocations(snapshot, trailPointLimit)
-                val trail = TrackerHistoryTrailPreservePolicy.preserveActiveSessionTrailWhenMappedEmpty(
+                val preserved = TrackerHistoryTrailPreservePolicy.preserveActiveSessionTrailWhenMappedEmpty(
                     mappedTrail = mapped,
                     stateTrail = state.trail,
                     trackerId = trackerId,
                     activeSessionStartMs = activeSessionStartMsForTracker(state.runtime, trackerId),
+                )
+                val withUnpublished = TrackerMapLiveDrawMerge.appendUnpublishedOverlay(
+                    preserved,
+                    unpublishedOverlaysByTracker[trackerId].orEmpty(),
+                )
+                val trail = TrackerMapLiveDrawMerge.mergeSingle(
+                    mappedTrail = withUnpublished,
+                    unpublishedOverlay = emptyList(),
+                    remoteLastPoint = state.remoteLastPoints[trackerId],
+                    runtime = state.runtime,
+                    displayedTrackerId = trackerId,
+                    trailPointLimit = trailPointLimit,
                 )
                 TrailsFromHistory(
                     trail = trail,
@@ -174,23 +203,36 @@ object TrackerMapHistoryUiSync {
                         val tracker = trackers.firstOrNull { it.id.trim() == trackerId.trim() }
                         markSnapshotFlags(snapshot, tracker, trackerId, incompleteTrunks, degradedTrunks)
                         val mapped = TrackerHistoryRenderMapper.toQueuedLocations(snapshot, trailPointLimit)
-                        TrackerHistoryTrailPreservePolicy.preserveActiveSessionTrailWhenMappedEmpty(
+                        val preserved = TrackerHistoryTrailPreservePolicy.preserveActiveSessionTrailWhenMappedEmpty(
                             mappedTrail = mapped,
                             stateTrail = state.allQueueTrailsByTracker[trackerId].orEmpty(),
                             trackerId = trackerId,
                             activeSessionStartMs = activeSessionStartMsForTracker(state.runtime, trackerId),
                         )
+                        TrackerMapLiveDrawMerge.appendUnpublishedOverlay(
+                            preserved,
+                            unpublishedOverlaysByTracker[trackerId].orEmpty(),
+                        )
                     }
+                val mergedMulti = TrackerMapLiveDrawMerge.mergeMulti(
+                    mappedTrails = multi,
+                    unpublishedOverlaysByTracker = emptyMap(),
+                    remoteLastPoints = state.remoteLastPoints,
+                    runtime = state.runtime,
+                    mode = state.mode,
+                    groupTrackerIds = plan.groupTrackerIds,
+                    trailPointLimit = trailPointLimit,
+                )
                 val activeId = plan.displayedTrackerId.trim()
                     .ifBlank { state.runtime.selectedTrackerId.trim() }
-                val activeTrail = multi[activeId].orEmpty()
+                val activeTrail = mergedMulti[activeId].orEmpty()
                 TrailsFromHistory(
                     trail = activeTrail,
-                    allQueueTrailsByTracker = multi,
+                    allQueueTrailsByTracker = mergedMulti,
                 ) to TrackerHistoryDiagnostics.TrailsDrawSummary(
                     singleCount = activeTrail.size,
                     singleTime = TrackerHistoryDiagnostics.queuedTimeRange(activeTrail),
-                    multiSizes = TrackerHistoryDiagnostics.mapSizes(multi),
+                    multiSizes = TrackerHistoryDiagnostics.mapSizes(mergedMulti),
                     incompleteTrackerIds = incompleteTrunks.toSet(),
                     degradedTrackerIds = degradedTrunks.toSet(),
                 )
@@ -251,7 +293,7 @@ object TrackerMapHistoryUiSync {
         queueOverlaysByTracker: Map<String, List<QueuedLocation>>,
         trackers: List<Tracker>,
         dispatcher: TrackerHistoryIntentDispatcher,
-        activeSessionStartMs: Long?,
+        activeSessionStartMsFor: (String) -> Long?,
     ) {
         val committed = mutableListOf<String>()
         queueOverlaysByTracker.forEach { (trackerId, overlay) ->
@@ -264,7 +306,7 @@ object TrackerMapHistoryUiSync {
                         window = window,
                         queuedLocations = overlay,
                     ),
-                    activeSessionStartMs = activeSessionStartMs,
+                    activeSessionStartMs = activeSessionStartMsFor(trackerId),
                 ),
             )
             if (result.committed) {
@@ -353,7 +395,7 @@ object TrackerMapHistoryUiSync {
         )
     }
 
-    private fun activeSessionStartMsForTracker(
+    fun activeSessionStartMsForTracker(
         runtime: TrackingRuntimeSnapshot,
         trackerId: String,
     ): Long? {

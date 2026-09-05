@@ -28,7 +28,7 @@ class GeoVaultMapLocationForegroundService : Service() {
             buildNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
-        return START_STICKY
+        return START_MODE
     }
 
     private fun ensureChannel() {
@@ -62,5 +62,6 @@ class GeoVaultMapLocationForegroundService : Service() {
     internal companion object {
         const val CHANNEL_ID = "gv_common_map_gps_location"
         const val NOTIFICATION_ID = 0x67766D47 // "gvMG"
+        const val START_MODE = START_NOT_STICKY
     }
 }

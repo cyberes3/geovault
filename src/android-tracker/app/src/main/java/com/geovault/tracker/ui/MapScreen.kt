@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,12 +65,15 @@ import com.geovault.common.maps.core.GeoVaultMapPhase
 import com.geovault.common.maps.core.MapLibreManager
 import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultCenterCameraWithMinimumZoom
-import com.geovault.common.maps.core.geoVaultCreateGestureMoveStartedListener
+import com.geovault.common.maps.core.geoVaultCenterCameraPreserveZoom
 import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
 import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
+import com.geovault.common.maps.location.LocationUpdates
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
+import com.geovault.common.maps.ui.camera.GeoVaultMapCameraInteractionEffect
+import com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoVaultRenderedMapHitKind
@@ -223,12 +227,18 @@ private fun TrackerMapAuthenticatedContent(
         }
     }
 
+    var isLifecycleStarted by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    var renderResumeEpoch by remember { mutableStateOf(0) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            isLifecycleStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     locationPermission = TrackingPermissionGate.hasLocationPermission(context)
                     viewModel.onHostResumed()
+                    renderResumeEpoch += 1
                 }
                 Lifecycle.Event.ON_PAUSE -> {
                     viewModel.onHostPaused()
@@ -313,11 +323,20 @@ private fun TrackerMapAuthenticatedContent(
     }
     val locationPlugin = rememberGeoVaultMapUserLocationPlugin(context = context)
     val userLocationPolicy = remember { TrackerMapUserLocationPolicy() }
-    // Viewport scoping is handled entirely by the `LaunchedEffect(viewportContextSeed)` reset
-    // below -- `rememberSaveable`'s cross-process persistence would only let this leak across a
-    // process-death/restore boundary into a viewport where the puck was never requested, so a
-    // plain `remember` is deliberately used instead.
-    var liveGpsPuckRequestedThisSession by remember { mutableStateOf(false) }
+    val viewportContextSeed = remember(
+        state.mode,
+        state.currentGroupId,
+        state.displayedTrackerId,
+        state.runtime.selectedTrackerId,
+    ) {
+        val effectiveDisplayedTrackerId = state.displayedTrackerId
+            .ifBlank { state.runtime.selectedTrackerId }
+            .trim()
+        "${state.mode}|${state.currentGroupId.trim()}|$effectiveDisplayedTrackerId"
+    }
+    var liveGpsPuckRequestedThisSession by rememberSaveable(viewportContextSeed) {
+        mutableStateOf(false)
+    }
     val clearMapLocks = remember(viewModel) {
         { viewModel.disableAllMapLocks() }
     }
@@ -335,17 +354,6 @@ private fun TrackerMapAuthenticatedContent(
     // sees the map at MapLibre's default camera (around 0,0) for the time it takes
     // the directive `LaunchedEffect` to schedule + run after `phase` flips to Ready.
     var mapInitialFrameReady by remember { mutableStateOf(false) }
-    val viewportContextSeed = remember(
-        state.mode,
-        state.currentGroupId,
-        state.displayedTrackerId,
-        state.runtime.selectedTrackerId,
-    ) {
-        val effectiveDisplayedTrackerId = state.displayedTrackerId
-            .ifBlank { state.runtime.selectedTrackerId }
-            .trim()
-        "${state.mode}|${state.currentGroupId.trim()}|$effectiveDisplayedTrackerId"
-    }
     LaunchedEffect(viewportContextSeed) {
         didInitialBounds = false
         gpsHomeAnchor = null
@@ -354,16 +362,17 @@ private fun TrackerMapAuthenticatedContent(
         // window between "old context's camera position" and "new context's camera
         // fit" is hidden (e.g. switching tracker, switching to group mode).
         mapInitialFrameReady = false
-        // "ThisSession" means this viewport context, not the process lifetime -- without
-        // resetting here, requesting the GPS puck while viewing one tracker would leak into
-        // every other tracker/mode viewed afterwards (e.g. making the live-lock FAB appear for
-        // a stream where the puck was never actually requested).
-        liveGpsPuckRequestedThisSession = false
         // A taller/shorter chip from the previous viewport must not feed stale padding into the
         // first bounds fit for this one -- fall back to the default reserve until this
         // viewport's own chip (if any) reports its measured height.
         topLeftChipMeasuredHeightPx = 0
     }
+    val displayedTrackerId = state.displayedTrackerId.trim()
+        .ifBlank { state.runtime.selectedTrackerId.trim() }
+    val locallyRecordedTrackerId = state.runtime.locallyRecordedTrackerId.trim()
+    val ownRecordedTrackerOnScreen = state.runtime.localRecordingActive &&
+        locallyRecordedTrackerId.isNotEmpty() &&
+        displayedTrackerId == locallyRecordedTrackerId
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
     val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
@@ -376,21 +385,21 @@ private fun TrackerMapAuthenticatedContent(
                 gpsHomeAnchor = latLng
                 locationPermission = TrackingPermissionGate.hasLocationPermission(context)
             },
+            showUserLocationPuck = !ownRecordedTrackerOnScreen,
             coordinateOverride = {
-                // RUNTIME-TRACKING RECENTER: while actively recording, the user's tracker marker
-                // already represents their position. The default FAB path enables the MapLibre
-                // user-location plugin and renders a synthetic puck — that paints a duplicate
-                // chevron on top of the tracker marker (TrackerMapUserLocationPolicy intentionally
-                // suppresses the plugin while tracking). Provide the runtime tracker coord so the
-                // controller animates the camera to it without enabling the puck.
                 val runtime = state.runtime
-                if (runtime.localRecordingActive) {
+                val recordedId = runtime.locallyRecordedTrackerId.trim()
+                val displayedId = state.displayedTrackerId.trim()
+                    .ifBlank { runtime.selectedTrackerId.trim() }
+                if (runtime.localRecordingActive &&
+                    recordedId.isNotEmpty() &&
+                    displayedId == recordedId
+                ) {
                     val lat = runtime.lastTrackedLatitude
                     val lon = runtime.lastTrackedLongitude
                     if (lat != null && lon != null) LatLng(lat, lon) else null
                 } else {
-                    locationPlugin.getLastLocation()
-                        ?.let { latLngOrNull(it.latitude, it.longitude) }
+                    null
                 }
             },
         )
@@ -399,6 +408,7 @@ private fun TrackerMapAuthenticatedContent(
     DisposableEffect(locationPlugin) {
         val listener: (Location) -> Unit = { location ->
             liveGpsPuckPosition = latLngOrNull(location.latitude, location.longitude)
+            viewModel.setFollowPuck(location.latitude, location.longitude)
         }
         locationPlugin.addLocationListener(listener)
         onDispose { locationPlugin.removeLocationListener(listener) }
@@ -442,27 +452,32 @@ private fun TrackerMapAuthenticatedContent(
         viewModel.setMapReady(isActive && phase == GeoVaultMapPhase.Ready)
     }
 
+    val locationSessionActive = isLifecycleStarted && isActive
     val userLocationDecision = remember(
-        isActive,
+        locationSessionActive,
         locationPermission,
         phase,
         liveGpsPuckRequestedThisSession,
-        state.runtime.gpsCollecting
+        displayedTrackerId,
+        locallyRecordedTrackerId,
     ) {
         userLocationPolicy.evaluate(
             TrackerMapUserLocationInput(
-                isMapActive = isActive,
+                isMapActive = locationSessionActive,
                 hasLocationPermission = locationPermission,
                 isMapReady = phase == GeoVaultMapPhase.Ready,
                 userLocationRequestedThisSession = liveGpsPuckRequestedThisSession,
-                runtimeRunning = state.runtime.gpsCollecting
+                displayedTrackerId = displayedTrackerId,
+                locallyRecordedTrackerId = locallyRecordedTrackerId,
             )
         )
     }
+    val useTrackingLocationFixes = state.runtime.localRecordingActive &&
+        userLocationDecision.shouldStreamGps
 
     // ORPHAN GUARD: both anchors are captured/updated only while the puck is enabled -- once it
-    // is disabled (permission revoked, backgrounded, runtime tracking took over, etc.) they must
-    // not survive to be unioned into a later fit as stale, no-longer-current positions.
+    // is disabled (permission revoked, backgrounded, own recorded tracker on screen, etc.) they
+    // must not survive to be unioned into a later fit as stale, no-longer-current positions.
     LaunchedEffect(userLocationDecision.shouldEnablePuck) {
         if (!userLocationDecision.shouldEnablePuck) {
             gpsHomeAnchor = null
@@ -470,36 +485,68 @@ private fun TrackerMapAuthenticatedContent(
         }
     }
 
-    DisposableEffect(map, userLocationDecision.shouldStreamGps) {
-        if (userLocationDecision.shouldStreamGps) {
-            locationPlugin.startRenderingGpsLocation(intervalMs = 2000L)
-        }
-        onDispose {
-            locationPlugin.stopRenderingGpsLocation()
-        }
-    }
-
-    LaunchedEffect(phase, userLocationDecision, viewportContextSeed) {
+    GeoVaultMapUserLocationNavigationLifecycle(
+        userLocation = locationPlugin,
+        shouldStreamGps = userLocationDecision.shouldStreamGps && !useTrackingLocationFixes,
+        shouldEnablePuck = userLocationDecision.shouldEnablePuck,
+        showAccuracyCircle = remember(locationPlugin) { locationPlugin.isAccuracyCircleVisible() },
+        gpsIntervalMs = 2000L,
+    )
+    LaunchedEffect(phase, userLocationDecision.shouldEnablePuck) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        locationPlugin.setEnabled(userLocationDecision.shouldEnablePuck)
         locationPlugin.setCameraTracking(false)
     }
-
-    DisposableEffect(map) {
-        val listener = geoVaultCreateGestureMoveStartedListener {
-            viewModel.disableAllMapLocks()
+    LaunchedEffect(
+        locationPlugin,
+        userLocationDecision.shouldStreamGps,
+        useTrackingLocationFixes,
+    ) {
+        if (!userLocationDecision.shouldStreamGps || useTrackingLocationFixes) return@LaunchedEffect
+        val latLng = LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
+            ?: return@LaunchedEffect
+        val synthetic = Location("tracker-map-prime").apply {
+            latitude = latLng.latitude
+            longitude = latLng.longitude
+            accuracy = 12f
+            time = System.currentTimeMillis()
         }
-        map.addOnCameraMoveStartedListener(listener)
-        onDispose {
-            map.removeOnCameraMoveStartedListener(listener)
-        }
+        locationPlugin.renderLocation(synthetic)
     }
+    LaunchedEffect(
+        useTrackingLocationFixes,
+        state.runtime.lastTrackedLatitude,
+        state.runtime.lastTrackedLongitude,
+        state.runtime.lastTrackedTimestampMs,
+    ) {
+        if (!useTrackingLocationFixes) return@LaunchedEffect
+        val lat = state.runtime.lastTrackedLatitude ?: return@LaunchedEffect
+        val lon = state.runtime.lastTrackedLongitude ?: return@LaunchedEffect
+        val synthetic = Location("tracker-recording").apply {
+            latitude = lat
+            longitude = lon
+            accuracy = state.runtime.lastAccuracyMeters ?: 12f
+            time = state.runtime.lastTrackedTimestampMs.takeIf { it > 0L }
+                ?: System.currentTimeMillis()
+        }
+        locationPlugin.renderLocation(synthetic)
+    }
+
+    GeoVaultMapCameraInteractionEffect(
+        map = map,
+        onCameraTakeover = { viewModel.disableAllMapLocks() },
+        onUserOwnedZoom = { viewModel.onUserOwnedZoom() },
+    )
     LaunchedEffect(
         phase,
         renderPackage.revision,
     ) {
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         delay(RENDER_COALESCE_MS)
+        val resolvedState = markerIconPlugin.prepareForRender(renderPackage.renderState)
+        renderPlugin.setRenderState(resolvedState)
+    }
+    LaunchedEffect(phase, renderResumeEpoch) {
+        if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         val resolvedState = markerIconPlugin.prepareForRender(renderPackage.renderState)
         renderPlugin.setRenderState(resolvedState)
     }
@@ -532,17 +579,27 @@ private fun TrackerMapAuthenticatedContent(
         when (directive) {
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.None -> Unit
             is com.geovault.tracker.presentation.TrackerMapCameraDirective.CenterOnPoint -> {
-                // FOCUS-NOT-PRESERVE: zoom in to a sensible floor instead of leaving the camera at
-                // whatever zoom a prior fit happened to land on -- e.g. a selection lock engaging
-                // the instant a stream starts should focus on the tracker's position, not inherit
-                // a leftover full-extent zoom level. Never zooms back out past a closer zoom the
-                // user (or a prior directive) already set.
-                geoVaultCenterCameraWithMinimumZoom(
-                    map = map,
-                    latitude = directive.latitude,
-                    longitude = directive.longitude,
-                    minimumZoom = MapLibreManager.DEFAULT_POINT_ZOOM,
-                )
+                if (directive.reason ==
+                    com.geovault.tracker.presentation.TrackerMapCameraDirective.Reason.LiveActiveFit
+                ) {
+                    geoVaultCenterCameraPreserveZoom(
+                        map = map,
+                        latitude = directive.latitude,
+                        longitude = directive.longitude,
+                    )
+                } else {
+                    // FOCUS-NOT-PRESERVE: zoom in to a sensible floor instead of leaving the camera at
+                    // whatever zoom a prior fit happened to land on -- e.g. a selection lock engaging
+                    // the instant a stream starts should focus on the tracker's position, not inherit
+                    // a leftover full-extent zoom level. Never zooms back out past a closer zoom the
+                    // user (or a prior directive) already set.
+                    geoVaultCenterCameraWithMinimumZoom(
+                        map = map,
+                        latitude = directive.latitude,
+                        longitude = directive.longitude,
+                        minimumZoom = MapLibreManager.DEFAULT_POINT_ZOOM,
+                    )
+                }
                 // Order matters: the camera move above must complete BEFORE we flip the
                 // overlay flag, otherwise we'd reveal the map for one frame at the previous
                 // (default / stale) camera position. The MapLibre move is synchronous so by
@@ -803,10 +860,7 @@ private fun TrackerMapAuthenticatedContent(
                     tooltip = tooltipMapZoomIn,
                     onTap = {
                         if (phase == GeoVaultMapPhase.Ready) {
-                            // GESTURE PARITY: a manual zoom is exactly as much a user takeover of
-                            // the camera as a pan is -- without this, zooming in/out with a lock
-                            // engaged would fight the lock's next re-fit instead of releasing it.
-                            viewModel.disableAllMapLocks()
+                            viewModel.onUserOwnedZoom()
                             zoomInFabAction.onTap?.invoke()
                         }
                     },
@@ -819,7 +873,7 @@ private fun TrackerMapAuthenticatedContent(
                     tooltip = tooltipMapZoomOut,
                     onTap = {
                         if (phase == GeoVaultMapPhase.Ready) {
-                            viewModel.disableAllMapLocks()
+                            viewModel.onUserOwnedZoom()
                             zoomOutFabAction.onTap?.invoke()
                         }
                     },

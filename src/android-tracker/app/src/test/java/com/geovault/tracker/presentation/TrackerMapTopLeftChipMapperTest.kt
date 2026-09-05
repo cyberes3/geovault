@@ -238,6 +238,34 @@ class TrackerMapTopLeftChipMapperTest {
     }
 
     @Test
+    fun singleTracker_viewingLocallyRecordedTracker_usesLastPointSentAtMs() {
+        val sentAt = 1_700_000_100_000L
+        val state = baseState(
+            mode = TrackerMapDisplayMode.SINGLE_SESSION,
+            displayedTrackerId = "local",
+            displayedTrackerName = "Local",
+            runtime = TrackingRuntimeSnapshot(
+                selectedTrackerId = "other",
+                selectedTrackerName = "Other",
+                recordingRuntime = RecordingRuntime(sessionActive = true, selectedTrackerId = "local"),
+                lastPointSentAtMs = sentAt,
+            ),
+        )
+        val roster = listOf(
+            Tracker(
+                id = "local",
+                name = "Local",
+                color = null,
+                last_point = listOf(-122.0, 37.0, 1.0),
+                updated_at = 1_700_000_000_000L,
+            )
+        )
+        val result = mapper.map(state, roster) as TrackerMapTopLeftChipUiModel.Visible
+        val rel = result.subtitle as TrackerMapTopLeftChipText.RelativeLastData
+        assertEquals(sentAt, rel.lastDataEpochMs)
+    }
+
+    @Test
     fun singleTracker_viewingOtherTracker_usesRelativeLastDataSubtitle() {
         val updatedAt = 1_700_000_000_000L
         val state = baseState(

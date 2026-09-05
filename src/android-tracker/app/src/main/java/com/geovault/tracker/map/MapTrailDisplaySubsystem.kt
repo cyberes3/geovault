@@ -23,24 +23,16 @@ import org.maplibre.android.geometry.LatLngBounds
  */
 internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
     /**
-     * RENDER-SYNC UNDER LOCK: reading `rt.dependencies.historyRepository.snapshots` and writing the derived
-     * trail fields onto `rt.stateHub.uiStateMutable` must happen as one atomic step under
-     * `rt.trailCommitLock` — the same mutex [MapTrailReloadSubsystem]'s reload commit and
-     * [MapStreamingSubsystem]'s live-point consumer already share. Without this, a render
-     * publish that read the history repository *before* a reload's commit finishes can still be
-     * mid-flight when that commit lands, then overwrite the just-committed fresh trail with its
-     * own now-stale computed value once it finally writes — a narrow but real last-writer-wins
-     * regression. Building the whole read-then-write step inside the lock (rather than just the
-     * write) is what actually closes the race: the reload side does the equivalent
-     * read-compute-write atomically too, so whichever side acquires the lock first always
-     * observes — and leaves behind — a fully consistent state for the other.
+     * RENDER-SYNC UNDER LOCK: reading history snapshots and building the draw package must happen
+     * as one atomic step under `rt.trailCommitLock` — the same mutex [MapTrailReloadSubsystem]'s
+     * reload commit and [MapStreamingSubsystem]'s live-point consumer already share. Draw reads
+     * snapshots + unpublished overlay + remote heads; it does not write those trails back onto
+     * `uiState`.
      */
     internal suspend fun publishRenderPackage() {
         val nowMs = System.currentTimeMillis()
         val effectiveSession = rt.trailCommitLock.withCommitLock {
-            buildCurrentEffectiveSession(nowMs = nowMs).also {
-                syncUiStateTrailsFromHistorySnapshot(it.snapshot.uiState)
-            }
+            buildCurrentEffectiveSession(nowMs = nowMs)
         }
         val snapshot = effectiveSession.snapshot
         val nextRenderState = buildMapRenderState(snapshot)
@@ -72,7 +64,8 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             // coords for completeness.
             if (current.renderState == nextRenderState &&
                 current.bounds == nextBounds &&
-                current.selectionLockPoint == nextSelectionLockPoint
+                current.selectionLockPoint == nextSelectionLockPoint &&
+                current.liveHead == effectiveSession.liveHead
             ) {
                 current
             } else {
@@ -80,13 +73,14 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
                     renderState = nextRenderState,
                     bounds = nextBounds,
                     selectionLockPoint = nextSelectionLockPoint,
+                    liveHead = effectiveSession.liveHead,
                     revision = current.revision + 1L,
                 )
             }
         }
         publishCameraDirective(
             state = snapshot.uiState,
-            followTarget = effectiveSession.liveHead,
+            liveHead = effectiveSession.liveHead,
             bounds = nextBounds,
             selectionLockPoint = nextSelectionLockPoint,
         )
@@ -98,12 +92,29 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
      * stamping. This function's only job is projecting the current session into the resolver's
      * input shape and logging the decision.
      */
+    internal fun refreshFollowLockCamera() {
+        val snapshot = buildCurrentSessionSnapshot()
+        val nextBounds = trailBoundsOrNull(snapshot, System.currentTimeMillis())
+        publishCameraDirective(
+            state = snapshot.uiState,
+            liveHead = TrackerMapEffectiveSessionProjector.resolveLiveHead(snapshot),
+            bounds = nextBounds,
+            selectionLockPoint = rt.context.selectionLockPointOrNull(snapshot),
+        )
+    }
+
     private fun publishCameraDirective(
         state: TrackerMapUiState,
-        followTarget: Pair<Double, Double>?,
+        liveHead: Pair<Double, Double>?,
         bounds: org.maplibre.android.geometry.LatLngBounds?,
         selectionLockPoint: Pair<Double, Double>?,
     ) {
+        val followTarget = TrackerMapFollowLockTarget.resolve(
+            followLockEnabled = state.followLockEnabled,
+            puckLatitude = rt.cameraCoordinator.followPuckLatitude(),
+            puckLongitude = rt.cameraCoordinator.followPuckLongitude(),
+            liveHead = liveHead,
+        )
         val input = TrackerMapCameraDirectiveInput(
             followLockEnabled = state.followLockEnabled,
             gpsCollecting = state.runtime.gpsCollecting,
@@ -114,6 +125,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             selectionLockLon = selectionLockPoint?.second,
             liveActiveFitEnabled = state.liveActiveFitEnabled,
             bounds = bounds,
+            userOwnsZoom = rt.cameraCoordinator.userOwnsZoom,
         )
         if (CaptureLogThrottle.shouldLogOnChange("vm_camera_resolve", input.toString())) {
             GeoVaultCaptureLog.d(
@@ -167,6 +179,11 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         )
         val snapshots = rt.dependencies.historyRepository.snapshots.value
         val visibleIds = visibleTrackerIdsForSessionPlan(state, plan)
+        val unpublished = TrackerMapHistoryUiSync.unpublishedOverlaysByTracker(
+            repository = rt.dependencies.historyRepository,
+            trackerIds = TrackerMapHistoryUiSync.historyTrackerIdsForRender(state, plan, visibleIds),
+            trackers = trackers,
+        )
         val trails = TrackerMapHistoryUiSync.trailsFromSnapshots(
             state = state,
             plan = plan,
@@ -174,6 +191,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             trackers = trackers,
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
             visibleTrackerIds = visibleIds,
+            unpublishedOverlaysByTracker = unpublished,
         )
         val trailsState = state.copy(
             trail = trails.trail,
@@ -231,13 +249,23 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
             dispatcher = rt.dependencies.historyIntentDispatcher,
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
         )
-        return TrackerMapHistoryUiSync.applySnapshotsToState(
+        val unpublished = TrackerMapHistoryUiSync.unpublishedOverlaysByTracker(
+            repository = rt.dependencies.historyRepository,
+            trackerIds = TrackerMapHistoryUiSync.historyTrackerIdsForRender(state, plan, visibleIds),
+            trackers = trackers,
+        )
+        val trails = TrackerMapHistoryUiSync.trailsFromSnapshots(
             state = state,
             plan = plan,
             snapshots = rt.dependencies.historyRepository.snapshots.value,
             trackers = trackers,
             trailPointLimit = TrackerMapViewModel.TRAIL_POINT_LIMIT,
             visibleTrackerIds = visibleIds,
+            unpublishedOverlaysByTracker = unpublished,
+        )
+        return state.copy(
+            trail = trails.trail,
+            allQueueTrailsByTracker = trails.allQueueTrailsByTracker,
         )
     }
 
@@ -339,6 +367,7 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
                 acceptedRemoteTrackerIds = sessionPlan.acceptedRemoteTrackerIds,
                 trackers = rt.dependencies.trackerManagementStateStore.trackers.value,
                 nowMs = nowMs,
+                runtime = snapshot.runtime,
             )
             // HOLD-ON-EMPTY-ACTIVE-ONLY: TrackerMapGroupBoundsResolution.Hold means "fit only
             // active trackers" is on but nobody currently qualifies -- falling back to the
@@ -427,28 +456,4 @@ internal class MapTrailDisplaySubsystem(private val rt: TrackerMapRuntime) {
         }
     }
 
-    /**
-     * Keeps [rt.stateHub.uiStateMutable] trail fields aligned with what history + render use, so resume guards and
-     * diagnostics that read `rt.stateHub.uiStateMutable` match the drawn map.
-     */
-    private fun syncUiStateTrailsFromHistorySnapshot(trailsState: TrackerMapUiState) {
-        val current = rt.stateHub.uiStateMutable.value
-        if (current.trail == trailsState.trail &&
-            current.allQueueTrailsByTracker == trailsState.allQueueTrailsByTracker
-        ) {
-            return
-        }
-        rt.stateHub.uiStateMutable.update { latest ->
-            if (latest.trail == trailsState.trail &&
-                latest.allQueueTrailsByTracker == trailsState.allQueueTrailsByTracker
-            ) {
-                latest
-            } else {
-                latest.copy(
-                    trail = trailsState.trail,
-                    allQueueTrailsByTracker = trailsState.allQueueTrailsByTracker,
-                )
-            }
-        }
-    }
 }

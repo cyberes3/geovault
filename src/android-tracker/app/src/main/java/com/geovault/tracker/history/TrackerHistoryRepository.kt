@@ -1,6 +1,7 @@
 package com.geovault.tracker.history
 
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.tracker.db.QueuedLocation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -127,6 +128,20 @@ class TrackerHistoryRepository(
     @Synchronized
     fun snapshotFor(key: TrackerHistoryKey): TrackerHistorySnapshot? {
         return _snapshots.value[key]
+    }
+
+    /**
+     * Overlay points already in the source store that the published snapshot does not include
+     * (typically [empty_snapshot_deferred]). Draw must still paint these.
+     */
+    @Synchronized
+    fun unpublishedOverlayQueuedLocations(key: TrackerHistoryKey): List<QueuedLocation> {
+        val publishedKeys = _snapshots.value[key]?.points?.map { it.key }?.toSet().orEmpty()
+        return sourceStore.overlays(key)
+            .flatMap { it.points }
+            .filter { it.key !in publishedKeys }
+            .sortedBy { it.timestampMs }
+            .map { it.toQueuedLocation() }
     }
 
     @Synchronized
