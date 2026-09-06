@@ -1,8 +1,7 @@
 package com.geovault.uploader.data
 
 import android.content.Context
-import com.geovault.common.settings.GeoVaultPrefsStore
-import com.geovault.common.settings.PrefKey
+import com.geovault.common.settings.GeoVaultDocumentStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -10,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 data class UploaderSettings(
     val suffixEnabled: Boolean = true
@@ -17,11 +17,14 @@ data class UploaderSettings(
 
 class UploaderPreferences private constructor(context: Context) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val store = GeoVaultPrefsStore(
+    private val store = GeoVaultDocumentStore(
         context = context,
-        prefsName = PREFS_NAME,
-        schemaVersion = SETTINGS_SCHEMA_VERSION,
-        registeredKeys = setOf(KEY_ADD_SUFFIX)
+        fileName = UploaderOptionsDocument.FILE_NAME,
+        documentSerializer = UploaderOptionsDocument.serializer(),
+        defaultValue = UploaderOptionsDocument(),
+        currentVersion = UploaderOptionsDocument.SCHEMA_VERSION,
+        legacyFileName = UploaderOptionsDocument.LEGACY_FILE_NAME,
+        legacyMapper = UploaderOptionsDocument::fromLegacy,
     )
     private val _settings = MutableStateFlow(UploaderSettings())
     val settings: StateFlow<UploaderSettings> = _settings.asStateFlow()
@@ -29,8 +32,8 @@ class UploaderPreferences private constructor(context: Context) {
     init {
         preloadOnLaunch()
         appScope.launch {
-            store.observe(KEY_ADD_SUFFIX).collect { enabled ->
-                _settings.value = _settings.value.copy(suffixEnabled = enabled)
+            store.data.collect { document ->
+                _settings.value = UploaderSettings(suffixEnabled = document.addFilenameSuffix)
             }
         }
     }
@@ -38,26 +41,22 @@ class UploaderPreferences private constructor(context: Context) {
     fun isSuffixEnabled(): Boolean = settings.value.suffixEnabled
 
     suspend fun setSuffixEnabled(enabled: Boolean) {
-        store.put(KEY_ADD_SUFFIX, enabled)
+        store.update { current -> current.copy(addFilenameSuffix = enabled) }
     }
 
     fun clearAll() {
-        store.clearBlocking()
+        runBlocking(Dispatchers.IO) {
+            store.update { UploaderOptionsDocument() }
+        }
     }
 
     fun preloadOnLaunch() {
         appScope.launch {
-            store.preloadAllData()
+            store.get()
         }
     }
 
     companion object {
-        private const val SETTINGS_SCHEMA_VERSION = 1
-        private const val PREFS_NAME = "geovault_prefs"
-        const val PREF_ADD_SUFFIX = "add_suffix"
-
-        private val KEY_ADD_SUFFIX = PrefKey.BooleanKey(PREF_ADD_SUFFIX, true)
-
         @Volatile
         private var instance: UploaderPreferences? = null
 

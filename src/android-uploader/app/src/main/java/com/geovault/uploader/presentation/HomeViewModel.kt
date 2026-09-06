@@ -43,7 +43,7 @@ class HomeViewModel(
     )
 
     private val validationRepository = services.validationRepository
-    private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Uploader.versionCheckSession(
+    private val updateCoordinator = GeoVaultAndroidReleaseIdentity.Uploader.updateCoordinator(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
     )
@@ -53,6 +53,14 @@ class HomeViewModel(
 
     private var validateJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            updateCoordinator.promptState.collect { prompt ->
+                _state.update { it.copy(updateAvailable = prompt.updateOrNull()) }
+            }
+        }
+    }
+
     fun initialize(intent: Intent?) = Unit
 
     fun onHostResumed() = Unit
@@ -61,14 +69,13 @@ class HomeViewModel(
         val wasAuthenticated = _state.value.isAuthenticated
         val isAuthenticated = accountState.isLoggedIn
         if (wasAuthenticated && !isAuthenticated) {
-            versionCheckSession.reset()
+            updateCoordinator.reset()
         }
         _state.update {
             it.copy(
                 isAuthenticated = isAuthenticated,
                 serverUrl = accountState.serverUrl,
                 isConnecting = accountState.isConnecting,
-                updateAvailable = if (isAuthenticated) it.updateAvailable else null,
             )
         }
         if (!wasAuthenticated && isAuthenticated) {
@@ -83,7 +90,7 @@ class HomeViewModel(
     }
 
     fun clearUpdateAvailable() {
-        _state.update { it.copy(updateAvailable = null) }
+        updateCoordinator.dismissPrompt()
     }
 
     fun validate() {
@@ -114,9 +121,7 @@ class HomeViewModel(
     }
 
     private fun launchVersionCheckIfNeeded() {
-        versionCheckSession.launchIfNeeded(viewModelScope) { available ->
-            _state.update { it.copy(updateAvailable = available) }
-        }
+        updateCoordinator.launchIfNeeded(viewModelScope)
     }
 
     private fun newImportantId(): String = UUID.randomUUID().toString()

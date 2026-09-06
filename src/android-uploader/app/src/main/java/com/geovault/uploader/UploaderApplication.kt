@@ -1,29 +1,38 @@
 package com.geovault.uploader
 
 import android.app.Application
-import com.geovault.common.AppResetFlow
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.bootstrap.AppResetFlow
+import com.geovault.common.bootstrap.GeoVaultAppBootstrap
 import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.data.UploaderPreferences
+import com.geovault.uploader.di.UploaderAppServices
 
-class UploaderApplication : Application(), GeovaultAuthManager.AuthFailureListener {
+class UploaderApplication : Application(), GeoVaultAuthSession.AuthFailureListener {
+    lateinit var bootstrap: GeoVaultAppBootstrap
+        private set
+
     override fun onCreate() {
         super.onCreate()
         GeoVaultAppVersionLog.log(this, BuildConfig.GIT_COMMIT_SHA)
-        GeovaultAuthManager.init(
-            context = this,
-            redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
-            clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_UPLOADER
-        )
-        UploaderPreferences.getInstance(this).preloadOnLaunch()
-        AppResetFlow.registerHook(
-            key = "uploader_clear_prefs",
-            phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR
-        ) { context ->
-            UploaderPreferences.getInstance(context).clearAll()
-        }
-        GeovaultAuthManager.setAuthFailureListener(this)
+        bootstrap = GeoVaultAppBootstrap.builder(this)
+            .auth(
+                redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
+                clientId = GeoVaultAuthSession.OAUTH_CLIENT_ID_UPLOADER,
+                authFailureListener = this,
+            ) { ctx -> UploaderAppServices.from(ctx.applicationContext as Application).initialAuthController() }
+            .gate("uploader-prefs") { ctx ->
+                UploaderPreferences.getInstance(ctx).preloadOnLaunch()
+            }
+            .resetHook(
+                key = "uploader_clear_prefs",
+                phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
+            ) { context ->
+                UploaderPreferences.getInstance(context).clearAll()
+            }
+            .build()
+        bootstrap.boot(this)
     }
 
     override fun onAuthFailure(context: android.content.Context) {

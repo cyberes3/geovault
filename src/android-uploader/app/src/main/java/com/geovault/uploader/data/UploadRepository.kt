@@ -3,9 +3,10 @@ package com.geovault.uploader.data
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
-import com.geovault.common.RetrofitClient
+import com.geovault.common.messages.GeoVaultUploadMessageFormatter
+import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.auth.AuthSessionService
-import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.ServerConfigService
 import com.geovault.uploader.domain.ImportFileUploader
 import com.geovault.uploader.model.ImportUploadOutcome
@@ -32,15 +33,15 @@ import org.json.JSONObject
 class UploadRepository(
     private val context: Context,
     private val contentResolver: ContentResolver,
-    private val authServices: GeovaultAuthServices = GeovaultAuthServices(context),
-    private val serverConfigService: ServerConfigService = authServices,
-    private val authSessionService: AuthSessionService = authServices,
+    private val authSession: GeoVaultAuthSession = GeoVaultAuthSession.get(),
+    private val serverConfigService: ServerConfigService = authSession,
+    private val authSessionService: AuthSessionService = authSession,
 ) : ImportFileUploader {
     private val callLock = Any()
     private var activeCall: Call? = null
 
     private val httpClient: OkHttpClient by lazy {
-        RetrofitClient.getAuthenticatedOkHttpClient(context)
+        GeoVaultHttp.authenticatedClient()
             .newBuilder()
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
@@ -59,7 +60,7 @@ class UploadRepository(
             return@withContext ImportUploadOutcome.Failed("Not signed in")
         }
         try {
-            authServices.getValidAccessToken()
+            authSession.getValidAccessToken()
             null
         } catch (e: Exception) {
             ImportUploadOutcome.Failed("Connection failed\n${e.message ?: "Unknown error"}")
@@ -146,7 +147,7 @@ class UploadRepository(
                             }
                             continuation.resume(
                                 ImportUploadOutcome.Failed(
-                                    UploadErrorMessageFormatter.fromStatusCode(it.code, serverMessage)
+                                    GeoVaultUploadMessageFormatter.fromStatusCode(it.code, serverMessage)
                                 )
                             )
                         }

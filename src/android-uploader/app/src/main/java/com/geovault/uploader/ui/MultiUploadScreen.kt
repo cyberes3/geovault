@@ -3,7 +3,6 @@ package com.geovault.uploader.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,7 +22,6 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,12 +40,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.geovault.common.ui.components.GeoVaultAuthGate
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
-import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultCardBorderColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
@@ -67,51 +64,26 @@ import kotlin.math.pow
 @Composable
 fun MultiUploadScreen(
     state: QueueUploadState,
-    isAuthenticated: Boolean,
-    serverUrl: String,
-    isConnecting: Boolean,
+    auth: GeoVaultAuthShellState,
     invalidFilesDialogNames: List<String>?,
     onDismissInvalidFiles: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onAuthServerUrlChanged: (String) -> Unit,
-    onAuthConnect: () -> Unit,
     onRename: (index: Int, String) -> Unit,
     onRemoveItem: (index: Int) -> Unit,
     onUploadClick: () -> Unit,
     onCancelClick: () -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            GeoVaultTopTitleBar(
-                title = state.fileCountLabel,
-                actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(
-                        onOpenSettings = onOpenSettings,
-                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
-                    )
-                }
-            )
-        }
-    ) { padding ->
-        GeoVaultAuthGate(
-            isAuthenticated = isAuthenticated,
-            serverUrl = serverUrl,
-            onServerUrlChanged = onAuthServerUrlChanged,
-            onConnect = onAuthConnect,
-            isConnecting = isConnecting,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .navigationBarsPadding()
-        ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
-                .padding(bottom = 16.dp)
-        ) {
+    GeoVaultTabShell(
+        title = state.fileCountLabel,
+        auth = auth,
+        modifier = Modifier.imePadding(),
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        applyNavigationBarsPadding = true,
+        scrollAuthenticatedMainContent = false,
+        authenticatedContentHorizontalPadding = 0.dp,
+        authenticatedBottomSpacer = 16.dp,
+        authenticatedMainContent = {
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 12.dp)
             ) {
                 itemsIndexed(state.items) { index, item ->
@@ -128,6 +100,8 @@ fun MultiUploadScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
+        },
+        authenticatedFooter = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Divider(
                     color = geoVaultHairlineDividerColor(),
@@ -181,9 +155,8 @@ fun MultiUploadScreen(
                     }
                 }
             }
-        }
-        }
-    }
+        },
+    )
     invalidFilesDialogNames?.let { names ->
         UnsupportedFilesDialog(
             fileNames = names,

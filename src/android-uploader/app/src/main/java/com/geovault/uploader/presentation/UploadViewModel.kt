@@ -2,10 +2,9 @@ package com.geovault.uploader.presentation
 
 import android.app.Application
 import android.content.Intent
-import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.NaturalSort
+import com.geovault.common.sort.NaturalSort
 import com.geovault.common.files.GeoVaultOpenableUriMetadata
 import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.domain.FilenamePolicy
@@ -43,6 +42,7 @@ class UploadViewModel(
     )
 
     private val metadata: GeoVaultOpenableUriMetadata = services.openableUriMetadata
+    private val fileIngest = services.fileIngest
     private val prefs = services.uploaderPreferences
     private val importUploadQueue: ImportUploadQueue = services.importUploadQueue
 
@@ -55,8 +55,9 @@ class UploadViewModel(
         uploadJob?.cancel()
         uploadJob = null
         val payloadUris = UploadNavigation.urisFrom(intent)
-        val items = payloadUris.map(::buildItem).sortedWith(
-            NaturalSort.naturalOrderBy { it.filename.lowercase(Locale.getDefault()) }
+        val ingested = fileIngest.ingest(payloadUris, com.geovault.common.files.GeoVaultFileRef.Source.Intent)
+        val items = ingested.accepted.map(::buildItem).sortedWith(
+            NaturalSort.byName(Locale.getDefault()) { it.filename }
         )
         _state.value = QueueUploadState(
             items = items,
@@ -114,25 +115,12 @@ class UploadViewModel(
         }
     }
 
-    private fun buildItem(uri: Uri): FileQueueItem {
-        val filename = metadata.displayName(uri)
-        val size = metadata.sizeBytes(uri)
-        val modifiedAt = metadata.lastModifiedMillis(uri)
-        if (!FilenamePolicy.isSupportedImportType(filename)) {
-            return FileQueueItem(
-                uri = uri,
-                filename = filename,
-                sizeBytes = size,
-                modifiedAtMs = modifiedAt,
-                status = FileStatus.ERROR,
-                errorMessage = "Invalid file type. Only KMZ, KML, and GPX files are allowed."
-            )
-        }
+    private fun buildItem(ref: com.geovault.common.files.GeoVaultFileRef): FileQueueItem {
         return FileQueueItem(
-            uri = uri,
-            filename = filename,
-            sizeBytes = size,
-            modifiedAtMs = modifiedAt,
+            uri = ref.uri,
+            filename = ref.displayName,
+            sizeBytes = ref.sizeBytes,
+            modifiedAtMs = metadata.lastModifiedMillis(ref.uri),
         )
     }
 

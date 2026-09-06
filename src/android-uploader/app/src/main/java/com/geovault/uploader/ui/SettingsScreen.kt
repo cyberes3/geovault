@@ -1,6 +1,7 @@
 package com.geovault.uploader.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,20 +9,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Text
-import com.geovault.common.ui.components.GeoVaultInitialAuthView
-import com.geovault.common.ui.components.GeoVaultServerConfigBlock
-import com.geovault.common.ui.components.GeoVaultSubViewScaffold
-import com.geovault.common.ui.components.GeoVaultToggleHelpCard
-import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.geovault.common.auth.GeoVaultAccountUiState
+import com.geovault.common.ui.components.GeoVaultAccountSettingsSection
+import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.theme.GeoVaultLayoutTokens
-import com.geovault.uploader.R
 import com.geovault.uploader.presentation.SettingsState
 
 @Composable
@@ -32,69 +26,35 @@ fun SettingsScreen(
     onSuffixChanged: (Boolean) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
-    onClose: () -> Unit
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
 ) {
-    Scaffold(
-        topBar = {
-            GeoVaultTopTitleBar(
-                title = stringResource(R.string.app_title),
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+            .verticalScroll(rememberScrollState())
+            .then(
+                if (accountState.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
             )
-        }
-    ) { padding ->
-        GeoVaultSubViewScaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            title = stringResource(R.string.settings_title),
-            onClose = onClose,
-            closeContentDescription = stringResource(R.string.close_button),
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .then(
-                        if (accountState.isLoggedIn) Modifier.padding(GeoVaultLayoutTokens.ScreenPadding) else Modifier
-                    )
-            ) {
-                if (!accountState.isLoggedIn) {
-                    GeoVaultInitialAuthView(
-                        serverUrl = accountState.serverUrl,
-                        onServerUrlChanged = onServerUrlChanged,
-                        onConnect = onConnect,
-                        title = "Connect Account",
-                        helpText = "Enter your GeoVault server URL and connect your account.",
-                        connectButtonText = "Connect Account",
-                        connectingButtonText = "Connecting...",
-                        isConnecting = accountState.isConnecting,
-                        connectEnabled = true,
-                        inputEnabled = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    GeoVaultToggleHelpCard(
-                        checked = state.suffixEnabled,
-                        onCheckedChange = onSuffixChanged,
-                        title = "Add Android Upload Suffix",
-                        helpText = "Append '_android_upload' to uploaded filenames."
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    val loggedInEmail = accountState.loggedInText.removePrefix("Logged in as").trim().ifBlank { "Authenticated User" }
-                    GeoVaultServerConfigBlock(
-                        serverUrl = accountState.serverUrl,
-                        loggedInEmail = loggedInEmail,
-                        onDisconnectConfirmed = onDisconnect,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                val accountInfoMessage = accountState.infoMessage
-                if (!accountInfoMessage.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(accountInfoMessage)
-                }
-            }
-        }
+    ) {
+        GeoVaultAccountSettingsSection(
+            accountState = accountState,
+            onServerUrlChanged = onServerUrlChanged,
+            onConnect = onConnect,
+            onDisconnect = onDisconnect,
+            modifier = Modifier.fillMaxWidth(),
+            connectTitle = "Connect Account",
+            connectHelpText = "Enter your GeoVault server URL and connect your account.",
+            signedInPrefix = {
+                GeoVaultToggleHelpCard(
+                    checked = state.suffixEnabled,
+                    onCheckedChange = onSuffixChanged,
+                    title = "Add Android Upload Suffix",
+                    helpText = "Append '_android_upload' to uploaded filenames."
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            },
+        )
     }
 }
