@@ -9,7 +9,7 @@ from geo_lib.processing.file_types import get_max_file_size, FileType, get_file_
 from geo_lib.security.exceptions import SecurityError, FileValidationError
 from geo_lib.security.filetype_checkers import _is_valid_kml, _is_valid_gpx
 from geo_lib.security.xml import parse_xml, _check_dangerous_elements, _check_dangerous_attributes
-from geo_lib.security.zip_utils import MAX_KMZ_KML_DECOMPRESSED_BYTES, read_zip_member_bounded
+from geo_lib.security.zip_utils import read_zip_member_bounded
 
 
 def _validate_kmz_content(uploaded_file: UploadedFile):
@@ -40,18 +40,21 @@ def _validate_kmz_content(uploaded_file: UploadedFile):
 
             # Validate the main KML file, bounded against decompression-bomb entries
             main_kml_file = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
-            kml_content = read_zip_member_bounded(kmz, main_kml_file, MAX_KMZ_KML_DECOMPRESSED_BYTES).decode('utf-8')
 
-            # Check embedded KML size against KML file type limit (not KMZ limit)
+            # Check embedded KML size against KML file type limit (not KMZ limit).
+            # Reject the archive's declared uncompressed size first (cheap), then stream-decompress
+            # with that same limit as the hard cap so a forged-size bomb cannot balloon to a
+            # separate, much larger ceiling before the size check runs.
             kml_size_limit = get_max_file_size(FileType.KML)
-            kml_content_size = len(kml_content.encode('utf-8'))
-
-            if kml_content_size > kml_size_limit:
-                kml_size_mb = kml_content_size / (1024 * 1024)
+            info = kmz.getinfo(main_kml_file)
+            if info.file_size > kml_size_limit:
+                kml_size_mb = info.file_size / (1024 * 1024)
                 kml_limit_mb = kml_size_limit / (1024 * 1024)
                 raise FileValidationError(
                     f"Embedded KML file too large: {kml_size_mb:.1f}MB exceeds {kml_limit_mb:.0f}MB limit for KML content"
                 )
+
+            kml_content = read_zip_member_bounded(kmz, main_kml_file, kml_size_limit).decode('utf-8')
 
             _validate_kml_structure(kml_content)
 
