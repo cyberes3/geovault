@@ -21,8 +21,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.geovault.common.maps.core.GeoVaultBaseMap
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.util.MeasurementSystem
 import kotlin.math.roundToInt
 import org.maplibre.android.maps.MapLibreMap
 
@@ -39,13 +41,14 @@ fun GeoVaultMapScaleBar(
     maxWidth: Dp = GeoVaultMapScaleBarDefaults.MaxWidth,
 ) {
     val attachmentVersion by map.mapAttachmentVersion.collectAsState()
+    val measurementSystem = MeasurementSystem.fromContext(LocalContext.current)
     val density = LocalDensity.current
     val maxWidthPx = remember(density, maxWidth) {
         with(density) { maxWidth.toPx().roundToInt() }
     }
     var measurement by remember(map) { mutableStateOf<GeoVaultMapScaleBarMeasurement?>(null) }
 
-    DisposableEffect(map, attachmentVersion, maxWidthPx) {
+    DisposableEffect(map, attachmentVersion, maxWidthPx, measurementSystem) {
         val mapLibreMap = map.maplibreMap
         if (mapLibreMap == null) {
             measurement = null
@@ -57,6 +60,7 @@ fun GeoVaultMapScaleBar(
             measurement = GeoVaultMapScaleBarCalculator.calculate(
                 metersPerPixel = mapLibreMap.projection.getMetersPerPixelAtLatitude(latitude),
                 maxWidthPx = maxWidthPx,
+                system = measurementSystem,
             )
         }
 

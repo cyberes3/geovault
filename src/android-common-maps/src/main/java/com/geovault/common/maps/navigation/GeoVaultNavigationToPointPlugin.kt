@@ -2,6 +2,7 @@ package com.geovault.common.maps.navigation
 
 import android.content.Context
 import androidx.compose.ui.graphics.toArgb
+import com.geovault.common.geo.GeoMath
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -20,11 +21,6 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
-
 /**
  * MapLibre plugin: a dashed line from the user to the target and an optional name/distance
  * label on the **user** coordinate (under the location puck). The **target** is not rendered as
@@ -276,22 +272,6 @@ class GeoVaultNavigationToPointPlugin(
             return FeatureCollection.fromFeatures(listOf(feature))
         }
 
-        fun haversineMeters(
-            lat1: Double,
-            lon1: Double,
-            lat2: Double,
-            lon2: Double,
-        ): Double {
-            val dLat = Math.toRadians(lat2 - lat1)
-            val dLon = Math.toRadians(lon2 - lon1)
-            val rLat1 = Math.toRadians(lat1)
-            val rLat2 = Math.toRadians(lat2)
-            val h = sin(dLat / 2) * sin(dLat / 2) +
-                cos(rLat1) * cos(rLat2) * sin(dLon / 2) * sin(dLon / 2)
-            return 2.0 * EARTH_RADIUS_METERS * atan2(sqrt(h), sqrt(1 - h))
-        }
-
-        private const val EARTH_RADIUS_METERS = 6_371_000.0
     }
 
     private fun buildFeatureCollection(
@@ -316,7 +296,7 @@ class GeoVaultNavigationToPointPlugin(
     )
 
     private fun haversineMeters(a: LatLon, b: LatLon): Double =
-        RenderGeometry.haversineMeters(a.latitude, a.longitude, b.latitude, b.longitude)
+        GeoMath.haversineMeters(a.latitude, a.longitude, b.latitude, b.longitude)
 
     companion object {
         const val SOURCE_ID: String = "gv-common-nav-to-point-source"

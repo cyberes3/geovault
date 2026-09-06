@@ -4,12 +4,12 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
-import com.geovault.common.net.GeoVaultValidatedInternet
+import com.geovault.common.net.GeoVaultConnectivity
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
  * **Not** this object's job:
  *  - Server-relative URL rewriting — owned by [MapResourceUrlTransform], which
  *    runs at the engine's request layer where every URL flows.
- *  - Auth bookkeeping — owned by [RetrofitClient].
+ *  - Auth bookkeeping — owned by [GeoVaultHttp].
  *
  * Threading: a private [CoroutineScope] on [Dispatchers.IO] owns all fetches.
  * Results are delivered on [Dispatchers.Main] so callers can update MapLibre
@@ -72,7 +72,7 @@ internal object MapStyleCache {
 
         val disk = MapMetadataTempCache.readStyleJson(appContext, styleUrl)
         val plan = MapNetworkAccessPolicy.plan(
-            hasValidatedInternet = GeoVaultValidatedInternet.isAvailable(appContext),
+            hasValidatedInternet = GeoVaultConnectivity.hasValidatedInternet(appContext),
             hasCache = disk != null,
         )
         val gate = MapMetadataLoadGate(
@@ -130,7 +130,7 @@ internal object MapStyleCache {
     fun preloadMapTilerStyles(context: Context) {
         TileSourceCache.getTileSources(context) { result ->
             val sources = (result as? TileSourceFetchResult.Success)?.sources ?: return@getTileSources
-            val serverUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+            val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
             for (source in sources) {
                 if (source.id !in PRELOADED_STYLE_SOURCE_IDS) continue
                 val styleUrl = source.client_config.style_url ?: continue
@@ -151,7 +151,7 @@ internal object MapStyleCache {
 
     private fun fetchAndValidate(context: Context, styleUrl: String, isOurServer: Boolean): String? {
         val client = if (isOurServer) {
-            RetrofitClient.getAuthenticatedOkHttpClient(context)
+            GeoVaultHttp.authenticatedClient()
         } else {
             externalStyleClient(context)
         }
@@ -219,7 +219,7 @@ internal object MapStyleCache {
     ) {
         val preview = bodyPreview.take(BODY_PREVIEW_MAX)
         if (isOurServer) {
-            val configuredServer = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+            val configuredServer = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
             Log.e(
                 TAG,
                 "GeoVault server map style HTTP error: code=$code message=$message " +
@@ -236,7 +236,7 @@ internal object MapStyleCache {
 
     private fun logEmptyBody(context: Context, styleUrl: String, isOurServer: Boolean) {
         if (isOurServer) {
-            val configuredServer = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+            val configuredServer = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
             Log.e(
                 TAG,
                 "GeoVault server map style returned empty body. styleUrl=$styleUrl " +
@@ -252,7 +252,7 @@ internal object MapStyleCache {
 
     private fun logFetchException(context: Context, styleUrl: String, isOurServer: Boolean, e: Exception) {
         if (isOurServer) {
-            val configuredServer = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+            val configuredServer = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
             Log.e(
                 TAG,
                 "GeoVault server map style request failed: styleUrl=$styleUrl configuredServer=$configuredServer",

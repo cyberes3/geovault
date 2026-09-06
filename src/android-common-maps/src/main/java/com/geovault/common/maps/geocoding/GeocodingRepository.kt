@@ -1,8 +1,8 @@
 package com.geovault.common.maps.geocoding
 
 import android.content.Context
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
@@ -12,8 +12,6 @@ import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 
 /**
  * Authenticated geocoding search against the configured GeoVault server.
@@ -24,14 +22,9 @@ class GeocodingRepository(
     private val appContext = context.applicationContext
 
     private fun api(): GeocodingApi {
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext)
-        val normalizedBase = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-        return Retrofit.Builder()
-            .baseUrl(normalizedBase)
-            .client(RetrofitClient.getAuthenticatedOkHttpClient(appContext))
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(GeocodingApi::class.java)
+        val base = GeoVaultAuthSession.get().serverUrl()
+            ?: error("Cannot geocode without a configured server URL")
+        return GeoVaultHttp.api(GeocodingApi::class.java, base)
     }
 
     suspend fun search(query: String): Result<List<GeocodeSearchResult>> = withContext(Dispatchers.IO) {

@@ -1,6 +1,6 @@
 package com.geovault.common.maps.core
 
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,7 +19,7 @@ class MapResourceUrlTransformTest {
 
     @Before
     fun resetServerUrl() {
-        GeovaultAuthManager.setServerUrl(appContext, "")
+        GeoVaultAuthSession.get().setServerUrl("")
     }
 
     @Test
@@ -50,7 +50,7 @@ class MapResourceUrlTransformTest {
 
     @Test
     fun serverRelativeUrl_isRewritten() {
-        GeovaultAuthManager.setServerUrl(appContext, "https://geovault.example.com/")
+        GeoVaultAuthSession.get().setServerUrl("https://geovault.example.com/")
         val rewritten = transform.onURL(Resource.SOURCE, "/api/tiles/style/streets")
         assertEquals("https://geovault.example.com/api/tiles/style/streets", rewritten)
     }

@@ -1,25 +1,21 @@
 package com.geovault.common.maps.core
 
 import com.geovault.common.geo.GeoMath
+import com.geovault.common.geo.Wgs84Point
 
 fun geoVaultSplitTrackByDistance(
-    points: List<Pair<Double, Double>>,
+    points: List<Wgs84Point>,
     maxJumpMeters: Float
-): List<List<Pair<Double, Double>>> {
-    if (maxJumpMeters <= 0f) return listOf(points.filter(::isFiniteLatLon))
-    val valid = points.filter(::isFiniteLatLon)
+): List<List<Wgs84Point>> {
+    if (maxJumpMeters <= 0f) return listOf(points.filter { it.isValidGeographic() })
+    val valid = points.filter { it.isValidGeographic() }
     if (valid.size < 2) return emptyList()
-    val segments = mutableListOf<MutableList<Pair<Double, Double>>>()
+    val segments = mutableListOf<MutableList<Wgs84Point>>()
     var current = mutableListOf(valid.first())
     for (index in 1 until valid.size) {
         val previous = valid[index - 1]
         val next = valid[index]
-        val distanceMeters = GeoMath.haversineMeters(
-            previous.first,
-            previous.second,
-            next.first,
-            next.second,
-        )
+        val distanceMeters = GeoMath.haversineMeters(previous, next)
         if (distanceMeters > maxJumpMeters) {
             if (current.size >= 2) segments.add(current)
             current = mutableListOf(next)
@@ -29,8 +25,4 @@ fun geoVaultSplitTrackByDistance(
     }
     if (current.size >= 2) segments.add(current)
     return segments
-}
-
-private fun isFiniteLatLon(point: Pair<Double, Double>): Boolean {
-    return isValidMapLibreGeographicLatLng(point.first, point.second)
 }

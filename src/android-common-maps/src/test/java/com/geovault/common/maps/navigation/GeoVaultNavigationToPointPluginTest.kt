@@ -1,5 +1,6 @@
 package com.geovault.common.maps.navigation
 
+import com.geovault.common.geo.GeoMath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -70,13 +71,13 @@ class GeoVaultNavigationToPointPluginTest {
 
     @Test
     fun `haversine returns zero for identical coordinates`() {
-        val d = GeoVaultNavigationToPointPlugin.RenderGeometry.haversineMeters(45.0, -93.0, 45.0, -93.0)
+        val d = GeoMath.haversineMeters(45.0, -93.0, 45.0, -93.0)
         assertEquals(0.0, d, 1e-6)
     }
 
     @Test
     fun `haversine approximates known distance Minneapolis to Saint Paul`() {
-        val d = GeoVaultNavigationToPointPlugin.RenderGeometry.haversineMeters(
+        val d = GeoMath.haversineMeters(
             44.9778, -93.2650,
             44.9537, -93.0900,
         )
@@ -90,8 +91,8 @@ class GeoVaultNavigationToPointPluginTest {
 
     @Test
     fun `haversine is symmetric`() {
-        val forward = GeoVaultNavigationToPointPlugin.RenderGeometry.haversineMeters(10.0, 20.0, 30.0, 40.0)
-        val backward = GeoVaultNavigationToPointPlugin.RenderGeometry.haversineMeters(30.0, 40.0, 10.0, 20.0)
+        val forward = GeoMath.haversineMeters(10.0, 20.0, 30.0, 40.0)
+        val backward = GeoMath.haversineMeters(30.0, 40.0, 10.0, 20.0)
         assertEquals(forward, backward, 1e-6)
     }
 

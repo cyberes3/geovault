@@ -51,7 +51,7 @@ import kotlinx.coroutines.delay
 fun GeoVaultMapGeocodeSearchDialog(
     visible: Boolean,
     repository: GeocodingRepository,
-    onDismiss: () -> Unit,
+    onDismissRequest: () -> Unit,
     onPickResult: (GeocodeSearchResult) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -96,7 +96,7 @@ fun GeoVaultMapGeocodeSearchDialog(
 
     AlertDialog(
         modifier = modifier,
-        onDismissRequest = onDismiss,
+        onDismissRequest = onDismissRequest,
         backgroundColor = geoVaultDialogSurfaceColor(),
         title = {
             Text(
@@ -157,7 +157,7 @@ fun GeoVaultMapGeocodeSearchDialog(
                                         result = item,
                                         onClick = {
                                             onPickResult(item)
-                                            onDismiss()
+                                            onDismissRequest()
                                         },
                                     )
                                     Divider(
@@ -175,7 +175,7 @@ fun GeoVaultMapGeocodeSearchDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismissRequest) {
                 Text(
                     text = stringResource(R.string.gv_common_geocode_search_done),
                     color = geoVaultDialogAccentButtonColor(),

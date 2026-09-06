@@ -41,7 +41,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.geovault.common.maps.R
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
-import com.geovault.common.ui.components.GeoVaultCompactFilledSearchField
+import com.geovault.common.ui.components.GeoVaultCompactInputStyle
+import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.modifier.geoVaultStableNavigationBarsPadding
 
 /**
@@ -306,9 +307,10 @@ private fun GeoVaultMapDrawerSearchBar(
     search: GeoVaultMapDrawerSearchState,
     drawerInteractionsEnabled: Boolean,
 ) {
-    GeoVaultCompactFilledSearchField(
+    GeoVaultSearchField(
         value = search.query,
         onValueChange = search.onQueryChange,
+        style = GeoVaultCompactInputStyle.Filled,
         placeholder = search.placeholder,
         enabled = drawerInteractionsEnabled && search.enabled,
         isLoading = search.isLoading,

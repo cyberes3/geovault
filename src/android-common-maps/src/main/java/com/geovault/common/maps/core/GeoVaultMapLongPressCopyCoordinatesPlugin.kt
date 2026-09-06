@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import android.widget.Toast
-import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.util.ClipboardCopyHelper
 import com.geovault.common.maps.R
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap

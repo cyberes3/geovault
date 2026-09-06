@@ -1,10 +1,11 @@
 package com.geovault.common.maps.ui.scale
 
-import java.util.Locale
+import com.geovault.common.util.DistanceFormat
+import com.geovault.common.util.DistanceUnit
+import com.geovault.common.util.MeasurementSystem
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
 data class GeoVaultMapScaleBarMeasurement(
     val label: String,
@@ -12,20 +13,25 @@ data class GeoVaultMapScaleBarMeasurement(
 )
 
 object GeoVaultMapScaleBarCalculator {
-    private const val FEET_PER_METER = 3.280839895
-    private const val FEET_PER_MILE = 5280.0
-
     fun calculate(
         metersPerPixel: Double,
         maxWidthPx: Int,
+        system: MeasurementSystem = MeasurementSystem.IMPERIAL,
     ): GeoVaultMapScaleBarMeasurement? {
         if (!metersPerPixel.isFinite() || metersPerPixel <= 0.0 || maxWidthPx <= 0) return null
 
-        val maxFeet = metersPerPixel * maxWidthPx * FEET_PER_METER
-        val (maxDistance, unit) = if (maxFeet > FEET_PER_MILE) {
-            maxFeet / FEET_PER_MILE to "mi"
+        val maxMeters = metersPerPixel * maxWidthPx
+        val (maxDistance, unit) = if (system.usesImperial) {
+            val maxFeet = DistanceFormat.metersToFeet(maxMeters)
+            if (maxFeet > DistanceFormat.FEET_PER_STATUTE_MILE) {
+                maxFeet / DistanceFormat.FEET_PER_STATUTE_MILE to DistanceUnit.MILE
+            } else {
+                maxFeet to DistanceUnit.FOOT
+            }
+        } else if (maxMeters > DistanceFormat.METERS_PER_KILOMETER) {
+            maxMeters / DistanceFormat.METERS_PER_KILOMETER to DistanceUnit.KILOMETER
         } else {
-            maxFeet to "ft"
+            maxMeters to DistanceUnit.METER
         }
         if (!maxDistance.isFinite() || maxDistance <= 0.0) return null
 
@@ -34,7 +40,7 @@ object GeoVaultMapScaleBarCalculator {
             .toFloat()
             .coerceIn(0f, 1f)
         return GeoVaultMapScaleBarMeasurement(
-            label = "${formatDistance(roundedDistance)} $unit",
+            label = "${DistanceFormat.formatScaleMagnitude(roundedDistance)} ${unit.symbolUs}",
             widthFraction = widthFraction,
         )
     }
@@ -50,13 +56,5 @@ object GeoVaultMapScaleBarCalculator {
             else -> 1.0
         }
         return roundedCandidate * pow10
-    }
-
-    private fun formatDistance(distance: Double): String {
-        return if (distance >= 1.0) {
-            distance.roundToInt().toString()
-        } else {
-            String.format(Locale.US, "%.2f", distance).trimEnd('0').trimEnd('.')
-        }
     }
 }

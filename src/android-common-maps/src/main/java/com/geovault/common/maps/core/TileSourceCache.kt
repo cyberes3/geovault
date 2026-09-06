@@ -4,8 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.maps.model.MapConfigError
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
@@ -13,7 +13,7 @@ import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.TileSource
 import com.geovault.common.maps.model.TileSourceResponse
-import com.geovault.common.net.GeoVaultValidatedInternet
+import com.geovault.common.net.GeoVaultConnectivity
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -36,7 +36,7 @@ internal object TileSourceCache {
 
     fun getTileSources(context: Context, onResult: (TileSourceFetchResult) -> Unit) {
         val appContext = context.applicationContext
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext).trimEnd('/')
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         if (serverUrl.isEmpty()) {
             mainHandler.post {
                 onResult(
@@ -70,7 +70,7 @@ internal object TileSourceCache {
 
         val diskSuccess = usableCachedTileSources(appContext, serverUrl)
         val plan = MapNetworkAccessPolicy.plan(
-            hasValidatedInternet = GeoVaultValidatedInternet.isAvailable(appContext),
+            hasValidatedInternet = GeoVaultConnectivity.hasValidatedInternet(appContext),
             hasCache = diskSuccess != null,
         )
         val cacheForFirstPaint = diskSuccess?.copy(forcedCacheOnly = plan != MapNetworkAccessPlan.WaitForNetwork)
@@ -124,7 +124,7 @@ internal object TileSourceCache {
         val baseUrl = if (load.serverUrl.endsWith("/")) load.serverUrl else "${load.serverUrl}/"
         val api = Retrofit.Builder()
             .baseUrl(baseUrl)
-            .client(RetrofitClient.getAuthenticatedOkHttpClient(context))
+            .client(GeoVaultHttp.authenticatedClient())
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(MapApi::class.java)
@@ -240,7 +240,7 @@ internal object TileSourceCache {
 
     private fun applyConnectivityForCachedResult(context: Context, result: TileSourceFetchResult) {
         val cacheOnly = result is TileSourceFetchResult.Success &&
-            !GeoVaultValidatedInternet.isAvailable(context)
+            !GeoVaultConnectivity.hasValidatedInternet(context)
         MapLibreEngineConnectivity.apply(
             context,
             if (cacheOnly) MapLibreConnectivityMode.CacheOnly else MapLibreConnectivityMode.FollowSystem,

@@ -7,7 +7,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.net.GeoVaultValidatedInternetNotifier
+import com.geovault.common.net.GeoVaultConnectivity
 import org.maplibre.android.camera.CameraUpdate
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapLibreMapOptions
@@ -62,7 +62,7 @@ sealed class GeoVaultBaseMap(
     private val mapLongClickListeners = linkedSetOf<MapLibreMap.OnMapLongClickListener>()
     private val cameraMoveStartedListeners = linkedSetOf<MapLibreMap.OnCameraMoveStartedListener>()
     private val networkRecoveryGate = MapNetworkRecoveryGate()
-    private val networkRecoveryNotifier = GeoVaultValidatedInternetNotifier(appContext) {
+    private val networkRecoveryNotifier = GeoVaultConnectivity.RecoveryMonitor(appContext) {
         retryMapSourceLoadFromNetworkRecovery()
     }
 

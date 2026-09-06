@@ -2,7 +2,7 @@ package com.geovault.common.maps.core
 
 import android.content.Context
 import android.util.Log
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.logging.GeoVaultCaptureLog
 import okhttp3.HttpUrl
 import org.maplibre.android.camera.CameraPosition
@@ -265,7 +265,7 @@ internal class BasemapApplier(
         style.layers.firstOrNull { it.id != RASTER_LAYER_ID }?.id
 
     private fun isGeoVaultServerStyle(styleUrl: HttpUrl): Boolean {
-        val server = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+        val server = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         if (server.isEmpty()) return false
         val s = styleUrl.toString()
         return s == server || s.startsWith("$server/")

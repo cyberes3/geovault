@@ -1,7 +1,7 @@
 package com.geovault.common.maps.core
 
 import android.content.Context
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -9,7 +9,7 @@ import okhttp3.Response
  * Adds `Origin` and `Referer` headers to MapTiler requests so they pass the
  * domain allowlist on `api.maptiler.com`. The headers are resolved per
  * request from the calling app's stored GeoVault server URL via
- * [GeovaultAuthManager.getServerUrl], so a server URL change after init is
+ * [GeoVaultAuthSession.getServerUrl], so a server URL change after init is
  * picked up without rebuilding the OkHttp client.
  *
  * Implemented as a class (rather than an inline `Interceptor { ... }`
@@ -25,7 +25,7 @@ internal class MapTilerOriginInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         if (!isMapTilerHost(request.url.host)) return chain.proceed(request)
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext).trimEnd('/')
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         if (serverUrl.isEmpty()) return chain.proceed(request)
         return chain.proceed(
             request.newBuilder()

@@ -2,8 +2,8 @@ package com.geovault.common.maps.core
 
 import android.content.Context
 import android.util.Log
-import com.geovault.common.AppResetFlow
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.bootstrap.AppResetFlow
+import com.geovault.common.auth.GeoVaultAuthSession
 import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -118,12 +118,12 @@ internal class GeoVaultAuthInterceptor(
 
     override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
         val request = chain.request()
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext).trimEnd('/')
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         val urlString = request.url.toString()
         val isOurServer = serverUrl.isNotEmpty() &&
             (urlString == serverUrl || urlString.startsWith("$serverUrl/"))
         if (!isOurServer) return chain.proceed(request)
-        val token = GeovaultAuthManager.getValidAccessToken(appContext)
+        val token = GeoVaultAuthSession.get().cachedAccessToken()
         val outgoing = if (!token.isNullOrBlank()) {
             request.newBuilder().header("Authorization", "Bearer $token").build()
         } else {
@@ -149,9 +149,9 @@ internal class GeoVaultAuthFailureInterceptor(
         val response = chain.proceed(chain.request())
         val request = response.request
         when {
-            response.code == 403 -> GeovaultAuthManager.handleAuthFailure(appContext)
+            response.code == 403 -> GeoVaultAuthSession.get().handleAuthFailure()
             response.code == 401 && request.header("X-Geovault-Retry") != null ->
-                GeovaultAuthManager.handleAuthFailure(appContext)
+                GeoVaultAuthSession.get().handleAuthFailure()
         }
         return response
     }
@@ -171,11 +171,17 @@ internal class GeoVaultTokenAuthenticator(
 
     override fun authenticate(route: Route?, response: okhttp3.Response): okhttp3.Request? {
         if (response.priorResponse?.code == 401) return null
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext).trimEnd('/')
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         val urlString = response.request.url.toString()
         if (serverUrl.isEmpty() || !urlString.startsWith("$serverUrl/")) return null
+        val authHeader = response.request.header("Authorization")
+        val failedToken = if (authHeader?.startsWith("Bearer ") == true) {
+            authHeader.substring("Bearer ".length)
+        } else {
+            null
+        }
         val newToken = try {
-            GeovaultAuthManager.getValidAccessToken(appContext, forceRefreshForToken = null)
+            GeoVaultAuthSession.get().refreshAccessToken(failedToken)
         } catch (_: Exception) {
             return null
         }

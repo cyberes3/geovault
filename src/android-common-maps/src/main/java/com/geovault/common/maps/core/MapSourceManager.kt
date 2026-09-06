@@ -2,7 +2,7 @@ package com.geovault.common.maps.core
 
 import android.content.Context
 import android.content.res.Configuration
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.maps.model.OPTION_STREET
 import com.geovault.common.maps.model.SOURCE_MAPTILER_HYBRID
 import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS
@@ -10,8 +10,9 @@ import com.geovault.common.maps.model.SOURCE_MAPTILER_STREETS_DARK
 import com.geovault.common.maps.model.SOURCE_MAPTILER_TOPO
 import com.geovault.common.maps.model.SOURCE_OSM
 import com.geovault.common.maps.model.TileSource
-import com.geovault.common.settings.GeoVaultPrefsStore
-import com.geovault.common.settings.PrefKey
+import com.geovault.common.settings.GeoVaultDocumentStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 /**
  * Resolves which tile source id to load for the user’s basemap selection.
@@ -42,11 +43,13 @@ class MapSourceManager(private val context: Context) {
         streetNightUiHint = isNight
     }
 
-    private val store = GeoVaultPrefsStore(
+    private val store = GeoVaultDocumentStore(
         context = context,
-        prefsName = PREFS_NAME,
-        schemaVersion = SCHEMA_VERSION,
-        registeredKeys = ALL_KEYS
+        fileName = MapSourceDocument.FILE_NAME,
+        documentSerializer = MapSourceDocument.serializer(),
+        defaultValue = MapSourceDocument(),
+        currentVersion = MapSourceDocument.SCHEMA_VERSION,
+        legacyMapper = MapSourceDocument::fromLegacy,
     )
 
     private var availableSources: List<TileSource> = emptyList()
@@ -76,17 +79,23 @@ class MapSourceManager(private val context: Context) {
     fun getSources(): List<TileSource> = availableSources
 
     fun getSelectedSourceId(): String {
-        val raw = store.getBlocking(KEY_SELECTED_SOURCE)
+        val raw = runBlocking(Dispatchers.IO) { store.get() }.selectedSourceId
         val effective = raw.ifBlank { OPTION_STREET }
         val normalized = MapSourcePolicy.normalizeSelection(effective)
         if (effective != normalized) {
-            store.putBlocking(KEY_SELECTED_SOURCE, normalized)
+            persistSelectedSourceId(normalized)
         }
         return normalized
     }
 
     fun setSelectedSourceId(id: String) {
-        store.putBlocking(KEY_SELECTED_SOURCE, MapSourcePolicy.normalizeSelection(id))
+        persistSelectedSourceId(MapSourcePolicy.normalizeSelection(id))
+    }
+
+    private fun persistSelectedSourceId(id: String) {
+        runBlocking(Dispatchers.IO) {
+            store.update { current -> current.copy(selectedSourceId = id) }
+        }
     }
 
     fun getNextSourceId(): String {
@@ -155,16 +164,8 @@ class MapSourceManager(private val context: Context) {
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isEmpty()) return null
         if (!trimmed.startsWith("/")) return trimmed
-        val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
+        val baseUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         return if (baseUrl.isBlank()) null else "$baseUrl$trimmed"
     }
 
-    companion object {
-        private const val PREFS_NAME = "geovault_map_source"
-        private const val SCHEMA_VERSION = 1
-
-        private val KEY_SELECTED_SOURCE = PrefKey.StringKey("selected_map_source")
-
-        private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_SELECTED_SOURCE)
-    }
 }

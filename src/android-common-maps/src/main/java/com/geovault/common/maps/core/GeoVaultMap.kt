@@ -317,7 +317,7 @@ private fun GeoVaultMapErrorDialog(
     GeoVaultFormDialog(
         title = notice.title,
         onConfirm = if (notice.retryable) onRetry else onDismiss,
-        onDismiss = onDismiss,
+        onDismissRequest = onDismiss,
         confirmText = if (notice.retryable) "Retry" else "Close",
         cancelText = "Close",
         showDismissButton = notice.retryable,

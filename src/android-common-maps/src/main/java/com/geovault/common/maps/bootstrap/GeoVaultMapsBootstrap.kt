@@ -1,7 +1,7 @@
 package com.geovault.common.maps.bootstrap
 
 import android.app.Application
-import com.geovault.common.AppResetFlow
+import com.geovault.common.bootstrap.AppResetFlow
 import com.geovault.common.bootstrap.BootstrapExtension
 import com.geovault.common.bootstrap.GeoVaultAppBootstrap
 import com.geovault.common.maps.bootstrap.tasks.MainMapWarmup
@@ -28,12 +28,15 @@ import com.geovault.common.maps.core.MapLibreInitializer
  */
 class GeoVaultMapsBootstrap(
     private val mainMapKey: String,
+    private val prewarmMainMap: Boolean = true,
 ) : BootstrapExtension {
 
     override fun configure(builder: GeoVaultAppBootstrap.Builder, application: Application) {
         MapLibreInitializer.init(application)
 
-        builder.background(MainMapWarmup(mainMapKey))
+        if (prewarmMainMap) {
+            builder.background(MainMapWarmup(mainMapKey))
+        }
 
         builder.resetHook(
             key = HOOK_RELEASE_MAIN_MAP,

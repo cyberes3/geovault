@@ -2,7 +2,7 @@ package com.geovault.common.maps.core
 
 import android.content.Context
 import android.util.Log
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.maplibre.android.storage.FileSource
@@ -53,7 +53,7 @@ internal class MapResourceUrlTransform(
 
     private fun rewriteServerRelative(url: String): String {
         if (!url.startsWith("/")) return url
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext).trimEnd('/')
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         if (serverUrl.isEmpty()) return url
         return "$serverUrl$url"
     }
