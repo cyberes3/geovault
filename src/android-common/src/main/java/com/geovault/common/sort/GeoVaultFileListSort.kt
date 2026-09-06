@@ -1,6 +1,6 @@
 package com.geovault.common.sort
 
-import com.geovault.common.NaturalSort
+import java.util.Locale
 
 object GeoVaultFileListSort {
     fun <T> comparator(
@@ -21,5 +21,5 @@ object GeoVaultFileListSort {
     }
 
     private fun <T> naturalNameComparator(nameSelector: (T) -> String): Comparator<T> =
-        NaturalSort.naturalOrderBy { nameSelector(it).lowercase() }
+        NaturalSort.byName(Locale.getDefault(), nameSelector)
 }

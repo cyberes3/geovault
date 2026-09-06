@@ -46,7 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.ComponentActivity
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.modifier.geoVaultStableStatusBarsPadding
 import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultColorTokens
@@ -110,7 +110,7 @@ object GeoVaultTopTitleBarDefaults {
  */
 enum class GeoVaultTopBarMenuVisibility {
     /**
-     * Menu is shown only when [GeovaultAuthManager] reports the user as signed in. This is the
+     * Menu is shown only when [GeoVaultAuthSession] reports the user as signed in. This is the
      * default and matches the post-login top-bar convention used by most surfaces.
      */
     AuthenticatedOnly,
@@ -136,11 +136,10 @@ fun RowScope.GeoVaultTopBarSettingsMenuAction(
     enabled: Boolean = true,
 ) {
     if (LocalGeoVaultShellSettingsOverlayActive.current) return
-    if (visibility == GeoVaultTopBarMenuVisibility.AuthenticatedOnly) {
-        val context = LocalContext.current
-        if (!GeovaultAuthManager.isLoggedIn(context)) {
-            return
-        }
+    if (visibility == GeoVaultTopBarMenuVisibility.AuthenticatedOnly &&
+        GeoVaultAuthSession.getOrNull()?.isLoggedIn() != true
+    ) {
+        return
     }
     var expanded by remember { mutableStateOf(false) }
     val entries = remember(onOpenSettings, extraEntries, settingsLabel) {

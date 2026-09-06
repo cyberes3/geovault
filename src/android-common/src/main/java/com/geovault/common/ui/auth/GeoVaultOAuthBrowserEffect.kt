@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.navigation.findComponentActivity
 
 /**
@@ -21,7 +21,7 @@ fun GeoVaultOAuthBrowserEffect(
     LaunchedEffect(oauthUrl, activity) {
         val url = oauthUrl ?: return@LaunchedEffect
         val host = activity ?: return@LaunchedEffect
-        GeovaultAuthManager.launchOAuthInBrowser(host, url)
+        GeoVaultAuthSession.get().launchOAuthInBrowser(host, url)
         onConsumed()
     }
 }

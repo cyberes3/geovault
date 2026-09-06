@@ -2,6 +2,7 @@ package com.geovault.common.htmlrender.internal
 
 import android.print.PrintAttributes
 import com.geovault.common.htmlrender.MarginsMm
+import com.geovault.common.htmlrender.PageSize
 import com.geovault.common.htmlrender.PdfColorMode
 import com.geovault.common.htmlrender.PdfSettings
 import kotlin.math.roundToInt
@@ -15,7 +16,7 @@ internal object PrintAttributesFactory {
             PdfColorMode.MONOCHROME -> PrintAttributes.COLOR_MODE_MONOCHROME
         }
         return PrintAttributes.Builder()
-            .setMediaSize(settings.mediaSize)
+            .setMediaSize(toMediaSize(settings.pageSize))
             .setResolution(
                 PrintAttributes.Resolution(
                     "html-render",
@@ -28,6 +29,14 @@ internal object PrintAttributesFactory {
             .setColorMode(colorMode)
             .build()
     }
+
+    private fun toMediaSize(pageSize: PageSize): PrintAttributes.MediaSize =
+        PrintAttributes.MediaSize(
+            pageSize.id,
+            pageSize.label,
+            pageSize.widthMils,
+            pageSize.heightMils,
+        )
 
     private fun marginsToPrintMargins(m: MarginsMm): PrintAttributes.Margins {
         fun mmToMils(mm: Float): Int = (mm * 1000f / 25.4f).roundToInt().coerceAtLeast(0)

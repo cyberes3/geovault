@@ -13,6 +13,6 @@ class GeoVaultValidatedInternetTest {
 
     @Test
     fun isAvailable_withoutActiveNetwork_isFalse() {
-        assertFalse(GeoVaultValidatedInternet.isAvailable(RuntimeEnvironment.getApplication()))
+        assertFalse(GeoVaultConnectivity.hasValidatedInternet(RuntimeEnvironment.getApplication()))
     }
 }

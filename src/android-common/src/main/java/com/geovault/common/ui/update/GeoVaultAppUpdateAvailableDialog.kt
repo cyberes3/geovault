@@ -1,5 +1,6 @@
 package com.geovault.common.ui.update
 
+import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,12 +17,10 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,44 +33,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.geovault.common.R
 import com.geovault.common.ui.components.GeoVaultInfoDialog
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
-import com.geovault.common.update.ApkDownloadProgress
-import com.geovault.common.update.ApkReleaseDownloader
-import com.geovault.common.update.GeoVaultApkInstallLauncher
-import com.geovault.common.update.GeoVaultApkUpdateDownloadCache
+import com.geovault.common.update.ApkDownloadState
 import com.geovault.common.update.UpdateDownloadProgressMath
 import com.geovault.common.update.VersionCheckResult
 import com.geovault.common.util.GeoVaultFileSizeFormat
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import java.io.File
-import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-
-private sealed interface DownloadPhase {
-    data object Idle : DownloadPhase
-    data object Connecting : DownloadPhase
-    data class Downloading(val progress: ApkDownloadProgress) : DownloadPhase
-    data object OpeningInstaller : DownloadPhase
-    data class Failed(val message: String) : DownloadPhase
-}
-
-private fun showDownloadProgressDialog(phase: DownloadPhase): Boolean =
-    when (phase) {
-        DownloadPhase.Connecting,
-        is DownloadPhase.Downloading,
-        DownloadPhase.OpeningInstaller,
-        -> true
-        DownloadPhase.Idle,
-        is DownloadPhase.Failed,
-        -> false
-    }
 
 @Composable
 fun GeoVaultAppUpdateAvailableDialog(
@@ -79,142 +52,52 @@ fun GeoVaultAppUpdateAvailableDialog(
     onDismissRequest: () -> Unit,
     onOpenReleaseInBrowser: (String) -> Unit,
 ) {
-    val context = LocalContext.current
+    val application = LocalContext.current.applicationContext as Application
+    val viewModel: GeoVaultAppUpdateViewModel = viewModel(
+        key = "apk-update-${update.releaseCommitSha}",
+        factory = GeoVaultAppUpdateViewModel.Factory(application, update),
+    )
+    val downloadState by viewModel.downloadState.collectAsState()
+    GeoVaultAppUpdateAvailableDialogContent(
+        update = update,
+        downloadState = downloadState,
+        onInstallClick = viewModel::onInstallClick,
+        onCancelDownload = viewModel::cancelActiveDownload,
+        onDismissSession = viewModel::onDismiss,
+        onHostResumed = viewModel::onHostResumed,
+        onDismissRequest = onDismissRequest,
+        onOpenReleaseInBrowser = onOpenReleaseInBrowser,
+    )
+}
+
+@Composable
+internal fun GeoVaultAppUpdateAvailableDialogContent(
+    update: VersionCheckResult.UpdateAvailable,
+    downloadState: ApkDownloadState,
+    onInstallClick: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onDismissSession: () -> Unit,
+    onHostResumed: () -> Unit,
+    onDismissRequest: () -> Unit,
+    onOpenReleaseInBrowser: (String) -> Unit,
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
-    var phase by remember(update.releaseCommitSha) { mutableStateOf<DownloadPhase>(DownloadPhase.Idle) }
-    var downloadJob by remember { mutableStateOf<Job?>(null) }
-    var awaitingInstallPermissionResume by remember(update.releaseCommitSha) { mutableStateOf(false) }
-    var installPermissionDenied by remember(update.releaseCommitSha) { mutableStateOf(false) }
-    val destFile = remember(update.releaseCommitSha, update.apkAssetName) {
-        val safeName = update.apkAssetName.trim()
-            .replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            .take(120)
-            .let { n -> if (n.endsWith(".apk", ignoreCase = true)) n else "$n.apk" }
-        val dir = GeoVaultApkUpdateDownloadCache.directory(context)
-        File(dir, "${update.releaseCommitSha.take(12)}_$safeName")
-    }
-    val downloader = remember { ApkReleaseDownloader() }
     val onDismissUpdated by rememberUpdatedState(onDismissRequest)
     val releaseUrlState by rememberUpdatedState(update.releaseUrl)
+    val onHostResumedState by rememberUpdatedState(onHostResumed)
 
-    DisposableEffect(update.releaseCommitSha) {
-        onDispose {
-            downloadJob?.cancel()
-            downloadJob = null
-        }
-    }
-
-    fun cancelActiveDownload() {
-        downloadJob?.cancel()
-        downloadJob = null
-        if (destFile.exists()) destFile.delete()
-        phase = DownloadPhase.Idle
-    }
-
-    fun handleDismiss() {
-        awaitingInstallPermissionResume = false
-        installPermissionDenied = false
-        if (phase is DownloadPhase.Downloading || phase is DownloadPhase.Connecting) {
-            cancelActiveDownload()
-        }
-        onDismissUpdated()
-    }
-
-    fun classifyFailure(t: Throwable): String {
-        val msg = t.message.orEmpty()
-        val disk = msg.contains("ENOSPC", ignoreCase = true) ||
-            msg.contains("No space", ignoreCase = true)
-        val net = t is IOException && !disk
-        val res = context.resources
-        return when {
-            disk -> res.getString(R.string.gv_update_error_disk)
-            net -> res.getString(R.string.gv_update_error_network)
-            t is IllegalStateException && t.message == "no_install_handler" ->
-                res.getString(R.string.gv_update_error_no_install_handler)
-            t is IllegalStateException && t.message == "version_downgrade" ->
-                res.getString(R.string.gv_update_error_version_downgrade)
-            t is IllegalStateException && t.message == "apk_package_mismatch" ->
-                res.getString(R.string.gv_update_error_apk_package_mismatch)
-            t is IllegalStateException && t.message == "apk_parse_failed" ->
-                res.getString(R.string.gv_update_error_apk_parse)
-            else -> res.getString(R.string.gv_update_error_generic)
-        }
-    }
-
-    fun startDownloadThenInstall() {
-        downloadJob?.cancel()
-        downloadJob = scope.launch {
-            phase = DownloadPhase.Connecting
-            val result = downloader.download(
-                url = update.apkDownloadUrl,
-                knownTotalBytes = update.apkSizeBytes,
-                destination = destFile,
-                onProgress = { p -> phase = DownloadPhase.Downloading(p) },
-            )
-            if (!result.isSuccess) {
-                val err = result.exceptionOrNull() ?: Exception("unknown")
-                if (err is CancellationException) {
-                    phase = DownloadPhase.Idle
-                    return@launch
-                }
-                val msg = err.message.orEmpty()
-                val httpMatch = Regex("HTTP (\\d+)").find(msg)?.groupValues?.getOrNull(1)
-                val text = if (httpMatch != null) {
-                    context.getString(R.string.gv_update_error_http, httpMatch.toInt())
-                } else {
-                    classifyFailure(err)
-                }
-                phase = DownloadPhase.Failed(text)
-                return@launch
-            }
-            phase = DownloadPhase.OpeningInstaller
-            val verifyResult = GeoVaultApkInstallLauncher.verifyDownloadedApkCanReplaceCurrentInstall(context, destFile)
-            if (verifyResult.isFailure) {
-                val e = verifyResult.exceptionOrNull()!!
-                phase = DownloadPhase.Failed(classifyFailure(e))
-                return@launch
-            }
-            val installResult = GeoVaultApkInstallLauncher.launchInstall(context, destFile)
-            if (installResult.isFailure) {
-                val e = installResult.exceptionOrNull()!!
-                phase = DownloadPhase.Failed(classifyFailure(e))
-            } else {
-                onDismissUpdated()
-            }
-        }
-    }
-
-    fun onInstallClick() {
-        if (phase is DownloadPhase.Downloading || phase is DownloadPhase.Connecting ||
-            phase is DownloadPhase.OpeningInstaller
-        ) {
-            return
-        }
-        if (!GeoVaultApkInstallLauncher.canRequestPackageInstalls(context)) {
-            installPermissionDenied = false
-            awaitingInstallPermissionResume = true
-            GeoVaultApkInstallLauncher.openInstallFromUnknownSourcesSettings(context)
-            return
-        }
-        startDownloadThenInstall()
-    }
-
-    val onResumeAfterInstallPermissionSettings = rememberUpdatedState {
-        if (!GeoVaultApkInstallLauncher.canRequestPackageInstalls(context)) {
-            installPermissionDenied = true
-        } else {
-            installPermissionDenied = false
-            startDownloadThenInstall()
+    LaunchedEffect(downloadState) {
+        if (downloadState is ApkDownloadState.InstallLaunched) {
+            onDismissSession()
+            onDismissUpdated()
         }
     }
 
     DisposableEffect(lifecycleOwner, update.releaseCommitSha) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
-            if (!awaitingInstallPermissionResume) return@LifecycleEventObserver
-            awaitingInstallPermissionResume = false
-            onResumeAfterInstallPermissionSettings.value()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onHostResumedState()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -232,7 +115,10 @@ fun GeoVaultAppUpdateAvailableDialog(
 
     GeoVaultInfoDialog(
         title = title,
-        onDismissRequest = { handleDismiss() },
+        onDismissRequest = {
+            onDismissSession()
+            onDismissUpdated()
+        },
         closeButtonText = stringResource(R.string.gv_update_close),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -246,10 +132,10 @@ fun GeoVaultAppUpdateAvailableDialog(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(modifier = Modifier.height(12.dp))
-            if (!showDownloadProgressDialog(phase)) {
+            if (!downloadState.showsDownloadProgress) {
                 UpdateDetailsFooter(
                     update = update,
-                    phase = phase,
+                    downloadState = downloadState,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             } else {
@@ -261,8 +147,8 @@ fun GeoVaultAppUpdateAvailableDialog(
             ) {
                 GeoVaultPrimaryButton(
                     text = installLabel,
-                    onClick = { onInstallClick() },
-                    enabled = installEnabled(phase),
+                    onClick = onInstallClick,
+                    enabled = downloadState.installEnabled,
                     modifier = Modifier.weight(1f),
                     leadingIcon = Icons.Outlined.GetApp,
                     leadingIconContentDescription = installLabel,
@@ -275,7 +161,7 @@ fun GeoVaultAppUpdateAvailableDialog(
                     leadingIconContentDescription = viewLabel,
                 )
             }
-            if (installPermissionDenied) {
+            if (downloadState.showsInstallPermissionDenied) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.gv_update_install_permission_still_denied),
@@ -283,11 +169,11 @@ fun GeoVaultAppUpdateAvailableDialog(
                     color = MaterialTheme.colors.error,
                 )
             }
-            when (val p = phase) {
-                is DownloadPhase.Failed -> {
+            when (val state = downloadState) {
+                is ApkDownloadState.Failed -> {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = p.message,
+                        text = state.message,
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colors.error,
                     )
@@ -297,33 +183,21 @@ fun GeoVaultAppUpdateAvailableDialog(
         }
     }
 
-    if (showDownloadProgressDialog(phase)) {
-        val progressCloseLabel = when (phase) {
-            DownloadPhase.OpeningInstaller -> stringResource(R.string.gv_update_close)
+    if (downloadState.showsDownloadProgress) {
+        val progressCloseLabel = when (downloadState) {
+            ApkDownloadState.OpeningInstaller -> stringResource(R.string.gv_update_close)
             else -> stringResource(R.string.gv_update_cancel_download)
         }
         GeoVaultInfoDialog(
             title = stringResource(R.string.gv_update_download_dialog_title),
-            onDismissRequest = { cancelActiveDownload() },
+            onDismissRequest = onCancelDownload,
             closeButtonText = progressCloseLabel,
         ) {
             UpdateDownloadProgressContent(
-                phase = phase,
+                downloadState = downloadState,
                 indeterminateA11y = indeterminateA11y,
             )
         }
-    }
-}
-
-private fun installEnabled(phase: DownloadPhase): Boolean {
-    return when (phase) {
-        is DownloadPhase.Downloading,
-        is DownloadPhase.Connecting,
-        is DownloadPhase.OpeningInstaller,
-        -> false
-        is DownloadPhase.Idle,
-        is DownloadPhase.Failed,
-        -> true
     }
 }
 
@@ -339,23 +213,17 @@ private fun apkSizeHintText(update: VersionCheckResult.UpdateAvailable): String 
     }
 }
 
-/** Summary under release details when not in the download-progress dialog. */
 @Composable
 private fun UpdateDetailsFooter(
     update: VersionCheckResult.UpdateAvailable,
-    phase: DownloadPhase,
+    downloadState: ApkDownloadState,
 ) {
     val sizeHint = apkSizeHintText(update)
     Column(modifier = Modifier.fillMaxWidth()) {
-        when (phase) {
-            DownloadPhase.Idle -> {
-                Text(
-                    text = sizeHint,
-                    style = MaterialTheme.typography.caption,
-                    color = MaterialTheme.colors.onSurface,
-                )
-            }
-            is DownloadPhase.Failed -> {
+        when (downloadState) {
+            is ApkDownloadState.Idle,
+            is ApkDownloadState.Failed,
+            -> {
                 Text(
                     text = sizeHint,
                     style = MaterialTheme.typography.caption,
@@ -384,14 +252,14 @@ private data class DownloadProgressUi(
 
 @Composable
 private fun downloadProgressUi(
-    phase: DownloadPhase,
+    downloadState: ApkDownloadState,
     indeterminateA11y: String,
 ): DownloadProgressUi {
     val dash = stringResource(R.string.gv_update_progress_em_dash)
     val zero = GeoVaultFileSizeFormat.humanBytes(0L)
     val estimating = stringResource(R.string.gv_update_progress_estimating_time)
-    return when (phase) {
-        DownloadPhase.Connecting -> DownloadProgressUi(
+    return when (downloadState) {
+        ApkDownloadState.Connecting -> DownloadProgressUi(
             headline = stringResource(R.string.gv_update_status_connecting),
             progressFraction = null,
             progressA11y = indeterminateA11y,
@@ -404,8 +272,8 @@ private fun downloadProgressUi(
             etaCentered = estimating,
             etaDimmed = true,
         )
-        is DownloadPhase.Downloading -> {
-            val p = phase.progress
+        is ApkDownloadState.Downloading -> {
+            val p = downloadState.progress
             val total = p.totalBytes
             if (total != null && total > 0L) {
                 val frac = (p.bytesReceived.toFloat() / total.toFloat()).coerceIn(0f, 1f)
@@ -465,7 +333,7 @@ private fun downloadProgressUi(
                 )
             }
         }
-        DownloadPhase.OpeningInstaller -> DownloadProgressUi(
+        ApkDownloadState.OpeningInstaller -> DownloadProgressUi(
             headline = stringResource(R.string.gv_update_status_download_complete),
             progressFraction = 1f,
             progressA11y = stringResource(R.string.gv_update_progress_a11y, 100),
@@ -498,13 +366,12 @@ private fun downloadProgressUi(
 private fun downloadProgressCaptionColor(dimmed: Boolean): Color =
     if (dimmed) MaterialTheme.colors.onSurface.copy(alpha = 0.38f) else MaterialTheme.colors.onSurface
 
-/** Body of the stacked download [GeoVaultInfoDialog]. */
 @Composable
 private fun UpdateDownloadProgressContent(
-    phase: DownloadPhase,
+    downloadState: ApkDownloadState,
     indeterminateA11y: String,
 ) {
-    val ui = downloadProgressUi(phase, indeterminateA11y)
+    val ui = downloadProgressUi(downloadState, indeterminateA11y)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = ui.headline,

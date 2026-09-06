@@ -1,5 +1,6 @@
 package com.geovault.common.sync
 
+import com.geovault.common.net.GeoVaultApiFailure
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -33,6 +34,10 @@ enum class GeoVaultHttpFailureKind {
 }
 
 object GeoVaultHttpFailureClassifier {
+    fun classify(failure: GeoVaultApiFailure): GeoVaultHttpFailureKind {
+        return classify(failure.httpCode, failure.serverMessage, failure.cause)
+    }
+
     fun classify(httpCode: Int?, errorMessage: String?, cause: Throwable?): GeoVaultHttpFailureKind {
         if (cause != null && isRetryableTransport(cause)) {
             return GeoVaultHttpFailureKind.RetryableNetwork
@@ -54,27 +59,18 @@ object GeoVaultHttpFailureClassifier {
             message.contains("Resource not found", ignoreCase = true) -> GeoVaultHttpFailureKind.NotFound
             message.contains("Unauthorized", ignoreCase = true) ||
                 message.contains("Authentication", ignoreCase = true) -> GeoVaultHttpFailureKind.Auth
-            message.startsWith("Server error:", ignoreCase = true) -> {
-                val parsed = message.removePrefix("Server error:").trim().toIntOrNull()
-                classify(parsed, message, null)
-            }
             else -> GeoVaultHttpFailureKind.Unknown
         }
     }
 
     fun classifyThrowable(error: Throwable): GeoVaultHttpFailureKind {
+        if (error is GeoVaultApiFailure) return classify(error)
         if (isRetryableTransport(error)) return GeoVaultHttpFailureKind.RetryableNetwork
-        val message = error.message
-        val codeFromMessage = Regex(
-            """(?:server error|failed[^:]*):\s*(\d{3})|\(HTTP\s+(\d{3})\)""",
-            RegexOption.IGNORE_CASE,
-        )
-            .find(message.orEmpty())
-            ?.groupValues
-            ?.drop(1)
-            ?.firstOrNull { it.isNotBlank() }
-            ?.toIntOrNull()
-        return classify(codeFromMessage, message, error)
+        return classify(httpCode = null, errorMessage = error.message, cause = error)
+    }
+
+    fun isTransientTransport(error: Throwable): Boolean {
+        return classifyThrowable(error) == GeoVaultHttpFailureKind.RetryableNetwork
     }
 
     private fun isRetryableTransport(t: Throwable): Boolean {

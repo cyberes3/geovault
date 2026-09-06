@@ -3,8 +3,6 @@ package com.geovault.common.concurrent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 
 /**
@@ -13,9 +11,12 @@ import kotlinx.coroutines.async
  * operation instead of starting a duplicate one. Useful for de-duplicating bursts of identical
  * network/database calls that land close together (e.g. several UI collectors independently
  * requesting the same resource on screen entry).
+ *
+ * [scope] must be supplied by the owner (ViewModel, Application, test). This type does not
+ * create a detached IO scope.
  */
 class SingleFlightGate<K, V>(
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope: CoroutineScope,
 ) {
     private val lock = Any()
     private val inFlightByKey = mutableMapOf<K, Deferred<V>>()

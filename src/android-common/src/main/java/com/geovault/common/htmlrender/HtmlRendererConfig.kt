@@ -10,7 +10,6 @@ package com.geovault.common.htmlrender
 data class HtmlRendererConfig(
     val maxHtmlBytes: Int = 5 * 1024 * 1024,
     val defaultLoadTimeoutMs: Long = 30_000L,
-    val defaultMeasureTimeoutMs: Long = 10_000L,
     val defaultOutputTimeoutMs: Long = 60_000L,
     val enableJavaScript: Boolean = true,
     val blockNetworkLoads: Boolean = false,
@@ -18,7 +17,6 @@ data class HtmlRendererConfig(
     init {
         require(maxHtmlBytes > 0)
         require(defaultLoadTimeoutMs > 0)
-        require(defaultMeasureTimeoutMs > 0)
         require(defaultOutputTimeoutMs > 0)
     }
 

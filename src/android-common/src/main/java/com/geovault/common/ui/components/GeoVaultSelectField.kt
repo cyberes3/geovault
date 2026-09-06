@@ -77,7 +77,7 @@ fun <T> GeoVaultSelectField(
             options = options,
             selectedValue = selectedValue,
             onSelected = { onSelectedState.value(it) },
-            onDismiss = { showDialog = false },
+            onDismissRequest = { showDialog = false },
             searchable = searchable,
             emptyLabel = emptyLabel,
         )

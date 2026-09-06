@@ -57,7 +57,7 @@ import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
  * @param items Rows to render (already sorted/pinned by the caller).
  * @param isSelected Returns whether the given item is currently selected.
  * @param onToggleItem Invoked when a row is tapped while [enabled].
- * @param onDismiss Invoked when the dialog should close from outside dismissal.
+ * @param onDismissRequest Invoked when the dialog should close from outside dismissal.
  * @param labelFor Display label for each row.
  * @param keyOf Stable key for [LazyColumn]; defaults to identity.
  * @param matchesQuery Predicate used to filter [items] when [searchQuery] is non-blank.
@@ -71,7 +71,7 @@ import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
  * @param loadingText Optional label rendered below the loading spinner.
  * @param enabled Disables search input and row taps when false (e.g. during save).
  * @param confirmText Text for the bottom primary "Done" button.
- * @param onConfirm Invoked when the "Done" button is tapped. Defaults to [onDismiss].
+ * @param onConfirm Invoked when the "Done" button is tapped. Defaults to [onDismissRequest].
  */
 @Composable
 fun <T> GeoVaultSearchableMultiSelectDialog(
@@ -79,7 +79,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
     items: List<T>,
     isSelected: (T) -> Boolean,
     onToggleItem: (T) -> Unit,
-    onDismiss: () -> Unit,
+    onDismissRequest: () -> Unit,
     labelFor: (T) -> String,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
@@ -95,7 +95,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
     isLoading: Boolean = false,
     loadingText: String? = null,
     enabled: Boolean = true,
-    onConfirm: () -> Unit = onDismiss,
+    onConfirm: () -> Unit = onDismissRequest,
 ) {
     val trimmedQuery = searchQuery.trim()
     val visibleItems = if (trimmedQuery.isEmpty()) {
@@ -104,7 +104,7 @@ fun <T> GeoVaultSearchableMultiSelectDialog(
         items.filter { matchesQuery(it, trimmedQuery) }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismissRequest) {
         val pickerWidth = LocalConfiguration.current.screenWidthDp.dp * 0.8f
         Card(
             modifier = Modifier.width(pickerWidth),

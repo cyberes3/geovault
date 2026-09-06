@@ -16,16 +16,34 @@ object GeoVaultListCardHighlightColors {
         else -> surfaceColor
     }
 
+    /** Selected-row fill used by tracker/places list cards (Purple100 / translucent blue). */
+    fun selectedFillColor(selected: Boolean, isLight: Boolean, surfaceColor: Color): Color = when {
+        selected && isLight -> GeoVaultColorTokens.Purple100
+        selected -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
+        else -> surfaceColor
+    }
+
     fun borderColor(highlighted: Boolean, isLight: Boolean): Color = when {
         highlighted && isLight -> GeoVaultColorTokens.Purple500
         highlighted -> GeoVaultColorTokens.MainPurple
         else -> GeoVaultColorTokens.MainBlue
     }
 
+    fun emphasisBorderColor(offline: Boolean): Color =
+        if (offline) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.MainBlue
+
     @Composable
     fun fillColor(highlighted: Boolean): Color =
         fillColor(
             highlighted = highlighted,
+            isLight = MaterialTheme.colors.isLight,
+            surfaceColor = MaterialTheme.colors.surface,
+        )
+
+    @Composable
+    fun selectedFillColor(selected: Boolean): Color =
+        selectedFillColor(
+            selected = selected,
             isLight = MaterialTheme.colors.isLight,
             surfaceColor = MaterialTheme.colors.surface,
         )

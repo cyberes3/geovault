@@ -17,3 +17,15 @@ fun Throwable.rethrowIfCancellation(): Throwable {
     if (this is CancellationException) throw this
     return this
 }
+
+/**
+ * Suspend [runCatching] that does not treat coroutine cancellation as a failure.
+ */
+suspend inline fun <T> runSuspendCatching(block: suspend () -> T): Result<T> {
+    return try {
+        Result.success(block())
+    } catch (t: Throwable) {
+        t.rethrowIfCancellation()
+        Result.failure(t)
+    }
+}

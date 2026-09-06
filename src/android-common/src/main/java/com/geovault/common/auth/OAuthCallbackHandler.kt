@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import com.geovault.common.GeovaultAuthManager
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -114,23 +113,20 @@ class OAuthCallbackHandler(
             onError("No redirect data")
             return
         }
+        val session = GeoVaultAuthSession.get()
         Log.d(TAG, "handleIntent: callback URI scheme=${uri.scheme} host=${uri.host} path=${uri.path}" +
             " queryParams=${uri.queryParameterNames} fragmentLen=${uri.fragment?.length ?: 0}")
         val (code, state, oauthError) = parseOAuthRedirectParams(uri)
-        val pkceState = GeovaultAuthManager.getAndClearPkceState(context)
-        val serverUrl = GeovaultAuthManager.getServerUrl(context)
+        val pkceState = session.getAndClearPkceState()
+        val serverUrl = session.getServerUrl()
         if (pkceState == null &&
             !state.isNullOrBlank() &&
-            GeovaultAuthManager.wasRecentlyConsumedPkceState(context, state)
+            session.wasRecentlyConsumedPkceState(state)
         ) {
             Log.i(TAG, "handleIntent: ignoring duplicate callback for already-consumed state=$state")
             onDuplicate()
             return
         }
-        Log.d(TAG, "handleIntent: parsed code=${if (code.isNullOrBlank()) "MISSING" else "present"}" +
-            " state=${if (state.isNullOrBlank()) "MISSING" else "present"}" +
-            " retrieved pkceState=${if (pkceState == null) "NULL" else "present"}" +
-            " serverUrl=${serverUrl.ifBlank { "BLANK" }}")
 
         val validation = OAuthCallbackValidator.validate(
             OAuthCallbackValidationInput(
@@ -149,6 +145,7 @@ class OAuthCallbackHandler(
             is OAuthCallbackValidationResult.Ready -> {
                 Log.i(TAG, "handleIntent: validation passed, starting token exchange")
                 executeTokenExchange(
+                    session = session,
                     ready = validation,
                     onSuccess = onSuccess,
                     onError = onError,
@@ -158,27 +155,31 @@ class OAuthCallbackHandler(
     }
 
     private fun executeTokenExchange(
+        session: GeoVaultAuthSession,
         ready: OAuthCallbackValidationResult.Ready,
         onSuccess: () -> Unit,
         onError: (String) -> Unit,
     ) {
         Log.i(TAG, "executeTokenExchange: server=${ready.serverUrl}")
         executor.execute {
-            GeovaultAuthManager.exchangeCodeForTokens(
+            val result = session.exchangeCodeForTokens(
                 serverUrl = ready.serverUrl,
                 code = ready.code,
                 codeVerifier = ready.codeVerifier,
-                onSuccess = { accessToken, refreshToken, expiresIn ->
-                    Log.i(TAG, "executeTokenExchange: success, expiresIn=${expiresIn}s refreshPresent=${!refreshToken.isNullOrBlank()}")
+            )
+            result.fold(
+                onSuccess = { tokens ->
+                    Log.i(TAG, "executeTokenExchange: success, expiresIn=${tokens.expiresInSeconds}s")
                     postToMain {
-                        GeovaultAuthManager.saveTokens(context, accessToken, refreshToken, expiresIn)
+                        session.saveTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresInSeconds)
                         onSuccess()
                     }
                 },
-                onError = { message ->
+                onFailure = { error ->
+                    val message = error.message ?: "Token exchange failed"
                     Log.e(TAG, "executeTokenExchange: failed — $message")
                     postToMain { onError(message) }
-                }
+                },
             )
         }
     }

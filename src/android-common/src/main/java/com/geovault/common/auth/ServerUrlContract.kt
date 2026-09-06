@@ -1,0 +1,51 @@
+package com.geovault.common.auth
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import com.geovault.common.net.GeoVaultServerUrl
+
+object ServerUrlContract {
+    private const val PACKAGE_PREFIX = "com.geovault."
+    private const val DEBUG_SUFFIX = ".debug"
+    const val AUTHORITY_SUFFIX = ".serverurl"
+    const val PATH_SERVER_URL = "server_url"
+    const val COLUMN_SERVER_URL = "server_url"
+
+    fun getServerUrlsFromOtherApps(context: Context): Set<String> {
+        return peerServerUrls(context).map { it.value }.toSet()
+    }
+
+    fun peerServerUrls(context: Context): Set<GeoVaultServerUrl> {
+        val ourPackage = context.packageName
+        val packageManager = context.packageManager
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val packages = packageManager.queryIntentActivities(launcherIntent, 0)
+            .asSequence()
+            .mapNotNull { it.activityInfo?.packageName }
+            .filter { it.startsWith(PACKAGE_PREFIX) }
+            .filter { !it.endsWith(DEBUG_SUFFIX) }
+            .filter { it != ourPackage }
+            .toSet()
+
+        val urls = mutableSetOf<GeoVaultServerUrl>()
+        for (pkg in packages) {
+            val uri = Uri.parse("content://${pkg}${AUTHORITY_SUFFIX}/$PATH_SERVER_URL")
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val index = cursor.getColumnIndex(COLUMN_SERVER_URL)
+                        if (index >= 0) {
+                            cursor.getString(index)
+                                ?.let { GeoVaultServerUrl.parse(it) }
+                                ?.let(urls::add)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Skip apps that do not expose the provider.
+            }
+        }
+        return urls
+    }
+}

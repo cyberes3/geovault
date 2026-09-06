@@ -2,9 +2,8 @@ package com.geovault.common.bootstrap
 
 import android.app.Application
 import android.content.Context
-import com.geovault.common.AppResetFlow
-import com.geovault.common.GeovaultAuthManager
 import com.geovault.common.auth.CommonInitialAuthController
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.bootstrap.tasks.AuthStateWarmup
 import kotlinx.coroutines.flow.StateFlow
 
@@ -70,11 +69,17 @@ class GeoVaultAppBootstrap private constructor(
         fun auth(
             redirectUri: String,
             clientId: String,
-            authFailureListener: GeovaultAuthManager.AuthFailureListener,
+            authFailureListener: GeoVaultAuthSession.AuthFailureListener,
             authControllerProvider: (Context) -> CommonInitialAuthController,
         ): Builder = apply {
-            GeovaultAuthManager.init(application, redirectUri = redirectUri, clientId = clientId)
-            GeovaultAuthManager.setAuthFailureListener(authFailureListener)
+            GeoVaultAuthSession.create(
+                context = application,
+                config = GeoVaultAuthSession.OAuthConfig(
+                    clientId = clientId,
+                    redirectUri = redirectUri,
+                ),
+                listener = authFailureListener,
+            )
             gate(AuthStateWarmup(authControllerProvider))
         }
 
@@ -92,10 +97,22 @@ class GeoVaultAppBootstrap private constructor(
             gateTasks += task
         }
 
+        fun gate(id: String, block: suspend (Context) -> Unit): Builder = gate(
+            object : GateTask(id) {
+                override suspend fun execute(context: Context) = block(context)
+            }
+        )
+
         /** Register a [BackgroundTask] that runs fire-and-forget after gates complete. */
         fun background(task: BackgroundTask): Builder = apply {
             backgroundTasks += task
         }
+
+        fun background(id: String, block: suspend (Context) -> Unit): Builder = background(
+            object : BackgroundTask(id) {
+                override suspend fun execute(context: Context) = block(context)
+            }
+        )
 
         /**
          * Register an [AppResetFlow] hook. Sugar around
@@ -120,6 +137,7 @@ class GeoVaultAppBootstrap private constructor(
 
         /** Finalize and return the configured [GeoVaultAppBootstrap]. */
         fun build(): GeoVaultAppBootstrap {
+            gate(com.geovault.common.bootstrap.tasks.ClearStaleUpdateCaches())
             val coldStart = GeoVaultColdStart(
                 gates = gateTasks.toList(),
                 background = backgroundTasks.toList(),

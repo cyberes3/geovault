@@ -69,6 +69,12 @@ object UpdateAvailableCacheStore {
         }
     }
 
+    fun clearAll(context: Context) {
+        val dir = File(context.applicationContext.cacheDir, CACHE_DIR_NAME)
+        if (!dir.isDirectory) return
+        dir.listFiles()?.forEach { it.delete() }
+    }
+
     private fun cacheFile(context: Context, key: String): File? {
         val safeKey = key.trim().lowercase().replace(Regex("[^a-z0-9._-]"), "_")
         if (safeKey.isBlank()) return null

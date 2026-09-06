@@ -37,6 +37,9 @@
     <string name="gv_update_error_no_install_handler">No app can install this package. Open the release page to download manually.</string>
     <string name="gv_update_error_version_downgrade">This release was built with a lower Android version number than the app you have installed, so the system will not install it as an upgrade. Use View to open the release page, or wait for a build whose version number is higher than your current install.</string>
     <string name="gv_update_error_apk_package_mismatch">This APK is not built for this app (package name does not match). Use View to open the release page and pick the correct variant.</string>
+    <string name="gv_update_error_apk_signing_mismatch">This APK is not signed with this app\'s certificate. The download may be corrupt or from the wrong source.</string>
+    <string name="gv_update_error_apk_size_mismatch">The downloaded file size does not match the expected size. Try downloading again.</string>
+    <string name="gv_update_error_insecure_url">The update download URL is not secure (HTTPS required).</string>
     <string name="gv_update_error_apk_parse">Could not read the downloaded APK. Try downloading again.</string>
     <string name="gv_update_error_cancelled">Download cancelled.</string>
 

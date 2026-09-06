@@ -6,6 +6,7 @@ import android.os.ParcelFileDescriptor
 import android.print.OpenLayoutResultCallback
 import android.print.OpenWriteResultCallback
 import android.print.PageRange
+import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.util.TypedValue
 import android.view.View
@@ -24,6 +25,9 @@ import kotlin.coroutines.resumeWithException
 
 internal class PdfRenderSink(
     private val config: HtmlRendererConfig,
+    private val createAdapter: (WebView) -> PrintDocumentAdapter = { webView ->
+        webView.createPrintDocumentAdapter("export")
+    },
 ) : RenderSink {
 
     override suspend fun emit(
@@ -65,7 +69,9 @@ internal class PdfRenderSink(
                     return@suspendCancellableCoroutine
                 }
 
-                val adapter = webView.createPrintDocumentAdapter("export")
+                // OpenLayoutResultCallback / OpenWriteResultCallback are the documented
+                // platform bridge to package-private PrintDocumentAdapter callbacks.
+                val adapter = createAdapter(webView)
                 val pfdNonNull = pfd!!
                 adapter.onStart()
                 adapter.onLayout(
@@ -140,6 +146,14 @@ internal class PdfRenderSink(
                                     RenderError.IoFailure(error?.toString() ?: "PDF layout failed"),
                                 ),
                             )
+                        }
+
+                        override fun onLayoutCancelled() {
+                            runCatching { pfdNonNull.close() }
+                            pfd = null
+                            temp.delete()
+                            runCatching { adapter.onFinish() }
+                            cont.cancel()
                         }
                     },
                     null,

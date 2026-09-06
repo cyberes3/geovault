@@ -47,6 +47,24 @@ class GeoVaultListCardHighlightColorsTest {
     }
 
     @Test
+    fun `light selected uses purple100 fill and emphasis blue border`() {
+        assertEquals(
+            GeoVaultColorTokens.Purple100,
+            GeoVaultListCardHighlightColors.selectedFillColor(true, isLight = true, surfaceColor = surface),
+        )
+        assertEquals(GeoVaultColorTokens.MainBlue, GeoVaultListCardHighlightColors.emphasisBorderColor(false))
+        assertEquals(GeoVaultColorTokens.MainYellow, GeoVaultListCardHighlightColors.emphasisBorderColor(true))
+    }
+
+    @Test
+    fun `dark selected uses translucent blue fill`() {
+        assertEquals(
+            GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f),
+            GeoVaultListCardHighlightColors.selectedFillColor(true, isLight = false, surfaceColor = surface),
+        )
+    }
+
+    @Test
     fun `trailingActionTint uses purple when highlighted`() {
         val default = GeoVaultColorTokens.Gray500
         assertEquals(GeoVaultColorTokens.MainPurple, GeoVaultListCardHighlightColors.trailingActionTint(true, default))

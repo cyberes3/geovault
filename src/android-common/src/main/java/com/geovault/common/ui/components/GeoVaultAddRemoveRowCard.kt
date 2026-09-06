@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.geovault.common.coroutines.runSuspendCatching
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultCardBorderColor
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
@@ -198,7 +199,7 @@ fun <T> GeoVaultAsyncAddRemoveCardList(
                     if (!enabled || pendingStates.containsKey(key) || isAdded(item)) return@GeoVaultAddRemoveRowCard
                     pendingStates[key] = GeoVaultAddRemoveRowActionState.ADDING
                     scope.launch {
-                        val result = runCatching { onAdd(item) }.fold(
+                        val result = runSuspendCatching { onAdd(item) }.fold(
                             onSuccess = { it },
                             onFailure = { Result.failure(it) },
                         )
@@ -212,7 +213,7 @@ fun <T> GeoVaultAsyncAddRemoveCardList(
                     if (!enabled || pendingStates.containsKey(key) || !isAdded(item)) return@GeoVaultAddRemoveRowCard
                     pendingStates[key] = GeoVaultAddRemoveRowActionState.REMOVING
                     scope.launch {
-                        val result = runCatching { onDelete(item) }.fold(
+                        val result = runSuspendCatching { onDelete(item) }.fold(
                             onSuccess = { it },
                             onFailure = { Result.failure(it) },
                         )

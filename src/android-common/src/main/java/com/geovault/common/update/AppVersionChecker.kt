@@ -7,25 +7,26 @@ class AppVersionChecker(
     private val apiClient: VersionCheckApiClient = WorkerVersionCheckApiClient()
 ) {
     /**
-     * Always runs a live check against the release worker. If the live check fails or finds
-     * no match, falls back to the last cached [VersionCheckResult.UpdateAvailable] for the
-     * current local commit (if any) so an "out of date" prompt keeps showing through
-     * transient network failures, until a live check confirms the app is up to date.
+     * Always runs a live check against the release worker, then persists the result.
+     * If the live check fails or finds no match, falls back to the last cached
+     * [VersionCheckResult.UpdateAvailable] for the current local commit (if any) so an
+     * "out of date" prompt keeps showing through transient network failures, until a live
+     * check confirms the app is up to date.
      */
-    fun checkForUpdateIfDue(
+    fun checkForUpdate(
         context: Context,
         request: VersionCheckRequest,
         cacheKey: String,
     ): VersionCheckResult {
         Log.i(
             UpdateCheckLog.TAG,
-            "if_due key=$cacheKey action=network_check appName=${request.appName.trim()}"
+            "checkForUpdate key=$cacheKey action=network_check appName=${request.appName.trim()}"
         )
         val normalizedLocalSha = request.localFullCommitSha.trim().lowercase()
-        return persistAndReturn(context, cacheKey, normalizedLocalSha, checkForUpdate(request))
+        return persistAndReturn(context, cacheKey, normalizedLocalSha, queryReleaseWorker(request))
     }
 
-    fun checkForUpdate(request: VersionCheckRequest): VersionCheckResult {
+    private fun queryReleaseWorker(request: VersionCheckRequest): VersionCheckResult {
         return try {
             val normalizedAppName = request.appName.trim()
             val normalizedLocalSha = request.localFullCommitSha.trim().lowercase()
@@ -78,6 +79,10 @@ class AppVersionChecker(
                             Log.w(UpdateCheckLog.TAG, "checkForUpdate result=CheckFailed reason=no_apk_url")
                             return VersionCheckResult.CheckFailed("Release worker returned no APK download URL")
                         }
+                        if (!ApkDownloadUrlPolicy.isHttps(apkUrl)) {
+                            Log.w(UpdateCheckLog.TAG, "checkForUpdate result=CheckFailed reason=insecure_apk_url")
+                            return VersionCheckResult.CheckFailed("Release worker returned a non-HTTPS APK download URL")
+                        }
                         Log.i(
                             UpdateCheckLog.TAG,
                             "checkForUpdate result=UpdateAvailable app=${payload.appName} version=${payload.versionLabel}"
@@ -117,7 +122,18 @@ class AppVersionChecker(
         cacheKey: String,
         localFullCommitSha: String
     ): VersionCheckResult.UpdateAvailable? {
-        return cachedUpdateOrNull(context, cacheKey, localFullCommitSha.trim().lowercase())
+        val cached = cachedUpdateOrNull(context, cacheKey, localFullCommitSha.trim().lowercase())
+            ?: return null
+        if (!ApkDownloadUrlPolicy.isHttps(cached.apkDownloadUrl)) {
+            Log.w(UpdateCheckLog.TAG, "discarding cached UpdateAvailable with non-HTTPS APK URL")
+            try {
+                UpdateAvailableCacheStore.clear(context, cacheKey)
+            } catch (e: Exception) {
+                Log.w(UpdateCheckLog.TAG, "failed clearing insecure cached UpdateAvailable", e)
+            }
+            return null
+        }
+        return cached
     }
 
     private fun cachedUpdateOrNull(

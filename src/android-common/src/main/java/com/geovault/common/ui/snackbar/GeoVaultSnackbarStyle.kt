@@ -1,5 +1,7 @@
 package com.geovault.common.ui.snackbar
 
+import androidx.compose.material.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -15,14 +17,20 @@ data class GeoVaultSnackbarStyle(
 )
 
 object GeoVaultSnackbarDefaults {
+    @Composable
     fun style(): GeoVaultSnackbarStyle {
+        val dark = !MaterialTheme.colors.isLight
         return GeoVaultSnackbarStyle(
-            background = GeoVaultColorTokens.SnackbarSurface,
+            background = if (dark) {
+                GeoVaultColorTokens.Dark.SnackbarSurface
+            } else {
+                GeoVaultColorTokens.SnackbarSurface
+            },
             messageColor = GeoVaultColorTokens.SnackbarMessage,
             actionColor = GeoVaultColorTokens.MainYellow,
             borderColor = GeoVaultColorTokens.Purple500,
             borderWidth = 1.dp,
-            cornerRadius = 3.dp
+            cornerRadius = 3.dp,
         )
     }
 }

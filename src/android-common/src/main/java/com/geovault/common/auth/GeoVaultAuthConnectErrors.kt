@@ -36,12 +36,3 @@ object GeoVaultAuthConnectErrors {
     }
 }
 
-fun CommonInitialAuthController.OAuthPreparationResult.publishConnectErrorIfNeeded() {
-    when (this) {
-        is CommonInitialAuthController.OAuthPreparationResult.InvalidServerUrl ->
-            GeoVaultAuthConnectErrors.show(message)
-        is CommonInitialAuthController.OAuthPreparationResult.UnreachableServer ->
-            GeoVaultAuthConnectErrors.show(message)
-        is CommonInitialAuthController.OAuthPreparationResult.Ready -> Unit
-    }
-}

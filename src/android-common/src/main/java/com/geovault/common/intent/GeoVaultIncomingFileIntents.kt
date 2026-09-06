@@ -40,6 +40,9 @@ object GeoVaultIncomingFileIntents {
         intent.data = null
         intent.clipData = null
         intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        intent.removeExtra(Intent.EXTRA_HTML_TEXT)
+        intent.removeExtra(Intent.EXTRA_SUBJECT)
     }
 
     private fun sendUris(intent: Intent): List<Uri> {

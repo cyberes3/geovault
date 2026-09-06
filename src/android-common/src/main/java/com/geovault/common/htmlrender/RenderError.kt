@@ -20,12 +20,6 @@ sealed class RenderError {
         override val cause: Throwable? = null,
     ) : RenderError()
 
-    /** Requested or measured layout would exceed memory or configured pixel limits. */
-    data class LayoutOverflow(
-        override val message: String,
-        override val cause: Throwable? = null,
-    ) : RenderError()
-
     /** Reading or writing binary output failed. */
     data class IoFailure(
         override val message: String,

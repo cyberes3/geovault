@@ -17,6 +17,14 @@ object GeoVaultApkUpdateDownloadCache {
         return dir
     }
 
+    fun destinationFile(context: Context, update: VersionCheckResult.UpdateAvailable): File {
+        val safeName = update.apkAssetName.trim()
+            .replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            .take(120)
+            .let { name -> if (name.endsWith(".apk", ignoreCase = true)) name else "$name.apk" }
+        return File(directory(context), "${update.releaseCommitSha.take(12)}_$safeName")
+    }
+
     /**
      * Deletes every file in the update cache directory. Safe to call on every process start;
      * failures are logged and ignored so boot is not blocked.

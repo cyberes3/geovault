@@ -59,7 +59,8 @@ fun GeoVaultSnackbarHost(
     onAction: (actionId: String) -> Unit,
     modifier: Modifier = GeoVaultSnackbarOverlayDefaults.hostModifier,
     style: GeoVaultSnackbarStyle = GeoVaultSnackbarDefaults.style(),
-    stackBottomInset: Dp = 0.dp
+    stackBottomInset: Dp = 0.dp,
+    onBarHeightChanged: ((Int) -> Unit)? = null,
 ) {
     if (model == null) return
 
@@ -92,13 +93,19 @@ fun GeoVaultSnackbarHost(
             .navigationBarsPadding()
             .imePadding()
             .padding(bottom = stackBottomInset)
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .padding(
+                horizontal = GeoVaultSnackbarOverlayDefaults.HostEdgePadding,
+                vertical = GeoVaultSnackbarOverlayDefaults.HostEdgePadding,
+            )
     ) {
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .onSizeChanged { barWidthPx = it.width.toFloat() }
+                .onSizeChanged {
+                    barWidthPx = it.width.toFloat()
+                    onBarHeightChanged?.invoke(it.height)
+                }
                 .graphicsLayer {
                     this.translationX = translationX
                     alpha = alphaBar

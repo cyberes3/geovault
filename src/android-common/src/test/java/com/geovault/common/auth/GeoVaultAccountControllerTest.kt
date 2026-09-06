@@ -110,15 +110,12 @@ class GeoVaultAccountControllerTest {
     private var serverUrl: String = ""
 
     override fun getServerUrl(): String = serverUrl
-    override fun setServerUrl(url: String, commit: Boolean) {
+    override fun setServerUrl(url: String) {
         serverUrl = url
     }
-        override fun normalizeServerUrl(url: String): String = normalizedUrl
+    override fun normalizeServerUrl(url: String): String = normalizedUrl
     override fun getNormalizedServerUrl(): String = normalizeServerUrl(serverUrl)
-    override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
-        callback(resolveResult)
-        return {}
-    }
+    override fun resolveServerUrlToCanonical(url: String): Result<String> = resolveResult
 
     override fun isLoggedIn(): Boolean = false
     override fun getCachedUserEmail(): String? = null

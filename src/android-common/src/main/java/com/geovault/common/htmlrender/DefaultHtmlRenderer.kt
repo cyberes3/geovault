@@ -1,43 +1,38 @@
 package com.geovault.common.htmlrender
 
 import android.content.Context
-import android.os.CancellationSignal
 import android.os.Looper
-import com.geovault.common.htmlrender.internal.DocumentLoader
-import com.geovault.common.htmlrender.internal.PdfRenderSink
 import com.geovault.common.htmlrender.internal.RenderPipelineException
-import com.geovault.common.htmlrender.internal.RenderSink
+import com.geovault.common.htmlrender.internal.RenderSession
 import com.geovault.common.htmlrender.internal.RequestValidator
-import com.geovault.common.htmlrender.internal.SessionStateMachine
-import com.geovault.common.htmlrender.internal.WebViewSessionHost
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 /**
- * Default [HtmlRenderer] using a dedicated WebView session. See [HtmlRenderer] for threading and security notes.
+ * Default [HtmlRenderer] using a dedicated [RenderSession]. See [HtmlRenderer] for threading notes.
  *
- * [close] may block the calling thread until the WebView is destroyed on the main looper.
- * It must not deadlock when invoked from the main thread (e.g. after [render] returns inside
- * [kotlin.use]); the main-thread path therefore runs [host.destroy] directly under the mutex
- * without nesting [runBlocking] on another dispatcher that would wait on Main.
+ * [close] never uses [runBlocking] on the main thread. An in-flight [render] that holds the mutex
+ * is cancelled; that render's `finally` destroys the session on main.
  */
-class DefaultHtmlRenderer(
+internal class DefaultHtmlRenderer(
     context: Context,
     private val config: HtmlRendererConfig = HtmlRendererConfig.DEFAULT,
     private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-) : HtmlRenderer, AutoCloseable {
+) : HtmlRenderer {
 
-    private val appContext = context.applicationContext
-    private val host = WebViewSessionHost(appContext, config)
+    private val session = RenderSession(context.applicationContext, config)
     private val mutex = Mutex()
-    private val stateMachine = SessionStateMachine()
+    private val closed = AtomicBoolean(false)
+
+    @Volatile
+    private var activeJob: Job? = null
 
     override suspend fun render(request: HtmlRenderRequest): HtmlRenderResult {
         RequestValidator.validate(request, config).exceptionOrNull()?.let { e ->
@@ -49,71 +44,46 @@ class DefaultHtmlRenderer(
         }
 
         return mutex.withLock {
-            withContext(mainDispatcher) {
-                renderOnMain(request)
+            if (closed.get() || session.isDisposed()) {
+                return@withLock HtmlRenderResult.Failure(
+                    RenderError.InvalidRequest(message = "HtmlRenderer is closed"),
+                )
             }
-        }
-    }
-
-    private suspend fun renderOnMain(request: HtmlRenderRequest): HtmlRenderResult {
-        if (host.isDisposed()) {
-            return HtmlRenderResult.Failure(
-                RenderError.InvalidRequest(message = "HtmlRenderer is closed"),
-            )
-        }
-
-        val cancellationSignal = CancellationSignal()
-        coroutineContext[Job]?.invokeOnCompletion { cause ->
-            if (cause != null) {
-                cancellationSignal.cancel()
-                host.stopLoadingIfPrepared()
+            activeJob = coroutineContext[Job]
+            try {
+                withContext(mainDispatcher) {
+                    session.render(request)
+                }
+            } finally {
+                activeJob = null
+                if (closed.get() && !session.isDisposed()) {
+                    withContext(mainDispatcher) {
+                        session.destroy()
+                    }
+                }
             }
-        }
-
-        return try {
-            host.prepare()
-            val webView = host.requireWebView()
-            stateMachine.moveToLoading()
-            DocumentLoader.load(webView, request, config)
-            stateMachine.moveToReady()
-
-            val sink: RenderSink = PdfRenderSink(config)
-            stateMachine.moveToOutputting()
-            val artifact = sink.emit(webView, request, cancellationSignal)
-            HtmlRenderResult.Success(artifact)
-        } catch (e: TimeoutCancellationException) {
-            HtmlRenderResult.Failure(
-                RenderError.Timeout(
-                    phase = "load_or_output",
-                    message = e.message ?: "Timed out",
-                    cause = e,
-                ),
-            )
-        } catch (e: RenderPipelineException) {
-            HtmlRenderResult.Failure(e.error)
-        } catch (e: Exception) {
-            HtmlRenderResult.Failure(
-                RenderError.IoFailure(message = e.message ?: "Unexpected error", cause = e),
-            )
-        } finally {
-            stateMachine.resetToIdle()
-            host.resetAfterJob()
         }
     }
 
     override fun close() {
+        if (!closed.compareAndSet(false, true)) {
+            return
+        }
+        activeJob?.cancel()
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            runBlocking {
-                mutex.withLock {
-                    host.destroy()
+            if (mutex.tryLock()) {
+                try {
+                    session.destroy()
+                } finally {
+                    mutex.unlock()
                 }
             }
-        } else {
-            runBlocking {
-                mutex.withLock {
-                    withContext(mainDispatcher) {
-                        host.destroy()
-                    }
+            return
+        }
+        runBlocking {
+            mutex.withLock {
+                withContext(mainDispatcher) {
+                    session.destroy()
                 }
             }
         }

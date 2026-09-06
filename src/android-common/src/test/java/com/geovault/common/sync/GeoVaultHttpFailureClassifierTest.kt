@@ -31,14 +31,14 @@ class GeoVaultHttpFailureClassifierTest {
         )
         assertEquals(
             GeoVaultHttpFailureKind.PermanentClient,
-            GeoVaultHttpFailureClassifier.classifyThrowable(
-                IllegalStateException("Validation failed (HTTP 400)"),
+            GeoVaultHttpFailureClassifier.classify(
+                com.geovault.common.net.GeoVaultApiFailure(httpCode = 400, serverMessage = "Validation failed"),
             ),
         )
         assertEquals(
             GeoVaultHttpFailureKind.NotFound,
-            GeoVaultHttpFailureClassifier.classifyThrowable(
-                IllegalStateException("Resource not found (HTTP 404)"),
+            GeoVaultHttpFailureClassifier.classify(
+                com.geovault.common.net.GeoVaultApiFailure(httpCode = 404, serverMessage = "Resource not found"),
             ),
         )
     }

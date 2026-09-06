@@ -22,6 +22,7 @@ class GeoVaultLoggingDatabasePathsTest {
         context = ApplicationProvider.getApplicationContext()
         context.cacheDir.resolve(GeoVaultCaptureLogStore.DB_NAME).delete()
         context.getDatabasePath(GeoVaultCaptureLogStore.DB_NAME).delete()
+        context.getDatabasePath("geovault_other.sqlite").delete()
     }
 
     @Test
@@ -35,5 +36,18 @@ class GeoVaultLoggingDatabasePathsTest {
 
         assertFalse(legacyFile.exists())
         assertTrue(File(context.cacheDir, GeoVaultCaptureLogStore.DB_NAME).exists())
+    }
+
+    @Test
+    fun storeInit_doesNotSweepOtherGeovaultSqliteFiles() {
+        val other = context.getDatabasePath("geovault_other.sqlite")
+        other.parentFile?.mkdirs()
+        assertTrue(other.createNewFile())
+
+        val store = GeoVaultCaptureLogStore(context)
+        store.readableDatabase.close()
+
+        assertTrue(other.exists())
+        other.delete()
     }
 }

@@ -94,4 +94,23 @@ class GeoVaultIncomingFileIntentsTest {
         assertFalse(GeoVaultIncomingFileIntents.isIncomingFileAction(intent))
         assertEquals(emptyList<Uri>(), GeoVaultIncomingFileIntents.urisFrom(intent))
     }
+
+    @Test
+    fun `consume send multiple clears leftover extras`() {
+        val first = Uri.parse("content://test/one.kml")
+        val second = Uri.parse("content://test/two.gpx")
+        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(first, second))
+            putExtra(Intent.EXTRA_TEXT, "leftover")
+            putExtra(Intent.EXTRA_SUBJECT, "subject")
+            clipData = ClipData.newRawUri("file", first)
+        }
+        GeoVaultIncomingFileIntents.consume(intent)
+        assertNull(intent.action)
+        assertNull(intent.clipData)
+        assertNull(intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java))
+        assertNull(intent.getStringExtra(Intent.EXTRA_TEXT))
+        assertNull(intent.getStringExtra(Intent.EXTRA_SUBJECT))
+        assertEquals(emptyList<Uri>(), GeoVaultIncomingFileIntents.urisFrom(intent))
+    }
 }

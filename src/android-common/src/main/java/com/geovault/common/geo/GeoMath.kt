@@ -9,6 +9,9 @@ import kotlin.math.sqrt
 object GeoMath {
     private const val EARTH_RADIUS_M = 6_371_000.0
 
+    fun haversineMeters(a: Wgs84Point, b: Wgs84Point): Double =
+        haversineMeters(a.latitude, a.longitude, b.latitude, b.longitude)
+
     fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val latRad1 = Math.toRadians(lat1)
         val latRad2 = Math.toRadians(lat2)

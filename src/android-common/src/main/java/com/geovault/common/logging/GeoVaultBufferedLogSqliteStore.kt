@@ -36,9 +36,24 @@ open class GeoVaultBufferedLogSqliteStore(
         DB_VERSION,
     ) {
 
+    private val appContext = context.applicationContext
+    private val initLock = Any()
+
+    @Volatile
+    private var initialized = false
+
     init {
-        GeoVaultLoggingDatabasePaths.deleteLegacyLoggingDatabaseIfPresent(context, dbFileName)
-        setWriteAheadLoggingEnabled(true)
+        ensureInitialized()
+    }
+
+    private fun ensureInitialized() {
+        if (initialized) return
+        synchronized(initLock) {
+            if (initialized) return
+            GeoVaultLoggingDatabasePaths.deleteLegacyLoggingDatabaseIfPresent(appContext, dbFileName)
+            setWriteAheadLoggingEnabled(true)
+            initialized = true
+        }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -63,6 +78,7 @@ open class GeoVaultBufferedLogSqliteStore(
     }
 
     fun insertLog(level: Int, tag: String, message: String, throwable: String?) {
+        ensureInitialized()
         val safeTag = tag.take(MAX_TAG_CHARS)
         val safeMessage = message.take(MAX_MESSAGE_CHARS)
         val safeThrowable = throwable?.take(MAX_THROWABLE_CHARS)
@@ -111,6 +127,7 @@ open class GeoVaultBufferedLogSqliteStore(
         pageSize: Int = DEFAULT_EXPORT_PAGE_SIZE,
         onProgress: (GeoVaultBufferedLogStreamResult) -> Unit = {},
     ): GeoVaultBufferedLogStreamResult {
+        ensureInitialized()
         var lastId = 0L
         var rowsWritten = 0L
         if (maxIdInclusive <= 0L) {
@@ -160,6 +177,7 @@ open class GeoVaultBufferedLogSqliteStore(
     }
 
     fun snapshotBounds(db: SQLiteDatabase = readableDatabase): GeoVaultBufferedLogSnapshotBounds {
+        ensureInitialized()
         db.rawQuery(
             "SELECT IFNULL(MIN(id), 0), IFNULL(MAX(id), 0), COUNT(*), IFNULL(SUM(approx_bytes), 0) FROM capture_log",
             null,

@@ -23,13 +23,16 @@ object GeoVaultApkInstallLauncher {
      * `INSTALL_FAILED_VERSION_DOWNGRADE` or a signature / package mismatch, which is opaque to users.
      *
      * On failure, [Result.failure] carries an [IllegalStateException] with message
-     * `version_downgrade`, `apk_package_mismatch`, or `apk_parse_failed` for localized UI mapping.
+     * `version_downgrade`, `apk_package_mismatch`, `apk_signing_mismatch`, or
+     * `apk_parse_failed` for localized UI mapping.
      */
     fun verifyDownloadedApkCanReplaceCurrentInstall(context: Context, apkFile: File): Result<Unit> {
         val appContext = context.applicationContext
         val pm = appContext.packageManager
-        val archiveFlags = PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong())
-        val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, archiveFlags)
+        val signingFlags = PackageManager.PackageInfoFlags.of(
+            PackageManager.GET_SIGNING_CERTIFICATES.toLong(),
+        )
+        val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, signingFlags)
             ?: run {
                 Log.w(UpdateCheckLog.TAG, "getPackageArchiveInfo returned null for ${apkFile.path}")
                 return Result.failure(IllegalStateException("apk_parse_failed"))
@@ -47,10 +50,7 @@ object GeoVaultApkInstallLauncher {
             return Result.failure(IllegalStateException("apk_package_mismatch"))
         }
 
-        val installedInfo = pm.getPackageInfo(
-            appContext.packageName,
-            PackageManager.PackageInfoFlags.of(0L),
-        )
+        val installedInfo = pm.getPackageInfo(appContext.packageName, signingFlags)
         val apkVc = archiveInfo.longVersionCode
         val installedVc = installedInfo.longVersionCode
         if (apkVc <= installedVc) {
@@ -59,6 +59,21 @@ object GeoVaultApkInstallLauncher {
                 "APK versionCode $apkVc is not greater than installed $installedVc; blocking install",
             )
             return Result.failure(IllegalStateException("version_downgrade"))
+        }
+
+        val apkSigning = archiveInfo.signingInfo
+        val installedSigning = installedInfo.signingInfo
+        if (apkSigning == null || installedSigning == null ||
+            !ApkSigningCertificates.match(
+                ApkSigningCertificates.currentSignerCerts(apkSigning),
+                ApkSigningCertificates.lineageCerts(installedSigning),
+            )
+        ) {
+            Log.w(
+                UpdateCheckLog.TAG,
+                "APK signing certificates do not match the installed app; blocking install",
+            )
+            return Result.failure(IllegalStateException("apk_signing_mismatch"))
         }
         return Result.success(Unit)
     }

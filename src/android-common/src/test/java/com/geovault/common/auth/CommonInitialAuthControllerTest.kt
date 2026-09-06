@@ -1,13 +1,8 @@
 package com.geovault.common.auth
 
 import java.net.SocketTimeoutException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -58,37 +53,6 @@ class CommonInitialAuthControllerTest {
         )
 
         assertEquals("https://peer.example", controller.getConfiguredServerUrlOrPeerDefault())
-    }
-
-    @Test
-    fun `prepareOAuthConnection cancels in-flight resolution`() = runSuspend {
-        val serverConfig = FakeServerConfigService(
-            normalizedUrl = "http://example.test",
-            canonicalResult = Result.success("https://canonical.example"),
-        ).apply { deferCanonicalCallback = true }
-        val controller = newController(serverConfig = serverConfig)
-
-        // The cancellation must happen inside this coroutineScope, not after it returns:
-        // coroutineScope suspends until all of its children complete, and the launched async
-        // never completes on its own (the canonical-URL callback is deliberately deferred), so
-        // returning the Deferred out of coroutineScope and cancelling it afterward would hang
-        // forever waiting for coroutineScope itself to return.
-        coroutineScope {
-            val job = async {
-                controller.prepareOAuthConnection("http://example.test")
-            }
-            delay(50)
-            job.cancel()
-            try {
-                job.await()
-                fail("Expected CancellationException")
-            } catch (_: CancellationException) {
-                // expected
-            }
-            serverConfig.cancelPendingResolve?.invoke()
-            serverConfig.pendingCanonicalCallback?.invoke(Result.success("https://late.example"))
-            assertTrue(job.isCancelled)
-        }
     }
 
     @Test
@@ -145,13 +109,10 @@ class CommonInitialAuthControllerTest {
         private val canonicalResult: Result<String> = Result.success("https://example.test"),
     ) : ServerConfigService {
         var savedUrl: String = ""
-        var deferCanonicalCallback: Boolean = false
-        var pendingCanonicalCallback: ((Result<String>) -> Unit)? = null
-        var cancelPendingResolve: (() -> Unit)? = null
 
         override fun getServerUrl(): String = savedUrl
 
-        override fun setServerUrl(url: String, commit: Boolean) {
+        override fun setServerUrl(url: String) {
             savedUrl = url
         }
 
@@ -159,17 +120,7 @@ class CommonInitialAuthControllerTest {
 
         override fun getNormalizedServerUrl(): String = normalizedUrl
 
-        override fun resolveServerUrlToCanonical(url: String, callback: (Result<String>) -> Unit): () -> Unit {
-            if (deferCanonicalCallback) {
-                pendingCanonicalCallback = callback
-                cancelPendingResolve = {
-                    pendingCanonicalCallback = null
-                }
-                return cancelPendingResolve!!
-            }
-            callback(canonicalResult)
-            return {}
-        }
+        override fun resolveServerUrlToCanonical(url: String): Result<String> = canonicalResult
     }
 
     private class FakeOAuthPreparationService : OAuthPreparationService {

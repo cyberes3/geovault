@@ -32,6 +32,14 @@ class AuthConnectCoordinator(
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: Exception) {
+                if (launchGeneration == generation) {
+                    onResult(
+                        CommonInitialAuthController.OAuthPreparationResult.UnreachableServer(
+                            message = e.message?.takeIf { it.isNotBlank() } ?: "Could not reach server.",
+                        ),
+                    )
+                }
             }
         }
     }

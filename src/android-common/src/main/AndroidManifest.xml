@@ -19,7 +19,7 @@
     <application>
         <receiver
             android:name=".logging.GeoVaultCaptureLogExportReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.geovault.common.EXPORT_CAPTURE_LOG" />
             </intent-filter>

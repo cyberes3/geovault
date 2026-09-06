@@ -2,188 +2,205 @@ package com.geovault.common.auth
 
 import android.content.Context
 import android.util.Log
-import com.geovault.common.SecureValueCipher
-import com.geovault.common.settings.GeoVaultPrefsStore
-import com.geovault.common.settings.PrefKey
+import com.geovault.common.settings.AuthSettingsDocument
+import com.geovault.common.settings.GeoVaultDocumentStore
+import com.geovault.common.settings.GeoVaultSecureString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 class GeoVaultAuthStore private constructor(context: Context) {
-    private val store = GeoVaultPrefsStore(
+    private val store = GeoVaultDocumentStore(
         context = context,
-        prefsName = PREFS_NAME,
-        schemaVersion = SCHEMA_VERSION,
-        registeredKeys = ALL_KEYS
+        fileName = AuthSettingsDocument.FILE_NAME,
+        documentSerializer = AuthSettingsDocument.serializer(),
+        defaultValue = AuthSettingsDocument(),
+        currentVersion = AuthSettingsDocument.SCHEMA_VERSION,
+        legacyMapper = AuthSettingsDocument::fromLegacy,
     )
+    private val lock = Any()
+
+    @Volatile
+    private var cached = AuthSettingsDocument()
+
+    @Volatile
+    private var hydrated = false
 
     fun preloadAll() {
-        store.preloadAllDataBlocking()
+        ensureHydrated()
     }
 
-    // ── Server URL (plain, not encrypted) ──────────────────────────────
-
-    fun getServerUrl(): String = store.getBlocking(KEY_SERVER_URL)
+    fun getServerUrl(): String {
+        ensureHydrated()
+        return cached.serverUrl
+    }
 
     fun setServerUrl(url: String) {
-        store.putBlocking(KEY_SERVER_URL, url)
+        updateCacheAndPersist { current -> current.copy(serverUrl = url) }
     }
-
-    suspend fun getServerUrlAsync(): String = store.get(KEY_SERVER_URL)
-
-    suspend fun setServerUrlAsync(url: String) {
-        store.put(KEY_SERVER_URL, url)
-    }
-
-    // ── Access token (encrypted, with expiration check) ────────────────
 
     fun getAccessToken(): String? {
-        val expiresAt = store.getBlocking(KEY_EXPIRES_AT)
+        ensureHydrated()
+        val expiresAt = cached.expiresAt
         if (expiresAt > 0 && System.currentTimeMillis() / 1000 >= expiresAt - TOKEN_BUFFER_SECONDS) {
             return null
         }
-        return getSecureValue(KEY_ACCESS_TOKEN)
+        return decrypted(cached.accessToken) { current -> current.copy(accessToken = null) }
     }
 
-    fun getRawAccessToken(): String? = getSecureValue(KEY_ACCESS_TOKEN)
+    fun getRawAccessToken(): String? {
+        ensureHydrated()
+        return decrypted(cached.accessToken) { current -> current.copy(accessToken = null) }
+    }
 
-    // ── Refresh token (encrypted) ──────────────────────────────────────
-
-    fun getRefreshToken(): String? = getSecureValue(KEY_REFRESH_TOKEN)
-
-    // ── Save / clear tokens ────────────────────────────────────────────
+    fun getRefreshToken(): String? {
+        ensureHydrated()
+        return decrypted(cached.refreshToken) { current -> current.copy(refreshToken = null) }
+    }
 
     fun saveTokens(accessToken: String, refreshToken: String?, expiresInSeconds: Long) {
-        store.putBatchBlocking(buildMap {
-            put(KEY_ACCESS_TOKEN, SecureValueCipher.encrypt(accessToken))
-            put(KEY_REFRESH_TOKEN, encryptOrNull(refreshToken))
-            put(KEY_EXPIRES_AT, System.currentTimeMillis() / 1000 + expiresInSeconds)
-        })
+        updateCacheAndPersist { current ->
+            current.copy(
+                accessToken = GeoVaultSecureString.encrypt(accessToken),
+                refreshToken = encryptOrNull(refreshToken),
+                expiresAt = System.currentTimeMillis() / 1000 + expiresInSeconds,
+            )
+        }
     }
 
     fun clearTokens() {
-        store.putBatchBlocking(mapOf(
-            KEY_ACCESS_TOKEN to null,
-            KEY_REFRESH_TOKEN to null,
-            KEY_EXPIRES_AT to null,
-            KEY_USER_EMAIL to null
-        ))
+        updateCacheAndPersist { current ->
+            current.copy(
+                accessToken = null,
+                refreshToken = null,
+                expiresAt = 0L,
+                cachedUserEmail = null,
+            )
+        }
     }
-
-    fun clearAuthData() {
-        store.putBatchBlocking(mapOf(
-            KEY_ACCESS_TOKEN to null,
-            KEY_REFRESH_TOKEN to null,
-            KEY_EXPIRES_AT to null,
-            KEY_PKCE_VERIFIER to null,
-            KEY_PKCE_STATE to null,
-            KEY_LAST_CONSUMED_PKCE_STATE to null,
-            KEY_LAST_CONSUMED_PKCE_AT to null,
-            KEY_USER_EMAIL to null
-        ))
-    }
-
-    // ── PKCE state (encrypted) ─────────────────────────────────────────
 
     fun savePkceState(verifier: String, state: String) {
-        val encVerifier = SecureValueCipher.encrypt(verifier)
-        val encState = SecureValueCipher.encrypt(state)
-        Log.d(TAG, "savePkceState: state=$state encrypted verifier=${encVerifier.length} chars, state=${encState.length} chars")
-        store.putBatchBlocking(mapOf(
-            KEY_PKCE_VERIFIER to encVerifier,
-            KEY_PKCE_STATE to encState,
-            KEY_LAST_CONSUMED_PKCE_STATE to null,
-            KEY_LAST_CONSUMED_PKCE_AT to null,
-        ))
+        val encVerifier = GeoVaultSecureString.encrypt(verifier)
+        val encState = GeoVaultSecureString.encrypt(state)
+        Log.d(TAG, "savePkceState: state=$state encrypted verifier=${encVerifier.ciphertext.length} chars, state=${encState.ciphertext.length} chars")
+        updateCacheAndPersist { current ->
+            current.copy(
+                pkceVerifier = encVerifier,
+                pkceState = encState,
+                lastConsumedPkceState = null,
+                lastConsumedPkceAt = 0L,
+            )
+        }
         Log.i(TAG, "savePkceState: written to store")
     }
 
     fun getAndClearPkceState(): Pair<String, String>? {
-        val rawVerifier = store.getBlocking(KEY_PKCE_VERIFIER)
-        val rawState = store.getBlocking(KEY_PKCE_STATE)
-        Log.d(TAG, "getAndClearPkceState: raw verifier=${if (rawVerifier.isBlank()) "BLANK" else "${rawVerifier.length} chars"}" +
-            " raw state=${if (rawState.isBlank()) "BLANK" else "${rawState.length} chars"}")
+        synchronized(lock) {
+            ensureHydratedLocked()
+            val rawVerifier = cached.pkceVerifier?.ciphertext.orEmpty()
+            val rawState = cached.pkceState?.ciphertext.orEmpty()
+            Log.d(
+                TAG,
+                "getAndClearPkceState: raw verifier=${if (rawVerifier.isBlank()) "BLANK" else "${rawVerifier.length} chars"}" +
+                    " raw state=${if (rawState.isBlank()) "BLANK" else "${rawState.length} chars"}"
+            )
 
-        val verifier = getSecureValue(KEY_PKCE_VERIFIER)
-        val state = getSecureValue(KEY_PKCE_STATE)
-        Log.d(TAG, "getAndClearPkceState: decrypted verifier=${if (verifier == null) "NULL" else "present"}" +
-            " state=${state ?: "NULL"}")
+            val verifier = cached.pkceVerifier?.decrypt()
+            val state = cached.pkceState?.decrypt()
+            Log.d(
+                TAG,
+                "getAndClearPkceState: decrypted verifier=${if (verifier == null) "NULL" else "present"}" +
+                    " state=${state ?: "NULL"}"
+            )
 
-        if (verifier == null || state == null) {
-            Log.w(TAG, "getAndClearPkceState: returning null — verifier=${verifier != null} state=${state != null}")
-            return null
+            if (verifier.isNullOrBlank() || state.isNullOrBlank()) {
+                Log.w(TAG, "getAndClearPkceState: returning null — verifier=${verifier != null} state=${state != null}")
+                return null
+            }
+            persistLocked { current ->
+                current.copy(
+                    pkceVerifier = null,
+                    pkceState = null,
+                    lastConsumedPkceState = GeoVaultSecureString.encrypt(state),
+                    lastConsumedPkceAt = System.currentTimeMillis(),
+                )
+            }
+            Log.i(TAG, "getAndClearPkceState: cleared stored PKCE, returning state=$state")
+            return verifier to state
         }
-        store.putBatchBlocking(mapOf(
-            KEY_PKCE_VERIFIER to null,
-            KEY_PKCE_STATE to null,
-            KEY_LAST_CONSUMED_PKCE_STATE to state,
-            KEY_LAST_CONSUMED_PKCE_AT to System.currentTimeMillis(),
-        ))
-        Log.i(TAG, "getAndClearPkceState: cleared stored PKCE, returning state=$state")
-        return verifier to state
     }
 
     fun wasRecentlyConsumedPkceState(state: String): Boolean {
-        val consumedState = store.getBlocking(KEY_LAST_CONSUMED_PKCE_STATE)
-        val consumedAt = store.getBlocking(KEY_LAST_CONSUMED_PKCE_AT)
+        ensureHydrated()
+        val consumedState = cached.lastConsumedPkceState?.decrypt()
+        val consumedAt = cached.lastConsumedPkceAt
         if (state.isBlank() || consumedState != state || consumedAt <= 0L) return false
         return System.currentTimeMillis() - consumedAt <= RECENT_PKCE_STATE_WINDOW_MS
     }
 
-    // ── Cached user email (encrypted) ──────────────────────────────────
-
-    fun getCachedUserEmail(): String? = getSecureValue(KEY_USER_EMAIL)
+    fun getCachedUserEmail(): String? {
+        ensureHydrated()
+        return decrypted(cached.cachedUserEmail) { current -> current.copy(cachedUserEmail = null) }
+    }
 
     fun setCachedUserEmail(email: String?) {
-        store.putBatchBlocking(mapOf(KEY_USER_EMAIL to encryptOrNull(email)))
+        updateCacheAndPersist { current -> current.copy(cachedUserEmail = encryptOrNull(email)) }
     }
 
-    // ── Debug ──────────────────────────────────────────────────────────
+    fun getExpiresAt(): Long {
+        ensureHydrated()
+        return cached.expiresAt
+    }
 
-    fun getExpiresAt(): Long = store.getBlocking(KEY_EXPIRES_AT)
-
-    // ── Encryption helpers ─────────────────────────────────────────────
-
-    private fun getSecureValue(key: PrefKey.StringKey): String? {
-        val encrypted = store.getBlocking(key)
-        if (encrypted.isBlank()) return null
-        val decrypted = SecureValueCipher.decrypt(encrypted)
+    private fun decrypted(
+        value: GeoVaultSecureString?,
+        clear: (AuthSettingsDocument) -> AuthSettingsDocument,
+    ): String? {
+        if (value == null) return null
+        val decrypted = value.decrypt()
         if (decrypted == null) {
-            Log.w(TAG, "secure_decrypt_failed key=${key.name}")
-            store.removeBlocking(key)
+            Log.w(TAG, "secure_decrypt_failed")
+            updateCacheAndPersist(clear)
+            return null
         }
-        return decrypted?.takeIf { it.isNotBlank() }
+        return decrypted.takeIf { it.isNotBlank() }
     }
 
-    private fun encryptOrNull(value: String?): String? {
-        return if (value.isNullOrBlank()) null else SecureValueCipher.encrypt(value)
+    private fun encryptOrNull(value: String?): GeoVaultSecureString? {
+        return if (value.isNullOrBlank()) null else GeoVaultSecureString.encrypt(value)
+    }
+
+    private fun ensureHydrated() {
+        if (hydrated) return
+        synchronized(lock) {
+            ensureHydratedLocked()
+        }
+    }
+
+    private fun ensureHydratedLocked() {
+        if (hydrated) return
+        cached = runBlocking(Dispatchers.IO) { store.get() }
+        hydrated = true
+    }
+
+    private fun updateCacheAndPersist(transform: (AuthSettingsDocument) -> AuthSettingsDocument) {
+        synchronized(lock) {
+            ensureHydratedLocked()
+            persistLocked(transform)
+        }
+    }
+
+    private fun persistLocked(transform: (AuthSettingsDocument) -> AuthSettingsDocument) {
+        val next = transform(cached)
+        cached = next
+        runBlocking(Dispatchers.IO) {
+            store.update { next }
+        }
     }
 
     companion object {
         private const val TAG = "GeoVaultAuthStore"
-        private const val PREFS_NAME = "geovault_auth"
-        private const val SCHEMA_VERSION = 1
         private const val TOKEN_BUFFER_SECONDS = 60L
-
-        private val KEY_SERVER_URL = PrefKey.StringKey("server_url")
-        private val KEY_ACCESS_TOKEN = PrefKey.StringKey("access_token")
-        private val KEY_REFRESH_TOKEN = PrefKey.StringKey("refresh_token")
-        private val KEY_EXPIRES_AT = PrefKey.LongKey("expires_at")
-        private val KEY_PKCE_VERIFIER = PrefKey.StringKey("pkce_code_verifier")
-        private val KEY_PKCE_STATE = PrefKey.StringKey("pkce_state")
-        private val KEY_LAST_CONSUMED_PKCE_STATE = PrefKey.StringKey("last_consumed_pkce_state")
-        private val KEY_LAST_CONSUMED_PKCE_AT = PrefKey.LongKey("last_consumed_pkce_at")
-        private val KEY_USER_EMAIL = PrefKey.StringKey("cached_user_email")
         private const val RECENT_PKCE_STATE_WINDOW_MS = 10 * 60 * 1000L
-
-        private val ALL_KEYS: Set<PrefKey<*>> = setOf(
-            KEY_SERVER_URL,
-            KEY_ACCESS_TOKEN,
-            KEY_REFRESH_TOKEN,
-            KEY_EXPIRES_AT,
-            KEY_PKCE_VERIFIER,
-            KEY_PKCE_STATE,
-            KEY_LAST_CONSUMED_PKCE_STATE,
-            KEY_LAST_CONSUMED_PKCE_AT,
-            KEY_USER_EMAIL
-        )
 
         @Volatile
         private var instance: GeoVaultAuthStore? = null

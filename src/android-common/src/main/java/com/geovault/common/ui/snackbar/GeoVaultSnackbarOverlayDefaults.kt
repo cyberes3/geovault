@@ -2,6 +2,7 @@ package com.geovault.common.ui.snackbar
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 /**
  * Shared layout for app-level snackbars: expand to the parent’s bounds so insets and
@@ -9,4 +10,5 @@ import androidx.compose.ui.Modifier
  */
 object GeoVaultSnackbarOverlayDefaults {
     val hostModifier: Modifier = Modifier.fillMaxSize()
+    val HostEdgePadding = 16.dp
 }

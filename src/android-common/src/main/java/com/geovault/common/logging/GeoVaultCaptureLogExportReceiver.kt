@@ -8,7 +8,7 @@ import com.geovault.common.BuildConfig
 
 /**
  * Dumps capture logs to Downloads via MediaStore. Trigger with
- * `adb shell am broadcast -a com.geovault.common.EXPORT_CAPTURE_LOG -p <package>`.
+ * `adb shell am broadcast -n <package>/com.geovault.common.logging.GeoVaultCaptureLogExportReceiver -a com.geovault.common.EXPORT_CAPTURE_LOG`.
  *
  * Pull from host, for example:
  * `adb pull "/storage/emulated/0/Download/<DISPLAY_NAME from logcat>" .`
@@ -28,7 +28,7 @@ class GeoVaultCaptureLogExportReceiver : BroadcastReceiver() {
             )
             return
         }
-        GeoVaultCaptureLogEngine.scheduleExport(context.applicationContext)
+        GeoVaultCaptureLog.exportToDownloads(context.applicationContext)
     }
 
     private companion object {

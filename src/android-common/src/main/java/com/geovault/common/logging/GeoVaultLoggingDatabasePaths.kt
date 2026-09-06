@@ -27,17 +27,13 @@ internal object GeoVaultLoggingDatabasePaths {
     fun cacheDatabasePath(context: Context, dbFileName: String): String =
         cacheDatabasePathPublic(context, dbFileName)
 
+    /**
+     * Removes the pre-cache copy of [dbFileName] under the app `databases/` directory.
+     * Current stores live in cache; leftover files from that older location are deleted
+     * by exact name only.
+     */
     fun deleteLegacyLoggingDatabaseIfPresent(context: Context, dbFileName: String) {
-        val appContext = context.applicationContext
-        deleteSqliteFiles(appContext.getDatabasePath(dbFileName))
-        val databasesDir = File(appContext.applicationInfo.dataDir, "databases")
-        if (databasesDir.isDirectory) {
-            databasesDir.listFiles()?.forEach { file ->
-                if (file.name.startsWith("geovault_") && file.name.endsWith(".sqlite")) {
-                    deleteSqliteFiles(file)
-                }
-            }
-        }
+        deleteSqliteFiles(context.applicationContext.getDatabasePath(dbFileName))
     }
 
     private fun deleteSqliteFiles(mainFile: File) {

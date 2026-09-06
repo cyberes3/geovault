@@ -31,6 +31,6 @@ class GeoVaultQueuedSyncMessageFormatterTest {
             itemLabelSingular = "offline item",
             itemLabelPlural = "offline items",
         )
-        assertEquals("Synced 2 offline items. 1 conflict copy was saved as new items.", message)
+        assertEquals("Synced 2 offline items. 1 conflict copy was saved as a new item.", message)
     }
 }

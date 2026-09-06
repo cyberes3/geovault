@@ -32,4 +32,18 @@ object GeoVaultQueuedSyncFailurePolicy {
             GeoVaultHttpFailureKind.Auth -> GeoVaultQueuedSyncItemDisposition.RequireAuth
         }
     }
+
+    fun shouldFallbackToOfflineSave(kind: GeoVaultHttpFailureKind): Boolean {
+        return when (dispositionFor(kind)) {
+            GeoVaultQueuedSyncItemDisposition.KeepRetrying,
+            GeoVaultQueuedSyncItemDisposition.ResolveConflict,
+            GeoVaultQueuedSyncItemDisposition.RecreateOrDiscard -> true
+            GeoVaultQueuedSyncItemDisposition.DropAndSurface,
+            GeoVaultQueuedSyncItemDisposition.RequireAuth -> false
+        }
+    }
+
+    fun shouldRemoveFromOfflineQueue(kind: GeoVaultHttpFailureKind, hasServerId: Boolean): Boolean {
+        return dispositionFor(kind) == GeoVaultQueuedSyncItemDisposition.DropAndSurface && hasServerId
+    }
 }

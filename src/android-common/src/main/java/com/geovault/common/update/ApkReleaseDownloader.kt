@@ -27,12 +27,13 @@ class ApkReleaseDownloader(
         destination: File,
         onProgress: (ApkDownloadProgress) -> Unit,
     ): Result<Unit> {
+        val httpsUrl = ApkDownloadUrlPolicy.requireHttps(url).getOrElse { return Result.failure(it) }
         destination.parentFile?.mkdirs()
         if (destination.exists()) {
             destination.delete()
         }
         val request = Request.Builder()
-            .url(url)
+            .url(httpsUrl)
             .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
             .get()
             .build()
@@ -104,6 +105,12 @@ class ApkReleaseDownloader(
                                 smoothedBytesPerSecond = smoothedBps,
                             ),
                         )
+                        if (knownTotalBytes != null && knownTotalBytes > 0L && received != knownTotalBytes) {
+                            if (destination.exists()) {
+                                destination.delete()
+                            }
+                            return@withContext Result.failure(IllegalStateException("apk_size_mismatch"))
+                        }
                         Result.success(Unit)
                     } catch (t: Throwable) {
                         if (destination.exists()) {

@@ -17,7 +17,12 @@ object GeoVaultQueuedSyncMessageFormatter {
         val noun = if (total == 1) itemLabelSingular else itemLabelPlural
         if (outcome.failedCount == 0) {
             if (outcome.conflictCount > 0) {
-                return "Synced $total $noun. ${outcome.conflictCount} conflict ${if (outcome.conflictCount == 1) "copy was" else "copies were"} saved as new items."
+                val conflictClause = if (outcome.conflictCount == 1) {
+                    "1 conflict copy was saved as a new item."
+                } else {
+                    "${outcome.conflictCount} conflict copies were saved as new items."
+                }
+                return "Synced $total $noun. $conflictClause"
             }
             return "Synced $total $noun."
         }

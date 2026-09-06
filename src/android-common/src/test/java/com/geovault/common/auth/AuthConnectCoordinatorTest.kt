@@ -1,12 +1,10 @@
 package com.geovault.common.auth
 
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,48 +12,33 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [34])
 class AuthConnectCoordinatorTest {
 
     @Test
-    fun secondLaunchCancelsFirstAndOnlyLatestResultApplies() = runBlocking {
-        val firstGate = CompletableDeferred<Result<String>>()
-        val secondGate = CompletableDeferred<Result<String>>()
-        val resolveInvocation = AtomicInteger(0)
-        val firstCancelled = AtomicBoolean(false)
+    fun secondLaunchCancelsFirstAndOnlyLatestResultApplies() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = TestScope(dispatcher)
         val serverConfig = object : ServerConfigService {
             override fun getServerUrl(): String = ""
-            override fun setServerUrl(url: String, commit: Boolean) = Unit
-            override fun normalizeServerUrl(url: String): String = "http://example.test"
-            override fun getNormalizedServerUrl(): String = "http://example.test"
-            override fun resolveServerUrlToCanonical(
-                url: String,
-                callback: (Result<String>) -> Unit,
-            ): () -> Unit {
-                val invocation = resolveInvocation.incrementAndGet()
-                val gate = if (invocation == 1) firstGate else secondGate
-                val cancelFlag = if (invocation == 1) firstCancelled else AtomicBoolean(false)
-                launch {
-                    val result = gate.await()
-                    if (!cancelFlag.get()) {
-                        callback(result)
-                    }
-                }
-                return {
-                    cancelFlag.set(true)
-                    gate.cancel()
-                }
+            override fun setServerUrl(url: String) = Unit
+            override fun normalizeServerUrl(url: String): String = url
+            override fun getNormalizedServerUrl(): String = ""
+            override fun resolveServerUrlToCanonical(url: String): Result<String> {
+                return Result.success(
+                    if (url == "second") "https://fresh.example" else "https://stale.example"
+                )
             }
         }
-        val oauth = FakeOAuthPreparationService()
         val controller = CommonInitialAuthController(
             serverConfigService = serverConfig,
             authSessionService = FakeAuthSessionService(),
-            oauthPreparationService = oauth,
+            oauthPreparationService = FakeOAuthPreparationService(),
             peerServerUrlsProvider = { emptySet() },
         )
-        val coordinator = AuthConnectCoordinator(this, controller)
+        val coordinator = AuthConnectCoordinator(scope, controller)
         val results = mutableListOf<CommonInitialAuthController.OAuthPreparationResult>()
         var connectingCount = 0
 
@@ -64,19 +47,12 @@ class AuthConnectCoordinatorTest {
             onConnecting = { connectingCount++ },
             onResult = { results.add(it) },
         )
-        yield()
         coordinator.launch(
             rawServerUrl = "second",
             onConnecting = { connectingCount++ },
             onResult = { results.add(it) },
         )
-
-        firstGate.complete(Result.success("https://stale.example"))
-        delay(50)
-        assertTrue(results.isEmpty())
-
-        secondGate.complete(Result.success("https://fresh.example"))
-        delay(100)
+        scope.advanceUntilIdle()
 
         assertEquals(2, connectingCount)
         assertEquals(1, results.size)

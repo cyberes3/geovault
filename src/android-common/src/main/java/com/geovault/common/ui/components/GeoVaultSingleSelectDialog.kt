@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
@@ -28,38 +26,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultDialogAccentButtonColor
-import com.geovault.common.ui.theme.geoVaultDialogSurfaceColor
 import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 import com.geovault.common.ui.theme.geoVaultTextFieldFillColor
 
 /**
- * Case-insensitive label filter used by [GeoVaultSingleSelectDialog] when [GeoVaultSingleSelectDialog]
- * is rendered with `searchable = true`. Extracted as a top-level function so the filter behavior
- * can be unit-tested without spinning up Compose.
- */
-fun <T> filterSelectOptions(
-    options: List<GeoVaultSelectOption<T>>,
-    query: String,
-): List<GeoVaultSelectOption<T>> {
-    val trimmed = query.trim()
-    if (trimmed.isEmpty()) return options
-    return options.filter { it.label.contains(trimmed, ignoreCase = true) }
-}
-
-/**
- * Single-select popup picker. Models the manholer "Pipe Size" dialog pattern: a centered modal
- * surface with a title, a scrollable list of options (the currently-selected row is tinted
- * primary-blue), and a Cancel button. An optional search field at the top filters the list by
- * label when [searchable] is `true`.
+ * Single-select popup picker: title, optional search, scrollable options, Cancel.
  *
- * Picking a row invokes [onSelected] with the chosen value; callers are expected to hide the
- * dialog as part of that callback (or use [GeoVaultSelectField] which handles dismissal
- * automatically).
+ * Picking a row invokes [onSelected] with the chosen value; callers hide the dialog as part
+ * of that callback (or use [GeoVaultSelectField], which handles dismissal).
  */
 @Composable
 fun <T> GeoVaultSingleSelectDialog(
@@ -67,7 +44,7 @@ fun <T> GeoVaultSingleSelectDialog(
     options: List<GeoVaultSelectOption<T>>,
     selectedValue: T,
     onSelected: (T) -> Unit,
-    onDismiss: () -> Unit,
+    onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     searchable: Boolean = false,
     searchPlaceholder: String = "Search\u2026",
@@ -76,78 +53,64 @@ fun <T> GeoVaultSingleSelectDialog(
 ) {
     var query by remember { mutableStateOf("") }
     val visibleOptions = remember(options, query, searchable) {
-        if (searchable) filterSelectOptions(options, query) else options
+        if (searchable) filterItemsByLabel(options, query) { it.label } else options
     }
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = true),
+    GeoVaultPickerDialogShell(
+        title = title,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
     ) {
-        Surface(
-            modifier = modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = geoVaultDialogSurfaceColor(),
-            elevation = 0.dp,
+        if (searchable) {
+            GeoVaultSearchField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = searchPlaceholder,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        if (visibleOptions.isEmpty()) {
+            Text(
+                text = emptyLabel,
+                style = MaterialTheme.typography.body2,
+                color = geoVaultContentSecondaryColor(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+            ) {
+                items(
+                    items = visibleOptions,
+                    key = { it.label to (it.value?.hashCode() ?: 0) },
+                ) { option ->
+                    OptionRow(
+                        option = option,
+                        selected = option.value == selectedValue,
+                        onClick = {
+                            onSelected(option.value)
+                            onDismissRequest()
+                        },
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.End,
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            TextButton(onClick = onDismissRequest) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
-                    color = geoVaultDialogTitleColor(),
-                    modifier = Modifier.padding(bottom = 12.dp),
+                    text = cancelText,
+                    color = geoVaultDialogAccentButtonColor(),
+                    fontWeight = FontWeight.SemiBold,
                 )
-                if (searchable) {
-                    GeoVaultSearchField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = searchPlaceholder,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-                if (visibleOptions.isEmpty()) {
-                    Text(
-                        text = emptyLabel,
-                        style = MaterialTheme.typography.body2,
-                        color = geoVaultContentSecondaryColor(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 360.dp),
-                    ) {
-                        items(
-                            items = visibleOptions,
-                            key = { it.label to (it.value?.hashCode() ?: 0) },
-                        ) { option ->
-                            OptionRow(
-                                option = option,
-                                selected = option.value == selectedValue,
-                                onClick = {
-                                    onSelected(option.value)
-                                    onDismiss()
-                                },
-                            )
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(
-                            text = cancelText,
-                            color = geoVaultDialogAccentButtonColor(),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
             }
         }
     }

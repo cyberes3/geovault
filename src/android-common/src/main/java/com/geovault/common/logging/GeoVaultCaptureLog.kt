@@ -1,6 +1,7 @@
 package com.geovault.common.logging
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import com.geovault.common.BuildConfig
 import java.io.PrintWriter
@@ -16,6 +17,9 @@ object GeoVaultCaptureLog {
     fun init(application: Application) {
         GeoVaultCaptureLogEngine.init(application)
     }
+
+    fun exportToDownloads(context: Context): Boolean =
+        GeoVaultCaptureLogEngine.exportToDownloads(context)
 
     @JvmStatic
     fun v(tag: String, msg: String) {

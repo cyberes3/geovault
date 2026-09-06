@@ -13,7 +13,7 @@ class SingleFlightGateTest {
 
     @Test
     fun run_coalescesConcurrentRequestsWithSameKey() = runBlocking {
-        val gate = SingleFlightGate<String, Int>()
+        val gate = SingleFlightGate<String, Int>(this)
         val executeCount = AtomicInteger(0)
         val release = CompletableDeferred<Unit>()
 
@@ -36,7 +36,7 @@ class SingleFlightGateTest {
 
     @Test
     fun run_distinctKeysExecuteIndependently() = runBlocking {
-        val gate = SingleFlightGate<String, Int>()
+        val gate = SingleFlightGate<String, Int>(this)
         val executeCount = AtomicInteger(0)
 
         val a = async { gate.run("a") { executeCount.incrementAndGet(); 1 } }
@@ -49,7 +49,7 @@ class SingleFlightGateTest {
 
     @Test
     fun run_afterPriorCompletionStartsANewOperation() = runBlocking {
-        val gate = SingleFlightGate<String, Int>()
+        val gate = SingleFlightGate<String, Int>(this)
         val executeCount = AtomicInteger(0)
 
         val first = gate.run("trackers") { executeCount.incrementAndGet() }

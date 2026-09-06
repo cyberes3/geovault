@@ -46,7 +46,7 @@ fun GeoVaultFileListSortButton(
             options = options,
             selectedValue = sortMode,
             onSelected = { onSortModeSelectedState.value(it) },
-            onDismiss = { showDialog = false },
+            onDismissRequest = { showDialog = false },
         )
     }
 }

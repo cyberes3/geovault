@@ -27,7 +27,7 @@ import com.geovault.common.ui.theme.geoVaultDialogTitleColor
 fun GeoVaultFormDialog(
     title: String,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
+    onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     confirmText: String = "Save",
     cancelText: String = "Cancel",
@@ -37,7 +37,7 @@ fun GeoVaultFormDialog(
 ) {
     AlertDialog(
         modifier = modifier,
-        onDismissRequest = onDismiss,
+        onDismissRequest = onDismissRequest,
         backgroundColor = geoVaultDialogSurfaceColor(),
         title = {
             Text(
@@ -63,7 +63,7 @@ fun GeoVaultFormDialog(
         },
         dismissButton = if (showDismissButton) {
             {
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = onDismissRequest) {
                     Text(
                         text = cancelText,
                         color = geoVaultDialogAccentButtonColor(),

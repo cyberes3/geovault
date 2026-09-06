@@ -1,15 +1,18 @@
 package com.geovault.common.files
 
 object GeoVaultUploadFileTypes {
+    const val MIME_KML = "application/vnd.google-earth.kml+xml"
+    const val MIME_KMZ = "application/vnd.google-earth.kmz"
+
     val catalog: GeoVaultFileTypeCatalog = GeoVaultFileTypeCatalog(
         listOf(
             GeoVaultFileType(
                 extension = "kml",
-                mimeTypes = setOf("application/vnd.google-earth.kml+xml"),
+                mimeTypes = setOf(MIME_KML),
             ),
             GeoVaultFileType(
                 extension = "kmz",
-                mimeTypes = setOf("application/vnd.google-earth.kmz"),
+                mimeTypes = setOf(MIME_KMZ),
             ),
             GeoVaultFileType(
                 extension = "gpx",

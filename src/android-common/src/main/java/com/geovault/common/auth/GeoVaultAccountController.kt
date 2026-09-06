@@ -1,7 +1,8 @@
 package com.geovault.common.auth
 
 import android.content.Context
-import com.geovault.common.AppResetFlow
+import com.geovault.common.bootstrap.AppResetFlow
+import com.geovault.common.bootstrap.AuthStateCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,11 +13,15 @@ import kotlinx.coroutines.launch
 data class GeoVaultAccountUiState(
     val serverUrl: String = "",
     val isLoggedIn: Boolean = false,
+    val userEmail: String? = null,
     val loggedInText: String = "",
     val isConnecting: Boolean = false,
     val infoMessage: String? = null,
     val oauthUrl: String? = null,
-)
+) {
+    val displayEmail: String
+        get() = userEmail?.takeIf { it.isNotBlank() } ?: "Authenticated User"
+}
 
 class GeoVaultAccountController(
     private val scope: CoroutineScope,
@@ -31,6 +36,7 @@ class GeoVaultAccountController(
         GeoVaultAuthConnectErrors.setOnClearListener {
             _state.update { it.copy(infoMessage = null) }
         }
+        _state.update { it.copy(isLoggedIn = AuthStateCache.isAuthenticated || it.isLoggedIn) }
         refreshAuthState()
     }
 
@@ -116,23 +122,29 @@ class GeoVaultAccountController(
     private fun refreshAuthState() {
         val server = authController.getConfiguredServerUrlOrPeerDefault()
         val loggedIn = server.isNotBlank() && authController.isLoggedIn()
-        val cachedEmail = authController.getCachedUserEmail().orEmpty()
+        val cachedEmail = authController.getCachedUserEmail()?.takeIf { it.isNotBlank() }
         _state.update {
             it.copy(
                 serverUrl = server,
                 isLoggedIn = loggedIn,
+                userEmail = cachedEmail,
                 loggedInText = when {
-                    loggedIn && cachedEmail.isNotBlank() -> "Logged in as $cachedEmail"
+                    loggedIn && cachedEmail != null -> "Logged in as $cachedEmail"
                     loggedIn -> "Logged in"
                     else -> ""
                 },
                 oauthUrl = if (loggedIn) null else it.oauthUrl,
             )
         }
-        if (loggedIn && cachedEmail.isBlank()) {
+        if (loggedIn && cachedEmail == null) {
             authController.fetchUserEmail { email ->
                 if (!email.isNullOrBlank()) {
-                    _state.update { current -> current.copy(loggedInText = "Logged in as $email") }
+                    _state.update { current ->
+                        current.copy(
+                            userEmail = email,
+                            loggedInText = "Logged in as $email",
+                        )
+                    }
                 }
             }
         }

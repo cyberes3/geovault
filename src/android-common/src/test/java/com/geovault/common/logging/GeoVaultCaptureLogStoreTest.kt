@@ -105,6 +105,11 @@ class GeoVaultCaptureLogStoreTest {
     }
 
     @Test
+    fun exportToDownloads_returnsFalseWhenCaptureLoggingDisabled() {
+        assertFalse(GeoVaultCaptureLog.exportToDownloads(context))
+    }
+
+    @Test
     fun snapshotBounds_emptyStoreReturnsZeroes() {
         val store = GeoVaultCaptureLogStore(context, maxStoredBytes = 500_000)
 

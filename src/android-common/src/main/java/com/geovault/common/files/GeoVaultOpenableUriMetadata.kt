@@ -42,6 +42,14 @@ class GeoVaultOpenableUriMetadata(
         return 0L
     }
 
+    fun mimeType(uri: Uri): String? {
+        return try {
+            contentResolver.getType(uri)?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun lastModifiedMillis(uri: Uri): Long? {
         queryColumnLong(uri, "last_modified")?.let { return normalizeEpochMillis(it) }
         queryColumnLong(uri, "date_modified")?.let { return normalizeEpochMillis(it) }

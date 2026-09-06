@@ -1,11 +1,10 @@
 package com.geovault.common.auth
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import java.io.IOException
 import java.net.SocketTimeoutException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 
 private const val TAG = "InitialAuthController"
 
@@ -32,8 +31,8 @@ class CommonInitialAuthController(
         }
     }
 
-    fun setServerUrl(url: String, commit: Boolean = false) {
-        serverConfigService.setServerUrl(url, commit = commit)
+    fun setServerUrl(url: String) {
+        serverConfigService.setServerUrl(url)
     }
 
     fun isLoggedIn(): Boolean = authSessionService.isLoggedIn()
@@ -52,18 +51,11 @@ class CommonInitialAuthController(
             return OAuthPreparationResult.InvalidServerUrl(message = invalidServerUrlMessage)
         }
         Log.d(TAG, "prepareOAuthConnection: normalized=$normalized, resolving to canonical…")
-        val resolvedResult = suspendCancellableCoroutine<Result<String>> { continuation ->
-            val cancelResolve = serverConfigService.resolveServerUrlToCanonical(normalized) { result ->
-                if (continuation.isActive) {
-                    continuation.resume(result)
-                }
-            }
-            continuation.invokeOnCancellation { cancelResolve() }
-        }
+        val resolvedResult = serverConfigService.resolveServerUrlToCanonical(normalized)
         return resolvedResult.fold(
             onSuccess = { resolved ->
                 Log.i(TAG, "prepareOAuthConnection: resolved server=$resolved")
-                serverConfigService.setServerUrl(resolved, commit = true)
+                serverConfigService.setServerUrl(resolved)
                 val (verifier, challenge) = oauthPreparationService.generatePkcePair()
                 val state = oauthPreparationService.generateOAuthStateNonce(length = 16)
                 Log.d(TAG, "prepareOAuthConnection: generated PKCE state=$state, saving…")
@@ -97,5 +89,23 @@ class CommonInitialAuthController(
             current = current.cause
         }
         return false
+    }
+
+    companion object {
+        fun standard(
+            session: GeoVaultAuthSession,
+            appContext: Context,
+            invalidServerUrlMessage: String = "Server URL is required.",
+            unreachableServerMessage: String = "Could not reach server.",
+        ): CommonInitialAuthController {
+            return CommonInitialAuthController(
+                serverConfigService = session,
+                authSessionService = session,
+                oauthPreparationService = session,
+                peerServerUrlsProvider = { ServerUrlContract.getServerUrlsFromOtherApps(appContext) },
+                invalidServerUrlMessage = invalidServerUrlMessage,
+                unreachableServerMessage = unreachableServerMessage,
+            )
+        }
     }
 }
