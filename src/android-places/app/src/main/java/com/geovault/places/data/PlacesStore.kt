@@ -1,19 +1,19 @@
 package com.geovault.places.data
 
 import android.content.Context
-import com.geovault.common.settings.GeoVaultPrefsStore
-import com.geovault.common.settings.PrefKey
+import com.geovault.common.settings.GeoVaultDocumentStore
 import com.geovault.places.domain.PlacesOfflineStore
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import com.geovault.places.model.OfflineFeature
-import com.google.gson.Gson
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 
 data class PlacesSnapshot(
     val cached: List<Feature> = emptyList(),
@@ -27,24 +27,38 @@ data class PlacesSnapshot(
 /**
  * Single source of truth for cached server places and the offline queue.
  *
- * Schema v2: offline entries require [OfflineFeature.clientLocalId]. Incompatible v1 queue JSON
- * (index-era entries without ids) is discarded on read — no migration.
+ * Offline entries require [OfflineFeature.clientLocalId]. Incompatible queue JSON
+ * without ids is discarded on read.
  */
 class PlacesStore(context: Context) : PlacesOfflineStore {
-    private val store = GeoVaultPrefsStore(
+    private val store = GeoVaultDocumentStore(
         context = context,
-        prefsName = PREFS_NAME,
-        schemaVersion = SCHEMA_VERSION,
-        registeredKeys = ALL_KEYS,
+        fileName = PlacesCacheDocument.FILE_NAME,
+        documentSerializer = PlacesCacheDocument.serializer(),
+        defaultValue = PlacesCacheDocument(),
+        currentVersion = PlacesCacheDocument.SCHEMA_VERSION,
+        legacyMapper = PlacesCacheDocument::fromLegacy,
     )
-    private val gson = Gson()
     private val lock = Any()
     private val _snapshot = MutableStateFlow(PlacesSnapshot())
     val snapshot: StateFlow<PlacesSnapshot> = _snapshot.asStateFlow()
 
     fun preloadOnLaunch() {
-        store.preloadAllDataBlocking()
-        synchronized(lock) { publishLocked() }
+        val document = runBlocking(Dispatchers.IO) {
+            val loaded = store.get()
+            val sanitized = loaded.sanitized()
+            if (sanitized != loaded) {
+                store.update { sanitized }
+            }
+            sanitized
+        }
+        synchronized(lock) {
+            _snapshot.value = PlacesSnapshot(
+                cached = document.cached,
+                offline = document.offline,
+                lastSyncMillis = document.lastSyncMillis,
+            )
+        }
     }
 
     override fun getCachedFeatures(): List<Feature> = snapshot.value.cached
@@ -81,13 +95,11 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
 
     override fun setCached(collection: FeatureCollection, lastSyncTime: Long) {
         synchronized(lock) {
-            store.putBatchBlocking(
-                mapOf(
-                    KEY_CACHED_PLACES to gson.toJson(collection),
-                    KEY_LAST_SYNC_TIME to lastSyncTime,
-                ),
+            _snapshot.value = _snapshot.value.copy(
+                cached = collection.features,
+                lastSyncMillis = lastSyncTime,
             )
-            publishLocked()
+            persistLocked()
         }
     }
 
@@ -97,15 +109,15 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
 
     fun setLastSyncTime(value: Long) {
         synchronized(lock) {
-            store.putBlocking(KEY_LAST_SYNC_TIME, value)
-            publishLocked()
+            _snapshot.value = _snapshot.value.copy(lastSyncMillis = value)
+            persistLocked()
         }
     }
 
     override fun applyServerFeature(feature: Feature) {
         synchronized(lock) {
             updateCachedFeatureLocked(feature)
-            publishLocked()
+            persistLocked()
         }
     }
 
@@ -124,7 +136,7 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
     ) {
         require(clientLocalId.isNotBlank()) { "clientLocalId required" }
         synchronized(lock) {
-            val list = readOfflineLocked().toMutableList()
+            val list = _snapshot.value.offline.toMutableList()
             val stamped = stampCreatedAtIfBlank(feature)
             val existingIndex = list.indexOfFirst { it.clientLocalId == clientLocalId }
             val item = if (existingIndex >= 0) {
@@ -145,17 +157,17 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
             } else {
                 list.add(item)
             }
-            writeQueueLocked(list)
-            publishLocked()
+            _snapshot.value = _snapshot.value.copy(offline = list)
+            persistLocked()
         }
     }
 
     override fun removeOffline(clientLocalId: String) {
         if (clientLocalId.isBlank()) return
         synchronized(lock) {
-            val filtered = readOfflineLocked().filterNot { it.clientLocalId == clientLocalId }
-            writeQueueLocked(filtered)
-            publishLocked()
+            val filtered = _snapshot.value.offline.filterNot { it.clientLocalId == clientLocalId }
+            _snapshot.value = _snapshot.value.copy(offline = filtered)
+            persistLocked()
         }
     }
 
@@ -169,7 +181,7 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
             val targetId = feature.properties.database_id
             val targetName = feature.properties.name
             val targetCoords = feature.geometry.coordinates
-            val list = readCachedLocked().filterNot { cached ->
+            val list = _snapshot.value.cached.filterNot { cached ->
                 val cachedId = cached.properties.database_id
                 when {
                     targetId != null && cachedId != null -> targetId == cachedId
@@ -177,21 +189,21 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
                         cached.geometry.coordinates == targetCoords
                 }
             }
-            store.putBlocking(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = list)))
-            publishLocked()
+            _snapshot.value = _snapshot.value.copy(cached = list)
+            persistLocked()
         }
     }
 
     fun clear() {
         synchronized(lock) {
-            store.clearBlocking()
-            publishLocked()
+            _snapshot.value = PlacesSnapshot()
+            persistLocked()
         }
     }
 
     private fun updateCachedFeatureLocked(feature: Feature) {
         val id = feature.properties.database_id
-        val current = readCachedLocked().toMutableList()
+        val current = _snapshot.value.cached.toMutableList()
         val idx = if (id != null) current.indexOfFirst { it.properties.database_id == id } else -1
         val updated = if (idx >= 0) {
             current.removeAt(idx)
@@ -200,7 +212,7 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
             stampCreatedAtIfBlank(feature)
         }
         current.add(0, updated)
-        store.putBlocking(KEY_CACHED_PLACES, gson.toJson(FeatureCollection(features = current)))
+        _snapshot.value = _snapshot.value.copy(cached = current)
     }
 
     private fun stampCreatedAtIfBlank(feature: Feature): Feature {
@@ -209,38 +221,17 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
         return feature.copy(properties = feature.properties.copy(created_at = now))
     }
 
-    private fun publishLocked() {
-        _snapshot.value = PlacesSnapshot(
-            cached = readCachedLocked(),
-            offline = readOfflineLocked(),
-            lastSyncMillis = store.getBlocking(KEY_LAST_SYNC_TIME),
-        )
-    }
-
-    private fun readCachedLocked(): List<Feature> {
-        val json = store.getBlocking(KEY_CACHED_PLACES)
-        if (json.isBlank()) return emptyList()
-        return runCatching {
-            gson.fromJson(json, FeatureCollection::class.java)?.features ?: emptyList()
-        }.getOrElse { emptyList() }
-    }
-
-    private fun readOfflineLocked(): List<OfflineFeature> {
-        val json = store.getBlocking(KEY_OFFLINE_PLACES)
-        val parsed = runCatching {
-            gson.fromJson(json, Array<OfflineFeature>::class.java)?.toList() ?: emptyList()
-        }.getOrElse { emptyList() }
-        // Schema v2: drop incompatible pre-clientLocalId queue entries.
-        // Gson leaves clientLocalId null for v1 JSON; that null must not call Kotlin isBlank().
-        val valid = retainValidOfflineEntries(parsed)
-        if (valid.size != parsed.size) {
-            writeQueueLocked(valid)
+    private fun persistLocked() {
+        val snapshot = _snapshot.value
+        runBlocking(Dispatchers.IO) {
+            store.update {
+                PlacesCacheDocument(
+                    cached = snapshot.cached,
+                    offline = snapshot.offline,
+                    lastSyncMillis = snapshot.lastSyncMillis,
+                )
+            }
         }
-        return valid
-    }
-
-    private fun writeQueueLocked(list: List<OfflineFeature>) {
-        store.putBlocking(KEY_OFFLINE_PLACES, gson.toJson(list))
     }
 
     companion object {
@@ -260,13 +251,6 @@ class PlacesStore(context: Context) : PlacesOfflineStore {
             }
         }
 
-        private const val PREFS_NAME = "geovault_places_cache"
-        /** Bumped for clientLocalId queue shape; old offline JSON is not migrated. */
-        private const val SCHEMA_VERSION = 2
-        private val KEY_CACHED_PLACES = PrefKey.StringKey("cached_places")
-        private val KEY_OFFLINE_PLACES = PrefKey.StringKey("offline_places", "[]")
-        private val KEY_LAST_SYNC_TIME = PrefKey.LongKey("last_sync_time")
-        private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_CACHED_PLACES, KEY_OFFLINE_PLACES, KEY_LAST_SYNC_TIME)
         private val DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
 }

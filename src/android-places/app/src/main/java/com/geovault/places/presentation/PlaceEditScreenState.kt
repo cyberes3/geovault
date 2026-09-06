@@ -3,7 +3,7 @@ package com.geovault.places.presentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.geovault.common.CoordinateParser
+import com.geovault.common.geo.CoordinateParser
 import com.geovault.common.maps.geocoding.GeocodeSearchResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.Geometry
@@ -101,10 +101,10 @@ class PlaceEditScreenState(
     fun parseCoordinatesFromInput(): Boolean {
         val parsed = CoordinateParser.parse(coordinatesInput.trim())
         if (parsed != null) {
-            selectedLat = parsed.first
-            selectedLon = parsed.second
+            selectedLat = parsed.latitude
+            selectedLon = parsed.longitude
             selectedAddress = null
-            coordinatesInput = CoordinateParser.formatLatLon(parsed.first, parsed.second)
+            coordinatesInput = CoordinateParser.formatLatLon(parsed)
             coordinatesError = null
             showSelectedPointMarker = true
             pendingCameraMotion = CameraMotionRequest.FocusSelection
@@ -122,10 +122,10 @@ class PlaceEditScreenState(
             coordinatesError = "Invalid coordinates"
             return null
         }
-        selectedLat = parsed.first
-        selectedLon = parsed.second
+        selectedLat = parsed.latitude
+        selectedLon = parsed.longitude
         return Feature(
-            geometry = Geometry(coordinates = listOf(parsed.second, parsed.first)),
+            geometry = Geometry(coordinates = listOf(parsed.longitude, parsed.latitude)),
             properties = Properties(
                 database_id = initial?.properties?.database_id,
                 name = normalizedName,

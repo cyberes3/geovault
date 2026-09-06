@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -61,13 +59,11 @@ import com.geovault.common.maps.ui.geoVaultZoomInFabAction
 import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle
 import com.geovault.common.maps.ui.location.rememberGeoVaultMapLocationSession
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.components.GeoVaultTopBarMenuVisibility
-import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
-import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.TopBarMenuEntry
-import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.places.R
@@ -88,8 +84,8 @@ fun PlacesMapScreen(
     map: GeoVaultMainMap,
     viewModel: PlacesMapViewModel,
     launchArgs: PlacesMapLaunchArgs,
+    auth: GeoVaultAuthShellState,
     isTabVisible: Boolean = true,
-    onOpenSettings: () -> Unit,
     onOpenShare: () -> Unit,
     onOpenEdit: (Feature) -> Unit,
     onViewInList: (Feature) -> Unit,
@@ -221,31 +217,24 @@ fun PlacesMapScreen(
         }
     }
 
-    Scaffold(
+    GeoVaultTabShell(
+        title = stringResource(R.string.app_title_bar),
+        auth = auth,
         modifier = Modifier.fillMaxSize(),
-        topBar = {
-            GeoVaultTopTitleBar(
-                title = stringResource(R.string.app_title_bar),
-                subtitle = stringResource(R.string.map_screen_subtitle),
-                actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(
-                        onOpenSettings = onOpenSettings,
-                        extraEntries = listOf(
-                            TopBarMenuEntry(label = "Share", onClick = onOpenShare),
-                        ),
-                        visibility = GeoVaultTopBarMenuVisibility.Always,
-                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
-                    )
-                },
-            )
-        },
-    ) { scaffoldPadding ->
+        subtitle = stringResource(R.string.map_screen_subtitle),
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        extraTopBarEntries = listOf(
+            TopBarMenuEntry(label = "Share", onClick = onOpenShare),
+        ),
+        scrollAuthenticatedMainContent = false,
+        authenticatedContentHorizontalPadding = 0.dp,
+        authenticatedBottomSpacer = 0.dp,
+        authenticatedMainContent = {
         // Match previous activity_map.xml behavior: map lives in a weighted region above the info panel;
         // bottom UI is a sibling, not an overlay — no camera bottom inset needed for it.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(scaffoldPadding)
                 .background(MaterialTheme.colors.background),
         ) {
             Box(
@@ -425,7 +414,8 @@ fun PlacesMapScreen(
                 }
             }
         }
-    }
+        }
+    )
 }
 
 private const val PLACES_GPS_STREAM_INTERVAL_MS = 2_000L

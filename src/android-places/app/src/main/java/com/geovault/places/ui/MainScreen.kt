@@ -1,8 +1,6 @@
 package com.geovault.places.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,13 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Card
 import androidx.compose.material.Divider
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -46,21 +41,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.CoordinateParser
-import com.geovault.common.ui.components.GeoVaultAuthGate
+import com.geovault.common.geo.CoordinateParser
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
+import com.geovault.common.ui.components.GeoVaultEmptyState
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSearchField
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
-import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.TopBarMenuEntry
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.GeoVaultListCardChrome
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
-import com.geovault.common.ui.update.GeoVaultUpdateAvailableSnackbarHost
+import com.geovault.common.ui.theme.geoVaultListCardChrome
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
 import com.geovault.places.R
@@ -88,10 +83,8 @@ private sealed interface PlaceListItem {
 @Composable
 fun MainScreen(
     state: MainScreenState,
+    auth: GeoVaultAuthShellState,
     onSearchChanged: (String) -> Unit,
-    onAuthServerUrlChanged: (String) -> Unit,
-    onAuthConnect: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenShare: () -> Unit,
     onRefresh: () -> Unit,
     onAddPlace: () -> Unit,
@@ -102,8 +95,6 @@ fun MainScreen(
     onOpenMapToPlace: (Feature) -> Unit,
     onCopyCoordinates: (String) -> Unit,
     onCancelRefresh: () -> Unit,
-    onDismissSnackbar: () -> Unit,
-    onClearUpdateAvailable: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val showSearchDivider by remember(listState) {
@@ -112,92 +103,59 @@ fun MainScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            topBar = {
-                GeoVaultTopTitleBar(
-                    title = stringResource(R.string.app_title_bar),
-                    subtitle = state.lastSyncLabel,
-                    actionsContent = {
-                        GeoVaultTopBarSettingsMenuAction(
-                            onOpenSettings = onOpenSettings,
-                            extraEntries = listOf(
-                                TopBarMenuEntry(label = "Share", onClick = onOpenShare),
-                            ),
-                            overflowTooltip = stringResource(R.string.tooltip_nav_settings),
-                        )
-                    }
+    GeoVaultTabShell(
+        title = stringResource(R.string.app_title_bar),
+        auth = auth,
+        subtitle = state.lastSyncLabel,
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        extraTopBarEntries = listOf(
+            TopBarMenuEntry(label = "Share", onClick = onOpenShare),
+        ),
+        scrollAuthenticatedMainContent = false,
+        authenticatedContentHorizontalPadding = 0.dp,
+        authenticatedBottomSpacer = 0.dp,
+        authenticatedMainContent = {
+            Column(modifier = Modifier.fillMaxSize()) {
+                SearchBlock(
+                    query = state.searchQuery,
+                    onSearchChanged = onSearchChanged
                 )
-            }
-        ) { scaffoldPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(scaffoldPadding)
-                    .background(MaterialTheme.colors.background)
-            ) {
-                GeoVaultAuthGate(
-                    isAuthenticated = state.isAuthenticated,
-                    serverUrl = state.serverUrl,
-                    onServerUrlChanged = onAuthServerUrlChanged,
-                    onConnect = onAuthConnect,
-                    isConnecting = state.isConnecting,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        SearchBlock(
-                            query = state.searchQuery,
-                            onSearchChanged = onSearchChanged
-                        )
-                        if (showSearchDivider) {
-                            Divider(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = geoVaultHairlineDividerColor(),
-                                thickness = 1.dp
-                            )
-                        }
-                        PlacesBody(
-                            state = state,
-                            listState = listState,
-                            onRefresh = onRefresh,
-                            onNavigatePlace = onNavigatePlace,
-                            onEditSavedPlace = onEditSavedPlace,
-                            onEditOfflinePlace = onEditOfflinePlace,
-                            onViewDescription = onViewDescription,
-                            onOpenMapToPlace = onOpenMapToPlace,
-                            onCopyCoordinates = onCopyCoordinates,
-                        )
-                    }
-                }
-
-                if (state.isAuthenticated) {
-                    FabStack(
-                        modifier = Modifier.align(Alignment.BottomEnd),
-                        onAddPlace = onAddPlace,
-                        enabled = !state.isRefreshing
+                if (showSearchDivider) {
+                    Divider(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = geoVaultHairlineDividerColor(),
+                        thickness = 1.dp
                     )
                 }
-
-                GeoVaultLoadingOverlay(
-                    isVisible = state.showSyncOverlay,
-                    title = state.syncOverlayTitle,
-                    subtext = state.syncOverlaySubtext,
-                    onTap = onCancelRefresh
+                PlacesBody(
+                    state = state,
+                    listState = listState,
+                    onRefresh = onRefresh,
+                    onNavigatePlace = onNavigatePlace,
+                    onEditSavedPlace = onEditSavedPlace,
+                    onEditOfflinePlace = onEditOfflinePlace,
+                    onViewDescription = onViewDescription,
+                    onOpenMapToPlace = onOpenMapToPlace,
+                    onCopyCoordinates = onCopyCoordinates,
                 )
             }
-        }
-
-        GeoVaultSnackbarHost(
-            model = state.snackbar,
-            onDismiss = onDismissSnackbar,
-            onAction = { _ -> onDismissSnackbar() },
-        )
-        GeoVaultUpdateAvailableSnackbarHost(
-            update = state.updateAvailable,
-            onDismiss = onClearUpdateAvailable,
-            stackBottomInset = if (state.snackbar != null) 72.dp else 0.dp,
-        )
-    }
+        },
+        authenticatedFloatingAction = {
+            FabStack(
+                modifier = Modifier.align(Alignment.BottomEnd),
+                onAddPlace = onAddPlace,
+                enabled = !state.isRefreshing
+            )
+        },
+        tabOverlay = {
+            GeoVaultLoadingOverlay(
+                isVisible = state.showSyncOverlay,
+                title = state.syncOverlayTitle,
+                subtext = state.syncOverlaySubtext,
+                onTap = onCancelRefresh
+            )
+        },
+    )
 }
 
 @Composable
@@ -290,7 +248,11 @@ private fun PlacesBody(
             .background(MaterialTheme.colors.background),
     ) {
         if (state.saved.isEmpty() && state.offlineItems.isEmpty()) {
-            EmptyState()
+            GeoVaultEmptyState(
+                icon = Icons.Default.Map,
+                title = "No places",
+                message = "Tap the + button to add your first place",
+            )
         } else {
             LazyColumn(
                 state = listState,
@@ -362,34 +324,19 @@ private fun PlaceRow(
     val formattedDate = if (rawDate.length >= 10) rawDate.substring(0, 10) else rawDate
     val dateLabel = if (item.isOffline) "$formattedDate (offline)" else formattedDate
 
-    Card(
+    val cardShape = RoundedCornerShape(12.dp)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        shape = RoundedCornerShape(12.dp),
-        backgroundColor = MaterialTheme.colors.surface,
-        elevation = 0.dp,
-        border = BorderStroke(
-            width = 2.dp,
-            color = when {
-                isSelected -> GeoVaultColorTokens.MainBlue
-                item.isOffline -> GeoVaultColorTokens.MainYellow
-                else -> GeoVaultColorTokens.MainBlue
-            }
-        )
+            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
+            .geoVaultListCardChrome(
+                selected = isSelected,
+                offline = item.isOffline,
+                shape = cardShape,
+                strokeWidth = GeoVaultListCardChrome.EmphasisStrokeWidth,
+            )
+            .padding(20.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    when {
-                        isSelected && MaterialTheme.colors.isLight -> GeoVaultColorTokens.Purple100
-                        isSelected -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
-                        else -> Color.Transparent
-                    }
-                )
-                .padding(20.dp)
-        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -495,38 +442,6 @@ private fun PlaceRow(
                     enabled = actionsEnabled
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = Icons.Default.Map,
-            contentDescription = null,
-            tint = geoVaultContentSecondaryColor().copy(alpha = 0.2f),
-            modifier = Modifier.size(64.dp)
-        )
-        Text(
-            text = "No places",
-            modifier = Modifier.padding(top = 16.dp),
-            color = geoVaultContentSecondaryColor(),
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Tap the + button to add your first place",
-            modifier = Modifier.padding(top = 8.dp),
-            color = geoVaultContentSecondaryColor().copy(alpha = 0.7f),
-            fontSize = 14.sp
-        )
     }
 }
 

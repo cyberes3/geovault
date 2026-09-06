@@ -262,20 +262,12 @@ class SyncOfflinePlacesUseCase(
         kind: GeoVaultHttpFailureKind,
         disposition: GeoVaultQueuedSyncItemDisposition,
     ): SyncItemOutcome {
-        val dropped = when (disposition) {
-            GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
-                val unsyncedCreate = item.feature.properties.database_id == null
-                if (unsyncedCreate) {
-                    false
-                } else {
-                    cacheStore.removeOffline(item.clientLocalId)
-                    true
-                }
-            }
-            GeoVaultQueuedSyncItemDisposition.RequireAuth,
-            GeoVaultQueuedSyncItemDisposition.KeepRetrying,
-            GeoVaultQueuedSyncItemDisposition.ResolveConflict,
-            GeoVaultQueuedSyncItemDisposition.RecreateOrDiscard -> false
+        val dropped = GeoVaultQueuedSyncFailurePolicy.shouldRemoveFromOfflineQueue(
+            kind = kind,
+            hasServerId = item.feature.properties.database_id != null,
+        )
+        if (dropped) {
+            cacheStore.removeOffline(item.clientLocalId)
         }
         val surfacedMessage = when (disposition) {
             GeoVaultQueuedSyncItemDisposition.RequireAuth ->

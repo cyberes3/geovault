@@ -2,10 +2,8 @@ package com.geovault.places.di
 
 import android.app.Application
 import android.content.Context
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.ServerUrlContract
 import com.geovault.common.auth.CommonInitialAuthController
-import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.places.data.NavigationTrackingRepository
 import com.geovault.places.data.PlacesRepository
 import com.geovault.places.data.PlacesStore
@@ -14,7 +12,8 @@ import com.geovault.places.domain.OfflineSyncCoordinator
 import com.geovault.places.domain.SyncOfflinePlacesUseCase
 
 class PlacesAppServices private constructor(private val appContext: Context) {
-    private val authServices by lazy { GeovaultAuthServices(appContext) }
+    fun authSession(): GeoVaultAuthSession = GeoVaultAuthSession.get()
+
     private val placesStore by lazy { PlacesStore(appContext) }
     private val placesRepository by lazy { PlacesRepository(appContext) }
     private val navigationRepository by lazy { NavigationTrackingRepository(appContext) }
@@ -32,16 +31,11 @@ class PlacesAppServices private constructor(private val appContext: Context) {
             cacheStore = placesStore,
             syncExecutor = syncUseCase,
             navigationRetryFlusher = navigationRepository,
-            serverUrlProvider = { GeovaultAuthManager.getServerUrl(appContext) },
+            serverUrlProvider = { authSession().getServerUrl() },
         )
     }
     private val authController by lazy {
-        CommonInitialAuthController(
-            serverConfigService = authServices,
-            authSessionService = authServices,
-            oauthPreparationService = authServices,
-            peerServerUrlsProvider = { ServerUrlContract.getServerUrlsFromOtherApps(appContext) },
-        )
+        CommonInitialAuthController.standard(authSession(), appContext)
     }
 
     fun placesStore(): PlacesStore = placesStore
@@ -60,6 +54,11 @@ class PlacesAppServices private constructor(private val appContext: Context) {
             return instance ?: synchronized(this) {
                 instance ?: PlacesAppServices(application.applicationContext).also { instance = it }
             }
+        }
+
+        fun from(context: Context): PlacesAppServices {
+            val app = context.applicationContext as Application
+            return from(app)
         }
     }
 }

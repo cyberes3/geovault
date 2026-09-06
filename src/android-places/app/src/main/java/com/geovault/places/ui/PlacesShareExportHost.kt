@@ -82,7 +82,7 @@ fun PlacesShareExportHost(
                     showActionSheet = true
                 }
             },
-            onDismiss = onDismissRequest,
+            onDismissRequest = onDismissRequest,
         )
     }
 

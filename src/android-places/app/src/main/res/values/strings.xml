@@ -2,6 +2,7 @@
     <string name="app_name">Places</string>
     <string name="app_title_bar">GeoVault Places</string>
     <string name="tooltip_nav_settings">Open account, sign-in, and app preferences.</string>
+    <string name="nav_settings">Settings</string>
     <string name="map_screen_subtitle">Map</string>
     <string name="tooltip_map_layers">Change the map style or layers you use for this view.</string>
     <string name="tooltip_map_fit_content">Fit all saved places and your location in view.</string>

@@ -56,7 +56,7 @@ class MainScreenViewModel(
     private val services = PlacesAppServices.from(application)
     private val placesStore = services.placesStore()
     private val offlineSyncCoordinator = services.offlineSyncCoordinator()
-    private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Places.versionCheckSession(
+    private val updateCoordinator = GeoVaultAndroidReleaseIdentity.Places.updateCoordinator(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
     )
@@ -68,6 +68,14 @@ class MainScreenViewModel(
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            updateCoordinator.promptState.collect { prompt ->
+                _state.update { it.copy(updateAvailable = prompt.updateOrNull()) }
+            }
+        }
+    }
 
     fun initialize() {
         if (!snapshotCollectStarted) {
@@ -234,7 +242,7 @@ class MainScreenViewModel(
     }
 
     fun clearUpdateAvailable() {
-        _state.update { it.copy(updateAvailable = null) }
+        updateCoordinator.dismissPrompt()
     }
 
     fun showExternalError(message: String) {
@@ -260,8 +268,7 @@ class MainScreenViewModel(
         }
         if (wasAuthenticated && !loggedIn) {
             initialRefreshTriggered = false
-            versionCheckSession.reset()
-            _state.update { it.copy(updateAvailable = null) }
+            updateCoordinator.reset()
         }
         val authenticatedAfterLaunch = !initialRefreshTriggered && loggedIn
         val becameAuthenticated = !wasAuthenticated && loggedIn
@@ -275,9 +282,7 @@ class MainScreenViewModel(
     }
 
     private fun launchVersionCheckIfNeeded() {
-        versionCheckSession.launchIfNeeded(viewModelScope) { available ->
-            _state.update { it.copy(updateAvailable = available) }
-        }
+        updateCoordinator.launchIfNeeded(viewModelScope)
     }
 
     private fun publishSyncOutcome(syncResult: SyncResult) {

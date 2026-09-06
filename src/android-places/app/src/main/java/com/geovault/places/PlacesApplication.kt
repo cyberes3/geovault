@@ -5,21 +5,22 @@ import android.content.ContentValues
 import android.content.Context
 import android.os.Environment
 import android.provider.MediaStore
-import com.geovault.common.AppResetFlow
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.bootstrap.AppResetFlow
+import com.geovault.common.bootstrap.GeoVaultAppBootstrap
 import com.geovault.common.logging.GeoVaultAppVersionLog
+import com.geovault.common.maps.bootstrap.GeoVaultMapsBootstrap
 import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.places.BuildConfig
 import com.geovault.places.data.PlacesApiFactory
 import com.geovault.places.di.PlacesAppServices
-import com.geovault.common.maps.core.MapLibreInitializer
 import com.geovault.places.model.Feature
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener {
+class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener {
     companion object {
         private const val HOOK_EMERGENCY_EXPORT = "places_emergency_export"
         private const val HOOK_CLEAR_LOCAL = "places_clear_local"
@@ -29,39 +30,48 @@ class PlacesApplication : Application(), GeovaultAuthManager.AuthFailureListener
         fun consumePendingExportSavedToast(): Boolean = pendingExportSavedToast.getAndSet(false)
     }
 
+    lateinit var bootstrap: GeoVaultAppBootstrap
+        private set
+
     override fun onCreate() {
         super.onCreate()
         GeoVaultAppVersionLog.log(this, BuildConfig.GIT_COMMIT_SHA)
-        GeovaultAuthManager.init(
-            context = this,
-            redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
-            clientId = GeovaultAuthManager.OAUTH_CLIENT_ID_PLACES,
-        )
-        GeovaultAuthManager.setAuthFailureListener(this)
-        val services = PlacesAppServices.from(this)
-        services.placesStore().preloadOnLaunch()
-        services.navigationRepository().preloadOnLaunch()
-        MapLibreInitializer.init(this)
-        AppResetFlow.registerHook(
-            key = HOOK_EMERGENCY_EXPORT,
-            phase = AppResetFlow.Phase.BEFORE_EMERGENCY_EXPORT,
-            reasons = setOf(
-                AppResetFlow.Reason.AUTH_FAILURE,
-                AppResetFlow.Reason.MANUAL_SIGN_OUT,
-            ),
-        ) { hookContext ->
-            performEmergencyExport(hookContext)
-        }
-        AppResetFlow.registerHook(
-            key = HOOK_CLEAR_LOCAL,
-            phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
-        ) { _ ->
-            GeoVaultMainMapControllerStore.releaseKey(PLACES_MAIN_MAP_KEY)
-            PlacesAppServices.from(this).placesStore().clear()
-            PlacesAppServices.from(this).navigationRepository().clearPending()
-            PlacesApiFactory.clearCache()
-        }
-        GeovaultAuthManager.fetchUserStatus(this)
+        bootstrap = GeoVaultAppBootstrap.builder(this)
+            .auth(
+                redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
+                clientId = GeoVaultAuthSession.OAUTH_CLIENT_ID_PLACES,
+                authFailureListener = this,
+            ) { ctx -> PlacesAppServices.from(ctx).initialAuthController() }
+            .install(GeoVaultMapsBootstrap(PLACES_MAIN_MAP_KEY, prewarmMainMap = false))
+            .gate("places-store") { ctx ->
+                val services = PlacesAppServices.from(ctx)
+                services.placesStore().preloadOnLaunch()
+                services.navigationRepository().preloadOnLaunch()
+            }
+            .background("places-user-status") {
+                GeoVaultAuthSession.get().fetchUserStatusWithResult()
+            }
+            .resetHook(
+                key = HOOK_EMERGENCY_EXPORT,
+                phase = AppResetFlow.Phase.BEFORE_EMERGENCY_EXPORT,
+                reasons = setOf(
+                    AppResetFlow.Reason.AUTH_FAILURE,
+                    AppResetFlow.Reason.MANUAL_SIGN_OUT,
+                ),
+            ) { hookContext ->
+                performEmergencyExport(hookContext)
+            }
+            .resetHook(
+                key = HOOK_CLEAR_LOCAL,
+                phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
+            ) { _ ->
+                GeoVaultMainMapControllerStore.releaseKey(PLACES_MAIN_MAP_KEY)
+                PlacesAppServices.from(this).placesStore().clear()
+                PlacesAppServices.from(this).navigationRepository().clearPending()
+                PlacesApiFactory.clearCache()
+            }
+            .build()
+        bootstrap.boot(this)
     }
 
     override fun onAuthFailure(context: Context) {

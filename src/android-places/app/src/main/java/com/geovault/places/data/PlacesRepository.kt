@@ -1,23 +1,23 @@
 package com.geovault.places.data
 
 import android.content.Context
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.places.domain.PlacesRemoteDataSource
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
-import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
 class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
     private fun api(): PlacesApi {
-        val serverUrl = GeovaultAuthManager.getServerUrl(context)
-        return PlacesApiFactory.create(context, serverUrl)
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl()
+        return PlacesApiFactory.create(serverUrl)
     }
 
     fun fetchPlaces(): Result<FeatureCollection> {
@@ -25,9 +25,9 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             GeoVaultCaptureLog.i(TAG, "fetchPlaces start")
             val response = api().getPlaces().execute()
             if (!response.isSuccessful) {
-                val message = parseApiError(response, "Server error: ${response.code()}")
-                GeoVaultCaptureLog.e(TAG, "fetchPlaces failed code=${response.code()} message=$message")
-                error(message)
+                val failure = GeoVaultApiFailure.fromRetrofit(response, "fetchPlaces")
+                GeoVaultCaptureLog.e(TAG, "fetchPlaces failed code=${failure.httpCode} message=${failure.message}")
+                throw failure
             }
             val body = response.body() ?: error("Server returned no data")
             GeoVaultCaptureLog.i(TAG, "fetchPlaces ok count=${body.features.size}")
@@ -43,12 +43,12 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             val call = api().getPlaces()
             executeCancellable(call) { response ->
                 if (!response.isSuccessful) {
-                    val message = parseApiError(response, "Server error: ${response.code()}")
+                    val failure = GeoVaultApiFailure.fromRetrofit(response, "fetchPlaces")
                     GeoVaultCaptureLog.e(
                         TAG,
-                        "fetchPlacesCancellable failed code=${response.code()} message=$message",
+                        "fetchPlacesCancellable failed code=${failure.httpCode} message=${failure.message}",
                     )
-                    error(message)
+                    throw failure
                 }
                 val body = response.body() ?: error("Server returned no data")
                 GeoVaultCaptureLog.i(TAG, "fetchPlacesCancellable ok count=${body.features.size}")
@@ -65,12 +65,12 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             val call = api().getPlace(id)
             executeCancellable(call) { response ->
                 if (!response.isSuccessful) {
-                    val message = parseApiError(response, "Sync failed: server error ${response.code()}")
+                    val failure = GeoVaultApiFailure.fromRetrofit(response, "fetchPlace")
                     GeoVaultCaptureLog.e(
                         TAG,
-                        "fetchPlace failed id=$id code=${response.code()} message=$message",
+                        "fetchPlace failed id=$id code=${failure.httpCode} message=${failure.message}",
                     )
-                    error(message)
+                    throw failure
                 }
                 val body = response.body() ?: error("Server returned no data")
                 GeoVaultCaptureLog.i(
@@ -97,12 +97,12 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             val call = api().createPlace(body)
             executeCancellable(call) { response ->
                 if (!response.isSuccessful) {
-                    val message = parseApiError(response, "Sync failed: server error ${response.code()}")
+                    val failure = GeoVaultApiFailure.fromRetrofit(response, "createPlace")
                     GeoVaultCaptureLog.e(
                         TAG,
-                        "createPlace failed name=$placeName code=${response.code()} message=$message",
+                        "createPlace failed name=$placeName code=${failure.httpCode} message=${failure.message}",
                     )
-                    error(message)
+                    throw failure
                 }
                 val created = response.body() ?: error("Server returned no data")
                 GeoVaultCaptureLog.i(
@@ -129,12 +129,12 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             val call = api().updatePlace(id, body)
             executeCancellable(call) { response ->
                 if (!response.isSuccessful) {
-                    val message = parseApiError(response, "Sync failed: server error ${response.code()}")
+                    val failure = GeoVaultApiFailure.fromRetrofit(response, "updatePlace")
                     GeoVaultCaptureLog.e(
                         TAG,
-                        "updatePlace failed id=$id name=$placeName code=${response.code()} message=$message",
+                        "updatePlace failed id=$id name=$placeName code=${failure.httpCode} message=${failure.message}",
                     )
-                    error(message)
+                    throw failure
                 }
                 val updated = response.body() ?: error("Server returned no data")
                 GeoVaultCaptureLog.i(TAG, "updatePlace ok id=$id name=$placeName")
@@ -150,9 +150,9 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
             GeoVaultCaptureLog.i(TAG, "deletePlace start id=$id")
             val response = api().deletePlace(id).execute()
             if (!response.isSuccessful) {
-                val message = parseApiError(response, "Failed to delete place: ${response.code()}")
-                GeoVaultCaptureLog.e(TAG, "deletePlace failed id=$id code=${response.code()} message=$message")
-                error(message)
+                val failure = GeoVaultApiFailure.fromRetrofit(response, "deletePlace")
+                GeoVaultCaptureLog.e(TAG, "deletePlace failed id=$id code=${failure.httpCode} message=${failure.message}")
+                throw failure
             }
             GeoVaultCaptureLog.i(TAG, "deletePlace ok id=$id")
             Unit
@@ -179,22 +179,6 @@ class PlacesRepository(private val context: Context) : PlacesRemoteDataSource {
                 continuation.resumeWithException(t)
             }
         })
-    }
-
-    private fun parseApiError(response: Response<*>, fallback: String): String {
-        val body = response.errorBody()?.string() ?: return fallback
-        return try {
-            val json = JSONObject(body)
-            val message = json.optString("error", "").trim()
-            if (message.isNotEmpty()) {
-                // Keep HTTP code discoverable for GeoVaultHttpFailureClassifier.
-                "$message (HTTP ${response.code()})"
-            } else {
-                fallback
-            }
-        } catch (_: Exception) {
-            fallback
-        }
     }
 
     companion object {

@@ -1,12 +1,9 @@
 package com.geovault.places.domain
 
 import com.geovault.common.logging.GeoVaultCaptureLog
+import com.geovault.common.net.GeoVaultApiFailure
+import com.geovault.common.sync.GeoVaultHttpFailureClassifier
 import com.geovault.places.model.FeatureCollection
-import java.io.IOException
-import java.net.ConnectException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import javax.net.ssl.SSLException
 import kotlinx.coroutines.delay
 
 class OfflineSyncCoordinator(
@@ -84,7 +81,7 @@ class OfflineSyncCoordinator(
             last = result
             if (result.isSuccess) return result
             val err = result.exceptionOrNull()!!
-            if (attempt < SNAPSHOT_FETCH_MAX_ATTEMPTS - 1 && isTransientNetworkFailure(err)) {
+            if (attempt < SNAPSHOT_FETCH_MAX_ATTEMPTS - 1 && GeoVaultHttpFailureClassifier.isTransientTransport(err)) {
                 delay(SNAPSHOT_FETCH_RETRY_DELAYS_MS[attempt])
             } else {
                 return result
@@ -94,40 +91,18 @@ class OfflineSyncCoordinator(
     }
 
     private fun snapshotFailureMessage(error: Throwable): String {
+        if (error is GeoVaultApiFailure) {
+            val detail = error.serverMessage?.takeIf { it.isNotBlank() }
+                ?: error.httpCode?.let { "HTTP $it" }
+                ?: "Unknown error"
+            return if (error.httpCode != null) "Server Error: $detail" else "Network failed: $detail"
+        }
         val details = error.message?.trim().orEmpty()
-        return if (details.startsWith("Server error:", ignoreCase = true)) {
-            "Server Error: ${details.removePrefix("Server error:").trim()}"
-        } else {
-            "Network failed: ${if (details.isNotEmpty()) details else "Unknown error"}"
-        }
-    }
-
-    private fun isTransientNetworkFailure(t: Throwable): Boolean {
-        val msg = t.message.orEmpty()
-        if (msg.startsWith("Server error:", ignoreCase = true)) return false
-        if (msg == "Server returned no data") return false
-
-        var cur: Throwable? = t
-        val seen = mutableSetOf<Throwable>()
-        while (cur != null && cur !in seen) {
-            seen.add(cur)
-            when (cur) {
-                is SSLException -> return false
-                is UnknownHostException -> return true
-                is SocketTimeoutException -> return true
-                is ConnectException -> return true
-                else -> {
-                    if (cur.javaClass.name == GAI_EXCEPTION_CLASS_NAME) return true
-                }
-            }
-            cur = cur.cause
-        }
-        return t is IOException && t !is SSLException
+        return "Network failed: ${if (details.isNotEmpty()) details else "Unknown error"}"
     }
 
     companion object {
         private const val TAG = "PlacesSyncCoordinator"
-        private const val GAI_EXCEPTION_CLASS_NAME = "android.system.GaiException"
         private const val SNAPSHOT_FETCH_MAX_ATTEMPTS = 3
         private val SNAPSHOT_FETCH_RETRY_DELAYS_MS = longArrayOf(200L, 450L)
     }

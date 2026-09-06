@@ -1,18 +1,15 @@
 package com.geovault.places.data
 
-import android.content.Context
-import com.geovault.common.RetrofitClient
+import com.geovault.common.net.GeoVaultHttp
+import com.geovault.common.net.GeoVaultServerUrl
 
 object PlacesApiFactory {
-    private val cache = RetrofitClient.CachedApiHolder<PlacesApi>()
+    private val cache = GeoVaultHttp.CachedApiHolder<PlacesApi>()
 
-    fun create(context: Context, baseUrl: String): PlacesApi {
-        return RetrofitClient.createCachedApiOmitNulls(
-            context = context,
-            baseUrl = baseUrl,
-            apiClass = PlacesApi::class.java,
-            cache = cache,
-        )
+    fun create(baseUrl: String): PlacesApi {
+        val parsed = GeoVaultServerUrl.parse(baseUrl)
+            ?: error("Cannot create Places API without a valid server URL")
+        return GeoVaultHttp.createCachedApi(parsed, PlacesApi::class.java, cache)
     }
 
     fun clearCache() {

@@ -28,7 +28,7 @@ if [ -z "$PACKAGE_NAME" ]; then
 fi
 
 echo "Requesting capture-log export from $PACKAGE_NAME..."
-adb shell am broadcast -a com.geovault.common.EXPORT_CAPTURE_LOG -p "$PACKAGE_NAME" >/dev/null
+adb shell am broadcast -n "$PACKAGE_NAME/com.geovault.common.logging.GeoVaultCaptureLogExportReceiver" -a com.geovault.common.EXPORT_CAPTURE_LOG >/dev/null
 
 echo "Bringing app to foreground so Android does not freeze the export worker..."
 adb shell am start -n "$PACKAGE_NAME/.MainActivity" >/dev/null 2>&1 || true

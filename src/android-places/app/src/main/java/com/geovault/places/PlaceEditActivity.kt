@@ -238,8 +238,8 @@ class PlaceEditActivity : ComponentActivity() {
                                         "kind=$kind disposition=$disposition " +
                                         "error=${error.message}",
                                 )
-                                when (disposition) {
-                                    GeoVaultQueuedSyncItemDisposition.RequireAuth -> {
+                                when {
+                                    disposition == GeoVaultQueuedSyncItemDisposition.RequireAuth -> {
                                         Toast.makeText(
                                             this@PlaceEditActivity,
                                             PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE,
@@ -247,7 +247,7 @@ class PlaceEditActivity : ComponentActivity() {
                                         ).show()
                                         saveInFlight.set(false)
                                     }
-                                    GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
+                                    disposition == GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
                                         Toast.makeText(
                                             this@PlaceEditActivity,
                                             error.message?.takeIf { it.isNotBlank() }
@@ -256,9 +256,7 @@ class PlaceEditActivity : ComponentActivity() {
                                         ).show()
                                         saveInFlight.set(false)
                                     }
-                                    GeoVaultQueuedSyncItemDisposition.KeepRetrying,
-                                    GeoVaultQueuedSyncItemDisposition.ResolveConflict,
-                                    GeoVaultQueuedSyncItemDisposition.RecreateOrDiscard -> {
+                                    GeoVaultQueuedSyncFailurePolicy.shouldFallbackToOfflineSave(kind) -> {
                                         val snackbar = when (kind) {
                                             GeoVaultHttpFailureKind.RetryableNetwork,
                                             GeoVaultHttpFailureKind.RetryableServer,
@@ -679,7 +677,7 @@ private fun PlaceEditScreen(
         GeoVaultMapGeocodeSearchDialog(
             visible = true,
             repository = geocodingRepository,
-            onDismiss = { showGeocodeSearchDialog = false },
+            onDismissRequest = { showGeocodeSearchDialog = false },
             onPickResult = state::setFromSearchResult,
         )
     }

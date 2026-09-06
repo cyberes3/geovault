@@ -1,32 +1,35 @@
 package com.geovault.places.data
 
 import android.content.Context
-import com.geovault.common.maps.external.GeoVaultExternalMapLauncher
-import com.geovault.common.settings.GeoVaultPrefsStore
-import com.geovault.common.settings.PrefKey
+import com.geovault.common.geo.external.GeoVaultExternalMapLauncher
+import com.geovault.common.settings.GeoVaultDocumentStore
 import com.geovault.common.sync.GeoVaultHttpFailureClassifier
 import com.geovault.common.sync.GeoVaultHttpFailureKind
 import com.geovault.places.domain.NavigationRetryFlusher
 import com.geovault.places.model.Feature
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
 class NavigationTrackingRepository(private val context: Context) : NavigationRetryFlusher {
-    private val store = GeoVaultPrefsStore(
+    private val store = GeoVaultDocumentStore(
         context = context,
-        prefsName = PREFS_NAME,
-        schemaVersion = SCHEMA_VERSION,
-        registeredKeys = ALL_KEYS,
+        fileName = PlacesNavDocument.FILE_NAME,
+        documentSerializer = PlacesNavDocument.serializer(),
+        defaultValue = PlacesNavDocument(),
+        currentVersion = PlacesNavDocument.SCHEMA_VERSION,
+        legacyMapper = PlacesNavDocument::fromLegacy,
     )
-    private val gson = Gson()
-    private val intListType = TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type
     private val pendingLock = Any()
+    private var pendingIds: List<Int> = emptyList()
+
+    @Volatile
+    private var loaded = false
 
     fun preloadOnLaunch() {
-        store.preloadAllDataBlocking()
+        ensureLoaded()
     }
 
     fun openInGoogleMaps(
@@ -48,7 +51,7 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
     fun trackNavigation(feature: Feature, serverUrl: String) {
         val dbId = feature.properties.database_id ?: return
         if (serverUrl.isBlank()) return
-        val api = PlacesApiFactory.create(context, serverUrl)
+        val api = PlacesApiFactory.create(serverUrl)
         flushPending(serverUrl)
         api.trackNavigation(dbId).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response: Response<Void>) {
@@ -68,7 +71,7 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
 
     override fun flushPending(serverUrl: String) {
         if (serverUrl.isBlank()) return
-        val api = PlacesApiFactory.create(context, serverUrl)
+        val api = PlacesApiFactory.create(serverUrl)
         getPending().forEach { id ->
             api.trackNavigation(id).enqueue(object : Callback<Void> {
                 override fun onResponse(call: Call<Void>, response: Response<Void>) {
@@ -88,7 +91,9 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
 
     fun clearPending() {
         synchronized(pendingLock) {
-            store.removeBlocking(KEY_PENDING_NAVIGATION_IDS)
+            ensureLoadedLocked()
+            pendingIds = emptyList()
+            persistLocked()
         }
     }
 
@@ -103,37 +108,46 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
 
     private fun getPending(): List<Int> {
         return synchronized(pendingLock) {
-            readPendingLocked()
+            ensureLoadedLocked()
+            pendingIds
         }
     }
 
     private fun addPending(id: Int) {
         synchronized(pendingLock) {
-            val pending = readPendingLocked().toMutableList()
-            if (id !in pending) {
-                pending.add(id)
-                store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
+            ensureLoadedLocked()
+            if (id !in pendingIds) {
+                pendingIds = pendingIds + id
+                persistLocked()
             }
         }
     }
 
     private fun removePending(id: Int) {
         synchronized(pendingLock) {
-            val pending = readPendingLocked().toMutableList()
-            pending.remove(id)
-            store.putBlocking(KEY_PENDING_NAVIGATION_IDS, gson.toJson(pending))
+            ensureLoadedLocked()
+            pendingIds = pendingIds.filterNot { it == id }
+            persistLocked()
         }
     }
 
-    private fun readPendingLocked(): List<Int> {
-        val json = store.getBlocking(KEY_PENDING_NAVIGATION_IDS)
-        return runCatching { gson.fromJson<List<Int>>(json, intListType) ?: emptyList() }.getOrElse { emptyList() }
+    private fun ensureLoaded() {
+        if (loaded) return
+        synchronized(pendingLock) {
+            ensureLoadedLocked()
+        }
     }
 
-    companion object {
-        private const val PREFS_NAME = "geovault_places_nav"
-        private const val SCHEMA_VERSION = 1
-        private val KEY_PENDING_NAVIGATION_IDS = PrefKey.StringKey("pending_navigation_ids", "[]")
-        private val ALL_KEYS: Set<PrefKey<*>> = setOf(KEY_PENDING_NAVIGATION_IDS)
+    private fun ensureLoadedLocked() {
+        if (loaded) return
+        pendingIds = runBlocking(Dispatchers.IO) { store.get() }.pendingNavigationIds
+        loaded = true
+    }
+
+    private fun persistLocked() {
+        val ids = pendingIds
+        runBlocking(Dispatchers.IO) {
+            store.update { PlacesNavDocument(pendingNavigationIds = ids) }
+        }
     }
 }
