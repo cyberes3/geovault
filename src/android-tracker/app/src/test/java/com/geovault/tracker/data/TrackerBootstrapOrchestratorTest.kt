@@ -19,6 +19,7 @@ class TrackerBootstrapOrchestratorTest {
         source.trackersGate = CompletableDeferred()
         val orchestrator = TrackerBootstrapOrchestrator(
             dataSource = source,
+            scope = this,
         )
         val callers = List(4) { async { orchestrator.refreshForLaunch() } }
         delay(30L)
@@ -36,6 +37,7 @@ class TrackerBootstrapOrchestratorTest {
         val source = FakeBootstrapDataSource()
         val orchestrator = TrackerBootstrapOrchestrator(
             dataSource = source,
+            scope = this,
         )
 
         val outcome = orchestrator.refreshForResume()

@@ -5,9 +5,9 @@ import android.content.Intent
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.GeoVaultAccountUiState
-import com.geovault.common.net.GeoVaultValidatedInternetNotifier
+import com.geovault.common.net.GeoVaultConnectivity
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.common.update.VersionCheckResult
@@ -26,7 +26,7 @@ import com.geovault.tracker.settings.TrackerSettingsLoadState
 import com.geovault.tracker.settings.TrackerSettingsRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
-import com.geovault.tracker.data.TrackerSessionBootstrap
+import com.geovault.tracker.data.TrackerSessionWarmup
 import com.geovault.tracker.history.TrackerHistoryIntent
 import com.geovault.tracker.history.TrackerHistoryIntentDispatcher
 import com.geovault.tracker.history.TrackerHistorySourceAdapters
@@ -46,7 +46,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 data class MainScreenState(
@@ -68,11 +67,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerSettingsRepository()
     private val trackerManagementRepository: TrackerManagementRepository =
         TrackerAppServices.from(application).trackerManagementRepository()
-    private val sessionBootstrap: TrackerSessionBootstrap =
-        TrackerAppServices.from(application).trackerSessionBootstrap()
+    private val sessionWarmup: TrackerSessionWarmup =
+        TrackerAppServices.from(application).trackerSessionWarmup()
     private val historyRepository = TrackerAppServices.from(application).trackerHistoryRepository()
     private val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
-    private val versionCheckSession = GeoVaultAndroidReleaseIdentity.Tracker.versionCheckSession(
+    private val updateCoordinator = GeoVaultAndroidReleaseIdentity.Tracker.updateCoordinator(
         application = application,
         localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
     )
@@ -104,7 +103,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var preparingStartJob: Job? = null
 
     private val validatedInternetNotifier =
-        GeoVaultValidatedInternetNotifier(app) {
+        GeoVaultConnectivity.RecoveryMonitor(app) {
             viewModelScope.launch {
                 val runBootstrap = transportProbeMutex.withLock {
                     if (!_state.value.isAuthenticated || _state.value.isServerAccessible) {
@@ -122,12 +121,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     true
                 }
                 if (runBootstrap) {
-                    sessionBootstrap.runResumeBootstrap()
+                    sessionWarmup.runResumeWarmup()
                 }
             }
         }
 
     init {
+        viewModelScope.launch {
+            updateCoordinator.promptState.collect { prompt ->
+                _state.update { it.copy(updateAvailable = prompt.updateOrNull()) }
+            }
+        }
         viewModelScope.launch {
             TrackingRuntimeStateStore.state.collect { runtime ->
                 if (_state.value.isPreparingToTrack &&
@@ -150,17 +154,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun initialize() {
         launchPostAuthStartupFlowsIfNeeded()
-        if (!_state.value.isAuthenticated) {
-            launchVersionCheckIfNeeded()
-        }
     }
 
     fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
         syncAccountState(accountState)
         launchPostAuthStartupFlowsIfNeeded()
-        if (!_state.value.isAuthenticated) {
-            launchVersionCheckIfNeeded()
-        }
     }
 
     fun requestStartTracking() {
@@ -223,9 +221,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun onHostResumed() {
         launchPostAuthStartupFlowsIfNeeded()
-        if (!_state.value.isAuthenticated) {
-            launchVersionCheckIfNeeded()
-        }
         scheduleResumeBootstrapAfterStartup()
     }
 
@@ -238,7 +233,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearUpdateAvailable() {
-        _state.update { it.copy(updateAvailable = null) }
+        updateCoordinator.dismissPrompt()
     }
 
     fun requestMapRecoveryAfterStreamingStop() {
@@ -375,7 +370,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     GeoVaultCaptureLog.d(TAG, "transport_probe_launch reachable=$transportReachable")
                     // Apply immediately so offline overlay / notifier match transport (do not wait for launch I/O).
                     _state.update { it.copy(isServerAccessible = transportReachable) }
-                    val outcome = sessionBootstrap.runLaunchBootstrap()
+                    val outcome = sessionWarmup.runLaunchWarmup()
                     outcome
                 } finally {
                     launchBootstrapMutex.withLock {
@@ -406,7 +401,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 // Avoid a flaky probe undoing a validated-network recovery that beat this coroutine.
                 GeoVaultCaptureLog.d(TAG, "transport_probe_on_resume skip_probe already_accessible")
             }
-            sessionBootstrap.runResumeBootstrap()
+            sessionWarmup.runResumeWarmup()
         }
     }
 
@@ -415,11 +410,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
      * Runs once during authenticated launch bootstrap only (see [runAuthenticatedLaunchBootstrap]).
      */
     private suspend fun measureLaunchTransportReachable(): Boolean =
-        suspendCancellableCoroutine { continuation ->
-            GeovaultAuthManager.probeServerTransportReachable(app) { reachable ->
-                continuation.resume(reachable)
-            }
-        }
+        GeoVaultAuthSession.get().probeServerTransportReachable()
 
     private suspend fun measureLaunchTransportReachableExclusive(): Boolean =
         transportProbeMutex.withLock { measureLaunchTransportReachable() }
@@ -474,17 +465,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun launchVersionCheckIfNeeded() {
-        versionCheckSession.launchIfNeeded(viewModelScope) { available ->
-            _state.update { it.copy(updateAvailable = available) }
-        }
+        updateCoordinator.launchIfNeeded(viewModelScope)
     }
 
     private fun resetPostAuthStartupState() {
-        sessionBootstrap.resetForSignedOutSession()
+        sessionWarmup.resetForSignedOutSession()
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
         startupSelectedTrackerGeometryHandled = false
-        versionCheckSession.reset()
+        updateCoordinator.reset()
         startupTrackingAutomationJob?.cancel()
         startupTrackingAutomationJob = null
         startupRefreshJob?.cancel()

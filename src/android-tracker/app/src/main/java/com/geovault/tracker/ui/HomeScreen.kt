@@ -61,11 +61,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.geovault.common.UnitUtils
+import com.geovault.common.util.DistanceFormat
+import com.geovault.common.util.MeasurementSystem
 import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInfoDialog
-import com.geovault.common.ui.components.GeoVaultNavTabShell
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
@@ -88,20 +90,14 @@ import com.geovault.tracker.services.TrackingRuntimeSnapshot
 import com.geovault.tracker.services.TrackingUiStatus
 import com.geovault.tracker.ui.time.HomeElapsedTimeFormat
 
-private const val FEET_PER_METER = 3.28084f
 private const val MAX_DISPLAY_ACCURACY_FEET = 1500f
-private const val MAX_DISPLAY_ACCURACY_METERS = MAX_DISPLAY_ACCURACY_FEET / FEET_PER_METER
+private val MAX_DISPLAY_ACCURACY_METERS = MAX_DISPLAY_ACCURACY_FEET / DistanceFormat.FEET_PER_METER.toFloat()
 
 @Composable
 fun HomeScreen(
-    isAuthenticated: Boolean,
+    auth: GeoVaultAuthShellState,
     isServerAccessible: Boolean,
     isPreparingToTrack: Boolean,
-    serverUrl: String,
-    onAuthServerUrlChanged: (String) -> Unit,
-    onAuthConnect: () -> Unit,
-    isConnecting: Boolean,
-    onOpenSettings: () -> Unit,
     infoMessage: String?,
     onClearInfoMessage: () -> Unit,
     onRequestStartTracking: () -> Unit,
@@ -158,17 +154,11 @@ fun HomeScreen(
         homeViewModel.refreshPermissionSnapshot()
     }
 
-    GeoVaultNavTabShell(
+    GeoVaultTabShell(
         title = stringResource(R.string.home_title),
+        auth = auth,
         placeholderText = stringResource(R.string.home_placeholder),
-        isAuthenticated = isAuthenticated,
-        serverUrl = serverUrl,
-        onAuthServerUrlChanged = onAuthServerUrlChanged,
-        onAuthConnect = onAuthConnect,
-        isConnecting = isConnecting,
-        onOpenSettings = onOpenSettings,
         settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
-        connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
@@ -250,7 +240,7 @@ fun HomeScreen(
                         onManualPoint = onRequestManualPoint,
                     )
                 }
-                if (!isServerAccessible && !isConnecting) {
+                if (!isServerAccessible && !auth.isConnecting) {
                     ServerFailureOverlay(modifier = Modifier.fillMaxSize())
                 }
                 GeoVaultSnackbarHost(
@@ -425,8 +415,8 @@ private fun TrackingContainer(
     } else {
         geoVaultContentSecondaryColor()
     }
-    val useImperial = UnitUtils.usesImperialUnitsDefault(androidx.compose.ui.platform.LocalContext.current)
-    val accuracy = formatAccuracyPresentation(state, useImperial)
+    val measurementSystem = MeasurementSystem.fromContext(androidx.compose.ui.platform.LocalContext.current)
+    val accuracy = formatAccuracyPresentation(state, measurementSystem)
     val isRunningOrPreparing = state.isTracking || isPreparingToTrack
     val density = LocalDensity.current
     val view = LocalView.current
@@ -504,7 +494,7 @@ private fun TrackingContainer(
                     StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_queued), if (state.isTracking) state.queuedPointsVisible.toString() else "\u2014")
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_distance), formatDistanceText(state.sessionTotalDistanceMeters, useImperial, state.isTracking))
+                    StatCard(Modifier.weight(1f), stringResource(R.string.stat_label_distance), formatDistanceText(state.sessionTotalDistanceMeters, measurementSystem, state.isTracking))
                     StatCard(
                         Modifier.weight(1f),
                         stringResource(R.string.stat_label_accuracy),
@@ -751,23 +741,11 @@ private fun formatHomeLastAgo(state: HomeUiState, nowMs: Long): String {
 
 private fun formatDistanceText(
     meters: Float,
-    imperial: Boolean,
+    system: MeasurementSystem,
     isTracking: Boolean,
 ): String {
     if (!isTracking) return "\u2014"
-    if (imperial) {
-        val feet = meters * FEET_PER_METER
-        return if (feet < 5280f) {
-            "%d ft".format(feet.toInt())
-        } else {
-            "%.2f mi".format(feet / 5280f)
-        }
-    }
-    return if (meters < 1000f) {
-        "%d m".format(meters.toInt())
-    } else {
-        "%.1f km".format(meters / 1000f)
-    }
+    return DistanceFormat.formatTravel(meters.toDouble(), system).text
 }
 
 private data class HomeAccuracyPresentation(
@@ -775,20 +753,14 @@ private data class HomeAccuracyPresentation(
     val isError: Boolean,
 )
 
-private fun formatAccuracyPresentation(state: HomeUiState, imperial: Boolean): HomeAccuracyPresentation {
+private fun formatAccuracyPresentation(state: HomeUiState, system: MeasurementSystem): HomeAccuracyPresentation {
     if (!state.isTracking) return HomeAccuracyPresentation(text = "\u2014", isError = false)
     val accuracy = state.lastAccuracyMeters
     if (accuracy == null || accuracy > MAX_DISPLAY_ACCURACY_METERS) {
         return HomeAccuracyPresentation(text = "-", isError = true)
     }
-    val value = if (imperial) (accuracy * FEET_PER_METER).toInt() else accuracy.toInt()
-    val text = if (imperial) {
-        "\u00B1%d ft".format(value)
-    } else {
-        "\u00B1%d m".format(value)
-    }
     return HomeAccuracyPresentation(
-        text = text,
+        text = DistanceFormat.formatAccuracy(accuracy.toDouble(), system),
         isError = accuracy > state.effectiveAccuracyThresholdMeters
     )
 }

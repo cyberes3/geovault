@@ -2,15 +2,14 @@ package com.geovault.tracker.di
 
 import android.app.Application
 import android.content.Context
-import com.geovault.common.ServerUrlContract
 import com.geovault.common.auth.CommonInitialAuthController
-import com.geovault.common.auth.GeovaultAuthServices
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.tracker.settings.TrackerSettingsDataStore
 import com.geovault.tracker.data.ApiTrackerManagementRepository
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.RepositoryTrackerBootstrapDataSource
 import com.geovault.tracker.data.TrackerBootstrapOrchestrator
-import com.geovault.tracker.data.TrackerSessionBootstrap
+import com.geovault.tracker.data.TrackerSessionWarmup
 import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.data.TrackerDetailRepositoryImpl
 import com.geovault.tracker.data.TrackerManagementRepository
@@ -21,18 +20,16 @@ import com.geovault.tracker.settings.TrackerSettingsRepositoryImpl
 import com.geovault.tracker.settings.TrackerSettingsWritePolicy
 import com.geovault.tracker.streaming.LiveStreamBootstrapper
 import com.geovault.tracker.streaming.LiveStreamSubscriptionRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class TrackerAppServices private constructor(private val appContext: Context) {
 
-    private val authServices by lazy { GeovaultAuthServices(appContext) }
+    fun authSession(): GeoVaultAuthSession = GeoVaultAuthSession.get()
 
     private val authController by lazy {
-        CommonInitialAuthController(
-            serverConfigService = authServices,
-            authSessionService = authServices,
-            oauthPreparationService = authServices,
-            peerServerUrlsProvider = { ServerUrlContract.getServerUrlsFromOtherApps(appContext) },
-        )
+        CommonInitialAuthController.standard(authSession(), appContext)
     }
 
     private val trackerSettingsRepository by lazy {
@@ -46,8 +43,10 @@ class TrackerAppServices private constructor(private val appContext: Context) {
 
     private val trackerHistoryRepository by lazy { TrackerHistoryRepository() }
 
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val trackerAndGroupManagementRepository by lazy {
-        ApiTrackerManagementRepository(appContext, trackerManagementStateStore)
+        ApiTrackerManagementRepository(appContext, trackerManagementStateStore, ioScope)
     }
 
     private val trackerDetailRepository by lazy {
@@ -59,12 +58,13 @@ class TrackerAppServices private constructor(private val appContext: Context) {
             dataSource = RepositoryTrackerBootstrapDataSource(
                 trackerRepository = trackerAndGroupManagementRepository,
                 groupRepository = trackerAndGroupManagementRepository,
-            )
+            ),
+            scope = ioScope,
         )
     }
 
-    private val trackerSessionBootstrap by lazy {
-        TrackerSessionBootstrap(trackerBootstrapOrchestrator)
+    private val trackerSessionWarmup by lazy {
+        TrackerSessionWarmup(trackerBootstrapOrchestrator)
     }
 
     /**
@@ -94,7 +94,7 @@ class TrackerAppServices private constructor(private val appContext: Context) {
 
     fun trackerBootstrapOrchestrator(): TrackerBootstrapOrchestrator = trackerBootstrapOrchestrator
 
-    fun trackerSessionBootstrap(): TrackerSessionBootstrap = trackerSessionBootstrap
+    fun trackerSessionWarmup(): TrackerSessionWarmup = trackerSessionWarmup
 
     internal fun liveStreamSubscriptionRepository(): LiveStreamSubscriptionRepository = liveStreamSubscriptionRepository
 

@@ -5,7 +5,7 @@ import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.tracker.BinaryPayloadBuilder
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
-import com.geovault.tracker.location.NetworkStatusMonitor
+import com.geovault.common.net.GeoVaultConnectivity
 import com.geovault.tracker.location.SyncFailureClass
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -226,7 +226,7 @@ class QueueUploadEngine(
         }
 
         try {
-            if (!NetworkStatusMonitor.hasUsableNetwork(appContext)) {
+            if (!GeoVaultConnectivity.hasValidatedInternet(appContext)) {
                 return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.NO_NETWORK)
             }
             if (trackerId.isBlank()) {

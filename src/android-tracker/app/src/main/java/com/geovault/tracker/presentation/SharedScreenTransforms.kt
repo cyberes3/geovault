@@ -1,6 +1,6 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.common.NaturalSort
+import com.geovault.common.sort.NaturalSort
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.Group
@@ -43,7 +43,7 @@ fun computeVisibleSharedTrackers(
             isSharedOrPublicNonOwnedTracker(track) &&
                 !trackIdsInSharedGroups.contains(normalizeSharedId(track.id))
         }
-        .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase(Locale.getDefault()) })
+        .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
 }
 
 /**
@@ -56,7 +56,7 @@ fun computeVisibleSharedGroups(groups: List<Group>): List<Group> {
                 (group.visibility ?: "") == "shared" &&
                 group.is_accepted == true
         }
-        .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase(Locale.getDefault()) })
+        .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
 }
 
 sealed interface SharedSurfaceItem {
@@ -83,7 +83,7 @@ fun computeSharedSurfaceItems(
     val sharedTrackers = computeVisibleSharedTrackers(trackers, groups)
         .map { SharedSurfaceItem.TrackerItem(it) }
     return (sharedGroups + sharedTrackers).sortedWith(
-        NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) }
+        NaturalSort.byName(Locale.getDefault()) { it.sortName }
     )
 }
 
@@ -193,7 +193,7 @@ private fun applyOptimisticSharedItems(
         .map { tracker -> SharedSurfaceItem.TrackerItem(tracker) }
         .toList()
     return (base + optimisticAddItems).sortedWith(
-        NaturalSort.naturalOrderBy { it.sortName.lowercase(Locale.getDefault()) }
+        NaturalSort.byName(Locale.getDefault()) { it.sortName }
     )
 }
 

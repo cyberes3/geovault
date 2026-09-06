@@ -1,21 +1,21 @@
 package com.geovault.tracker.data
 
 import com.geovault.tracker.RepositoryResult
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
-class TrackerSessionBootstrapTest {
+class TrackerSessionWarmupTest {
 
     @Test
-    fun runLaunchBootstrap_delegatesToOrchestrator() = runBlocking {
+    fun runLaunchWarmup_delegatesToOrchestrator() = runTest {
         val source = FakeBootstrapDataSource()
-        val orchestrator = TrackerBootstrapOrchestrator(dataSource = source)
-        val session = TrackerSessionBootstrap(orchestrator)
+        val orchestrator = TrackerBootstrapOrchestrator(dataSource = source, scope = this)
+        val session = TrackerSessionWarmup(orchestrator)
 
-        val outcome = session.runLaunchBootstrap()
+        val outcome = session.runLaunchWarmup()
 
         assertTrue(outcome.isServerAccessible)
         assertEquals(1, source.loadTrackersCalls.get())
@@ -24,16 +24,16 @@ class TrackerSessionBootstrapTest {
     }
 
     @Test
-    fun resetForSignedOutSession_thenRunLaunchBootstrap_loadsAgain() = runBlocking {
+    fun resetForSignedOutSession_thenRunLaunchWarmup_loadsAgain() = runTest {
         val source = FakeBootstrapDataSource()
-        val orchestrator = TrackerBootstrapOrchestrator(dataSource = source)
-        val session = TrackerSessionBootstrap(orchestrator)
+        val orchestrator = TrackerBootstrapOrchestrator(dataSource = source, scope = this)
+        val session = TrackerSessionWarmup(orchestrator)
 
-        session.runLaunchBootstrap()
+        session.runLaunchWarmup()
         assertEquals(1, source.loadTrackersCalls.get())
 
         session.resetForSignedOutSession()
-        session.runLaunchBootstrap()
+        session.runLaunchWarmup()
 
         assertEquals(2, source.loadTrackersCalls.get())
         assertEquals(2, source.loadGroupsCalls.get())
@@ -41,12 +41,12 @@ class TrackerSessionBootstrapTest {
     }
 
     @Test
-    fun runResumeBootstrap_delegatesToOrchestrator() = runBlocking {
+    fun runResumeWarmup_delegatesToOrchestrator() = runTest {
         val source = FakeBootstrapDataSource()
-        val orchestrator = TrackerBootstrapOrchestrator(dataSource = source)
-        val session = TrackerSessionBootstrap(orchestrator)
+        val orchestrator = TrackerBootstrapOrchestrator(dataSource = source, scope = this)
+        val session = TrackerSessionWarmup(orchestrator)
 
-        val outcome = session.runResumeBootstrap()
+        val outcome = session.runResumeWarmup()
 
         assertTrue(outcome.isServerAccessible)
         assertEquals(1, source.loadTrackersCalls.get())

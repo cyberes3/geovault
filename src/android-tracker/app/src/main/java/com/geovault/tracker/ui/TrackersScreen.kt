@@ -66,13 +66,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.geo.CoordinateFormat
+import com.geovault.common.geo.Wgs84Point
 import com.geovault.common.ui.files.ExportedFileToast
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
-import com.geovault.common.ui.components.GeoVaultNavTabShell
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
@@ -175,7 +178,7 @@ private fun Tracker.toRowModel(
         chevronColorHex = color,
         formattedLastUpdate = lastUpdateMs?.let(::formatTrackerListTime),
         formattedCoordinates = lastPosition?.let {
-            String.format(Locale.US, "%.4f, %.4f", it.first, it.second)
+            CoordinateFormat.DECIMAL_4.formatLatLon(it)
         },
         ownerEmail = owner_email?.takeIf { it.isNotBlank() },
         canEdit = OwnershipActionPolicy.canEditTracker(this),
@@ -214,13 +217,8 @@ private fun Group.toRowModel(
 fun TrackersScreen(
     vm: TrackersGroupsViewModel,
     trackersTabBottomNavStamp: Int = 0,
-    isAuthenticated: Boolean,
-    serverUrl: String,
-    onAuthServerUrlChanged: (String) -> Unit,
-    onAuthConnect: () -> Unit,
-    isConnecting: Boolean,
+    auth: GeoVaultAuthShellState,
     isServerAccessible: Boolean,
-    onOpenSettings: () -> Unit,
     navigationRequest: TrackersHostNavigationRequest? = null,
     onNavigationTargetConsumed: () -> Unit = {},
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit = { _, _ -> },
@@ -344,7 +342,7 @@ fun TrackersScreen(
         if (editFlowHasUnsaved) {
             showOpenSettingsDiscardConfirm = true
         } else {
-            onOpenSettings()
+            auth.onOpenSettings()
         }
     }
     val dismissEditDialog: () -> Unit = {
@@ -363,17 +361,12 @@ fun TrackersScreen(
         }
     }
 
-    GeoVaultNavTabShell(
+    val trackersAuth = auth.copy(onOpenSettings = onOpenSettingsWithEditGuard)
+    GeoVaultTabShell(
         title = stringResource(R.string.trackers_screen_title),
+        auth = trackersAuth,
         placeholderText = stringResource(R.string.trackers_placeholder_signed_out),
-        isAuthenticated = isAuthenticated,
-        serverUrl = serverUrl,
-        onAuthServerUrlChanged = onAuthServerUrlChanged,
-        onAuthConnect = onAuthConnect,
-        isConnecting = isConnecting,
-        onOpenSettings = onOpenSettingsWithEditGuard,
         settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
-        connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
@@ -415,7 +408,7 @@ fun TrackersScreen(
             TrackersGroupsAuthenticatedBody(
                 state = state,
                 isServerAccessible = isServerAccessible,
-                isConnecting = isConnecting,
+                isConnecting = auth.isConnecting,
                 onSubTabSelected = vm::setSubTab,
                 onTrackerSearchQueryChanged = vm::updateTrackerSearchQuery,
                 onGroupSearchQueryChanged = vm::updateGroupSearchQuery,
@@ -739,7 +732,7 @@ fun TrackersScreen(
             onConfirm = {
                 showOpenSettingsDiscardConfirm = false
                 dismissEditDialog()
-                onOpenSettings()
+                auth.onOpenSettings()
             },
             onCancel = { showOpenSettingsDiscardConfirm = false },
             confirmText = stringResource(R.string.trackers_edit_discard_confirm),
@@ -1385,10 +1378,10 @@ private fun Tracker.lastUpdateMsOrNull(): Long? {
     return if (value < 1_000_000_000_000L) value * 1000L else value
 }
 
-private fun Tracker.lastPositionOrNull(): Pair<Double, Double>? {
+private fun Tracker.lastPositionOrNull(): Wgs84Point? {
     val coord = last_point ?: return null
     if (coord.size < 2) return null
-    return Pair(coord[1], coord[0])
+    return Wgs84Point(latitude = coord[1], longitude = coord[0])
 }
 
 private fun isVisibleOwnerGroup(group: Group): Boolean {
@@ -1497,7 +1490,7 @@ private fun TrackersGroupsDialogs(
             GeoVaultFormDialog(
                 title = stringResource(R.string.trackers_dialog_create_group_title),
                 onConfirm = onSubmitCreateGroup,
-                onDismiss = onDismiss,
+                onDismissRequest = onDismiss,
                 confirmText = stringResource(R.string.trackers_dialog_confirm_create),
                 cancelText = stringResource(R.string.trackers_dialog_cancel),
             ) {

@@ -10,7 +10,7 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
-import com.geovault.tracker.data.TrackerSessionBootstrap
+import com.geovault.tracker.data.TrackerSessionWarmup
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import kotlinx.coroutines.async
@@ -35,8 +35,8 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         trackerRepository = trackerRepository,
         groupRepository = groupRepository,
     )
-    private val sessionBootstrap: TrackerSessionBootstrap =
-        TrackerAppServices.from(application).trackerSessionBootstrap()
+    private val sessionWarmup: TrackerSessionWarmup =
+        TrackerAppServices.from(application).trackerSessionWarmup()
     private val stateStore = TrackerAppServices.from(application).trackerManagementStateStore()
 
     private val _uiState = MutableStateFlow(SharedUiState())
@@ -447,7 +447,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         if (current.isLoading || current.hasCompletedInitialLoad) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val outcome = sessionBootstrap.runLaunchBootstrap()
+            val outcome = sessionWarmup.runLaunchWarmup()
             _uiState.update { state ->
                 state.copy(
                     isLoading = false,

@@ -46,7 +46,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.geovault.common.NaturalSort
+import com.geovault.common.sort.NaturalSort
+import java.util.Locale
 import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
@@ -215,13 +216,13 @@ private fun PickerTabContent(
         val knownById = allTrackers.associateBy { it.id }
         selectedTrackerIds.map { id ->
             TrackerRowItem(trackerId = id, tracker = knownById[id])
-        }.sortedWith(NaturalSort.naturalOrderBy { it.displayName.lowercase() })
+        }.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.displayName })
     }
     val addTabDisplayItems = remember(allTrackers, selectedTrackerIds, addTabRecentlyAddedIds) {
         allTrackers
             .filter { it.id !in selectedTrackerIds || it.id in addTabRecentlyAddedIds }
             .map { TrackerRowItem(trackerId = it.id, tracker = it) }
-            .sortedWith(NaturalSort.naturalOrderBy { it.displayName.lowercase() })
+            .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.displayName })
     }
     val filteredItems = remember(addTabDisplayItems, searchQuery) {
         val q = searchQuery.trim().lowercase()

@@ -3,9 +3,9 @@ package com.geovault.tracker.data
 import android.app.Application
 import android.content.Context
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.NaturalSort
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
+import com.geovault.common.sort.NaturalSort
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.concurrent.SingleFlightGate
 import com.geovault.tracker.AppError
 import com.geovault.tracker.AvailableToAddResponse
@@ -28,17 +28,20 @@ import com.geovault.tracker.UsersResponse
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.toDomainModel
 import com.geovault.tracker.toDomainModels
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import org.json.JSONObject
 import retrofit2.Response
+import java.util.Locale
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 class ApiTrackerManagementRepository(
     private val appContext: Context,
-    private val stateStore: TrackerManagementStateStore
+    private val stateStore: TrackerManagementStateStore,
+    scope: CoroutineScope,
 ) : TrackerManagementRepository, GroupManagementRepository {
     private companion object {
         const val TAG = "ApiTrackerMgmtRepo"
@@ -51,7 +54,7 @@ class ApiTrackerManagementRepository(
     @Volatile private var mapVisibilityCache: MapVisibilityResponse? = null
     @Volatile private var cachedApiBaseUrl: String? = null
     @Volatile private var cachedApi: TrackerApi? = null
-    private val readRequestGate = SingleFlightGate<String, Any>()
+    private val readRequestGate = SingleFlightGate<String, Any>(scope)
 
     override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> {
         if (!forceRefresh) {
@@ -461,7 +464,7 @@ class ApiTrackerManagementRepository(
             }
             val result = executeApiCall { api -> api.getGroups().execute() }
             if (result is RepositoryResult.Success) {
-                val sortedGroups = result.data.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                val sortedGroups = result.data.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
                 cacheMutex.withLock {
                     groupsCache = sortedGroups
                 }
@@ -480,7 +483,7 @@ class ApiTrackerManagementRepository(
                     .orEmpty()
                     .plus(result.data)
                     .distinctBy { it.id }
-                    .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                    .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
             }
             stateStore.publishGroup(result.data)
         }
@@ -494,7 +497,7 @@ class ApiTrackerManagementRepository(
                 groupsCache = groupsCache
                     .orEmpty()
                     .plus(result.data)
-                    .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                    .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
                 availableToAddCache = null
             }
             stateStore.publishGroup(result.data)
@@ -512,7 +515,7 @@ class ApiTrackerManagementRepository(
             cacheMutex.withLock {
                 groupsCache = groupsCache
                     ?.map { if (it.id == groupId) result.data else it }
-                    ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                    ?.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
                 availableToAddCache = null
             }
             stateStore.publishGroup(result.data, emitEvent = publishToStore)
@@ -538,7 +541,7 @@ class ApiTrackerManagementRepository(
             cacheMutex.withLock {
                 groupsCache = groupsCache
                     ?.map { if (it.id == groupId) result.data else it }
-                    ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                    ?.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
                 availableToAddCache = null
             }
             stateStore.publishGroup(result.data)
@@ -554,7 +557,7 @@ class ApiTrackerManagementRepository(
                     cacheMutex.withLock {
                         groupsCache = groupsCache
                             ?.map { if (it.id == groupId) updated.data else it }
-                            ?.sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                            ?.sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
                         availableToAddCache = null
                     }
                     stateStore.publishGroup(updated.data)
@@ -584,7 +587,7 @@ class ApiTrackerManagementRepository(
                     .orEmpty()
                     .filterNot { it.id == groupId }
                     .plus(result.data)
-                    .sortedWith(NaturalSort.naturalOrderBy { it.name.lowercase() })
+                    .sortedWith(NaturalSort.byName(Locale.getDefault()) { it.name })
                 availableToAddCache = null
             }
             stateStore.publishGroup(result.data)
@@ -636,11 +639,12 @@ class ApiTrackerManagementRepository(
     }
 
     private fun createApi(): TrackerApi? {
-        val serverUrl = GeovaultAuthManager.getServerUrl(appContext)
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl()
         if (serverUrl.isBlank()) {
             return null
         }
-        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val parsed = com.geovault.common.net.GeoVaultServerUrl.parse(serverUrl) ?: return null
+        val baseUrl = parsed.asRetrofitBase()
         val existingApi = cachedApi
         if (existingApi != null && cachedApiBaseUrl == baseUrl) {
             return existingApi
@@ -650,7 +654,7 @@ class ApiTrackerManagementRepository(
             if (synchronizedExistingApi != null && cachedApiBaseUrl == baseUrl) {
                 synchronizedExistingApi
             } else {
-                RetrofitClient.getClientOmitNulls(appContext, baseUrl).create(TrackerApi::class.java).also { createdApi ->
+                GeoVaultHttp.api(TrackerApi::class.java, parsed).also { createdApi ->
                     cachedApiBaseUrl = baseUrl
                     cachedApi = createdApi
                 }

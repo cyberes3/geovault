@@ -50,9 +50,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.ClipboardCopyHelper
+import com.geovault.common.util.ClipboardCopyHelper
 import com.geovault.common.files.GeoVaultOutgoingShare
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultSelectField
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -66,13 +66,14 @@ import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
-import com.geovault.common.NaturalSort
+import com.geovault.common.sort.NaturalSort
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.UserItem
 import com.geovault.tracker.TrackerRecentDataWindowOptions
-import com.geovault.tracker.parseHexToColorInt
+import com.geovault.common.ui.theme.GeoVaultColorHex
+import androidx.compose.ui.graphics.toArgb
 import com.geovault.tracker.showHueColorPickerDialog
 import com.geovault.tracker.presentation.TrackersGroupsDialog
 import com.geovault.tracker.presentation.TrackerShareVisibility
@@ -317,9 +318,7 @@ private data class Quadruple<A, B, C, D>(
 )
 
 private fun normalizeHexForCompare(raw: String): String {
-    val t = raw.trim().ifEmpty { return "" }
-    val withHash = if (t.startsWith("#")) t else "#$t"
-    return withHash.lowercase(Locale.getDefault())
+    return GeoVaultColorHex.normalizeForCompare(raw, Locale.getDefault())
 }
 
 private fun createTrackerFormIsDirty(d: TrackersGroupsDialog.CreateTracker): Boolean {
@@ -841,7 +840,7 @@ private fun TrackerEditFormContent(
             items = pickerRowEmails,
             isSelected = { selectedEmails.contains(it) },
             onToggleItem = onToggleSharedEmail,
-            onDismiss = { showPickUsersDialog = false },
+            onDismissRequest = { showPickUsersDialog = false },
             labelFor = { emailLower ->
                 shareRecipientUsers
                     .firstOrNull {
@@ -914,15 +913,7 @@ private fun copyShareLink(
     label: String,
 ) {
     if (shareUrl.isNullOrBlank()) return
-    clipboardHelper.copyText(resolveShareUrl(context, shareUrl), label)
-}
-
-private fun resolveShareUrl(context: Context, shareUrl: String): String {
-    val trimmed = shareUrl.trim()
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
-    val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
-    if (baseUrl.isBlank()) return trimmed
-    return if (trimmed.startsWith("/")) "$baseUrl$trimmed" else "$baseUrl/$trimmed"
+    clipboardHelper.copyText(GeoVaultAuthSession.get().resolveAbsoluteUrl(shareUrl), label)
 }
 
 private fun shareWorldShareLink(context: Context, worldShareUrl: String?) {
@@ -939,13 +930,13 @@ private fun resolveTrackerColorPreview(colorDraft: String): TrackerColorPreviewS
     val normalized = colorDraft.trim()
     if (normalized.isEmpty()) {
         return TrackerColorPreviewState(
-            backgroundColor = Color(parseHexToColorInt(null)),
+            backgroundColor = Color(GeoVaultColorHex.parseColorInt(null, GeoVaultColorTokens.Blue400.toArgb())),
             showInvalidBadge = false,
         )
     }
-    return if (isValidTrackerHexInput(normalized)) {
+    return if (GeoVaultColorHex.isValid(normalized)) {
         TrackerColorPreviewState(
-            backgroundColor = Color(parseHexToColorInt(normalized)),
+            backgroundColor = Color(GeoVaultColorHex.parseColorInt(normalized, GeoVaultColorTokens.Blue400.toArgb())),
             showInvalidBadge = false,
         )
     } else {
@@ -954,12 +945,4 @@ private fun resolveTrackerColorPreview(colorDraft: String): TrackerColorPreviewS
             showInvalidBadge = true,
         )
     }
-}
-
-private fun isValidTrackerHexInput(input: String): Boolean {
-    val hex = if (input.startsWith("#")) input.substring(1) else input
-    if (hex.isEmpty()) return false
-    val validLength = hex.length == 3 || hex.length == 4 || hex.length == 6 || hex.length == 8
-    if (!validLength) return false
-    return hex.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
 }

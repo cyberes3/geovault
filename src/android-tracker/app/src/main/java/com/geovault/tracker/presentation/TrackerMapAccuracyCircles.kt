@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.ui.theme.GeoVaultColorHex
 import com.geovault.common.maps.location.AccuracyGeometryBuilder
 import com.geovault.common.maps.location.AccuracyRadiusInput
 import com.geovault.common.maps.location.AccuracyRadiusPolicy
@@ -32,7 +33,11 @@ class TrackerAccuracyPolygonFactory {
             radiusMeters = radiusMeters,
         )
         if (ring.isEmpty()) return null
-        val fillColorHex = withAlpha(input.colorHex, 0x40)
+        val fillColorHex = GeoVaultColorHex.toRgbaCss(
+            hex = input.colorHex,
+            alphaByte = 0x40,
+            fallbackHex = TrackerMapIconIds.DEFAULT_COLOR_HEX,
+        )
         return MapRenderPolygon(
             id = input.polygonId,
             rings = listOf(ring.map { it.lat to it.lon }),
@@ -41,15 +46,6 @@ class TrackerAccuracyPolygonFactory {
         )
     }
 
-    private fun withAlpha(colorHex: String, alpha: Int): String {
-        val normalized = colorHex.removePrefix("#")
-        val safeHex = if (normalized.length == 6) normalized else TrackerMapIconIds.DEFAULT_COLOR_HEX.removePrefix("#")
-        val r = safeHex.substring(0, 2).toInt(16)
-        val g = safeHex.substring(2, 4).toInt(16)
-        val b = safeHex.substring(4, 6).toInt(16)
-        val a = alpha.coerceIn(0, 255) / 255f
-        return "rgba($r,$g,$b,$a)"
-    }
 }
 
 class TrackerAccuracyCircleResolver(

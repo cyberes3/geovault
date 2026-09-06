@@ -43,6 +43,8 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.theme.GeoVaultListCardChrome
+import com.geovault.common.ui.theme.GeoVaultListCardHighlightColors
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.tracker.R
 import com.geovault.tracker.ui.TrackerChevronIcon
@@ -72,18 +74,18 @@ fun TrackerItemCard(
     val chevronTint = remember(model.chevronColorHex) {
         TrackerChevronStylePolicy.tintForTrackerColorHex(model.chevronColorHex)
     }
+    val cardShape = RoundedCornerShape(12.dp)
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = cardShape,
         elevation = 0.dp,
-        backgroundColor = when {
-            model.isHighlighted && MaterialTheme.colors.isLight -> GeoVaultColorTokens.Purple100
-            model.isHighlighted -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
-            else -> MaterialTheme.colors.surface
-        },
-        border = BorderStroke(2.dp, GeoVaultColorTokens.MainBlue),
+        backgroundColor = GeoVaultListCardHighlightColors.selectedFillColor(model.isHighlighted),
+        border = BorderStroke(
+            GeoVaultListCardChrome.EmphasisStrokeWidth,
+            GeoVaultListCardHighlightColors.emphasisBorderColor(offline = false),
+        ),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(
@@ -220,14 +222,10 @@ fun GroupItemCard(
             .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = 0.dp,
-        backgroundColor = when {
-            model.isHighlighted && MaterialTheme.colors.isLight -> GeoVaultColorTokens.Purple100
-            model.isHighlighted -> GeoVaultColorTokens.MainBlue.copy(alpha = 0.14f)
-            else -> MaterialTheme.colors.surface
-        },
+        backgroundColor = GeoVaultListCardHighlightColors.selectedFillColor(model.isHighlighted),
         border = BorderStroke(
-            2.dp,
-            if (model.isPending) GeoVaultColorTokens.MainYellow else GeoVaultColorTokens.MainBlue
+            GeoVaultListCardChrome.EmphasisStrokeWidth,
+            GeoVaultListCardHighlightColors.emphasisBorderColor(offline = model.isPending),
         ),
     ) {
         Row(

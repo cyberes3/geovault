@@ -6,8 +6,8 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.IBinder
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
 import com.geovault.tracker.location.StreamingFailureClass
 import com.geovault.tracker.location.StreamingLifecycleEvent
 import com.geovault.tracker.location.StreamingLifecycleOrchestrator
@@ -453,7 +453,7 @@ class LiveTrackStreamingService : Service() {
     private suspend fun connect(sessionId: Long) {
         if (!serviceScope.isActive || currentTrackerIdsSnapshot().isEmpty()) return
         val token = withContext(Dispatchers.IO) {
-            runCatching { GeovaultAuthManager.getValidAccessToken(applicationContext, null) }.getOrNull()
+            runCatching { GeoVaultAuthSession.get().getValidAccessToken(null) }.getOrNull()
         }
         if (token.isNullOrBlank()) {
             val reason = getString(R.string.error_streaming_auth_failed)
@@ -466,7 +466,7 @@ class LiveTrackStreamingService : Service() {
             )
             return
         }
-        val serverUrl = GeovaultAuthManager.getServerUrl(applicationContext).trimEnd('/')
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
         if (serverUrl.isBlank()) {
             val reason = getString(R.string.error_server_unreachable)
             emitStreamingError(reason)
@@ -694,8 +694,7 @@ class LiveTrackStreamingService : Service() {
             if (existingClient != null) {
                 return existingClient
             }
-            return RetrofitClient.newAuthenticatedWebSocketClient(
-                context = applicationContext,
+            return GeoVaultHttp.webSocketClient(
                 readTimeoutSec = TimeUnit.MILLISECONDS.toSeconds(StreamingConfig.webSocketReadTimeoutMs),
                 pingIntervalSec = TimeUnit.MILLISECONDS.toSeconds(StreamingConfig.webSocketPingIntervalMs),
             ).also { builtClient -> wsHttpClient = builtClient }

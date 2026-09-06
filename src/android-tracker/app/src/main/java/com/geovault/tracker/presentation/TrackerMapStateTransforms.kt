@@ -1,10 +1,12 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.geo.Wgs84Point
 import com.geovault.common.maps.core.geoVaultSplitTrackByDistance
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.render.MapRenderLine
 import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
+import com.geovault.common.ui.theme.GeoVaultColorHex
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.policy.StreamingTargetPolicy
@@ -392,12 +394,12 @@ object TrackerMapStateTransforms {
         sessionGroups.forEachIndexed { sessionIndex, group ->
             val timeGroups = splitByTimeGap(group, maxTimeGapMs)
             timeGroups.forEachIndexed { timeIndex, timeGroup ->
-                val coords = timeGroup.map { it.latitude to it.longitude }
+                val coords = timeGroup.map { Wgs84Point(it.latitude, it.longitude) }
                 val distanceSegments = geoVaultSplitTrackByDistance(coords, MAX_TRACK_JUMP_METERS)
                 distanceSegments.forEachIndexed { distanceIndex, segment ->
                     lines += MapRenderLine(
                         id = "$lineIdPrefix-$sessionIndex-$timeIndex-$distanceIndex",
-                        coordinates = segment,
+                        coordinates = segment.map { it.latitude to it.longitude },
                         lineColorHex = lineColorHex,
                     )
                 }
@@ -446,10 +448,7 @@ object TrackerMapStateTransforms {
         return groups
     }
 
-    private fun normalizeColor(raw: String?): String? {
-        if (raw.isNullOrBlank()) return null
-        return if (raw.startsWith("#")) raw else "#$raw"
-    }
+    private fun normalizeColor(raw: String?): String? = GeoVaultColorHex.normalizeHashPrefix(raw)
 
     private fun trackDirectionDegrees(points: List<LatLng>): Float {
         val validPoints = points.filter(::isValidPoint)

@@ -7,7 +7,7 @@ import android.hardware.SensorManager
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.UnitUtils
+import com.geovault.common.util.UnitUtils
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.di.TrackerAppServices

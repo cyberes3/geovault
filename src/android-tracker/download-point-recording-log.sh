@@ -17,7 +17,7 @@ adb shell am start -n "$PACKAGE_NAME/.MainActivity" >/dev/null 2>&1 || true
 sleep 1
 
 echo "Requesting point-recording-log export from $PACKAGE_NAME..."
-adb shell am broadcast -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG -p "$PACKAGE_NAME" >/dev/null
+adb shell am broadcast -n "$PACKAGE_NAME/com.geovault.tracker.logging.GeoVaultPointRecordingLogExportReceiver" -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG >/dev/null
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 done_line=""

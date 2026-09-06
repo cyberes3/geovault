@@ -4,45 +4,14 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Configuration
-import android.graphics.Color
 import androidx.appcompat.R as AppCompatR
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.compose.ui.graphics.toArgb
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.builder.ColorPickerDialogBuilder
+import com.geovault.common.ui.theme.GeoVaultColorHex
 import com.geovault.common.ui.theme.GeoVaultColorTokens
-
-/**
- * Parses a hex color string (with or without #) to Android color int.
- * Returns the default tracker color (`GeoVaultColorTokens.Blue400`) when [hex] is null or invalid.
- */
-fun parseHexToColorInt(hex: String?): Int {
-    val normalized = hex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
-    if (normalized == null) return GeoVaultColorTokens.Blue400.toArgb()
-    return try {
-        val parsedHex = if (
-            normalized.length == 9 &&
-            normalized.substring(1).all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
-        ) {
-            val rrggbb = normalized.substring(1, 7)
-            val aa = normalized.substring(7, 9)
-            "#$aa$rrggbb"
-        } else {
-            normalized
-        }
-        Color.parseColor(parsedHex)
-    } catch (_: Exception) {
-        GeoVaultColorTokens.Blue400.toArgb()
-    }
-}
-
-fun colorIntToHex(color: Int): String {
-    val r = Color.red(color)
-    val g = Color.green(color)
-    val b = Color.blue(color)
-    return String.format("#%02X%02X%02X", r, g, b)
-}
 
 private fun Context.findActivity(): Activity? {
     var current: Context = this
@@ -71,7 +40,7 @@ fun showHueColorPickerDialog(
     initialHex: String?,
     onColorPicked: (String) -> Unit,
 ) {
-    val initialColor = parseHexToColorInt(initialHex)
+    val initialColor = GeoVaultColorHex.parseColorInt(initialHex, GeoVaultColorTokens.Blue400.toArgb())
     val dialogContext = appCompatDialogContext(context)
     val dialog: AlertDialog = ColorPickerDialogBuilder
         .with(dialogContext)
@@ -80,7 +49,7 @@ fun showHueColorPickerDialog(
         .wheelType(ColorPickerView.WHEEL_TYPE.FLOWER)
         .density(12)
         .setPositiveButton(context.getString(android.R.string.ok)) { _, selectedColor, _ ->
-            onColorPicked(colorIntToHex(selectedColor))
+            onColorPicked(GeoVaultColorHex.formatRgb(selectedColor))
         }
         .setNegativeButton(context.getString(android.R.string.cancel), null)
         .build()

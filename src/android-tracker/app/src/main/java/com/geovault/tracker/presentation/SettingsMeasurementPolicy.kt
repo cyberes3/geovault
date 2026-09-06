@@ -1,22 +1,14 @@
 package com.geovault.tracker.presentation
 
-import kotlin.math.roundToInt
+import com.geovault.common.util.DistanceFormat
+import com.geovault.common.util.MeasurementSystem
 
 object SettingsMeasurementPolicy {
-    private const val FEET_PER_METER = 3.28084f
-
     fun metersToDisplayText(meters: Float, usesImperial: Boolean): String {
-        val converted = if (usesImperial) meters * FEET_PER_METER else meters
-        if (converted <= 0f) return "0"
-        return converted.roundToInt().coerceAtLeast(1).toString()
+        return DistanceFormat.metersToDisplayMagnitude(meters, MeasurementSystem.fromFlag(usesImperial))
     }
 
     fun displayTextToMetersOrNull(raw: String, usesImperial: Boolean): Float? {
-        val displayValue = raw.toFloatOrNull() ?: return null
-        return if (usesImperial) {
-            displayValue / FEET_PER_METER
-        } else {
-            displayValue
-        }
+        return DistanceFormat.displayMagnitudeToMetersOrNull(raw, MeasurementSystem.fromFlag(usesImperial))
     }
 }

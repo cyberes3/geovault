@@ -3,6 +3,7 @@ package com.geovault.tracker.presentation
 import com.geovault.common.concurrent.SingleFlightGate
 import com.geovault.common.concurrent.TimeWindowedCache
 import com.geovault.tracker.RepositoryResult
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Dedupes bursty map warmup requests for a short session window.
@@ -11,11 +12,12 @@ import com.geovault.tracker.RepositoryResult
  * multiple times while preserving fresh fetches once the window expires.
  */
 class TrackerMapSessionRequestDeduper(
+    scope: CoroutineScope,
     dedupeWindowMs: Long = 4_000L,
     nowMsProvider: () -> Long = { System.currentTimeMillis() },
 ) {
     private val resultCache = TimeWindowedCache<String, Any>(windowMs = dedupeWindowMs, nowMsProvider = nowMsProvider)
-    private val gate = SingleFlightGate<String, Any>()
+    private val gate = SingleFlightGate<String, Any>(scope)
 
     suspend fun <T : Any> loadOnce(
         key: String,

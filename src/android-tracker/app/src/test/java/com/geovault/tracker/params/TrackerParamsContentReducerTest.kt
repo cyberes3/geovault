@@ -1,5 +1,7 @@
 package com.geovault.tracker.params
 
+import com.geovault.common.geo.Wgs84Point
+
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -36,7 +38,7 @@ class TrackerParamsContentReducerTest {
             TrackerParamsContentReducer.resolve(
                 latestPointParams = emptyMap(),
                 lastTimestampMs = null,
-                lastPosition = Pair(1.0, 2.0),
+                lastPosition = Wgs84Point(1.0, 2.0),
             ),
         )
     }

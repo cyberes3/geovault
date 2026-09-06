@@ -1,8 +1,9 @@
 package com.geovault.tracker.data
 
 import com.geovault.common.concurrent.SingleFlightGate
-import com.geovault.common.concurrent.TimeWindowedCache
+import com.geovault.common.concurrent.TimeWindowedSingleFlight
 import com.geovault.tracker.RepositoryResult
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -32,12 +33,13 @@ class RepositoryTrackerBootstrapDataSource(
 
 class TrackerBootstrapOrchestrator(
     private val dataSource: TrackerBootstrapDataSource,
+    scope: CoroutineScope,
     resumeDedupeWindowMs: Long = 4_000L,
     nowMsProvider: () -> Long = { System.currentTimeMillis() },
 ) {
-    private val launchGate = SingleFlightGate<String, TrackerBootstrapOutcome>()
-    private val resumeGate = SingleFlightGate<String, TrackerBootstrapOutcome>()
-    private val resumeCache = TimeWindowedCache<String, TrackerBootstrapOutcome>(
+    private val launchGate = SingleFlightGate<String, TrackerBootstrapOutcome>(scope)
+    private val resumeFlight = TimeWindowedSingleFlight<String, TrackerBootstrapOutcome>(
+        scope = scope,
         windowMs = resumeDedupeWindowMs,
         nowMsProvider = nowMsProvider,
     )
@@ -66,21 +68,15 @@ class TrackerBootstrapOrchestrator(
     }
 
     suspend fun refreshForResume(): TrackerBootstrapOutcome {
-        resumeCache.get(RESUME_CACHE_KEY)?.let { return it }
-        return resumeGate.run("resume") {
-            resumeCache.get(RESUME_CACHE_KEY)?.let { return@run it }
-            refresh(
-                forceRefresh = true,
-            ).also { outcome ->
-                resumeCache.put(RESUME_CACHE_KEY, outcome)
-            }
+        return resumeFlight.run(RESUME_CACHE_KEY) {
+            refresh(forceRefresh = true)
         }
     }
 
     fun resetLaunchState() {
         launchCompleted = false
         lastLaunchOutcome = null
-        resumeCache.clear()
+        resumeFlight.clear()
     }
 
     private suspend fun refresh(forceRefresh: Boolean): TrackerBootstrapOutcome {

@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -86,14 +85,14 @@ import com.geovault.common.maps.ui.geoVaultZoomOutFabAction
 import com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationFabAction
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBar
 import com.geovault.common.maps.ui.scale.GeoVaultMapScaleBarDefaults
-import com.geovault.common.ClipboardCopyHelper
-import com.geovault.common.ui.components.GeoVaultAuthGate
+import com.geovault.common.geo.CoordinateFormat
+import com.geovault.common.util.ClipboardCopyHelper
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultIconButton
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.components.GeoVaultTopBarSettingsMenuAction
-import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
@@ -123,8 +122,6 @@ import com.geovault.tracker.presentation.TrackerMapViewModel
 import com.geovault.tracker.ui.time.mapElapsedAgoText
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
-import java.util.Locale
-
 private const val RENDER_COALESCE_MS = 120L
 
 @Composable
@@ -133,57 +130,31 @@ fun MapScreen(
     mapViewModel: TrackerMapViewModel,
     modifier: Modifier = Modifier,
     isActive: Boolean = true,
-    isAuthenticated: Boolean,
+    auth: GeoVaultAuthShellState,
     isServerAccessible: Boolean,
-    serverUrl: String,
-    onAuthServerUrlChanged: (String) -> Unit,
-    onAuthConnect: () -> Unit,
-    isConnecting: Boolean,
-    onOpenSettings: () -> Unit,
     onHostNavigationRequested: (MapHostNavigationRequest) -> Unit,
     onRequestTrackerParams: (TrackerParamsRouteArgs) -> Unit,
 ) {
-    Scaffold(
+    GeoVaultTabShell(
+        title = stringResource(R.string.map_screen_title),
+        auth = auth,
         modifier = modifier.fillMaxSize(),
-        topBar = {
-            GeoVaultTopTitleBar(
-                title = stringResource(R.string.map_screen_title),
-                actionsContent = {
-                    GeoVaultTopBarSettingsMenuAction(
-                        onOpenSettings = onOpenSettings,
-                        overflowTooltip = stringResource(R.string.tooltip_nav_settings),
-                    )
-                },
+        settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
+        scrollAuthenticatedMainContent = false,
+        authenticatedContentHorizontalPadding = 0.dp,
+        authenticatedBottomSpacer = 0.dp,
+        authenticatedMainContent = {
+            TrackerMapAuthenticatedContent(
+                map = map,
+                viewModel = mapViewModel,
+                isActive = isActive,
+                isServerAccessible = isServerAccessible,
+                onHostNavigationRequested = onHostNavigationRequested,
+                onRequestTrackerParams = onRequestTrackerParams,
             )
         },
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(MaterialTheme.colors.background),
-        ) {
-            GeoVaultAuthGate(
-                isAuthenticated = isAuthenticated,
-                serverUrl = serverUrl,
-                onServerUrlChanged = onAuthServerUrlChanged,
-                onConnect = onAuthConnect,
-                isConnecting = isConnecting,
-                connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                TrackerMapAuthenticatedContent(
-                    map = map,
-                    viewModel = mapViewModel,
-                    isActive = isActive,
-                    isServerAccessible = isServerAccessible,
-                    onHostNavigationRequested = onHostNavigationRequested,
-                    onRequestTrackerParams = onRequestTrackerParams,
-                )
-            }
-            TrackerParamsOverlayLayer()
-        }
-    }
+        tabOverlay = { TrackerParamsOverlayLayer() },
+    )
 }
 
 @Composable
@@ -1155,7 +1126,7 @@ private fun MapTrackerSelectionPanel(
                     )
                 }
             }
-            val latLon = String.format(Locale.US, "%.4f, %.4f", model.latitude, model.longitude)
+            val latLon = CoordinateFormat.DECIMAL_4.formatLatLon(model.latitude, model.longitude)
             Text(
                 text = latLon,
                 style = MaterialTheme.typography.body2,

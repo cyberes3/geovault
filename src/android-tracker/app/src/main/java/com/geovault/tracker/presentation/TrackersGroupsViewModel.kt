@@ -20,7 +20,7 @@ import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.services.TrackingRuntimeStateStore
-import com.geovault.common.NaturalSort
+import com.geovault.common.sort.NaturalSort
 import java.util.Locale
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -731,7 +731,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                         .filter { it.email.isNotEmpty() }
                         .distinctBy { it.email.lowercase(Locale.getDefault()) }
                         .sortedWith(
-                            NaturalSort.naturalOrderBy { it.email.lowercase(Locale.getDefault()) }
+                            NaturalSort.byName(Locale.getDefault()) { it.email }
                         )
                     _uiState.update {
                         it.copy(

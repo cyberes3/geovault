@@ -12,7 +12,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `loadOnce returns cached value within the dedupe window`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 1_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 1_000L, nowMsProvider = { now })
         var calls = 0
         val key = "single:geometry:a"
         val first = deduper.loadOnce(key) { calls++; RepositoryResult.Success("v1") }
@@ -26,7 +26,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `loadOnce refetches once the window expires`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 1_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 1_000L, nowMsProvider = { now })
         var calls = 0
         val key = "single:geometry:a"
         deduper.loadOnce(key) { calls++; RepositoryResult.Success("v1") }
@@ -39,7 +39,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `clear drops every entry`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 1_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 1_000L, nowMsProvider = { now })
         deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a") }
         deduper.loadOnce("single:geometry:b") { RepositoryResult.Success("b") }
         deduper.clear()
@@ -51,7 +51,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `invalidate purges the single-tracker key`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 10_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
         deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a-cached") }
         deduper.invalidate("a")
         var refetched = false
@@ -63,7 +63,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `invalidate purges multi-tracker keys that contain the tracker`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 10_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
         deduper.loadOnce("multi:geometry:a,b,c") { RepositoryResult.Success("multi-cached") }
         deduper.invalidate("b")
         var refetched = false
@@ -75,7 +75,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `invalidate leaves entries for unrelated trackers intact`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 10_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
         deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a") }
         deduper.loadOnce("single:geometry:b") { RepositoryResult.Success("b") }
         deduper.invalidate("a")
@@ -87,7 +87,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `invalidate matches full id boundaries only`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 10_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
         deduper.loadOnce("single:geometry:abc") { RepositoryResult.Success("abc") }
         deduper.invalidate("ab")
         var refetched = false
@@ -98,7 +98,7 @@ class TrackerMapSessionRequestDeduperTest {
     @Test
     fun `invalidate blank id is a no-op`() = runBlocking {
         var now = 0L
-        val deduper = TrackerMapSessionRequestDeduper(dedupeWindowMs = 10_000L, nowMsProvider = { now })
+        val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
         deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a") }
         deduper.invalidate("   ")
         var refetched = false

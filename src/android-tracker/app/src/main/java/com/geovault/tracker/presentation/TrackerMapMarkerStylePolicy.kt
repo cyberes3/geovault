@@ -1,13 +1,13 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.ui.theme.GeoVaultColorHex
+
 object TrackerMapMarkerStylePolicy {
     fun normalizedColorOrDefault(
         rawColor: String?,
         fallbackColorHex: String = TrackerMapIconIds.DEFAULT_COLOR_HEX,
     ): String {
-        if (rawColor.isNullOrBlank()) return fallbackColorHex
-        val normalized = rawColor.trim()
-        return if (normalized.startsWith("#")) normalized else "#$normalized"
+        return GeoVaultColorHex.normalizeHashPrefix(rawColor) ?: fallbackColorHex
     }
 
     fun singleTrackerIconId(

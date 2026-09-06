@@ -5,9 +5,10 @@ import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.maps.core.GeoVaultMapPlugin
 import com.geovault.common.maps.core.MapMarkerUtils
 import com.geovault.common.maps.render.MapRenderState
+import com.geovault.common.ui.theme.GeoVaultColorHex
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
-import com.geovault.tracker.parseHexToColorInt
+import androidx.compose.ui.graphics.toArgb
 import com.geovault.tracker.presentation.TrackerMapIconIds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
@@ -75,7 +76,7 @@ class TrackerMapMarkerIconPlugin(
         } else {
             TrackerMapIconIds.parseSpec(imageId) ?: return false
         }
-        val tint = parseHexToColorInt(spec.colorHex)
+        val tint = GeoVaultColorHex.parseColorInt(spec.colorHex, GeoVaultColorTokens.Blue400.toArgb())
         val bitmap = if (spec.chevronOnly) {
             MapMarkerUtils.getMarkerBitmapWithTintedForeground(
                 context = context,

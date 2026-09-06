@@ -7,9 +7,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.geovault.common.ui.theme.GeoVaultColorHex
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.R
-import com.geovault.tracker.parseHexToColorInt
+import androidx.compose.ui.graphics.toArgb
 
 object TrackerChevronStylePolicy {
     val TrackerRowChevronSize: Dp = 18.dp
@@ -18,11 +19,9 @@ object TrackerChevronStylePolicy {
     fun tintForTrackerColorHex(colorHex: String?): Color {
         val normalized = colorHex?.trim()?.let { if (it.startsWith("#")) it else "#$it" }?.takeIf { it.isNotEmpty() }
         if (normalized == null) return GeoVaultColorTokens.MainBlue
-        return try {
-            Color(parseHexToColorInt(colorHex))
-        } catch (_: Exception) {
-            GeoVaultColorTokens.MainBlue
-        }
+        return Color(
+            GeoVaultColorHex.parseColorInt(colorHex, GeoVaultColorTokens.Blue400.toArgb())
+        )
     }
 }
 

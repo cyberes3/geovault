@@ -19,7 +19,7 @@ import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.SettingsViewModel
-import com.geovault.tracker.presentation.TrackerAccountViewModel
+import com.geovault.common.auth.GeoVaultAccountViewModel
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.services.TrackingRuntimeStateStore
 import com.geovault.tracker.tracking.TrackingService
@@ -37,7 +37,9 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainScreenViewModel by viewModels()
     private val settingsViewModel: SettingsViewModel by viewModels()
-    private val accountViewModel: TrackerAccountViewModel by viewModels()
+    private val accountViewModel: GeoVaultAccountViewModel by viewModels {
+        GeoVaultAccountViewModel.factory(TrackerAppServices.from(application).initialAuthController())
+    }
 
     private var streamingErrorReceiverRegistered = false
     private var trackingErrorReceiverRegistered = false
@@ -59,6 +61,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.geovault.common.ui.splash.GeoVaultSplashScreen.install(
+            this,
+            (application as TrackerApplication).bootstrap.isReady,
+        )
         super.onCreate(savedInstanceState)
         handleIntentAction(intent)
         consumeOpenAllTrackersMapIntentIfPresent(intent)

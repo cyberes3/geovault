@@ -5,7 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.NaturalSort
+import com.geovault.common.geo.CoordinateFormat
+import com.geovault.common.geo.Wgs84Point
+import com.geovault.common.sort.NaturalSort
 import com.geovault.tracker.AppError
 import com.geovault.tracker.R
 import com.geovault.tracker.RepositoryResult
@@ -167,19 +169,19 @@ class TrackerParamsViewModel(
         val seed = args.seed
         val app = getApplication<Application>()
         val title = seed.displayName.takeIf { it.isNotBlank() }?.uppercase(Locale.getDefault())
-        val positionPair = if (seed.latitude != null && seed.longitude != null) {
-            Pair(seed.latitude, seed.longitude)
+        val position = if (seed.latitude != null && seed.longitude != null) {
+            Wgs84Point(seed.latitude, seed.longitude)
         } else {
             null
         }
         val lastText = seed.lastUpdateMs?.takeIf { it > 0 }?.let(::formatTimeLocal)
             ?: app.getString(R.string.no_points_yet)
-        val posText = positionPair?.let { formatLatLon(it.first, it.second) } ?: "-"
+        val posText = position?.let { CoordinateFormat.DECIMAL_6.formatLatLon(it) } ?: "-"
         val params = seed.initialParams.orEmpty()
         val bodyKind = TrackerParamsContentReducer.resolve(
             latestPointParams = params,
             lastTimestampMs = seed.lastUpdateMs?.takeIf { it > 0 },
-            lastPosition = positionPair,
+            lastPosition = position,
         )
         val gridRows = buildGridRows(bodyKind, params)
         return TrackerParamsScreenUiState(
@@ -223,13 +225,13 @@ class TrackerParamsViewModel(
             app.getString(R.string.no_points_yet)
         }
         val posText = if (!lat.isNaN() && !lon.isNaN()) {
-            formatLatLon(lat, lon)
+            CoordinateFormat.DECIMAL_6.formatLatLon(lat, lon)
         } else {
             "-"
         }
         val lastMsOrNull = timestampMs.takeIf { it > 0L }
-        val positionPair = if (!lat.isNaN() && !lon.isNaN()) Pair(lat, lon) else null
-        val bodyKind = TrackerParamsContentReducer.resolve(paramsMap, lastMsOrNull, positionPair)
+        val position = if (!lat.isNaN() && !lon.isNaN()) Wgs84Point(lat, lon) else null
+        val bodyKind = TrackerParamsContentReducer.resolve(paramsMap, lastMsOrNull, position)
         val gridRows = buildGridRows(bodyKind, paramsMap)
         _uiState.update { prev ->
             prev.copy(
@@ -243,7 +245,7 @@ class TrackerParamsViewModel(
 
     private fun applyFromTracker(tracker: Tracker) {
         val lastTs = tracker.lastTimestampMs()
-        val pos = tracker.lastPositionPair()
+        val pos = tracker.lastPositionOrNull()
         val latestParams = tracker.point_params?.lastOrNull().orEmpty()
         val shouldApplyPoint = synchronized(this) {
             if (lastTs != null && lastTs > 0L) {
@@ -271,7 +273,7 @@ class TrackerParamsViewModel(
         } else {
             app.getString(R.string.no_points_yet)
         }
-        val posText = pos?.let { formatLatLon(it.first, it.second) } ?: "-"
+        val posText = pos?.let { CoordinateFormat.DECIMAL_6.formatLatLon(it) } ?: "-"
         val bodyKind = TrackerParamsContentReducer.resolve(latestParams, lastTs, pos)
         val gridRows = buildGridRows(bodyKind, latestParams)
         _uiState.update { prev ->
@@ -318,10 +320,6 @@ class TrackerParamsViewModel(
     private fun formatTimeLocal(ms: Long): String {
         val sdf = SimpleDateFormat("MMM d, yyyy, h:mm:ss a", Locale.getDefault())
         return sdf.format(Date(ms))
-    }
-
-    private fun formatLatLon(lat: Double, lon: Double): String {
-        return "%.6f, %.6f".format(Locale.US, lat, lon)
     }
 
     private fun parsePropsJson(json: String?): Map<String, Any?> {
@@ -382,8 +380,8 @@ private fun Tracker.lastTimestampMs(): Long? {
     return if (value < 1_000_000_000_000L) value * 1000L else value
 }
 
-private fun Tracker.lastPositionPair(): Pair<Double, Double>? {
+private fun Tracker.lastPositionOrNull(): Wgs84Point? {
     val coord = last_point ?: return null
     if (coord.size < 2) return null
-    return Pair(coord[1], coord[0])
+    return Wgs84Point(latitude = coord[1], longitude = coord[0])
 }

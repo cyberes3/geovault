@@ -1,5 +1,7 @@
 package com.geovault.tracker.params
 
+import com.geovault.common.geo.Wgs84Point
+
 /**
  * Pure classification for which empty-state or grid to show, matching
  * [com.geovault.tracker.fragments.TrackerParamsFragment.bindTracker] / stream update rules.
@@ -15,7 +17,7 @@ object TrackerParamsContentReducer {
     fun resolve(
         latestPointParams: Map<String, Any?>,
         lastTimestampMs: Long?,
-        lastPosition: Pair<Double, Double>?,
+        lastPosition: Wgs84Point?,
     ): TrackerParamsBodyKind {
         val hasStoredParams = latestPointParams.isNotEmpty()
         if (hasStoredParams) return TrackerParamsBodyKind.ShowingGrid

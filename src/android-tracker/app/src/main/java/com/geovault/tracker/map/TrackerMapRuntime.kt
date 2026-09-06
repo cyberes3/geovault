@@ -49,7 +49,7 @@ internal class TrackerMapRuntime(
 
     internal val trailCommitLock = TrailCommitCoordinator()
     internal val pendingReloadCameraFit = PendingReloadCameraFit()
-    internal val sessionRequestDeduper = TrackerMapSessionRequestDeduper()
+    internal val sessionRequestDeduper = TrackerMapSessionRequestDeduper(ports.viewModelScope)
     internal val streamingPlanCache = TrackerMapStreamingPlanCache()
     internal lateinit var trailLoaderOps: TrackerMapTrailLoaderOps
 

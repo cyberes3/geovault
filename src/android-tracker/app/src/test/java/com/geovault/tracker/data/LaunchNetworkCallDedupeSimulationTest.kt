@@ -26,8 +26,10 @@ class LaunchNetworkCallDedupeSimulationTest {
         val dataSource = RecordingBootstrapDataSource(recorder)
         val orchestrator = TrackerBootstrapOrchestrator(
             dataSource = dataSource,
+            scope = this,
         )
         val deduper = TrackerMapSessionRequestDeduper(
+            scope = this,
             dedupeWindowMs = 10_000L,
             nowMsProvider = { 1_000L }
         )
@@ -59,8 +61,10 @@ class LaunchNetworkCallDedupeSimulationTest {
         val dataSource = RecordingBootstrapDataSource(recorder)
         val orchestrator = TrackerBootstrapOrchestrator(
             dataSource = dataSource,
+            scope = this,
         )
         val deduper = TrackerMapSessionRequestDeduper(
+            scope = this,
             dedupeWindowMs = 10_000L,
             nowMsProvider = { 2_000L }
         )
@@ -89,8 +93,10 @@ class LaunchNetworkCallDedupeSimulationTest {
         val dataSource = RecordingBootstrapDataSource(recorder)
         val orchestrator = TrackerBootstrapOrchestrator(
             dataSource = dataSource,
+            scope = this,
         )
         val deduper = TrackerMapSessionRequestDeduper(
+            scope = this,
             dedupeWindowMs = 10_000L,
             nowMsProvider = { 3_000L }
         )
@@ -129,6 +135,7 @@ class LaunchNetworkCallDedupeSimulationTest {
         val trackerId = "80542db3-e986-4303-a26b-585505d658ad"
         val recorder = EndpointRecorder()
         val deduper = TrackerMapSessionRequestDeduper(
+            scope = this,
             dedupeWindowMs = 10_000L,
             nowMsProvider = { 4_000L }
         )

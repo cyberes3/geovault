@@ -1,10 +1,10 @@
 package com.geovault.tracker.positioning
 import com.geovault.tracker.positioning.PositioningRuntime
 import android.content.Intent
-import com.geovault.common.GeovaultAuthManager
-import com.geovault.common.RetrofitClient
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
 import com.geovault.tracker.R
-import com.geovault.tracker.location.NetworkStatusMonitor
+import com.geovault.common.net.GeoVaultConnectivity
 import com.geovault.tracker.location.SyncFailureClass
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.location.TrackingSyncPolicy
@@ -123,7 +123,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
         val trackerId = rt.ports.selectedTrackerId()
         trimQueuedLocationsRetention(trackerId)
         updateUploadQueueCounts(trackerId)
-        if (!NetworkStatusMonitor.hasUsableNetwork(rt.ports.service)) {
+        if (!GeoVaultConnectivity.hasValidatedInternet(rt.ports.service)) {
             val result = QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.NO_NETWORK)
             rt.upload.applyQueueUploadResult(
                 result = result,
@@ -164,7 +164,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
             }
             return result.failureClass
         }
-        val serverUrl = GeovaultAuthManager.getServerUrl(rt.ports.service)
+        val serverUrl = GeoVaultAuthSession.get().getServerUrl()
         val settings = rt.deps.settingsRepository.getSettings()
         val result = rt.deps.queueUploadEngine.push(
             scope = scope,
@@ -299,7 +299,7 @@ internal class UploadSubsystem(private val rt: PositioningRuntime) {
 
     fun getAuthenticatedHttpClient(): OkHttpClient {
         if (rt.deps.httpClient == null) {
-            rt.deps.httpClient = RetrofitClient.getAuthenticatedOkHttpClient(rt.ports.service.applicationContext).newBuilder()
+            rt.deps.httpClient = GeoVaultHttp.authenticatedClient().newBuilder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .writeTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)

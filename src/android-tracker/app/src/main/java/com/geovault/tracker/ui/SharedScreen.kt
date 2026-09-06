@@ -55,11 +55,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.geovault.common.geo.CoordinateFormat
 import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
-import com.geovault.common.ui.components.GeoVaultNavTabShell
+import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSearchField
@@ -104,12 +106,7 @@ import java.util.Locale
 fun SharedScreen(
     vm: SharedViewModel,
     sharedTabBottomNavStamp: Int = 0,
-    isAuthenticated: Boolean,
-    serverUrl: String,
-    onAuthServerUrlChanged: (String) -> Unit,
-    onAuthConnect: () -> Unit,
-    isConnecting: Boolean,
-    onOpenSettings: () -> Unit,
+    auth: GeoVaultAuthShellState,
     navigationRequest: SharedHostNavigationRequest? = null,
     onNavigationTargetConsumed: () -> Unit = {},
     onOpenTrackerOnMap: (trackerId: String, trackerName: String?) -> Unit = { _, _ -> },
@@ -188,17 +185,11 @@ fun SharedScreen(
     // [tabOverlay]. Each renders through [GeoVaultSubViewScaffold] (compact "<-Title  X"
     // dismiss strip), so the outer NavTabShell title bar stays in place across open/close.
     // Settings remains available and uses the common host-inactive path to dismiss sub-views.
-    GeoVaultNavTabShell(
+    GeoVaultTabShell(
         title = stringResource(R.string.shared_screen_title),
+        auth = auth,
         placeholderText = stringResource(R.string.shared_placeholder_signed_out),
-        isAuthenticated = isAuthenticated,
-        serverUrl = serverUrl,
-        onAuthServerUrlChanged = onAuthServerUrlChanged,
-        onAuthConnect = onAuthConnect,
-        isConnecting = isConnecting,
-        onOpenSettings = onOpenSettings,
         settingsOverflowTooltip = stringResource(R.string.tooltip_nav_settings),
-        connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
         scrollAuthenticatedMainContent = false,
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
@@ -693,7 +684,7 @@ private fun SharedMainListSurface(
                                         lastUpdateText = row.lastUpdateMs?.let(::formatSharedListDate)
                                             ?: stringResource(R.string.waiting_for_data),
                                         coordinatesText = if (row.latitude != null && row.longitude != null) {
-                                            String.format(Locale.getDefault(), "%.4f, %.4f", row.latitude, row.longitude)
+                                            CoordinateFormat.DECIMAL_4.formatLatLon(row.latitude, row.longitude)
                                         } else {
                                             null
                                         },

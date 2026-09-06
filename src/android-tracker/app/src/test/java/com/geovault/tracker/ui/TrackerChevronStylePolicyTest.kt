@@ -1,7 +1,8 @@
 package com.geovault.tracker.ui
 
+import com.geovault.common.ui.theme.GeoVaultColorHex
 import com.geovault.common.ui.theme.GeoVaultColorTokens
-import com.geovault.tracker.parseHexToColorInt
+import androidx.compose.ui.graphics.toArgb
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,7 +25,9 @@ class TrackerChevronStylePolicyTest {
     @Test
     fun tintForTrackerColorHex_matchesParseHexPolicyForValidHex() {
         val hex = "#AA33CC"
-        val expected = androidx.compose.ui.graphics.Color(parseHexToColorInt(hex))
+        val expected = androidx.compose.ui.graphics.Color(
+            GeoVaultColorHex.parseColorInt(hex, GeoVaultColorTokens.Blue400.toArgb())
+        )
         val actual = TrackerChevronStylePolicy.tintForTrackerColorHex(hex)
 
         assertEquals(expected, actual)

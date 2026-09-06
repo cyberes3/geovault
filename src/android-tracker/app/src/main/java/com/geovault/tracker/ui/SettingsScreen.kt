@@ -2,6 +2,7 @@ package com.geovault.tracker.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,13 +42,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.geovault.common.ui.components.GeoVaultInitialAuthView
+import com.geovault.common.ui.components.GeoVaultAccountSettingsSection
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
+import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
-import com.geovault.common.ui.components.GeoVaultServerConfigBlock
-import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultToggleHelpCard
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
@@ -83,6 +83,7 @@ fun SettingsScreen(
     onOpenAllTrackersOnMap: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
 ) {
     var showHiddenTrackersOverlay by remember { mutableStateOf(false) }
     var isBindingSettings by remember { mutableStateOf(true) }
@@ -143,16 +144,10 @@ fun SettingsScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        GeoVaultSubViewScaffold(
-            modifier = Modifier.fillMaxSize(),
-            title = stringResource(R.string.nav_settings),
-            onClose = onClose,
-            closeContentDescription = stringResource(R.string.close),
-        ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(contentPadding),
             ) {
                 Column(
                     modifier = Modifier
@@ -288,46 +283,25 @@ fun SettingsScreen(
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
 
-        if (!accountState.isLoggedIn) {
-            Divider(
-                color = geoVaultHairlineDividerColor(),
-                thickness = 1.dp,
-                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
-            )
-            GeoVaultInitialAuthView(
-                serverUrl = accountState.serverUrl,
-                onServerUrlChanged = onServerUrlChanged,
-                onConnect = onConnect,
-                isConnecting = accountState.isConnecting,
-                serverUrlLabel = stringResource(R.string.server_url_label),
-                connectButtonText = stringResource(R.string.connect_account),
-                connectingButtonText = "Connecting...",
-                connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
-                captureOutsideTapAcrossParent = false,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-            )
-        } else {
-            val loggedInEmail = accountState.loggedInText
-                .removePrefix("Logged in as")
-                .trim()
-                .ifBlank { "Authenticated User" }
-            GeoVaultServerConfigBlock(
-                serverUrl = accountState.serverUrl,
-                loggedInEmail = loggedInEmail,
-                onDisconnectConfirmed = onDisconnect,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                title = stringResource(R.string.server_settings_title),
-                disconnectButtonText = stringResource(R.string.disconnect),
-                disconnectButtonTooltip = stringResource(R.string.tooltip_settings_disconnect),
-            )
-        }
+        GeoVaultAccountSettingsSection(
+            accountState = accountState,
+            onServerUrlChanged = onServerUrlChanged,
+            onConnect = onConnect,
+            onDisconnect = onDisconnect,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            showSignedOutDivider = true,
+            connectButtonTooltip = stringResource(R.string.tooltip_settings_connect),
+            serverUrlLabel = stringResource(R.string.server_url_label),
+            connectButtonText = stringResource(R.string.connect_account),
+            captureOutsideTapAcrossParent = false,
+            serverBlockTitle = stringResource(R.string.server_settings_title),
+            disconnectButtonText = stringResource(R.string.disconnect),
+            disconnectButtonTooltip = stringResource(R.string.tooltip_settings_disconnect),
+        )
             }
             TrackerParamsOverlayLayer()
-        }
         }
         if (showHiddenTrackersOverlay) {
             HiddenTrackersSubView(

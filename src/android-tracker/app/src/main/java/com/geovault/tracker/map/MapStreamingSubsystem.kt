@@ -9,7 +9,7 @@ import com.geovault.tracker.policy.TrackPointBus
 import com.geovault.tracker.policy.TrackPointEvent
 import com.geovault.tracker.presentation.*
 import com.geovault.tracker.services.*
-import com.geovault.tracker.location.NetworkStatusMonitor
+import com.geovault.common.net.GeoVaultConnectivity
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.streaming.LiveStreamSubscriptionState
 import com.geovault.tracker.streaming.StreamingConfig
@@ -660,7 +660,7 @@ internal class MapStreamingSubsystem(private val rt: TrackerMapRuntime) {
                 connectionHealthy = streamState.subscriptionHealthy,
                 unhealthySinceMs = streamingUnhealthySinceMs,
                 nowMs = nowMs,
-                hasUsableNetwork = NetworkStatusMonitor.hasUsableNetwork(rt.dependencies.appContext),
+                hasUsableNetwork = GeoVaultConnectivity.hasValidatedInternet(rt.dependencies.appContext),
                 hasBatteryOptimizationExemption = TrackingPermissionGate.hasBatteryOptimizationExemption(rt.dependencies.appContext),
             )
             if (rt.stateHub.uiStateMutable.value.batteryOptimizationHintVisible != showHint) {

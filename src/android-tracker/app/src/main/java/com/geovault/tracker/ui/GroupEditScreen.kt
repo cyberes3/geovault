@@ -41,9 +41,9 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.geovault.common.NaturalSort
-import com.geovault.common.ClipboardCopyHelper
-import com.geovault.common.GeovaultAuthManager
+import com.geovault.common.sort.NaturalSort
+import com.geovault.common.util.ClipboardCopyHelper
+import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultFormSection
@@ -667,7 +667,7 @@ private fun GroupEditShareUserPickerDialog(
         items = pickerRowEmails,
         isSelected = { selectedEmails.contains(it) },
         onToggleItem = onToggleSharedEmail,
-        onDismiss = onDismiss,
+        onDismissRequest = onDismiss,
         labelFor = { emailLower ->
             shareRecipientUsers
                 .firstOrNull {
@@ -712,13 +712,5 @@ private fun copyShareLink(
     label: String,
 ) {
     if (shareUrl.isNullOrBlank()) return
-    clipboardHelper.copyText(resolveShareUrl(context, shareUrl), label)
-}
-
-private fun resolveShareUrl(context: Context, shareUrl: String): String {
-    val trimmed = shareUrl.trim()
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
-    val baseUrl = GeovaultAuthManager.getServerUrl(context).trimEnd('/')
-    if (baseUrl.isBlank()) return trimmed
-    return if (trimmed.startsWith("/")) "$baseUrl$trimmed" else "$baseUrl/$trimmed"
+    clipboardHelper.copyText(GeoVaultAuthSession.get().resolveAbsoluteUrl(shareUrl), label)
 }

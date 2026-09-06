@@ -8,7 +8,7 @@ import com.geovault.tracker.BuildConfig
 
 /**
  * Dumps point recording logs to Downloads via MediaStore. Trigger with
- * `adb shell am broadcast -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG -p <package>`.
+ * `adb shell am broadcast -n <package>/com.geovault.tracker.logging.GeoVaultPointRecordingLogExportReceiver -a com.geovault.tracker.EXPORT_POINT_RECORDING_LOG`.
  */
 class GeoVaultPointRecordingLogExportReceiver : BroadcastReceiver() {
 
@@ -24,7 +24,7 @@ class GeoVaultPointRecordingLogExportReceiver : BroadcastReceiver() {
             )
             return
         }
-        GeoVaultPointRecordingLogEngine.scheduleExport(context.applicationContext)
+        GeoVaultPointRecordingLog.exportToDownloads(context.applicationContext)
     }
 
     private companion object {
