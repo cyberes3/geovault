@@ -1,8 +1,5 @@
 package com.geovault.tracker.data
 
-import com.geovault.tracker.RepositoryResult
-import com.geovault.tracker.Tracker
-import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.presentation.TrackerMapServerTrailResult
 import com.geovault.tracker.presentation.TrackerMapSessionRequestDeduper
 import com.geovault.tracker.presentation.TrackerMapTrailLoader
@@ -165,19 +162,16 @@ class LaunchNetworkCallDedupeSimulationTest {
     private class RecordingBootstrapDataSource(
         private val recorder: EndpointRecorder,
     ) : TrackerBootstrapDataSource {
-        override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadTrackers(forceRefresh: Boolean) {
             recorder.record("GET /api/extensions/live-track/trackers/")
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadGroups(forceRefresh: Boolean) {
             recorder.record("GET /api/extensions/live-track/groups/")
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadMapVisibility(forceRefresh: Boolean) {
             recorder.record("GET /api/extensions/live-track/map-visibility/")
-            return RepositoryResult.Success(Unit)
         }
 
     }
@@ -189,19 +183,12 @@ class LaunchNetworkCallDedupeSimulationTest {
     ) {
         val ops = TrackerMapTrailLoaderOps(
             loadSingleServer = { id, _ ->
-                when (
-                    val result = deduper.loadOnce("geometry:$id") {
-                        recorder.record("GET /api/extensions/live-track/trackers/$id/geometry/")
-                        RepositoryResult.Success(
-                            TrackerMapServerTrailResult(
-                                trailsByTracker = mapOf(id to emptyList()),
-                                authoritativeTrackerIds = setOf(id),
-                            ),
-                        )
-                    }
-                ) {
-                    is RepositoryResult.Success -> result.data
-                    is RepositoryResult.Failure -> TrackerMapServerTrailResult(emptyMap(), emptySet())
+                deduper.loadOnce("geometry:$id") {
+                    recorder.record("GET /api/extensions/live-track/trackers/$id/geometry/")
+                    TrackerMapServerTrailResult(
+                        trailsByTracker = mapOf(id to emptyList()),
+                        authoritativeTrackerIds = setOf(id),
+                    )
                 }
             },
             loadMultiServer = { _, _ ->

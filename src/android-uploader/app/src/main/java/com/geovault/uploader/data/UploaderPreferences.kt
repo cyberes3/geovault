@@ -30,7 +30,6 @@ class UploaderPreferences private constructor(context: Context) {
     val settings: StateFlow<UploaderSettings> = _settings.asStateFlow()
 
     init {
-        preloadOnLaunch()
         appScope.launch {
             store.data.collect { document ->
                 _settings.value = UploaderSettings(suffixEnabled = document.addFilenameSuffix)

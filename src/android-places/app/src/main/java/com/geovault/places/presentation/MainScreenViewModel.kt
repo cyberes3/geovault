@@ -9,13 +9,13 @@ import com.geovault.common.sync.GeoVaultQueuedSyncMessageFormatter
 import com.geovault.common.sync.GeoVaultQueuedSyncOutcome
 import com.geovault.common.sync.GeoVaultRefreshTimeoutPolicy
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
+import com.geovault.common.ui.time.GeoVaultDateTimeFormat
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultAppUpdatePromptBinding
 import com.geovault.common.update.VersionCheckResult
 import com.geovault.places.BuildConfig
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.domain.SnapshotFetchResult
-import com.geovault.places.domain.SyncEvent
-import com.geovault.places.domain.SyncFailureReason
 import com.geovault.places.domain.SyncResult
 import com.geovault.places.model.Feature
 import com.geovault.places.model.OfflineFeature
@@ -32,10 +32,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 data class MainScreenState(
-    val isAuthenticated: Boolean = false,
-    val serverUrl: String = "",
-    val isConnecting: Boolean = false,
-    val oauthUrl: String? = null,
     val isRefreshing: Boolean = false,
     val searchQuery: String = "",
     val saved: List<Feature> = emptyList(),
@@ -56,24 +52,25 @@ class MainScreenViewModel(
     private val services = PlacesAppServices.from(application)
     private val placesStore = services.placesStore()
     private val offlineSyncCoordinator = services.offlineSyncCoordinator()
-    private val updateCoordinator = GeoVaultAndroidReleaseIdentity.Places.updateCoordinator(
-        application = application,
-        localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+    private val updatePromptBinding = GeoVaultAppUpdatePromptBinding(
+        GeoVaultAndroidReleaseIdentity.Places.updateCoordinator(
+            application = application,
+            localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+        )
     )
     private var refreshJob: Job? = null
     private var refreshCancelMessage: String? = null
     private var refreshPhase: RefreshPhase = RefreshPhase.IDLE
     private var initialRefreshTriggered: Boolean = false
     private var snapshotCollectStarted: Boolean = false
+    private var isLoggedIn: Boolean = false
 
     private val _state = MutableStateFlow(MainScreenState())
     val state: StateFlow<MainScreenState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            updateCoordinator.promptState.collect { prompt ->
-                _state.update { it.copy(updateAvailable = prompt.updateOrNull()) }
-            }
+        updatePromptBinding.collect(viewModelScope) { prompt ->
+            _state.update { it.copy(updateAvailable = prompt) }
         }
     }
 
@@ -242,7 +239,7 @@ class MainScreenViewModel(
     }
 
     fun clearUpdateAvailable() {
-        updateCoordinator.dismissPrompt()
+        updatePromptBinding.dismissPrompt()
     }
 
     fun showExternalError(message: String) {
@@ -254,21 +251,18 @@ class MainScreenViewModel(
     }
 
     private fun refreshAuthAndCache(accountState: GeoVaultAccountUiState) {
-        val wasAuthenticated = _state.value.isAuthenticated
+        val wasAuthenticated = isLoggedIn
         val loggedIn = accountState.isLoggedIn
+        isLoggedIn = loggedIn
         _state.update {
             it.copy(
-                serverUrl = accountState.serverUrl,
-                isAuthenticated = loggedIn,
-                isConnecting = accountState.isConnecting,
-                oauthUrl = null,
                 lastSyncMillis = placesStore.getLastSyncTime(),
                 lastSyncLabel = formatLastSyncLabel(placesStore.getLastSyncTime()),
             )
         }
         if (wasAuthenticated && !loggedIn) {
             initialRefreshTriggered = false
-            updateCoordinator.reset()
+            updatePromptBinding.onSignedOut()
         }
         val authenticatedAfterLaunch = !initialRefreshTriggered && loggedIn
         val becameAuthenticated = !wasAuthenticated && loggedIn
@@ -282,21 +276,11 @@ class MainScreenViewModel(
     }
 
     private fun launchVersionCheckIfNeeded() {
-        updateCoordinator.launchIfNeeded(viewModelScope)
+        updatePromptBinding.onAuthenticated(viewModelScope)
     }
 
     private fun publishSyncOutcome(syncResult: SyncResult) {
         if (!syncResult.hadQueuedItems) return
-        syncResult.events.forEach { event ->
-            when (event) {
-                is SyncEvent.ConflictSavedAsNew -> {
-                    showSnackbar("Conflict detected: '${event.placeName}' saved as new item", "sync_conflict")
-                }
-                is SyncEvent.ItemFailed -> {
-                    showSnackbar(formatItemFailureMessage(event), "sync_item_failed")
-                }
-            }
-        }
         val summary = GeoVaultQueuedSyncMessageFormatter.format(
             outcome = GeoVaultQueuedSyncOutcome(
                 successCount = syncResult.successCount,
@@ -306,26 +290,8 @@ class MainScreenViewModel(
             itemLabelSingular = "item",
             itemLabelPlural = "items",
         )
-        val soleFailureDetail = syncResult.events
-            .filterIsInstance<SyncEvent.ItemFailed>()
-            .singleOrNull()
-            ?.let { formatItemFailureMessage(it) }
-        val message = when {
-            syncResult.successCount == 0 && soleFailureDetail != null -> soleFailureDetail
-            summary.isNotBlank() -> summary
-            else -> return
-        }
-        showSnackbar(message, "sync_result")
-    }
-
-    private fun formatItemFailureMessage(event: SyncEvent.ItemFailed): String {
-        val details = event.message?.takeIf { it.isNotBlank() }
-        return when (event.reason) {
-            SyncFailureReason.FetchFailed -> details ?: "Sync failed while checking server changes for '${event.placeName}'"
-            SyncFailureReason.ConflictCreateFailed -> details ?: "Sync conflict for '${event.placeName}' could not be saved as new item"
-            SyncFailureReason.UpdateFailed -> details ?: "Sync update failed for '${event.placeName}'"
-            SyncFailureReason.CreateFailed -> details ?: "Sync create failed for '${event.placeName}'"
-        }
+        if (summary.isBlank()) return
+        showSnackbar(summary, "sync_result")
     }
 
     private fun showSnackbar(message: String, prefix: String) {
@@ -376,8 +342,7 @@ class MainScreenViewModel(
 
     private fun formatLastSyncLabel(lastSyncMillis: Long): String {
         if (lastSyncMillis == 0L) return "Not synced"
-        val format = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-        return "Last synced: ${format.format(java.util.Date(lastSyncMillis))}"
+        return "Last synced: ${GeoVaultDateTimeFormat.formatLocalTime(lastSyncMillis)}"
     }
 }
 

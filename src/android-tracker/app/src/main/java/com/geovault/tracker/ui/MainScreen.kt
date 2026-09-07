@@ -23,7 +23,7 @@ import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.maps.core.rememberGeoVaultMainMap
 import com.geovault.common.ui.GeoVaultAppShell
 import com.geovault.common.ui.GeoVaultAppSnackbarLayer
-import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.rememberGeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultShellOverlayScaffold
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
@@ -103,8 +103,8 @@ fun MainScreen(
         trackerParamsArgs = null
     }
 
-    LaunchedEffect(state.isAuthenticated) {
-        if (state.isAuthenticated) {
+    LaunchedEffect(accountState.isLoggedIn) {
+        if (accountState.isLoggedIn) {
             trackersGroupsViewModel.beginShellBootstrapUi()
             sharedViewModel.beginShellBootstrapUi()
             val outcome = mainScreenViewModel.runAuthenticatedLaunchBootstrap()
@@ -288,25 +288,13 @@ fun MainScreen(
         )
     }
     val connectTooltip = stringResource(R.string.tooltip_settings_connect)
-    val auth = remember(
-        state.isAuthenticated,
-        state.serverUrl,
-        state.isConnecting,
-        connectTooltip,
-        onAuthServerUrlChanged,
-        onAuthConnect,
-        openSettingsOverlay,
-    ) {
-        GeoVaultAuthShellState(
-            isAuthenticated = state.isAuthenticated,
-            serverUrl = state.serverUrl,
-            onServerUrlChanged = onAuthServerUrlChanged,
-            onConnect = onAuthConnect,
-            onOpenSettings = openSettingsOverlay,
-            isConnecting = state.isConnecting,
-            connectButtonTooltip = connectTooltip,
-        )
-    }
+    val auth = rememberGeoVaultAuthShellState(
+        accountState = accountState,
+        onServerUrlChanged = onAuthServerUrlChanged,
+        onConnect = onAuthConnect,
+        onOpenSettings = openSettingsOverlay,
+        connectButtonTooltip = connectTooltip,
+    )
     val globalInfoModel = state.infoMessage
         ?.takeIf { it.isNotBlank() }
         ?.let { message ->
@@ -323,7 +311,7 @@ fun MainScreen(
             overlayNavBarChrome = isSettingsOpen,
             alwaysComposedTabIds = setOf(TrackerTab.MAP.name),
             prewarmTabIds = listOf(TrackerTab.TRACKERS.name, TrackerTab.SHARED.name),
-            prewarmEnabled = state.isAuthenticated,
+            prewarmEnabled = accountState.isLoggedIn,
             onDestinationSelected = { destination ->
                 if (destination.id != selectedTab) {
                     if (!isHandlingTabBack && selectedTab.isNotBlank()) {

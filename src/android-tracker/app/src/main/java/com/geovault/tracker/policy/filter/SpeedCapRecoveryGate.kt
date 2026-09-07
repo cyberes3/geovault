@@ -2,10 +2,7 @@ package com.geovault.tracker.policy.filter
 
 import com.geovault.common.geo.GeoMath
 import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.max
-import kotlin.math.sin
 
 internal class SpeedCapRecoveryGate(
     private var config: SpeedRecoveryConfig,
@@ -117,11 +114,6 @@ internal class SpeedCapRecoveryGate(
     private fun courseDegrees(from: LocationInput, to: LocationInput): Double? {
         val distanceMeters = GeoMath.haversineMeters(from.latitude, from.longitude, to.latitude, to.longitude)
         if (distanceMeters < config.minContinuityMeters) return null
-        val fromLatRad = Math.toRadians(from.latitude)
-        val toLatRad = Math.toRadians(to.latitude)
-        val deltaLonRad = Math.toRadians(to.longitude - from.longitude)
-        val y = sin(deltaLonRad) * cos(toLatRad)
-        val x = cos(fromLatRad) * sin(toLatRad) - sin(fromLatRad) * cos(toLatRad) * cos(deltaLonRad)
-        return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
+        return GeoMath.initialBearingDegrees(from.latitude, from.longitude, to.latitude, to.longitude)
     }
 }

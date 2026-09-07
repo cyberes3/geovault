@@ -1,20 +1,20 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.AppError
-import com.geovault.tracker.RepositoryResult
+import com.geovault.common.net.GeoVaultApiFailure
 
 sealed class TrackersGroupsMutationResult<out T> {
     data class Success<T>(val data: T) : TrackersGroupsMutationResult<T>()
-    data class Failure(val error: AppError) : TrackersGroupsMutationResult<Nothing>()
+    data class Failure(val error: GeoVaultApiFailure) : TrackersGroupsMutationResult<Nothing>()
 }
 
 object TrackersGroupsMutationCoordinator {
     suspend fun <T> run(
-        mutation: suspend () -> RepositoryResult<T>
+        mutation: suspend () -> T
     ): TrackersGroupsMutationResult<T> {
-        return when (val result = mutation()) {
-            is RepositoryResult.Success -> TrackersGroupsMutationResult.Success(result.data)
-            is RepositoryResult.Failure -> TrackersGroupsMutationResult.Failure(result.error)
+        return try {
+            TrackersGroupsMutationResult.Success(mutation())
+        } catch (e: GeoVaultApiFailure) {
+            TrackersGroupsMutationResult.Failure(e)
         }
     }
 }

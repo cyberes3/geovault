@@ -1,13 +1,12 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.AvailableToAddItem
 import com.geovault.tracker.AvailableToAddResponse
-import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
 import com.geovault.tracker.GroupPatchRequest
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.TrackerCheckRequest
 import com.geovault.tracker.TrackerCoordinatesResponse
@@ -113,39 +112,42 @@ class TrackerAddRemoveCoordinatorTest {
     }
 }
 
+private fun unknownApiFailure(): Nothing =
+    throw GeoVaultApiFailure(httpCode = null, serverMessage = "Unknown")
+
 private class FakeTrackerManagementRepository : TrackerManagementRepository {
-    override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<List<Tracker>> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadAvailableToAdd(forceRefresh: Boolean): RepositoryResult<AvailableToAddResponse> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadTracker(trackerId: String): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadTrackerGeometry(trackerId: String): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadTrackerCoordinates(trackerId: String): RepositoryResult<TrackerCoordinatesResponse> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadTrackersGeometry(trackerIds: List<String>): RepositoryResult<List<Tracker>> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun createTracker(request: TrackerCreateRequest): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun updateTrackerSettings(trackerId: String, request: TrackerSettingsRequest, publishToStore: Boolean): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun deleteTracker(trackerId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun clearTrackerHistory(trackerId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun leaveShareWithMe(trackerId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun unsubscribeTracker(trackerId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun subscribeTracker(trackerId: String): RepositoryResult<Tracker> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun checkTracker(request: TrackerCheckRequest): RepositoryResult<Boolean> = RepositoryResult.Failure(AppError.Unknown)
+    override suspend fun loadTrackers(forceRefresh: Boolean): List<Tracker> = unknownApiFailure()
+    override suspend fun loadAvailableToAdd(forceRefresh: Boolean): AvailableToAddResponse = unknownApiFailure()
+    override suspend fun loadTracker(trackerId: String): Tracker = unknownApiFailure()
+    override suspend fun loadTrackerGeometry(trackerId: String): Tracker = unknownApiFailure()
+    override suspend fun loadTrackerCoordinates(trackerId: String): TrackerCoordinatesResponse = unknownApiFailure()
+    override suspend fun loadTrackersGeometry(trackerIds: List<String>): List<Tracker> = unknownApiFailure()
+    override suspend fun createTracker(request: TrackerCreateRequest): Tracker = unknownApiFailure()
+    override suspend fun updateTrackerSettings(trackerId: String, request: TrackerSettingsRequest, publishToStore: Boolean): Tracker = unknownApiFailure()
+    override suspend fun deleteTracker(trackerId: String) = unknownApiFailure()
+    override suspend fun clearTrackerHistory(trackerId: String) = unknownApiFailure()
+    override suspend fun leaveShareWithMe(trackerId: String) = unknownApiFailure()
+    override suspend fun unsubscribeTracker(trackerId: String) = unknownApiFailure()
+    override suspend fun subscribeTracker(trackerId: String): Tracker = unknownApiFailure()
+    override suspend fun checkTracker(request: TrackerCheckRequest): Boolean = unknownApiFailure()
     override fun getTrackerFromCache(trackerId: String): Tracker? = null
     override fun clearSelectedTrackerCaches() = Unit
-    override suspend fun fetchTrackerKml(trackerId: String): RepositoryResult<ByteArray> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadUsers(): RepositoryResult<UsersResponse> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<MapVisibilityResponse> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun patchMapVisibility(request: MapVisibilityRequest): RepositoryResult<MapVisibilityResponse> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun clearHiddenItems(targetTypes: List<String>?): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
+    override suspend fun fetchTrackerKml(trackerId: String): ByteArray = unknownApiFailure()
+    override suspend fun loadUsers(): UsersResponse = unknownApiFailure()
+    override suspend fun loadMapVisibility(forceRefresh: Boolean): MapVisibilityResponse = unknownApiFailure()
+    override suspend fun patchMapVisibility(request: MapVisibilityRequest): MapVisibilityResponse = unknownApiFailure()
+    override suspend fun clearHiddenItems(targetTypes: List<String>?) = unknownApiFailure()
 }
 
 private class FakeGroupManagementRepository : GroupManagementRepository {
-    override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<List<Group>> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun loadGroup(groupId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun createGroup(name: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun patchGroup(groupId: String, request: GroupPatchRequest, publishToStore: Boolean): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun deleteGroup(groupId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun addGroupTrack(groupId: String, trackId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun removeGroupTrack(groupId: String, trackId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun leaveGroup(groupId: String): RepositoryResult<Unit> = RepositoryResult.Failure(AppError.Unknown)
-    override suspend fun acceptGroupShare(groupId: String): RepositoryResult<Group> = RepositoryResult.Failure(AppError.Unknown)
+    override suspend fun loadGroups(forceRefresh: Boolean): List<Group> = unknownApiFailure()
+    override suspend fun loadGroup(groupId: String): Group = unknownApiFailure()
+    override suspend fun createGroup(name: String): Group = unknownApiFailure()
+    override suspend fun patchGroup(groupId: String, request: GroupPatchRequest, publishToStore: Boolean): Group = unknownApiFailure()
+    override suspend fun deleteGroup(groupId: String) = unknownApiFailure()
+    override suspend fun addGroupTrack(groupId: String, trackId: String): Group = unknownApiFailure()
+    override suspend fun removeGroupTrack(groupId: String, trackId: String): Group = unknownApiFailure()
+    override suspend fun leaveGroup(groupId: String) = unknownApiFailure()
+    override suspend fun acceptGroupShare(groupId: String): Group = unknownApiFailure()
 }
 

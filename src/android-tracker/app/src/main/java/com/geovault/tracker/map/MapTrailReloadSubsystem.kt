@@ -3,8 +3,7 @@ package com.geovault.tracker.map
 import android.app.Application
 import com.geovault.common.logging.CaptureLogThrottle
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.AppError
-import com.geovault.tracker.RepositoryResult
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.tracker.history.*
@@ -14,6 +13,7 @@ import com.geovault.tracker.streaming.StreamingDiagnostics
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.withLock
+import java.io.IOException
 
 /**
  * Owns fetching and merging trail geometry: coalescing reload requests behind a single-flight
@@ -538,59 +538,55 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
         existingTrailMinTimeMs: Long?,
     ): TrackerMapServerTrailResult {
         val normalizedId = trackerId.trim()
-        return when (
-            val geometryResult = rt.sessionRequestDeduper.loadOnce("single:geometry:$normalizedId") {
+        return try {
+            val geometry = rt.sessionRequestDeduper.loadOnce("single:geometry:$normalizedId") {
                 geometryLoadingTracker.track {
                     fetchGeometryGuarded(setOf(normalizedId)) { rt.dependencies.trackerManagementRepository.loadTrackerGeometry(normalizedId) }
                 }
             }
-        ) {
-            is RepositoryResult.Success -> {
-                val batch = enrichTrunkBatchForActiveSession(
-                    TrackerHistorySourceAdapters.filteredServerTrunk(geometryResult.data),
-                    trackerId = normalizedId,
+            val batch = enrichTrunkBatchForActiveSession(
+                TrackerHistorySourceAdapters.filteredServerTrunk(geometry),
+                trackerId = normalizedId,
+            )
+            val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
+                TrackerHistoryIntent.CommitTrunk(
+                    batch = batch,
+                    activeSessionStartMs = rt.activeSessionStartMsForTracker(normalizedId),
                 )
-                val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
-                    TrackerHistoryIntent.CommitTrunk(
-                        batch = batch,
-                        activeSessionStartMs = rt.activeSessionStartMsForTracker(normalizedId),
-                    )
-                )
-                TrackerMapServerTrailResult(
-                    trailsByTracker = mapOf(
-                        normalizedId to TrackerHistoryRenderMapper.toQueuedLocations(
-                            transaction.snapshot,
-                            TrackerMapViewModel.TRAIL_POINT_LIMIT,
-                        ),
+            )
+            TrackerMapServerTrailResult(
+                trailsByTracker = mapOf(
+                    normalizedId to TrackerHistoryRenderMapper.toQueuedLocations(
+                        transaction.snapshot,
+                        TrackerMapViewModel.TRAIL_POINT_LIMIT,
                     ),
-                    authoritativeTrackerIds = setOf(normalizedId).filter { it.isNotEmpty() }.toSet(),
+                ),
+                authoritativeTrackerIds = setOf(normalizedId).filter { it.isNotEmpty() }.toSet(),
+            )
+        } catch (_: GeoVaultApiFailure) {
+            val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
+            val window = TrackerMapHistoryUiSync.historyWindowForTracker(normalizedId, trackers)
+            val queueTrail = loadQueueTrail(normalizedId)
+            val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
+                trackerId = normalizedId,
+                window = window,
+                queuedLocations = queueTrail,
+            )
+            val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
+                TrackerHistoryIntent.CommitTrunk(
+                    batch = batch,
+                    activeSessionStartMs = rt.activeSessionStartMsForTracker(normalizedId),
                 )
-            }
-            is RepositoryResult.Failure -> {
-                val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
-                val window = TrackerMapHistoryUiSync.historyWindowForTracker(normalizedId, trackers)
-                val queueTrail = loadQueueTrail(normalizedId)
-                val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
-                    trackerId = normalizedId,
-                    window = window,
-                    queuedLocations = queueTrail,
-                )
-                val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
-                    TrackerHistoryIntent.CommitTrunk(
-                        batch = batch,
-                        activeSessionStartMs = rt.activeSessionStartMsForTracker(normalizedId),
-                    )
-                )
-                TrackerMapServerTrailResult(
-                    trailsByTracker = mapOf(
-                        normalizedId to TrackerHistoryRenderMapper.toQueuedLocations(
-                            transaction.snapshot,
-                            TrackerMapViewModel.TRAIL_POINT_LIMIT,
-                        ),
+            )
+            TrackerMapServerTrailResult(
+                trailsByTracker = mapOf(
+                    normalizedId to TrackerHistoryRenderMapper.toQueuedLocations(
+                        transaction.snapshot,
+                        TrackerMapViewModel.TRAIL_POINT_LIMIT,
                     ),
-                    authoritativeTrackerIds = emptySet(),
-                )
-            }
+                ),
+                authoritativeTrackerIds = emptySet(),
+            )
         }
     }
 
@@ -606,75 +602,71 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
             )
         }
         val key = "multi:geometry:${normalizedIds.sorted().joinToString(",")}"
-        return when (
-            val result = rt.sessionRequestDeduper.loadOnce(key) {
+        return try {
+            val loaded = rt.sessionRequestDeduper.loadOnce(key) {
                 geometryLoadingTracker.track {
                     fetchGeometryGuarded(normalizedIds.toSet()) { rt.dependencies.trackerManagementRepository.loadTrackersGeometry(normalizedIds) }
                 }
             }
-        ) {
-            is RepositoryResult.Success -> {
-                val trackersById = result.data.associateBy { it.id.trim() }
-                val authoritativeIds = trackersById.keys.intersect(normalizedIds.toSet())
-                val trails = normalizedIds.associateWith { trackerId ->
-                    val tracker = trackersById[trackerId]
-                    if (tracker == null) {
-                        val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
-                        val window = TrackerMapHistoryUiSync.historyWindowForTracker(trackerId, trackers)
-                        val queueTrail = loadQueueTrail(trackerId)
-                        val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
-                            trackerId = trackerId,
-                            window = window,
-                            queuedLocations = queueTrail,
+            val trackersById = loaded.associateBy { it.id.trim() }
+            val authoritativeIds = trackersById.keys.intersect(normalizedIds.toSet())
+            val trails = normalizedIds.associateWith { trackerId ->
+                val tracker = trackersById[trackerId]
+                if (tracker == null) {
+                    val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
+                    val window = TrackerMapHistoryUiSync.historyWindowForTracker(trackerId, trackers)
+                    val queueTrail = loadQueueTrail(trackerId)
+                    val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
+                        trackerId = trackerId,
+                        window = window,
+                        queuedLocations = queueTrail,
+                    )
+                    val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
+                        TrackerHistoryIntent.CommitTrunk(
+                            batch = batch,
+                            activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                         )
-                        val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
-                            TrackerHistoryIntent.CommitTrunk(
-                                batch = batch,
-                                activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
-                            )
+                    )
+                    TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
+                } else {
+                    val batch = enrichTrunkBatchForActiveSession(
+                        TrackerHistorySourceAdapters.filteredServerTrunk(tracker),
+                        trackerId = trackerId,
+                    )
+                    val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
+                        TrackerHistoryIntent.CommitTrunk(
+                            batch = batch,
+                            activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                         )
-                        TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
-                    } else {
-                        val batch = enrichTrunkBatchForActiveSession(
-                            TrackerHistorySourceAdapters.filteredServerTrunk(tracker),
-                            trackerId = trackerId,
-                        )
-                        val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
-                            TrackerHistoryIntent.CommitTrunk(
-                                batch = batch,
-                                activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
-                            )
-                        )
-                        TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
-                    }
+                    )
+                    TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
                 }
-                TrackerMapServerTrailResult(
-                    trailsByTracker = trails,
-                    authoritativeTrackerIds = authoritativeIds,
-                )
             }
-            is RepositoryResult.Failure -> {
-                val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
-                TrackerMapServerTrailResult(
-                    trailsByTracker = normalizedIds.associateWith { trackerId ->
-                        val window = TrackerMapHistoryUiSync.historyWindowForTracker(trackerId, trackers)
-                        val queueTrail = loadQueueTrail(trackerId)
-                        val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
-                            trackerId = trackerId,
-                            window = window,
-                            queuedLocations = queueTrail,
+            TrackerMapServerTrailResult(
+                trailsByTracker = trails,
+                authoritativeTrackerIds = authoritativeIds,
+            )
+        } catch (_: GeoVaultApiFailure) {
+            val trackers = rt.dependencies.trackerManagementStateStore.trackers.value
+            TrackerMapServerTrailResult(
+                trailsByTracker = normalizedIds.associateWith { trackerId ->
+                    val window = TrackerMapHistoryUiSync.historyWindowForTracker(trackerId, trackers)
+                    val queueTrail = loadQueueTrail(trackerId)
+                    val batch = TrackerHistorySourceAdapters.degradedLocalOnlyTrunk(
+                        trackerId = trackerId,
+                        window = window,
+                        queuedLocations = queueTrail,
+                    )
+                    val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
+                        TrackerHistoryIntent.CommitTrunk(
+                            batch = batch,
+                            activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
                         )
-                        val transaction = rt.dependencies.historyIntentDispatcher.dispatch(
-                            TrackerHistoryIntent.CommitTrunk(
-                                batch = batch,
-                                activeSessionStartMs = rt.activeSessionStartMsForTracker(trackerId),
-                            )
-                        )
-                        TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
-                    },
-                    authoritativeTrackerIds = emptySet(),
-                )
-            }
+                    )
+                    TrackerHistoryRenderMapper.toQueuedLocations(transaction.snapshot, TrackerMapViewModel.TRAIL_POINT_LIMIT)
+                },
+                authoritativeTrackerIds = emptySet(),
+            )
         }
     }
 
@@ -684,24 +676,31 @@ internal class MapTrailReloadSubsystem(private val rt: TrackerMapRuntime) {
      * [MapTrailReloadSubsystem.geometryReloadCircuitBreaker] so a run of consecutive failures (e.g. the
      * server is unreachable) stops attempting new network fetches for a cooldown window instead of
      * re-paying the same timeout on every reload trigger. A skipped or timed-out attempt is
-     * reported as [AppError.Network], which every call site already treats as "fall back to the
-     * local queue/degraded trunk" — no separate failure path needed.
+     * reported as a [GeoVaultApiFailure] classified
+     * [com.geovault.common.sync.GeoVaultHttpFailureKind.RetryableNetwork], which every call site
+     * already treats as "fall back to the local queue/degraded trunk" — no separate failure
+     * path needed.
      */
     private suspend fun <T : Any> fetchGeometryGuarded(
         trackerIds: Set<String>,
-        loader: suspend () -> RepositoryResult<T>,
-    ): RepositoryResult<T> {
+        loader: suspend () -> T,
+    ): T {
         if (!geometryReloadCircuitBreaker.shouldAttempt()) {
-            return RepositoryResult.Failure(AppError.Network)
+            throw GeoVaultApiFailure.fromThrowable(IOException("geometry reload circuit open"))
         }
         val startMs = System.currentTimeMillis()
-        val result = withTimeoutOrNull(MapGeometryReloadCircuitBreaker.NETWORK_TIMEOUT_MS) { loader() }
-            ?: RepositoryResult.Failure(AppError.Network)
-        val elapsedMs = System.currentTimeMillis() - startMs
-        when (result) {
-            is RepositoryResult.Success -> geometryReloadCircuitBreaker.recordSuccess()
-            is RepositoryResult.Failure -> geometryReloadCircuitBreaker.recordFailure()
+        val result = try {
+            withTimeoutOrNull(MapGeometryReloadCircuitBreaker.NETWORK_TIMEOUT_MS) { loader() }
+        } catch (e: GeoVaultApiFailure) {
+            geometryReloadCircuitBreaker.recordFailure()
+            throw e
         }
+        if (result == null) {
+            geometryReloadCircuitBreaker.recordFailure()
+            throw GeoVaultApiFailure.fromThrowable(IOException("geometry reload timeout"))
+        }
+        geometryReloadCircuitBreaker.recordSuccess()
+        val elapsedMs = System.currentTimeMillis() - startMs
         // Only diagnostically interesting -- worth a breadcrumb -- when it happens while a
         // recording session is active for one of the same trackers, since that's exactly the
         // "stalled local map on the recording device" failure mode this plan set out to catch.

@@ -1,5 +1,11 @@
 package com.geovault.tracker.settings
 
+data class TrackerSettingsRecord(
+    val settings: TrackerSettings,
+    val wasTrackingBeforeExit: Boolean,
+    val schemaVersion: Int
+)
+
 data class TrackerSettings(
     val accuracyFilterMeters: Float = INTERNAL_ACCURACY_FILTER_METERS,
     val lowAccuracyFallbackEnabled: Boolean = DEFAULT_LOW_ACCURACY_FALLBACK_ENABLED,

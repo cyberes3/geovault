@@ -1,7 +1,6 @@
 package com.geovault.tracker.ui.components
 
 import android.graphics.Rect
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Card
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
@@ -43,9 +41,8 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.trackGeoVaultTooltipBounds
 import com.geovault.common.ui.theme.GeoVaultColorTokens
-import com.geovault.common.ui.theme.GeoVaultListCardChrome
-import com.geovault.common.ui.theme.GeoVaultListCardHighlightColors
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
+import com.geovault.common.ui.theme.geoVaultListCardChrome
 import com.geovault.tracker.R
 import com.geovault.tracker.ui.TrackerChevronIcon
 import com.geovault.tracker.ui.TrackerChevronStylePolicy
@@ -75,19 +72,17 @@ fun TrackerItemCard(
         TrackerChevronStylePolicy.tintForTrackerColorHex(model.chevronColorHex)
     }
     val cardShape = RoundedCornerShape(12.dp)
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        shape = cardShape,
-        elevation = 0.dp,
-        backgroundColor = GeoVaultListCardHighlightColors.selectedFillColor(model.isHighlighted),
-        border = BorderStroke(
-            GeoVaultListCardChrome.EmphasisStrokeWidth,
-            GeoVaultListCardHighlightColors.emphasisBorderColor(offline = false),
-        ),
+            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
+            .geoVaultListCardChrome(
+                highlighted = model.isHighlighted,
+                selected = model.isSelected,
+                shape = cardShape,
+            )
+            .padding(20.dp),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -180,7 +175,6 @@ fun TrackerItemCard(
                 )
             }
         }
-    }
 }
 
 data class GroupItemCardModel(
@@ -216,24 +210,18 @@ fun GroupItemCard(
         suppressNextClickAfterTooltip = suppressTitleClickAfterTooltip,
     )
     val trackCountText = stringResource(R.string.trackers_meta_tracks_count, model.trackerCount)
-    Card(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-        shape = RoundedCornerShape(8.dp),
-        elevation = 0.dp,
-        backgroundColor = GeoVaultListCardHighlightColors.selectedFillColor(model.isHighlighted),
-        border = BorderStroke(
-            GeoVaultListCardChrome.EmphasisStrokeWidth,
-            GeoVaultListCardHighlightColors.emphasisBorderColor(offline = model.isPending),
-        ),
+            .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
+            .geoVaultListCardChrome(
+                highlighted = model.isHighlighted,
+                offline = model.isPending,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
             Icon(
                 painter = painterResource(R.drawable.ic_groups),
                 contentDescription = null,
@@ -326,6 +314,5 @@ fun GroupItemCard(
                     }
                 }
             }
-        }
     }
 }

@@ -1,28 +1,24 @@
 package com.geovault.common.net
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Test
 
 class GeoVaultApiFailureTest {
     @Test
-    fun fromThrowable_returnsSameInstance() {
-        val original = GeoVaultApiFailure(httpCode = 404, serverMessage = "missing", operation = "fetch")
-        assertSame(original, GeoVaultApiFailure.fromThrowable(original))
+    fun userMessage_usesServerPrefixWhenHttpCodePresent() {
+        val failure = GeoVaultApiFailure(httpCode = 500, serverMessage = "boom")
+        assertEquals("Server Error: boom", failure.userMessage())
     }
 
     @Test
-    fun message_includesOperationCodeAndServerText() {
-        val failure = GeoVaultApiFailure(httpCode = 409, serverMessage = "already exists", operation = "createPlace")
-        assertEquals("createPlace: HTTP 409: already exists", failure.message)
+    fun userMessage_fallsBackToHttpCodeWhenServerMessageBlank() {
+        val failure = GeoVaultApiFailure(httpCode = 404, serverMessage = "  ")
+        assertEquals("Server Error: HTTP 404", failure.userMessage())
     }
 
     @Test
-    fun classify_usesHttpCodeNotMessageText() {
-        val failure = GeoVaultApiFailure(httpCode = 401, serverMessage = "nope")
-        assertEquals(
-            com.geovault.common.sync.GeoVaultHttpFailureKind.Auth,
-            com.geovault.common.sync.GeoVaultHttpFailureClassifier.classify(failure),
-        )
+    fun userMessage_usesNetworkPrefixWhenHttpCodeMissing() {
+        val failure = GeoVaultApiFailure(httpCode = null, serverMessage = "timeout")
+        assertEquals("Network failed: timeout", failure.userMessage())
     }
 }

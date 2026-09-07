@@ -14,7 +14,8 @@ class QueueUploadOutcomePolicyTest {
     @Test
     fun httpFailureClass_treatsOther4xxAsPermanent() {
         assertEquals(SyncFailureClass.PERMANENT, QueueUploadOutcomePolicy.httpFailureClass(400))
-        assertEquals(SyncFailureClass.PERMANENT, QueueUploadOutcomePolicy.httpFailureClass(401))
+        assertEquals(SyncFailureClass.TRANSIENT, QueueUploadOutcomePolicy.httpFailureClass(401))
+        assertEquals(SyncFailureClass.TRANSIENT, QueueUploadOutcomePolicy.httpFailureClass(403))
     }
 
     @Test

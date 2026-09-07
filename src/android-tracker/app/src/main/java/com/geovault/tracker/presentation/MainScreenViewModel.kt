@@ -10,12 +10,13 @@ import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.net.GeoVaultConnectivity
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultAppUpdatePromptBinding
 import com.geovault.common.update.VersionCheckResult
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.TrackerCheckRequest
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.runtime.RuntimeTrigger
@@ -49,11 +50,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.resume
 
 data class MainScreenState(
-    val isAuthenticated: Boolean = false,
-    val serverUrl: String = "",
     val isServerAccessible: Boolean = true,
-    val isConnecting: Boolean = false,
-    val oauthUrl: String? = null,
     val infoMessage: String? = null,
     val updateAvailable: VersionCheckResult.UpdateAvailable? = null,
     val mapRecoveryRequestToken: Long = 0L,
@@ -71,9 +68,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         TrackerAppServices.from(application).trackerSessionWarmup()
     private val historyRepository = TrackerAppServices.from(application).trackerHistoryRepository()
     private val historyIntentDispatcher = TrackerHistoryIntentDispatcher(historyRepository)
-    private val updateCoordinator = GeoVaultAndroidReleaseIdentity.Tracker.updateCoordinator(
-        application = application,
-        localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+    private val updatePromptBinding = GeoVaultAppUpdatePromptBinding(
+        GeoVaultAndroidReleaseIdentity.Tracker.updateCoordinator(
+            application = application,
+            localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+        )
     )
 
     private val launchBootstrapMutex = Mutex()
@@ -101,12 +100,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private var startupSelectedTrackerGeometryJob: Job? = null
     private var resumeBootstrapJob: Job? = null
     private var preparingStartJob: Job? = null
+    private var isLoggedIn: Boolean = false
+    private var configuredServerUrl: String = ""
 
     private val validatedInternetNotifier =
         GeoVaultConnectivity.RecoveryMonitor(app) {
             viewModelScope.launch {
                 val runBootstrap = transportProbeMutex.withLock {
-                    if (!_state.value.isAuthenticated || _state.value.isServerAccessible) {
+                    if (!isLoggedIn || _state.value.isServerAccessible) {
                         return@withLock false
                     }
                     val ok = measureLaunchTransportReachable()
@@ -127,10 +128,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
 
     init {
-        viewModelScope.launch {
-            updateCoordinator.promptState.collect { prompt ->
-                _state.update { it.copy(updateAvailable = prompt.updateOrNull()) }
-            }
+        updatePromptBinding.collect(viewModelScope) { prompt ->
+            _state.update { it.copy(updateAvailable = prompt) }
         }
         viewModelScope.launch {
             TrackingRuntimeStateStore.state.collect { runtime ->
@@ -143,7 +142,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             state.collect { s ->
-                if (s.isAuthenticated && !s.isServerAccessible) {
+                if (isLoggedIn && !s.isServerAccessible) {
                     validatedInternetNotifier.start()
                 } else {
                     validatedInternetNotifier.stop()
@@ -157,7 +156,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
-        syncAccountState(accountState)
+        val wasAuthenticated = isLoggedIn
+        isLoggedIn = accountState.isLoggedIn
+        configuredServerUrl = accountState.serverUrl
+        if (wasAuthenticated != isLoggedIn) {
+            resetPostAuthStartupState()
+        }
         launchPostAuthStartupFlowsIfNeeded()
     }
 
@@ -233,7 +237,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearUpdateAvailable() {
-        updateCoordinator.dismissPrompt()
+        updatePromptBinding.dismissPrompt()
     }
 
     fun requestMapRecoveryAfterStreamingStop() {
@@ -246,24 +250,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun syncAccountState(accountState: GeoVaultAccountUiState) {
-        val wasAuthenticated = _state.value.isAuthenticated
-        val loggedIn = accountState.isLoggedIn
-        _state.update {
-            it.copy(
-                isAuthenticated = loggedIn,
-                serverUrl = accountState.serverUrl,
-                isConnecting = accountState.isConnecting,
-                oauthUrl = null,
-            )
-        }
-        if (wasAuthenticated != loggedIn) {
-            resetPostAuthStartupState()
-        }
-    }
-
     private fun launchPostAuthStartupFlowsIfNeeded() {
-        if (!_state.value.isAuthenticated) return
+        if (!isLoggedIn) return
         launchStartupRefreshIfNeeded()
         launchStartupSelectedTrackerGeometryPreloadIfNeeded()
         launchStartupTrackingAutomationIfNeeded()
@@ -288,31 +276,31 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             startupSelectedTrackerGeometryHandled = true
             val selectedId = SelectedTrackerPrefs.selectedTrackerId(app).trim()
             if (selectedId.isEmpty()) return@launch
-            when (val result = trackerManagementRepository.loadTrackerGeometry(selectedId)) {
-                is RepositoryResult.Success -> {
-                    val batch = TrackerHistorySourceAdapters.filteredServerTrunk(result.data)
-                    val runtime = TrackingRuntimeStateStore.state.value
-                    val activeSessionStart = runtime.sessionStartTimeMs.takeIf {
-                        runtime.localRecordingActive && it > 0L &&
-                            runtime.locallyRecordedTrackerId.trim() == selectedId
-                    }
-                    val tx = historyIntentDispatcher.dispatch(
-                        TrackerHistoryIntent.CommitTrunk(
-                            batch = batch,
-                            activeSessionStartMs = activeSessionStart,
-                        ),
-                    )
-                    GeoVaultCaptureLog.i(
-                        TAG,
-                        "map_update history_preload_startup tracker=$selectedId window=${batch.window.normalizedKey} " +
-                            "committed=${tx.committed} pts=${tx.snapshot.points.size}",
-                    )
+            try {
+                val tracker = trackerManagementRepository.loadTrackerGeometry(selectedId)
+                val batch = TrackerHistorySourceAdapters.filteredServerTrunk(tracker)
+                val runtime = TrackingRuntimeStateStore.state.value
+                val activeSessionStart = runtime.sessionStartTimeMs.takeIf {
+                    runtime.localRecordingActive && it > 0L &&
+                        runtime.locallyRecordedTrackerId.trim() == selectedId
                 }
-                is RepositoryResult.Failure ->
-                    GeoVaultCaptureLog.w(
-                        "MainScreenViewModel",
-                        "Selected tracker geometry preload failed trackerId=$selectedId error=${result.error}"
-                    )
+                val tx = historyIntentDispatcher.dispatch(
+                    TrackerHistoryIntent.CommitTrunk(
+                        batch = batch,
+                        activeSessionStartMs = activeSessionStart,
+                    ),
+                )
+                GeoVaultCaptureLog.i(
+                    TAG,
+                    "map_update history_preload_startup tracker=$selectedId window=${batch.window.normalizedKey} " +
+                        "committed=${tx.committed} pts=${tx.snapshot.points.size}",
+                )
+            } catch (e: GeoVaultApiFailure) {
+                GeoVaultCaptureLog.w(
+                    "MainScreenViewModel",
+                    "Selected tracker geometry preload failed trackerId=$selectedId error=$e",
+                    e,
+                )
             }
         }
     }
@@ -388,7 +376,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun scheduleResumeBootstrapAfterStartup() {
-        if (!_state.value.isAuthenticated) return
+        if (!isLoggedIn) return
         resumeBootstrapJob?.cancel()
         resumeBootstrapJob = viewModelScope.launch {
             startupRefreshJob?.join()
@@ -416,7 +404,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         transportProbeMutex.withLock { measureLaunchTransportReachable() }
 
     private fun logConfiguredServerHost(reason: String) {
-        val raw = _state.value.serverUrl.trim()
+        val raw = configuredServerUrl.trim()
         val host = runCatching { java.net.URI(raw).host }.getOrNull().orEmpty()
         GeoVaultCaptureLog.d(TAG, "$reason configuredHost=$host len=${raw.length}")
     }
@@ -465,7 +453,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun launchVersionCheckIfNeeded() {
-        updateCoordinator.launchIfNeeded(viewModelScope)
+        updatePromptBinding.onAuthenticated(viewModelScope)
     }
 
     private fun resetPostAuthStartupState() {
@@ -473,7 +461,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         startupTrackingAutomationHandled = false
         startupRefreshHandled = false
         startupSelectedTrackerGeometryHandled = false
-        updateCoordinator.reset()
+        updatePromptBinding.onSignedOut()
         startupTrackingAutomationJob?.cancel()
         startupTrackingAutomationJob = null
         startupRefreshJob?.cancel()
@@ -504,16 +492,19 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             return false
         }
-        val isValid = when (
-            val result = trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
-        ) {
-            is RepositoryResult.Success -> result.data
-            is RepositoryResult.Failure -> false
+        val isValid = try {
+            trackerManagementRepository.checkTracker(TrackerCheckRequest(tracker_id = trackerId))
+        } catch (_: GeoVaultApiFailure) {
+            false
         }
         if (isValid) return true
         GeoVaultCaptureLog.w("MainScreenViewModel", "selected tracker invalid on start, clearing selection")
         SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(app)
-        trackerManagementRepository.loadTrackers(forceRefresh = true)
+        try {
+            trackerManagementRepository.loadTrackers(forceRefresh = true)
+        } catch (e: GeoVaultApiFailure) {
+            GeoVaultCaptureLog.w("MainScreenViewModel", "failed to refresh trackers after invalid selection", e)
+        }
         _state.update { it.copy(infoMessage = app.getString(R.string.tracker_validation_failed_go_to_settings)) }
         return false
     }

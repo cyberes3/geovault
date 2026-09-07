@@ -1,6 +1,5 @@
 package com.geovault.tracker.data
 
-import com.geovault.tracker.RepositoryResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -54,20 +53,17 @@ class TrackerBootstrapOrchestratorTest {
         val loadMapVisibilityCalls = AtomicInteger(0)
         var trackersGate: CompletableDeferred<Unit>? = null
 
-        override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadTrackers(forceRefresh: Boolean) {
             loadTrackersCalls.incrementAndGet()
             trackersGate?.await()
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadGroups(forceRefresh: Boolean) {
             loadGroupsCalls.incrementAndGet()
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadMapVisibility(forceRefresh: Boolean) {
             loadMapVisibilityCalls.incrementAndGet()
-            return RepositoryResult.Success(Unit)
         }
 
     }

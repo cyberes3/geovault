@@ -16,9 +16,7 @@ class ImportUploadQueue(
         onState: (QueueUploadState) -> Unit,
     ): QueueUploadState {
         val allItems = state.items.toMutableList()
-        val validIndexes = allItems.indices.filter { idx ->
-            FilenamePolicy.isSupportedImportType(allItems[idx].filename)
-        }
+        val validIndexes = allItems.indices.toList()
         var current = QueueUploadStateMachine.startUpload(state, validIndexes.size)
         onState(current)
         if (validIndexes.isEmpty()) {

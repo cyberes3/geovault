@@ -45,7 +45,7 @@ class OfflineSyncCoordinator(
                 )
             }.onFailure { error ->
                 val warningMessage =
-                    "Synced changes, but failed to refresh latest server data: ${error.message ?: "Unknown error"}"
+                    "Synced changes, but failed to refresh latest server data: ${GeoVaultApiFailure.fromThrowable(error).userMessage()}"
                 warning = warningMessage
                 GeoVaultCaptureLog.w(TAG, warningMessage, error)
             }
@@ -91,14 +91,7 @@ class OfflineSyncCoordinator(
     }
 
     private fun snapshotFailureMessage(error: Throwable): String {
-        if (error is GeoVaultApiFailure) {
-            val detail = error.serverMessage?.takeIf { it.isNotBlank() }
-                ?: error.httpCode?.let { "HTTP $it" }
-                ?: "Unknown error"
-            return if (error.httpCode != null) "Server Error: $detail" else "Network failed: $detail"
-        }
-        val details = error.message?.trim().orEmpty()
-        return "Network failed: ${if (details.isNotEmpty()) details else "Unknown error"}"
+        return GeoVaultApiFailure.fromThrowable(error).userMessage()
     }
 
     companion object {

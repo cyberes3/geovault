@@ -1,10 +1,9 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.AvailableToAddGroup
 import com.geovault.tracker.AvailableToAddItem
-import com.geovault.tracker.AppError
 import com.geovault.tracker.Group
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
@@ -104,39 +103,35 @@ class TrackerAddRemoveCoordinator(
         }
     }
 
-    suspend fun executeIncomingGroupAccept(groupId: String): RepositoryResult<Group> =
+    suspend fun executeIncomingGroupAccept(groupId: String): Group =
         groupRepository.acceptGroupShare(groupId)
 
     suspend fun executeSharedMutation(
         operation: SharedAddRemoveOperation,
         trackerResolver: (String) -> Tracker?,
-    ): RepositoryResult<Unit> {
-        return when (operation) {
-            is SharedAddRemoveOperation.IncomingTrackerAdd -> trackerRepository
-                .subscribeTracker(operation.trackerId)
-                .mapToUnit()
-            is SharedAddRemoveOperation.PublicTrackerAdd -> trackerRepository
-                .subscribeTracker(operation.trackerId)
-                .mapToUnit()
-            is SharedAddRemoveOperation.PublicTrackerRemove -> trackerRepository
-                .unsubscribeTracker(operation.trackerId)
+    ) {
+        when (operation) {
+            is SharedAddRemoveOperation.IncomingTrackerAdd ->
+                trackerRepository.subscribeTracker(operation.trackerId)
+            is SharedAddRemoveOperation.PublicTrackerAdd ->
+                trackerRepository.subscribeTracker(operation.trackerId)
+            is SharedAddRemoveOperation.PublicTrackerRemove ->
+                trackerRepository.unsubscribeTracker(operation.trackerId)
             is SharedAddRemoveOperation.DiscoverOnMapTrackerRemove -> {
                 val tracker = trackerResolver(operation.trackerId)
-                    ?: return RepositoryResult.Failure(AppError.Unknown)
+                    ?: throw GeoVaultApiFailure(httpCode = null, serverMessage = "Unknown")
                 val command = SharedOwnershipTransitionPolicy.forTrackerLeave(tracker)
-                    ?: return RepositoryResult.Failure(AppError.Unknown)
+                    ?: throw GeoVaultApiFailure(httpCode = null, serverMessage = "Unknown")
                 executeTrackerCommand(command)
             }
-            is SharedAddRemoveOperation.IncomingGroupAccept -> groupRepository
-                .acceptGroupShare(operation.groupId)
-                .mapToUnit()
-            is SharedAddRemoveOperation.DiscoverOnMapGroupRemove -> groupRepository
-                .leaveGroup(operation.groupId)
-            is SharedAddRemoveOperation.PublicGroupAdd -> groupRepository
-                .acceptGroupShare(operation.groupId)
-                .mapToUnit()
-            is SharedAddRemoveOperation.PublicGroupRemove -> groupRepository
-                .leaveGroup(operation.groupId)
+            is SharedAddRemoveOperation.IncomingGroupAccept ->
+                groupRepository.acceptGroupShare(operation.groupId)
+            is SharedAddRemoveOperation.DiscoverOnMapGroupRemove ->
+                groupRepository.leaveGroup(operation.groupId)
+            is SharedAddRemoveOperation.PublicGroupAdd ->
+                groupRepository.acceptGroupShare(operation.groupId)
+            is SharedAddRemoveOperation.PublicGroupRemove ->
+                groupRepository.leaveGroup(operation.groupId)
         }
     }
 
@@ -152,17 +147,18 @@ class TrackerAddRemoveCoordinator(
         return addingTrackerIds - trackerId
     }
 
-    suspend fun addTrackerToGroup(groupId: String, trackerId: String): RepositoryResult<Unit> {
-        return groupRepository.addGroupTrack(groupId, trackerId).mapToUnit()
+    suspend fun addTrackerToGroup(groupId: String, trackerId: String) {
+        groupRepository.addGroupTrack(groupId, trackerId)
     }
 
-    private suspend fun executeTrackerCommand(command: SharedTrackerTransitionCommand): RepositoryResult<Unit> {
-        return when (command.action) {
-            SharedTrackerTransitionAction.Subscribe -> trackerRepository
-                .subscribeTracker(command.trackerId)
-                .mapToUnit()
-            SharedTrackerTransitionAction.Unsubscribe -> trackerRepository.unsubscribeTracker(command.trackerId)
-            SharedTrackerTransitionAction.LeaveShare -> trackerRepository.leaveShareWithMe(command.trackerId)
+    private suspend fun executeTrackerCommand(command: SharedTrackerTransitionCommand) {
+        when (command.action) {
+            SharedTrackerTransitionAction.Subscribe ->
+                trackerRepository.subscribeTracker(command.trackerId)
+            SharedTrackerTransitionAction.Unsubscribe ->
+                trackerRepository.unsubscribeTracker(command.trackerId)
+            SharedTrackerTransitionAction.LeaveShare ->
+                trackerRepository.leaveShareWithMe(command.trackerId)
         }
     }
 
@@ -221,13 +217,6 @@ class TrackerAddRemoveCoordinator(
             is SharedAddRemoveOperation.DiscoverOnMapGroupRemove,
             is SharedAddRemoveOperation.PublicGroupRemove,
             -> state
-        }
-    }
-
-    private fun <T> RepositoryResult<T>.mapToUnit(): RepositoryResult<Unit> {
-        return when (this) {
-            is RepositoryResult.Success -> RepositoryResult.Success(Unit)
-            is RepositoryResult.Failure -> RepositoryResult.Failure(error)
         }
     }
 }

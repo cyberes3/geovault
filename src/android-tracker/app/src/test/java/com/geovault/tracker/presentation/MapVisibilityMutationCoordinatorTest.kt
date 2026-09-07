@@ -1,9 +1,8 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.AppError
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
-import com.geovault.tracker.RepositoryResult
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,11 +21,11 @@ class MapVisibilityMutationCoordinatorTest {
             target = MapVisibilityToggleTarget(id = "b", type = MapVisibilityToggleEntityType.Tracker),
             loadVisibility = {
                 loadCallCount += 1
-                RepositoryResult.Success(MapVisibilityResponse())
+                MapVisibilityResponse()
             },
             patchVisibility = { request ->
                 patchedRequest = request
-                RepositoryResult.Success(MapVisibilityResponse(hidden_track_ids = request.hidden_track_ids.orEmpty()))
+                MapVisibilityResponse(hidden_track_ids = request.hidden_track_ids.orEmpty())
             }
         )
 
@@ -44,13 +43,11 @@ class MapVisibilityMutationCoordinatorTest {
             target = MapVisibilityToggleTarget(id = "g1", type = MapVisibilityToggleEntityType.Group),
             loadVisibility = {
                 loadCallCount += 1
-                RepositoryResult.Success(MapVisibilityResponse(hidden_group_ids = listOf("g0")))
+                MapVisibilityResponse(hidden_group_ids = listOf("g0"))
             },
             patchVisibility = { request ->
-                RepositoryResult.Success(
-                    MapVisibilityResponse(
-                        hidden_group_ids = request.hidden_group_ids.orEmpty()
-                    )
+                MapVisibilityResponse(
+                    hidden_group_ids = request.hidden_group_ids.orEmpty()
                 )
             }
         )
@@ -62,25 +59,27 @@ class MapVisibilityMutationCoordinatorTest {
 
     @Test
     fun toggle_returnsFailureWhenLoadFails() = runBlocking {
+        val network = GeoVaultApiFailure(httpCode = null, serverMessage = "network")
         val result = MapVisibilityMutationCoordinator.toggle(
             current = null,
             target = MapVisibilityToggleTarget(id = "t1", type = MapVisibilityToggleEntityType.Tracker),
-            loadVisibility = { RepositoryResult.Failure(AppError.Network) },
-            patchVisibility = { RepositoryResult.Success(MapVisibilityResponse()) }
+            loadVisibility = { throw network },
+            patchVisibility = { MapVisibilityResponse() }
         )
 
-        assertEquals(MapVisibilityMutationResult.Failure(AppError.Network), result)
+        assertEquals(MapVisibilityMutationResult.Failure(network), result)
     }
 
     @Test
     fun toggle_returnsFailureWhenPatchFails() = runBlocking {
+        val unauthorized = GeoVaultApiFailure(httpCode = 401, serverMessage = "unauthorized")
         val result = MapVisibilityMutationCoordinator.toggle(
             current = MapVisibilityResponse(),
             target = MapVisibilityToggleTarget(id = "t1", type = MapVisibilityToggleEntityType.Tracker),
-            loadVisibility = { RepositoryResult.Success(MapVisibilityResponse()) },
-            patchVisibility = { RepositoryResult.Failure(AppError.Unauthorized) }
+            loadVisibility = { MapVisibilityResponse() },
+            patchVisibility = { throw unauthorized }
         )
 
-        assertEquals(MapVisibilityMutationResult.Failure(AppError.Unauthorized), result)
+        assertEquals(MapVisibilityMutationResult.Failure(unauthorized), result)
     }
 }

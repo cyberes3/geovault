@@ -4,10 +4,12 @@ import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.common.sort.NaturalSort
+import com.geovault.common.files.GeoVaultFilename
 import com.geovault.common.files.GeoVaultOpenableUriMetadata
+import com.geovault.common.sort.NaturalSort
+import com.geovault.common.update.GeoVaultAppUpdatePromptBinding
+import com.geovault.common.update.VersionCheckResult
 import com.geovault.uploader.di.UploaderAppServices
-import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.domain.ImportUploadQueue
 import com.geovault.uploader.domain.QueueUploadStateMachine
 import com.geovault.uploader.model.FileQueueItem
@@ -19,7 +21,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.geovault.common.auth.GeoVaultAccountUiState
 
 data class QueueUploadState(
     val items: List<FileQueueItem> = emptyList(),
@@ -28,7 +32,9 @@ data class QueueUploadState(
     val progressCurrent: Int = 0,
     val progressMax: Int = 0,
     val statusMessage: String = "",
-    val fileCountLabel: String = "0 files"
+    val fileCountLabel: String = "0 files",
+    val rejectedFileNames: List<String> = emptyList(),
+    val updateAvailable: VersionCheckResult.UpdateAvailable? = null,
 )
 
 class UploadViewModel(
@@ -45,17 +51,36 @@ class UploadViewModel(
     private val fileIngest = services.fileIngest
     private val prefs = services.uploaderPreferences
     private val importUploadQueue: ImportUploadQueue = services.importUploadQueue
+    private val updatePromptBinding = GeoVaultAppUpdatePromptBinding(services.updateCoordinator())
 
     private val _state = MutableStateFlow(QueueUploadState())
     val state: StateFlow<QueueUploadState> = _state.asStateFlow()
 
     private var uploadJob: Job? = null
 
+    init {
+        updatePromptBinding.collect(viewModelScope) { prompt ->
+            _state.update { it.copy(updateAvailable = prompt) }
+        }
+    }
+
+    fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
+        if (accountState.isLoggedIn) {
+            updatePromptBinding.onAuthenticated(viewModelScope)
+        } else {
+            updatePromptBinding.onSignedOut()
+        }
+    }
+
+    fun clearUpdateAvailable() {
+        updatePromptBinding.dismissPrompt()
+    }
+
     fun initialize(intent: Intent?) {
         uploadJob?.cancel()
         uploadJob = null
         val payloadUris = UploadNavigation.urisFrom(intent)
-        val ingested = fileIngest.ingest(payloadUris, com.geovault.common.files.GeoVaultFileRef.Source.Intent)
+        val ingested = fileIngest.ingest(payloadUris, UploadNavigation.readSource(intent))
         val items = ingested.accepted.map(::buildItem).sortedWith(
             NaturalSort.byName(Locale.getDefault()) { it.filename }
         )
@@ -63,6 +88,8 @@ class UploadViewModel(
             items = items,
             fileCountLabel = fileCountLabel(items.size),
             uploadCancelled = false,
+            rejectedFileNames = ingested.rejectedFileNames,
+            updateAvailable = _state.value.updateAvailable,
         )
     }
 
@@ -72,7 +99,7 @@ class UploadViewModel(
         if (index !in items.indices) return
         val original = items[index]
         if (original.status != FileStatus.PENDING) return
-        val (_, ext) = FilenamePolicy.splitFilename(original.filename)
+        val (_, ext) = GeoVaultFilename.splitBaseAndExtension(original.filename)
         val updatedName = if (ext.isNotEmpty()) "$baseName.$ext" else baseName
         items[index] = original.copy(filename = updatedName)
         _state.value = _state.value.copy(items = items)

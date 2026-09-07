@@ -1,6 +1,5 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.RepositoryResult
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,11 +14,11 @@ class TrackerMapSessionRequestDeduperTest {
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 1_000L, nowMsProvider = { now })
         var calls = 0
         val key = "single:geometry:a"
-        val first = deduper.loadOnce(key) { calls++; RepositoryResult.Success("v1") }
+        val first = deduper.loadOnce(key) { calls++; "v1" }
         now = 500
-        val second = deduper.loadOnce(key) { calls++; RepositoryResult.Success("v2") }
-        assertEquals(RepositoryResult.Success("v1"), first)
-        assertEquals(RepositoryResult.Success("v1"), second)
+        val second = deduper.loadOnce(key) { calls++; "v2" }
+        assertEquals("v1", first)
+        assertEquals("v1", second)
         assertEquals(1, calls)
     }
 
@@ -29,10 +28,10 @@ class TrackerMapSessionRequestDeduperTest {
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 1_000L, nowMsProvider = { now })
         var calls = 0
         val key = "single:geometry:a"
-        deduper.loadOnce(key) { calls++; RepositoryResult.Success("v1") }
+        deduper.loadOnce(key) { calls++; "v1" }
         now = 2_000
-        val second = deduper.loadOnce(key) { calls++; RepositoryResult.Success("v2") }
-        assertEquals(RepositoryResult.Success("v2"), second)
+        val second = deduper.loadOnce(key) { calls++; "v2" }
+        assertEquals("v2", second)
         assertEquals(2, calls)
     }
 
@@ -40,11 +39,11 @@ class TrackerMapSessionRequestDeduperTest {
     fun `clear drops every entry`() = runBlocking {
         var now = 0L
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 1_000L, nowMsProvider = { now })
-        deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a") }
-        deduper.loadOnce("single:geometry:b") { RepositoryResult.Success("b") }
+        deduper.loadOnce("single:geometry:a") { "a" }
+        deduper.loadOnce("single:geometry:b") { "b" }
         deduper.clear()
         var calls = 0
-        deduper.loadOnce("single:geometry:a") { calls++; RepositoryResult.Success("a2") }
+        deduper.loadOnce("single:geometry:a") { calls++; "a2" }
         assertEquals(1, calls)
     }
 
@@ -52,35 +51,35 @@ class TrackerMapSessionRequestDeduperTest {
     fun `invalidate purges the single-tracker key`() = runBlocking {
         var now = 0L
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
-        deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a-cached") }
+        deduper.loadOnce("single:geometry:a") { "a-cached" }
         deduper.invalidate("a")
         var refetched = false
-        val result = deduper.loadOnce("single:geometry:a") { refetched = true; RepositoryResult.Success("a-fresh") }
+        val result = deduper.loadOnce("single:geometry:a") { refetched = true; "a-fresh" }
         assertTrue(refetched)
-        assertEquals(RepositoryResult.Success("a-fresh"), result)
+        assertEquals("a-fresh", result)
     }
 
     @Test
     fun `invalidate purges multi-tracker keys that contain the tracker`() = runBlocking {
         var now = 0L
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
-        deduper.loadOnce("multi:geometry:a,b,c") { RepositoryResult.Success("multi-cached") }
+        deduper.loadOnce("multi:geometry:a,b,c") { "multi-cached" }
         deduper.invalidate("b")
         var refetched = false
-        val result = deduper.loadOnce("multi:geometry:a,b,c") { refetched = true; RepositoryResult.Success("multi-fresh") }
+        val result = deduper.loadOnce("multi:geometry:a,b,c") { refetched = true; "multi-fresh" }
         assertTrue(refetched)
-        assertEquals(RepositoryResult.Success("multi-fresh"), result)
+        assertEquals("multi-fresh", result)
     }
 
     @Test
     fun `invalidate leaves entries for unrelated trackers intact`() = runBlocking {
         var now = 0L
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
-        deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a") }
-        deduper.loadOnce("single:geometry:b") { RepositoryResult.Success("b") }
+        deduper.loadOnce("single:geometry:a") { "a" }
+        deduper.loadOnce("single:geometry:b") { "b" }
         deduper.invalidate("a")
         var bRefetched = false
-        deduper.loadOnce("single:geometry:b") { bRefetched = true; RepositoryResult.Success("b2") }
+        deduper.loadOnce("single:geometry:b") { bRefetched = true; "b2" }
         assertFalse(bRefetched)
     }
 
@@ -88,10 +87,10 @@ class TrackerMapSessionRequestDeduperTest {
     fun `invalidate matches full id boundaries only`() = runBlocking {
         var now = 0L
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
-        deduper.loadOnce("single:geometry:abc") { RepositoryResult.Success("abc") }
+        deduper.loadOnce("single:geometry:abc") { "abc" }
         deduper.invalidate("ab")
         var refetched = false
-        deduper.loadOnce("single:geometry:abc") { refetched = true; RepositoryResult.Success("abc2") }
+        deduper.loadOnce("single:geometry:abc") { refetched = true; "abc2" }
         assertFalse(refetched)
     }
 
@@ -99,10 +98,10 @@ class TrackerMapSessionRequestDeduperTest {
     fun `invalidate blank id is a no-op`() = runBlocking {
         var now = 0L
         val deduper = TrackerMapSessionRequestDeduper(scope = this, dedupeWindowMs = 10_000L, nowMsProvider = { now })
-        deduper.loadOnce("single:geometry:a") { RepositoryResult.Success("a") }
+        deduper.loadOnce("single:geometry:a") { "a" }
         deduper.invalidate("   ")
         var refetched = false
-        deduper.loadOnce("single:geometry:a") { refetched = true; RepositoryResult.Success("a2") }
+        deduper.loadOnce("single:geometry:a") { refetched = true; "a2" }
         assertFalse(refetched)
     }
 }

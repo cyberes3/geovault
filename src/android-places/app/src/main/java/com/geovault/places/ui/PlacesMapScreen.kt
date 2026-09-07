@@ -1,6 +1,5 @@
 package com.geovault.places.ui
 
-import android.location.Location
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
@@ -39,19 +37,20 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.geovault.common.maps.core.GeoVaultMainMap
 import com.geovault.common.maps.core.GeoVaultMainMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
-import com.geovault.common.maps.core.animateCameraToFitLatLngBounds
-import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
+import com.geovault.common.maps.core.animateCameraToHomeFit
 import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.rememberGeoVaultMapBoundsFitPaddingPx
-import com.geovault.common.maps.location.LocationUpdates
 import com.geovault.common.maps.location.rememberGeoVaultMapLocationPermissionState
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoVaultRenderedMapHitKind
+import com.geovault.common.maps.ui.GeoVaultMapBottomActionPanel
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
+import com.geovault.common.maps.ui.GeoVaultMapInitialFrameShield
+import com.geovault.common.maps.ui.GeoVaultMapLocationPrimeEffect
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.camerafollow.rememberGeoVaultMapHeadingFollowFabBundle
@@ -65,7 +64,6 @@ import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.TopBarMenuEntry
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
-import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.places.R
 import com.geovault.places.model.Feature
 import com.geovault.places.presentation.PlacesMapViewModel
@@ -142,17 +140,11 @@ fun PlacesMapScreen(
         showAccuracyCircle = remember(locationPlugin) { locationPlugin.isAccuracyCircleVisible() },
         gpsIntervalMs = PLACES_GPS_STREAM_INTERVAL_MS,
     )
-    LaunchedEffect(locationPlugin, locationSession.decision.shouldStreamGps) {
-        if (!locationSession.decision.shouldStreamGps) return@LaunchedEffect
-        val latLng = LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L) ?: return@LaunchedEffect
-        val synthetic = Location("places-map-prime").apply {
-            latitude = latLng.latitude
-            longitude = latLng.longitude
-            accuracy = 12f
-            time = System.currentTimeMillis()
-        }
-        locationPlugin.renderLocation(synthetic)
-    }
+    GeoVaultMapLocationPrimeEffect(
+        location = locationPlugin,
+        shouldStreamGps = locationSession.decision.shouldStreamGps,
+        providerName = "places-map-prime",
+    )
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map) }
     val zoomInFabAction = remember(map) { geoVaultZoomInFabAction(map) }
     val zoomOutFabAction = remember(map) { geoVaultZoomOutFabAction(map) }
@@ -181,6 +173,7 @@ fun PlacesMapScreen(
         renderPlugin.setRenderState(viewModel.buildMapRenderState())
     }
 
+    var mapInitialFrameReady by remember { mutableStateOf(false) }
     LaunchedEffect(phase, state.features, launchArgs) {
         map.maplibreMap ?: return@LaunchedEffect
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
@@ -190,7 +183,10 @@ fun PlacesMapScreen(
         ) {
             return@LaunchedEffect
         }
-        if (!viewModel.shouldApplyInitialCamera(launchArgs.requestToken)) return@LaunchedEffect
+        if (!viewModel.shouldApplyInitialCamera(launchArgs.requestToken)) {
+            mapInitialFrameReady = true
+            return@LaunchedEffect
+        }
         viewModel.markInitialCameraApplied(launchArgs.requestToken)
         if (requestedId != null) {
             viewModel.selectByDatabaseId(requestedId)
@@ -212,6 +208,7 @@ fun PlacesMapScreen(
                 map.moveCameraToFitLatLngBounds(bounds, boundsFitPaddingPx)
             }
         }
+        mapInitialFrameReady = true
         if (launchArgs.requestToken != 0L) {
             onLaunchArgsConsumed()
         }
@@ -271,24 +268,13 @@ fun PlacesMapScreen(
                     tooltip = fitContentTooltip,
                     onTap = {
                         headingFollowFabs.runProgrammaticCamera {
-                            val mapLibreMap = map.maplibreMap
-                            if (mapLibreMap != null) {
-                                mapLibreMap.setCameraPosition(
-                                    CameraPosition.Builder(mapLibreMap.cameraPosition).bearing(0.0).tilt(0.0).build()
-                                )
-                            }
-                            val bounds = viewModel.featureBounds()
-                            val gpsAnchor = locationPlugin.getLastLocation()?.let { loc ->
-                                latLngOrNull(loc.latitude, loc.longitude)
-                            }
-                            val effectiveBounds = when {
-                                bounds != null && gpsAnchor != null ->
-                                    geoVaultLatLngBoundsUnion(bounds, listOf(gpsAnchor))
-                                else -> bounds
-                            }
-                            if (effectiveBounds != null) {
-                                map.animateCameraToFitLatLngBounds(effectiveBounds, boundsFitPaddingPx)
-                            }
+                            map.animateCameraToHomeFit(
+                                bounds = viewModel.featureBounds(),
+                                gpsAnchor = locationPlugin.getLastLocation()?.let {
+                                    latLngOrNull(it.latitude, it.longitude)
+                                },
+                                paddingPx = boundsFitPaddingPx,
+                            )
                         }
                     },
                 )
@@ -334,30 +320,15 @@ fun PlacesMapScreen(
                         .padding(top = 16.dp, end = 16.dp),
                     actions = mapFabActions,
                 )
+                GeoVaultMapInitialFrameShield(
+                    visible = !mapInitialFrameReady,
+                    statusText = "Loading map",
+                )
             }
 
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(geoVaultHairlineDividerColor()),
-            )
-
             val selectedFeature = state.selectedFeature
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.ui.graphics.RectangleShape,
-                backgroundColor = MaterialTheme.colors.background,
-                elevation = 0.dp,
-            ) {
-                Column {
-                    Spacer(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(geoVaultHairlineDividerColor()),
-                    )
-                    Column(modifier = Modifier.padding(12.dp)) {
+            GeoVaultMapBottomActionPanel {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = viewModel.selectedFeatureLabel(selectedFeature?.properties),
                         color = MaterialTheme.colors.onSurface,
@@ -410,7 +381,6 @@ fun PlacesMapScreen(
                             )
                         }
                     }
-                }
                 }
             }
         }

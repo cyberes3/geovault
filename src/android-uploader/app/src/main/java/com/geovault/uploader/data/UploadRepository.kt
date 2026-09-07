@@ -4,7 +4,9 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import com.geovault.common.messages.GeoVaultUploadMessageFormatter
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.common.net.GeoVaultHttp
+import com.geovault.common.net.GeoVaultServerUrl
 import com.geovault.common.auth.AuthSessionService
 import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.ServerConfigService
@@ -28,7 +30,6 @@ import okhttp3.RequestBody
 import okhttp3.Response
 import okio.BufferedSink
 import okio.source
-import org.json.JSONObject
 
 class UploadRepository(
     private val context: Context,
@@ -68,8 +69,8 @@ class UploadRepository(
     }
 
     override suspend fun upload(uri: Uri, finalFilename: String): ImportUploadOutcome {
-        val serverUrl = serverConfigService.getNormalizedServerUrl()
-        if (serverUrl.isBlank()) return ImportUploadOutcome.Failed("Missing server URL")
+        val serverUrl = GeoVaultServerUrl.parse(serverConfigService.getNormalizedServerUrl())
+            ?: return ImportUploadOutcome.Failed("Missing server URL")
         if (!authSessionService.isLoggedIn()) return ImportUploadOutcome.Failed("Not signed in")
 
         val fileBody = UriRequestBody(
@@ -82,7 +83,7 @@ class UploadRepository(
             .addFormDataPart("file", finalFilename, fileBody)
             .build()
         val request = Request.Builder()
-            .url("$serverUrl/api/item/import/upload")
+            .url(serverUrl.resolve("/api/item/import/upload"))
             .post(requestBody)
             .build()
 
@@ -125,29 +126,18 @@ class UploadRepository(
                                 continuation.resume(ImportUploadOutcome.Success)
                                 return
                             }
-                            if (it.code == 401) {
-                                authSessionService.handleAuthFailure()
-                            }
                             val payload = try {
                                 it.body.string()
                             } catch (_: Exception) {
                                 ""
                             }
-                            val serverMessage = try {
-                                if (payload.trimStart().startsWith("{")) {
-                                    JSONObject(payload).optString(
-                                        "error",
-                                        JSONObject(payload).optString("message", "")
-                                    )
-                                } else {
-                                    ""
-                                }
-                            } catch (_: Exception) {
-                                ""
-                            }
+                            val failure = GeoVaultApiFailure.fromOkHttp(it, "importUpload", payload)
                             continuation.resume(
                                 ImportUploadOutcome.Failed(
-                                    GeoVaultUploadMessageFormatter.fromStatusCode(it.code, serverMessage)
+                                    GeoVaultUploadMessageFormatter.fromStatusCode(
+                                        failure.httpCode ?: 0,
+                                        failure.serverMessage.orEmpty(),
+                                    )
                                 )
                             )
                         }

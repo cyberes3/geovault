@@ -3,11 +3,15 @@ package com.geovault.tracker.presentation
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.geovault.tracker.AppError
+import com.geovault.common.coroutines.runSuspendCatching
+import com.geovault.common.net.GeoVaultApiFailure
+import com.geovault.tracker.AvailableToAddResponse
+import com.geovault.tracker.Group
+import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.R
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.data.TrackerSessionWarmup
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 class SharedViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -269,40 +274,34 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             when (operation) {
                 is SharedAddRemoveOperation.IncomingGroupAccept -> {
-                    when (val result = addRemoveCoordinator.executeIncomingGroupAccept(operation.groupId)) {
-                        is RepositoryResult.Success -> {
-                            val overlapCount = countOverlappingIncomingShares(
-                                incomingTrackersSnapshot,
-                                result.data.track_ids,
-                            )
-                            refreshStateFromServerSerialized(
-                                feedbackMessage = resolveAlsoAcceptedSharesMessage(overlapCount),
-                            )
-                            _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
-                        }
-                        is RepositoryResult.Failure -> {
-                            _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
-                            emitSnackbar(appErrorMessage(result.error))
-                        }
+                    try {
+                        val group = addRemoveCoordinator.executeIncomingGroupAccept(operation.groupId)
+                        val overlapCount = countOverlappingIncomingShares(
+                            incomingTrackersSnapshot,
+                            group.track_ids,
+                        )
+                        refreshStateFromServerSerialized(
+                            feedbackMessage = resolveAlsoAcceptedSharesMessage(overlapCount),
+                        )
+                        _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
+                    } catch (e: GeoVaultApiFailure) {
+                        _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
+                        emitSnackbar(apiFailureMessage(e))
                     }
                 }
                 else -> {
-                    when (
-                        val result = addRemoveCoordinator.executeSharedMutation(
+                    try {
+                        addRemoveCoordinator.executeSharedMutation(
                             operation = operation,
                             trackerResolver = { trackerId ->
                                 _uiState.value.trackers.firstOrNull { it.id == trackerId }
                             },
                         )
-                    ) {
-                        is RepositoryResult.Success -> {
-                            refreshStateFromServerSerialized(feedbackMessage = null)
-                            _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
-                        }
-                        is RepositoryResult.Failure -> {
-                            _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
-                            emitSnackbar(appErrorMessage(result.error))
-                        }
+                        refreshStateFromServerSerialized(feedbackMessage = null)
+                        _uiState.update { state -> addRemoveCoordinator.applySuccess(state, operation) }
+                    } catch (e: GeoVaultApiFailure) {
+                        _uiState.update { state -> addRemoveCoordinator.applyFailure(state, operation) }
+                        emitSnackbar(apiFailureMessage(e))
                     }
                 }
             }
@@ -347,20 +346,18 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         val key = mutationKeyEditTrackerUnsubscribe(trackerId)
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
-            when (
-                val result = executeTrackerTransition(
+            try {
+                executeTrackerTransition(
                     SharedTrackerTransitionCommand(
                         trackerId = trackerId,
                         action = SharedTrackerTransitionAction.Unsubscribe,
                     )
                 )
-            ) {
                 // No forced refresh: repository mutation updates the state store immediately,
                 // and Shared UI collects that stream for in-place list updates.
-                is RepositoryResult.Success -> {
-                    _dismissSharedTrackerEditId.tryEmit(trackerId)
-                }
-                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
+                _dismissSharedTrackerEditId.tryEmit(trackerId)
+            } catch (e: GeoVaultApiFailure) {
+                emitSnackbar(apiFailureMessage(e))
             }
             clearPendingMutation(key)
         }
@@ -370,20 +367,18 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         val key = mutationKeyEditTrackerLeaveShare(trackerId)
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
-            when (
-                val result = executeTrackerTransition(
+            try {
+                executeTrackerTransition(
                     SharedTrackerTransitionCommand(
                         trackerId = trackerId,
                         action = SharedTrackerTransitionAction.LeaveShare,
                     )
                 )
-            ) {
                 // No forced refresh: repository mutation updates the state store immediately,
                 // and Shared UI collects that stream for in-place list updates.
-                is RepositoryResult.Success -> {
-                    _dismissSharedTrackerEditId.tryEmit(trackerId)
-                }
-                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
+                _dismissSharedTrackerEditId.tryEmit(trackerId)
+            } catch (e: GeoVaultApiFailure) {
+                emitSnackbar(apiFailureMessage(e))
             }
             clearPendingMutation(key)
         }
@@ -393,12 +388,12 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         val key = mutationKeyEditGroupLeave(groupId)
         if (!startPendingMutation(key, SharedMutationPhase.PENDING_REMOVE)) return
         viewModelScope.launch {
-            when (val result = executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))) {
-                is RepositoryResult.Success -> {
-                    _dismissSharedGroupEditId.tryEmit(groupId)
-                    refreshStateFromServerSerialized(feedbackMessage = null)
-                }
-                is RepositoryResult.Failure -> emitSnackbar(appErrorMessage(result.error))
+            try {
+                executeGroupTransition(SharedOwnershipTransitionPolicy.forGroupLeave(groupId))
+                _dismissSharedGroupEditId.tryEmit(groupId)
+                refreshStateFromServerSerialized(feedbackMessage = null)
+            } catch (e: GeoVaultApiFailure) {
+                emitSnackbar(apiFailureMessage(e))
             }
             clearPendingMutation(key)
         }
@@ -455,7 +450,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             if (!outcome.isServerAccessible) {
-                emitSnackbar(appErrorMessage(AppError.Network))
+                emitSnackbar(apiFailureMessage(networkApiFailure()))
             }
         }
     }
@@ -474,7 +469,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         if (!outcome.isServerAccessible) {
-            emitSnackbar(appErrorMessage(AppError.Network))
+            emitSnackbar(apiFailureMessage(networkApiFailure()))
         } else {
             ensureDiscoveryDataLoaded(showLoading = false)
         }
@@ -514,7 +509,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 is MapVisibilityMutationResult.Failure -> {
                     _uiState.update { it.copy(isLoading = false) }
-                    emitSnackbar(appErrorMessage(result.error))
+                    emitSnackbar(apiFailureMessage(result.error))
                 }
             }
         }
@@ -552,14 +547,14 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            var firstFailure: AppError? = null
+            var firstFailure: GeoVaultApiFailure? = null
             val outcome = SharedBulkMutationCoordinator.run(normalizedIds) { id ->
-                when (val r = trackerRepository.unsubscribeTracker(id)) {
-                    is RepositoryResult.Success -> true
-                    is RepositoryResult.Failure -> {
-                        if (firstFailure == null) firstFailure = r.error
-                        false
-                    }
+                try {
+                    trackerRepository.unsubscribeTracker(id)
+                    true
+                } catch (e: GeoVaultApiFailure) {
+                    if (firstFailure == null) firstFailure = e
+                    false
                 }
             }
             refreshStateFromServer(feedbackMessage = resolveBulkUnsubscribeMessage(outcome, firstFailure))
@@ -572,20 +567,20 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun loadSharedSnapshot(forceRefresh: Boolean): SharedLoadSnapshot {
         return coroutineScope {
-            val tDef = async { trackerRepository.loadTrackers(forceRefresh = forceRefresh) }
-            val gDef = async { groupRepository.loadGroups(forceRefresh = forceRefresh) }
-            val aDef = async { trackerRepository.loadAvailableToAdd(forceRefresh = forceRefresh) }
-            val vDef = async { trackerRepository.loadMapVisibility(forceRefresh = forceRefresh) }
+            val tDef = async { runSuspendCatching { trackerRepository.loadTrackers(forceRefresh = forceRefresh) } }
+            val gDef = async { runSuspendCatching { groupRepository.loadGroups(forceRefresh = forceRefresh) } }
+            val aDef = async { runSuspendCatching { trackerRepository.loadAvailableToAdd(forceRefresh = forceRefresh) } }
+            val vDef = async { runSuspendCatching { trackerRepository.loadMapVisibility(forceRefresh = forceRefresh) } }
             val tr = tDef.await()
             val gr = gDef.await()
             val ar = aDef.await()
             val vr = vDef.await()
             SharedLoadSnapshot(
-                trackersResult = tr,
-                groupsResult = gr,
-                availableToAddResult = ar,
-                mapVisibilityResult = vr,
-                errorMessage = firstError(tr, gr, ar, vr)?.let(::appErrorMessage)
+                trackers = tr,
+                groups = gr,
+                availableToAdd = ar,
+                mapVisibility = vr,
+                errorMessage = firstApiFailure(listOf(tr, gr, ar, vr))?.let(::apiFailureMessage)
             )
         }
     }
@@ -598,16 +593,14 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            when (val result = executeTrackerTransition(command)) {
-                is RepositoryResult.Success -> {
-                    refreshStateFromServer(feedbackMessage = null)
-                    onSuccess()
-                }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false) }
-                    emitSnackbar(appErrorMessage(result.error))
-                    onFailure()
-                }
+            try {
+                executeTrackerTransition(command)
+                refreshStateFromServer(feedbackMessage = null)
+                onSuccess()
+            } catch (e: GeoVaultApiFailure) {
+                _uiState.update { it.copy(isLoading = false) }
+                emitSnackbar(apiFailureMessage(e))
+                onFailure()
             }
             onSettled()
         }
@@ -615,24 +608,25 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun executeTrackerTransition(
         command: SharedTrackerTransitionCommand
-    ): RepositoryResult<Unit> {
-        return when (command.action) {
-            SharedTrackerTransitionAction.Subscribe -> trackerRepository
-                .subscribeTracker(command.trackerId)
-                .mapToUnit()
-            SharedTrackerTransitionAction.Unsubscribe -> trackerRepository.unsubscribeTracker(command.trackerId)
-            SharedTrackerTransitionAction.LeaveShare -> trackerRepository.leaveShareWithMe(command.trackerId)
+    ) {
+        when (command.action) {
+            SharedTrackerTransitionAction.Subscribe ->
+                trackerRepository.subscribeTracker(command.trackerId)
+            SharedTrackerTransitionAction.Unsubscribe ->
+                trackerRepository.unsubscribeTracker(command.trackerId)
+            SharedTrackerTransitionAction.LeaveShare ->
+                trackerRepository.leaveShareWithMe(command.trackerId)
         }
     }
 
     private suspend fun executeGroupTransition(
         command: SharedGroupTransitionCommand
-    ): RepositoryResult<Unit> {
-        return when (command.action) {
-            SharedGroupTransitionAction.AcceptShare -> groupRepository
-                .acceptGroupShare(command.groupId)
-                .mapToUnit()
-            SharedGroupTransitionAction.LeaveGroup -> groupRepository.leaveGroup(command.groupId)
+    ) {
+        when (command.action) {
+            SharedGroupTransitionAction.AcceptShare ->
+                groupRepository.acceptGroupShare(command.groupId)
+            SharedGroupTransitionAction.LeaveGroup ->
+                groupRepository.leaveGroup(command.groupId)
         }
     }
 
@@ -657,10 +651,10 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
     ): SharedUiState {
         val next = base.copy(
             isLoading = false,
-            trackers = snapshot.trackersResult.successDataOr(base.trackers),
-            groups = snapshot.groupsResult.successDataOr(base.groups),
-            availableToAdd = snapshot.availableToAddResult.successDataOr(base.availableToAdd),
-            mapVisibility = snapshot.mapVisibilityResult.successDataOr(base.mapVisibility),
+            trackers = snapshot.trackers.getOrDefault(base.trackers),
+            groups = snapshot.groups.getOrDefault(base.groups),
+            availableToAdd = snapshot.availableToAdd.getOrNull() ?: base.availableToAdd,
+            mapVisibility = snapshot.mapVisibility.getOrNull() ?: base.mapVisibility,
             hasCompletedInitialLoad = true,
             selectedTrackerId = selectedTrackerId(),
         )
@@ -672,7 +666,7 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun resolveBulkUnsubscribeMessage(
         outcome: SharedBulkMutationOutcome,
-        firstFailure: AppError?
+        firstFailure: GeoVaultApiFailure?
     ): String {
         return when (SharedViewModelContracts.resolveBulkFeedbackKind(outcome)) {
             SharedBulkFeedbackKind.SUCCESS ->
@@ -686,43 +680,27 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
                     outcome.succeededCount,
                     outcome.failedCount
                 )
-            SharedBulkFeedbackKind.FULL_FAILURE -> appErrorMessage(firstFailure ?: AppError.Unknown)
+            SharedBulkFeedbackKind.FULL_FAILURE -> apiFailureMessage(firstFailure ?: unknownApiFailure())
         }
     }
 
-    private fun <T> RepositoryResult<T>.successDataOr(fallback: T): T =
-        when (this) {
-            is RepositoryResult.Success -> data
-            is RepositoryResult.Failure -> fallback
-        }
-
-    private fun <T> RepositoryResult<T>.mapToUnit(): RepositoryResult<Unit> {
-        return when (this) {
-            is RepositoryResult.Success -> RepositoryResult.Success(Unit)
-            is RepositoryResult.Failure -> RepositoryResult.Failure(error)
-        }
-    }
-
-    private fun firstError(vararg results: RepositoryResult<*>): AppError? {
+    private fun firstApiFailure(results: List<Result<*>>): GeoVaultApiFailure? {
         for (r in results) {
-            if (r is RepositoryResult.Failure) return r.error
+            val error = r.exceptionOrNull() ?: continue
+            if (error !is GeoVaultApiFailure) throw error
+            return error
         }
         return null
     }
 
-    private fun appErrorMessage(error: AppError): String {
-        val ctx = getApplication<Application>()
-        return when (error) {
-            AppError.MissingServerUrl -> ctx.getString(R.string.trackers_error_missing_server)
-            AppError.Network -> ctx.getString(R.string.trackers_error_network)
-            AppError.Unauthorized -> ctx.getString(R.string.trackers_error_unauthorized)
-            AppError.NotFound -> ctx.getString(R.string.trackers_error_not_found)
-            is AppError.Server -> ctx.getString(R.string.trackers_error_server, error.code)
-            is AppError.Validation -> error.message?.takeIf { it.isNotBlank() }
-                ?: ctx.getString(R.string.trackers_error_validation)
-            AppError.Unknown -> ctx.getString(R.string.trackers_error_unknown)
-        }
-    }
+    private fun apiFailureMessage(failure: GeoVaultApiFailure): String =
+        TrackerApiFailureMessages.format(getApplication(), failure)
+
+    private fun networkApiFailure(): GeoVaultApiFailure =
+        GeoVaultApiFailure.fromThrowable(IOException())
+
+    private fun unknownApiFailure(): GeoVaultApiFailure =
+        GeoVaultApiFailure(httpCode = null, serverMessage = null)
 
     private fun emitSnackbar(message: String?) {
         if (message.isNullOrBlank()) return
@@ -735,34 +713,32 @@ class SharedViewModel(application: Application) : AndroidViewModel(application) 
             if (showLoading) {
                 _uiState.update { it.copy(isLoading = true) }
             }
-            when (val result = trackerRepository.loadAvailableToAdd(forceRefresh = false)) {
-                is RepositoryResult.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = if (showLoading || it.viewMode != SharedViewMode.SHARED_LIST) {
-                                false
-                            } else {
-                                it.isLoading
-                            },
-                            availableToAdd = result.data,
-                        )
-                    }
+            try {
+                val available = trackerRepository.loadAvailableToAdd(forceRefresh = false)
+                _uiState.update {
+                    it.copy(
+                        isLoading = if (showLoading || it.viewMode != SharedViewMode.SHARED_LIST) {
+                            false
+                        } else {
+                            it.isLoading
+                        },
+                        availableToAdd = available,
+                    )
                 }
-                is RepositoryResult.Failure -> {
-                    if (showLoading || _uiState.value.viewMode != SharedViewMode.SHARED_LIST) {
-                        _uiState.update { it.copy(isLoading = false) }
-                    }
-                    emitSnackbar(appErrorMessage(result.error))
+            } catch (e: GeoVaultApiFailure) {
+                if (showLoading || _uiState.value.viewMode != SharedViewMode.SHARED_LIST) {
+                    _uiState.update { it.copy(isLoading = false) }
                 }
+                emitSnackbar(apiFailureMessage(e))
             }
         }
     }
 
     private data class SharedLoadSnapshot(
-        val trackersResult: RepositoryResult<List<Tracker>>,
-        val groupsResult: RepositoryResult<List<com.geovault.tracker.Group>>,
-        val availableToAddResult: RepositoryResult<com.geovault.tracker.AvailableToAddResponse>,
-        val mapVisibilityResult: RepositoryResult<com.geovault.tracker.MapVisibilityResponse>,
+        val trackers: Result<List<Tracker>>,
+        val groups: Result<List<Group>>,
+        val availableToAdd: Result<AvailableToAddResponse>,
+        val mapVisibility: Result<MapVisibilityResponse>,
         val errorMessage: String?
     )
 }

@@ -1,6 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,15 +29,12 @@ import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -53,8 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -62,17 +56,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.geo.CoordinateFormat
 import com.geovault.common.geo.Wgs84Point
-import com.geovault.common.ui.files.ExportedFileToast
+import com.geovault.common.ui.files.GeoVaultSafExportRequest
+import com.geovault.common.ui.files.rememberGeoVaultSafDocumentExportLauncher
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
+import com.geovault.common.ui.components.GeoVaultEmptyState
 import com.geovault.common.ui.components.GeoVaultFormDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
+import com.geovault.common.ui.components.GeoVaultServerConnectionFailureOverlay
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.GeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultTabShell
@@ -86,6 +82,7 @@ import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.components.GeoVaultToggle
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.time.GeoVaultDateTimeFormat
 import com.geovault.tracker.Group
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
@@ -110,7 +107,7 @@ import com.geovault.tracker.presentation.filterVisibleOwnerTrackersForSearch
 import kotlinx.coroutines.delay
 
 private fun formatTrackerListTime(timestampMs: Long): String {
-    return TrackerListDateTimeFormat.formatLocal(timestampMs)
+    return GeoVaultDateTimeFormat.formatLocalDateTime(timestampMs)
 }
 
 @Immutable
@@ -231,49 +228,20 @@ fun TrackersScreen(
         onDispose { vm.dismissDialog() }
     }
     val context = LocalContext.current
-    var pendingKmlExport by remember { mutableStateOf<TrackerKmlExportEvent?>(null) }
-    val createKmlDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
-    ) { uri: Uri? ->
-        val pending = pendingKmlExport
-        pendingKmlExport = null
-        if (pending == null) return@rememberLauncherForActivityResult
-        if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            val stream = context.contentResolver.openOutputStream(uri)
-                ?: return@runCatching false
-            stream.use { it.write(pending.bytes) }
-            true
-        }.fold(
-            onSuccess = { saved ->
-                if (saved) {
-                    ExportedFileToast.show(
-                        context = context,
-                        destinationUri = uri,
-                        fallbackBaseName = pending.fileBaseName,
-                        extensionWithoutDot = "kml",
-                    )
-                } else {
-                    Toast.makeText(
-                        context.applicationContext,
-                        context.getString(R.string.trackers_kml_write_failed),
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            },
-            onFailure = {
-                Toast.makeText(
-                    context.applicationContext,
-                    context.getString(R.string.trackers_kml_write_failed),
-                    Toast.LENGTH_LONG,
-                ).show()
-            },
-        )
-    }
+    val launchKmlExport = rememberGeoVaultSafDocumentExportLauncher(
+        mimeType = "application/vnd.google-earth.kml+xml",
+        writeFailedMessage = context.getString(R.string.trackers_kml_write_failed),
+    )
     LaunchedEffect(vm) {
         vm.kmlExportEvents.collect { event: TrackerKmlExportEvent ->
-            pendingKmlExport = event
-            createKmlDocumentLauncher.launch("${event.fileBaseName}.kml")
+            launchKmlExport(
+                GeoVaultSafExportRequest(
+                    bytes = event.bytes,
+                    suggestedFileName = "${event.fileBaseName}.kml",
+                    fallbackBaseName = event.fileBaseName,
+                    extensionWithoutDot = "kml",
+                )
+            )
         }
     }
     LaunchedEffect(vm) {
@@ -1100,54 +1068,11 @@ private fun TrackersGroupsAuthenticatedBody(
             }
         }
         if (!isServerAccessible && !isConnecting) {
-            TrackersServerFailureOverlay(modifier = Modifier.fillMaxSize())
-        }
-    }
-}
-
-@Composable
-private fun TrackersServerFailureOverlay(modifier: Modifier = Modifier) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier = modifier
-            .background(GeoVaultColorTokens.ScrimStrong)
-            .clickable(
-                enabled = true,
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = {},
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            shape = MaterialTheme.shapes.medium,
-            color = GeoVaultColorTokens.ErrorSurfaceLight,
-            elevation = 0.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = stringResource(R.string.server_connection_error_title),
-                    style = MaterialTheme.typography.h6,
-                    fontWeight = FontWeight.Bold,
-                    color = GeoVaultColorTokens.Error,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.server_connection_error_message),
-                    style = MaterialTheme.typography.body2,
-                    color = MaterialTheme.colors.onSurface,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            GeoVaultServerConnectionFailureOverlay(
+                title = stringResource(R.string.server_connection_error_title),
+                message = stringResource(R.string.server_connection_error_message),
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -1169,14 +1094,10 @@ private fun TrackersListPage(
     ) {
         if (isEmpty) {
             item {
-                Box(
-                    modifier = Modifier.fillParentMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.trackers_empty_trackers),
-                        style = MaterialTheme.typography.body2,
-                        textAlign = TextAlign.Center,
+                Box(modifier = Modifier.fillParentMaxSize()) {
+                    GeoVaultEmptyState(
+                        message = stringResource(R.string.trackers_empty_trackers),
+                        fillMaxSize = true,
                     )
                 }
             }
@@ -1209,14 +1130,10 @@ private fun GroupsListPage(
     ) {
         if (isEmpty) {
             item {
-                Box(
-                    modifier = Modifier.fillParentMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.trackers_empty_groups),
-                        style = MaterialTheme.typography.body2,
-                        textAlign = TextAlign.Center,
+                Box(modifier = Modifier.fillParentMaxSize()) {
+                    GeoVaultEmptyState(
+                        message = stringResource(R.string.trackers_empty_groups),
+                        fillMaxSize = true,
                     )
                 }
             }

@@ -8,10 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -20,14 +20,14 @@ import com.geovault.common.auth.GeoVaultAccountViewModel
 import com.geovault.common.intent.GeoVaultShareLaunch
 import com.geovault.common.intent.GeoVaultShareLaunchDecision
 import com.geovault.common.intent.GeoVaultShareSession
-import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.GeoVaultAppSnackbarLayer
 import com.geovault.common.ui.GeoVaultShellOverlayScaffold
+import com.geovault.common.ui.auth.GeoVaultAuthHost
 import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
-import com.geovault.common.ui.system.GeoVaultSystemBars
+import com.geovault.common.ui.rememberGeoVaultAuthShellState
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.uploader.di.UploaderAppServices
-import com.geovault.uploader.navigation.UploadNavigation
 import com.geovault.uploader.presentation.SettingsViewModel
 import com.geovault.uploader.presentation.UploadViewModel
 import com.geovault.uploader.ui.MultiUploadScreen
@@ -49,9 +49,12 @@ class MultiUploadActivity : ComponentActivity() {
             }
             is GeoVaultShareLaunchDecision.Continue -> Unit
         }
+        GeoVaultAuthHost.installSplash(
+            this,
+            (application as UploaderApplication).bootstrap.isReady,
+        )
         super.onCreate(savedInstanceState)
-        GeoVaultSystemBars.applyAppChrome(activity = this)
-        accountViewModel.initialize()
+        GeoVaultAuthHost.onCreate(this, accountViewModel)
         viewModel.initialize(intent)
         shareSession.consumeIncoming(intent)
         settingsViewModel.initialize()
@@ -60,13 +63,20 @@ class MultiUploadActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
                 val accountState by accountViewModel.state.collectAsState()
-                var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
-                var invalidFilesDialogNames by rememberSaveable {
-                    mutableStateOf(
-                        UploadNavigation.readRejectedFileNames(intent)
-                            .takeIf { it.isNotEmpty() }
-                    )
+                LaunchedEffect(accountState.isLoggedIn) {
+                    viewModel.onAccountStateChanged(accountState)
                 }
+                var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
+                var rejectedDialogDismissed by rememberSaveable { mutableStateOf(false) }
+                var lastRejectedNames by rememberSaveable { mutableStateOf(emptyList<String>()) }
+                LaunchedEffect(state.rejectedFileNames) {
+                    if (state.rejectedFileNames != lastRejectedNames) {
+                        lastRejectedNames = state.rejectedFileNames
+                        rejectedDialogDismissed = false
+                    }
+                }
+                val invalidFilesDialogNames = state.rejectedFileNames
+                    .takeIf { it.isNotEmpty() && !rejectedDialogDismissed }
                 BackHandler(enabled = !isSettingsOpen) {
                     if (state.isUploading) {
                         viewModel.cancelUpload()
@@ -79,26 +89,18 @@ class MultiUploadActivity : ComponentActivity() {
                     onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
                 val openSettingsOverlay: () -> Unit = { isSettingsOpen = true }
-                val auth = remember(
-                    accountState.isLoggedIn,
-                    accountState.serverUrl,
-                    accountState.isConnecting,
-                ) {
-                    GeoVaultAuthShellState(
-                        isAuthenticated = accountState.isLoggedIn,
-                        serverUrl = accountState.serverUrl,
-                        onServerUrlChanged = accountViewModel::onServerUrlChanged,
-                        onConnect = accountViewModel::connect,
-                        onOpenSettings = openSettingsOverlay,
-                        isConnecting = accountState.isConnecting,
-                    )
-                }
+                val auth = rememberGeoVaultAuthShellState(
+                    accountState = accountState,
+                    onServerUrlChanged = accountViewModel::onServerUrlChanged,
+                    onConnect = accountViewModel::connect,
+                    onOpenSettings = openSettingsOverlay,
+                )
                 Box(modifier = Modifier.fillMaxSize()) {
                     MultiUploadScreen(
                         state = state,
                         auth = auth,
                         invalidFilesDialogNames = invalidFilesDialogNames,
-                        onDismissInvalidFiles = { invalidFilesDialogNames = null },
+                        onDismissInvalidFiles = { rejectedDialogDismissed = true },
                         onRename = viewModel::rename,
                         onRemoveItem = viewModel::removeItemAt,
                         onUploadClick = viewModel::startUpload,
@@ -109,6 +111,12 @@ class MultiUploadActivity : ComponentActivity() {
                                 shareSession.finish(this@MultiUploadActivity)
                             }
                         }
+                    )
+                    GeoVaultAppSnackbarLayer(
+                        snackbar = null,
+                        onDismissSnackbar = {},
+                        update = state.updateAvailable,
+                        onDismissUpdate = viewModel::clearUpdateAvailable,
                     )
                     GeoVaultShellSettingsOverlayHost(
                         visible = isSettingsOpen,
@@ -136,18 +144,19 @@ class MultiUploadActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        accountViewModel.onHostResumed()
+        GeoVaultAuthHost.onResume(accountViewModel)
         settingsViewModel.onHostResumed()
     }
 
     override fun onStop() {
         super.onStop()
-        accountViewModel.onOauthUrlConsumed()
+        GeoVaultAuthHost.onStop(accountViewModel)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        GeoVaultAuthHost.onNewIntent(intent, accountViewModel)
         viewModel.initialize(intent)
         shareSession.consumeIncoming(intent)
     }

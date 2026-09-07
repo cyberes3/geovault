@@ -1,7 +1,6 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.AppError
-import com.geovault.tracker.RepositoryResult
+import com.geovault.common.net.GeoVaultApiFailure
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -12,7 +11,7 @@ class TrackersGroupsMutationCoordinatorTest {
     @Test
     fun run_mapsSuccessResult() = runBlocking {
         val result = TrackersGroupsMutationCoordinator.run {
-            RepositoryResult.Success("ok")
+            "ok"
         }
 
         assertTrue(result is TrackersGroupsMutationResult.Success)
@@ -21,12 +20,13 @@ class TrackersGroupsMutationCoordinatorTest {
 
     @Test
     fun run_mapsFailureResult() = runBlocking {
+        val failure = GeoVaultApiFailure(httpCode = null, serverMessage = "network")
         val result = TrackersGroupsMutationCoordinator.run<String> {
-            RepositoryResult.Failure(AppError.Network)
+            throw failure
         }
 
         assertEquals(
-            TrackersGroupsMutationResult.Failure(AppError.Network),
+            TrackersGroupsMutationResult.Failure(failure),
             result
         )
     }

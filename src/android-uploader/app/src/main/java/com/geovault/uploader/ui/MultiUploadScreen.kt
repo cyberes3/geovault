@@ -19,7 +19,6 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.Card
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -40,26 +39,26 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.geovault.common.files.GeoVaultFilename
+import com.geovault.common.files.GeoVaultUploadFileTypes
 import com.geovault.common.ui.GeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultTabShell
+import com.geovault.common.ui.components.GeoVaultEmptyState
+import com.geovault.common.ui.components.GeoVaultIconButton
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
+import com.geovault.common.ui.files.GeoVaultRejectedIncomingFilesDialog
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultCardBorderColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
+import com.geovault.common.ui.time.GeoVaultDateTimeFormat
+import com.geovault.common.util.GeoVaultFileSizeFormat
 import com.geovault.uploader.R
-import com.geovault.uploader.domain.FilenamePolicy
 import com.geovault.uploader.model.FileQueueItem
 import com.geovault.uploader.model.FileStatus
 import com.geovault.uploader.presentation.QueueUploadState
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.coroutines.launch
-import kotlin.math.ln
-import kotlin.math.pow
 
 @Composable
 fun MultiUploadScreen(
@@ -82,22 +81,30 @@ fun MultiUploadScreen(
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 16.dp,
         authenticatedMainContent = {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 12.dp)
-            ) {
-                itemsIndexed(state.items) { index, item ->
-                    FileQueueRow(
-                        item = item,
-                        onRename = { onRename(index, it) },
-                        onRemove = { onRemoveItem(index) },
-                        renameEnabled = !state.uploadCancelled && item.status == FileStatus.PENDING,
-                        removeEnabled =
-                            !state.isUploading &&
-                                !state.uploadCancelled &&
-                                item.status == FileStatus.PENDING
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+            if (state.items.isEmpty()) {
+                GeoVaultEmptyState(
+                    title = "No files to upload",
+                    message = "Choose KML, KMZ, or GPX files to add them to the queue.",
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 12.dp)
+                ) {
+                    itemsIndexed(state.items) { index, item ->
+                        FileQueueRow(
+                            item = item,
+                            onRename = { onRename(index, it) },
+                            onRemove = { onRemoveItem(index) },
+                            renameEnabled = !state.uploadCancelled && item.status == FileStatus.PENDING,
+                            removeEnabled =
+                                !state.isUploading &&
+                                    !state.uploadCancelled &&
+                                    item.status == FileStatus.PENDING
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         },
@@ -158,9 +165,10 @@ fun MultiUploadScreen(
         },
     )
     invalidFilesDialogNames?.let { names ->
-        UnsupportedFilesDialog(
+        GeoVaultRejectedIncomingFilesDialog(
             fileNames = names,
-            onDismissRequest = onDismissInvalidFiles
+            catalog = GeoVaultUploadFileTypes.catalog,
+            onDismissRequest = onDismissInvalidFiles,
         )
     }
 }
@@ -173,7 +181,7 @@ private fun FileQueueRow(
     renameEnabled: Boolean,
     removeEnabled: Boolean
 ) {
-    val (basename, ext) = FilenamePolicy.splitFilename(item.filename)
+    val (basename, ext) = GeoVaultFilename.splitBaseAndExtension(item.filename)
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
     Card(
@@ -228,9 +236,10 @@ private fun FileQueueRow(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(".$ext")
                 }
-                IconButton(
+                GeoVaultIconButton(
                     onClick = onRemove,
                     enabled = removeEnabled,
+                    tooltip = "Remove file",
                     modifier = Modifier
                         .size(36.dp)
                         .alpha(if (removeEnabled) 1f else 0f),
@@ -260,32 +269,9 @@ private fun FileQueueRow(
     }
 }
 
-private fun formatFileSize(sizeBytes: Long): String {
-    if (sizeBytes <= 0L) return "Size unknown"
-    if (sizeBytes < 1024L) return "$sizeBytes B"
-    val units = arrayOf("KB", "MB", "GB", "TB")
-    val base = 1024.0
-    val exp = (ln(sizeBytes.toDouble()) / ln(base)).toInt().coerceAtMost(units.size)
-    val value = sizeBytes / base.pow(exp.toDouble())
-    val unit = units[exp - 1]
-    val rounded = if (value >= 10) {
-        String.format(Locale.getDefault(), "%.0f", value)
-    } else {
-        String.format(Locale.getDefault(), "%.1f", value)
-    }
-    return "$rounded $unit"
-}
-
 private fun buildMetadataLine(sizeBytes: Long, modifiedAtMs: Long?): String {
-    val sizeText = formatFileSize(sizeBytes)
-    val modifiedText = modifiedAtMs?.let { "Modified ${formatModifiedDate(it)}" } ?: "Modified unknown"
+    val sizeText = GeoVaultFileSizeFormat.humanBytesOrUnknown(sizeBytes)
+    val modifiedText = modifiedAtMs?.let { "Modified ${GeoVaultDateTimeFormat.formatLocalDate(it)}" }
+        ?: "Modified unknown"
     return "$sizeText • $modifiedText"
-}
-
-private fun formatModifiedDate(timestampMs: Long): String {
-    val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
-    return Instant.ofEpochMilli(timestampMs)
-        .atZone(ZoneId.systemDefault())
-        .toLocalDate()
-        .format(formatter)
 }

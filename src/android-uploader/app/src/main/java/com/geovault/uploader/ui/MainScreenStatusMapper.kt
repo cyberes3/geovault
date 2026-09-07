@@ -24,12 +24,20 @@ internal object MainScreenStatusMapper {
         } else {
             null
         }
+        val secondaryAction = if (
+            visualState == GeoVaultStatusVisualState.Info ||
+            visualState == GeoVaultStatusVisualState.Error
+        ) {
+            GeoVaultActionRenderModel(label = "Settings")
+        } else {
+            null
+        }
         return GeoVaultStatusRenderModel(
             visualState = visualState,
             title = title,
             message = state.validationMessage,
             primaryAction = primaryAction,
-            secondaryAction = null
+            secondaryAction = secondaryAction,
         )
     }
 }

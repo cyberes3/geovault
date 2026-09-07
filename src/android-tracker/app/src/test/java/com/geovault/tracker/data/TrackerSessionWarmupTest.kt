@@ -1,6 +1,5 @@
 package com.geovault.tracker.data
 
-import com.geovault.tracker.RepositoryResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -57,19 +56,16 @@ class TrackerSessionWarmupTest {
         val loadGroupsCalls = AtomicInteger(0)
         val loadMapVisibilityCalls = AtomicInteger(0)
 
-        override suspend fun loadTrackers(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadTrackers(forceRefresh: Boolean) {
             loadTrackersCalls.incrementAndGet()
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun loadGroups(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadGroups(forceRefresh: Boolean) {
             loadGroupsCalls.incrementAndGet()
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun loadMapVisibility(forceRefresh: Boolean): RepositoryResult<*> {
+        override suspend fun loadMapVisibility(forceRefresh: Boolean) {
             loadMapVisibilityCalls.incrementAndGet()
-            return RepositoryResult.Success(Unit)
         }
     }
 }

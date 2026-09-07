@@ -128,22 +128,22 @@ fun deriveSharedFilteredSections(
     val mergedPublicTrackers = mergeRetainedTrackerItems(publicTrackers, retainedPublicTrackers)
     val mergedPublicGroups = mergeRetainedGroupItems(publicGroups, retainedPublicGroups)
     val filteredOnMyMapTrackers = discoverOnMyMapTrackers.filter { item ->
-        matchesSharedSearch(discoverOnMapQuery, item.name, item.owner_email)
+        matchesTrackerSearch(discoverOnMapQuery, item.name, item.owner_email)
     }
     val filteredOnMyMapGroups = discoverOnMyMapGroups.filter { group ->
-        matchesSharedSearch(discoverOnMapQuery, group.name, group.owner_email, group.track_ids.size.toString())
+        matchesTrackerSearch(discoverOnMapQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
     val filteredIncomingTrackers = mergedIncomingTrackers.filter { item ->
-        matchesSharedSearch(discoverIncomingQuery, item.name, item.owner_email)
+        matchesTrackerSearch(discoverIncomingQuery, item.name, item.owner_email)
     }
     val filteredIncomingGroups = mergedIncomingGroups.filter { group ->
-        matchesSharedSearch(discoverIncomingQuery, group.name, group.owner_email, group.track_ids.size.toString())
+        matchesTrackerSearch(discoverIncomingQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
     val filteredPublicTrackers = mergedPublicTrackers.filter { item ->
-        matchesSharedSearch(publicQuery, item.name, item.owner_email)
+        matchesTrackerSearch(publicQuery, item.name, item.owner_email)
     }
     val filteredPublicGroups = mergedPublicGroups.filter { group ->
-        matchesSharedSearch(publicQuery, group.name, group.owner_email, group.track_ids.size.toString())
+        matchesTrackerSearch(publicQuery, group.name, group.owner_email, group.track_ids.size.toString())
     }
     return SharedFilteredSections(
         sharedItems = filteredSharedItems,
@@ -162,12 +162,12 @@ fun filterSharedSurfaceItemsForSearch(
 ): List<SharedSurfaceItem> {
     return items.filter { item ->
         when (item) {
-            is SharedSurfaceItem.TrackerItem -> matchesSharedSearch(
+            is SharedSurfaceItem.TrackerItem -> matchesTrackerSearch(
                 query,
                 item.tracker.name,
                 item.tracker.owner_email,
             )
-            is SharedSurfaceItem.GroupItem -> matchesSharedSearch(
+            is SharedSurfaceItem.GroupItem -> matchesTrackerSearch(
                 query,
                 item.group.name,
                 item.group.owner_email,
@@ -233,13 +233,4 @@ private fun mergeRetainedGroupItems(
                 { normalizeSharedId(it.id) }
             )
         )
-}
-
-
-fun matchesSharedSearch(query: String, vararg parts: String?): Boolean {
-    val normalizedQuery = query.trim().lowercase()
-    if (normalizedQuery.isEmpty()) return true
-    return parts.any { part ->
-        part.orEmpty().lowercase().contains(normalizedQuery)
-    }
 }

@@ -7,11 +7,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.geo.CoordinateFormat
 import com.geovault.common.geo.Wgs84Point
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.common.sort.NaturalSort
-import com.geovault.tracker.AppError
 import com.geovault.tracker.R
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
+import com.geovault.tracker.data.TrackerApiFailureMessages
 import com.geovault.tracker.data.TrackerDetailRepository
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.params.TrackerParamGridRow
@@ -142,24 +142,25 @@ class TrackerParamsViewModel(
                 }
                 return@launch
             }
-            when (val result = detailRepository.loadTrackerMetadata(args.trackerId, forceRefresh = refresh)) {
-                is RepositoryResult.Success -> {
-                    applyFromTracker(result.data)
-                    viewModelScope.launch {
+            try {
+                val tracker = detailRepository.loadTrackerMetadata(args.trackerId, forceRefresh = refresh)
+                applyFromTracker(tracker)
+                viewModelScope.launch {
+                    try {
                         detailRepository.refreshTrackers()
-                    }
-                    _uiState.update {
-                        it.copy(showBlockingLoader = false, isRefreshing = false, errorMessage = null)
+                    } catch (_: GeoVaultApiFailure) {
                     }
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update {
-                        it.copy(
-                            showBlockingLoader = false,
-                            isRefreshing = false,
-                            errorMessage = appErrorMessage(result.error),
-                        )
-                    }
+                _uiState.update {
+                    it.copy(showBlockingLoader = false, isRefreshing = false, errorMessage = null)
+                }
+            } catch (e: GeoVaultApiFailure) {
+                _uiState.update {
+                    it.copy(
+                        showBlockingLoader = false,
+                        isRefreshing = false,
+                        errorMessage = TrackerApiFailureMessages.format(app, e),
+                    )
                 }
             }
         }
@@ -329,20 +330,6 @@ class TrackerParamsViewModel(
             obj.keys().asSequence().associateWith { key -> obj.opt(key) }
         } catch (_: Exception) {
             emptyMap()
-        }
-    }
-
-    private fun appErrorMessage(error: AppError): String {
-        val ctx = getApplication<Application>()
-        return when (error) {
-            AppError.MissingServerUrl -> ctx.getString(R.string.trackers_error_missing_server)
-            AppError.Network -> ctx.getString(R.string.trackers_error_network)
-            AppError.Unauthorized -> ctx.getString(R.string.trackers_error_unauthorized)
-            AppError.NotFound -> ctx.getString(R.string.trackers_error_not_found)
-            is AppError.Server -> ctx.getString(R.string.trackers_error_server, error.code)
-            is AppError.Validation -> error.message?.takeIf { it.isNotBlank() }
-                ?: ctx.getString(R.string.trackers_error_validation)
-            AppError.Unknown -> ctx.getString(R.string.trackers_error_unknown)
         }
     }
 

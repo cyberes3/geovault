@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geovault.common.geo.CoordinateFormat
 import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
+import com.geovault.common.ui.components.GeoVaultEmptyState
 import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -71,6 +72,7 @@ import com.geovault.common.ui.components.GeoVaultTab
 import com.geovault.common.ui.components.GeoVaultTabBar
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
 import com.geovault.common.ui.theme.GeoVaultColorTokens
+import com.geovault.common.ui.time.GeoVaultDateTimeFormat
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarHost
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.tracker.AvailableToAddGroup
@@ -98,9 +100,6 @@ import com.geovault.tracker.ui.components.TrackerItemCardModel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun SharedScreen(
@@ -1271,24 +1270,15 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun EmptyLine(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.body2,
-        color = MaterialTheme.colors.onSurface.copy(alpha = 0.65f),
-        textAlign = TextAlign.Start,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-    )
+    GeoVaultEmptyState(message = text, fillMaxSize = false)
 }
 
 private fun SharedHostNavigationRequest.toNavigationKey(): String {
     return "${subTab.name}|${focus.name}|${trackerId.orEmpty()}|${groupId.orEmpty()}"
 }
 
-private val SHARED_LIST_DATE_FORMAT = SimpleDateFormat("MMM d, yyyy, h:mm a", Locale.getDefault())
-
-private fun formatSharedListDate(timestampMs: Long): String = SHARED_LIST_DATE_FORMAT.format(Date(timestampMs))
+private fun formatSharedListDate(timestampMs: Long): String =
+    GeoVaultDateTimeFormat.formatLocalDateTime(timestampMs)
 
 @Composable
 private fun DiscoverIncomingTrackerCard(

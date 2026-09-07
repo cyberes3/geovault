@@ -14,6 +14,13 @@ class GeoVaultApiFailure(
     override val cause: Throwable? = null,
 ) : Exception(buildMessage(httpCode, serverMessage, operation), cause) {
 
+    fun userMessage(): String {
+        val detail = serverMessage?.takeIf { it.isNotBlank() }
+            ?: httpCode?.let { "HTTP $it" }
+            ?: "Unknown error"
+        return if (httpCode != null) "Server Error: $detail" else "Network failed: $detail"
+    }
+
     companion object {
         fun fromOkHttp(response: OkHttpResponse, operation: String? = null, body: String? = null): GeoVaultApiFailure {
             return GeoVaultApiFailure(

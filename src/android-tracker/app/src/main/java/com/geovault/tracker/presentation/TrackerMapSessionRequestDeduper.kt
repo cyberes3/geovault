@@ -2,7 +2,6 @@ package com.geovault.tracker.presentation
 
 import com.geovault.common.concurrent.SingleFlightGate
 import com.geovault.common.concurrent.TimeWindowedCache
-import com.geovault.tracker.RepositoryResult
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -21,25 +20,21 @@ class TrackerMapSessionRequestDeduper(
 
     suspend fun <T : Any> loadOnce(
         key: String,
-        loader: suspend () -> RepositoryResult<T>
-    ): RepositoryResult<T> {
+        loader: suspend () -> T
+    ): T {
         resultCache.get(key)?.let { cached ->
             @Suppress("UNCHECKED_CAST")
-            return RepositoryResult.Success(cached as T)
+            return cached as T
         }
         @Suppress("UNCHECKED_CAST")
         return gate.run(key) {
             resultCache.get(key)?.let { rechecked ->
-                return@run RepositoryResult.Success(rechecked) as Any
+                return@run rechecked
             }
-            when (val result = loader()) {
-                is RepositoryResult.Success -> {
-                    resultCache.put(key, result.data as Any)
-                    result as Any
-                }
-                is RepositoryResult.Failure -> result as Any
-            }
-        } as RepositoryResult<T>
+            val result = loader()
+            resultCache.put(key, result as Any)
+            result as Any
+        } as T
     }
 
     suspend fun clear() {

@@ -17,10 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
-import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -41,10 +39,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.geovault.common.geo.CoordinateParser
+import com.geovault.common.geo.CoordinateFormat
+import com.geovault.common.geo.LonLat
 import com.geovault.common.ui.GeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultEmptyState
+import com.geovault.common.ui.components.GeoVaultFloatingActionButtonWithTooltip
 import com.geovault.common.ui.components.GeoVaultLoadingOverlay
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -312,14 +312,11 @@ private fun PlaceRow(
     onCopyCoordinates: (String) -> Unit,
 ) {
     val feature = item.feature
-    val addressOrCoordinates = feature.properties.address?.takeIf { it.isNotBlank() } ?: run {
-        val coords = feature.geometry.coordinates
-        if (coords.size >= 2) {
-            CoordinateParser.formatLatLon(coords[1], coords[0])
-        } else {
-            ""
-        }
-    }
+    val copyCoordinates = LonLat.fromGeoJsonCoordinates(feature.geometry.coordinates)
+        ?.let { CoordinateFormat.DECIMAL_4.formatLatLon(it.asWgs84()) }
+        .orEmpty()
+    val addressOrCoordinates = feature.properties.address?.takeIf { it.isNotBlank() }
+        ?: copyCoordinates
     val rawDate = feature.properties.created_at.orEmpty()
     val formattedDate = if (rawDate.length >= 10) rawDate.substring(0, 10) else rawDate
     val dateLabel = if (item.isOffline) "$formattedDate (offline)" else formattedDate
@@ -387,9 +384,9 @@ private fun PlaceRow(
                 Text(
                     text = addressOrCoordinates,
                     modifier = Modifier
-                        .clickable(enabled = addressOrCoordinates.isNotBlank()) {
+                        .clickable(enabled = copyCoordinates.isNotBlank()) {
                             if (!actionsEnabled) return@clickable
-                            onCopyCoordinates(addressOrCoordinates)
+                            onCopyCoordinates(copyCoordinates)
                         }
                         .padding(2.dp),
                     color = geoVaultContentSecondaryColor(),
@@ -457,15 +454,11 @@ private fun FabStack(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.End
     ) {
-        FloatingActionButton(
+        GeoVaultFloatingActionButtonWithTooltip(
             onClick = { if (enabled) onAddPlace() },
-            shape = CircleShape,
+            tooltip = "Create a new place",
             backgroundColor = GeoVaultColorTokens.MainBlue,
             contentColor = Color.White,
-            elevation = androidx.compose.material.FloatingActionButtonDefaults.elevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 0.dp
-            )
         ) {
             Icon(Icons.Default.Add, contentDescription = "Create Place")
         }

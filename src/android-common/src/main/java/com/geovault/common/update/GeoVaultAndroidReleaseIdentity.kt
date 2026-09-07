@@ -88,4 +88,34 @@ object GeoVaultAndroidReleaseIdentity {
             localFullCommitSha,
         )
     }
+
+    object SurveyDataViewer {
+        const val WORKER_APP_NAME: String = "GeoVault Survey Data Viewer"
+        const val CACHE_KEY: String = "survey"
+
+        fun updateCoordinator(
+            application: Application,
+            localFullCommitSha: () -> String,
+        ): GeoVaultAppUpdateCoordinator = geoVaultAppUpdateCoordinator(
+            application,
+            CACHE_KEY,
+            WORKER_APP_NAME,
+            localFullCommitSha,
+        )
+    }
+
+    object NgsNavigator {
+        const val WORKER_APP_NAME: String = "NGS Navigator"
+        const val CACHE_KEY: String = "ngs"
+
+        fun updateCoordinator(
+            application: Application,
+            localFullCommitSha: () -> String,
+        ): GeoVaultAppUpdateCoordinator = geoVaultAppUpdateCoordinator(
+            application,
+            CACHE_KEY,
+            WORKER_APP_NAME,
+            localFullCommitSha,
+        )
+    }
 }

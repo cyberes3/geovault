@@ -6,7 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
-import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultAppUpdatePromptBinding
 import com.geovault.common.update.VersionCheckResult
 import com.geovault.uploader.BuildConfig
 import com.geovault.uploader.MainActivity
@@ -21,9 +21,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeScreenState(
-    val isAuthenticated: Boolean = false,
-    val serverUrl: String = "",
-    val isConnecting: Boolean = false,
     val validationTitle: String = "Configuration Required",
     val validationMessage: String = "Please configure settings first",
     val isValidationLoading: Boolean = false,
@@ -43,21 +40,17 @@ class HomeViewModel(
     )
 
     private val validationRepository = services.validationRepository
-    private val updateCoordinator = GeoVaultAndroidReleaseIdentity.Uploader.updateCoordinator(
-        application = application,
-        localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
-    )
+    private val updatePromptBinding = GeoVaultAppUpdatePromptBinding(services.updateCoordinator())
 
     private val _state = MutableStateFlow(HomeScreenState())
     val state: StateFlow<HomeScreenState> = _state.asStateFlow()
 
     private var validateJob: Job? = null
+    private var isLoggedIn: Boolean = false
 
     init {
-        viewModelScope.launch {
-            updateCoordinator.promptState.collect { prompt ->
-                _state.update { it.copy(updateAvailable = prompt.updateOrNull()) }
-            }
+        updatePromptBinding.collect(viewModelScope) { prompt ->
+            _state.update { it.copy(updateAvailable = prompt) }
         }
     }
 
@@ -66,19 +59,12 @@ class HomeViewModel(
     fun onHostResumed() = Unit
 
     fun onAccountStateChanged(accountState: GeoVaultAccountUiState) {
-        val wasAuthenticated = _state.value.isAuthenticated
-        val isAuthenticated = accountState.isLoggedIn
-        if (wasAuthenticated && !isAuthenticated) {
-            updateCoordinator.reset()
+        val wasAuthenticated = isLoggedIn
+        isLoggedIn = accountState.isLoggedIn
+        if (wasAuthenticated && !isLoggedIn) {
+            updatePromptBinding.onSignedOut()
         }
-        _state.update {
-            it.copy(
-                isAuthenticated = isAuthenticated,
-                serverUrl = accountState.serverUrl,
-                isConnecting = accountState.isConnecting,
-            )
-        }
-        if (!wasAuthenticated && isAuthenticated) {
+        if (!wasAuthenticated && isLoggedIn) {
             _state.update { it.copy(importantSnackbar = null) }
             validate()
             launchVersionCheckIfNeeded()
@@ -90,7 +76,7 @@ class HomeViewModel(
     }
 
     fun clearUpdateAvailable() {
-        updateCoordinator.dismissPrompt()
+        updatePromptBinding.dismissPrompt()
     }
 
     fun validate() {
@@ -121,7 +107,7 @@ class HomeViewModel(
     }
 
     private fun launchVersionCheckIfNeeded() {
-        updateCoordinator.launchIfNeeded(viewModelScope)
+        updatePromptBinding.onAuthenticated(viewModelScope)
     }
 
     private fun newImportantId(): String = UUID.randomUUID().toString()

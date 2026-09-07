@@ -47,11 +47,4 @@ object PlacesOfflineBehaviorPolicy {
         }
     }
 
-    fun deleteFailureMessage(rawErrorMessage: String?): String {
-        return if (rawErrorMessage?.startsWith("Failed to delete place:") == true) {
-            DELETE_SERVER_ERROR_MESSAGE
-        } else {
-            DELETE_WHILE_OFFLINE_MESSAGE
-        }
-    }
 }

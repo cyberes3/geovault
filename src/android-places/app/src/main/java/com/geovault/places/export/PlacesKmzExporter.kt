@@ -1,5 +1,6 @@
 package com.geovault.places.export
 
+import com.geovault.common.geo.CoordinateParser
 import com.geovault.common.maps.kml.GeoVaultKmlExporter
 import com.geovault.common.maps.kml.GeoVaultKmlPlacemark
 import com.geovault.places.model.Feature
@@ -36,7 +37,7 @@ object PlacesKmzExporter {
         properties.description?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
         properties.address?.takeIf { it.isNotBlank() }?.let { parts.add("Address: $it") }
         if (coords.size >= 2) {
-            parts.add("Coordinates: ${coords[1]}, ${coords[0]}")
+            parts.add("Coordinates: ${CoordinateParser.formatLatLon(coords[1], coords[0])}")
         }
         properties.created_at?.takeIf { it.isNotBlank() }?.let { parts.add("Created: $it") }
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")

@@ -2,7 +2,6 @@ package com.geovault.places
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -77,6 +76,7 @@ import com.geovault.common.sync.GeoVaultHttpFailureClassifier
 import com.geovault.common.sync.GeoVaultHttpFailureKind
 import com.geovault.common.sync.GeoVaultQueuedSyncFailurePolicy
 import com.geovault.common.sync.GeoVaultQueuedSyncItemDisposition
+import com.geovault.common.ui.GeoVaultAppSnackbarLayer
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
@@ -87,6 +87,7 @@ import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
 import com.geovault.common.ui.components.TopBarIconAction
 import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
@@ -130,6 +131,8 @@ class PlaceEditActivity : ComponentActivity() {
 
         setContent {
             GeoVaultTheme {
+                var snackbarMessage by remember { mutableStateOf<String?>(null) }
+                Box(modifier = Modifier.fillMaxSize()) {
                 PlaceEditScreen(
                     initial = editFeature,
                     isOfflineEdit = isOfflineEdit,
@@ -152,19 +155,25 @@ class PlaceEditActivity : ComponentActivity() {
                             }
                             val dbId = editFeature?.properties?.database_id ?: return@launch
                             val repo = PlacesAppServices.from(application).placesRepository()
-                            val deleted = withContext(Dispatchers.IO) { repo.deletePlace(dbId).isSuccess }
-                            if (deleted) {
+                            val result = withContext(Dispatchers.IO) { repo.deletePlace(dbId) }
+                            if (result.isSuccess) {
                                 setResult(
                                     RESULT_OK,
                                     Intent().putExtra(EXTRA_DELETED_FEATURE, editFeature),
                                 )
                                 finish()
                             } else {
-                                Toast.makeText(
-                                    this@PlaceEditActivity,
-                                    PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE,
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                                val kind = GeoVaultHttpFailureClassifier.classifyThrowable(
+                                    result.exceptionOrNull() ?: Exception("delete failed"),
+                                )
+                                val message = when (kind) {
+                                    GeoVaultHttpFailureKind.Auth ->
+                                        PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE
+                                    GeoVaultHttpFailureKind.RetryableNetwork ->
+                                        PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE
+                                    else -> PlacesOfflineBehaviorPolicy.DELETE_SERVER_ERROR_MESSAGE
+                                }
+                                snackbarMessage = message
                             }
                         }
                     },
@@ -240,20 +249,12 @@ class PlaceEditActivity : ComponentActivity() {
                                 )
                                 when {
                                     disposition == GeoVaultQueuedSyncItemDisposition.RequireAuth -> {
-                                        Toast.makeText(
-                                            this@PlaceEditActivity,
-                                            PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE,
-                                            Toast.LENGTH_LONG,
-                                        ).show()
+                                        snackbarMessage = PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE
                                         saveInFlight.set(false)
                                     }
                                     disposition == GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
-                                        Toast.makeText(
-                                            this@PlaceEditActivity,
-                                            error.message?.takeIf { it.isNotBlank() }
-                                                ?: PlacesOfflineBehaviorPolicy.VALIDATION_FAILED_MESSAGE,
-                                            Toast.LENGTH_LONG,
-                                        ).show()
+                                        snackbarMessage = error.message?.takeIf { it.isNotBlank() }
+                                            ?: PlacesOfflineBehaviorPolicy.VALIDATION_FAILED_MESSAGE
                                         saveInFlight.set(false)
                                     }
                                     GeoVaultQueuedSyncFailurePolicy.shouldFallbackToOfflineSave(kind) -> {
@@ -283,6 +284,15 @@ class PlaceEditActivity : ComponentActivity() {
                         }
                     },
                 )
+                GeoVaultAppSnackbarLayer(
+                    snackbar = snackbarMessage?.let { message ->
+                        GeoVaultSnackbarModel(id = message, message = message)
+                    },
+                    onDismissSnackbar = { snackbarMessage = null },
+                    update = null,
+                    onDismissUpdate = {},
+                )
+                }
             }
         }
     }

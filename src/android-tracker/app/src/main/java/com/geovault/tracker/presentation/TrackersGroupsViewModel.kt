@@ -3,11 +3,12 @@ package com.geovault.tracker.presentation
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.common.coroutines.runSuspendCatching
 import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.tracker.AppError
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.Group
+import com.geovault.tracker.MapVisibilityResponse
 import com.geovault.tracker.R
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.SelectedTrackerManager
 import com.geovault.tracker.SelectedTrackerPrefs
 import com.geovault.tracker.TrackerCreateRequest
@@ -16,6 +17,7 @@ import com.geovault.tracker.Tracker
 import com.geovault.tracker.UserItem
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.tracker.data.GroupManagementRepository
+import com.geovault.tracker.data.TrackerApiFailureMessages
 import com.geovault.tracker.data.TrackerBootstrapOutcome
 import com.geovault.tracker.data.TrackerManagementRepository
 import com.geovault.tracker.di.TrackerAppServices
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 class TrackersGroupsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -118,7 +121,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 isLoading = false,
                 isPullRefreshing = false,
                 hasCompletedInitialLoad = true,
-                userMessage = if (outcome.isServerAccessible) null else appErrorMessage(AppError.Network),
+                userMessage = if (outcome.isServerAccessible) null else apiFailureMessage(networkApiFailure()),
             )
         }
     }
@@ -155,19 +158,17 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         if (_uiState.value.isKmlExportLoading) return
         viewModelScope.launch {
             _uiState.update { it.copy(isKmlExportLoading = true) }
-            when (val result = trackerRepository.fetchTrackerKml(trackerId)) {
-                is RepositoryResult.Success -> {
-                    _uiState.update { it.copy(isKmlExportLoading = false) }
-                    val base = sanitizeKmlBaseFileName(trackerDisplayName)
-                    _kmlExportEvents.emit(TrackerKmlExportEvent(result.data, base))
-                }
-                is RepositoryResult.Failure -> {
-                    _uiState.update {
-                        it.copy(
-                            isKmlExportLoading = false,
-                            userMessage = getApplication<Application>().getString(R.string.trackers_kml_fetch_failed),
-                        )
-                    }
+            try {
+                val bytes = trackerRepository.fetchTrackerKml(trackerId)
+                _uiState.update { it.copy(isKmlExportLoading = false) }
+                val base = sanitizeKmlBaseFileName(trackerDisplayName)
+                _kmlExportEvents.emit(TrackerKmlExportEvent(bytes, base))
+            } catch (_: GeoVaultApiFailure) {
+                _uiState.update {
+                    it.copy(
+                        isKmlExportLoading = false,
+                        userMessage = getApplication<Application>().getString(R.string.trackers_kml_fetch_failed),
+                    )
                 }
             }
         }
@@ -201,10 +202,12 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             )
         }
         openEditTrackerJob = viewModelScope.launch {
-            val loadResult = trackerRepository.loadTracker(fallbackTracker.id)
-            val trackerForDialog = when (loadResult) {
-                is RepositoryResult.Success -> loadResult.data
-                is RepositoryResult.Failure -> fallbackTracker
+            var loadFailed = false
+            val trackerForDialog = try {
+                trackerRepository.loadTracker(fallbackTracker.id)
+            } catch (_: GeoVaultApiFailure) {
+                loadFailed = true
+                fallbackTracker
             }
             val selectedTrackerId = selectedTrackerId()
             _uiState.update {
@@ -212,7 +215,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 if (loading.trackerId != fallbackTracker.id) return@update it
                 it.copy(
                     dialog = toEditTrackerDialog(trackerForDialog, selectedTrackerId),
-                    userMessage = if (loadResult is RepositoryResult.Failure) {
+                    userMessage = if (loadFailed) {
                         getApplication<Application>().getString(
                             R.string.trackers_failed_to_load_tracker_details,
                         )
@@ -392,8 +395,8 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 if (cur.tracker.id != trackerId) return@update it
                 it.copy(dialog = cur.copy(isWorldShareLinkLoading = true))
             }
-            when (
-                val result = trackerRepository.updateTrackerSettings(
+            try {
+                val t = trackerRepository.updateTrackerSettings(
                     trackerId = trackerId,
                     request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
                         tracker = tracker,
@@ -402,34 +405,29 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     ),
                     publishToStore = true,
                 )
-            ) {
-                is RepositoryResult.Success -> {
-                    val t = result.data
-                    _uiState.update {
-                        val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                        if (cur.tracker.id != trackerId) return@update it
-                        it.copy(
-                            dialog = cur.copy(
-                                tracker = t,
-                                isWorldShareLinkLoading = false,
-                                visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
-                                internalShareUrlDraft = t.internal_share_url,
-                                worldShareUrlDraft = t.world_share_url,
-                            ),
-                        )
-                    }
+                _uiState.update {
+                    val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                    if (cur.tracker.id != trackerId) return@update it
+                    it.copy(
+                        dialog = cur.copy(
+                            tracker = t,
+                            isWorldShareLinkLoading = false,
+                            visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
+                            internalShareUrlDraft = t.internal_share_url,
+                            worldShareUrlDraft = t.world_share_url,
+                        ),
+                    )
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update {
-                        val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                        if (cur.tracker.id != trackerId) return@update it
-                        it.copy(
-                            dialog = cur.copy(isWorldShareLinkLoading = false),
-                            userMessage = getApplication<Application>().getString(
-                                R.string.trackers_failed_to_fetch_world_share_link,
-                            ),
-                        )
-                    }
+            } catch (_: GeoVaultApiFailure) {
+                _uiState.update {
+                    val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                    if (cur.tracker.id != trackerId) return@update it
+                    it.copy(
+                        dialog = cur.copy(isWorldShareLinkLoading = false),
+                        userMessage = getApplication<Application>().getString(
+                            R.string.trackers_failed_to_fetch_world_share_link,
+                        ),
+                    )
                 }
             }
         }
@@ -453,57 +451,53 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             ).normalizedEmails
             val worldShareEnabled = d.visibilityDraft != TrackerShareVisibility.PRIVATE &&
                 d.worldShareEnabledDraft
-            val result = trackerRepository.updateTrackerSettings(
-                trackerId = trackerId,
-                request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
-                    tracker = d.tracker,
-                    visibility = d.visibilityDraft.apiValue,
-                    shareParamsWithRecipients = d.shareParamsWithRecipientsDraft,
-                    shareParamsWithWorld = worldShareEnabled && d.shareParamsWithWorldDraft,
-                    sharedWithEmails = if (d.visibilityDraft == TrackerShareVisibility.SHARED) {
-                        normalizedEmails
-                    } else {
-                        null
-                    },
-                    worldShareEnabled = worldShareEnabled,
-                    allowGroupReshare = d.allowGroupReshareDraft,
-                ),
-                publishToStore = true,
-            )
-            when (result) {
-                is RepositoryResult.Success -> {
-                    val t = result.data
-                    _uiState.update {
-                        val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                        if (cur.tracker.id != trackerId) return@update it
-                        it.copy(
-                            dialog = cur.copy(
-                                tracker = t,
-                                isWorldShareLinkLoading = false,
-                                visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
-                                sharedEmailsDraft = t.shared_with_emails.orEmpty().joinToString(", "),
-                                shareParamsWithRecipientsDraft = t.share_params_with_recipients == true,
-                                allowGroupReshareDraft = t.settingBoolean("allow_group_reshare"),
-                                worldShareEnabledDraft = !t.world_share_id.isNullOrBlank() ||
-                                    !t.world_share_url.isNullOrBlank(),
-                                shareParamsWithWorldDraft = t.share_params_with_world == true,
-                                internalShareUrlDraft = t.internal_share_url,
-                                worldShareUrlDraft = t.world_share_url,
-                            ),
-                        )
-                    }
+            try {
+                val t = trackerRepository.updateTrackerSettings(
+                    trackerId = trackerId,
+                    request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                        tracker = d.tracker,
+                        visibility = d.visibilityDraft.apiValue,
+                        shareParamsWithRecipients = d.shareParamsWithRecipientsDraft,
+                        shareParamsWithWorld = worldShareEnabled && d.shareParamsWithWorldDraft,
+                        sharedWithEmails = if (d.visibilityDraft == TrackerShareVisibility.SHARED) {
+                            normalizedEmails
+                        } else {
+                            null
+                        },
+                        worldShareEnabled = worldShareEnabled,
+                        allowGroupReshare = d.allowGroupReshareDraft,
+                    ),
+                    publishToStore = true,
+                )
+                _uiState.update {
+                    val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                    if (cur.tracker.id != trackerId) return@update it
+                    it.copy(
+                        dialog = cur.copy(
+                            tracker = t,
+                            isWorldShareLinkLoading = false,
+                            visibilityDraft = TrackerShareVisibility.fromApiValue(t.visibility),
+                            sharedEmailsDraft = t.shared_with_emails.orEmpty().joinToString(", "),
+                            shareParamsWithRecipientsDraft = t.share_params_with_recipients == true,
+                            allowGroupReshareDraft = t.settingBoolean("allow_group_reshare"),
+                            worldShareEnabledDraft = !t.world_share_id.isNullOrBlank() ||
+                                !t.world_share_url.isNullOrBlank(),
+                            shareParamsWithWorldDraft = t.share_params_with_world == true,
+                            internalShareUrlDraft = t.internal_share_url,
+                            worldShareUrlDraft = t.world_share_url,
+                        ),
+                    )
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update {
-                        val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
-                        if (cur.tracker.id != trackerId) return@update it
-                        it.copy(
-                            dialog = cur.copy(isWorldShareLinkLoading = false),
-                            userMessage = getApplication<Application>().getString(
-                                R.string.trackers_failed_to_save_sharing,
-                            ),
-                        )
-                    }
+            } catch (_: GeoVaultApiFailure) {
+                _uiState.update {
+                    val cur = it.dialog as? TrackersGroupsDialog.EditTracker ?: return@update it
+                    if (cur.tracker.id != trackerId) return@update it
+                    it.copy(
+                        dialog = cur.copy(isWorldShareLinkLoading = false),
+                        userMessage = getApplication<Application>().getString(
+                            R.string.trackers_failed_to_save_sharing,
+                        ),
+                    )
                 }
             }
         }
@@ -647,37 +641,34 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 },
                 worldShareEnabled = worldShareEnabled,
             )
-            when (val result = groupRepository.patchGroup(groupId, request, publishToStore = true)) {
-                is RepositoryResult.Success -> {
-                    val g = result.data
-                    _uiState.update {
-                        val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
-                        if (cur.group.id != groupId) return@update it
-                        it.copy(
-                            dialog = cur.copy(
-                                group = g,
-                                isWorldShareLinkLoading = false,
-                                visibilityDraft = GroupShareVisibility.fromApiValue(g.visibility),
-                                sharedEmailsDraft = g.shared_with_emails.orEmpty().joinToString(", "),
-                                worldShareEnabledDraft = !g.world_share_id.isNullOrBlank() ||
-                                    !g.world_share_url.isNullOrBlank(),
-                                internalShareUrlDraft = g.internal_share_url,
-                                worldShareUrlDraft = g.world_share_url,
-                            ),
-                        )
-                    }
+            try {
+                val g = groupRepository.patchGroup(groupId, request, publishToStore = true)
+                _uiState.update {
+                    val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
+                    if (cur.group.id != groupId) return@update it
+                    it.copy(
+                        dialog = cur.copy(
+                            group = g,
+                            isWorldShareLinkLoading = false,
+                            visibilityDraft = GroupShareVisibility.fromApiValue(g.visibility),
+                            sharedEmailsDraft = g.shared_with_emails.orEmpty().joinToString(", "),
+                            worldShareEnabledDraft = !g.world_share_id.isNullOrBlank() ||
+                                !g.world_share_url.isNullOrBlank(),
+                            internalShareUrlDraft = g.internal_share_url,
+                            worldShareUrlDraft = g.world_share_url,
+                        ),
+                    )
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update {
-                        val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
-                        if (cur.group.id != groupId) return@update it
-                        it.copy(
-                            dialog = cur.copy(isWorldShareLinkLoading = false),
-                            userMessage = getApplication<Application>().getString(
-                                R.string.trackers_failed_to_save_sharing,
-                            ),
-                        )
-                    }
+            } catch (_: GeoVaultApiFailure) {
+                _uiState.update {
+                    val cur = it.dialog as? TrackersGroupsDialog.EditGroup ?: return@update it
+                    if (cur.group.id != groupId) return@update it
+                    it.copy(
+                        dialog = cur.copy(isWorldShareLinkLoading = false),
+                        userMessage = getApplication<Application>().getString(
+                            R.string.trackers_failed_to_save_sharing,
+                        ),
+                    )
                 }
             }
         }
@@ -708,14 +699,15 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     fun refreshTrackersForPicker() {
         viewModelScope.launch {
             _uiState.update { it.copy(isPickerRefreshing = true) }
-            val result = trackerRepository.loadTrackers(forceRefresh = true)
+            val trackers = try {
+                trackerRepository.loadTrackers(forceRefresh = true)
+            } catch (_: GeoVaultApiFailure) {
+                null
+            }
             _uiState.update { current ->
                 current.copy(
                     isPickerRefreshing = false,
-                    trackers = when (result) {
-                        is RepositoryResult.Success -> result.data
-                        is RepositoryResult.Failure -> current.trackers
-                    },
+                    trackers = trackers ?: current.trackers,
                 )
             }
         }
@@ -724,28 +716,26 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     fun refreshShareRecipientSuggestions() {
         viewModelScope.launch {
             _uiState.update { it.copy(isShareRecipientSuggestionsLoading = true) }
-            when (val loaded = trackerRepository.loadUsers()) {
-                is RepositoryResult.Success -> {
-                    val distinctUsers = loaded.data.users
-                        .map { user -> UserItem(id = user.id, email = user.email.trim()) }
-                        .filter { it.email.isNotEmpty() }
-                        .distinctBy { it.email.lowercase(Locale.getDefault()) }
-                        .sortedWith(
-                            NaturalSort.byName(Locale.getDefault()) { it.email }
-                        )
-                    _uiState.update {
-                        it.copy(
-                            isShareRecipientSuggestionsLoading = false,
-                            shareRecipientUsers = distinctUsers,
-                            shareRecipientSuggestions = distinctUsers
-                                .map { user -> user.email.trim().lowercase(Locale.getDefault()) }
-                                .filter { it.isNotEmpty() },
-                        )
-                    }
+            try {
+                val loaded = trackerRepository.loadUsers()
+                val distinctUsers = loaded.users
+                    .map { user -> UserItem(id = user.id, email = user.email.trim()) }
+                    .filter { it.email.isNotEmpty() }
+                    .distinctBy { it.email.lowercase(Locale.getDefault()) }
+                    .sortedWith(
+                        NaturalSort.byName(Locale.getDefault()) { it.email }
+                    )
+                _uiState.update {
+                    it.copy(
+                        isShareRecipientSuggestionsLoading = false,
+                        shareRecipientUsers = distinctUsers,
+                        shareRecipientSuggestions = distinctUsers
+                            .map { user -> user.email.trim().lowercase(Locale.getDefault()) }
+                            .filter { it.isNotEmpty() },
+                    )
                 }
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(isShareRecipientSuggestionsLoading = false) }
-                }
+            } catch (_: GeoVaultApiFailure) {
+                _uiState.update { it.copy(isShareRecipientSuggestionsLoading = false) }
             }
         }
     }
@@ -957,14 +947,14 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         if (normalizedIds.isEmpty()) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isPullRefreshing = false, userMessage = null) }
-            var firstFailure: AppError? = null
+            var firstFailure: GeoVaultApiFailure? = null
             val outcome = SharedBulkMutationCoordinator.run(normalizedIds) { id ->
-                when (val r = trackerRepository.unsubscribeTracker(id)) {
-                    is RepositoryResult.Success -> true
-                    is RepositoryResult.Failure -> {
-                        if (firstFailure == null) firstFailure = r.error
-                        false
-                    }
+                try {
+                    trackerRepository.unsubscribeTracker(id)
+                    true
+                } catch (e: GeoVaultApiFailure) {
+                    if (firstFailure == null) firstFailure = e
+                    false
                 }
             }
             val feedbackMessage = resolveBulkUnsubscribeMessage(outcome, firstFailure)
@@ -1029,25 +1019,25 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         if (syncPlan.isNoOp) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isPullRefreshing = false, userMessage = null) }
-            var firstFailure: AppError? = null
+            var firstFailure: GeoVaultApiFailure? = null
             val outcome = GroupMembershipMutationCoordinator.run(
                 plan = syncPlan,
                 removeTrackerFromGroup = { trackId ->
-                    when (val result = groupRepository.removeGroupTrack(groupId, trackId)) {
-                        is RepositoryResult.Success -> true
-                        is RepositoryResult.Failure -> {
-                            if (firstFailure == null) firstFailure = result.error
-                            false
-                        }
+                    try {
+                        groupRepository.removeGroupTrack(groupId, trackId)
+                        true
+                    } catch (e: GeoVaultApiFailure) {
+                        if (firstFailure == null) firstFailure = e
+                        false
                     }
                 },
                 addTrackerToGroup = { trackId ->
-                    when (val result = groupRepository.addGroupTrack(groupId, trackId)) {
-                        is RepositoryResult.Success -> true
-                        is RepositoryResult.Failure -> {
-                            if (firstFailure == null) firstFailure = result.error
-                            false
-                        }
+                    try {
+                        groupRepository.addGroupTrack(groupId, trackId)
+                        true
+                    } catch (e: GeoVaultApiFailure) {
+                        if (firstFailure == null) firstFailure = e
+                        false
                     }
                 }
             )
@@ -1083,10 +1073,10 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             if (!shouldRunMutation) return@launch
 
             try {
-                when (val result = addRemoveCoordinator.addTrackerToGroup(groupId, trackerId)) {
-                    is RepositoryResult.Success -> onSuccess()
-                    is RepositoryResult.Failure -> _toastEvents.emit(appErrorMessage(result.error))
-                }
+                addRemoveCoordinator.addTrackerToGroup(groupId, trackerId)
+                onSuccess()
+            } catch (e: GeoVaultApiFailure) {
+                _toastEvents.emit(apiFailureMessage(e))
             } finally {
                 _uiState.update { state ->
                     state.copy(
@@ -1100,25 +1090,19 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    private fun <T> RepositoryResult<T>.successDataOr(fallback: T): T =
-        when (this) {
-            is RepositoryResult.Success -> data
-            is RepositoryResult.Failure -> fallback
-        }
-
     private suspend fun loadTrackersGroupsSnapshot(forceRefresh: Boolean): TrackersGroupsLoadSnapshot {
         return coroutineScope {
-            val tDef = async { trackerRepository.loadTrackers(forceRefresh = forceRefresh) }
-            val gDef = async { groupRepository.loadGroups(forceRefresh = forceRefresh) }
-            val vDef = async { trackerRepository.loadMapVisibility(forceRefresh = forceRefresh) }
+            val tDef = async { runSuspendCatching { trackerRepository.loadTrackers(forceRefresh = forceRefresh) } }
+            val gDef = async { runSuspendCatching { groupRepository.loadGroups(forceRefresh = forceRefresh) } }
+            val vDef = async { runSuspendCatching { trackerRepository.loadMapVisibility(forceRefresh = forceRefresh) } }
             val tr = tDef.await()
             val gr = gDef.await()
             val vr = vDef.await()
             TrackersGroupsLoadSnapshot(
-                trackersResult = tr,
-                groupsResult = gr,
-                mapVisibilityResult = vr,
-                errorMessage = firstError(tr, gr, vr)?.let(::appErrorMessage),
+                trackers = tr,
+                groups = gr,
+                mapVisibility = vr,
+                errorMessage = firstApiFailure(listOf(tr, gr, vr))?.let(::apiFailureMessage),
             )
         }
     }
@@ -1132,9 +1116,9 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             isLoading = false,
             isPullRefreshing = false,
             hasCompletedInitialLoad = true,
-            trackers = snapshot.trackersResult.successDataOr(base.trackers),
-            groups = snapshot.groupsResult.successDataOr(base.groups),
-            mapVisibility = snapshot.mapVisibilityResult.successDataOr(base.mapVisibility),
+            trackers = snapshot.trackers.getOrDefault(base.trackers),
+            groups = snapshot.groups.getOrDefault(base.groups),
+            mapVisibility = snapshot.mapVisibility.getOrNull() ?: base.mapVisibility,
             userMessage = userMessageOverride,
         )
     }
@@ -1142,16 +1126,16 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     private fun runTrackerTransition(command: SharedTrackerTransitionCommand) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isPullRefreshing = false, userMessage = null) }
-            when (val result = executeTrackerTransition(command)) {
-                is RepositoryResult.Success -> refreshStateFromServer(
+            try {
+                executeTrackerTransition(command)
+                refreshStateFromServer(
                     userMessage = null,
                     forceRefresh = true
                 )
-                is RepositoryResult.Failure -> {
-                    val message = appErrorMessage(result.error)
-                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = message) }
-                    _toastEvents.tryEmit(message)
-                }
+            } catch (e: GeoVaultApiFailure) {
+                val message = apiFailureMessage(e)
+                _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = message) }
+                _toastEvents.tryEmit(message)
             }
         }
     }
@@ -1171,7 +1155,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     _uiState.update { it.copy(isLoading = false, mapVisibility = result.visibility) }
                 }
                 is MapVisibilityMutationResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = appErrorMessage(result.error)) }
+                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = apiFailureMessage(result.error)) }
                 }
             }
         }
@@ -1180,38 +1164,39 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
     private fun runGroupTransition(command: SharedGroupTransitionCommand) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isPullRefreshing = false, userMessage = null) }
-            when (val result = executeGroupTransition(command)) {
-                is RepositoryResult.Success -> refreshStateFromServer(
+            try {
+                executeGroupTransition(command)
+                refreshStateFromServer(
                     userMessage = null,
                     forceRefresh = true
                 )
-                is RepositoryResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = appErrorMessage(result.error)) }
-                }
+            } catch (e: GeoVaultApiFailure) {
+                _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = apiFailureMessage(e)) }
             }
         }
     }
 
     private suspend fun executeTrackerTransition(
         command: SharedTrackerTransitionCommand
-    ): RepositoryResult<Unit> {
-        return when (command.action) {
-            SharedTrackerTransitionAction.Subscribe -> trackerRepository
-                .subscribeTracker(command.trackerId)
-                .mapToUnit()
-            SharedTrackerTransitionAction.Unsubscribe -> trackerRepository.unsubscribeTracker(command.trackerId)
-            SharedTrackerTransitionAction.LeaveShare -> trackerRepository.leaveShareWithMe(command.trackerId)
+    ) {
+        when (command.action) {
+            SharedTrackerTransitionAction.Subscribe ->
+                trackerRepository.subscribeTracker(command.trackerId)
+            SharedTrackerTransitionAction.Unsubscribe ->
+                trackerRepository.unsubscribeTracker(command.trackerId)
+            SharedTrackerTransitionAction.LeaveShare ->
+                trackerRepository.leaveShareWithMe(command.trackerId)
         }
     }
 
     private suspend fun executeGroupTransition(
         command: SharedGroupTransitionCommand
-    ): RepositoryResult<Unit> {
-        return when (command.action) {
-            SharedGroupTransitionAction.AcceptShare -> groupRepository
-                .acceptGroupShare(command.groupId)
-                .mapToUnit()
-            SharedGroupTransitionAction.LeaveGroup -> groupRepository.leaveGroup(command.groupId)
+    ) {
+        when (command.action) {
+            SharedGroupTransitionAction.AcceptShare ->
+                groupRepository.acceptGroupShare(command.groupId)
+            SharedGroupTransitionAction.LeaveGroup ->
+                groupRepository.leaveGroup(command.groupId)
         }
     }
 
@@ -1229,23 +1214,18 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    private fun <T> RepositoryResult<T>.mapToUnit(): RepositoryResult<Unit> {
-        return when (this) {
-            is RepositoryResult.Success -> RepositoryResult.Success(Unit)
-            is RepositoryResult.Failure -> RepositoryResult.Failure(error)
-        }
-    }
-
-    private fun firstError(vararg results: RepositoryResult<*>): AppError? {
+    private fun firstApiFailure(results: List<Result<*>>): GeoVaultApiFailure? {
         for (r in results) {
-            if (r is RepositoryResult.Failure) return r.error
+            val error = r.exceptionOrNull() ?: continue
+            if (error !is GeoVaultApiFailure) throw error
+            return error
         }
         return null
     }
 
     private fun resolveGroupMembershipMessage(
         outcome: GroupMembershipMutationOutcome,
-        firstFailure: AppError?
+        firstFailure: GeoVaultApiFailure?
     ): String {
         return when {
             outcome.failedCount == 0 -> getApplication<Application>().getString(R.string.groups_membership_updated)
@@ -1254,13 +1234,13 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                 outcome.succeededCount,
                 outcome.failedCount
             )
-            else -> appErrorMessage(firstFailure ?: AppError.Unknown)
+            else -> apiFailureMessage(firstFailure ?: unknownApiFailure())
         }
     }
 
     private fun resolveBulkUnsubscribeMessage(
         outcome: SharedBulkMutationOutcome,
-        firstFailure: AppError?
+        firstFailure: GeoVaultApiFailure?
     ): String {
         return when {
             outcome.failedCount == 0 ->
@@ -1274,12 +1254,12 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     outcome.succeededCount,
                     outcome.failedCount
                 )
-            else -> appErrorMessage(firstFailure ?: AppError.Unknown)
+            else -> apiFailureMessage(firstFailure ?: unknownApiFailure())
         }
     }
 
     private fun <T> runMutationAndRefresh(
-        mutation: suspend () -> RepositoryResult<T>,
+        mutation: suspend () -> T,
         onSuccess: suspend (T) -> Unit = {},
         successMessage: String? = null,
     ) {
@@ -1294,7 +1274,7 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
                     )
                 }
                 is TrackersGroupsMutationResult.Failure -> {
-                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = appErrorMessage(result.error)) }
+                    _uiState.update { it.copy(isLoading = false, isPullRefreshing = false, userMessage = apiFailureMessage(result.error)) }
                 }
             }
         }
@@ -1306,24 +1286,19 @@ class TrackersGroupsViewModel(application: Application) : AndroidViewModel(appli
             .take(40)
             .ifEmpty { "track" }
 
-    private fun appErrorMessage(error: AppError): String {
-        val ctx = getApplication<Application>()
-        return when (error) {
-            AppError.MissingServerUrl -> ctx.getString(R.string.trackers_error_missing_server)
-            AppError.Network -> ctx.getString(R.string.trackers_error_network)
-            AppError.Unauthorized -> ctx.getString(R.string.trackers_error_unauthorized)
-            AppError.NotFound -> ctx.getString(R.string.trackers_error_not_found)
-            is AppError.Server -> ctx.getString(R.string.trackers_error_server, error.code)
-            is AppError.Validation -> error.message?.takeIf { it.isNotBlank() }
-                ?: ctx.getString(R.string.trackers_error_validation)
-            AppError.Unknown -> ctx.getString(R.string.trackers_error_unknown)
-        }
-    }
+    private fun apiFailureMessage(failure: GeoVaultApiFailure): String =
+        TrackerApiFailureMessages.format(getApplication(), failure)
+
+    private fun networkApiFailure(): GeoVaultApiFailure =
+        GeoVaultApiFailure.fromThrowable(IOException())
+
+    private fun unknownApiFailure(): GeoVaultApiFailure =
+        GeoVaultApiFailure(httpCode = null, serverMessage = null)
 
     private data class TrackersGroupsLoadSnapshot(
-        val trackersResult: RepositoryResult<List<com.geovault.tracker.Tracker>>,
-        val groupsResult: RepositoryResult<List<Group>>,
-        val mapVisibilityResult: RepositoryResult<com.geovault.tracker.MapVisibilityResponse>,
+        val trackers: Result<List<Tracker>>,
+        val groups: Result<List<Group>>,
+        val mapVisibility: Result<MapVisibilityResponse>,
         val errorMessage: String?,
     )
 }

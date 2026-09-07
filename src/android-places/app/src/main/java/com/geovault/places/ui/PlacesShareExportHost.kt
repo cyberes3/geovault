@@ -1,25 +1,22 @@
 package com.geovault.places.ui
 
-import android.net.Uri
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.geovault.common.files.GeoVaultOutgoingShare
+import com.geovault.common.files.GeoVaultExportFileNames
+import com.geovault.common.files.GeoVaultFileExport
+import com.geovault.common.ui.GeoVaultAppSnackbarLayer
 import com.geovault.common.ui.components.GeoVaultActionSheetDialog
 import com.geovault.common.ui.components.GeoVaultActionSheetOption
 import com.geovault.common.ui.components.GeoVaultMultiSelectDialog
-import com.geovault.common.ui.files.ExportedFileToast
+import com.geovault.common.ui.files.GeoVaultSafExportRequest
+import com.geovault.common.ui.files.rememberGeoVaultSafDocumentExportLauncher
+import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.places.data.PlacesStore
 import com.geovault.places.export.PlacesKmzExporter
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 private const val KMZ_MIME_TYPE = "application/vnd.google-earth.kmz"
 
@@ -38,29 +35,11 @@ fun PlacesShareExportHost(
     placesStore: PlacesStore,
 ) {
     val context = LocalContext.current
+    val fileExport = remember(context) { GeoVaultFileExport(context) }
     var pendingKmzBytes by remember { mutableStateOf<ByteArray?>(null) }
     var showActionSheet by remember { mutableStateOf(false) }
-
-    val saveDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(KMZ_MIME_TYPE)
-    ) { uri: Uri? ->
-        val bytes = pendingKmzBytes
-        pendingKmzBytes = null
-        if (uri == null || bytes == null) return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                ?: error("Could not open destination for writing")
-        }.onSuccess {
-            ExportedFileToast.show(
-                context = context,
-                destinationUri = uri,
-                fallbackBaseName = exportFileBaseName(),
-                extensionWithoutDot = "kmz",
-            )
-        }.onFailure {
-            Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
-        }
-    }
+    var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    val launchSaveDocument = rememberGeoVaultSafDocumentExportLauncher(KMZ_MIME_TYPE)
 
     if (visible) {
         val features = remember(visible) { placesStore.getDisplayFeatures() }
@@ -76,7 +55,7 @@ fun PlacesShareExportHost(
             onConfirm = { selected ->
                 onDismissRequest()
                 if (selected.isEmpty()) {
-                    Toast.makeText(context, "No points selected", Toast.LENGTH_SHORT).show()
+                    snackbarMessage = "No points selected"
                 } else {
                     pendingKmzBytes = PlacesKmzExporter.buildKmzBytes(features.filter { it in selected })
                     showActionSheet = true
@@ -87,6 +66,7 @@ fun PlacesShareExportHost(
     }
 
     if (showActionSheet) {
+        val baseName = GeoVaultExportFileNames.timestamped("places_export")
         GeoVaultActionSheetDialog(
             title = "Share places",
             options = listOf(
@@ -97,10 +77,9 @@ fun PlacesShareExportHost(
                         val bytes = pendingKmzBytes
                         pendingKmzBytes = null
                         if (bytes != null) {
-                            GeoVaultOutgoingShare.shareBytes(
-                                context = context,
+                            fileExport.shareBytes(
                                 bytes = bytes,
-                                fileName = "${exportFileBaseName()}.kmz",
+                                fileName = "$baseName.kmz",
                                 mimeType = KMZ_MIME_TYPE,
                                 chooserTitle = "Share places",
                             )
@@ -111,7 +90,18 @@ fun PlacesShareExportHost(
                     label = "Save to device",
                     onClick = {
                         showActionSheet = false
-                        saveDocumentLauncher.launch("${exportFileBaseName()}.kmz")
+                        val bytes = pendingKmzBytes
+                        pendingKmzBytes = null
+                        if (bytes != null) {
+                            launchSaveDocument(
+                                GeoVaultSafExportRequest(
+                                    bytes = bytes,
+                                    suggestedFileName = "$baseName.kmz",
+                                    fallbackBaseName = baseName,
+                                    extensionWithoutDot = "kmz",
+                                )
+                            )
+                        }
                     },
                 ),
             ),
@@ -121,7 +111,13 @@ fun PlacesShareExportHost(
             },
         )
     }
-}
 
-private fun exportFileBaseName(): String =
-    "places_export_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}"
+    snackbarMessage?.let { message ->
+        GeoVaultAppSnackbarLayer(
+            snackbar = GeoVaultSnackbarModel(id = message, message = message),
+            onDismissSnackbar = { snackbarMessage = null },
+            update = null,
+            onDismissUpdate = {},
+        )
+    }
+}

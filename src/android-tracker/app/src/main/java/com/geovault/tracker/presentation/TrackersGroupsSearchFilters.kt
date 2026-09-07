@@ -13,7 +13,7 @@ fun filterVisibleOwnerTrackersForSearch(
                 (tracker.settings?.get("hidden") as? Boolean) != true
         }
         .filter { tracker ->
-            matchesTrackerGroupSearch(query, tracker.name, tracker.owner_email)
+            matchesTrackerSearch(query, tracker.name, tracker.owner_email)
         }
 }
 
@@ -26,11 +26,11 @@ fun filterVisibleOwnerGroupsForSearch(
             group.isOwner() && group.hidden != true
         }
         .filter { group ->
-            matchesTrackerGroupSearch(query, group.name, group.owner_email)
+            matchesTrackerSearch(query, group.name, group.owner_email)
         }
 }
 
-private fun matchesTrackerGroupSearch(query: String, vararg parts: String?): Boolean {
+fun matchesTrackerSearch(query: String, vararg parts: String?): Boolean {
     val normalizedQuery = query.trim().lowercase()
     if (normalizedQuery.isEmpty()) return true
     return parts.any { part ->

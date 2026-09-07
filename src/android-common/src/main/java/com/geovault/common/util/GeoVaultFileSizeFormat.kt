@@ -5,6 +5,11 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 object GeoVaultFileSizeFormat {
+    fun humanBytesOrUnknown(bytes: Long, unknownLabel: String = "Size unknown"): String {
+        if (bytes <= 0L) return unknownLabel
+        return humanBytes(bytes)
+    }
+
     /** Compact human-readable size (e.g. `1.2 MB`, `512 B`) using SI-style 1024 steps. */
     fun humanBytes(bytes: Long): String {
         val n = bytes.coerceAtLeast(0L)

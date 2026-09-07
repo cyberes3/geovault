@@ -1,44 +1,48 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.AppError
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityResponse
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class HiddenMapItemsCoordinatorTest {
 
     @Test
     fun loadSnapshot_failsWhenMapVisibilityFails() = runBlocking {
-        val result = HiddenMapItemsCoordinator.loadSnapshot(
-            forceRefresh = true,
-            loadMapVisibility = { RepositoryResult.Failure(AppError.Network) },
-            loadTrackers = { RepositoryResult.Success(emptyList()) },
-            loadGroups = { RepositoryResult.Success(emptyList()) }
-        )
-
-        assertEquals(RepositoryResult.Failure(AppError.Network), result)
+        val network = GeoVaultApiFailure(httpCode = null, serverMessage = "network")
+        try {
+            HiddenMapItemsCoordinator.loadSnapshot(
+                forceRefresh = true,
+                loadMapVisibility = { throw network },
+                loadTrackers = { emptyList() },
+                loadGroups = { emptyList() }
+            )
+            fail("expected GeoVaultApiFailure")
+        } catch (e: GeoVaultApiFailure) {
+            assertEquals(network, e)
+        }
     }
 
     @Test
     fun loadSnapshot_returnsWarningWhenTrackersOrGroupsFail() = runBlocking {
-        val result = HiddenMapItemsCoordinator.loadSnapshot(
+        val unauthorized = GeoVaultApiFailure(httpCode = 401, serverMessage = "unauthorized")
+        val snapshot = HiddenMapItemsCoordinator.loadSnapshot(
             forceRefresh = false,
             loadMapVisibility = {
-                RepositoryResult.Success(MapVisibilityResponse(hidden_track_ids = listOf("t1")))
+                MapVisibilityResponse(hidden_track_ids = listOf("t1"))
             },
-            loadTrackers = { RepositoryResult.Failure(AppError.Unauthorized) },
-            loadGroups = { RepositoryResult.Success(emptyList()) }
+            loadTrackers = { throw unauthorized },
+            loadGroups = { emptyList() }
         )
 
-        val success = result as RepositoryResult.Success
-        assertEquals(AppError.Unauthorized, success.data.warning)
-        assertEquals(emptyList<Tracker>(), success.data.trackers)
-        assertEquals(emptyList<Group>(), success.data.groups)
+        assertEquals(unauthorized, snapshot.warning)
+        assertEquals(emptyList<Tracker>(), snapshot.trackers)
+        assertEquals(emptyList<Group>(), snapshot.groups)
     }
 
     @Test

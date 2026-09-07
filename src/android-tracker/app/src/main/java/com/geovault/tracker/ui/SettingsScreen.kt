@@ -9,21 +9,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
-import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -44,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.geovault.common.ui.components.GeoVaultAccountSettingsSection
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
+import com.geovault.common.ui.components.GeoVaultEmptyState
+import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultSubViewScaffold
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -54,6 +49,7 @@ import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
+import com.geovault.common.ui.theme.geoVaultListCardChrome
 import com.geovault.common.auth.GeoVaultAccountUiState
 import com.geovault.tracker.R
 import com.geovault.tracker.presentation.HiddenTrackerItem
@@ -263,11 +259,15 @@ fun SettingsScreen(
             style = MaterialTheme.typography.subtitle2,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        SettingsNumericInput(
+        GeoVaultInput(
             value = lowAccuracyTimeoutText,
             onValueChange = { lowAccuracyTimeoutText = it },
             enabled = trackerSettings.lowAccuracyFallbackEnabled,
-            onDone = { commitLowAccuracyTimeout() },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { commitLowAccuracyTimeout() }),
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged {
@@ -316,42 +316,6 @@ fun SettingsScreen(
         }
     }
 
-}
-
-@Composable
-private fun SettingsNumericInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    enabled: Boolean,
-    onDone: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val fieldBackground = MaterialTheme.colors.surface
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier,
-        enabled = enabled,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Number,
-            imeAction = ImeAction.Done,
-        ),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-        colors = TextFieldDefaults.outlinedTextFieldColors(
-            backgroundColor = fieldBackground,
-            focusedBorderColor = GeoVaultColorTokens.MainBlue,
-            unfocusedBorderColor = GeoVaultColorTokens.MainBlue,
-            focusedLabelColor = GeoVaultColorTokens.MainBlue,
-            unfocusedLabelColor = GeoVaultColorTokens.MainBlue,
-            disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
-            disabledBorderColor = GeoVaultColorTokens.MainBlue,
-            disabledLabelColor = GeoVaultColorTokens.MainBlue.copy(alpha = 0.6f),
-            disabledPlaceholderColor = geoVaultContentSecondaryColor().copy(alpha = 0.6f),
-            disabledTrailingIconColor = Color.Unspecified,
-            disabledLeadingIconColor = Color.Unspecified,
-        ),
-    )
 }
 
 @Composable
@@ -411,11 +375,9 @@ private fun HiddenTrackersSubView(
                     .padding(20.dp),
             ) {
                 if (items.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.hidden_trackers_empty),
-                        color = geoVaultContentSecondaryColor(),
-                        style = MaterialTheme.typography.body2,
-                        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+                    GeoVaultEmptyState(
+                        message = stringResource(R.string.hidden_trackers_empty),
+                        fillMaxSize = false,
                     )
                 } else {
                     val trackers = items.filter { it.type == HiddenTrackerItemType.TRACKER }
@@ -478,16 +440,10 @@ private fun HiddenTrackerRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
-            .clip(rowShape)
-            .clickable(enabled = !isLoading) { onUnhideItem(item) }
-            .background(
-                color = MaterialTheme.colors.surface,
+            .geoVaultListCardChrome(
                 shape = rowShape,
-            )
-            .border(
-                width = 1.dp,
-                color = GeoVaultColorTokens.MainBlue,
-                shape = rowShape,
+                onClick = { onUnhideItem(item) },
+                enabled = !isLoading,
             )
             .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

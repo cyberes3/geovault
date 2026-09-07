@@ -29,22 +29,6 @@ class PlacesOfflineBehaviorPolicyTest {
     }
 
     @Test
-    fun deleteFailureMessage_matchesOfflineAndServerErrors() {
-        assertEquals(
-            PlacesOfflineBehaviorPolicy.DELETE_SERVER_ERROR_MESSAGE,
-            PlacesOfflineBehaviorPolicy.deleteFailureMessage("Failed to delete place: 500")
-        )
-        assertEquals(
-            PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE,
-            PlacesOfflineBehaviorPolicy.deleteFailureMessage("Unable to resolve host")
-        )
-        assertEquals(
-            PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE,
-            PlacesOfflineBehaviorPolicy.deleteFailureMessage(null)
-        )
-    }
-
-    @Test
     fun offlineRemovalMessage_matchesRevertAndDiscardCopy() {
         assertEquals(
             PlacesOfflineBehaviorPolicy.REVERTED_CHANGES_MESSAGE,

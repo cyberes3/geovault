@@ -6,6 +6,7 @@ import com.geovault.tracker.BinaryPayloadBuilder
 import com.geovault.tracker.db.LocationDao
 import com.geovault.tracker.db.QueuedLocation
 import com.geovault.common.net.GeoVaultConnectivity
+import com.geovault.common.net.GeoVaultServerUrl
 import com.geovault.tracker.location.SyncFailureClass
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -70,6 +71,7 @@ data class QueueUploadResult(
 
 internal object QueueUploadOutcomePolicy {
     fun httpFailureClass(code: Int): SyncFailureClass {
+        if (code == 401 || code == 403) return SyncFailureClass.TRANSIENT
         if (code == 408 || code == 429) return SyncFailureClass.TRANSIENT
         return if (code in 400..499) SyncFailureClass.PERMANENT else SyncFailureClass.TRANSIENT
     }
@@ -237,8 +239,9 @@ class QueueUploadEngine(
             }
             val trackerUuid = runCatching { UUID.fromString(trackerId) }.getOrNull()
                 ?: return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.INVALID_TRACKER)
-            val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-            val ingressUrl = "${baseUrl}api/extensions/live-track/app-ingress/"
+            val ingressUrl = GeoVaultServerUrl.parse(serverUrl)
+                ?.resolve("/api/extensions/live-track/app-ingress/")
+                ?: return@withContext QueueUploadOutcomePolicy.skipped(QueueUploadSkipReason.MISSING_SERVER_URL)
             var batchesAttempted = 0
             var batchesSent = 0
             var rowsDeleted = 0

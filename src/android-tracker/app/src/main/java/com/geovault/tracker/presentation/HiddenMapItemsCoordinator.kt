@@ -1,10 +1,10 @@
 package com.geovault.tracker.presentation
 
-import com.geovault.tracker.AppError
+import com.geovault.common.coroutines.runSuspendCatching
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.tracker.Group
 import com.geovault.tracker.MapVisibilityRequest
 import com.geovault.tracker.MapVisibilityResponse
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.Tracker
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -13,38 +13,35 @@ data class HiddenMapItemsSnapshot(
     val mapVisibility: MapVisibilityResponse,
     val trackers: List<Tracker>,
     val groups: List<Group>,
-    val warning: AppError? = null,
+    val warning: GeoVaultApiFailure? = null,
 )
 
 object HiddenMapItemsCoordinator {
     suspend fun loadSnapshot(
         forceRefresh: Boolean,
-        loadMapVisibility: suspend (Boolean) -> RepositoryResult<MapVisibilityResponse>,
-        loadTrackers: suspend (Boolean) -> RepositoryResult<List<Tracker>>,
-        loadGroups: suspend (Boolean) -> RepositoryResult<List<Group>>,
-    ): RepositoryResult<HiddenMapItemsSnapshot> {
-        val (visibilityResult, trackersResult, groupsResult) = coroutineScope {
+        loadMapVisibility: suspend (Boolean) -> MapVisibilityResponse,
+        loadTrackers: suspend (Boolean) -> List<Tracker>,
+        loadGroups: suspend (Boolean) -> List<Group>,
+    ): HiddenMapItemsSnapshot {
+        val (mapVisibility, trackersResult, groupsResult) = coroutineScope {
             val visibilityDeferred = async { loadMapVisibility(forceRefresh) }
-            val trackersDeferred = async { loadTrackers(forceRefresh) }
-            val groupsDeferred = async { loadGroups(forceRefresh) }
+            val trackersDeferred = async { runSuspendCatching { loadTrackers(forceRefresh) } }
+            val groupsDeferred = async { runSuspendCatching { loadGroups(forceRefresh) } }
             Triple(
                 visibilityDeferred.await(),
                 trackersDeferred.await(),
                 groupsDeferred.await(),
             )
         }
-        val mapVisibility = when (visibilityResult) {
-            is RepositoryResult.Success -> visibilityResult.data
-            is RepositoryResult.Failure -> return RepositoryResult.Failure(visibilityResult.error)
-        }
-        val warning = firstError(trackersResult, groupsResult)
-        return RepositoryResult.Success(
-            HiddenMapItemsSnapshot(
-                mapVisibility = mapVisibility,
-                trackers = trackersResult.successDataOrEmpty(),
-                groups = groupsResult.successDataOrEmpty(),
-                warning = warning
-            )
+        val trackersError = trackersResult.exceptionOrNull()
+        if (trackersError != null && trackersError !is GeoVaultApiFailure) throw trackersError
+        val groupsError = groupsResult.exceptionOrNull()
+        if (groupsError != null && groupsError !is GeoVaultApiFailure) throw groupsError
+        return HiddenMapItemsSnapshot(
+            mapVisibility = mapVisibility,
+            trackers = trackersResult.getOrDefault(emptyList()),
+            groups = groupsResult.getOrDefault(emptyList()),
+            warning = (trackersError as? GeoVaultApiFailure) ?: (groupsError as? GeoVaultApiFailure),
         )
     }
 
@@ -74,19 +71,5 @@ object HiddenMapItemsCoordinator {
 
     fun buildUnhideAllRequest(): MapVisibilityRequest {
         return MapVisibilityRequest(hidden_track_ids = emptyList(), hidden_group_ids = emptyList())
-    }
-
-    private fun firstError(vararg results: RepositoryResult<*>): AppError? {
-        for (result in results) {
-            if (result is RepositoryResult.Failure) return result.error
-        }
-        return null
-    }
-
-    private fun <T> RepositoryResult<List<T>>.successDataOrEmpty(): List<T> {
-        return when (this) {
-            is RepositoryResult.Success -> data
-            is RepositoryResult.Failure -> emptyList()
-        }
     }
 }

@@ -55,7 +55,7 @@ This document defines how we write code and evolve the tracker app going forward
 ## Repository And Data Access
 
 - Repositories expose suspend-first APIs.
-- Prefer typed result wrappers (`RepositoryResult` / domain errors) over implicit null/error callbacks.
+- Throw `GeoVaultApiFailure` on API/network failure instead of returning a result wrapper or using null/error callbacks.
 - Keep mapping between API/network and domain models explicit.
 - Do not leak Retrofit/transport details into UI classes.
 

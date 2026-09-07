@@ -46,10 +46,11 @@ fun GeoVaultEmptyState(
     icon: ImageVector? = null,
     title: String? = null,
     primaryAction: GeoVaultEmptyStateAction? = null,
+    fillMaxSize: Boolean = true,
 ) {
     Column(
         modifier = modifier
-            .fillMaxSize()
+            .then(if (fillMaxSize) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
             .padding(GeoVaultLayoutTokens.PanePadding),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,

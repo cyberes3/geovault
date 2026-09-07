@@ -1,5 +1,6 @@
 package com.geovault.places.domain
 
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.places.model.Feature
 import com.geovault.places.model.FeatureCollection
 import com.geovault.places.model.Geometry
@@ -102,7 +103,7 @@ class SyncOfflinePlacesUseCaseTest {
             cached = mutableListOf(),
         )
         val repo = FakeRepo(
-            createResult = Result.failure(IllegalStateException("Validation failed (HTTP 400)")),
+            createResult = Result.failure(GeoVaultApiFailure(httpCode = 400, serverMessage = "Validation failed")),
         )
         val useCase = SyncOfflinePlacesUseCase(
             repository = repo,
@@ -126,7 +127,7 @@ class SyncOfflinePlacesUseCaseTest {
             cached = mutableListOf(),
         )
         val repo = FakeRepo(
-            updateResult = Result.failure(IllegalStateException("Validation failed (HTTP 400)")),
+            updateResult = Result.failure(GeoVaultApiFailure(httpCode = 400, serverMessage = "Validation failed")),
         )
         val useCase = SyncOfflinePlacesUseCase(
             repository = repo,
@@ -156,7 +157,7 @@ class SyncOfflinePlacesUseCaseTest {
             createResults = mutableListOf(Result.success(recreated)),
             fetchPlaceResults = mutableListOf(),
             updateResults = mutableListOf(
-                Result.failure(IllegalStateException("Resource not found (HTTP 404)")),
+                Result.failure(GeoVaultApiFailure(httpCode = 404, serverMessage = "Resource not found")),
             ),
         )
         val useCase = SyncOfflinePlacesUseCase(

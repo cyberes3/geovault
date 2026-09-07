@@ -9,7 +9,6 @@ import com.geovault.common.bootstrap.GeoVaultAppBootstrap
 import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.maps.bootstrap.GeoVaultMapsBootstrap
-import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.tracker.BuildConfig
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.logging.GeoVaultPointRecordingLog
@@ -55,7 +54,6 @@ class TrackerApplication : Application(), GeoVaultAuthSession.AuthFailureListene
                 phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
             ) { hookContext ->
                 SelectedTrackerManager.clearSelectedTrackerAndInvalidateCaches(hookContext)
-                GeoVaultMainMapControllerStore.releaseKey(TRACKER_MAIN_MAP_KEY)
             }
             .build()
         bootstrap.boot(this)

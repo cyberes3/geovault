@@ -1,7 +1,5 @@
 package com.geovault.tracker.ui
 
-import android.content.Context
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +20,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Card
 import androidx.compose.material.Icon
 import com.geovault.common.ui.components.GeoVaultIconButton
 import androidx.compose.material.MaterialTheme
@@ -41,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.geovault.common.sort.NaturalSort
 import java.util.Locale
 import com.geovault.common.ui.components.GeoVaultAddRemoveRowFlags
+import com.geovault.common.ui.components.GeoVaultEmptyState
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPullRefreshLoadingContainer
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -62,6 +59,7 @@ import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultCardBorderColor
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
+import com.geovault.common.ui.theme.geoVaultListCardChrome
 import com.geovault.tracker.R
 import com.geovault.tracker.Tracker
 import com.geovault.tracker.presentation.GroupReshareAddabilityPolicy
@@ -154,7 +152,6 @@ private fun PickerTabContent(
     dismissOnHostInactive: Boolean,
     doneButtonLabel: String,
 ) {
-    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     val pagerState = rememberPagerState(
@@ -294,18 +291,10 @@ private fun PickerTabContent(
             when (tabs.getOrNull(page)?.value ?: PickerPhase.LIST) {
                 PickerPhase.LIST -> {
                     if (memberItems.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.groups_tracker_list_empty),
-                                style = MaterialTheme.typography.body2,
-                                color = geoVaultContentSecondaryColor(),
-                            )
-                        }
+                        GeoVaultEmptyState(
+                            message = stringResource(R.string.groups_tracker_list_empty),
+                            fillMaxSize = true,
+                        )
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
@@ -320,8 +309,6 @@ private fun PickerTabContent(
                             items(memberItems, key = { it.trackerId }) { item ->
                                 MemberTrackerCard(
                                     item = item,
-                                    context = context,
-                                    borderColor = cardBorderColor,
                                     onRemove = { onRemoveTracker(item.trackerId) },
                                 )
                             }
@@ -357,18 +344,10 @@ private fun PickerTabContent(
                             )
 
                             if (filteredItems.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.groups_tracker_picker_empty),
-                                        style = MaterialTheme.typography.body2,
-                                        color = geoVaultContentSecondaryColor(),
-                                    )
-                                }
+                                GeoVaultEmptyState(
+                                    message = stringResource(R.string.groups_tracker_picker_empty),
+                                    fillMaxSize = true,
+                                )
                             } else {
                                 LazyColumn(
                                     modifier = Modifier.weight(1f),
@@ -428,28 +407,20 @@ private fun PickerTabContent(
 @Composable
 private fun MemberTrackerCard(
     item: TrackerRowItem,
-    context: Context,
-    borderColor: Color,
     onRemove: () -> Unit,
 ) {
     val chevronTint = remember(item.tracker?.color) {
         TrackerChevronStylePolicy.tintForTrackerColorHex(item.tracker?.color)
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        elevation = 0.dp,
-        backgroundColor = MaterialTheme.colors.surface,
-        border = BorderStroke(1.dp, borderColor),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .geoVaultListCardChrome(shape = RoundedCornerShape(8.dp))
+            .heightIn(min = 48.dp)
+            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
             TrackerChevronIcon(
                 tint = chevronTint,
                 modifier = Modifier.size(TrackerChevronStylePolicy.TrackerRowChevronSize),
@@ -484,7 +455,6 @@ private fun MemberTrackerCard(
                     modifier = Modifier.size(20.dp),
                 )
             }
-        }
     }
 }
 

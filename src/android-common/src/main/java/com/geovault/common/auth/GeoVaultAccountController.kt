@@ -16,7 +16,6 @@ data class GeoVaultAccountUiState(
     val userEmail: String? = null,
     val loggedInText: String = "",
     val isConnecting: Boolean = false,
-    val infoMessage: String? = null,
     val oauthUrl: String? = null,
 ) {
     val displayEmail: String
@@ -33,9 +32,6 @@ class GeoVaultAccountController(
     val state: StateFlow<GeoVaultAccountUiState> = _state.asStateFlow()
 
     fun initialize() {
-        GeoVaultAuthConnectErrors.setOnClearListener {
-            _state.update { it.copy(infoMessage = null) }
-        }
         _state.update { it.copy(isLoggedIn = AuthStateCache.isAuthenticated || it.isLoggedIn) }
         refreshAuthState()
     }
@@ -77,13 +73,11 @@ class GeoVaultAccountController(
     }
 
     private fun clearConnectError() {
-        GeoVaultAuthConnectErrors.clear(notifyListener = false)
-        _state.update { it.copy(infoMessage = null) }
+        GeoVaultAuthConnectErrors.clear()
     }
 
     private fun publishConnectError(message: String) {
         GeoVaultAuthConnectErrors.show(message)
-        _state.update { it.copy(infoMessage = message) }
     }
 
     fun disconnect(mainActivityClass: Class<*>) {

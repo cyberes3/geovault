@@ -14,7 +14,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -24,11 +23,11 @@ import com.geovault.common.auth.GeoVaultAuthExtras
 import com.geovault.common.files.GeoVaultFileRef
 import com.geovault.common.files.GeoVaultUploadFileTypes
 import com.geovault.common.ui.GeoVaultAppSnackbarLayer
-import com.geovault.common.ui.GeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultShellOverlayScaffold
+import com.geovault.common.ui.auth.GeoVaultAuthHost
 import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
-import com.geovault.common.ui.system.GeoVaultSystemBars
+import com.geovault.common.ui.rememberGeoVaultAuthShellState
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.uploader.di.UploaderAppServices
 import com.geovault.uploader.navigation.UploadNavigation
@@ -43,11 +42,10 @@ class MainActivity : ComponentActivity() {
     private val accountViewModel: GeoVaultAccountViewModel by viewModels {
         GeoVaultAccountViewModel.factory(UploaderAppServices.from(application).initialAuthController())
     }
-    private val services: UploaderAppServices by lazy { UploaderAppServices.from(application) }
     private lateinit var chooseFilesLauncher: ActivityResultLauncher<Array<String>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        com.geovault.common.ui.splash.GeoVaultSplashScreen.install(
+        GeoVaultAuthHost.installSplash(
             this,
             (application as UploaderApplication).bootstrap.isReady,
         )
@@ -55,8 +53,7 @@ class MainActivity : ComponentActivity() {
         chooseFilesLauncher = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             routeUrisToUpload(uris.orEmpty(), finishAfterStart = false)
         }
-        GeoVaultSystemBars.applyAppChrome(activity = this)
-        accountViewModel.initialize()
+        GeoVaultAuthHost.onCreate(this, accountViewModel)
         viewModel.initialize(intent)
         settingsViewModel.initialize()
         setContent {
@@ -64,43 +61,24 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
                 val accountState by accountViewModel.state.collectAsState()
-                LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
+                LaunchedEffect(accountState.isLoggedIn) {
                     viewModel.onAccountStateChanged(accountState)
-                }
-                LaunchedEffect(Unit) {
-                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-                        accountViewModel.showExternalError(error)
-                        intent.removeExtra(EXTRA_OAUTH_ERROR)
-                    }
                 }
                 var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
                 val openSettingsOverlay: () -> Unit = { isSettingsOpen = true }
-                val mergedState = state.copy(
-                    isAuthenticated = accountState.isLoggedIn,
-                    serverUrl = accountState.serverUrl,
-                    isConnecting = accountState.isConnecting,
+                val auth = rememberGeoVaultAuthShellState(
+                    accountState = accountState,
+                    onServerUrlChanged = accountViewModel::onServerUrlChanged,
+                    onConnect = accountViewModel::connect,
+                    onOpenSettings = openSettingsOverlay,
                 )
-                val auth = remember(
-                    mergedState.isAuthenticated,
-                    mergedState.serverUrl,
-                    mergedState.isConnecting,
-                ) {
-                    GeoVaultAuthShellState(
-                        isAuthenticated = mergedState.isAuthenticated,
-                        serverUrl = mergedState.serverUrl,
-                        onServerUrlChanged = accountViewModel::onServerUrlChanged,
-                        onConnect = accountViewModel::connect,
-                        onOpenSettings = openSettingsOverlay,
-                        isConnecting = mergedState.isConnecting,
-                    )
-                }
                 GeoVaultOAuthBrowserEffect(
                     oauthUrl = accountState.oauthUrl,
                     onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainScreen(
-                        state = mergedState,
+                        state = state,
                         auth = auth,
                         onChooseFileClick = {
                             chooseFilesLauncher.launch(GeoVaultUploadFileTypes.supportedMimeTypes)
@@ -127,9 +105,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     GeoVaultAppSnackbarLayer(
-                        snackbar = mergedState.importantSnackbar,
+                        snackbar = state.importantSnackbar,
                         onDismissSnackbar = viewModel::clearImportantMessage,
-                        update = mergedState.updateAvailable,
+                        update = state.updateAvailable,
                         onDismissUpdate = viewModel::clearUpdateAvailable,
                     )
                 }
@@ -139,14 +117,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        accountViewModel.onHostResumed()
+        GeoVaultAuthHost.onResume(accountViewModel)
         viewModel.onHostResumed()
         settingsViewModel.onHostResumed()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        GeoVaultAuthHost.onNewIntent(intent, accountViewModel)
+    }
+
     override fun onStop() {
         super.onStop()
-        accountViewModel.onOauthUrlConsumed()
+        GeoVaultAuthHost.onStop(accountViewModel)
     }
 
     companion object {
@@ -154,13 +138,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun routeUrisToUpload(uris: List<Uri>, finishAfterStart: Boolean) {
-        val result = services.fileIngest.ingest(uris, GeoVaultFileRef.Source.Picker)
-        if (result.accepted.isEmpty() && result.rejectedFileNames.isEmpty()) return
+        if (uris.isEmpty()) return
         startActivity(
             UploadNavigation.createIntent(
                 context = this,
-                supportedUris = result.accepted.map { it.uri },
-                rejectedFileNames = result.rejectedFileNames,
+                supportedUris = uris,
+                source = GeoVaultFileRef.Source.Picker,
             )
         )
         if (finishAfterStart) finish()

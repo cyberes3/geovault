@@ -28,7 +28,7 @@ class GeoVaultAccountControllerTest {
 
         assertTrue(controller.state.value.isConnecting)
         assertEquals("https://example.com/oauth", controller.state.value.oauthUrl)
-        assertNull(controller.state.value.infoMessage)
+        assertNull(GeoVaultAuthConnectErrors.message.value)
     }
 
     @Test
@@ -70,7 +70,7 @@ class GeoVaultAccountControllerTest {
         delay(10)
 
         assertFalse(controller.state.value.isConnecting)
-        assertEquals("Server URL is required.", controller.state.value.infoMessage)
+        assertEquals("Server URL is required.", GeoVaultAuthConnectErrors.message.value)
     }
 
     @Test
@@ -85,10 +85,11 @@ class GeoVaultAccountControllerTest {
         delay(10)
 
         assertFalse(controller.state.value.isConnecting)
-        assertEquals("Could not reach server.", controller.state.value.infoMessage)
+        assertEquals("Could not reach server.", GeoVaultAuthConnectErrors.message.value)
     }
 
     private fun CoroutineScope.newController(services: FakeAuthServices): GeoVaultAccountController {
+        GeoVaultAuthConnectErrors.clear(notifyListener = false)
         return GeoVaultAccountController(
             scope = this,
             appContext = ApplicationProvider.getApplicationContext(),

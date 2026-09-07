@@ -466,23 +466,22 @@ class LiveTrackStreamingService : Service() {
             )
             return
         }
-        val serverUrl = GeoVaultAuthSession.get().getServerUrl().trimEnd('/')
-        if (serverUrl.isBlank()) {
+        val parsed = GeoVaultAuthSession.get().serverUrl()
+        if (parsed == null) {
             val reason = getString(R.string.error_server_unreachable)
             emitStreamingError(reason)
             applyLifecycleEvent(StreamingLifecycleEvent.PermanentFailure, currentTrackerIdsSnapshot(), reason)
             terminateStreaming()
             return
         }
-        val wsScheme = when {
-            serverUrl.startsWith("https://") -> "wss"
-            serverUrl.startsWith("http://") -> "ws"
-            else -> "wss"
+        val httpUrl = parsed.resolve("/ws/extensions/live-track/trackers-live/")
+        val wsUrl = when {
+            httpUrl.startsWith("https://") -> "wss://" + httpUrl.removePrefix("https://")
+            httpUrl.startsWith("http://") -> "ws://" + httpUrl.removePrefix("http://")
+            else -> httpUrl
         }
-        val base = serverUrl.removePrefix("https://").removePrefix("http://")
         val request = Request.Builder()
-            .url("$wsScheme://$base/ws/extensions/live-track/trackers-live/")
-            .addHeader("Authorization", "Bearer $token")
+            .url(wsUrl)
             .build()
         val trackerIdsSnapshot = currentTrackerIdsSnapshot()
         val listener = TrackersWebSocketListener(

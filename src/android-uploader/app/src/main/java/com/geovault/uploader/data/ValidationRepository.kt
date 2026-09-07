@@ -1,14 +1,12 @@
 package com.geovault.uploader.data
 
 import android.content.Context
-import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.auth.AuthSessionService
 import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.ServerConfigService
 import com.geovault.common.messages.GeoVaultUploadMessageFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Request
 
 enum class ValidationOutcome {
     Loading,
@@ -40,42 +38,22 @@ class ValidationRepository(
                 message = "Please configure settings first"
             )
         }
-        val client = GeoVaultHttp.authenticatedClient().newBuilder().retryOnConnectionFailure(true).build()
-        val request = Request.Builder().url("$serverUrl/api/user/status/").build()
-        return@withContext try {
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    ValidationResult(
-                        outcome = ValidationOutcome.Success,
-                        title = "Connected",
-                        message = GeoVaultUploadMessageFormatter.validationConnected()
-                    )
-                } else if (response.code == 401) {
-                    authSessionService.handleAuthFailure()
-                    ValidationResult(
-                        outcome = ValidationOutcome.Error,
-                        title = "Validation Failed",
-                        message = GeoVaultUploadMessageFormatter.validationUnauthorized()
-                    )
-                } else if (response.code == 404) {
-                    ValidationResult(
-                        outcome = ValidationOutcome.Error,
-                        title = "Validation Failed",
-                        message = GeoVaultUploadMessageFormatter.validationNotFound()
-                    )
-                } else {
-                    ValidationResult(
-                        outcome = ValidationOutcome.Error,
-                        title = "Validation Failed",
-                        message = GeoVaultUploadMessageFormatter.validationRequestFailed(response.code)
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            ValidationResult(
+        val status = GeoVaultAuthSession.get().fetchUserStatusWithResult()
+        return@withContext when {
+            status.email != null -> ValidationResult(
+                outcome = ValidationOutcome.Success,
+                title = "Connected",
+                message = GeoVaultUploadMessageFormatter.validationConnected(),
+            )
+            status.isUserStatusEndpointReachable -> ValidationResult(
                 outcome = ValidationOutcome.Error,
                 title = "Validation Failed",
-                message = GeoVaultUploadMessageFormatter.validationConnectionFailed(e.message ?: "Unknown error")
+                message = GeoVaultUploadMessageFormatter.validationUnauthorized(),
+            )
+            else -> ValidationResult(
+                outcome = ValidationOutcome.Error,
+                title = "Validation Failed",
+                message = GeoVaultUploadMessageFormatter.validationConnectionFailed("Could not reach server"),
             )
         }
     }

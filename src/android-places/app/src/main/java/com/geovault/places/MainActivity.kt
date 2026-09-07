@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.ui.auth.GeoVaultAuthHost
 import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.maps.core.GeoVaultMainMapPreloadHost
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
@@ -33,12 +34,12 @@ import com.geovault.common.maps.core.resolveGeoVaultMainMapPreloadCameraTarget
 import com.geovault.common.auth.GeoVaultAccountViewModel
 import com.geovault.common.ui.GeoVaultAppShell
 import com.geovault.common.ui.GeoVaultAppSnackbarLayer
-import com.geovault.common.ui.GeoVaultAuthShellState
+import com.geovault.common.ui.rememberGeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultShellOverlayScaffold
 import com.geovault.common.ui.components.GeoVaultBottomNavDestination
 import com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
-import com.geovault.common.ui.system.GeoVaultSystemBars
+import com.geovault.common.ui.components.GeoVaultAccountOnlySettingsContent
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.places.di.PlacesAppServices
 import com.geovault.places.model.Feature
@@ -50,7 +51,6 @@ import com.geovault.places.ui.MainScreen
 import com.geovault.places.ui.PlacesMapLaunchArgs
 import com.geovault.places.ui.PlacesMapScreen
 import com.geovault.places.ui.PlacesShareExportHost
-import com.geovault.places.ui.SettingsScreen
 import org.maplibre.android.geometry.LatLng
 
 class MainActivity : ComponentActivity() {
@@ -105,26 +105,19 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        com.geovault.common.ui.splash.GeoVaultSplashScreen.install(
+        GeoVaultAuthHost.installSplash(
             this,
             (application as PlacesApplication).bootstrap.isReady,
         )
         super.onCreate(savedInstanceState)
-        GeoVaultSystemBars.applyAppChrome(this)
+        GeoVaultAuthHost.onCreate(this, accountViewModel)
         clipboardCopyHelper.prewarm()
-        accountViewModel.initialize()
         viewModel.initialize()
         setContent {
             GeoVaultTheme {
                 val state by viewModel.state.collectAsState()
                 val accountState by accountViewModel.state.collectAsState()
-                val accountMainState = state.copy(
-                    isAuthenticated = accountState.isLoggedIn,
-                    serverUrl = accountState.serverUrl,
-                    isConnecting = accountState.isConnecting,
-                    oauthUrl = null,
-                )
-                LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
+                LaunchedEffect(accountState.isLoggedIn) {
                     viewModel.onAccountStateChanged(accountState)
                 }
                 val mainMap = rememberGeoVaultMainMap(PLACES_MAIN_MAP_KEY)
@@ -156,7 +149,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 val preloadPoints = buildList {
-                    accountMainState.saved.forEach { feature ->
+                    state.saved.forEach { feature ->
                         val coords = feature.geometry.coordinates
                         if (coords.size >= 2) {
                             val lat = coords[1]
@@ -166,7 +159,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    accountMainState.offlineItems.forEach { offline ->
+                    state.offlineItems.forEach { offline ->
                         val coords = offline.feature.geometry.coordinates
                         if (coords.size >= 2) {
                             val lat = coords[1]
@@ -182,12 +175,6 @@ class MainActivity : ComponentActivity() {
                     oauthUrl = accountState.oauthUrl,
                     onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
-                LaunchedEffect(Unit) {
-                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-                        accountViewModel.showExternalError(error)
-                        intent?.removeExtra(EXTRA_OAUTH_ERROR)
-                    }
-                }
                 // Root back: Map → List. Settings / share dialogs register their own handlers
                 // (or use Dialog onDismissRequest). On List, defer to the system (finish).
                 GeoVaultRegisterBackHandler(
@@ -199,24 +186,16 @@ class MainActivity : ComponentActivity() {
                     },
                 )
                 val openSettingsOverlay: () -> Unit = { isSettingsOpen = true }
-                val auth = remember(
-                    accountMainState.isAuthenticated,
-                    accountMainState.serverUrl,
-                    accountMainState.isConnecting,
-                ) {
-                    GeoVaultAuthShellState(
-                        isAuthenticated = accountMainState.isAuthenticated,
-                        serverUrl = accountMainState.serverUrl,
-                        onServerUrlChanged = accountViewModel::onServerUrlChanged,
-                        onConnect = accountViewModel::connect,
-                        onOpenSettings = openSettingsOverlay,
-                        isConnecting = accountMainState.isConnecting,
-                    )
-                }
+                val auth = rememberGeoVaultAuthShellState(
+                    accountState = accountState,
+                    onServerUrlChanged = accountViewModel::onServerUrlChanged,
+                    onConnect = accountViewModel::connect,
+                    onOpenSettings = openSettingsOverlay,
+                )
                 Box(modifier = Modifier.fillMaxSize()) {
                     GeoVaultMainMapPreloadHost(
                         mainMapKey = PLACES_MAIN_MAP_KEY,
-                        enabled = accountMainState.isAuthenticated && !hasOpenedMapTab,
+                        enabled = accountState.isLoggedIn && !hasOpenedMapTab,
                         cameraTarget = preloadTarget,
                         surfaceMapInHost = selectedTab != PlacesTab.MAP.name && !hasOpenedMapTab,
                     )
@@ -240,7 +219,7 @@ class MainActivity : ComponentActivity() {
                                     title = stringResource(R.string.nav_settings),
                                     onClose = { isSettingsOpen = false },
                                 ) { padding ->
-                                    SettingsScreen(
+                                    GeoVaultAccountOnlySettingsContent(
                                         accountState = accountState,
                                         onServerUrlChanged = accountViewModel::onServerUrlChanged,
                                         onConnect = accountViewModel::connect,
@@ -257,16 +236,16 @@ class MainActivity : ComponentActivity() {
                         },
                         snackbarLayer = {
                             GeoVaultAppSnackbarLayer(
-                                snackbar = accountMainState.snackbar,
+                                snackbar = state.snackbar,
                                 onDismissSnackbar = viewModel::clearSnackbar,
-                                update = accountMainState.updateAvailable,
+                                update = state.updateAvailable,
                                 onDismissUpdate = viewModel::clearUpdateAvailable,
                             )
                         },
                     ) { tabId, isActive ->
                         when (tabId) {
                             PlacesTab.LIST.name -> MainScreen(
-                                state = accountMainState,
+                                state = state,
                                 auth = auth,
                                 onSearchChanged = viewModel::onSearchChanged,
                                 onOpenShare = { isShareExportOpen = true },
@@ -321,13 +300,12 @@ class MainActivity : ComponentActivity() {
                                     selectedTab = PlacesTab.MAP.name
                                 },
                                 onCopyCoordinates = { text ->
-                                    if (clipboardCopyHelper.copyText(text = text, label = "Coordinates")) {
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Coordinates copied",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
+                                    clipboardCopyHelper.copyTextWithToast(
+                                        context = this@MainActivity,
+                                        text = text,
+                                        label = "Coordinates",
+                                        toastMessage = "Coordinates copied",
+                                    )
                                 },
                                 onCancelRefresh = {
                                     viewModel.cancelRefresh()
@@ -380,10 +358,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-            accountViewModel.showExternalError(error)
-            intent.removeExtra(EXTRA_OAUTH_ERROR)
-        }
+        GeoVaultAuthHost.onNewIntent(intent, accountViewModel)
     }
 
     override fun onResume() {
@@ -394,13 +369,13 @@ class MainActivity : ComponentActivity() {
             intent?.removeExtra(EXTRA_SHOW_EXPORT_SAVED_MESSAGE)
             Toast.makeText(this, "Offline data saved to Files -> Downloads", Toast.LENGTH_SHORT).show()
         }
-        accountViewModel.onHostResumed()
+        GeoVaultAuthHost.onResume(accountViewModel)
         viewModel.onHostResumed()
     }
 
     override fun onStop() {
         super.onStop()
-        accountViewModel.onOauthUrlConsumed()
+        GeoVaultAuthHost.onStop(accountViewModel)
     }
 
     private fun openDescriptionView(feature: Feature) {

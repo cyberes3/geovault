@@ -12,10 +12,10 @@ import androidx.core.content.ContextCompat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.geovault.common.ui.auth.GeoVaultAuthHost
 import com.geovault.common.ui.auth.GeoVaultOAuthBrowserEffect
 import com.geovault.common.auth.GeoVaultAuthExtras
 import com.geovault.tracker.di.TrackerAppServices
-import com.geovault.common.ui.system.GeoVaultSystemBars
 import com.geovault.common.ui.theme.GeoVaultTheme
 import com.geovault.tracker.presentation.MainScreenViewModel
 import com.geovault.tracker.presentation.SettingsViewModel
@@ -61,16 +61,15 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        com.geovault.common.ui.splash.GeoVaultSplashScreen.install(
+        GeoVaultAuthHost.installSplash(
             this,
             (application as TrackerApplication).bootstrap.isReady,
         )
         super.onCreate(savedInstanceState)
         handleIntentAction(intent)
         consumeOpenAllTrackersMapIntentIfPresent(intent)
-        GeoVaultSystemBars.applyAppChrome(activity = this)
+        GeoVaultAuthHost.onCreate(this, accountViewModel)
         syncRuntimeSelectedTracker()
-        accountViewModel.initialize()
         viewModel.initialize()
         settingsViewModel.initialize()
 
@@ -79,13 +78,7 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
                 val accountState by accountViewModel.state.collectAsState()
-                val accountMainState = state.copy(
-                    isAuthenticated = accountState.isLoggedIn,
-                    serverUrl = accountState.serverUrl,
-                    isConnecting = accountState.isConnecting,
-                    oauthUrl = null,
-                )
-                LaunchedEffect(accountState.isLoggedIn, accountState.serverUrl, accountState.isConnecting) {
+                LaunchedEffect(accountState.isLoggedIn) {
                     viewModel.onAccountStateChanged(accountState)
                 }
 
@@ -93,16 +86,9 @@ class MainActivity : ComponentActivity() {
                     oauthUrl = accountState.oauthUrl,
                     onConsumed = accountViewModel::onOauthUrlConsumed,
                 )
-
-                LaunchedEffect(Unit) {
-                    intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-                        accountViewModel.showExternalError(error)
-                        intent?.removeExtra(EXTRA_OAUTH_ERROR)
-                    }
-                }
                 MainScreen(
                     mainScreenViewModel = viewModel,
-                    state = accountMainState,
+                    state = state,
                     mapRecoveryRequestToken = state.mapRecoveryRequestToken,
                     onMapRecoveryRequestConsumed = viewModel::consumeMapRecoveryRequest,
                     onAuthServerUrlChanged = accountViewModel::onServerUrlChanged,
@@ -139,15 +125,12 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleIntentAction(intent)
         consumeOpenAllTrackersMapIntentIfPresent(intent)
-        intent.getStringExtra(EXTRA_OAUTH_ERROR)?.let { error ->
-            accountViewModel.showExternalError(error)
-            intent.removeExtra(EXTRA_OAUTH_ERROR)
-        }
+        GeoVaultAuthHost.onNewIntent(intent, accountViewModel)
     }
 
     override fun onResume() {
         super.onResume()
-        accountViewModel.onHostResumed()
+        GeoVaultAuthHost.onResume(accountViewModel)
         viewModel.onHostResumed()
         settingsViewModel.onHostResumed()
     }
@@ -236,6 +219,6 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(streamingErrorReceiver)
             streamingErrorReceiverRegistered = false
         }
-        accountViewModel.onOauthUrlConsumed()
+        GeoVaultAuthHost.onStop(accountViewModel)
     }
 }

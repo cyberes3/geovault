@@ -7,9 +7,9 @@ import android.hardware.SensorManager
 import com.geovault.common.logging.GeoVaultCaptureLog
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.common.util.UnitUtils
 import com.geovault.tracker.R
-import com.geovault.tracker.RepositoryResult
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.data.GroupManagementRepository
 import com.geovault.tracker.data.TrackerManagementRepository
@@ -130,21 +130,19 @@ class SettingsViewModel(
     fun refreshHiddenTrackerItems() {
         viewModelScope.launch {
             _state.update { it.copy(isHiddenTrackerItemsLoading = true) }
-            val trackers = when (val result = trackerManagementRepository.loadTrackers(forceRefresh = true)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> {
-                    GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load trackers")
-                    _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
-                    return@launch
-                }
+            val trackers = try {
+                trackerManagementRepository.loadTrackers(forceRefresh = true)
+            } catch (e: GeoVaultApiFailure) {
+                GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load trackers", e)
+                _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
+                return@launch
             }
-            val groups = when (val result = groupManagementRepository.loadGroups(forceRefresh = true)) {
-                is RepositoryResult.Success -> result.data
-                is RepositoryResult.Failure -> {
-                    GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load groups")
-                    _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
-                    return@launch
-                }
+            val groups = try {
+                groupManagementRepository.loadGroups(forceRefresh = true)
+            } catch (e: GeoVaultApiFailure) {
+                GeoVaultCaptureLog.w(TAG, "refreshHiddenTrackerItems: failed to load groups", e)
+                _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
+                return@launch
             }
             _state.update {
                 it.copy(
@@ -159,39 +157,39 @@ class SettingsViewModel(
         viewModelScope.launch {
             when (item.type) {
                 HiddenTrackerItemType.TRACKER -> {
-                    val tracker = when (val loadResult = trackerManagementRepository.loadTracker(item.id)) {
-                        is RepositoryResult.Success -> loadResult.data
-                        is RepositoryResult.Failure -> {
-                            GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load tracker ${item.id}")
-                            return@launch
-                        }
+                    val tracker = try {
+                        trackerManagementRepository.loadTracker(item.id)
+                    } catch (e: GeoVaultApiFailure) {
+                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load tracker ${item.id}", e)
+                        return@launch
                     }
-                    val result = trackerManagementRepository.updateTrackerSettings(
-                        trackerId = item.id,
-                        request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
-                            tracker = tracker,
-                            hidden = false,
+                    try {
+                        trackerManagementRepository.updateTrackerSettings(
+                            trackerId = item.id,
+                            request = TrackerSharingSettingsPolicy.buildPreservingSettingsRequest(
+                                tracker = tracker,
+                                hidden = false,
+                            )
                         )
-                    )
-                    if (result is RepositoryResult.Failure) {
-                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update tracker ${item.id}")
+                    } catch (e: GeoVaultApiFailure) {
+                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update tracker ${item.id}", e)
                         return@launch
                     }
                 }
                 HiddenTrackerItemType.GROUP -> {
-                    val group = when (val loadResult = groupManagementRepository.loadGroup(item.id)) {
-                        is RepositoryResult.Success -> loadResult.data
-                        is RepositoryResult.Failure -> {
-                            GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load group ${item.id}")
-                            return@launch
-                        }
+                    val group = try {
+                        groupManagementRepository.loadGroup(item.id)
+                    } catch (e: GeoVaultApiFailure) {
+                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to load group ${item.id}", e)
+                        return@launch
                     }
-                    val result = groupManagementRepository.patchGroup(
-                        groupId = item.id,
-                        request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
-                    )
-                    if (result is RepositoryResult.Failure) {
-                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update group ${item.id}")
+                    try {
+                        groupManagementRepository.patchGroup(
+                            groupId = item.id,
+                            request = GroupSharingSettingsPolicy.buildUnhidePatch(group)
+                        )
+                    } catch (e: GeoVaultApiFailure) {
+                        GeoVaultCaptureLog.w(TAG, "unhideTrackerItem: failed to update group ${item.id}", e)
                         return@launch
                     }
                 }
@@ -209,14 +207,12 @@ class SettingsViewModel(
     fun unhideAllTrackerItems() {
         viewModelScope.launch {
             _state.update { it.copy(isHiddenTrackerItemsLoading = true) }
-            when (val result = trackerManagementRepository.clearHiddenItems(SHOW_ALL_CLEAR_TARGETS)) {
-                is RepositoryResult.Success -> {
-                    refreshHiddenTrackerItems()
-                }
-                is RepositoryResult.Failure -> {
-                    GeoVaultCaptureLog.w(TAG, "unhideAllTrackerItems: failed to clear hidden items")
-                    _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
-                }
+            try {
+                trackerManagementRepository.clearHiddenItems(SHOW_ALL_CLEAR_TARGETS)
+                refreshHiddenTrackerItems()
+            } catch (e: GeoVaultApiFailure) {
+                GeoVaultCaptureLog.w(TAG, "unhideAllTrackerItems: failed to clear hidden items", e)
+                _state.update { it.copy(isHiddenTrackerItemsLoading = false) }
             }
         }
     }

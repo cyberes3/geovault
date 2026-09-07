@@ -44,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -69,14 +68,19 @@ import com.geovault.common.maps.core.geoVaultLatLngBoundsUnion
 import com.geovault.common.maps.core.latLngOrNull
 import com.geovault.common.maps.core.moveCameraToFitLatLngBounds
 import com.geovault.common.maps.core.geoVaultResetCameraBearingAndTilt
-import com.geovault.common.maps.location.LocationUpdates
+import com.geovault.common.maps.location.geoVaultMapHasFineOrCoarseLocation
+import com.geovault.common.maps.location.rememberGeoVaultMapLocationPermissionState
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.ui.camera.GeoVaultMapCameraInteractionEffect
 import com.geovault.common.maps.ui.lifecycle.GeoVaultMapUserLocationNavigationLifecycle
 import com.geovault.common.maps.render.GeoJsonRenderConfig
 import com.geovault.common.maps.render.GeoJsonRenderPlugin
 import com.geovault.common.maps.render.GeoVaultRenderedMapHitKind
+import com.geovault.common.maps.ui.GeoVaultMapBottomActionPanel
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
+import com.geovault.common.maps.ui.GeoVaultMapInitialFrameShield
+import com.geovault.common.maps.ui.GeoVaultMapLocationPrimeEffect
+import com.geovault.common.maps.ui.location.rememberGeoVaultMapLocationSessionDecision
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
@@ -95,13 +99,11 @@ import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.theme.GeoVaultColorTokens
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
-import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
 import com.geovault.tracker.di.TrackerAppServices
 import com.geovault.tracker.policy.ActiveButDeadTrackerPolicy
 import com.geovault.tracker.params.TrackerParamsRouteArgs
 import com.geovault.tracker.params.toTrackerParamsRouteArgs
 import com.geovault.tracker.R
-import com.geovault.tracker.location.TrackingPermissionGate
 import com.geovault.tracker.presentation.LiveActiveFitInput
 import com.geovault.tracker.presentation.TrackerMapDisplayMode
 import com.geovault.tracker.presentation.TrackerMapFitTrailMode
@@ -177,9 +179,8 @@ private fun TrackerMapAuthenticatedContent(
     )
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var locationPermission by remember {
-        mutableStateOf(TrackingPermissionGate.hasLocationPermission(context))
-    }
+    val mapLocationPermission = rememberGeoVaultMapLocationPermissionState()
+    val locationPermission by mapLocationPermission
 
     DisposableEffect(viewModel, isActive, lifecycleOwner) {
         if (isActive) {
@@ -207,7 +208,6 @@ private fun TrackerMapAuthenticatedContent(
             isLifecycleStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    locationPermission = TrackingPermissionGate.hasLocationPermission(context)
                     viewModel.onHostResumed()
                     renderResumeEpoch += 1
                 }
@@ -354,7 +354,7 @@ private fun TrackerMapAuthenticatedContent(
             order = 30,
             onLocationResolved = { latLng ->
                 gpsHomeAnchor = latLng
-                locationPermission = TrackingPermissionGate.hasLocationPermission(context)
+                mapLocationPermission.value = context.geoVaultMapHasFineOrCoarseLocation()
             },
             showUserLocationPuck = !ownRecordedTrackerOnScreen,
             coordinateOverride = {
@@ -424,6 +424,12 @@ private fun TrackerMapAuthenticatedContent(
     }
 
     val locationSessionActive = isLifecycleStarted && isActive
+    val commonLocationDecision = rememberGeoVaultMapLocationSessionDecision(
+        hasLocationPermission = locationPermission,
+        isMapReady = phase == GeoVaultMapPhase.Ready,
+        isActive = locationSessionActive,
+        userLocationRequested = liveGpsPuckRequestedThisSession,
+    )
     val userLocationDecision = remember(
         locationSessionActive,
         locationPermission,
@@ -431,6 +437,7 @@ private fun TrackerMapAuthenticatedContent(
         liveGpsPuckRequestedThisSession,
         displayedTrackerId,
         locallyRecordedTrackerId,
+        commonLocationDecision,
     ) {
         userLocationPolicy.evaluate(
             TrackerMapUserLocationInput(
@@ -440,7 +447,8 @@ private fun TrackerMapAuthenticatedContent(
                 userLocationRequestedThisSession = liveGpsPuckRequestedThisSession,
                 displayedTrackerId = displayedTrackerId,
                 locallyRecordedTrackerId = locallyRecordedTrackerId,
-            )
+            ),
+            commonDecision = commonLocationDecision,
         )
     }
     val useTrackingLocationFixes = state.runtime.localRecordingActive &&
@@ -467,22 +475,11 @@ private fun TrackerMapAuthenticatedContent(
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
         locationPlugin.setCameraTracking(false)
     }
-    LaunchedEffect(
-        locationPlugin,
-        userLocationDecision.shouldStreamGps,
-        useTrackingLocationFixes,
-    ) {
-        if (!userLocationDecision.shouldStreamGps || useTrackingLocationFixes) return@LaunchedEffect
-        val latLng = LocationUpdates.getCurrentLatLngOnce(context, timeoutMs = 4000L)
-            ?: return@LaunchedEffect
-        val synthetic = Location("tracker-map-prime").apply {
-            latitude = latLng.latitude
-            longitude = latLng.longitude
-            accuracy = 12f
-            time = System.currentTimeMillis()
-        }
-        locationPlugin.renderLocation(synthetic)
-    }
+    GeoVaultMapLocationPrimeEffect(
+        location = locationPlugin,
+        shouldStreamGps = userLocationDecision.shouldStreamGps && !useTrackingLocationFixes,
+        providerName = "tracker-map-prime",
+    )
     LaunchedEffect(
         useTrackingLocationFixes,
         state.runtime.lastTrackedLatitude,
@@ -937,19 +934,7 @@ private fun TrackerMapAuthenticatedContent(
                     ),
                 )
                 if (selectionModel != null) {
-                    Spacer(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(geoVaultHairlineDividerColor()),
-                    )
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = androidx.compose.ui.graphics.RectangleShape,
-                        backgroundColor = MaterialTheme.colors.background,
-                        elevation = 0.dp,
-                    ) {
+                    GeoVaultMapBottomActionPanel {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                             MapTrackerSelectionPanel(
                                 model = selectionModel,
@@ -979,19 +964,10 @@ private fun TrackerMapAuthenticatedContent(
             // LaunchedEffect that consumes the directive can run on the same frame
             // `phase` flips Ready.
             // Touch is swallowed so the user can't pan the still-loading map.
-            if (!mapInitialFrameReady) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colors.background)
-                        .pointerInteropFilter { true },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    GeoVaultLoadingSpinner(
-                        bottomText = stringResource(R.string.map_status_map_loading),
-                    )
-                }
-            }
+            GeoVaultMapInitialFrameShield(
+                visible = !mapInitialFrameReady,
+                statusText = stringResource(R.string.map_status_map_loading),
+            )
         }
     }
 }

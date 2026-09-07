@@ -9,9 +9,6 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +63,7 @@ import com.geovault.common.util.MeasurementSystem
 import com.geovault.common.ui.components.GeoVaultClickableWithTooltip
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
 import com.geovault.common.ui.components.GeoVaultInfoDialog
+import com.geovault.common.ui.components.GeoVaultServerConnectionFailureOverlay
 import com.geovault.common.ui.GeoVaultAuthShellState
 import com.geovault.common.ui.GeoVaultTabShell
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
@@ -241,7 +239,19 @@ fun HomeScreen(
                     )
                 }
                 if (!isServerAccessible && !auth.isConnecting) {
-                    ServerFailureOverlay(modifier = Modifier.fillMaxSize())
+                    GeoVaultServerConnectionFailureOverlay(
+                        title = stringResource(R.string.server_connection_error_title),
+                        message = stringResource(R.string.server_connection_error_message),
+                        modifier = Modifier.fillMaxSize(),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_radar_dish),
+                                contentDescription = null,
+                                tint = GeoVaultColorTokens.Error,
+                                modifier = Modifier.size(56.dp),
+                            )
+                        },
+                    )
                 }
                 GeoVaultSnackbarHost(
                     model = imuSnackbarModel,
@@ -612,59 +622,6 @@ private fun SmallIconActionButton(
                 tint = GeoVaultColorTokens.MainBlue,
                 modifier = Modifier.size(22.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun ServerFailureOverlay(modifier: Modifier = Modifier) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier = modifier
-            .background(GeoVaultColorTokens.ScrimStrong)
-            .clickable(
-                enabled = true,
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = {},
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            modifier = Modifier.width(280.dp),
-            shape = MaterialTheme.shapes.medium,
-            color = GeoVaultColorTokens.ErrorSurfaceLight,
-            border = BorderStroke(3.dp, GeoVaultColorTokens.Error),
-            elevation = 0.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_radar_dish),
-                    contentDescription = null,
-                    tint = GeoVaultColorTokens.Error,
-                    modifier = Modifier.size(56.dp),
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.server_connection_error_title),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GeoVaultColorTokens.Error,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.server_connection_error_message),
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colors.onSurface,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
         }
     }
 }

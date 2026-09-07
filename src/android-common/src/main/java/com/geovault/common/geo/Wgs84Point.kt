@@ -24,4 +24,12 @@ data class LonLat(
     fun isValidGeographic(): Boolean = GeoCoordinates.isValidGeographic(latitude, longitude)
 
     fun asWgs84(): Wgs84Point = Wgs84Point(latitude = latitude, longitude = longitude)
+
+    companion object {
+        fun fromGeoJsonCoordinates(coords: List<Double>): LonLat? {
+            if (coords.size < 2) return null
+            val point = LonLat(longitude = coords[0], latitude = coords[1])
+            return point.takeIf { it.isValidGeographic() }
+        }
+    }
 }

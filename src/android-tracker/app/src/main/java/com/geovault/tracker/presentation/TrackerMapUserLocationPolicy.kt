@@ -1,5 +1,6 @@
 package com.geovault.tracker.presentation
 
+import com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionDecision
 import com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionInput
 import com.geovault.common.maps.ui.location.GeoVaultMapLocationSessionPolicy
 
@@ -36,7 +37,10 @@ data class TrackerMapUserLocationDecision(
 class TrackerMapUserLocationPolicy(
     private val commonPolicy: GeoVaultMapLocationSessionPolicy = GeoVaultMapLocationSessionPolicy(),
 ) {
-    fun evaluate(input: TrackerMapUserLocationInput): TrackerMapUserLocationDecision {
+    fun evaluate(
+        input: TrackerMapUserLocationInput,
+        commonDecision: GeoVaultMapLocationSessionDecision? = null,
+    ): TrackerMapUserLocationDecision {
         val displayedId = input.displayedTrackerId.trim()
         val recordedId = input.locallyRecordedTrackerId.trim()
         val ownRecordedTrackerOnScreen = recordedId.isNotEmpty() && displayedId == recordedId
@@ -50,7 +54,7 @@ class TrackerMapUserLocationPolicy(
         if (ownRecordedTrackerOnScreen) {
             blockers += TrackerMapUserLocationBlocker.OwnRecordedTrackerOnScreen
         }
-        val commonDecision = commonPolicy.decide(
+        val resolvedCommon = commonDecision ?: commonPolicy.decide(
             GeoVaultMapLocationSessionInput(
                 isActive = input.isMapActive,
                 hasLocationPermission = input.hasLocationPermission,
@@ -61,8 +65,8 @@ class TrackerMapUserLocationPolicy(
             ),
         )
         return TrackerMapUserLocationDecision(
-            shouldStreamGps = commonDecision.shouldStreamGps && !ownRecordedTrackerOnScreen,
-            shouldEnablePuck = commonDecision.shouldEnablePuck && !ownRecordedTrackerOnScreen,
+            shouldStreamGps = resolvedCommon.shouldStreamGps && !ownRecordedTrackerOnScreen,
+            shouldEnablePuck = resolvedCommon.shouldEnablePuck && !ownRecordedTrackerOnScreen,
             blockers = blockers,
         )
     }

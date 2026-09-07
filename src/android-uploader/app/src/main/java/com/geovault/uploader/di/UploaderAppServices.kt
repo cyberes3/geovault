@@ -4,6 +4,9 @@ import android.app.Application
 import android.content.Context
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
+import com.geovault.common.update.GeoVaultAppUpdateCoordinator
+import com.geovault.uploader.BuildConfig
 import com.geovault.common.files.GeoVaultOpenableUriMetadata
 import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
@@ -58,19 +61,35 @@ class UploaderAppServices private constructor(
         ImportUploadQueue(uploadRepository)
     }
 
-    fun initialAuthController(
-        invalidServerUrlMessage: String = "Server URL is required. Connect your account to sign in.",
-        unreachableServerMessage: String = "Could not reach server. Check URL and connection.",
-    ): CommonInitialAuthController = CommonInitialAuthController.standard(
-        session = authSession(),
-        appContext = appContext,
-        invalidServerUrlMessage = invalidServerUrlMessage,
-        unreachableServerMessage = unreachableServerMessage,
-    )
+    private val initialAuthController by lazy {
+        CommonInitialAuthController.standard(
+            session = authSession(),
+            appContext = appContext,
+            invalidServerUrlMessage = "Server URL is required. Connect your account to sign in.",
+            unreachableServerMessage = "Could not reach server. Check URL and connection.",
+        )
+    }
+
+    private val updateCoordinator by lazy {
+        GeoVaultAndroidReleaseIdentity.Uploader.updateCoordinator(
+            application = appContext as Application,
+            localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
+        )
+    }
+
+    fun initialAuthController(): CommonInitialAuthController = initialAuthController
+
+    fun updateCoordinator(): GeoVaultAppUpdateCoordinator = updateCoordinator
 
     companion object {
+        @Volatile
+        private var instance: UploaderAppServices? = null
+
         fun from(application: Application): UploaderAppServices {
-            return UploaderAppServices(application.applicationContext)
+            val context = application.applicationContext
+            return instance ?: synchronized(this) {
+                instance ?: UploaderAppServices(context).also { instance = it }
+            }
         }
     }
 }

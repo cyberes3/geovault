@@ -2,6 +2,7 @@ package com.geovault.common.geo
 
 import kotlin.math.abs
 import kotlin.math.asin
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -30,5 +31,17 @@ object GeoMath {
     fun shortestBearingDeltaDegrees(fromDeg: Double, toDeg: Double): Double {
         val rawDelta = abs(toDeg - fromDeg) % 360.0
         return if (rawDelta > 180.0) 360.0 - rawDelta else rawDelta
+    }
+
+    fun initialBearingDegrees(from: Wgs84Point, to: Wgs84Point): Double =
+        initialBearingDegrees(from.latitude, from.longitude, to.latitude, to.longitude)
+
+    fun initialBearingDegrees(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val latRad1 = Math.toRadians(lat1)
+        val latRad2 = Math.toRadians(lat2)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val y = sin(dLon) * cos(latRad2)
+        val x = cos(latRad1) * sin(latRad2) - sin(latRad1) * cos(latRad2) * cos(dLon)
+        return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
     }
 }

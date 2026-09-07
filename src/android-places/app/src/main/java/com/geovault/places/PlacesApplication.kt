@@ -1,16 +1,15 @@
 package com.geovault.places
 
 import android.app.Application
-import android.content.ContentValues
 import android.content.Context
-import android.os.Environment
-import android.provider.MediaStore
 import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.bootstrap.AppResetFlow
 import com.geovault.common.bootstrap.GeoVaultAppBootstrap
+import com.geovault.common.files.GeoVaultExportFileNames
+import com.geovault.common.files.GeoVaultFileExport
+import com.geovault.common.geo.CoordinateParser
 import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.common.maps.bootstrap.GeoVaultMapsBootstrap
-import com.geovault.common.maps.core.GeoVaultMainMapControllerStore
 import com.geovault.places.BuildConfig
 import com.geovault.places.data.PlacesApiFactory
 import com.geovault.places.di.PlacesAppServices
@@ -19,6 +18,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.runBlocking
 
 class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener {
     companion object {
@@ -48,9 +48,6 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
                 services.placesStore().preloadOnLaunch()
                 services.navigationRepository().preloadOnLaunch()
             }
-            .background("places-user-status") {
-                GeoVaultAuthSession.get().fetchUserStatusWithResult()
-            }
             .resetHook(
                 key = HOOK_EMERGENCY_EXPORT,
                 phase = AppResetFlow.Phase.BEFORE_EMERGENCY_EXPORT,
@@ -65,7 +62,6 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
                 key = HOOK_CLEAR_LOCAL,
                 phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
             ) { _ ->
-                GeoVaultMainMapControllerStore.releaseKey(PLACES_MAIN_MAP_KEY)
                 PlacesAppServices.from(this).placesStore().clear()
                 PlacesAppServices.from(this).navigationRepository().clearPending()
                 PlacesApiFactory.clearCache()
@@ -107,21 +103,15 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
                 }
                 cachedFiltered.forEach { append(formatPlaceBlock(it)) }
             }
-
-            val filename = "geovault_emergency_export_${
-                SimpleDateFormat("yyyy-MM-dd_HHmmss", Locale.US).format(Date())
-            }.txt"
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            val filename = "${GeoVaultExportFileNames.timestamped("geovault_emergency_export")}.txt"
+            runBlocking {
+                GeoVaultFileExport(context).saveToDownloads(
+                    displayName = filename,
+                    mimeType = "text/plain",
+                    bytes = content.toByteArray(Charsets.UTF_8),
+                    showToast = false,
+                ).isSuccess
             }
-            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                ?: return@runCatching false
-            context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(content.toByteArray(Charsets.UTF_8))
-            } ?: return@runCatching false
-            true
         }.getOrDefault(false)
         pendingExportSavedToast.set(wrote)
     }
@@ -129,7 +119,11 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
     private fun formatPlaceBlock(feature: Feature): String {
         val properties = feature.properties
         val coords = feature.geometry.coordinates
-        val coordsLine = if (coords.size >= 2) "${coords[1]}, ${coords[0]}" else ""
+        val coordsLine = if (coords.size >= 2) {
+            CoordinateParser.formatLatLon(coords[1], coords[0])
+        } else {
+            ""
+        }
         val addressLine = properties.address?.takeIf { it.isNotBlank() } ?: ""
         val descLine = properties.description?.takeIf { it.isNotBlank() } ?: ""
         return buildString {

@@ -72,7 +72,6 @@ fun GroupActionsScreen(
     }
 
     val actionBarBorderColor = if (isSystemInDarkTheme()) GeoVaultColorTokens.Dark.BorderLight else GeoVaultColorTokens.BorderLight
-    val memberCardBorderColor = GeoVaultColorTokens.MainBlue
 
     GeoVaultSubViewScaffold(
         modifier = Modifier.fillMaxSize(),
@@ -131,7 +130,6 @@ fun GroupActionsScreen(
                 rows = memberRows,
                 highlightedTrackerId = highlightedTrackerId,
                 listState = listState,
-                borderColor = memberCardBorderColor,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     top = 6.dp,
                     bottom = 12.dp,
