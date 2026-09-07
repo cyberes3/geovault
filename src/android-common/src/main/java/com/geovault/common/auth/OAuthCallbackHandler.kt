@@ -117,7 +117,7 @@ class OAuthCallbackHandler(
         Log.d(TAG, "handleIntent: callback URI scheme=${uri.scheme} host=${uri.host} path=${uri.path}" +
             " queryParams=${uri.queryParameterNames} fragmentLen=${uri.fragment?.length ?: 0}")
         val (code, state, oauthError) = parseOAuthRedirectParams(uri)
-        val pkceState = session.getAndClearPkceState()
+        val pkceState = session.peekPkceState()
         val serverUrl = session.getServerUrl()
         if (pkceState == null &&
             !state.isNullOrBlank() &&
@@ -144,6 +144,7 @@ class OAuthCallbackHandler(
             }
             is OAuthCallbackValidationResult.Ready -> {
                 Log.i(TAG, "handleIntent: validation passed, starting token exchange")
+                session.getAndClearPkceState()
                 executeTokenExchange(
                     session = session,
                     ready = validation,

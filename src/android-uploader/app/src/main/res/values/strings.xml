@@ -4,9 +4,11 @@
     <string name="tooltip_nav_settings">Open account, sign-in, and app preferences.</string>
     <string name="settings_title">Settings</string>
     <string name="upload_button">Upload</string>
+    <string name="upload_all">Upload All</string>
     <string name="cancel_button">Cancel</string>
     <string name="close_button">Close</string>
     <string name="connect_account">Connect Account</string>
+    <string name="connect_account_help">Sign in with your GeoVault account to upload files.</string>
     <string name="disconnect">Disconnect</string>
     <string name="save_settings">Save Settings</string>
     <string name="settings_required">Server URL is required. Connect your account to sign in.</string>
@@ -16,4 +18,19 @@
     <string name="tooltip_cancel">Close this screen without uploading.</string>
     <string name="tooltip_upload_all">Upload all pending files to your GeoVault server.</string>
     <string name="tooltip_cancel_upload">Stop the upload in progress.</string>
+    <string name="no_files_to_upload">No Files to Upload</string>
+    <string name="no_files_to_upload_message">Choose KML, KMZ, or GPX files to add them to the queue.</string>
+    <string name="add_android_upload_suffix">Add _android_upload suffix</string>
+    <string name="add_android_upload_suffix_help">Appends _android_upload to each filename before upload so you can tell Android imports apart on the server.</string>
+    <string name="filename_label">Filename</string>
+    <string name="remove_file">Remove file</string>
+    <string name="status_uploading">Uploading</string>
+    <string name="status_upload_succeeded">Upload succeeded</string>
+    <string name="status_upload_failed">Upload failed</string>
+    <string name="file_modified">Modified %1$s</string>
+    <string name="file_modified_unknown">Modified unknown</string>
+    <plurals name="queue_file_count">
+        <item quantity="one">%d File</item>
+        <item quantity="other">%d Files</item>
+    </plurals>
 </resources>

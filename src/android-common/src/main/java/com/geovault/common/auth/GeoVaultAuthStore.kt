@@ -93,6 +93,18 @@ class GeoVaultAuthStore private constructor(context: Context) {
         Log.i(TAG, "savePkceState: written to store")
     }
 
+    fun peekPkceState(): Pair<String, String>? {
+        synchronized(lock) {
+            ensureHydratedLocked()
+            val verifier = cached.pkceVerifier?.decrypt()
+            val state = cached.pkceState?.decrypt()
+            if (verifier.isNullOrBlank() || state.isNullOrBlank()) {
+                return null
+            }
+            return verifier to state
+        }
+    }
+
     fun getAndClearPkceState(): Pair<String, String>? {
         synchronized(lock) {
             ensureHydratedLocked()

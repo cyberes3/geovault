@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Back up all app data: shared prefs, databases, and filesDir (auth, settings, queues, etc.).
-         Android automatically excludes cacheDir and noBackup files. -->
     <include domain="sharedpref" path="." />
     <include domain="database" path="." />
     <include domain="file" path="." />
     <include domain="external" path="." />
+    <exclude domain="file" path="datastore/geovault_auth.settings" />
 </full-backup-content>

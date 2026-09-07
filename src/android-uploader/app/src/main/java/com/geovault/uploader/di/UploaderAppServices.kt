@@ -4,52 +4,45 @@ import android.app.Application
 import android.content.Context
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.auth.GeoVaultConnectionValidator
+import com.geovault.common.files.GeoVaultFileIngest
+import com.geovault.common.files.GeoVaultOpenableUriMetadata
+import com.geovault.common.files.GeoVaultUploadFileTypes
+import com.geovault.common.intent.GeoVaultIncomingFileIntake
 import com.geovault.common.update.GeoVaultAndroidReleaseIdentity
 import com.geovault.common.update.GeoVaultAppUpdateCoordinator
 import com.geovault.uploader.BuildConfig
-import com.geovault.common.files.GeoVaultOpenableUriMetadata
-import com.geovault.uploader.data.UploaderPreferences
 import com.geovault.uploader.data.UploadRepository
-import com.geovault.uploader.data.ValidationRepository
-import com.geovault.common.files.GeoVaultFileIngest
-import com.geovault.common.files.GeoVaultUploadFileTypes
-import com.geovault.uploader.domain.ImportUploadQueue
+import com.geovault.uploader.data.UploaderSettingsStore
+import com.geovault.uploader.domain.ImportUploadEngine
 
-/**
- * Composition root for app-layer dependencies.
- * Keeps ViewModels focused on state orchestration rather than object construction.
- */
 class UploaderAppServices private constructor(
-    context: Context
+    context: Context,
 ) {
     private val appContext = context.applicationContext
 
     fun authSession(): GeoVaultAuthSession = GeoVaultAuthSession.get()
 
-    val uploaderPreferences: UploaderPreferences by lazy {
-        UploaderPreferences.getInstance(appContext)
+    private val settingsStore by lazy {
+        UploaderSettingsStore(appContext)
     }
 
-    val openableUriMetadata: GeoVaultOpenableUriMetadata by lazy {
+    private val openableUriMetadata by lazy {
         GeoVaultOpenableUriMetadata(appContext.contentResolver)
     }
 
-    val uploadRepository: UploadRepository by lazy {
-        UploadRepository(
-            context = appContext,
+    private val uploadRepository by lazy {
+        UploadRepository.fromSession(
             contentResolver = appContext.contentResolver,
-            authSession = authSession(),
+            session = authSession(),
         )
     }
 
-    val validationRepository: ValidationRepository by lazy {
-        ValidationRepository(
-            context = appContext,
-            authSession = authSession(),
-        )
+    private val connectionValidator by lazy {
+        GeoVaultConnectionValidator(authSession())
     }
 
-    val fileIngest: GeoVaultFileIngest by lazy {
+    private val fileIngest by lazy {
         GeoVaultFileIngest(
             context = appContext,
             catalog = GeoVaultUploadFileTypes.catalog,
@@ -57,8 +50,12 @@ class UploaderAppServices private constructor(
         )
     }
 
-    val importUploadQueue: ImportUploadQueue by lazy {
-        ImportUploadQueue(uploadRepository)
+    private val incomingIntake by lazy {
+        GeoVaultIncomingFileIntake(fileIngest)
+    }
+
+    private val importUploadEngine by lazy {
+        ImportUploadEngine(uploadRepository)
     }
 
     private val initialAuthController by lazy {
@@ -76,6 +73,18 @@ class UploaderAppServices private constructor(
             localFullCommitSha = { BuildConfig.GIT_COMMIT_SHA },
         )
     }
+
+    fun settingsStore(): UploaderSettingsStore = settingsStore
+
+    fun openableUriMetadata(): GeoVaultOpenableUriMetadata = openableUriMetadata
+
+    fun uploadRepository(): UploadRepository = uploadRepository
+
+    fun connectionValidator(): GeoVaultConnectionValidator = connectionValidator
+
+    fun incomingIntake(): GeoVaultIncomingFileIntake = incomingIntake
+
+    fun importUploadEngine(): ImportUploadEngine = importUploadEngine
 
     fun initialAuthController(): CommonInitialAuthController = initialAuthController
 

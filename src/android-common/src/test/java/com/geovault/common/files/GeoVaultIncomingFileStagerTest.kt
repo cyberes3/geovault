@@ -40,6 +40,9 @@ class GeoVaultIncomingFileStagerTest {
     @Test
     fun `sanitizeFileName strips path separators`() {
         assertEquals("job.kml", GeoVaultIncomingFileStager.sanitizeFileName("/tmp/job.kml"))
+        assertEquals("escape.kml", GeoVaultIncomingFileStager.sanitizeFileName("../escape.kml"))
         assertEquals("incoming", GeoVaultIncomingFileStager.sanitizeFileName("   "))
+        assertEquals("incoming", GeoVaultIncomingFileStager.sanitizeFileName(".."))
+        assertEquals("incoming", GeoVaultIncomingFileStager.sanitizeFileName("evil..kml"))
     }
 }

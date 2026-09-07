@@ -106,6 +106,8 @@ class GeoVaultAuthSession private constructor(
         store.savePkceState(verifier, state)
     }
 
+    fun peekPkceState(): Pair<String, String>? = store.peekPkceState()
+
     fun getAndClearPkceState(): Pair<String, String>? = store.getAndClearPkceState()
 
     fun wasRecentlyConsumedPkceState(state: String): Boolean = store.wasRecentlyConsumedPkceState(state)

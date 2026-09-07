@@ -20,6 +20,14 @@ class GeoVaultFileTypeCatalog(types: List<GeoVaultFileType>) {
         types.forEach { addAll(it.mimeTypes) }
     }.toTypedArray()
 
+    val pickerMimeTypes: Array<String> = mimeTypes + OCTET_STREAM
+
+    val shareSheetMimeTypes: Array<String> =
+        mimeTypes.filterNot { it.startsWith("image/") }.toTypedArray() + OCTET_STREAM
+
+    val supportedFormatsLabel: String =
+        types.joinToString(", ") { it.extension.uppercase(Locale.US) }
+
     init {
         require(types.isNotEmpty()) { "catalog must contain at least one file type" }
         val duplicate = types.groupingBy { it.extension }.eachCount().filterValues { it > 1 }
@@ -96,5 +104,14 @@ class GeoVaultFileTypeCatalog(types: List<GeoVaultFileType>) {
             supported = supported,
             rejectedFileNames = rejected,
         )
+    }
+
+    fun unsupportedMessage(rejectedFileNames: List<String>): String {
+        val names = rejectedFileNames.joinToString(", ")
+        return "Can't import $names. Supported: $supportedFormatsLabel."
+    }
+
+    companion object {
+        const val OCTET_STREAM = "application/octet-stream"
     }
 }

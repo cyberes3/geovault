@@ -26,6 +26,12 @@ class GeoVaultIncomingFileStager(
         val safeName = sanitizeFileName(fileName)
         val dir = File(cacheDir, "$INCOMING_SUBDIR/${UUID.randomUUID()}").apply { mkdirs() }
         val dest = File(dir, safeName)
+        val dirCanonical = dir.canonicalPath
+        val destCanonical = dest.canonicalPath
+        if (destCanonical != dirCanonical && !destCanonical.startsWith(dirCanonical + File.separator)) {
+            dest.parentFile?.deleteRecursively()
+            error("Invalid incoming file name")
+        }
         val copied = when {
             uri.scheme.equals("file", ignoreCase = true) -> {
                 val source = uri.path?.let(::File)
@@ -62,11 +68,19 @@ class GeoVaultIncomingFileStager(
 
         fun sanitizeFileName(name: String): String {
             val leaf = name.substringAfterLast('/').substringAfterLast('\\')
+            if (leaf == "." || leaf == ".." || leaf.contains("..")) {
+                return "incoming"
+            }
             val cleaned = buildString(leaf.length) {
                 leaf.forEach { ch ->
-                    append(if (ch == '\u0000') '_' else ch)
+                    append(
+                        if (ch == '\u0000' || ch == '/' || ch == '\\') '_' else ch
+                    )
                 }
-            }.trim().ifBlank { "incoming" }
+            }.trim()
+            if (cleaned.isBlank() || cleaned == "." || cleaned == "..") {
+                return "incoming"
+            }
             return cleaned
         }
     }

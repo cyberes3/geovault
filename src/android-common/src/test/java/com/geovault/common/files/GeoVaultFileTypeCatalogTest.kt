@@ -112,4 +112,23 @@ class GeoVaultFileTypeCatalogTest {
         assertFalse(GeoVaultUploadFileTypes.isSupportedFilename("layer.dxf"))
         assertTrue(GeoVaultUploadFileTypes.supportedMimeTypes.contains("application/gpx+xml"))
     }
+
+    @Test
+    fun `picker and share mime helpers append octet stream and drop image types`() {
+        val dwg = GeoVaultFileTypeCatalog(
+            listOf(
+                GeoVaultFileType("kml", setOf("application/vnd.google-earth.kml+xml")),
+                GeoVaultFileType("dwg", setOf("application/acad", "image/vnd.dwg")),
+            ),
+        )
+        assertTrue(dwg.pickerMimeTypes.contains("application/octet-stream"))
+        assertTrue(dwg.pickerMimeTypes.contains("image/vnd.dwg"))
+        assertTrue(dwg.shareSheetMimeTypes.contains("application/octet-stream"))
+        assertFalse(dwg.shareSheetMimeTypes.contains("image/vnd.dwg"))
+        assertEquals("KML, DWG", dwg.supportedFormatsLabel)
+        assertEquals(
+            "Can't import notes.pdf. Supported: KML, DWG.",
+            dwg.unsupportedMessage(listOf("notes.pdf")),
+        )
+    }
 }

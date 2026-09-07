@@ -29,5 +29,12 @@ object GeoVaultUploadFileTypes {
 
     val supportedMimeTypes: Array<String> get() = catalog.mimeTypes
 
+    val pickerMimeTypes: Array<String> get() = catalog.pickerMimeTypes
+
+    val shareSheetMimeTypes: Array<String> get() = catalog.shareSheetMimeTypes
+
     fun isSupportedFilename(filename: String): Boolean = catalog.isSupportedFilename(filename)
+
+    fun unsupportedMessage(rejectedFileNames: List<String>): String =
+        catalog.unsupportedMessage(rejectedFileNames)
 }

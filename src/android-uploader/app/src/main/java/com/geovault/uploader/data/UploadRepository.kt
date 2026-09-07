@@ -1,79 +1,80 @@
 package com.geovault.uploader.data
 
 import android.content.ContentResolver
-import android.content.Context
 import android.net.Uri
-import com.geovault.common.messages.GeoVaultUploadMessageFormatter
-import com.geovault.common.net.GeoVaultApiFailure
-import com.geovault.common.net.GeoVaultHttp
-import com.geovault.common.net.GeoVaultServerUrl
 import com.geovault.common.auth.AuthSessionService
 import com.geovault.common.auth.GeoVaultAuthSession
 import com.geovault.common.auth.ServerConfigService
+import com.geovault.common.files.GeoVaultContentUriRequestBody
+import com.geovault.common.net.GeoVaultApiFailure
+import com.geovault.common.net.GeoVaultHttp
+import com.geovault.common.net.GeoVaultServerUrl
 import com.geovault.uploader.domain.ImportFileUploader
-import com.geovault.uploader.model.ImportUploadOutcome
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.IOException
+import com.geovault.uploader.domain.ImportUploadOutcome
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.Response
-import okio.BufferedSink
-import okio.source
+import java.io.IOException
 
 class UploadRepository(
-    private val context: Context,
     private val contentResolver: ContentResolver,
-    private val authSession: GeoVaultAuthSession = GeoVaultAuthSession.get(),
-    private val serverConfigService: ServerConfigService = authSession,
-    private val authSessionService: AuthSessionService = authSession,
+    private val serverConfigService: ServerConfigService,
+    private val authSessionService: AuthSessionService,
+    private val httpClient: OkHttpClient = defaultClient(),
 ) : ImportFileUploader {
     private val callLock = Any()
-    private var activeCall: Call? = null
+    private var active: ActiveUpload? = null
 
-    private val httpClient: OkHttpClient by lazy {
-        GeoVaultHttp.authenticatedClient()
-            .newBuilder()
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
-
-    override fun cancelActiveUpload() {
+    override fun cancelActiveUpload(generation: Long) {
         synchronized(callLock) {
-            activeCall?.cancel()
-            activeCall = null
+            val current = active ?: return
+            if (current.generation != generation) return
+            current.call.cancel()
+            active = null
         }
     }
 
-    override suspend fun warmAccessToken(): ImportUploadOutcome? = withContext(Dispatchers.IO) {
-        if (!authSessionService.isLoggedIn()) {
-            return@withContext ImportUploadOutcome.Failed("Not signed in")
-        }
-        try {
-            authSession.getValidAccessToken()
-            null
-        } catch (e: Exception) {
-            ImportUploadOutcome.Failed("Connection failed\n${e.message ?: "Unknown error"}")
+    fun cancelAllUploads() {
+        synchronized(callLock) {
+            active?.call?.cancel()
+            active = null
         }
     }
 
-    override suspend fun upload(uri: Uri, finalFilename: String): ImportUploadOutcome {
+    override suspend fun upload(
+        uri: Uri,
+        finalFilename: String,
+        generation: Long,
+    ): ImportUploadOutcome = withContext(Dispatchers.IO) {
         val serverUrl = GeoVaultServerUrl.parse(serverConfigService.getNormalizedServerUrl())
-            ?: return ImportUploadOutcome.Failed("Missing server URL")
-        if (!authSessionService.isLoggedIn()) return ImportUploadOutcome.Failed("Not signed in")
+            ?: return@withContext ImportUploadOutcome.Failed(
+                GeoVaultApiFailure(
+                    httpCode = null,
+                    serverMessage = "Missing server URL",
+                    operation = "importUpload",
+                ),
+            )
+        if (!authSessionService.isLoggedIn()) {
+            return@withContext ImportUploadOutcome.Failed(
+                GeoVaultApiFailure(
+                    httpCode = null,
+                    serverMessage = "Not signed in",
+                    operation = "importUpload",
+                ),
+            )
+        }
 
-        val fileBody = UriRequestBody(
+        val fileBody = GeoVaultContentUriRequestBody(
             contentResolver = contentResolver,
             uri = uri,
             contentType = "application/octet-stream".toMediaType(),
@@ -87,35 +88,31 @@ class UploadRepository(
             .post(requestBody)
             .build()
 
-        return try {
-            suspendCancellableCoroutine { continuation ->
+        try {
+            suspendCancellableCoroutine<ImportUploadOutcome> { continuation ->
                 val call = httpClient.newCall(request)
                 synchronized(callLock) {
-                    activeCall = call
+                    active = ActiveUpload(generation, call)
                 }
                 continuation.invokeOnCancellation {
                     call.cancel()
                 }
                 call.enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) {
-                        synchronized(callLock) {
-                            if (activeCall === call) activeCall = null
-                        }
+                        clearIfOwner(generation, call)
                         if (!continuation.isActive) return
                         val outcome = if (call.isCanceled()) {
                             ImportUploadOutcome.Cancelled
                         } else {
                             ImportUploadOutcome.Failed(
-                                "Connection failed\n${e.message ?: "Unknown error"}"
+                                GeoVaultApiFailure.fromThrowable(e, "importUpload"),
                             )
                         }
                         continuation.resume(outcome)
                     }
 
                     override fun onResponse(call: Call, response: Response) {
-                        synchronized(callLock) {
-                            if (activeCall === call) activeCall = null
-                        }
+                        clearIfOwner(generation, call)
                         if (!continuation.isActive) return
                         response.use {
                             if (call.isCanceled()) {
@@ -131,14 +128,10 @@ class UploadRepository(
                             } catch (_: Exception) {
                                 ""
                             }
-                            val failure = GeoVaultApiFailure.fromOkHttp(it, "importUpload", payload)
                             continuation.resume(
                                 ImportUploadOutcome.Failed(
-                                    GeoVaultUploadMessageFormatter.fromStatusCode(
-                                        failure.httpCode ?: 0,
-                                        failure.serverMessage.orEmpty(),
-                                    )
-                                )
+                                    GeoVaultApiFailure.fromOkHttp(it, "importUpload", payload),
+                                ),
                             )
                         }
                     }
@@ -146,36 +139,48 @@ class UploadRepository(
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            ImportUploadOutcome.Failed("Connection failed\n${e.message ?: "Unknown error"}")
+            ImportUploadOutcome.Failed(GeoVaultApiFailure.fromThrowable(e, "importUpload"))
         } finally {
             synchronized(callLock) {
-                activeCall = null
+                if (active?.generation == generation) {
+                    active = null
+                }
             }
         }
     }
 
-    private class UriRequestBody(
-        private val contentResolver: ContentResolver,
-        private val uri: Uri,
-        private val contentType: MediaType?,
-    ) : RequestBody() {
-        override fun contentType(): MediaType? = contentType
-
-        override fun contentLength(): Long {
-            return try {
-                contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-                    descriptor.statSize.takeIf { it >= 0L }
-                } ?: -1L
-            } catch (_: Exception) {
-                -1L
+    private fun clearIfOwner(generation: Long, call: Call) {
+        synchronized(callLock) {
+            val current = active ?: return
+            if (current.generation == generation && current.call === call) {
+                active = null
             }
         }
+    }
 
-        override fun writeTo(sink: BufferedSink) {
-            val input = contentResolver.openInputStream(uri) ?: throw IOException("Could not read file")
-            input.use { stream ->
-                sink.writeAll(stream.source())
-            }
+    private data class ActiveUpload(
+        val generation: Long,
+        val call: Call,
+    )
+
+    companion object {
+        fun defaultClient(): OkHttpClient {
+            return GeoVaultHttp.authenticatedClient()
+                .newBuilder()
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .build()
+        }
+
+        fun fromSession(
+            contentResolver: ContentResolver,
+            session: GeoVaultAuthSession = GeoVaultAuthSession.get(),
+        ): UploadRepository {
+            return UploadRepository(
+                contentResolver = contentResolver,
+                serverConfigService = session,
+                authSessionService = session,
+            )
         }
     }
 }
