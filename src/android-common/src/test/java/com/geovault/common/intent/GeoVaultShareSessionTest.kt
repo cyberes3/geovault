@@ -3,7 +3,9 @@ package com.geovault.common.intent
 import android.content.Intent
 import android.net.Uri
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,5 +32,18 @@ class GeoVaultShareSessionTest {
         assertEquals(listOf(uri), uris)
         assertNull(intent.action)
         assertNull(intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
+    }
+
+    @Test
+    fun onStandaloneUiReady_marks_established() {
+        val session = GeoVaultShareSession()
+        assertFalse(GeoVaultShareSession.keepHostOpen(deliveredToRunningInstance = false, intent = null))
+        session.onStandaloneUiReady()
+        assertTrue(GeoVaultShareSession.keepHostOpen(deliveredToRunningInstance = false, intent = null))
+    }
+
+    @Test
+    fun keepHostOpen_is_true_for_onNewIntent_before_ui_ready() {
+        assertTrue(GeoVaultShareSession.keepHostOpen(deliveredToRunningInstance = true, intent = null))
     }
 }

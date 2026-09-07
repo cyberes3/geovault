@@ -17,8 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.geovault.common.auth.GeoVaultAccountViewModel
-import com.geovault.common.intent.GeoVaultShareLaunch
-import com.geovault.common.intent.GeoVaultShareLaunchDecision
 import com.geovault.common.intent.GeoVaultShareSession
 import com.geovault.common.ui.GeoVaultAppSnackbarLayer
 import com.geovault.common.ui.GeoVaultShellOverlayScaffold
@@ -42,12 +40,8 @@ class MultiUploadActivity : ComponentActivity() {
     private val shareSession = GeoVaultShareSession()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        when (val decision = shareSession.begin(this, savedInstanceState)) {
-            GeoVaultShareLaunchDecision.RelocateToStandaloneTask -> {
-                GeoVaultShareLaunch.relocateToStandaloneTask(this)
-                return
-            }
-            is GeoVaultShareLaunchDecision.Continue -> Unit
+        if (!shareSession.beginOrRelocate(this, savedInstanceState)) {
+            return
         }
         GeoVaultAuthHost.installSplash(
             this,
@@ -57,6 +51,7 @@ class MultiUploadActivity : ComponentActivity() {
         GeoVaultAuthHost.onCreate(this, accountViewModel)
         viewModel.initialize(intent)
         shareSession.consumeIncoming(intent)
+        shareSession.onStandaloneUiReady()
         settingsViewModel.initialize()
         setContent {
             GeoVaultTheme {
