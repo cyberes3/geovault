@@ -8,6 +8,8 @@ import com.geovault.common.logging.GeoVaultCaptureLog
 import com.geovault.common.net.GeoVaultApiFailure
 import com.geovault.common.net.GeoVaultHttp
 import com.geovault.common.net.GeoVaultServerUrl
+import com.geovault.common.net.bodyOrThrow
+import com.geovault.common.net.successOrThrow
 import com.geovault.common.sort.NaturalSort
 import com.geovault.tracker.AvailableToAddResponse
 import com.geovault.tracker.Group
@@ -496,20 +498,8 @@ class ApiTrackerManagementRepository(
 
     private suspend fun <T> executeApiCall(callProvider: (TrackerApi) -> Response<T>): T {
         return withContext(Dispatchers.IO) {
-            val api = createApi()
             try {
-                val response = callProvider(api)
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    if (body != null) {
-                        body
-                    } else {
-                        GeoVaultCaptureLog.w(TAG, "Successful API response had no body code=${response.code()}")
-                        throw GeoVaultApiFailure(httpCode = response.code(), serverMessage = "Empty response")
-                    }
-                } else {
-                    throw GeoVaultApiFailure.fromRetrofit(response)
-                }
+                callProvider(createApi()).bodyOrThrow()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GeoVaultApiFailure) {
@@ -525,14 +515,10 @@ class ApiTrackerManagementRepository(
         callProvider: (TrackerApi) -> Response<ResponseBody>
     ) {
         withContext(Dispatchers.IO) {
-            val api = createApi()
             try {
-                val response = callProvider(api)
-                if (response.isSuccessful) {
-                    response.body()?.close()
-                } else {
-                    throw GeoVaultApiFailure.fromRetrofit(response)
-                }
+                val response = callProvider(createApi())
+                response.successOrThrow()
+                response.body()?.close()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GeoVaultApiFailure) {

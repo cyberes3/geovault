@@ -7,16 +7,13 @@ import com.geovault.common.bootstrap.AppResetFlow
 import com.geovault.common.bootstrap.GeoVaultAppBootstrap
 import com.geovault.common.files.GeoVaultExportFileNames
 import com.geovault.common.files.GeoVaultFileExport
-import com.geovault.common.geo.CoordinateParser
 import com.geovault.common.logging.GeoVaultAppVersionLog
 import com.geovault.common.maps.bootstrap.GeoVaultMapsBootstrap
 import com.geovault.places.BuildConfig
-import com.geovault.places.data.PlacesApiFactory
 import com.geovault.places.di.PlacesAppServices
-import com.geovault.places.model.Feature
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.geovault.places.domain.PlacesListProjection
+import com.geovault.places.export.PlacesExportFormat
+import com.geovault.places.export.PlacesExporter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.runBlocking
 
@@ -30,21 +27,26 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
         fun consumePendingExportSavedToast(): Boolean = pendingExportSavedToast.getAndSet(false)
     }
 
+    lateinit var services: PlacesAppServices
+        private set
+
     lateinit var bootstrap: GeoVaultAppBootstrap
         private set
+
+    private val skipLocalClearAfterFailedExport = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
         GeoVaultAppVersionLog.log(this, BuildConfig.GIT_COMMIT_SHA)
+        services = PlacesAppServices(this)
         bootstrap = GeoVaultAppBootstrap.builder(this)
             .auth(
                 redirectUri = "${BuildConfig.APPLICATION_ID}://oauth/callback",
                 clientId = GeoVaultAuthSession.OAUTH_CLIENT_ID_PLACES,
                 authFailureListener = this,
-            ) { ctx -> PlacesAppServices.from(ctx).initialAuthController() }
+            ) { services.initialAuthController() }
             .install(GeoVaultMapsBootstrap(PLACES_MAIN_MAP_KEY, prewarmMainMap = false))
-            .gate("places-store") { ctx ->
-                val services = PlacesAppServices.from(ctx)
+            .gate("places-store") {
                 services.placesStore().preloadOnLaunch()
                 services.navigationRepository().preloadOnLaunch()
             }
@@ -62,9 +64,10 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
                 key = HOOK_CLEAR_LOCAL,
                 phase = AppResetFlow.Phase.AFTER_TOKEN_CLEAR,
             ) { _ ->
-                PlacesAppServices.from(this).placesStore().clear()
-                PlacesAppServices.from(this).navigationRepository().clearPending()
-                PlacesApiFactory.clearCache()
+                if (skipLocalClearAfterFailedExport.getAndSet(false)) return@resetHook
+                services.placesStore().clearBlocking()
+                services.navigationRepository().clearPendingBlocking()
+                services.placesRepository().clearApiCache()
             }
             .build()
         bootstrap.boot(this)
@@ -84,55 +87,25 @@ class PlacesApplication : Application(), GeoVaultAuthSession.AuthFailureListener
     }
 
     private fun performEmergencyExport(context: Context) {
-        val services = PlacesAppServices.from(this)
-        val offlineList = services.placesStore().getOfflineFeatures()
-        val cachedFeatures = services.placesStore().getCachedFeatures()
-        if (offlineList.isEmpty() && cachedFeatures.isEmpty()) {
+        val places = PlacesListProjection.exportable(services.placesStore().places())
+        if (places.isEmpty()) {
             pendingExportSavedToast.set(false)
+            skipLocalClearAfterFailedExport.set(false)
             return
         }
-
         val wrote = runCatching {
-            val exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
-            val content = buildString {
-                appendLine("GeoVault emergency export - $exportedAt")
-                appendLine()
-                offlineList.forEach { append(formatPlaceBlock(it.feature)) }
-                val cachedFiltered = cachedFeatures.filter { cached ->
-                    offlineList.none { it.feature.properties.database_id == cached.properties.database_id }
-                }
-                cachedFiltered.forEach { append(formatPlaceBlock(it)) }
-            }
+            val content = PlacesExporter.export(places, PlacesExportFormat.PLAIN_TEXT)
             val filename = "${GeoVaultExportFileNames.timestamped("geovault_emergency_export")}.txt"
             runBlocking {
                 GeoVaultFileExport(context).saveToDownloads(
                     displayName = filename,
                     mimeType = "text/plain",
-                    bytes = content.toByteArray(Charsets.UTF_8),
+                    bytes = content,
                     showToast = false,
                 ).isSuccess
             }
         }.getOrDefault(false)
         pendingExportSavedToast.set(wrote)
-    }
-
-    private fun formatPlaceBlock(feature: Feature): String {
-        val properties = feature.properties
-        val coords = feature.geometry.coordinates
-        val coordsLine = if (coords.size >= 2) {
-            CoordinateParser.formatLatLon(coords[1], coords[0])
-        } else {
-            ""
-        }
-        val addressLine = properties.address?.takeIf { it.isNotBlank() } ?: ""
-        val descLine = properties.description?.takeIf { it.isNotBlank() } ?: ""
-        return buildString {
-            appendLine(properties.name?.takeIf { it.isNotBlank() } ?: "(unnamed)")
-            appendLine(properties.created_at ?: "")
-            appendLine(coordsLine)
-            appendLine(addressLine)
-            appendLine(descLine)
-            appendLine()
-        }
+        skipLocalClearAfterFailedExport.set(!wrote)
     }
 }

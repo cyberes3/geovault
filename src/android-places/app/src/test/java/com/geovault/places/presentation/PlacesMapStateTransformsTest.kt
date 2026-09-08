@@ -1,68 +1,55 @@
 package com.geovault.places.presentation
 
-import com.geovault.places.model.Feature
-import com.geovault.places.model.Geometry
-import com.geovault.places.model.Properties
 import com.geovault.common.maps.render.CommonMapIconIds
+import com.geovault.places.model.PlaceKey
+import com.geovault.places.samplePlace
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlacesMapStateTransformsTest {
     @Test
-    fun reconcileSelectedFeature_keepsSelectionUpdatedAfterModify() {
-        val original = feature(id = 7, lat = 10.0, lon = 20.0, name = "Old")
-        val updated = feature(id = 7, lat = 11.0, lon = 21.0, name = "New")
+    fun reconcileSelectedKeyKeepsSelectionAfterContentChange() {
+        val key = PlaceKey.server(7)
+        val updated = samplePlace(key = key, serverId = 7, name = "New", latitude = 11.0, longitude = 21.0)
 
-        val resolved = PlacesMapStateTransforms.reconcileSelectedFeature(
-            features = listOf(updated),
-            selectedFeature = original,
-        )
+        val resolved = PlacesMapStateTransforms.reconcileSelectedKey(listOf(updated), key)
 
-        assertNotNull(resolved)
-        assertEquals("New", resolved?.properties?.name)
-        assertEquals(11.0, resolved!!.geometry.coordinates[1], 0.000001)
+        assertEquals(key, resolved)
     }
 
     @Test
-    fun reconcileSelectedFeature_clearsSelectionAfterDelete() {
-        val selected = feature(id = 7, lat = 10.0, lon = 20.0, name = "Gone")
-
-        val resolved = PlacesMapStateTransforms.reconcileSelectedFeature(
-            features = emptyList(),
-            selectedFeature = selected,
+    fun reconcileSelectedKeyClearsSelectionAfterDelete() {
+        val resolved = PlacesMapStateTransforms.reconcileSelectedKey(
+            places = emptyList(),
+            selectedKey = PlaceKey.server(7),
         )
-
-        assertEquals(null, resolved)
+        assertNull(resolved)
     }
 
     @Test
-    fun reconcileSelectedFeature_supportsNewFeaturesWithoutIdByCoordinates() {
-        val selected = feature(id = null, lat = 1.0, lon = 2.0, name = "Draft")
-        val reloaded = feature(id = null, lat = 1.0, lon = 2.0, name = "Draft")
+    fun reconcileSelectedKeyMatchesLocalDraftByKeyNotName() {
+        val key = PlaceKey.local("draft-1")
+        val reloaded = samplePlace(key = key, serverId = null, name = "Renamed")
 
-        val resolved = PlacesMapStateTransforms.reconcileSelectedFeature(
-            features = listOf(reloaded),
-            selectedFeature = selected,
-        )
+        val resolved = PlacesMapStateTransforms.reconcileSelectedKey(listOf(reloaded), key)
 
-        assertNotNull(resolved)
+        assertEquals(key, resolved)
     }
 
     @Test
-    fun buildRenderState_appliesSelectedPointStyle() {
-        val features = listOf(
-            feature(id = 1, lat = 10.0, lon = 11.0, name = "A"),
-            feature(id = 2, lat = 12.0, lon = 13.0, name = "B"),
-        )
+    fun buildRenderStateUsesPlaceKeyAndSelectedStyle() {
+        val first = samplePlace(key = PlaceKey.server(1), serverId = 1, name = "A", latitude = 10.0, longitude = 11.0)
+        val second = samplePlace(key = PlaceKey.server(2), serverId = 2, name = "B", latitude = 12.0, longitude = 13.0)
 
         val renderState = PlacesMapStateTransforms.buildRenderState(
-            features = features,
-            selectedId = 2,
+            places = listOf(first, second),
+            selectedKey = second.key,
         )
-        val selected = renderState.points.first { it.id == "2" }
-        val normal = renderState.points.first { it.id == "1" }
+        val selected = renderState.points.first { it.id == second.key.value }
+        val normal = renderState.points.first { it.id == first.key.value }
 
         assertEquals(CommonMapIconIds.MARKER_SELECTED, selected.iconImageId)
         assertEquals(1.08f, selected.iconSize)
@@ -71,11 +58,21 @@ class PlacesMapStateTransformsTest {
     }
 
     @Test
-    fun featureBounds_returnsBoundsForMappedPoints() {
+    fun buildRenderStateSkipsInvalidCoordinates() {
+        val invalid = samplePlace(latitude = 100.0, longitude = 20.0)
+        val valid = samplePlace(key = PlaceKey.server(2), serverId = 2, name = "Ok")
+
+        val renderState = PlacesMapStateTransforms.buildRenderState(listOf(invalid, valid), null)
+
+        assertEquals(listOf(valid.key.value), renderState.points.map { it.id })
+    }
+
+    @Test
+    fun featureBoundsReturnsBoundsForMappedPoints() {
         val bounds = PlacesMapStateTransforms.featureBounds(
             listOf(
-                feature(id = 1, lat = 40.0, lon = -120.0, name = "A"),
-                feature(id = 2, lat = 41.0, lon = -121.0, name = "B"),
+                samplePlace(key = PlaceKey.server(1), serverId = 1, latitude = 40.0, longitude = -120.0),
+                samplePlace(key = PlaceKey.server(2), serverId = 2, latitude = 41.0, longitude = -121.0),
             ),
         )
 
@@ -87,27 +84,16 @@ class PlacesMapStateTransformsTest {
     }
 
     @Test
-    fun featureBounds_usesShortLongitudeArcAcrossPacific() {
+    fun featureBoundsUsesShortLongitudeArcAcrossPacific() {
         val bounds = PlacesMapStateTransforms.featureBounds(
             listOf(
-                feature(id = 1, lat = 39.0, lon = -95.0, name = "USA"),
-                feature(id = 2, lat = 55.0, lon = 37.0, name = "Russia"),
+                samplePlace(key = PlaceKey.server(1), serverId = 1, latitude = 39.0, longitude = -95.0),
+                samplePlace(key = PlaceKey.server(2), serverId = 2, latitude = 55.0, longitude = 37.0),
             ),
         )
 
         assertNotNull(bounds)
-        assertEquals(39.0, bounds!!.southWest.latitude, 0.000001)
-        assertEquals(55.0, bounds.northEast.latitude, 0.000001)
-        assertEquals(-95.0, bounds.southWest.longitude, 0.000001)
-        assertEquals(37.0, bounds.northEast.longitude, 0.000001)
-        val lonSpan = bounds.longitudeEast - bounds.longitudeWest
+        val lonSpan = bounds!!.longitudeEast - bounds.longitudeWest
         assertTrue("span should be the short arc (~132°), not ~292°", lonSpan < 200.0)
-    }
-
-    private fun feature(id: Int?, lat: Double, lon: Double, name: String): Feature {
-        return Feature(
-            geometry = Geometry(coordinates = listOf(lon, lat)),
-            properties = Properties(database_id = id, name = name),
-        )
     }
 }

@@ -4,61 +4,49 @@ import android.app.Application
 import android.content.Context
 import com.geovault.common.auth.CommonInitialAuthController
 import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.places.PlacesApplication
 import com.geovault.places.data.NavigationTrackingRepository
 import com.geovault.places.data.PlacesRepository
 import com.geovault.places.data.PlacesStore
 import com.geovault.places.domain.ConflictResolutionPolicy
-import com.geovault.places.domain.OfflineSyncCoordinator
-import com.geovault.places.domain.SyncOfflinePlacesUseCase
+import com.geovault.places.domain.DeletePlaceUseCase
+import com.geovault.places.domain.PlacesSyncEngine
+import com.geovault.places.domain.SavePlaceUseCase
 
-class PlacesAppServices private constructor(private val appContext: Context) {
+class PlacesAppServices(appContext: Context) {
+    private val app = appContext.applicationContext
+
     fun authSession(): GeoVaultAuthSession = GeoVaultAuthSession.get()
 
-    private val placesStore by lazy { PlacesStore(appContext) }
-    private val placesRepository by lazy { PlacesRepository(appContext) }
-    private val navigationRepository by lazy { NavigationTrackingRepository(appContext) }
+    private val placesStore by lazy { PlacesStore(app) }
+    private val placesRepository by lazy { PlacesRepository(authSession()) }
+    private val navigationRepository by lazy { NavigationTrackingRepository(app, authSession()) }
     private val conflictResolutionPolicy by lazy { ConflictResolutionPolicy() }
-    private val syncUseCase by lazy {
-        SyncOfflinePlacesUseCase(
-            repository = placesRepository,
-            cacheStore = placesStore,
+    private val savePlaceUseCase by lazy { SavePlaceUseCase(placesRepository, placesStore) }
+    private val deletePlaceUseCase by lazy { DeletePlaceUseCase(placesRepository, placesStore) }
+    private val syncEngine by lazy {
+        PlacesSyncEngine(
+            remote = placesRepository,
+            store = placesStore,
             conflictResolutionPolicy = conflictResolutionPolicy,
-        )
-    }
-    private val offlineSyncCoordinator by lazy {
-        OfflineSyncCoordinator(
-            repository = placesRepository,
-            cacheStore = placesStore,
-            syncExecutor = syncUseCase,
-            navigationRetryFlusher = navigationRepository,
-            serverUrlProvider = { authSession().getServerUrl() },
+            navigationFlusher = navigationRepository,
         )
     }
     private val authController by lazy {
-        CommonInitialAuthController.standard(authSession(), appContext)
+        CommonInitialAuthController.standard(authSession(), app)
     }
 
     fun placesStore(): PlacesStore = placesStore
-    fun cacheStore(): PlacesStore = placesStore
     fun placesRepository(): PlacesRepository = placesRepository
     fun navigationRepository(): NavigationTrackingRepository = navigationRepository
-    fun syncOfflinePlacesUseCase(): SyncOfflinePlacesUseCase = syncUseCase
-    fun offlineSyncCoordinator(): OfflineSyncCoordinator = offlineSyncCoordinator
+    fun savePlaceUseCase(): SavePlaceUseCase = savePlaceUseCase
+    fun deletePlaceUseCase(): DeletePlaceUseCase = deletePlaceUseCase
+    fun syncEngine(): PlacesSyncEngine = syncEngine
     fun initialAuthController(): CommonInitialAuthController = authController
 
     companion object {
-        @Volatile
-        private var instance: PlacesAppServices? = null
-
         fun from(application: Application): PlacesAppServices {
-            return instance ?: synchronized(this) {
-                instance ?: PlacesAppServices(application.applicationContext).also { instance = it }
-            }
-        }
-
-        fun from(context: Context): PlacesAppServices {
-            val app = context.applicationContext as Application
-            return from(app)
+            return (application as PlacesApplication).services
         }
     }
 }

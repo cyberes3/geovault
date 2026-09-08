@@ -1,6 +1,6 @@
 package com.geovault.places.data
 
-import com.geovault.places.model.Feature
+import com.geovault.places.model.Place
 
 /**
  * Places API create/update body. Only fields allowed by server PlaceProperties (extra=forbid).
@@ -11,20 +11,15 @@ data class PlaceWriteBody(
     val properties: PlaceWriteProperties,
 ) {
     companion object {
-        fun fromFeature(feature: Feature): PlaceWriteBody {
-            val coords = feature.geometry.coordinates
-            require(coords.size >= 2) { "Point coordinates require lon and lat" }
-            val name = feature.properties.name.orEmpty().trim()
+        fun fromPlace(place: Place): PlaceWriteBody {
+            val name = place.content.name.trim()
             require(name.isNotEmpty()) { "Place name is required" }
-            val description = feature.properties.description
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-            val address = feature.properties.address
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
+            val location = place.content.location
+            val description = place.content.description.trim().takeIf { it.isNotEmpty() }
+            val address = place.content.address?.trim()?.takeIf { it.isNotEmpty() }
             return PlaceWriteBody(
                 geometry = PlaceWriteGeometry(
-                    coordinates = listOf(coords[0], coords[1]),
+                    coordinates = listOf(location.longitude, location.latitude),
                 ),
                 properties = PlaceWriteProperties(
                     name = name,

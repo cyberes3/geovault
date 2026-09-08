@@ -1,7 +1,5 @@
 package com.geovault.places.data
 
-import com.geovault.places.model.Feature
-import com.geovault.places.model.FeatureCollection
 import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -13,16 +11,16 @@ import retrofit2.http.Query
 
 interface PlacesApi {
     @GET("api/extensions/places/features/")
-    fun getPlaces(@Query("sort") sort: String = "composite"): Call<FeatureCollection>
+    fun getPlaces(@Query("sort") sort: String = "composite"): Call<PlacesGeoJsonFeatureCollection>
 
     @GET("api/extensions/places/features/{id}/")
-    fun getPlace(@Path("id") id: Int): Call<Feature>
+    fun getPlace(@Path("id") id: Int): Call<PlacesGeoJsonFeature>
 
     @POST("api/extensions/places/features/")
-    fun createPlace(@Body body: PlaceWriteBody): Call<Feature>
+    fun createPlace(@Body body: PlaceWriteBody): Call<PlacesGeoJsonFeature>
 
     @PUT("api/extensions/places/features/{id}/")
-    fun updatePlace(@Path("id") id: Int, @Body body: PlaceWriteBody): Call<Feature>
+    fun updatePlace(@Path("id") id: Int, @Body body: PlaceWriteBody): Call<PlacesGeoJsonFeature>
 
     @DELETE("api/extensions/places/features/{id}/")
     fun deletePlace(@Path("id") id: Int): Call<Void>

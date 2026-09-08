@@ -1,9 +1,5 @@
-package com.geovault.places
+package com.geovault.places.ui
 
-import android.content.Intent
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,9 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Divider
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
@@ -34,31 +30,30 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import com.geovault.places.R
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope
-import com.geovault.common.intent.getSerializableExtraCompat
-import com.geovault.common.logging.GeoVaultCaptureLog
-import com.geovault.common.maps.core.GeoVaultStandardMapView
 import com.geovault.common.maps.core.GeoVaultMapPhase
+import com.geovault.common.maps.core.GeoVaultStandardMapView
 import com.geovault.common.maps.core.MapLibreManager
 import com.geovault.common.maps.core.isValidMapLibreGeographicLatLng
 import com.geovault.common.maps.core.rememberGeoVaultStandardMap
+import com.geovault.common.maps.geocoding.GeocodingRepository
 import com.geovault.common.maps.location.rememberGeoVaultMapUserLocationPlugin
 import com.geovault.common.maps.render.CommonMapIconIds
 import com.geovault.common.maps.render.GeoJsonRenderConfig
@@ -67,248 +62,60 @@ import com.geovault.common.maps.render.MapRenderPoint
 import com.geovault.common.maps.render.MapRenderState
 import com.geovault.common.maps.ui.GeoVaultMapFabColumn
 import com.geovault.common.maps.ui.GeoVaultMapFabIcon
-import com.geovault.common.maps.geocoding.GeocodingRepository
 import com.geovault.common.maps.ui.buildGeoVaultMapFabActions
 import com.geovault.common.maps.ui.geoVaultLayerToggleFabAction
 import com.geovault.common.maps.ui.geocoding.GeoVaultMapGeocodeSearchDialog
 import com.geovault.common.maps.ui.oneshot.rememberGeoVaultGpsOneShotMyLocationController
-import com.geovault.common.sync.GeoVaultHttpFailureClassifier
-import com.geovault.common.sync.GeoVaultHttpFailureKind
-import com.geovault.common.sync.GeoVaultQueuedSyncFailurePolicy
-import com.geovault.common.sync.GeoVaultQueuedSyncItemDisposition
-import com.geovault.common.ui.GeoVaultAppSnackbarLayer
 import com.geovault.common.ui.components.GeoVaultConfirmationDialog
+import com.geovault.common.ui.components.GeoVaultFormSection
+import com.geovault.common.ui.components.GeoVaultFormSectionHeader
 import com.geovault.common.ui.components.GeoVaultInput
 import com.geovault.common.ui.components.GeoVaultLoadingSpinner
 import com.geovault.common.ui.components.GeoVaultPrimaryButton
+import com.geovault.common.ui.components.GeoVaultRequestBottomTabsHidden
 import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.GeoVaultTopTitleBar
 import com.geovault.common.ui.components.GeoVaultTopTitleBarDefaults
 import com.geovault.common.ui.components.TopBarIconAction
 import com.geovault.common.ui.modifier.geoVaultKeyboardAwareVerticalScroll
 import com.geovault.common.ui.navigation.GeoVaultRegisterBackHandler
-import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.common.ui.theme.GeoVaultColorTokens
-import com.geovault.common.ui.theme.GeoVaultTheme
-import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.common.ui.theme.geoVaultHairlineDividerColor
-import com.geovault.places.di.PlacesAppServices
-import com.geovault.places.model.Feature
-import com.geovault.places.model.OfflineFeature
-import com.geovault.places.presentation.PlaceEditScreenState
+import com.geovault.places.R
+import com.geovault.places.presentation.PlaceEditCameraMotion
+import com.geovault.places.presentation.PlaceEditEvent
+import com.geovault.places.presentation.PlaceEditFormDraft
+import com.geovault.places.presentation.PlaceEditMode
+import com.geovault.places.presentation.PlaceEditViewModel
 import com.geovault.places.presentation.PlacesOfflineBehaviorPolicy
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 
-class PlaceEditActivity : ComponentActivity() {
-    companion object {
-        private const val TAG = "PlacesEdit"
-        const val EXTRA_CLIENT_LOCAL_ID = "client_local_id"
-        const val EXTRA_IS_OFFLINE_EDIT = "is_offline_edit"
-        const val EXTRA_FEATURE = "feature"
-        const val EXTRA_ORIGINAL_FEATURE = "original_feature"
-        const val EXTRA_OFFLINE_FEATURE = "offline_feature"
-        const val EXTRA_UPDATED_FEATURE = "updated_feature"
-        const val EXTRA_DELETED_FEATURE = "deleted_feature"
-        const val EXTRA_REVERT_OFFLINE = "revert_offline_feature"
-        const val EXTRA_OFFLINE_SNACKBAR = "offline_snackbar_message"
+@Composable
+fun PlaceEditScreen(
+    viewModel: PlaceEditViewModel,
+    onClose: () -> Unit,
+    onMessage: (String) -> Unit,
+) {
+    val state by viewModel.state.collectAsState()
+    var formDraft by rememberSaveable(stateSaver = PlaceEditFormDraftSaver) {
+        mutableStateOf(PlaceEditFormDraft.from(state))
     }
-
-    private val saveInFlight = AtomicBoolean(false)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val editFeature = intent.getSerializableExtraCompat<Feature>(EXTRA_FEATURE)
-        val originalFeature = intent.getSerializableExtraCompat<Feature>(EXTRA_ORIGINAL_FEATURE)
-        val isOfflineEdit = intent.getBooleanExtra(EXTRA_IS_OFFLINE_EDIT, false)
-        val clientLocalId = intent.getStringExtra(EXTRA_CLIENT_LOCAL_ID)
-            ?: OfflineFeature.newId()
-
-        setContent {
-            GeoVaultTheme {
-                var snackbarMessage by remember { mutableStateOf<String?>(null) }
-                Box(modifier = Modifier.fillMaxSize()) {
-                PlaceEditScreen(
-                    initial = editFeature,
-                    isOfflineEdit = isOfflineEdit,
-                    onClose = { finish() },
-                    onDeleteOrRevert = {
-                        lifecycleScope.launch {
-                            if (isOfflineEdit) {
-                                val featureToRevert = editFeature ?: return@launch
-                                val offline = OfflineFeature(
-                                    clientLocalId = clientLocalId,
-                                    feature = featureToRevert,
-                                    original = originalFeature,
-                                )
-                                setResult(
-                                    RESULT_OK,
-                                    Intent().putExtra(EXTRA_REVERT_OFFLINE, offline),
-                                )
-                                finish()
-                                return@launch
-                            }
-                            val dbId = editFeature?.properties?.database_id ?: return@launch
-                            val repo = PlacesAppServices.from(application).placesRepository()
-                            val result = withContext(Dispatchers.IO) { repo.deletePlace(dbId) }
-                            if (result.isSuccess) {
-                                setResult(
-                                    RESULT_OK,
-                                    Intent().putExtra(EXTRA_DELETED_FEATURE, editFeature),
-                                )
-                                finish()
-                            } else {
-                                val kind = GeoVaultHttpFailureClassifier.classifyThrowable(
-                                    result.exceptionOrNull() ?: Exception("delete failed"),
-                                )
-                                val message = when (kind) {
-                                    GeoVaultHttpFailureKind.Auth ->
-                                        PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE
-                                    GeoVaultHttpFailureKind.RetryableNetwork ->
-                                        PlacesOfflineBehaviorPolicy.DELETE_WHILE_OFFLINE_MESSAGE
-                                    else -> PlacesOfflineBehaviorPolicy.DELETE_SERVER_ERROR_MESSAGE
-                                }
-                                snackbarMessage = message
-                            }
-                        }
-                    },
-                    onSave = { updated ->
-                        if (!saveInFlight.compareAndSet(false, true)) {
-                            GeoVaultCaptureLog.w(TAG, "save ignored: already in flight")
-                            return@PlaceEditScreen
-                        }
-                        lifecycleScope.launch {
-                            try {
-                                if (isOfflineEdit) {
-                                    GeoVaultCaptureLog.i(
-                                        TAG,
-                                        "save offline-edit clientLocalId=$clientLocalId " +
-                                            "name=${updated.properties.name} " +
-                                            "databaseId=${updated.properties.database_id}",
-                                    )
-                                    setResult(
-                                        RESULT_OK,
-                                        Intent().apply {
-                                            putExtra(EXTRA_OFFLINE_FEATURE, updated)
-                                            putExtra(
-                                                EXTRA_ORIGINAL_FEATURE,
-                                                originalFeature ?: editFeature,
-                                            )
-                                            putExtra(EXTRA_CLIENT_LOCAL_ID, clientLocalId)
-                                            putExtra(
-                                                EXTRA_OFFLINE_SNACKBAR,
-                                                PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE,
-                                            )
-                                        },
-                                    )
-                                    finish()
-                                    return@launch
-                                }
-
-                                val repo = PlacesAppServices.from(application).placesRepository()
-                                val dbId = editFeature?.properties?.database_id
-                                GeoVaultCaptureLog.i(
-                                    TAG,
-                                    "save online-attempt name=${updated.properties.name} databaseId=$dbId " +
-                                        "hasCreatedAt=${!updated.properties.created_at.isNullOrBlank()}",
-                                )
-                                val result = withContext(Dispatchers.IO) {
-                                    if (dbId != null) {
-                                        repo.updatePlace(dbId, updated)
-                                    } else {
-                                        repo.createPlace(updated)
-                                    }
-                                }
-                                if (result.isSuccess) {
-                                    GeoVaultCaptureLog.i(
-                                        TAG,
-                                        "save online-ok name=${updated.properties.name} " +
-                                            "serverId=${result.getOrNull()?.properties?.database_id}",
-                                    )
-                                    setResult(
-                                        RESULT_OK,
-                                        Intent().putExtra(EXTRA_UPDATED_FEATURE, result.getOrNull()),
-                                    )
-                                    finish()
-                                    return@launch
-                                }
-
-                                val error = result.exceptionOrNull()!!
-                                val kind = GeoVaultHttpFailureClassifier.classifyThrowable(error)
-                                val disposition = GeoVaultQueuedSyncFailurePolicy.dispositionFor(kind)
-                                GeoVaultCaptureLog.e(
-                                    TAG,
-                                    "save online-failed name=${updated.properties.name} " +
-                                        "kind=$kind disposition=$disposition " +
-                                        "error=${error.message}",
-                                )
-                                when {
-                                    disposition == GeoVaultQueuedSyncItemDisposition.RequireAuth -> {
-                                        snackbarMessage = PlacesOfflineBehaviorPolicy.AUTH_REQUIRED_MESSAGE
-                                        saveInFlight.set(false)
-                                    }
-                                    disposition == GeoVaultQueuedSyncItemDisposition.DropAndSurface -> {
-                                        snackbarMessage = error.message?.takeIf { it.isNotBlank() }
-                                            ?: PlacesOfflineBehaviorPolicy.VALIDATION_FAILED_MESSAGE
-                                        saveInFlight.set(false)
-                                    }
-                                    GeoVaultQueuedSyncFailurePolicy.shouldFallbackToOfflineSave(kind) -> {
-                                        val snackbar = when (kind) {
-                                            GeoVaultHttpFailureKind.RetryableNetwork,
-                                            GeoVaultHttpFailureKind.RetryableServer,
-                                            GeoVaultHttpFailureKind.Unknown ->
-                                                PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_NETWORK_MESSAGE
-                                            else -> PlacesOfflineBehaviorPolicy.SAVED_OFFLINE_MESSAGE
-                                        }
-                                        setResult(
-                                            RESULT_OK,
-                                            Intent().apply {
-                                                putExtra(EXTRA_OFFLINE_FEATURE, updated)
-                                                putExtra(EXTRA_ORIGINAL_FEATURE, editFeature)
-                                                putExtra(EXTRA_CLIENT_LOCAL_ID, clientLocalId)
-                                                putExtra(EXTRA_OFFLINE_SNACKBAR, snackbar)
-                                            },
-                                        )
-                                        finish()
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                                saveInFlight.set(false)
-                                throw t
-                            }
-                        }
-                    },
-                )
-                GeoVaultAppSnackbarLayer(
-                    snackbar = snackbarMessage?.let { message ->
-                        GeoVaultSnackbarModel(id = message, message = message)
-                    },
-                    onDismissSnackbar = { snackbarMessage = null },
-                    update = null,
-                    onDismissUpdate = {},
-                )
-                }
-            }
+    var appliedSavedDraft by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!appliedSavedDraft) {
+            viewModel.restoreDraft(formDraft)
+            appliedSavedDraft = true
         }
     }
-}
-
-@Composable
-private fun PlaceEditScreen(
-    initial: Feature?,
-    isOfflineEdit: Boolean,
-    onClose: () -> Unit,
-    onDeleteOrRevert: () -> Unit,
-    onSave: (Feature) -> Unit,
-) {
-    val state = remember(initial, isOfflineEdit) { PlaceEditScreenState(initial = initial, isOfflineEdit = isOfflineEdit) }
+    LaunchedEffect(state) {
+        if (appliedSavedDraft) {
+            formDraft = PlaceEditFormDraft.from(state)
+        }
+    }
     val map = rememberGeoVaultStandardMap()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val geocodingRepository = remember(context) { GeocodingRepository(context) }
     var showGeocodeSearchDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -324,6 +131,7 @@ private fun PlaceEditScreen(
                 showPointCircles = false,
                 showPointLabelsAndIcons = true,
                 showPointTextLabels = false,
+                synchronousGeoJsonApplication = true,
             ),
             context = context,
         )
@@ -333,18 +141,29 @@ private fun PlaceEditScreen(
         map = map,
         userLocation = locationPlugin,
         onLocationResolved = { latLng ->
-            state.setFromDeviceLocation(latLng.latitude, latLng.longitude)
+            viewModel.setFromDeviceLocation(latLng.latitude, latLng.longitude)
         },
         showUserLocationPuck = false,
     )
     val layerFabAction = remember(map) { geoVaultLayerToggleFabAction(map, order = 1) }
     val formScrollState = rememberScrollState()
 
+    GeoVaultRequestBottomTabsHidden(shouldHide = true)
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                PlaceEditEvent.Closed -> onClose()
+                is PlaceEditEvent.Message -> onMessage(event.text)
+            }
+        }
+    }
+
     GeoVaultRegisterBackHandler(
         canGoBack = { true },
         onBack = {
             if (state.hasUnsavedChanges) {
-                state.showDiscardDialog = true
+                viewModel.setShowDiscardDialog(true)
             } else {
                 onClose()
             }
@@ -360,7 +179,7 @@ private fun PlaceEditScreen(
         map.registerPlugin(renderPlugin)
         map.registerPlugin(locationPlugin)
         val listener = MapLibreMap.OnMapClickListener { clicked ->
-            if (state.setFromMapPoint(clicked.latitude, clicked.longitude)) {
+            if (viewModel.setFromMapPoint(clicked.latitude, clicked.longitude)) {
                 dismissInputFocus()
             }
             true
@@ -374,10 +193,10 @@ private fun PlaceEditScreen(
     }
 
     val phase by map.phase.collectAsState()
-    LaunchedEffect(state.selectedLat, state.selectedLon, phase) {
-        val lat = state.selectedLat ?: return@LaunchedEffect
-        val lon = state.selectedLon ?: return@LaunchedEffect
-        val coordinateValid = isValidMapLibreGeographicLatLng(lat, lon)
+    LaunchedEffect(state.selectedLat, state.selectedLon, phase, state.showSelectedPointMarker) {
+        val lat = state.selectedLat
+        val lon = state.selectedLon
+        val coordinateValid = lat != null && lon != null && isValidMapLibreGeographicLatLng(lat, lon)
         val points = if (state.showSelectedPointMarker && coordinateValid) {
             listOf(
                 MapRenderPoint(
@@ -391,13 +210,9 @@ private fun PlaceEditScreen(
         } else {
             emptyList()
         }
-        renderPlugin.setRenderState(
-            MapRenderState(
-                points = points,
-            ),
-        )
+        renderPlugin.setRenderState(MapRenderState(points = points))
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        if (!state.shouldFocusCameraOnSelection()) return@LaunchedEffect
+        if (state.pendingCameraMotion != PlaceEditCameraMotion.FocusSelection) return@LaunchedEffect
         if (coordinateValid) {
             map.animateCameraWithPadding(
                 CameraUpdateFactory.newLatLngZoom(
@@ -406,7 +221,7 @@ private fun PlaceEditScreen(
                 ),
             )
         }
-        state.markSelectionCameraFocusHandled()
+        viewModel.markSelectionCameraFocusHandled()
     }
 
     Scaffold(
@@ -415,16 +230,20 @@ private fun PlaceEditScreen(
             GeoVaultTopTitleBar(
                 title = state.title,
                 backgroundColor = GeoVaultColorTokens.MainBlue,
-                rightActions = if (initial != null) {
+                rightActions = if (state.mode != PlaceEditMode.New) {
                     listOf(
                         TopBarIconAction(
                             icon = Icons.Filled.Delete,
-                            contentDescription = state.deleteActionLabel(),
-                            onClick = { state.showDeleteDialog = true },
+                            contentDescription = PlacesOfflineBehaviorPolicy.destructiveActionLabel(state.deleteAction),
+                            onClick = { viewModel.setShowDeleteDialog(true) },
                         ),
                         GeoVaultTopTitleBarDefaults.closeAction(
                             onClick = {
-                                if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                                if (state.hasUnsavedChanges) {
+                                    viewModel.setShowDiscardDialog(true)
+                                } else {
+                                    onClose()
+                                }
                             },
                         ),
                     )
@@ -432,7 +251,11 @@ private fun PlaceEditScreen(
                     listOf(
                         GeoVaultTopTitleBarDefaults.closeAction(
                             onClick = {
-                                if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                                if (state.hasUnsavedChanges) {
+                                    viewModel.setShowDiscardDialog(true)
+                                } else {
+                                    onClose()
+                                }
                             },
                         ),
                     )
@@ -505,18 +328,17 @@ private fun PlaceEditScreen(
                             color = geoVaultHairlineDividerColor(),
                             thickness = 1.dp,
                         )
-                        Column(
+                        GeoVaultFormSection(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
                                 .geoVaultKeyboardAwareVerticalScroll(formScrollState)
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("Name *", color = geoVaultContentSecondaryColor(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            GeoVaultFormSectionHeader("Name *")
                             GeoVaultInput(
                                 value = state.name,
-                                onValueChange = { state.name = it },
+                                onValueChange = viewModel::onNameChange,
                                 label = null,
                                 placeholder = "Place name",
                                 modifier = Modifier.fillMaxWidth(),
@@ -525,28 +347,23 @@ private fun PlaceEditScreen(
                                 ),
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Description", color = geoVaultContentSecondaryColor(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            GeoVaultFormSectionHeader("Description")
                             GeoVaultInput(
                                 value = state.description,
-                                onValueChange = { state.description = it },
+                                onValueChange = viewModel::onDescriptionChange,
                                 label = null,
                                 placeholder = "Optional description",
                                 singleLine = false,
                                 modifier = Modifier.fillMaxWidth(),
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(
+                                GeoVaultFormSectionHeader(
                                     "Coordinates *",
                                     modifier = Modifier.weight(1f),
-                                    color = geoVaultContentSecondaryColor(),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
                                 )
                                 state.coordinatesError?.let {
                                     Text(it, color = GeoVaultColorTokens.Error, fontSize = 12.sp)
@@ -561,7 +378,7 @@ private fun PlaceEditScreen(
                             ) {
                                 GeoVaultInput(
                                     value = state.coordinatesInput,
-                                    onValueChange = state::onCoordinatesEdited,
+                                    onValueChange = viewModel::onCoordinatesEdited,
                                     label = null,
                                     placeholder = "latitude, longitude",
                                     modifier = Modifier
@@ -571,12 +388,21 @@ private fun PlaceEditScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 GeoVaultSecondaryButton(
                                     text = "{ }",
-                                    onClick = { state.parseCoordinatesFromInput() },
+                                    onClick = viewModel::parseCoordinatesFromInput,
                                     tooltip = stringResource(R.string.tooltip_place_normalize_coordinates),
                                     fitToContent = true,
                                     modifier = Modifier.fillMaxHeight(),
                                 )
                             }
+
+                            GeoVaultFormSectionHeader("Address")
+                            GeoVaultInput(
+                                value = state.selectedAddress.orEmpty(),
+                                onValueChange = viewModel::onAddressChange,
+                                label = null,
+                                placeholder = "Optional address",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
 
                             GeoVaultSecondaryButton(
                                 text = "Use my location",
@@ -621,18 +447,19 @@ private fun PlaceEditScreen(
                             ) {
                                 GeoVaultPrimaryButton(
                                     text = "Save Place",
-                                    onClick = {
-                                        val built = state.buildFeatureOrNull() ?: return@GeoVaultPrimaryButton
-                                        onSave(built)
-                                    },
-                                    enabled = state.name.trim().isNotEmpty() && state.coordinatesInput.trim().isNotEmpty(),
+                                    onClick = viewModel::save,
+                                    enabled = state.isSaveEnabled,
                                     tooltip = stringResource(R.string.tooltip_place_save),
                                     modifier = Modifier.weight(1f),
                                 )
                                 GeoVaultSecondaryButton(
                                     text = "Cancel",
                                     onClick = {
-                                        if (state.hasUnsavedChanges) state.showDiscardDialog = true else onClose()
+                                        if (state.hasUnsavedChanges) {
+                                            viewModel.setShowDiscardDialog(true)
+                                        } else {
+                                            onClose()
+                                        }
                                     },
                                     tooltip = stringResource(R.string.tooltip_place_cancel),
                                     modifier = Modifier.weight(1f),
@@ -650,34 +477,34 @@ private fun PlaceEditScreen(
             title = "Discard Changes?",
             message = "You have unsaved changes. Are you sure you want to leave?",
             onConfirm = {
-                state.showDiscardDialog = false
+                viewModel.setShowDiscardDialog(false)
                 onClose()
             },
-            onCancel = { state.showDiscardDialog = false },
+            onCancel = { viewModel.setShowDiscardDialog(false) },
             confirmText = "Discard",
             cancelText = "Cancel",
         )
     }
 
-    if (state.showDeleteDialog && initial != null) {
-        val actionLabel = state.deleteActionLabel()
-        val message = if (state.isOfflineEdit) {
-            if (initial.properties.database_id != null) {
-                "Are you sure you want to revert your changes to '${initial.properties.name ?: "this place"}'?"
-            } else {
-                "Are you sure you want to discard '${initial.properties.name ?: "this place"}'?"
-            }
-        } else {
-            "Are you sure you want to delete '${initial.properties.name ?: "this place"}'? This cannot be undone."
+    if (state.showDeleteDialog && state.mode != PlaceEditMode.New) {
+        val actionLabel = PlacesOfflineBehaviorPolicy.destructiveActionLabel(state.deleteAction)
+        val placeName = state.name.ifBlank { "this place" }
+        val message = when (state.mode) {
+            PlaceEditMode.EditPendingUpdate ->
+                "Are you sure you want to revert your changes to '$placeName'?"
+            PlaceEditMode.EditPendingCreate ->
+                "Are you sure you want to discard '$placeName'?"
+            else ->
+                "Are you sure you want to delete '$placeName'? This cannot be undone."
         }
         GeoVaultConfirmationDialog(
             title = "$actionLabel Place",
             message = message,
             onConfirm = {
-                state.showDeleteDialog = false
-                onDeleteOrRevert()
+                viewModel.setShowDeleteDialog(false)
+                viewModel.deleteOrRevert()
             },
-            onCancel = { state.showDeleteDialog = false },
+            onCancel = { viewModel.setShowDeleteDialog(false) },
             confirmText = actionLabel,
             cancelText = "Cancel",
         )
@@ -688,7 +515,30 @@ private fun PlaceEditScreen(
             visible = true,
             repository = geocodingRepository,
             onDismissRequest = { showGeocodeSearchDialog = false },
-            onPickResult = state::setFromSearchResult,
+            onPickResult = viewModel::setFromSearchResult,
         )
     }
 }
+
+private val PlaceEditFormDraftSaver = listSaver<PlaceEditFormDraft, String>(
+    save = { draft ->
+        listOf(
+            draft.name,
+            draft.description,
+            draft.coordinatesInput,
+            draft.address.orEmpty(),
+            draft.selectedLat?.toString().orEmpty(),
+            draft.selectedLon?.toString().orEmpty(),
+        )
+    },
+    restore = { values ->
+        PlaceEditFormDraft(
+            name = values.getOrElse(0) { "" },
+            description = values.getOrElse(1) { "" },
+            coordinatesInput = values.getOrElse(2) { "" },
+            address = values.getOrNull(3)?.takeIf { it.isNotEmpty() },
+            selectedLat = values.getOrNull(4)?.toDoubleOrNull(),
+            selectedLon = values.getOrNull(5)?.toDoubleOrNull(),
+        )
+    },
+)

@@ -1,6 +1,7 @@
 package com.geovault.places.presentation
 
-import com.geovault.places.model.OfflineFeature
+import com.geovault.places.model.PendingChange
+import com.geovault.places.model.Place
 
 enum class PlacesOfflineDestructiveAction {
     Delete,
@@ -15,19 +16,18 @@ object PlacesOfflineBehaviorPolicy {
     const val AUTH_REQUIRED_MESSAGE: String = "Sign in again to save this place."
     const val VALIDATION_FAILED_MESSAGE: String = "Server rejected this place. Fix the fields and try again."
     const val REFRESH_CANCELLED_USING_CACHE_MESSAGE: String = "Cancelled - using cached data"
-    const val DELETE_WHILE_OFFLINE_MESSAGE: String =
-        "Cannot delete while offline. Please try again when connected."
+    const val DELETE_QUEUED_OFFLINE_MESSAGE: String =
+        "Couldn't reach the server. Delete queued — pull to sync."
     const val DELETE_SERVER_ERROR_MESSAGE: String = "Failed to delete: Server error"
     const val MAP_APP_UNAVAILABLE_MESSAGE: String = "No map app available"
     const val REVERTED_CHANGES_MESSAGE: String = "Changes reverted - showing original"
     const val DISCARDED_OFFLINE_PLACE_MESSAGE: String = "Offline place discarded"
 
-    fun destructiveActionForRow(isOffline: Boolean, offlineFeature: OfflineFeature?): PlacesOfflineDestructiveAction {
-        if (!isOffline || offlineFeature == null) return PlacesOfflineDestructiveAction.Delete
-        return if (offlineFeature.feature.properties.database_id != null) {
-            PlacesOfflineDestructiveAction.Revert
-        } else {
-            PlacesOfflineDestructiveAction.Discard
+    fun destructiveActionFor(place: Place): PlacesOfflineDestructiveAction {
+        return when (place.pending) {
+            is PendingChange.Update -> PlacesOfflineDestructiveAction.Revert
+            PendingChange.Create -> PlacesOfflineDestructiveAction.Discard
+            else -> PlacesOfflineDestructiveAction.Delete
         }
     }
 
@@ -39,12 +39,11 @@ object PlacesOfflineBehaviorPolicy {
         }
     }
 
-    fun offlineRemovalMessage(item: OfflineFeature): String {
-        return if (item.feature.properties.database_id != null) {
+    fun offlineRemovalMessage(place: Place): String {
+        return if (place.pending is PendingChange.Update) {
             REVERTED_CHANGES_MESSAGE
         } else {
             DISCARDED_OFFLINE_PLACE_MESSAGE
         }
     }
-
 }

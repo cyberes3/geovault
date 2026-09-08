@@ -1,6 +1,7 @@
 package com.geovault.places.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -65,41 +65,43 @@ import com.geovault.common.ui.components.GeoVaultSecondaryButton
 import com.geovault.common.ui.components.TopBarMenuEntry
 import com.geovault.common.ui.theme.geoVaultContentSecondaryColor
 import com.geovault.places.R
-import com.geovault.places.model.Feature
+import com.geovault.places.model.Place
+import com.geovault.places.model.PlaceKey
+import com.geovault.places.presentation.PlacesMapLaunchArgs
 import com.geovault.places.presentation.PlacesMapViewModel
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
-
-data class PlacesMapLaunchArgs(
-    val zoomToLat: Double? = null,
-    val zoomToLon: Double? = null,
-    val zoomToId: Int? = null,
-    val requestToken: Long = 0L,
-)
 
 @Composable
 fun PlacesMapScreen(
     map: GeoVaultMainMap,
     viewModel: PlacesMapViewModel,
     launchArgs: PlacesMapLaunchArgs,
+    selectedKey: PlaceKey?,
     auth: GeoVaultAuthShellState,
     isTabVisible: Boolean = true,
     onOpenShare: () -> Unit,
-    onOpenEdit: (Feature) -> Unit,
-    onViewInList: (Feature) -> Unit,
-    onNavigate: (Feature) -> Unit,
-    onViewDescription: (Feature) -> Unit,
+    onSelectKey: (PlaceKey?) -> Unit,
+    onOpenEdit: (Place) -> Unit,
+    onViewInList: (Place) -> Unit,
+    onNavigate: (Place) -> Unit,
+    onViewDescription: (Place) -> Unit,
     onLaunchArgsConsumed: () -> Unit = {},
 ) {
-    val state by viewModel.state.collectAsState()
+    val places by viewModel.places.collectAsState()
+    val selectedPlace = remember(places, selectedKey) {
+        places.firstOrNull { it.key == selectedKey }
+    }
     val context = LocalContext.current
     val boundsFitPaddingPx = rememberGeoVaultMapBoundsFitPaddingPx()
     val renderPlugin = remember {
         GeoJsonRenderPlugin(
+            sourceIdPrefix = "places-main-map",
             config = GeoJsonRenderConfig(
                 showPointCircles = false,
                 showPointLabelsAndIcons = true,
                 showPointTextLabels = true,
+                synchronousGeoJsonApplication = true,
             ),
             context = context,
         )
@@ -151,11 +153,12 @@ fun PlacesMapScreen(
 
     renderPlugin.renderedMapTapHitKinds = setOf(GeoVaultRenderedMapHitKind.Point)
     renderPlugin.onRenderedMapHitSelected = { hit ->
-        viewModel.selectByRenderId(hit.id)
+        onSelectKey(PlaceKey(hit.id))
+        true
     }
     renderPlugin.onRenderedMapBackgroundTapped = {
-        viewModel.setSelectedFeature(null)
-        false
+        onSelectKey(null)
+        true
     }
 
     DisposableEffect(map) {
@@ -169,18 +172,16 @@ fun PlacesMapScreen(
         }
     }
 
-    LaunchedEffect(state.features, state.selectedFeature) {
-        renderPlugin.setRenderState(viewModel.buildMapRenderState())
+    LaunchedEffect(places, selectedKey) {
+        renderPlugin.setRenderState(viewModel.buildMapRenderState(selectedKey))
     }
 
     var mapInitialFrameReady by remember { mutableStateOf(false) }
-    LaunchedEffect(phase, state.features, launchArgs) {
+    LaunchedEffect(phase, places, launchArgs) {
         map.maplibreMap ?: return@LaunchedEffect
         if (phase != GeoVaultMapPhase.Ready) return@LaunchedEffect
-        val requestedId = launchArgs.zoomToId?.takeIf { it >= 0 }
-        if (requestedId != null &&
-            state.features.none { it.properties.database_id == requestedId }
-        ) {
+        val requestedKey = launchArgs.selectKey
+        if (requestedKey != null && places.none { it.key == requestedKey }) {
             return@LaunchedEffect
         }
         if (!viewModel.shouldApplyInitialCamera(launchArgs.requestToken)) {
@@ -188,12 +189,12 @@ fun PlacesMapScreen(
             return@LaunchedEffect
         }
         viewModel.markInitialCameraApplied(launchArgs.requestToken)
-        if (requestedId != null) {
-            viewModel.selectByDatabaseId(requestedId)
+        if (requestedKey != null) {
+            onSelectKey(requestedKey)
         }
         headingFollowFabs.runProgrammaticCamera {
-            if (launchArgs.zoomToLat != null && launchArgs.zoomToLon != null) {
-                val zoomTarget = latLngOrNull(launchArgs.zoomToLat, launchArgs.zoomToLon)
+            if (launchArgs.zoomLatitude != null && launchArgs.zoomLongitude != null) {
+                val zoomTarget = latLngOrNull(launchArgs.zoomLatitude, launchArgs.zoomLongitude)
                 if (zoomTarget != null) {
                     val camera = CameraPosition.Builder()
                         .target(zoomTarget)
@@ -227,164 +228,158 @@ fun PlacesMapScreen(
         authenticatedContentHorizontalPadding = 0.dp,
         authenticatedBottomSpacer = 0.dp,
         authenticatedMainContent = {
-        // Match previous activity_map.xml behavior: map lives in a weighted region above the info panel;
-        // bottom UI is a sibling, not an overlay — no camera bottom inset needed for it.
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colors.background),
-        ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .background(MaterialTheme.colors.background),
             ) {
-                GeoVaultMainMapView(
-                    modifier = Modifier.fillMaxSize(),
-                    map = map,
-                    showDefaultSourceToggle = false,
-                    includeDefaultFabColumnPadding = true,
-                )
-
-            val layersTooltip = stringResource(R.string.tooltip_map_layers)
-            val fitContentTooltip = stringResource(R.string.tooltip_map_fit_content)
-            val zoomInTooltip = stringResource(R.string.tooltip_map_zoom_in)
-            val zoomOutTooltip = stringResource(R.string.tooltip_map_zoom_out)
-            val mapFabActions = buildGeoVaultMapFabActions {
-                action(
-                    id = "source",
-                    order = 10,
-                    icon = layerFabAction.icon,
-                    contentDescription = layersTooltip,
-                    tooltip = layersTooltip,
-                    onTap = layerFabAction.onTap,
-                )
-                action(
-                    id = "home",
-                    order = 20,
-                    icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
-                    contentDescription = fitContentTooltip,
-                    tooltip = fitContentTooltip,
-                    onTap = {
-                        headingFollowFabs.runProgrammaticCamera {
-                            map.animateCameraToHomeFit(
-                                bounds = viewModel.featureBounds(),
-                                gpsAnchor = locationPlugin.getLastLocation()?.let {
-                                    latLngOrNull(it.latitude, it.longitude)
-                                },
-                                paddingPx = boundsFitPaddingPx,
-                            )
-                        }
-                    },
-                )
-                action(
-                    id = gpsFabAction.id,
-                    order = gpsFabAction.order,
-                    icon = gpsFabAction.icon,
-                    contentDescription = gpsFabAction.contentDescription,
-                    tooltip = gpsFabAction.contentDescription,
-                    onTap = gpsFabAction.onTap,
-                )
-                action(
-                    id = orientationFabAction.id,
-                    order = orientationFabAction.order,
-                    icon = orientationFabAction.icon,
-                    contentDescription = orientationFabAction.contentDescription,
-                    onTap = orientationFabAction.onTap,
-                    tooltip = orientationFabAction.tooltip,
-                    iconRotationDegrees = orientationFabAction.iconRotationDegrees,
-                    useIntrinsicIconColors = orientationFabAction.useIntrinsicIconColors,
-                )
-                action(
-                    id = "zoom_in",
-                    order = 40,
-                    icon = zoomInFabAction.icon,
-                    contentDescription = zoomInTooltip,
-                    tooltip = zoomInTooltip,
-                    onTap = zoomInFabAction.onTap,
-                )
-                action(
-                    id = "zoom_out",
-                    order = 50,
-                    icon = zoomOutFabAction.icon,
-                    contentDescription = zoomOutTooltip,
-                    tooltip = zoomOutTooltip,
-                    onTap = zoomOutFabAction.onTap,
-                )
-            }
-
-                GeoVaultMapFabColumn(
+                Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 16.dp, end = 16.dp),
-                    actions = mapFabActions,
-                )
-                GeoVaultMapInitialFrameShield(
-                    visible = !mapInitialFrameReady,
-                    statusText = "Loading map",
-                )
-            }
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .fillMaxSize(),
+                ) {
+                    GeoVaultMainMapView(
+                        modifier = Modifier.fillMaxSize(),
+                        map = map,
+                        showDefaultSourceToggle = false,
+                        includeDefaultFabColumnPadding = true,
+                    )
 
-            val selectedFeature = state.selectedFeature
-            GeoVaultMapBottomActionPanel {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = viewModel.selectedFeatureLabel(selectedFeature?.properties),
-                        color = MaterialTheme.colors.onSurface,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    // Always reserve a line for the description (even when blank) so the card's
-                    // height — and the buttons below it — don't jump around as the selected
-                    // feature changes.
-                    val description = selectedFeature?.properties?.description?.takeIf { it.isNotBlank() }
-                    Text(
-                        text = description ?: "No description",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .clickable(enabled = description != null) {
-                                selectedFeature?.let(onViewDescription)
-                            },
-                        color = geoVaultContentSecondaryColor(),
-                        fontStyle = if (description == null) FontStyle.Italic else FontStyle.Normal,
-                        minLines = 1,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        GeoVaultPrimaryButton(
-                            text = "View in List",
-                            onClick = { selectedFeature?.let(onViewInList) },
-                            enabled = selectedFeature != null,
-                            tooltip = stringResource(R.string.tooltip_map_view_in_list),
-                            modifier = Modifier.fillMaxWidth(),
+                    val layersTooltip = stringResource(R.string.tooltip_map_layers)
+                    val fitContentTooltip = stringResource(R.string.tooltip_map_fit_content)
+                    val zoomInTooltip = stringResource(R.string.tooltip_map_zoom_in)
+                    val zoomOutTooltip = stringResource(R.string.tooltip_map_zoom_out)
+                    val mapFabActions = buildGeoVaultMapFabActions {
+                        action(
+                            id = "source",
+                            order = 10,
+                            icon = layerFabAction.icon,
+                            contentDescription = layersTooltip,
+                            tooltip = layersTooltip,
+                            onTap = layerFabAction.onTap,
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            GeoVaultSecondaryButton(
-                                text = "Edit",
-                                onClick = { selectedFeature?.let(onOpenEdit) },
-                                enabled = selectedFeature != null,
-                                tooltip = stringResource(R.string.tooltip_place_edit),
-                                modifier = Modifier.weight(1f),
+                        action(
+                            id = "home",
+                            order = 20,
+                            icon = GeoVaultMapFabIcon.Vector(Icons.Default.Home),
+                            contentDescription = fitContentTooltip,
+                            tooltip = fitContentTooltip,
+                            onTap = {
+                                headingFollowFabs.runProgrammaticCamera {
+                                    map.animateCameraToHomeFit(
+                                        bounds = viewModel.featureBounds(),
+                                        gpsAnchor = locationPlugin.getLastLocation()?.let {
+                                            latLngOrNull(it.latitude, it.longitude)
+                                        },
+                                        paddingPx = boundsFitPaddingPx,
+                                    )
+                                }
+                            },
+                        )
+                        action(
+                            id = gpsFabAction.id,
+                            order = gpsFabAction.order,
+                            icon = gpsFabAction.icon,
+                            contentDescription = gpsFabAction.contentDescription,
+                            tooltip = gpsFabAction.contentDescription,
+                            onTap = gpsFabAction.onTap,
+                        )
+                        action(
+                            id = orientationFabAction.id,
+                            order = orientationFabAction.order,
+                            icon = orientationFabAction.icon,
+                            contentDescription = orientationFabAction.contentDescription,
+                            onTap = orientationFabAction.onTap,
+                            tooltip = orientationFabAction.tooltip,
+                            iconRotationDegrees = orientationFabAction.iconRotationDegrees,
+                            useIntrinsicIconColors = orientationFabAction.useIntrinsicIconColors,
+                        )
+                        action(
+                            id = "zoom_in",
+                            order = 40,
+                            icon = zoomInFabAction.icon,
+                            contentDescription = zoomInTooltip,
+                            tooltip = zoomInTooltip,
+                            onTap = zoomInFabAction.onTap,
+                        )
+                        action(
+                            id = "zoom_out",
+                            order = 50,
+                            icon = zoomOutFabAction.icon,
+                            contentDescription = zoomOutTooltip,
+                            tooltip = zoomOutTooltip,
+                            onTap = zoomOutFabAction.onTap,
+                        )
+                    }
+
+                    GeoVaultMapFabColumn(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 16.dp, end = 16.dp),
+                        actions = mapFabActions,
+                    )
+                    GeoVaultMapInitialFrameShield(
+                        visible = !mapInitialFrameReady,
+                        statusText = "Loading map",
+                    )
+                }
+
+                GeoVaultMapBottomActionPanel {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = viewModel.selectedPlaceLabel(selectedPlace),
+                            color = MaterialTheme.colors.onSurface,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        val description = selectedPlace?.content?.description?.takeIf { it.isNotBlank() }
+                        Text(
+                            text = description ?: "No description",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .clickable(enabled = description != null) {
+                                    selectedPlace?.let(onViewDescription)
+                                },
+                            color = geoVaultContentSecondaryColor(),
+                            fontStyle = if (description == null) FontStyle.Italic else FontStyle.Normal,
+                            minLines = 1,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            GeoVaultPrimaryButton(
+                                text = "View in List",
+                                onClick = { selectedPlace?.let(onViewInList) },
+                                enabled = selectedPlace != null,
+                                tooltip = stringResource(R.string.tooltip_map_view_in_list),
+                                modifier = Modifier.fillMaxWidth(),
                             )
-                            GeoVaultSecondaryButton(
-                                text = "Navigate",
-                                onClick = { selectedFeature?.let(onNavigate) },
-                                enabled = selectedFeature != null,
-                                tooltip = stringResource(R.string.tooltip_place_navigate),
-                                modifier = Modifier.weight(1f),
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                GeoVaultSecondaryButton(
+                                    text = "Edit",
+                                    onClick = { selectedPlace?.let(onOpenEdit) },
+                                    enabled = selectedPlace != null,
+                                    tooltip = stringResource(R.string.tooltip_place_edit),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                GeoVaultSecondaryButton(
+                                    text = "Navigate",
+                                    onClick = { selectedPlace?.let(onNavigate) },
+                                    enabled = selectedPlace != null,
+                                    tooltip = stringResource(R.string.tooltip_place_navigate),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-        }
+        },
     )
 }
 

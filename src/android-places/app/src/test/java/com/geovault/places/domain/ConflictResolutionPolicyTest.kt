@@ -1,9 +1,12 @@
 package com.geovault.places.domain
 
-import com.geovault.places.model.Feature
-import com.geovault.places.model.Geometry
-import com.geovault.places.model.Properties
+import com.geovault.places.model.PendingChange
+import com.geovault.places.model.PlaceKey
+import com.geovault.places.sampleContent
+import com.geovault.places.samplePlace
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -12,38 +15,40 @@ class ConflictResolutionPolicyTest {
 
     @Test
     fun emptyStringDescriptionMatchesNull() {
-        val original = place(description = "")
-        val server = place(description = null)
-        assertFalse(policy.hasServerChanged(original, server))
-    }
-
-    @Test
-    fun point2dIgnoresAltitudeDifference() {
-        val original = Feature(
-            geometry = Geometry(coordinates = listOf(2.0, 1.0)),
-            properties = Properties(name = "A"),
-        )
-        val server = Feature(
-            geometry = Geometry(coordinates = listOf(2.0, 1.0, 100.0)),
-            properties = Properties(name = "A"),
-        )
-        assertFalse(policy.hasServerChanged(original, server))
+        assertFalse(policy.hasServerChanged(sampleContent(description = ""), sampleContent(description = "")))
+        assertFalse(policy.hasServerChanged(sampleContent(address = ""), sampleContent(address = null)))
     }
 
     @Test
     fun nameChangeIsConflict() {
-        val original = place(name = "A")
-        val server = place(name = "B")
-        assertTrue(policy.hasServerChanged(original, server))
+        assertTrue(policy.hasServerChanged(sampleContent(name = "A"), sampleContent(name = "B")))
     }
 
-    private fun place(
-        name: String = "Place",
-        description: String? = null,
-    ): Feature {
-        return Feature(
-            geometry = Geometry(coordinates = listOf(2.0, 1.0)),
-            properties = Properties(name = name, description = description),
+    @Test
+    fun addressChangeIsConflict() {
+        assertTrue(
+            policy.hasServerChanged(
+                sampleContent(address = "One"),
+                sampleContent(address = "Two"),
+            ),
         )
+    }
+
+    @Test
+    fun buildConflictedCopyUsesUniqueSuffixNotStackedLabel() {
+        val local = samplePlace(
+            key = PlaceKey.local("abcdef-rest"),
+            serverId = null,
+            name = "Camp",
+            pending = PendingChange.Create,
+        )
+
+        val copy = policy.buildConflictedCopy(local)
+
+        assertEquals("Camp (conflict abcdef)", copy.content.name)
+        assertNull(copy.serverId)
+        assertEquals(PendingChange.Create, copy.pending)
+        assertTrue(copy.key.isLocal)
+        assertTrue(copy.key != local.key)
     }
 }

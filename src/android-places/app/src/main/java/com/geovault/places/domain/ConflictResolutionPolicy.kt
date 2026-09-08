@@ -1,37 +1,31 @@
 package com.geovault.places.domain
 
-import com.geovault.places.model.Feature
+import com.geovault.places.model.PendingChange
+import com.geovault.places.model.Place
+import com.geovault.places.model.PlaceContent
+import com.geovault.places.model.PlaceKey
 
 class ConflictResolutionPolicy {
-    fun hasServerChanged(original: Feature, server: Feature): Boolean {
-        if (normalizeOptional(original.properties.name) != normalizeOptional(server.properties.name)) {
-            return true
-        }
-        if (normalizeOptional(original.properties.description) !=
-            normalizeOptional(server.properties.description)
-        ) {
-            return true
-        }
-        if (normalizeOptional(original.properties.address) !=
-            normalizeOptional(server.properties.address)
-        ) {
-            return true
-        }
-        return point2d(original.geometry.coordinates) != point2d(server.geometry.coordinates)
+    fun hasServerChanged(original: PlaceContent, server: PlaceContent): Boolean {
+        if (normalizeOptional(original.name) != normalizeOptional(server.name)) return true
+        if (normalizeOptional(original.description) != normalizeOptional(server.description)) return true
+        if (normalizeOptional(original.address) != normalizeOptional(server.address)) return true
+        return original.location.longitude != server.location.longitude ||
+            original.location.latitude != server.location.latitude
     }
 
-    fun buildConflictedCopy(local: Feature): Feature {
+    fun buildConflictedCopy(local: Place): Place {
+        val shortKey = local.key.shortToken()
         return local.copy(
-            properties = local.properties.copy(
-                database_id = null,
-                name = (local.properties.name ?: "Place") + " - Conflicted",
+            key = PlaceKey.local(),
+            serverId = null,
+            content = local.content.copy(
+                name = "${local.content.name.ifBlank { "Place" }} (conflict $shortKey)",
             ),
+            pending = PendingChange.Create,
         )
     }
 
     private fun normalizeOptional(value: String?): String? =
         value?.trim()?.takeIf { it.isNotEmpty() }
-
-    private fun point2d(coordinates: List<Double>): List<Double> =
-        coordinates.take(2)
 }

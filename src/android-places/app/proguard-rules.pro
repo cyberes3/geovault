@@ -1,7 +1,6 @@
 # ---------------------------------------------------------------------------
-# App model/API classes (Gson + Parcelable + Retrofit)
+# Gson Retrofit wire types in data/
 # ---------------------------------------------------------------------------
--keep class com.geovault.places.model.** { *; }
 -keep class com.geovault.places.data.** { *; }
 
 # ---------------------------------------------------------------------------

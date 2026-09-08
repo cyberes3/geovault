@@ -16,18 +16,11 @@ import com.geovault.common.ui.files.GeoVaultSafExportRequest
 import com.geovault.common.ui.files.rememberGeoVaultSafDocumentExportLauncher
 import com.geovault.common.ui.snackbar.GeoVaultSnackbarModel
 import com.geovault.places.data.PlacesStore
-import com.geovault.places.export.PlacesKmzExporter
+import com.geovault.places.domain.PlacesListProjection
+import com.geovault.places.export.PlacesExporter
 
 private const val KMZ_MIME_TYPE = "application/vnd.google-earth.kmz"
 
-/**
- * Owns the "Share" export flow: pick which points to include (from both the list and map top
- * bars), generate a KMZ client-side from the local cache (so offline/unsynced points are
- * included), then choose to send it via the system share sheet or save it to a chosen location.
- *
- * Rendered unconditionally — like [com.geovault.common.ui.components.GeoVaultShellSettingsOverlayHost] —
- * so the SAF launcher stays registered across recompositions regardless of dialog visibility.
- */
 @Composable
 fun PlacesShareExportHost(
     visible: Boolean,
@@ -42,12 +35,12 @@ fun PlacesShareExportHost(
     val launchSaveDocument = rememberGeoVaultSafDocumentExportLauncher(KMZ_MIME_TYPE)
 
     if (visible) {
-        val features = remember(visible) { placesStore.getDisplayFeatures() }
+        val places = remember(visible) { PlacesListProjection.exportable(placesStore.places()) }
         GeoVaultMultiSelectDialog(
             title = "Select points to export",
-            items = features,
-            initialSelection = features.toSet(),
-            labelFor = { feature -> feature.properties.name?.takeIf { it.isNotBlank() } ?: "(unnamed)" },
+            items = places,
+            initialSelection = places.toSet(),
+            labelFor = { place -> place.content.name.ifBlank { "(unnamed)" } },
             emptyLabel = "No places to export",
             searchable = true,
             selectNoneLabel = "Select none",
@@ -57,7 +50,7 @@ fun PlacesShareExportHost(
                 if (selected.isEmpty()) {
                     snackbarMessage = "No points selected"
                 } else {
-                    pendingKmzBytes = PlacesKmzExporter.buildKmzBytes(features.filter { it in selected })
+                    pendingKmzBytes = PlacesExporter.buildKmzBytes(places.filter { it in selected })
                     showActionSheet = true
                 }
             },

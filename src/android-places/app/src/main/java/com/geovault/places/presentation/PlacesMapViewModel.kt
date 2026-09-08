@@ -2,78 +2,40 @@ package com.geovault.places.presentation
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.CreationExtras
+import com.geovault.common.maps.render.MapRenderState
+import com.geovault.places.PlacesApplication
+import com.geovault.places.data.PlacesStore
 import com.geovault.places.di.PlacesAppServices
-import com.geovault.places.model.Feature
-import com.geovault.places.model.Properties
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.geovault.places.domain.PlacesListProjection
+import com.geovault.places.model.Place
+import com.geovault.places.model.PlaceKey
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import org.maplibre.android.geometry.LatLngBounds
 
-data class PlacesMapState(
-    val features: List<Feature> = emptyList(),
-    val selectedFeature: Feature? = null,
-)
+class PlacesMapViewModel(
+    application: Application,
+    placesStore: PlacesStore,
+) : AndroidViewModel(application) {
+    constructor(application: Application) : this(
+        application,
+        (application as PlacesApplication).services,
+    )
 
-class PlacesMapViewModel(application: Application) : AndroidViewModel(application) {
-    private val placesStore = PlacesAppServices.from(application).placesStore()
-    private val _state = MutableStateFlow(PlacesMapState())
-    val state: StateFlow<PlacesMapState> = _state.asStateFlow()
+    constructor(application: Application, services: PlacesAppServices) : this(
+        application,
+        services.placesStore(),
+    )
 
-    init {
-        viewModelScope.launch {
-            placesStore.snapshot.collect { snap ->
-                val nextFeatures = snap.displayFeatures
-                val nextSelected = PlacesMapStateTransforms.reconcileSelectedFeature(
-                    features = nextFeatures,
-                    selectedFeature = _state.value.selectedFeature,
-                )
-                _state.value = _state.value.copy(
-                    features = nextFeatures,
-                    selectedFeature = nextSelected,
-                )
-            }
-        }
-    }
-
-    fun selectByDatabaseId(id: Int?) {
-        if (id == null || id < 0) return
-        val selected = _state.value.features.firstOrNull { it.properties.database_id == id }
-        _state.value = _state.value.copy(selectedFeature = selected)
-    }
-
-    fun selectByRenderId(renderId: String): Boolean {
-        val selected = _state.value.features
-            .withIndex()
-            .firstOrNull { (index, feature) ->
-                PlacesMapStateTransforms.renderIdForFeature(index, feature) == renderId
-            }
-            ?.value
-        _state.value = _state.value.copy(selectedFeature = selected)
-        return selected != null
-    }
-
-    fun setSelectedFeature(feature: Feature?) {
-        _state.value = _state.value.copy(selectedFeature = feature)
-    }
-
-    fun featureBounds(): LatLngBounds? {
-        return PlacesMapStateTransforms.featureBounds(_state.value.features)
-    }
-
-    fun buildMapRenderState(): com.geovault.common.maps.render.MapRenderState {
-        return PlacesMapStateTransforms.buildRenderState(
-            features = _state.value.features,
-            selectedId = _state.value.selectedFeature?.properties?.database_id,
-            selectedFeature = _state.value.selectedFeature,
-        )
-    }
-
-    fun selectedFeatureLabel(properties: Properties?): String {
-        return properties?.name?.takeIf { it.isNotBlank() } ?: "Select a place"
-    }
+    val places: StateFlow<List<Place>> = placesStore.document
+        .map { PlacesListProjection.exportable(it.toDomain()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private var lastAppliedCameraRequestToken: Long? = null
 
@@ -83,5 +45,32 @@ class PlacesMapViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun markInitialCameraApplied(requestToken: Long) {
         lastAppliedCameraRequestToken = requestToken
+    }
+
+    fun featureBounds(): LatLngBounds? {
+        return PlacesMapStateTransforms.featureBounds(places.value)
+    }
+
+    fun buildMapRenderState(selectedKey: PlaceKey?): MapRenderState {
+        return PlacesMapStateTransforms.buildRenderState(places.value, selectedKey)
+    }
+
+    fun selectedPlaceLabel(place: Place?): String {
+        return place?.content?.name?.takeIf { it.isNotBlank() } ?: "Select a place"
+    }
+
+    companion object {
+        fun factory(services: PlacesAppServices): ViewModelProvider.Factory = Factory(services)
+    }
+
+    private class Factory(
+        private val services: PlacesAppServices,
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+            val application = extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]
+                ?: error("PlacesMapViewModel.factory requires an Application")
+            return modelClass.cast(PlacesMapViewModel(application, services))
+                ?: error("Unknown ViewModel class ${modelClass.name}")
+        }
     }
 }

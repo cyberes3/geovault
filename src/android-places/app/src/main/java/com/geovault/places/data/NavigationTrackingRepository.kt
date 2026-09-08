@@ -1,99 +1,76 @@
 package com.geovault.places.data
 
 import android.content.Context
-import com.geovault.common.geo.external.GeoVaultExternalMapLauncher
-import com.geovault.common.settings.GeoVaultDocumentStore
+import com.geovault.common.auth.GeoVaultAuthSession
+import com.geovault.common.net.GeoVaultHttp
+import com.geovault.common.net.GeoVaultServerUrl
+import com.geovault.common.net.awaitResponse
+import com.geovault.common.settings.GeoVaultCachedDocumentStore
 import com.geovault.common.sync.GeoVaultHttpFailureClassifier
 import com.geovault.common.sync.GeoVaultHttpFailureKind
 import com.geovault.places.domain.NavigationRetryFlusher
-import com.geovault.places.model.Feature
+import com.geovault.places.model.Place
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 
-class NavigationTrackingRepository(private val context: Context) : NavigationRetryFlusher {
-    private val store = GeoVaultDocumentStore(
-        context = context,
+class NavigationTrackingRepository(
+    context: Context,
+    private val session: GeoVaultAuthSession = GeoVaultAuthSession.get(),
+    private val apiCache: GeoVaultHttp.CachedApiHolder<PlacesApi> = GeoVaultHttp.CachedApiHolder(),
+) : NavigationRetryFlusher {
+    private val cached = GeoVaultCachedDocumentStore(
+        context = context.applicationContext,
         fileName = PlacesNavDocument.FILE_NAME,
         documentSerializer = PlacesNavDocument.serializer(),
         defaultValue = PlacesNavDocument(),
         currentVersion = PlacesNavDocument.SCHEMA_VERSION,
         legacyMapper = PlacesNavDocument::fromLegacy,
     )
-    private val pendingLock = Any()
-    private var pendingIds: List<Int> = emptyList()
-
-    @Volatile
-    private var loaded = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun preloadOnLaunch() {
-        ensureLoaded()
+        cached.preloadBlocking()
     }
 
-    fun openInGoogleMaps(
-        context: Context,
-        feature: Feature,
-        onUnavailable: () -> Unit,
-    ): Boolean {
-        val coords = feature.geometry.coordinates
-        if (coords.size < 2) return false
-        return GeoVaultExternalMapLauncher.open(
-            context = context,
-            latitude = coords[1],
-            longitude = coords[0],
-            label = feature.properties.name,
-            onUnavailable = onUnavailable,
-        )
+    fun track(place: Place) {
+        val id = place.serverId ?: return
+        scope.launch { trackId(id) }
     }
 
-    fun trackNavigation(feature: Feature, serverUrl: String) {
-        val dbId = feature.properties.database_id ?: return
-        if (serverUrl.isBlank()) return
-        val api = PlacesApiFactory.create(serverUrl)
-        flushPending(serverUrl)
-        api.trackNavigation(dbId).enqueue(object : Callback<Void> {
-            override fun onResponse(call: Call<Void>, response: Response<Void>) {
-                if (response.isSuccessful) return
-                if (shouldDropPending(response.code())) {
-                    removePending(dbId)
-                    return
-                }
-                addPending(dbId)
-            }
-
-            override fun onFailure(call: Call<Void>, t: Throwable) {
-                addPending(dbId)
-            }
-        })
-    }
-
-    override fun flushPending(serverUrl: String) {
-        if (serverUrl.isBlank()) return
-        val api = PlacesApiFactory.create(serverUrl)
-        getPending().forEach { id ->
-            api.trackNavigation(id).enqueue(object : Callback<Void> {
-                override fun onResponse(call: Call<Void>, response: Response<Void>) {
-                    if (response.isSuccessful) {
-                        removePending(id)
-                        return
-                    }
-                    if (shouldDropPending(response.code())) {
-                        removePending(id)
-                    }
-                }
-
-                override fun onFailure(call: Call<Void>, t: Throwable) = Unit
-            })
+    override suspend fun flushPending() {
+        val ids = cached.get().pendingNavigationIds
+        ids.forEach { id ->
+            runCatching { trackId(id) }
         }
     }
 
-    fun clearPending() {
-        synchronized(pendingLock) {
-            ensureLoadedLocked()
-            pendingIds = emptyList()
-            persistLocked()
+    fun clearPendingBlocking() {
+        runBlocking {
+            cached.update { PlacesNavDocument() }
+        }
+    }
+
+    private suspend fun trackId(id: Int) {
+        val api = apiOrNull() ?: run {
+            addPending(id)
+            return
+        }
+        try {
+            val response = api.trackNavigation(id).awaitResponse("trackNavigation")
+            if (response.isSuccessful) {
+                removePending(id)
+                return
+            }
+            if (shouldDropPending(response.code())) {
+                removePending(id)
+            } else {
+                addPending(id)
+            }
+        } catch (_: Throwable) {
+            addPending(id)
         }
     }
 
@@ -106,48 +83,22 @@ class NavigationTrackingRepository(private val context: Context) : NavigationRet
         }
     }
 
-    private fun getPending(): List<Int> {
-        return synchronized(pendingLock) {
-            ensureLoadedLocked()
-            pendingIds
+    private suspend fun addPending(id: Int) {
+        cached.update { doc ->
+            if (id in doc.pendingNavigationIds) doc else doc.copy(pendingNavigationIds = doc.pendingNavigationIds + id)
         }
     }
 
-    private fun addPending(id: Int) {
-        synchronized(pendingLock) {
-            ensureLoadedLocked()
-            if (id !in pendingIds) {
-                pendingIds = pendingIds + id
-                persistLocked()
-            }
+    private suspend fun removePending(id: Int) {
+        cached.update { doc ->
+            doc.copy(pendingNavigationIds = doc.pendingNavigationIds.filterNot { it == id })
         }
     }
 
-    private fun removePending(id: Int) {
-        synchronized(pendingLock) {
-            ensureLoadedLocked()
-            pendingIds = pendingIds.filterNot { it == id }
-            persistLocked()
-        }
-    }
-
-    private fun ensureLoaded() {
-        if (loaded) return
-        synchronized(pendingLock) {
-            ensureLoadedLocked()
-        }
-    }
-
-    private fun ensureLoadedLocked() {
-        if (loaded) return
-        pendingIds = runBlocking(Dispatchers.IO) { store.get() }.pendingNavigationIds
-        loaded = true
-    }
-
-    private fun persistLocked() {
-        val ids = pendingIds
-        runBlocking(Dispatchers.IO) {
-            store.update { PlacesNavDocument(pendingNavigationIds = ids) }
-        }
+    private fun apiOrNull(): PlacesApi? {
+        val url = session.getServerUrl()
+        if (url.isBlank()) return null
+        val parsed = GeoVaultServerUrl.parse(url) ?: return null
+        return GeoVaultHttp.createCachedApi(parsed, PlacesApi::class.java, apiCache)
     }
 }

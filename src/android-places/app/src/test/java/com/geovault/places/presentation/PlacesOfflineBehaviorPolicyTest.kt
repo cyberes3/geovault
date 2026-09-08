@@ -1,53 +1,40 @@
 package com.geovault.places.presentation
 
-import com.geovault.places.model.Feature
-import com.geovault.places.model.Geometry
-import com.geovault.places.model.OfflineFeature
-import com.geovault.places.model.Properties
+import com.geovault.places.model.PendingChange
+import com.geovault.places.model.PlaceKey
+import com.geovault.places.samplePlace
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PlacesOfflineBehaviorPolicyTest {
     @Test
-    fun destructiveActionForRow_matchesOfflineAndSavedRules() {
-        val saved = PlacesOfflineBehaviorPolicy.destructiveActionForRow(
-            isOffline = false,
-            offlineFeature = null
-        )
-        val offlineExisting = PlacesOfflineBehaviorPolicy.destructiveActionForRow(
-            isOffline = true,
-            offlineFeature = offlineFeature(databaseId = 7)
-        )
-        val offlineDraft = PlacesOfflineBehaviorPolicy.destructiveActionForRow(
-            isOffline = true,
-            offlineFeature = offlineFeature(databaseId = null)
+    fun destructiveActionMatchesPendingKind() {
+        val saved = samplePlace()
+        val pendingUpdate = samplePlace(pending = PendingChange.Update(samplePlace().content))
+        val pendingCreate = samplePlace(
+            key = PlaceKey.local("n"),
+            serverId = null,
+            pending = PendingChange.Create,
         )
 
-        assertEquals(PlacesOfflineDestructiveAction.Delete, saved)
-        assertEquals(PlacesOfflineDestructiveAction.Revert, offlineExisting)
-        assertEquals(PlacesOfflineDestructiveAction.Discard, offlineDraft)
+        assertEquals(PlacesOfflineDestructiveAction.Delete, PlacesOfflineBehaviorPolicy.destructiveActionFor(saved))
+        assertEquals(PlacesOfflineDestructiveAction.Revert, PlacesOfflineBehaviorPolicy.destructiveActionFor(pendingUpdate))
+        assertEquals(PlacesOfflineDestructiveAction.Discard, PlacesOfflineBehaviorPolicy.destructiveActionFor(pendingCreate))
     }
 
     @Test
-    fun offlineRemovalMessage_matchesRevertAndDiscardCopy() {
+    fun offlineRemovalMessageMatchesRevertAndDiscardCopy() {
         assertEquals(
             PlacesOfflineBehaviorPolicy.REVERTED_CHANGES_MESSAGE,
-            PlacesOfflineBehaviorPolicy.offlineRemovalMessage(offlineFeature(databaseId = 99))
+            PlacesOfflineBehaviorPolicy.offlineRemovalMessage(
+                samplePlace(pending = PendingChange.Update(samplePlace().content)),
+            ),
         )
         assertEquals(
             PlacesOfflineBehaviorPolicy.DISCARDED_OFFLINE_PLACE_MESSAGE,
-            PlacesOfflineBehaviorPolicy.offlineRemovalMessage(offlineFeature(databaseId = null))
-        )
-    }
-
-    private fun offlineFeature(databaseId: Int?): OfflineFeature {
-        return OfflineFeature(
-            clientLocalId = "sample-${databaseId ?: "new"}",
-            feature = Feature(
-                geometry = Geometry(coordinates = listOf(1.0, 2.0)),
-                properties = Properties(database_id = databaseId, name = "Sample"),
+            PlacesOfflineBehaviorPolicy.offlineRemovalMessage(
+                samplePlace(key = PlaceKey.local("n"), serverId = null, pending = PendingChange.Create),
             ),
-            original = null,
         )
     }
 }
